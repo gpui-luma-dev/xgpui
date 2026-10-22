@@ -2,9 +2,16 @@ name: Validate xgpui
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Optional source ref to test using this workflow's validation configuration
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -21,19 +28,72 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check captured platform and local dependency resolution
+        with:
+          fetch-depth: 0
+
+      - name: Prepare validation configuration and source
+        id: source
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Preserve this workflow's configuration when testing an older source branch.
+          cp .cargo/validation.toml "$RUNNER_TEMP/xgpui-validation.toml"
+          if [[ -n "$SOURCE_REF" ]]; then
+            git fetch -- origin "$SOURCE_REF"
+            git checkout --detach FETCH_HEAD
+          fi
+          if [[ -f gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No release has been imported on this branch yet."
+          fi
+
+      - name: Install Rust tools
+        if: steps.source.outputs.present == 'true'
+        run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
+
+      - name: Resolve platform dependencies and verify local sources
+        if: steps.source.outputs.present == 'true'
         shell: bash
         run: |
           set -euo pipefail
           manifest=gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml
-          if [[ ! -f "$manifest" ]]; then
-            echo "No release has been imported on this branch yet."
-            exit 0
-          fi
-          rustup toolchain install stable --profile minimal --component clippy,rustfmt
-          cargo +stable metadata --manifest-path "$manifest" --format-version 1 \
+          config="$RUNNER_TEMP/xgpui-validation.toml"
+          # A patch alone does not select an older version over newer registry releases.
+          cargo +stable --config "$config" update --manifest-path "$manifest" -p proptest --precise 1.10.0
+          cargo +stable --config "$config" metadata --locked --manifest-path "$manifest" --format-version 1 \
             > "$RUNNER_TEMP/metadata.json"
           python3 scripts/check_local_dependencies.py "$RUNNER_TEMP/metadata.json"
-          cargo +stable check --manifest-path "$manifest" --features font-kit,runtime_shaders
-          cargo +stable clippy --manifest-path "$manifest" --features font-kit,runtime_shaders
-          cargo +stable test --manifest-path gpui/crates/gpui-unofficial/Cargo.toml --lib
+
+      - name: Check platform build
+        if: steps.source.outputs.present == 'true'
+        run: cargo +stable --config "$RUNNER_TEMP/xgpui-validation.toml" check --locked --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
+
+      - name: Clippy
+        if: steps.source.outputs.present == 'true'
+        run: cargo +stable --config "$RUNNER_TEMP/xgpui-validation.toml" clippy --locked --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
+
+      - name: Library tests with Zed's Proptest revision
+        if: steps.source.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest=gpui/crates/gpui-unofficial/Cargo.toml
+          config="$RUNNER_TEMP/xgpui-validation.toml"
+          cargo +stable --config "$config" update --manifest-path "$manifest" -p proptest --precise 1.10.0
+          cargo +stable --config "$config" metadata --locked --manifest-path "$manifest" --format-version 1 \
+            > "$RUNNER_TEMP/test-metadata.json"
+          python3 scripts/check_local_dependencies.py "$RUNNER_TEMP/test-metadata.json"
+          python3 - "$RUNNER_TEMP/test-metadata.json" "$config" <<'PY'
+          import json, pathlib, sys, tomllib
+          metadata = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          pin = tomllib.loads(pathlib.Path(sys.argv[2]).read_text())["patch"]["crates-io"]["proptest"]
+          expected_source = f"git+{pin['git']}?rev={pin['rev']}#{pin['rev']}"
+          packages = [p for p in metadata["packages"] if p["name"] in {"proptest", "proptest-macro"}]
+          assert {p["name"] for p in packages} == {"proptest", "proptest-macro"}, "Missing property-test dependencies"
+          assert all(p["source"] == expected_source for p in packages), "Proptest revision drifted"
+          print("Verified Zed's exact Proptest and macro revision.")
+          PY
+          cargo +stable --config "$config" test --locked --manifest-path "$manifest" --lib --features gpui_platform/runtime_shaders

@@ -1,0 +1,6 @@
+# Restore the dependency used by Zed d25fa01ccd788d812f236810b71af4feff6b2e38.
+# The release extraction changed this Git dependency to proptest = "1".
+# Its property_test wrapper needs this revision's string-valued proptest_path.
+# Review this compatibility override when adopting another GPUI release.
+[patch.crates-io]
+proptest = { version = "=1.10.0", git = "https://github.com/proptest-rs/proptest", rev = "3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b" }

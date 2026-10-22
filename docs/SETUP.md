@@ -32,11 +32,13 @@ root Cargo workspace yet. Run Cargo from the repository root so it discovers
 the generated local overrides:
 
 ```sh
-cargo metadata --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --format-version 1 > /tmp/xgpui-metadata.json
+cargo --config .cargo/validation.toml update --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml -p proptest --precise 1.10.0
+cargo --config .cargo/validation.toml update --manifest-path gpui/crates/gpui-unofficial/Cargo.toml -p proptest --precise 1.10.0
+cargo --config .cargo/validation.toml metadata --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --format-version 1 > /tmp/xgpui-metadata.json
 python3 scripts/check_local_dependencies.py /tmp/xgpui-metadata.json
-cargo check --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
-cargo clippy --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
-cargo test --manifest-path gpui/crates/gpui-unofficial/Cargo.toml --lib
+cargo --config .cargo/validation.toml check --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
+cargo --config .cargo/validation.toml clippy --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
+cargo --config .cargo/validation.toml test --manifest-path gpui/crates/gpui-unofficial/Cargo.toml --lib --features gpui_platform/runtime_shaders
 cargo fmt --manifest-path gpui/crates/gpui-unofficial/Cargo.toml --check
 python3 -m unittest discover -s scripts -p 'test_*.py' -v
 ```
@@ -54,7 +56,9 @@ retain development lockfiles when adding reproducible bench applications.
 
 Generated `.cargo/config.toml` is reserved for importer output. Configuration in
 this repository is not inherited by a separate consumer such as gpui-luma;
-that consumer must supply its own patches to one pinned xgpui commit.
+that consumer must supply its own patches to one pinned xgpui commit. The separate
+`.cargo/validation.toml` restores Zed's Proptest dependency and is not generated
+or overwritten by synchronization. Pass it explicitly to Cargo when testing.
 
 ## Local modifications and conflicts
 
@@ -101,11 +105,36 @@ The initial import was checked with Rust 1.99.0 on macOS:
 - All resolved captured packages use local sources.
 - Platform `cargo check` and `cargo clippy` pass with `font-kit,runtime_shaders`.
 - All four importer regression tests pass.
-- Core `cargo test --lib` fails to compile at the `gpui::property_test` attribute
-  in `src/randomized_element_tree.rs:1648`: the macro reports an unexpected token,
-  expected `;`, with the dependencies resolved during this setup.
+- With Zed's Proptest revision restored, core library tests pass: 369 passed,
+  0 failed, 2 ignored.
 - Core `cargo fmt --check` reports formatting differences in captured source.
 
-These failures are recorded rather than fixed in the clean import. The macOS
-validation workflow deliberately reports a failed check if library tests fail.
-Any compatibility fixes belong on main in a separate reviewed change.
+Formatting differences are preserved in the clean import. They are not a CI
+formatting gate for captured upstream source.
+
+### Cause and fix of the initial test compilation failure
+
+The original [Zed workspace manifest](https://github.com/zed-industries/zed/blob/d25fa01ccd788d812f236810b71af4feff6b2e38/Cargo.toml)
+pins Proptest to Git revision `3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b`.
+The captured release instead declares `proptest = "1"`, which resolved to 1.12.0
+and proptest-macro 0.6.0 during setup. GPUI's wrapper emits
+`proptest_path = "::gpui::proptest"`; Zed's pinned macro accepts this string,
+whereas the newer published macro expects a Rust path. Its error generation
+panics while parsing, producing the misleading unexpected-token diagnostic at
+`randomized_element_tree.rs:1648` before any tests run.
+
+Validation now restores the exact Git dependency with `.cargo/validation.toml`
+and explicitly selects version 1.10.0 in each standalone crate's lockfile.
+It verifies both Proptest packages resolve to that Git revision. No captured
+Rust source is changed or test disabled. Review the override when adopting
+another GPUI release.
+
+The test command also enables `gpui_platform/runtime_shaders`, since features
+from the separate platform build command do not carry into the library test
+command. This avoids requiring precompiled Metal shaders for headless tests.
+
+To validate upstream using the current workflow and dependency configuration:
+
+```sh
+gh workflow run validate.yml --repo gpui-luma-dev/xgpui --ref main -f source_ref=upstream
+```
