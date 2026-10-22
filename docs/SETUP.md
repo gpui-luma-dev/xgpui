@@ -91,3 +91,21 @@ gh pr create --repo gpui-luma-dev/xgpui --base main --head upstream --title "Syn
 If an organization administrator later enables Actions PR creation, set
 `SYNC_AUTO_PR=true` and enable the repository's Actions PR creation setting.
 No organization-wide policy is changed by this setup.
+
+## Initial 1.25.2 validation baseline
+
+The initial import was checked with Rust 1.99.0 on macOS:
+
+- Snapshot Git tree exactly matches source commit
+  `4eadf3cd8c4bcbdd4e8652aa0fbe5e20712cc8c6`.
+- All resolved captured packages use local sources.
+- Platform `cargo check` and `cargo clippy` pass with `font-kit,runtime_shaders`.
+- All four importer regression tests pass.
+- Core `cargo test --lib` fails to compile at the `gpui::property_test` attribute
+  in `src/randomized_element_tree.rs:1648`: the macro reports an unexpected token,
+  expected `;`, with the dependencies resolved during this setup.
+- Core `cargo fmt --check` reports formatting differences in captured source.
+
+These failures are recorded rather than fixed in the clean import. The macOS
+validation workflow deliberately reports a failed check if library tests fail.
+Any compatibility fixes belong on main in a separate reviewed change.
