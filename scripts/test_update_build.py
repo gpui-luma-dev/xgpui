@@ -18,6 +18,9 @@ class BuildManifestTests(unittest.TestCase):
                 (package / "Cargo.toml").write_text(
                     f'[package]\nname = "{name}"\nversion = "1.25.2"\n[workspace]\n'
                 )
+            application = root / "apps/lifecycle"
+            application.mkdir(parents=True)
+            (application / "Cargo.toml").write_text('[package]\nname = "lifecycle"\nversion = "0.0.0"\n')
             staging = root / "gpui/crates/transformed-crates/duplicate"
             staging.mkdir(parents=True)
             (staging / "Cargo.toml").write_text("This staging copy is not a package input")
@@ -28,6 +31,7 @@ class BuildManifestTests(unittest.TestCase):
             generated = manifests(root)
             workspace = tomllib.loads(generated["Cargo.toml"])
             harness = tomllib.loads(generated["tools/build-all/Cargo.toml"])
+            self.assertEqual(workspace["workspace"]["members"], ["tools/build-all", "apps/lifecycle"])
             self.assertEqual(set(workspace["workspace"]["exclude"]), {
                 "gpui/crates/gpui-unofficial",
                 "gpui/crates/gpui-macos-gpui-unofficial",

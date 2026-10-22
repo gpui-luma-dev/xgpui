@@ -11,6 +11,8 @@ libraries supported by the selected target. On macOS, this compiles 23 captured
 crates, including GPUI, the Apple/Metal and macOS backends, the wgpu renderer,
 macros, HTTP clients, and supporting utilities. Metal shaders are compiled at
 build time by default. The harness has no runtime behavior and launches nothing.
+The workspace also compiles applications under `apps/`; the first is the
+[lifecycle API exercise](LIFECYCLE.md). Compiling it does not launch it.
 
 The complete release contains 26 crates. The Linux, Windows, and browser
 backends are selected only for their respective targets, rather than counted
@@ -35,10 +37,10 @@ cargo build --locked --features runtime-shaders
 # Static checks on the root harness and its dependency graph.
 cargo check --workspace --locked
 cargo clippy --workspace --locked
-cargo fmt --package xgpui-build --check
+cargo fmt --package xgpui-build --package xgpui-lifecycle --check
 ```
 
-Root Clippy and formatting checks target the harness; imported libraries are
+Root Clippy and formatting checks target the harness and exercise apps; imported libraries are
 dependencies, not root workspace members. Existing platform/library validation
 is still run separately by validate.yml.
 
@@ -55,7 +57,8 @@ them. Add `gpui_platform/runtime_shaders` to the comma-separated feature list
 if you need runtime shader compilation. Standalone example builds use their
 own Cargo.lock; the root lockfile applies to the root harness build.
 
-`cargo test` at the root tests only the harness. For the imported library's
+`cargo test` at the root tests the harness and workspace exercise apps, including
+headless lifecycle contracts. It does not run imported crates' own tests. For the imported library's
 headless tests, follow [SETUP.md](SETUP.md); its dependency override and feature
 flags remain required. No test or application is launched by `cargo build`.
 
@@ -69,7 +72,9 @@ tests advance deterministically; the clean upstream branch retains the original.
 The nested `transformed-crates` staging copy is not built a second time.
 
 `Cargo.toml` and `tools/build-all/Cargo.toml` are generated development files;
-they are not overwritten by upstream imports. After an import adds or removes
+they are not overwritten by upstream imports. The generator discovers exercise
+members at `apps/*/Cargo.toml` as well as captured library dependencies.
+After adding an exercise or an import that adds or removes
 packages, regenerate them and update the root lockfile on the development or
 integration branch:
 
