@@ -63,7 +63,9 @@ flags remain required. No test or application is launched by `cargo build`.
 
 The captured manifests each declare their own workspace. The root workspace
 explicitly excludes each of those directories and builds their libraries as
-path dependencies. Their Rust source, manifests, and licenses remain unchanged.
+path dependencies. The harness does not rewrite their manifests or source.
+A separate downstream spring-animation fix uses the scheduler clock so headless
+tests advance deterministically; the clean upstream branch retains the original.
 The nested `transformed-crates` staging copy is not built a second time.
 
 `Cargo.toml` and `tools/build-all/Cargo.toml` are generated development files;
