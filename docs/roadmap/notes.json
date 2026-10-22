@@ -1,0 +1,210 @@
+{
+  "gpui-unofficial": {
+    "short": "gpui",
+    "group": "Core",
+    "role": "Application model, entities, windows, elements, input, layout, text and scene primitives.",
+    "surface": "Broad root re-exports connect private implementation modules to the application-facing API. AppContext and platform traits define important contracts.",
+    "review": "Review root re-exports by subsystem. Preserve hidden macro support until generated consumers have been checked.",
+    "entry": "src/gpui.rs"
+  },
+  "gpui-platform-gpui-unofficial": {
+    "short": "gpui-platform",
+    "group": "Platforms & rendering",
+    "role": "Selects and constructs the native or web platform.",
+    "surface": "application, headless, background_executor and current_platform; additional exports depend on target and test/bench features.",
+    "review": "Keep platform selection separate from renderer changes. This snapshot has no iOS branch in current_platform.",
+    "entry": "src/gpui_platform.rs"
+  },
+  "gpui-apple-gpui-unofficial": {
+    "short": "gpui-apple",
+    "group": "Platforms & rendering",
+    "role": "Shared Apple rendering and services, gated for macOS or iOS.",
+    "surface": "Metal renderer, dispatcher, optional text system, keychain and thermal modules.",
+    "review": "Start the Apple color investigation in metal_renderer.rs: BGRA8Unorm appears in layer and texture setup. Shared iOS code does not establish a complete iOS window backend.",
+    "entry": "src/gpui_apple.rs"
+  },
+  "gpui-macos-gpui-unofficial": {
+    "short": "gpui-macos",
+    "group": "Platforms & rendering",
+    "role": "macOS windows, input, display and native platform integration.",
+    "surface": "MacPlatform plus a small metal_renderer export module; headless renderer depends on test/bench features.",
+    "review": "Trace window configuration into shared Apple rendering before proposing wide-gamut controls. Review native and headless behavior separately.",
+    "entry": "src/gpui_macos.rs"
+  },
+  "gpui-linux-gpui-unofficial": {
+    "short": "gpui-linux",
+    "group": "Platforms & rendering",
+    "role": "Linux/FreeBSD platform integration with Wayland and X11 feature paths.",
+    "surface": "current_platform and linux_platform; implementation lives behind private modules.",
+    "review": "Preserve target and feature combinations when changing the shared platform contract.",
+    "entry": "src/gpui_linux.rs"
+  },
+  "gpui-windows-gpui-unofficial": {
+    "short": "gpui-windows",
+    "group": "Platforms & rendering",
+    "role": "Windows native platform, Win32 windows, DirectWrite and DirectX integration.",
+    "surface": "WindowsPlatform is the narrow root export; most native modules are crate-private.",
+    "review": "A small export list still implements the shared platform contract. Check backend implementations when that contract changes.",
+    "entry": "src/gpui_windows.rs"
+  },
+  "gpui-web-gpui-unofficial": {
+    "short": "gpui-web",
+    "group": "Platforms & rendering",
+    "role": "Browser windowing, input and rendering with WebGPU and a WebGL2 fallback.",
+    "surface": "CanvasFontFallback plus wasm-gated platform, window, dispatcher, HTTP and initialization exports.",
+    "review": "Keep wasm exports distinct from native fallback text support. The entry documentation describes a single top-level window lifecycle restriction.",
+    "entry": "src/gpui_web.rs"
+  },
+  "gpui-wgpu-gpui-unofficial": {
+    "short": "gpui-wgpu",
+    "group": "Platforms & rendering",
+    "role": "GPU context, renderer, atlas and text support used across platform backends.",
+    "surface": "WgpuRenderer, WgpuContext, WgpuSurfaceConfig, atlas/text exports and a public wgpu re-export.",
+    "review": "WgpuContext exposes device and queue fields. Review the intended custom-rendering contract before narrowing these handles or adding shader extension points.",
+    "entry": "src/gpui_wgpu.rs"
+  },
+  "gpui-macros-gpui-unofficial": {
+    "short": "gpui-macros",
+    "group": "Core",
+    "role": "Procedural macros for GPUI actions, elements, contexts, styling and test/benchmark support.",
+    "surface": "Action, IntoElement, Render, AppContext and VisualContext derives, plus procedural helper macros.",
+    "review": "Generated API is not expanded by this inventory. Pair macro changes with downstream compilation and inspect hidden support paths.",
+    "entry": "src/gpui_macros.rs"
+  },
+  "gpui-shared-string-gpui-unofficial": {
+    "short": "gpui-shared-string",
+    "group": "Data & runtime",
+    "role": "A cheaply cloned immutable string value currently backed by SmolStr.",
+    "surface": "SharedString constructors, conversions and trait implementations.",
+    "review": "Treat this as a consumer value type: changing representation or conversions can affect APIs re-exported by GPUI.",
+    "entry": "src/gpui_shared_string.rs"
+  },
+  "gpui-util-gpui-unofficial": {
+    "short": "gpui-util",
+    "group": "Data & runtime",
+    "role": "GPUI-oriented utility types, result/future helpers and platform process helpers.",
+    "surface": "ArcCow module, extension traits, defer helpers, hashes, sorting and exported macros.",
+    "review": "Separate generally useful primitives from platform conveniences only after tracing re-exports and signature dependencies.",
+    "entry": "src/lib.rs"
+  },
+  "scheduler-gpui-unofficial": {
+    "short": "scheduler",
+    "group": "Data & runtime",
+    "role": "Task scheduling, executors, clocks, priorities and deterministic test scheduling.",
+    "surface": "Clock/executor/test_scheduler root exports, Scheduler, Priority, Timer and task metadata.",
+    "review": "test_scheduler is exported from the root without a feature gate here. Evaluate a feature boundary against existing consumers before moving it.",
+    "entry": "src/scheduler.rs"
+  },
+  "collections-gpui-unofficial": {
+    "short": "collections",
+    "group": "Data & runtime",
+    "role": "Shared collection aliases and supporting map utilities.",
+    "surface": "FxHash map/set and index collection aliases, standard collection re-exports and vecmap.",
+    "review": "Collection aliases can appear in public signatures. Narrowing broad re-exports needs consumer checks even if implementation is small.",
+    "entry": "src/collections.rs"
+  },
+  "sum-tree-gpui-unofficial": {
+    "short": "sum-tree",
+    "group": "Data & runtime",
+    "role": "Summarized tree data structures with cursors, filtered traversal and map/set adapters.",
+    "surface": "SumTree, Summary, Item, Dimension, cursors, TreeMap/TreeSet, Bias, Edit and Node.",
+    "review": "Review whether Node belongs in the supported contract. Internal-looking names alone are not evidence that removal is safe.",
+    "entry": "src/sum_tree.rs"
+  },
+  "refineable-gpui-unofficial": {
+    "short": "refineable",
+    "group": "Data & runtime",
+    "role": "Partial configuration refinement used to compose styles and other layered values.",
+    "surface": "Refineable, IsEmpty, Cascade and CascadeSlot; re-exports the Refineable derive.",
+    "review": "Keep trait and derive behavior aligned. Generated refinement types are part of consumer behavior.",
+    "entry": "src/refineable.rs"
+  },
+  "derive-refineable-gpui-unofficial": {
+    "short": "derive-refineable",
+    "group": "Data & runtime",
+    "role": "Generates refinement structures and implementations for Refineable.",
+    "surface": "Refineable derive and its accepted helper attributes.",
+    "review": "Inspect generated names and field behavior before changing the derive contract.",
+    "entry": "src/derive_refineable.rs"
+  },
+  "http-client-gpui-unofficial": {
+    "short": "http-client",
+    "group": "Transport & tooling",
+    "role": "HTTP abstraction, request/body helpers, redirects, timeouts and proxy utilities.",
+    "surface": "HttpClient, AsyncBody and request extensions; re-exports HTTP and URL types. GitHub helpers and fake clients have target/feature conditions.",
+    "review": "Consider optional application-specific helpers separately from the transport trait. Re-exported external types also constrain compatibility.",
+    "entry": "src/http_client.rs"
+  },
+  "http-client-tls-gpui-unofficial": {
+    "short": "http-client-tls",
+    "group": "Transport & tooling",
+    "role": "Builds a cached TLS client configuration using platform verification with a root fallback.",
+    "surface": "tls_config returns a rustls ClientConfig.",
+    "review": "The public return type ties consumers to rustls. Review that coupling before hiding or replacing the TLS implementation.",
+    "entry": "src/http_client_tls.rs"
+  },
+  "reqwest-client-gpui-unofficial": {
+    "short": "reqwest-client",
+    "group": "Transport & tooling",
+    "role": "Concrete HTTP client adapter using reqwest and a shared Tokio runtime.",
+    "surface": "ReqwestClient constructors and runtime accessor; implements the shared HTTP client trait.",
+    "review": "Keep adapter-specific configuration out of the abstraction unless multiple backends need the same contract.",
+    "entry": "src/reqwest_client.rs"
+  },
+  "path-gpui-unofficial": {
+    "short": "path",
+    "group": "Data & runtime",
+    "role": "Normalized path types and cross-platform path helpers.",
+    "surface": "Absolute and relative path modules, PathStyle, PathExt, normalization and byte conversion.",
+    "review": "Preserve Windows and POSIX semantics; downstream utility crates re-export some of these helpers.",
+    "entry": "src/path.rs"
+  },
+  "util-gpui-unofficial": {
+    "short": "util",
+    "group": "Transport & tooling",
+    "role": "Broad application utilities for files, archives, commands, shells, paths, serialization and formatting.",
+    "surface": "Many public modules; re-exports GPUI utilities, path helpers and optional utility macros.",
+    "review": "A candidate for dependency-boundary review because it mixes broad application helpers with primitives. Manifest edges do not prove runtime use.",
+    "entry": "src/util.rs"
+  },
+  "util-macros-gpui-unofficial": {
+    "short": "util-macros",
+    "group": "Transport & tooling",
+    "role": "Platform-aware literal helpers and performance instrumentation.",
+    "surface": "path!, uri!, line_endings! and the perf attribute.",
+    "review": "Preserve generated platform behavior and feature-controlled instrumentation when narrowing exports.",
+    "entry": "src/util_macros.rs"
+  },
+  "perf-gpui-unofficial": {
+    "short": "perf",
+    "group": "Transport & tooling",
+    "role": "Profiling protocol and instrumentation support, with a separate CLI entrypoint.",
+    "surface": "The library re-exports implementation types and constants, including Importance and profiler metadata.",
+    "review": "Separate developer tooling requirements from application runtime dependencies through an actual usage audit.",
+    "entry": "src/lib.rs"
+  },
+  "zlog-gpui-unofficial": {
+    "short": "zlog",
+    "group": "Transport & tooling",
+    "role": "Logging setup, filters, sinks, scopes and exported logging macros.",
+    "surface": "Public filter/sink modules, initialization functions and log implementation re-export.",
+    "review": "Hidden private support is used by exported macros. Check expansions before trimming those paths.",
+    "entry": "src/zlog.rs"
+  },
+  "ztracing-gpui-unofficial": {
+    "short": "ztracing",
+    "group": "Transport & tooling",
+    "role": "Tracing facade with configurable native, web and no-op behavior.",
+    "surface": "Tracing macros and initialization vary with custom cfg settings; fallback types and macros support disabled instrumentation.",
+    "review": "Audit the cfg matrix before narrowing the facade. A default build alone misses active tracing configurations.",
+    "entry": "src/lib.rs"
+  },
+  "ztracing-macro-gpui-unofficial": {
+    "short": "ztracing-macro",
+    "group": "Transport & tooling",
+    "role": "No-op instrumentation attribute used by the tracing fallback.",
+    "surface": "instrument attribute returns its input unchanged.",
+    "review": "Its small implementation supports the no-op facade; preserve the re-export contract when reviewing dependency removal.",
+    "entry": "src/lib.rs"
+  }
+}
