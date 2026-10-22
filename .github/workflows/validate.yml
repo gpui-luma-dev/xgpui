@@ -73,7 +73,7 @@ jobs:
 
       - name: Clippy
         if: steps.source.outputs.present == 'true'
-        run: cargo +stable --config "$RUNNER_TEMP/xgpui-validation.toml" clippy --locked --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
+        run: cargo +stable clippy --config "$RUNNER_TEMP/xgpui-validation.toml" --locked --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
 
       - name: Library tests with Zed's Proptest revision
         if: steps.source.outputs.present == 'true'

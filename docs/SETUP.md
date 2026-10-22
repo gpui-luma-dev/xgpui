@@ -37,7 +37,7 @@ cargo --config .cargo/validation.toml generate-lockfile --manifest-path gpui/cra
 cargo --config .cargo/validation.toml metadata --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --format-version 1 > /tmp/xgpui-metadata.json
 python3 scripts/check_local_dependencies.py /tmp/xgpui-metadata.json
 cargo --config .cargo/validation.toml check --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
-cargo --config .cargo/validation.toml clippy --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
+cargo clippy --config .cargo/validation.toml --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
 cargo --config .cargo/validation.toml test --manifest-path gpui/crates/gpui-unofficial/Cargo.toml --lib --features gpui_platform/runtime_shaders
 cargo fmt --manifest-path gpui/crates/gpui-unofficial/Cargo.toml --check
 python3 -m unittest discover -s scripts -p 'test_*.py' -v
