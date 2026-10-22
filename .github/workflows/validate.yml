@@ -1,0 +1,39 @@
+name: Validate xgpui
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  importer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test import replacement and provenance
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check captured platform and local dependency resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest=gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml
+          if [[ ! -f "$manifest" ]]; then
+            echo "No release has been imported on this branch yet."
+            exit 0
+          fi
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt
+          cargo +stable metadata --manifest-path "$manifest" --format-version 1 \
+            > "$RUNNER_TEMP/metadata.json"
+          python3 scripts/check_local_dependencies.py "$RUNNER_TEMP/metadata.json"
+          cargo +stable check --manifest-path "$manifest" --features font-kit,runtime_shaders
+          cargo +stable clippy --manifest-path "$manifest" --features font-kit,runtime_shaders
+          cargo +stable test --manifest-path gpui/crates/gpui-unofficial/Cargo.toml --lib
