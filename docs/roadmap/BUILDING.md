@@ -54,3 +54,18 @@ small scene model, not the native renderer. Its model tests cover overlap
 ordering, clipping, explicit layers, batch texture boundaries and replay.
 Playback is opt-in, stops after one sequence, and is cleaned up on navigation.
 Reduced-motion preferences suppress SVG movement.
+
+## Review after a release sync
+
+Invoke `$xgpui-docs-sync` using the repository skill at
+`.agents/skills/xgpui-docs-sync/SKILL.md`. For example:
+
+> Use $xgpui-docs-sync to check and update the web docs against the imported release.
+
+The skill compares the capture against `release-review.json`, regenerates the
+inventory, and reviews the narrative, build recipes and scene model against the
+changed Rust code. Use “check only” for a report without tracked documentation
+edits. It does not import a release, publish the site or open a PR by itself.
+
+`release-review.json` records the inspected source checkout and validation scope.
+Update it after a source review, not merely because generation succeeds.

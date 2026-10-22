@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "reviewed",
+  "reviewed_on": "2026-10-22",
+  "release_ref": "release/1.25.2",
+  "upstream_commit": "4eadf3cd8c4bcbdd4e8652aa0fbe5e20712cc8c6",
+  "checkout_commit": "613c683004a835a655c2c293517e409ea5ff87e3",
+  "scope": "Initial documentation authoring and source review: crate inventory, architecture, execution, build recipes and SVG scene teaching model.",
+  "validation": {
+    "generator": "passed",
+    "site_verifier": "passed",
+    "generator_fmt_tests_clippy": "passed",
+    "native_macos_app": "cargo check passed with runtime shaders",
+    "single_threaded_wasm_app": "cargo check passed on stable for wasm32-unknown-unknown",
+    "browser_visual_runtime": "not run",
+    "threaded_wasm_and_worker_packaging": "not run",
+    "native_linux_windows_mobile": "not run"
+  },
+  "remaining_gaps": [
+    "Syntactic API inventory does not resolve exports or macro expansions.",
+    "Captured browser gallery contains old directory paths and requires review before use.",
+    "Threaded WASM, other native targets and browser rendering have not been validated."
+  ]
+}
