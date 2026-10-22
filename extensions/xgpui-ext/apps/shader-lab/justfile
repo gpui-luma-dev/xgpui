@@ -1,0 +1,92 @@
+# Run here with `just ui`, or from the repository root with:
+# just --justfile extensions/xgpui-ext/apps/shader-lab/justfile ui
+# Extra application flags are forwarded verbatim. Paths are relative to the repo root.
+set working-directory := "../../../.."
+set positional-arguments
+set shell := ["bash", "-cu"]
+
+manifest := "extensions/xgpui-ext/apps/shader-lab/Cargo.toml"
+config := ".cargo/validation.toml"
+# Override with `just --set profile release ...` for optimized measurements.
+profile := "dev"
+cargo-options := "--locked --config " + config + " --manifest-path " + manifest + " --target-dir target --profile " + profile
+
+# List recipes without launching the app.
+default:
+    @just --justfile '{{justfile()}}' --list
+
+# Show all application options, constraints and defaults.
+args:
+    cargo run {{cargo-options}} -- --help
+
+# Build without opening a window.
+build:
+    cargo build {{cargo-options}}
+
+# Launch the paused mesh UI (1280x960 window, 960x640 preview).
+ui *args:
+    cargo run {{cargo-options}} -- "$@"
+
+# Play the four-second A-to-B mesh morph.
+animate *args:
+    cargo run {{cargo-options}} -- --animate "$@"
+
+# Play the same transition at one-tenth speed (40 seconds).
+slow *args:
+    cargo run {{cargo-options}} -- --animate --slow-animations "$@"
+
+# Resize the native window; headless width/height instead mean physical pixels.
+window width="1280" height="960" *args:
+    cargo run {{cargo-options}} -- --width "$1" --height "$2" "${@:3}"
+
+# Metal correctness checks and readback timing; optionally append --png/--json.
+headless *args:
+    cargo run {{cargo-options}} -- --headless "$@"
+
+# Readback timing with PNG and JSON artifacts (override output paths positionally).
+capture png="/tmp/shader-lab.png" json="/tmp/shader-lab.json" *args:
+    cargo run {{cargo-options}} -- --headless --frames 60 --warmup 10 --png "$1" --json "$2" "${@:3}"
+
+# Cached mesh CPU encode/submit timing; excludes final GPU drain, not GPU time/FPS.
+submit *args:
+    cargo run {{cargo-options}} -- --headless --submit-only --width 640 --height 480 --count 16 --frames 120 --warmup 20 "$@"
+
+# Native solid baseline with the same submission workload (not mesh-equivalent).
+baseline *args:
+    cargo run {{cargo-options}} -- --headless --submit-only --width 640 --height 480 --count 16 --frames 120 --warmup 20 --baseline "$@"
+
+# New immutable mesh snapshot each frame; pipelines remain shared.
+animated-submit *args:
+    cargo run {{cargo-options}} -- --headless --submit-only --width 640 --height 480 --count 16 --frames 120 --warmup 20 --animate "$@"
+
+# Minimal topology/quality workload.
+minimal *args:
+    cargo run {{cargo-options}} -- --headless --grid 2 --subdivisions 2 --frames 10 "$@"
+
+# Higher-quality animated mesh at an odd physical extent.
+quality *args:
+    cargo run {{cargo-options}} -- --headless --grid 3 --subdivisions 32 --animate --width 641 --height 479 --frames 30 "$@"
+
+# Solid custom-content headless mode; add --animate or --submit-only as needed.
+solid *args:
+    cargo run {{cargo-options}} -- --headless --effect solid "$@"
+
+# Automated clock, interpolation and Metal integration tests.
+test:
+    cargo test {{cargo-options}}
+
+# Run the same tests with Metal API validation enabled.
+[macos]
+metal-test:
+    MTL_DEBUG_LAYER=1 cargo test {{cargo-options}}
+
+# Check formatting without changing files.
+fmt-check:
+    cargo fmt --manifest-path {{manifest}} --check
+
+# Lint every app target.
+lint:
+    cargo clippy {{cargo-options}} --all-targets -- -D warnings
+
+# Run formatting, tests and lint without opening a window.
+check: fmt-check test lint

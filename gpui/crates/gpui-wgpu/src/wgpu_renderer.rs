@@ -1605,6 +1605,9 @@ impl WgpuRendererCore {
                     }
                     // Surfaces are macOS-only for video playback and are not
                     // implemented by the WGPU renderer.
+                    PrimitiveBatch::Custom(_) => anyhow::bail!(
+                        "custom GPU content is not supported by the wgpu renderer yet"
+                    ),
                     PrimitiveBatch::Surfaces(_surfaces) => {}
                 }
             }

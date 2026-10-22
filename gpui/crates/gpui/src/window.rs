@@ -5148,6 +5148,33 @@ impl Window {
         Ok(())
     }
 
+    /// Record independent GPU content at the current scene order.
+    ///
+    /// The backend prepares an offscreen texture; GPUI applies the inherited
+    /// rectangular clip, local corner coverage, and element opacity. Unsupported
+    /// renderers report an error rather than silently ignoring custom content.
+    pub fn paint_custom(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        corner_radii: Corners<Pixels>,
+        content: std::sync::Arc<dyn crate::CustomContent>,
+    ) {
+        self.invalidator.debug_assert_paint();
+        if self.element_opacity() <= 0.0 {
+            return;
+        }
+        self.next_frame.scene.insert_primitive(crate::CustomDraw {
+            order: 0,
+            bounds: self.snap_bounds(bounds),
+            content_mask: self.snapped_content_mask(),
+            corner_radii: corner_radii
+                .clamp_radii_for_quad_size(bounds.size)
+                .scale(self.scale_factor()),
+            opacity: self.element_opacity(),
+            content,
+        });
+    }
+
     /// Paint a surface into the scene for the next frame at the current z-index.
     ///
     /// This method should only be called as part of the paint phase of element drawing.

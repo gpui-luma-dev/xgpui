@@ -50,6 +50,7 @@ pub struct Scene {
     pub subpixel_sprites: Vec<SubpixelSprite>,
     pub polychrome_sprites: Vec<PolychromeSprite>,
     pub surfaces: Vec<PaintSurface>,
+    pub custom_draws: Vec<CustomDraw>,
 }
 
 #[expect(missing_docs)]
@@ -66,6 +67,7 @@ impl Scene {
         self.subpixel_sprites.clear();
         self.polychrome_sprites.clear();
         self.surfaces.clear();
+        self.custom_draws.clear();
     }
 
     pub fn len(&self) -> usize {
@@ -129,6 +131,10 @@ impl Scene {
                 sprite.order = order;
                 self.polychrome_sprites.push(*sprite);
             }
+            Primitive::Custom(draw) => {
+                draw.order = order;
+                self.custom_draws.push(draw.clone());
+            }
             Primitive::Surface(surface) => {
                 surface.order = order;
                 self.surfaces.push(surface.clone());
@@ -160,6 +166,7 @@ impl Scene {
         self.polychrome_sprites
             .sort_by_key(|sprite| (sprite.order, sprite.tile.tile_id));
         self.surfaces.sort_by_key(|surface| surface.order);
+        self.custom_draws.sort_by_key(|draw| draw.order);
     }
 
     #[cfg_attr(
@@ -185,6 +192,8 @@ impl Scene {
             subpixel_sprites_iter: self.subpixel_sprites.iter().peekable(),
             polychrome_sprites_start: 0,
             polychrome_sprites_iter: self.polychrome_sprites.iter().peekable(),
+            custom_start: 0,
+            custom_iter: self.custom_draws.iter().peekable(),
             surfaces_start: 0,
             surfaces_iter: self.surfaces.iter().peekable(),
         }
@@ -209,6 +218,7 @@ pub(crate) enum PrimitiveKind {
     SubpixelSprite,
     PolychromeSprite,
     Surface,
+    Custom,
 }
 
 pub(crate) enum PaintOperation {
@@ -228,6 +238,7 @@ pub enum Primitive {
     SubpixelSprite(SubpixelSprite),
     PolychromeSprite(PolychromeSprite),
     Surface(PaintSurface),
+    Custom(CustomDraw),
 }
 
 #[expect(missing_docs)]
@@ -242,6 +253,7 @@ impl Primitive {
             Primitive::SubpixelSprite(sprite) => &sprite.bounds,
             Primitive::PolychromeSprite(sprite) => &sprite.bounds,
             Primitive::Surface(surface) => &surface.bounds,
+            Primitive::Custom(draw) => &draw.bounds,
         }
     }
 
@@ -255,6 +267,7 @@ impl Primitive {
             Primitive::SubpixelSprite(sprite) => &sprite.content_mask,
             Primitive::PolychromeSprite(sprite) => &sprite.content_mask,
             Primitive::Surface(surface) => &surface.content_mask,
+            Primitive::Custom(draw) => &draw.content_mask,
         }
     }
 }
@@ -267,6 +280,8 @@ impl Primitive {
     allow(dead_code)
 )]
 struct BatchIterator<'a> {
+    custom_start: usize,
+    custom_iter: Peekable<slice::Iter<'a, CustomDraw>>,
     shadows_start: usize,
     shadows_iter: Peekable<slice::Iter<'a, Shadow>>,
     quads_start: usize,
@@ -290,6 +305,10 @@ impl<'a> Iterator for BatchIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut orders_and_kinds = [
+            (
+                self.custom_iter.peek().map(|d| d.order),
+                PrimitiveKind::Custom,
+            ),
             (
                 self.shadows_iter.peek().map(|s| s.order),
                 PrimitiveKind::Shadow,
@@ -328,6 +347,19 @@ impl<'a> Iterator for BatchIterator<'a> {
         };
 
         match batch_kind {
+            PrimitiveKind::Custom => {
+                let start = self.custom_start;
+                self.custom_iter.next();
+                self.custom_start += 1;
+                while self
+                    .custom_iter
+                    .next_if(|d| (d.order, batch_kind) < max_order_and_kind)
+                    .is_some()
+                {
+                    self.custom_start += 1;
+                }
+                Some(PrimitiveBatch::Custom(start..self.custom_start))
+            }
             PrimitiveKind::Shadow => {
                 let shadows_start = self.shadows_start;
                 let mut shadows_end = shadows_start + 1;
@@ -493,6 +525,7 @@ pub enum PrimitiveBatch {
         range: Range<usize>,
     },
     Surfaces(Range<usize>),
+    Custom(Range<usize>),
 }
 
 impl PrimitiveBatch {
@@ -524,6 +557,7 @@ impl PrimitiveBatch {
                     texture_id.index
                 )
             }
+            Self::Custom(range) => format!("custom ({})", range.len()),
             Self::Surfaces(range) => format!("surfaces ({})", range.len()),
         }
     }
@@ -945,5 +979,40 @@ impl PathVertex<Pixels> {
             st_position: self.st_position,
             content_mask: self.content_mask.scale(factor),
         }
+    }
+}
+
+/// An immutable, replayable description of independent GPU content.
+/// Backend contexts and outputs use checked type erasure; backend crates define
+/// their concrete types. Implementations must not submit or present GPU work.
+pub trait CustomContent: std::fmt::Debug + Send + Sync + 'static {
+    /// Prepare content on the host device. Return an explicit error for unsupported backends.
+    fn prepare(
+        &self,
+        backend: &dyn std::any::Any,
+        size: Size<crate::DevicePixels>,
+    ) -> anyhow::Result<Box<dyn std::any::Any>>;
+}
+
+/// Retained custom drawing. CPU ownership data is never uploaded as an instance struct.
+#[derive(Clone, Debug)]
+pub struct CustomDraw {
+    /// Assigned by scene insertion.
+    pub order: DrawOrder,
+    /// Destination in scaled scene coordinates.
+    pub bounds: Bounds<ScaledPixels>,
+    /// Inherited rectangular clip.
+    pub content_mask: ContentMask<ScaledPixels>,
+    /// Local corner coverage, in scaled pixels.
+    pub corner_radii: Corners<ScaledPixels>,
+    /// Inherited element opacity, applied once at composition.
+    pub opacity: f32,
+    /// Owned immutable content snapshot, shared across scene replay.
+    pub content: std::sync::Arc<dyn CustomContent>,
+}
+
+impl From<CustomDraw> for Primitive {
+    fn from(draw: CustomDraw) -> Self {
+        Self::Custom(draw)
     }
 }

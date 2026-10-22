@@ -1,0 +1,18 @@
+[package]
+name = "shader-lab"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+gpui = { path = "../../../../gpui/crates/gpui", features = ["test-support"] }
+gpui_platform = { package = "gpui-platform", path = "../../../../gpui/crates/gpui-platform", default-features = false, features = ["test-support", "font-kit"] }
+xgpui-shader = { path = "../../crates/xgpui-shader" }
+serde_json = "1"
+
+[features]
+runtime-shaders = ["gpui_platform/runtime_shaders"]

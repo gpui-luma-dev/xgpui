@@ -1,0 +1,16 @@
+[package]
+name = "xgpui-shader"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+gpui = { path = "../../../../gpui/crates/gpui" }
+refineable = { path = "../../../../gpui/crates/refineable" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui-apple = { path = "../../../../gpui/crates/gpui-apple" }
+metal = "0.33"

@@ -108,6 +108,7 @@ impl InstanceBufferPool {
 }
 
 pub struct MetalRenderer {
+    custom_compositor: Option<crate::custom_draw::CustomCompositor>,
     device: metal::Device,
     layer: Option<metal::MetalLayer>,
     is_apple_gpu: bool,
@@ -384,6 +385,7 @@ impl MetalRenderer {
         };
 
         Self {
+            custom_compositor: None,
             device,
             layer,
             presents_with_transaction: false,
@@ -717,6 +719,32 @@ impl MetalRenderer {
         texture: &metal::TextureRef,
         viewport_size: Size<DevicePixels>,
     ) -> Result<metal::CommandBuffer> {
+        let custom_outputs = if scene.custom_draws.is_empty() {
+            Vec::new()
+        } else {
+            if self.custom_compositor.is_none() {
+                self.custom_compositor =
+                    Some(crate::custom_draw::CustomCompositor::new(&self.device)?);
+            }
+            let context = crate::custom_draw::MetalCustomContext {
+                device: self.device.clone(),
+                queue: self.command_queue.clone(),
+            };
+            let outputs = scene
+                .custom_draws
+                .iter()
+                .map(|draw| crate::custom_draw::CustomCompositor::prepare(&context, draw))
+                .collect::<Result<Vec<_>>>()?;
+            let mut submitted = std::collections::HashSet::new();
+            for output in &outputs {
+                for command in &output.commands {
+                    if submitted.insert(command.as_ptr() as usize) {
+                        command.commit();
+                    }
+                }
+            }
+            outputs
+        };
         let command_queue = self.command_queue.clone();
         let command_buffer = command_queue.new_command_buffer();
         let alpha = if self.opaque { 1. } else { 0. };
@@ -730,6 +758,16 @@ impl MetalRenderer {
 
         for batch in scene.batches() {
             match batch {
+                PrimitiveBatch::Custom(range) => {
+                    for index in range {
+                        self.custom_compositor.as_ref().unwrap().draw(
+                            &scene.custom_draws[index],
+                            &custom_outputs[index],
+                            viewport_size,
+                            command_encoder,
+                        );
+                    }
+                }
                 PrimitiveBatch::Shadows(range) => {
                     self.draw_shadows(range, instance_bindings, viewport_size, command_encoder)
                 }

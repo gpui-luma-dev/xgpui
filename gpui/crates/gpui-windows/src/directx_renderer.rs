@@ -384,6 +384,7 @@ impl DirectXRenderer {
                 PrimitiveBatch::PolychromeSprites { texture_id, range } => {
                     self.draw_polychrome_sprites(texture_id, range.start, range.len())
                 }
+                PrimitiveBatch::Custom(_) => anyhow::bail!("custom GPU content is not supported by the DirectX renderer yet"),
                 PrimitiveBatch::Surfaces(range) => self.draw_surfaces(&scene.surfaces[range]),
             }
             .with_context(|| {

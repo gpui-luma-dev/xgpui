@@ -9,14 +9,14 @@ This directory is an umbrella, not a single extension crate.
 ```text
 extensions/xgpui-ext/
   crates/
-    xgpui-shader/    Custom shader and canvas extension (design stage)
+    xgpui-shader/    Custom shader and canvas extension (Metal solid-color and mesh producers)
   apps/
-    shader-lab/     Local correctness and performance app (planned)
+    shader-lab/     Local correctness and performance app (macOS Metal)
 ```
 
-The directories currently contain documentation placeholders. Cargo manifests,
-workspace membership, dependencies, and implementation will be added after the
-relevant design is agreed. The root build manifests are generated; follow
+The shader integration, mesh producer, and local lab use standalone Cargo manifests and
+local path dependencies. See [shader-lab](apps/shader-lab/README.md) for commands.
+The root build manifests remain unchanged; follow
 [the build instructions](../../docs/BUILDING.md) when integrating new crates.
 
 ## Boundaries
