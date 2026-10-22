@@ -1,6 +1,6 @@
 'use strict';
 const data = window.ROADMAP;
-const crates = data.crates;
+const crates = [...data.crates].sort((a, b) => Number(b.package === "gpui-unofficial") - Number(a.package === "gpui-unofficial"));
 const notes = data.notes;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short = pkg => notes[pkg]?.short || pkg;
