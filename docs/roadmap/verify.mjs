@@ -15,7 +15,7 @@ const run = code => vm.runInContext(code, context);
 const data = context.window.ROADMAP;
 assert.equal(data.crates.length, Object.keys(data.provenance.packages).length);
 assert.equal(Object.keys(data.notes).sort().join(), data.crates.map(c => c.package).sort().join());
-assert.equal(run('parseRoute(crateUrl("gpui-unofficial", "surface")).tab'), 'surface');
+assert.equal(run('parseRoute(crateUrl("gpui", "surface")).tab'), 'surface');
 assert.equal(run('parseRoute("#method").global'), 'method');
 assert.equal(run('escapeHtml("<script>&")'), "&lt;script&gt;&amp;");
 assert.equal(run('filterDeclarations([{name:"Example", signature:"", module:"crate", file:"", guards:[],kind:"struct", root_export:false}], "example").length'), 1);

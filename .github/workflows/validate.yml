@@ -23,8 +23,16 @@ jobs:
       - name: Test import replacement and provenance
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
-      - name: Check generated build manifests
-        run: python3 scripts/update_build.py --check
+      - name: Test downstream normalization and native manifest generation
+        run: cargo test --locked --manifest-path tools/release-sync/Cargo.toml
+      - name: Check normalized capture and generated manifests
+        run: |
+          cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- normalize --check
+          cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests --check
+      - name: Build and verify documentation
+        run: |
+          cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
+          node docs/roadmap/verify.mjs
 
   native-build:
     # A manually selected clean upstream branch has no development build harness.
@@ -41,7 +49,7 @@ jobs:
       - name: Clippy
         run: cargo +stable clippy --workspace --locked
       - name: Compile captured examples without launching them
-        run: cargo +stable build --config .cargo/validation.toml --manifest-path gpui/crates/gpui-unofficial/Cargo.toml --examples --features gpui_platform/font-kit --target-dir target
+        run: cargo +stable build --config .cargo/validation.toml --manifest-path gpui/crates/gpui/Cargo.toml --examples --features gpui_platform/font-kit --target-dir target
 
   macos:
     runs-on: macos-latest
@@ -63,8 +71,14 @@ jobs:
             git fetch -- origin "$SOURCE_REF"
             git checkout --detach FETCH_HEAD
           fi
-          if [[ -f gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml ]]; then
+          if [[ -f gpui/crates/gpui-platform/Cargo.toml ]]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "platform=gpui/crates/gpui-platform/Cargo.toml" >> "$GITHUB_OUTPUT"
+            echo "core=gpui/crates/gpui/Cargo.toml" >> "$GITHUB_OUTPUT"
+          elif [[ -f gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "platform=gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml" >> "$GITHUB_OUTPUT"
+            echo "core=gpui/crates/gpui-unofficial/Cargo.toml" >> "$GITHUB_OUTPUT"
           else
             echo "No release has been imported on this branch yet."
           fi
@@ -78,7 +92,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          manifest=gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml
+          manifest="${{ steps.source.outputs.platform }}"
           config="$RUNNER_TEMP/xgpui-validation.toml"
           # Resolve a fresh lockfile with the reviewed compatibility override.
           cargo +stable --config "$config" generate-lockfile --manifest-path "$manifest"
@@ -88,18 +102,18 @@ jobs:
 
       - name: Check platform build
         if: steps.source.outputs.present == 'true'
-        run: cargo +stable --config "$RUNNER_TEMP/xgpui-validation.toml" check --locked --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
+        run: cargo +stable --config "$RUNNER_TEMP/xgpui-validation.toml" check --locked --manifest-path "${{ steps.source.outputs.platform }}" --features font-kit,runtime_shaders
 
       - name: Clippy
         if: steps.source.outputs.present == 'true'
-        run: cargo +stable clippy --config "$RUNNER_TEMP/xgpui-validation.toml" --locked --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
+        run: cargo +stable clippy --config "$RUNNER_TEMP/xgpui-validation.toml" --locked --manifest-path "${{ steps.source.outputs.platform }}" --features font-kit,runtime_shaders
 
       - name: Library tests with Zed's Proptest revision
         if: steps.source.outputs.present == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          manifest=gpui/crates/gpui-unofficial/Cargo.toml
+          manifest="${{ steps.source.outputs.core }}"
           config="$RUNNER_TEMP/xgpui-validation.toml"
           cargo +stable --config "$config" generate-lockfile --manifest-path "$manifest"
           cargo +stable --config "$config" metadata --locked --manifest-path "$manifest" --format-version 1 \
