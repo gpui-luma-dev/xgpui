@@ -23,6 +23,26 @@ jobs:
       - name: Test import replacement and provenance
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
+      - name: Check generated build manifests
+        run: python3 scripts/update_build.py --check
+
+  native-build:
+    # A manually selected clean upstream branch has no development build harness.
+    if: inputs.source_ref == ''
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust tools
+        run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
+      - name: Build every native library, including Metal shaders
+        run: cargo +stable build --workspace --locked
+      - name: Check build harness formatting
+        run: cargo +stable fmt --package xgpui-build --check
+      - name: Clippy
+        run: cargo +stable clippy --workspace --locked
+      - name: Compile captured examples without launching them
+        run: cargo +stable build --config .cargo/validation.toml --manifest-path gpui/crates/gpui-unofficial/Cargo.toml --examples --features gpui_platform/font-kit --target-dir target
+
   macos:
     runs-on: macos-latest
     steps:

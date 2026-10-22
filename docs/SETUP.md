@@ -27,9 +27,10 @@ the original Zed SHA and tag reported by upstream's transform-metadata.json.
 
 ## Build and validate
 
-The captured crates are standalone Cargo workspaces. There is intentionally no
-root Cargo workspace yet. Run Cargo from the repository root so it discovers
-the generated local overrides:
+The captured crates retain their standalone Cargo workspaces. The root build
+harness now compiles supported native libraries with `cargo build --locked`;
+see [BUILDING.md](BUILDING.md). For standalone crate validation, run Cargo from
+the repository root so it discovers the generated local overrides:
 
 ```sh
 cargo --config .cargo/validation.toml generate-lockfile --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml
@@ -57,8 +58,8 @@ retain development lockfiles when adding reproducible bench applications.
 Generated `.cargo/config.toml` is reserved for importer output. Configuration in
 this repository is not inherited by a separate consumer such as gpui-luma;
 that consumer must supply its own patches to one pinned xgpui commit. The separate
-`.cargo/validation.toml` restores Zed's Proptest dependency and is not generated
-or overwritten by synchronization. Pass it explicitly to Cargo when testing.
+`.cargo/validation.toml` restores required Zed dependency overrides and is not
+generated or overwritten by synchronization. Pass it explicitly to Cargo when testing.
 
 ## Local modifications and conflicts
 
