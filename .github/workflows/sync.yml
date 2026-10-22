@@ -14,6 +14,12 @@ on:
         default: ""
         type: string
 
+      open_pr:
+        description: Explicitly allow creating or updating the normalized release PR
+        required: false
+        default: false
+        type: boolean
+
 permissions:
   contents: write
   pull-requests: write
@@ -31,6 +37,13 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+
+      - name: Prepare downstream normalization tool
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo +stable build --locked --release --manifest-path tools/release-sync/Cargo.toml --target-dir "$RUNNER_TEMP/normalization-target"
+          cp "$RUNNER_TEMP/normalization-target/release/xgpui-release" "$RUNNER_TEMP/xgpui-release"
+          cp scripts/crate-names.json "$RUNNER_TEMP/crate-names.json"
 
       - name: Import release onto upstream
         env:
@@ -63,8 +76,31 @@ jobs:
           print(f"Captured {len(data['packages'])} packages.")
           PY
 
+      - name: Normalize capture on its own persistent branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin upstream
+          remote_ref="$(git ls-remote --heads origin refs/heads/upstream-normalized)"
+          if [[ -n "$remote_ref" ]]; then
+            git fetch origin upstream-normalized
+            git switch -C upstream-normalized origin/upstream-normalized
+          else
+            git switch -c upstream-normalized origin/upstream
+          fi
+          # Replace only capture files on this generated branch, never on main.
+          git restore --source=origin/upstream -- gpui .cargo/config.toml upstream.json
+          "$RUNNER_TEMP/xgpui-release" normalize --root "$GITHUB_WORKSPACE" --map "$RUNNER_TEMP/crate-names.json"
+          "$RUNNER_TEMP/xgpui-release" normalize --root "$GITHUB_WORKSPACE" --map "$RUNNER_TEMP/crate-names.json" --check
+          git add --all -- gpui .cargo/config.toml upstream.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Normalize GPUI crate names"
+            git push origin upstream-normalized
+          fi
+          echo 'Normalized release is ready on upstream-normalized; raw upstream remains unchanged.' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Open or update sync PR
-        if: vars.SYNC_AUTO_PR != 'false'
+        if: inputs.open_pr && vars.SYNC_AUTO_PR != 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -72,40 +108,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin main upstream
-          if git merge-base --is-ancestor origin/upstream origin/main; then
+          git fetch origin main upstream-normalized
+          if git merge-base --is-ancestor origin/upstream-normalized origin/main; then
             echo "This import is already included in main."
             exit 0
           fi
           body_file="$RUNNER_TEMP/sync-pr.md"
-          python3 - <<'PY' > "$body_file"
-          import json
-          import pathlib
-          data = json.loads(pathlib.Path("upstream.json").read_text())
-          print(f"Import gpui-unofficial `{data['ref']}`.")
-          print(f"\nSource commit: `{data['commit']}`")
-          print("\nCaptures the complete release tree under `gpui/`, preserving")
-          print("source files and licenses. Generates local Cargo overrides")
-          print("and records provenance in `upstream.json`.")
-          print("\nReview validation results before merging. If there are conflicts,")
-          print("resolve them on an integration branch created from main;")
-          print("keep upstream free of local changes.")
-          print("\n**Use a merge commit and keep the upstream branch.**")
-          PY
-          pr_number="$(gh pr list --base main --head upstream --state open \
+          source_sha="$(jq -r '.commit' upstream.json)"
+          printf 'Import gpui-unofficial %s with normalized crate names.\n\nSource commit: %s\n\nRaw capture remains on upstream. This PR comes from upstream-normalized.\nThe name mapping and original package paths are recorded in upstream.json.\n\nReview validation before merging. Resolve conflicts on an integration branch based on main; preserve downstream patches and both upstream branches.\n\nUse a merge commit.\n' "$RELEASE" "$source_sha" > "$body_file"
+          pr_number="$(gh pr list --base main --head upstream-normalized --state open \
             --json number --jq '.[0].number // empty')"
           if [[ -n "$pr_number" ]]; then
             gh pr edit "$pr_number" --title "Sync gpui-unofficial $RELEASE" \
               --body-file "$body_file"
           else
-            gh pr create --base main --head upstream \
+            gh pr create --base main --head upstream-normalized \
               --title "Sync gpui-unofficial $RELEASE" --body-file "$body_file"
           fi
 
-      - name: Show manual PR link when organization policy blocks automated PRs
-        if: vars.SYNC_AUTO_PR == 'false'
+      - name: Show manual review link when PR creation was not authorized
+        if: ${{ !inputs.open_pr || vars.SYNC_AUTO_PR == 'false' }}
         env:
           REPOSITORY: ${{ github.repository }}
         run: |
-          echo "Organization policy disables automated PR creation."
-          echo "[Review upstream and open a PR](https://github.com/$REPOSITORY/compare/main...upstream?expand=1)" >> "$GITHUB_STEP_SUMMARY"
+          echo "No PR was created: opt-in authorization or organization permission is missing."
+          echo "[Review upstream and open a PR](https://github.com/$REPOSITORY/compare/main...upstream-normalized?expand=1)" >> "$GITHUB_STEP_SUMMARY"

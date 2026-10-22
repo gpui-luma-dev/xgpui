@@ -23,7 +23,8 @@ are not all enabled by a root library build.
 - Rust with the 2024 edition; tested with Rust 1.99.0 on Apple Silicon macOS.
 - Xcode selected as the active developer directory, with the Metal compiler
   installed, for the default macOS shader build.
-- Python 3.11 or later for the manifest generator and import tooling.
+- Rust for downstream normalization and build-manifest generation. The existing
+  raw import workflow retains its current importer.
 
 ```sh
 # Optimized native libraries.
@@ -46,7 +47,7 @@ is still run separately by validate.yml.
 
 ```sh
 cargo build --config .cargo/validation.toml \
-  --manifest-path gpui/crates/gpui-unofficial/Cargo.toml \
+  --manifest-path gpui/crates/gpui/Cargo.toml \
   --examples --features gpui_platform/font-kit --target-dir target
 ```
 
@@ -69,12 +70,12 @@ tests advance deterministically; the clean upstream branch retains the original.
 The nested `transformed-crates` staging copy is not built a second time.
 
 `Cargo.toml` and `tools/build-all/Cargo.toml` are generated development files;
-they are not overwritten by upstream imports. After an import adds or removes
+they are not overwritten by upstream imports or downstream normalization. After an import adds or removes
 packages, regenerate them and update the root lockfile on the development or
 integration branch:
 
 ```sh
-python3 scripts/update_build.py
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests
 cargo generate-lockfile
 cargo build --locked
 ```
@@ -89,3 +90,10 @@ utility crate requires Zed's async-process fork: its process launcher calls
 `Child::adopt_raw_pid`, which the registry dependency does not provide. The fork
 revision is taken from the original Zed release's workspace patch. These
 overrides repair extraction omissions without editing captured source.
+
+## Local naming
+
+The raw gpui-unofficial release remains on upstream. Development uses a
+normalized capture with names such as gpui and gpui-linux. The Rust tool in
+tools/release-sync applies scripts/crate-names.json and preserves original
+package paths in upstream.json. See [the sync process](SETUP.md).

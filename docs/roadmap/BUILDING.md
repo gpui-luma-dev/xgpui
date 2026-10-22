@@ -54,3 +54,8 @@ small scene model, not the native renderer. Its model tests cover overlap
 ordering, clipping, explicit layers, batch texture boundaries and replay.
 Playback is opt-in, stops after one sequence, and is cleaned up on navigation.
 Reduced-motion preferences suppress SVG movement.
+
+Capture packages use normalized local names. The original gpui-unofficial
+repository and release remain the provenance source; upstream.json records both
+original and local package maps. Review narrative links and examples after a
+normalization-map change as well as after a release sync.

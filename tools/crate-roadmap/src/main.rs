@@ -712,9 +712,9 @@ fn generate(root: &Path) -> Result<()> {
         "tools/build-all/Cargo.toml",
         ".cargo/config.toml",
         ".cargo/validation.toml",
-        "gpui/crates/gpui-web-gpui-unofficial/examples/hello_web/Cargo.toml",
-        "gpui/crates/gpui-web-gpui-unofficial/examples/hello_web/.cargo/config.toml",
-        "gpui/crates/gpui-web-gpui-unofficial/examples/hello_web/trunk.toml",
+        "gpui/crates/gpui-web/examples/hello_web/Cargo.toml",
+        "gpui/crates/gpui-web/examples/hello_web/.cargo/config.toml",
+        "gpui/crates/gpui-web/examples/hello_web/trunk.toml",
     ] {
         build_files.insert(file.to_owned(), fs::read_to_string(root.join(file))?);
     }

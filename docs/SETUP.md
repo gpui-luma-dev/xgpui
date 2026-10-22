@@ -1,154 +1,112 @@
 # xgpui release imports
 
-`main` is the development branch. `upstream` is a persistent sequence of clean
-release snapshots. Do not add local patches to upstream, delete it, or force-push
-it. Merge sync PRs with merge commits, never squash or rebase merges.
+`main` is the development branch. Synchronization keeps two persistent branches:
+
+- `upstream`: the exact gpui-unofficial capture, with its original names.
+- `upstream-normalized`: the same capture with local crate names, used for merges.
+
+Do not add development patches to either generated branch. Preserve both branches
+and use merge commits when integrating their history; resolve conflicts on a
+development/integration branch based on main.
 
 ## Import a release
 
-Run Actions > Sync GPUI release from main, specifying a release such as `1.25.2`.
-Optionally provide its full source SHA to verify the fetched branch. Or run:
+Run **Actions → Sync GPUI release** from main, supplying the release number and,
+optionally, an expected source SHA. The workflow:
+
+1. Uses the existing importer to replace `gpui/` on upstream and record provenance.
+2. Restores those capture files onto upstream-normalized, replacing the previous
+   generated snapshot rather than overlaying it.
+3. Runs the Rust normalizer with the explicit `scripts/crate-names.json` mapping.
+4. Commits and pushes changes to the generated branches when necessary.
+5. Provides a comparison link against main. Creating/updating a PR requires the
+   dispatch's `open_pr` opt-in and organization permission.
+
+Dispatching this workflow authorizes its branch updates. It never publishes
+crates, merges a PR or launches an application. No workflow is dispatched merely
+by changing these files locally.
+
+Re-running an unchanged capture is idempotent. Unknown crates or naming collisions
+stop normalization for review; add a reviewed mapping before retrying. Do not
+derive new names silently. When updating the normalizer, retain its schema and
+mapping version in provenance and review the resulting generated diff.
+
+## Names and provenance
+
+For example, `gpui-unofficial` becomes `gpui`, and
+`gpui-linux-gpui-unofficial` becomes `gpui-linux`. Rust dependency aliases such as
+`gpui_linux` stay as they were. Cargo package identities, dependency references,
+directory paths and local overrides change together. The nested transformed
+staging copy is normalized too, but is not a second build input.
+
+`upstream.json` retains the source repository, release and commit, plus Zed's
+reported provenance. `source_packages` retains original names/paths; `packages`
+describes the local normalized tree. `normalization` records the schema and name
+map. Upstream repository URLs, Rust source, licenses and READMEs are preserved.
+
+Package names change for downstream consumers. Existing dependency aliases can
+stay, but their `package` and path fields must point at the normalized names.
+These local names do not imply ownership of the corresponding crates.io names.
+
+## Integrate and validate
+
+Merge upstream-normalized into the development/integration branch. Preserve local
+Rust edits when resolving conflicts; do not replace main's capture with a fresh
+generated snapshot as a substitute for merging. The first normalization is a
+directory/package migration; later releases use the same stable paths.
+
+After integration, run from the repository root. Refresh the standalone tools'
+lockfiles too when captured versions change, because Cargo records unused local
+patches in them:
 
 ```sh
-gh workflow run sync.yml --repo gpui-luma-dev/xgpui --ref main -f release=1.25.2
+cargo generate-lockfile --manifest-path tools/release-sync/Cargo.toml
+cargo generate-lockfile --manifest-path tools/crate-roadmap/Cargo.toml
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- normalize --check
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests
+cargo check
+cargo build --locked
+
+cargo test --locked --manifest-path tools/release-sync/Cargo.toml
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests --check
 ```
 
-The workflow replaces `gpui/` on upstream, records the exact source commit in
-`upstream.json`, generates `.cargo/config.toml`, and opens or updates one PR into
-main. Re-running an unchanged release does not create another import commit.
-An import already merged into main does not create another PR. Finish reviewing
-one import before requesting another if you want separate release reviews.
+`build-manifests` reads the package map and preserves native target selection,
+standalone workspace exclusions and the compatibility patches. It supersedes the
+legacy `scripts/update_build.py` generator, which is retained but is not the
+normalized build path. Review and retain the root lockfile.
 
-The entire captured tree is preserved, including upstream's nested
-`crates/transformed-crates` staging copy. Only direct `crates/*/Cargo.toml`
-packages generate overrides; nested staging copies are not additional packages.
-The source SHA belongs to gpui-unofficial. When available, the import also records
-the original Zed SHA and tag reported by upstream's transform-metadata.json.
-
-## Build and validate
-
-The captured crates retain their standalone Cargo workspaces. The root build
-harness now compiles supported native libraries with `cargo build --locked`;
-see [BUILDING.md](BUILDING.md). For standalone crate validation, run Cargo from
-the repository root so it discovers the generated local overrides:
+For standalone checks, continue invoking Cargo from the repository root so it
+discovers `.cargo/config.toml`. For example, on macOS:
 
 ```sh
-cargo --config .cargo/validation.toml generate-lockfile --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml
-cargo --config .cargo/validation.toml generate-lockfile --manifest-path gpui/crates/gpui-unofficial/Cargo.toml
-cargo --config .cargo/validation.toml metadata --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --format-version 1 > /tmp/xgpui-metadata.json
-python3 scripts/check_local_dependencies.py /tmp/xgpui-metadata.json
-cargo --config .cargo/validation.toml check --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
-cargo clippy --config .cargo/validation.toml --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
-cargo --config .cargo/validation.toml test --manifest-path gpui/crates/gpui-unofficial/Cargo.toml --lib --features gpui_platform/runtime_shaders
-cargo fmt --manifest-path gpui/crates/gpui-unofficial/Cargo.toml --check
-python3 -m unittest discover -s scripts -p 'test_*.py' -v
+cargo check --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-platform/Cargo.toml \
+  --features font-kit,runtime_shaders
+cargo test --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui/Cargo.toml --lib \
+  --features gpui_platform/runtime_shaders
 ```
 
-`runtime_shaders` avoids requiring precompiled Metal shaders for checks. These
-commands do not launch GUI examples. macOS checks do not establish iOS, Linux,
-Windows, or browser compatibility. Keep any inherited upstream failures visible;
-do not fix them on the clean upstream branch.
+`.cargo/validation.toml` remains separate from generated capture overrides. It
+restores the Proptest and async-process Git revisions needed by this release.
+Cargo patches do not force a lower version over a newer compatible registry
+version; inspect metadata when updating versions. A separate consumer must carry
+its own local package overrides rather than assuming this checkout's config is
+inherited.
 
-Cargo patches participate in version resolution; they do not force a lower
-version over a newer compatible registry release. The dependency check rejects
-such drift. If needed, use `cargo update --manifest-path MANIFEST -p PACKAGE
---precise CAPTURED_VERSION`, then rerun metadata and validation. Establish and
-retain development lockfiles when adding reproducible bench applications.
+Refresh and review the web documentation after each release; regeneration alone
+does not validate the narrative or SVG teaching model. See
+[roadmap maintenance](roadmap/BUILDING.md) and [build options](BUILDING.md).
 
-Generated `.cargo/config.toml` is reserved for importer output. Configuration in
-this repository is not inherited by a separate consumer such as gpui-luma;
-that consumer must supply its own patches to one pinned xgpui commit. The separate
-`.cargo/validation.toml` restores required Zed dependency overrides and is not
-generated or overwritten by synchronization. Pass it explicitly to Cargo when testing.
-
-## Local modifications and conflicts
-
-Add documentation under docs, test applications under apps, and eventual Rust
-changes under gpui on main. If a sync PR conflicts, create an integration branch
-from main, merge upstream there, resolve conflicts and validate, then open its PR
-into main. Keep upstream as the unmodified import history. Do not resolve
-conflicts by merging main into upstream.
+The workflow can still validate the original raw upstream paths through its
+`source_ref` input. Native macOS checks do not establish browser, Linux, Windows
+or mobile runtime compatibility.
 
 ## GitHub settings
 
-- Default branch: main.
-- Enable merge commits; preserve the upstream branch after PR merges.
-- Allow Actions to create pull requests. sync.yml requests contents and PR write
-  permissions; no personal access token is stored in the repository.
-- If a token-created PR's checks require approval, approve the workflow runs in
-  GitHub, or manually dispatch validate.yml on upstream.
-
-The sync workflow never publishes crates, merges PRs, or launches applications.
-Imported licenses remain with the captured source. README files are preserved
-as imported, without local edits.
-
-### Current organization policy
-
-gpui-luma-dev currently prevents GitHub Actions from opening pull requests.
-Repository variable `SYNC_AUTO_PR=false` selects the manual-PR fallback: the
-workflow still imports and pushes upstream, and its summary provides a compare
-link. Open or update the PR manually after each import:
-
-```sh
-gh pr create --repo gpui-luma-dev/xgpui --base main --head upstream --title "Sync gpui-unofficial RELEASE" --body "Review the imported release and validation results. Merge with a merge commit and preserve upstream."
-```
-
-If an organization administrator later enables Actions PR creation, set
-`SYNC_AUTO_PR=true` and enable the repository's Actions PR creation setting.
-No organization-wide policy is changed by this setup.
-
-## Initial 1.25.2 validation baseline
-
-The initial import was checked with Rust 1.99.0 on macOS:
-
-- Snapshot Git tree exactly matches source commit
-  `4eadf3cd8c4bcbdd4e8652aa0fbe5e20712cc8c6`.
-- All resolved captured packages use local sources.
-- Platform `cargo check` and `cargo clippy` pass with `font-kit,runtime_shaders`.
-- All four importer regression tests pass.
-- With Zed's Proptest revision restored, core library tests pass: 369 passed,
-  0 failed, 2 ignored.
-- Core `cargo fmt --check` reports formatting differences in captured source.
-
-Formatting differences are preserved in the clean import. They are not a CI
-formatting gate for captured upstream source.
-
-### Cause and fix of the initial test compilation failure
-
-The original [Zed workspace manifest](https://github.com/zed-industries/zed/blob/d25fa01ccd788d812f236810b71af4feff6b2e38/Cargo.toml)
-pins Proptest to Git revision `3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b`.
-The captured release instead declares `proptest = "1"`, which resolved to 1.12.0
-and proptest-macro 0.6.0 during setup. GPUI's wrapper emits
-`proptest_path = "::gpui::proptest"`; Zed's pinned macro accepts this string,
-whereas the newer published macro expects a Rust path. Its error generation
-panics while parsing, producing the misleading unexpected-token diagnostic at
-`randomized_element_tree.rs:1648` before any tests run.
-
-Validation now restores the exact Git dependency with `.cargo/validation.toml`
-and resolves fresh lockfiles for the standalone crates.
-It verifies both Proptest packages resolve to that Git revision. No captured
-Rust source is changed or test disabled. Review the override when adopting
-another GPUI release.
-
-The test command also enables `gpui_platform/runtime_shaders`, since features
-from the separate platform build command do not carry into the library test
-command. This avoids requiring precompiled Metal shaders for headless tests.
-
-To validate upstream using the current workflow and dependency configuration:
-
-```sh
-gh workflow run validate.yml --repo gpui-luma-dev/xgpui --ref main -f source_ref=upstream
-```
-
-### Spring animation clock correction
-
-The initial full test runs exposed an intermittent failure in
-`test_spring_animation_preserves_velocity_when_retargeted`. The test advances
-simulated scheduler time, but the spring element sampled wall time. Its result
-therefore depended on execution speed rather than the requested 50 ms step.
-
-The development branch now samples `cx.background_executor().now()` for spring
-animation updates. Production still uses the scheduler's real clock, while
-headless tests use its simulated clock. The regression test also compares its
-intermediate position with the expected 50 ms spring state. No tests are skipped
-or retried. This is a downstream Rust patch; the clean upstream branch is unchanged.
+Keep main as the default branch and preserve upstream/upstream-normalized after
+merges. If organization policy blocks Actions-created PRs, leave
+`SYNC_AUTO_PR=false`; the workflow supplies the normalized comparison link.
+Even when the organization permits PR creation, the dispatch's `open_pr` input
+defaults to false. Review and authorize each operation separately.

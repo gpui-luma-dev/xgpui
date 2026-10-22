@@ -917,10 +917,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "collections-gpui-unofficial"
+name = "collections"
 version = "1.25.2"
 dependencies = [
- "gpui-util-gpui-unofficial",
+ "gpui-util",
  "indexmap",
  "rustc-hash 2.1.3",
 ]
@@ -1272,7 +1272,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e9de72ce2ad1f90dc62fa25f0f430ef85eb4b0d8fa0be4f30373bc40a21d28e"
 
 [[package]]
-name = "derive-refineable-gpui-unofficial"
+name = "derive-refineable"
 version = "1.25.2"
 dependencies = [
  "proc-macro2",
@@ -2039,14 +2039,77 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-apple-gpui-unofficial"
+name = "gpui"
+version = "1.25.2"
+dependencies = [
+ "accesskit",
+ "anyhow",
+ "async-channel",
+ "async-task",
+ "backtrace",
+ "bitflags 2.13.2",
+ "chrono",
+ "collections",
+ "ctor",
+ "derive_more",
+ "embed-resource",
+ "etagere",
+ "futures",
+ "getrandom 0.3.4",
+ "gpui-macros",
+ "gpui-shared-string",
+ "gpui-util",
+ "heapless",
+ "http-client",
+ "image",
+ "inventory",
+ "itertools",
+ "libc",
+ "log",
+ "lyon",
+ "num_cpus",
+ "objc2-core-foundation",
+ "objc2-core-video",
+ "parking",
+ "parking_lot",
+ "pin-project",
+ "pollster",
+ "profiling",
+ "rand 0.9.5",
+ "raw-window-handle",
+ "refineable",
+ "regex",
+ "resvg",
+ "scheduler",
+ "schemars",
+ "seahash",
+ "serde",
+ "serde_json",
+ "slotmap",
+ "smallvec",
+ "spin 0.10.1",
+ "strum",
+ "sum-tree",
+ "taffy",
+ "thiserror 2.0.21",
+ "ttf-parser",
+ "url",
+ "usvg",
+ "uuid",
+ "waker-fn",
+ "windows 0.62.2",
+ "zed-scap",
+]
+
+[[package]]
+name = "gpui-apple"
 version = "1.25.2"
 dependencies = [
  "anyhow",
  "async-task",
  "block2 0.6.2",
  "cbindgen",
- "collections-gpui-unofficial",
+ "collections",
  "core-foundation 0.10.1",
  "core-foundation-sys",
  "core-graphics 0.24.0",
@@ -2056,8 +2119,8 @@ dependencies = [
  "etagere",
  "foreign-types",
  "futures",
- "gpui-unofficial",
- "gpui-util-gpui-unofficial",
+ "gpui",
+ "gpui-util",
  "image",
  "libc",
  "log",
@@ -2079,7 +2142,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-linux-gpui-unofficial"
+name = "gpui-linux"
 version = "1.25.2"
 dependencies = [
  "accesskit",
@@ -2090,13 +2153,13 @@ dependencies = [
  "bytemuck",
  "calloop",
  "calloop-wayland-source",
- "collections-gpui-unofficial",
+ "collections",
  "filedescriptor",
  "futures",
- "gpui-unofficial",
- "gpui-util-gpui-unofficial",
- "gpui-wgpu-gpui-unofficial",
- "http-client-gpui-unofficial",
+ "gpui",
+ "gpui-util",
+ "gpui-wgpu",
+ "http-client",
  "libc",
  "log",
  "notify-rust",
@@ -2122,7 +2185,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-macos-gpui-unofficial"
+name = "gpui-macos"
 version = "1.25.2"
 dependencies = [
  "accesskit",
@@ -2130,7 +2193,7 @@ dependencies = [
  "anyhow",
  "block2 0.6.2",
  "cocoa 0.26.0",
- "collections-gpui-unofficial",
+ "collections",
  "core-foundation 0.10.1",
  "core-foundation-sys",
  "core-graphics 0.24.0",
@@ -2138,9 +2201,9 @@ dependencies = [
  "dispatch2",
  "foreign-types",
  "futures",
- "gpui-apple-gpui-unofficial",
- "gpui-unofficial",
- "gpui-util-gpui-unofficial",
+ "gpui",
+ "gpui-apple",
+ "gpui-util",
  "image",
  "itertools",
  "log",
@@ -2152,7 +2215,7 @@ dependencies = [
  "objc2-user-notifications",
  "parking_lot",
  "raw-window-handle",
- "scheduler-gpui-unofficial",
+ "scheduler",
  "semver",
  "smallvec",
  "strum",
@@ -2160,7 +2223,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-macros-gpui-unofficial"
+name = "gpui-macros"
 version = "1.25.2"
 dependencies = [
  "heck 0.5.0",
@@ -2170,20 +2233,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-platform-gpui-unofficial"
+name = "gpui-platform"
 version = "1.25.2"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
- "gpui-linux-gpui-unofficial",
- "gpui-macos-gpui-unofficial",
- "gpui-unofficial",
- "gpui-web-gpui-unofficial",
- "gpui-windows-gpui-unofficial",
+ "gpui",
+ "gpui-linux",
+ "gpui-macos",
+ "gpui-web",
+ "gpui-windows",
 ]
 
 [[package]]
-name = "gpui-shared-string-gpui-unofficial"
+name = "gpui-shared-string"
 version = "1.25.2"
 dependencies = [
  "schemars",
@@ -2192,70 +2255,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-unofficial"
-version = "1.25.2"
-dependencies = [
- "accesskit",
- "anyhow",
- "async-channel",
- "async-task",
- "backtrace",
- "bitflags 2.13.2",
- "chrono",
- "collections-gpui-unofficial",
- "ctor",
- "derive_more",
- "embed-resource",
- "etagere",
- "futures",
- "getrandom 0.3.4",
- "gpui-macros-gpui-unofficial",
- "gpui-shared-string-gpui-unofficial",
- "gpui-util-gpui-unofficial",
- "heapless",
- "http-client-gpui-unofficial",
- "image",
- "inventory",
- "itertools",
- "libc",
- "log",
- "lyon",
- "num_cpus",
- "objc2-core-foundation",
- "objc2-core-video",
- "parking",
- "parking_lot",
- "pin-project",
- "pollster",
- "profiling",
- "rand 0.9.5",
- "raw-window-handle",
- "refineable-gpui-unofficial",
- "regex",
- "resvg",
- "scheduler-gpui-unofficial",
- "schemars",
- "seahash",
- "serde",
- "serde_json",
- "slotmap",
- "smallvec",
- "spin 0.10.1",
- "strum",
- "sum-tree-gpui-unofficial",
- "taffy",
- "thiserror 2.0.21",
- "ttf-parser",
- "url",
- "usvg",
- "uuid",
- "waker-fn",
- "windows 0.62.2",
- "zed-scap",
-]
-
-[[package]]
-name = "gpui-util-gpui-unofficial"
+name = "gpui-util"
 version = "1.25.2"
 dependencies = [
  "anyhow",
@@ -2264,21 +2264,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-web-gpui-unofficial"
+name = "gpui-web"
 version = "1.25.2"
 dependencies = [
  "anyhow",
  "async-channel",
  "console_error_panic_hook",
  "futures",
- "gpui-unofficial",
- "gpui-wgpu-gpui-unofficial",
- "http-client-gpui-unofficial",
+ "gpui",
+ "gpui-wgpu",
+ "http-client",
  "js-sys",
  "log",
  "parking_lot",
  "raw-window-handle",
- "scheduler-gpui-unofficial",
+ "scheduler",
  "smallvec",
  "unicode-properties",
  "unicode-script",
@@ -2292,16 +2292,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-wgpu-gpui-unofficial"
+name = "gpui-wgpu"
 version = "1.25.2"
 dependencies = [
  "anyhow",
  "bytemuck",
- "collections-gpui-unofficial",
+ "collections",
  "cosmic-text",
  "etagere",
- "gpui-unofficial",
- "gpui-util-gpui-unofficial",
+ "gpui",
+ "gpui-util",
  "itertools",
  "log",
  "parking_lot",
@@ -2317,25 +2317,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-windows-gpui-unofficial"
+name = "gpui-windows"
 version = "1.25.2"
 dependencies = [
  "accesskit",
  "accesskit_windows",
  "anyhow",
- "collections-gpui-unofficial",
+ "collections",
  "dunce",
  "etagere",
  "futures",
- "gpui-unofficial",
- "gpui-util-gpui-unofficial",
+ "gpui",
+ "gpui-util",
  "image",
  "itertools",
  "log",
  "parking_lot",
  "rand 0.9.5",
  "raw-window-handle",
- "scheduler-gpui-unofficial",
+ "scheduler",
  "smallvec",
  "uuid",
  "windows 0.62.2",
@@ -2509,7 +2509,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "http-client-gpui-unofficial"
+name = "http-client"
 version = "1.25.2"
 dependencies = [
  "anyhow",
@@ -2526,7 +2526,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "http-client-tls-gpui-unofficial"
+name = "http-client-tls"
 version = "1.25.2"
 dependencies = [
  "log",
@@ -4008,7 +4008,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
 
 [[package]]
-name = "path-gpui-unofficial"
+name = "path"
 version = "1.25.2"
 dependencies = [
  "anyhow",
@@ -4053,10 +4053,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
-name = "perf-gpui-unofficial"
+name = "perf"
 version = "1.25.2"
 dependencies = [
- "collections-gpui-unofficial",
+ "collections",
  "serde",
  "serde_json",
 ]
@@ -4715,10 +4715,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "refineable-gpui-unofficial"
+name = "refineable"
 version = "1.25.2"
 dependencies = [
- "derive-refineable-gpui-unofficial",
+ "derive-refineable",
 ]
 
 [[package]]
@@ -4757,15 +4757,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
-name = "reqwest-client-gpui-unofficial"
+name = "reqwest-client"
 version = "1.25.2"
 dependencies = [
  "anyhow",
  "bytes",
  "futures",
- "gpui-util-gpui-unofficial",
- "http-client-gpui-unofficial",
- "http-client-tls-gpui-unofficial",
+ "gpui-util",
+ "http-client",
+ "http-client-tls",
  "log",
  "regex",
  "tokio",
@@ -5046,7 +5046,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "scheduler-gpui-unofficial"
+name = "scheduler"
 version = "1.25.2"
 dependencies = [
  "async-task",
@@ -5538,13 +5538,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
-name = "sum-tree-gpui-unofficial"
+name = "sum-tree"
 version = "1.25.2"
 dependencies = [
  "heapless",
  "rayon",
  "tracing",
- "ztracing-gpui-unofficial",
+ "ztracing",
 ]
 
 [[package]]
@@ -6286,26 +6286,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
-name = "util-gpui-unofficial"
+name = "util"
 version = "1.25.2"
 dependencies = [
  "anyhow",
  "async-fs",
  "async_zip",
- "collections-gpui-unofficial",
+ "collections",
  "command-fds",
  "dirs 6.0.0",
  "dunce",
  "futures",
  "futures-lite",
  "globset",
- "gpui-util-gpui-unofficial",
+ "gpui-util",
  "itertools",
  "libc",
  "log",
  "mach2",
  "nix 0.30.1",
- "path-gpui-unofficial",
+ "path",
  "percent-encoding",
  "regex",
  "rust-embed",
@@ -6324,10 +6324,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "util-macros-gpui-unofficial"
+name = "util-macros"
 version = "1.25.2"
 dependencies = [
- "perf-gpui-unofficial",
+ "perf",
  "quote",
  "syn 2.0.119",
 ]
@@ -7524,32 +7524,32 @@ checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
 name = "xgpui-build"
 version = "0.0.0"
 dependencies = [
- "collections-gpui-unofficial",
- "derive-refineable-gpui-unofficial",
- "gpui-apple-gpui-unofficial",
- "gpui-linux-gpui-unofficial",
- "gpui-macos-gpui-unofficial",
- "gpui-macros-gpui-unofficial",
- "gpui-platform-gpui-unofficial",
- "gpui-shared-string-gpui-unofficial",
- "gpui-unofficial",
- "gpui-util-gpui-unofficial",
- "gpui-web-gpui-unofficial",
- "gpui-wgpu-gpui-unofficial",
- "gpui-windows-gpui-unofficial",
- "http-client-gpui-unofficial",
- "http-client-tls-gpui-unofficial",
- "path-gpui-unofficial",
- "perf-gpui-unofficial",
- "refineable-gpui-unofficial",
- "reqwest-client-gpui-unofficial",
- "scheduler-gpui-unofficial",
- "sum-tree-gpui-unofficial",
- "util-gpui-unofficial",
- "util-macros-gpui-unofficial",
- "zlog-gpui-unofficial",
- "ztracing-gpui-unofficial",
- "ztracing-macro-gpui-unofficial",
+ "collections",
+ "derive-refineable",
+ "gpui",
+ "gpui-apple",
+ "gpui-linux",
+ "gpui-macos",
+ "gpui-macros",
+ "gpui-platform",
+ "gpui-shared-string",
+ "gpui-util",
+ "gpui-web",
+ "gpui-wgpu",
+ "gpui-windows",
+ "http-client",
+ "http-client-tls",
+ "path",
+ "perf",
+ "refineable",
+ "reqwest-client",
+ "scheduler",
+ "sum-tree",
+ "util",
+ "util-macros",
+ "zlog",
+ "ztracing",
+ "ztracing-macro",
 ]
 
 [[package]]
@@ -7965,12 +7965,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112"
 
 [[package]]
-name = "zlog-gpui-unofficial"
+name = "zlog"
 version = "1.25.2"
 dependencies = [
  "anyhow",
  "chrono",
- "collections-gpui-unofficial",
+ "collections",
  "log",
 ]
 
@@ -8009,15 +8009,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "ztracing-gpui-unofficial"
+name = "ztracing"
 version = "1.25.2"
 dependencies = [
  "tracing",
- "ztracing-macro-gpui-unofficial",
+ "ztracing-macro",
 ]
 
 [[package]]
-name = "ztracing-macro-gpui-unofficial"
+name = "ztracing-macro"
 version = "1.25.2"
 
 [[package]]
