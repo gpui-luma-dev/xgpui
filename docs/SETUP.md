@@ -27,9 +27,10 @@ the original Zed SHA and tag reported by upstream's transform-metadata.json.
 
 ## Build and validate
 
-The captured crates are standalone Cargo workspaces. There is intentionally no
-root Cargo workspace yet. Run Cargo from the repository root so it discovers
-the generated local overrides:
+The captured crates retain their standalone Cargo workspaces. The root build
+harness now compiles supported native libraries with `cargo build --locked`;
+see [BUILDING.md](BUILDING.md). For standalone crate validation, run Cargo from
+the repository root so it discovers the generated local overrides:
 
 ```sh
 cargo --config .cargo/validation.toml generate-lockfile --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml
@@ -57,8 +58,8 @@ retain development lockfiles when adding reproducible bench applications.
 Generated `.cargo/config.toml` is reserved for importer output. Configuration in
 this repository is not inherited by a separate consumer such as gpui-luma;
 that consumer must supply its own patches to one pinned xgpui commit. The separate
-`.cargo/validation.toml` restores Zed's Proptest dependency and is not generated
-or overwritten by synchronization. Pass it explicitly to Cargo when testing.
+`.cargo/validation.toml` restores required Zed dependency overrides and is not
+generated or overwritten by synchronization. Pass it explicitly to Cargo when testing.
 
 ## Local modifications and conflicts
 
@@ -139,15 +140,15 @@ To validate upstream using the current workflow and dependency configuration:
 gh workflow run validate.yml --repo gpui-luma-dev/xgpui --ref main -f source_ref=upstream
 ```
 
-### Separate intermittent animation test failure
+### Spring animation clock correction
 
-After correcting the Proptest dependency, the PR validation run passed all 369
-library tests. A concurrent manual validation run failed only
-`elements::animation::tests::test_spring_animation_preserves_velocity_when_retargeted`
-at `elements/animation.rs:742`, where it expected a positive intermediate value.
-That test advances the scheduler's simulated clock, but the spring element samples
-`scheduler::Instant::now()`, an alias of the wall-clock `web_time::Instant`, rather
-than the scheduler's clock. This is a separate timing-sensitive test concern;
-restoring Proptest does not address it. No retry or skip hides this failure, and
-no captured source has been changed. A deterministic clock correction should be
-a separate downstream patch before treating every test run as reliable.
+The initial full test runs exposed an intermittent failure in
+`test_spring_animation_preserves_velocity_when_retargeted`. The test advances
+simulated scheduler time, but the spring element sampled wall time. Its result
+therefore depended on execution speed rather than the requested 50 ms step.
+
+The development branch now samples `cx.background_executor().now()` for spring
+animation updates. Production still uses the scheduler's real clock, while
+headless tests use its simulated clock. The regression test also compares its
+intermediate position with the expected 50 ms spring state. No tests are skipped
+or retried. This is a downstream Rust patch; the clean upstream branch is unchanged.
