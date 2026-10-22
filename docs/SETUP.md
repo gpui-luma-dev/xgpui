@@ -32,8 +32,8 @@ root Cargo workspace yet. Run Cargo from the repository root so it discovers
 the generated local overrides:
 
 ```sh
-cargo --config .cargo/validation.toml update --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml -p proptest --precise 1.10.0
-cargo --config .cargo/validation.toml update --manifest-path gpui/crates/gpui-unofficial/Cargo.toml -p proptest --precise 1.10.0
+cargo --config .cargo/validation.toml generate-lockfile --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml
+cargo --config .cargo/validation.toml generate-lockfile --manifest-path gpui/crates/gpui-unofficial/Cargo.toml
 cargo --config .cargo/validation.toml metadata --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --format-version 1 > /tmp/xgpui-metadata.json
 python3 scripts/check_local_dependencies.py /tmp/xgpui-metadata.json
 cargo --config .cargo/validation.toml check --manifest-path gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml --features font-kit,runtime_shaders
@@ -124,7 +124,7 @@ panics while parsing, producing the misleading unexpected-token diagnostic at
 `randomized_element_tree.rs:1648` before any tests run.
 
 Validation now restores the exact Git dependency with `.cargo/validation.toml`
-and explicitly selects version 1.10.0 in each standalone crate's lockfile.
+and resolves fresh lockfiles for the standalone crates.
 It verifies both Proptest packages resolve to that Git revision. No captured
 Rust source is changed or test disabled. Review the override when adopting
 another GPUI release.

@@ -61,8 +61,8 @@ jobs:
           set -euo pipefail
           manifest=gpui/crates/gpui-platform-gpui-unofficial/Cargo.toml
           config="$RUNNER_TEMP/xgpui-validation.toml"
-          # A patch alone does not select an older version over newer registry releases.
-          cargo +stable --config "$config" update --manifest-path "$manifest" -p proptest --precise 1.10.0
+          # Resolve a fresh lockfile with the reviewed compatibility override.
+          cargo +stable --config "$config" generate-lockfile --manifest-path "$manifest"
           cargo +stable --config "$config" metadata --locked --manifest-path "$manifest" --format-version 1 \
             > "$RUNNER_TEMP/metadata.json"
           python3 scripts/check_local_dependencies.py "$RUNNER_TEMP/metadata.json"
@@ -82,7 +82,7 @@ jobs:
           set -euo pipefail
           manifest=gpui/crates/gpui-unofficial/Cargo.toml
           config="$RUNNER_TEMP/xgpui-validation.toml"
-          cargo +stable --config "$config" update --manifest-path "$manifest" -p proptest --precise 1.10.0
+          cargo +stable --config "$config" generate-lockfile --manifest-path "$manifest"
           cargo +stable --config "$config" metadata --locked --manifest-path "$manifest" --format-version 1 \
             > "$RUNNER_TEMP/test-metadata.json"
           python3 scripts/check_local_dependencies.py "$RUNNER_TEMP/test-metadata.json"
