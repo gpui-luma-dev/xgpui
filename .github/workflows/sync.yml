@@ -64,6 +64,7 @@ jobs:
           PY
 
       - name: Open or update sync PR
+        if: vars.SYNC_AUTO_PR != 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -100,3 +101,11 @@ jobs:
             gh pr create --base main --head upstream \
               --title "Sync gpui-unofficial $RELEASE" --body-file "$body_file"
           fi
+
+      - name: Show manual PR link when organization policy blocks automated PRs
+        if: vars.SYNC_AUTO_PR == 'false'
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "Organization policy disables automated PR creation."
+          echo "[Review upstream and open a PR](https://github.com/$REPOSITORY/compare/main...upstream?expand=1)" >> "$GITHUB_STEP_SUMMARY"

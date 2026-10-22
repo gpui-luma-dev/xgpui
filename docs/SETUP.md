@@ -76,3 +76,18 @@ conflicts by merging main into upstream.
 The sync workflow never publishes crates, merges PRs, or launches applications.
 Imported licenses remain with the captured source. README files are preserved
 as imported, without local edits.
+
+### Current organization policy
+
+gpui-luma-dev currently prevents GitHub Actions from opening pull requests.
+Repository variable `SYNC_AUTO_PR=false` selects the manual-PR fallback: the
+workflow still imports and pushes upstream, and its summary provides a compare
+link. Open or update the PR manually after each import:
+
+```sh
+gh pr create --repo gpui-luma-dev/xgpui --base main --head upstream --title "Sync gpui-unofficial RELEASE" --body "Review the imported release and validation results. Merge with a merge commit and preserve upstream."
+```
+
+If an organization administrator later enables Actions PR creation, set
+`SYNC_AUTO_PR=true` and enable the repository's Actions PR creation setting.
+No organization-wide policy is changed by this setup.
