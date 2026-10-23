@@ -1,4 +1,6 @@
 mod gradient_checks;
+#[cfg(test)]
+mod preparation_checks;
 use super::*;
 use std::time::Instant;
 

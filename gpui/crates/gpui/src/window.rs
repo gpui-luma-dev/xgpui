@@ -4781,7 +4781,11 @@ impl Window {
                     content_mask: self.snapped_content_mask(),
                     corner_radii: Corners::default(),
                     opacity: self.element_opacity(),
-                    content,
+                    content: crate::scene::content_with_preparation_geometry(
+                        content,
+                        path.bounds.size,
+                        self.scale_factor(),
+                    ),
                     coverage: Some(crate::CustomCoverage::Path(std::sync::Arc::new(
                         path.scale(self.scale_factor()),
                     ))),
@@ -4837,7 +4841,11 @@ impl Window {
                         .clamp_radii_for_quad_size(quad.bounds.size)
                         .scale(self.scale_factor()),
                     opacity: self.element_opacity(),
-                    content,
+                    content: crate::scene::content_with_preparation_geometry(
+                        content,
+                        quad.bounds.size,
+                        self.scale_factor(),
+                    ),
                     coverage: Some(crate::CustomCoverage::Border {
                         widths: self.snap_border_widths(quad.border_widths),
                         style: quad.border_style,
@@ -5252,7 +5260,11 @@ impl Window {
                 .clamp_radii_for_quad_size(bounds.size)
                 .scale(self.scale_factor()),
             opacity: self.element_opacity(),
-            content,
+            content: crate::scene::content_with_preparation_geometry(
+                content,
+                bounds.size,
+                self.scale_factor(),
+            ),
             coverage: None,
         });
     }
@@ -9642,6 +9654,98 @@ mod tests {
     }
 
     struct UnderlineTestView(Rc<dyn Fn(&mut Window)>);
+
+    #[gpui::test]
+    fn preparation_window_geometry_survives_scaling_and_clipping(cx: &mut TestAppContext) {
+        #[derive(Debug)]
+        struct Probe;
+        impl crate::CustomContent for Probe {
+            fn prepare(
+                &self,
+                _: &dyn std::any::Any,
+                _: crate::Size<crate::DevicePixels>,
+            ) -> anyhow::Result<Box<dyn std::any::Any>> {
+                panic!("request-aware preparation expected")
+            }
+
+            fn prepare_with_request(
+                &self,
+                _: &dyn std::any::Any,
+                request: &crate::PreparationRequest,
+            ) -> anyhow::Result<Box<dyn std::any::Any>> {
+                Ok(Box::new(*request))
+            }
+        }
+        test_underline_paint_at_scales(cx, |window| {
+            let bounds = Bounds::new(point(px(10.3), px(20.7)), size(px(100.3), px(50.7)));
+            let content: std::sync::Arc<dyn crate::CustomContent> = std::sync::Arc::new(Probe);
+            let mut path = crate::PathBuilder::fill();
+            path.move_to(bounds.origin);
+            path.line_to(bounds.top_right());
+            path.line_to(bounds.bottom_right());
+            path.line_to(bounds.bottom_left());
+            path.close();
+            let path = path.build().unwrap();
+            let mut full_requests = Vec::new();
+            for clipped in [false, true] {
+                window.next_frame.scene.clear();
+                if clipped {
+                    window.content_mask_stack.push(ContentMask {
+                        bounds: Bounds::new(point(px(30.), px(30.)), size(px(20.), px(15.))),
+                    });
+                }
+                window.paint_custom(bounds, crate::Corners::default(), content.clone());
+                window.paint_quad_with_paints(
+                    crate::quad(
+                        bounds,
+                        crate::Corners::default(),
+                        crate::transparent_black(),
+                        crate::Edges::all(px(2.)),
+                        crate::transparent_black(),
+                        crate::BorderStyle::Solid,
+                    ),
+                    crate::transparent_black(),
+                    crate::Paint::Custom(content.clone()),
+                );
+                window.paint_path_with_paint(path.clone(), crate::Paint::Custom(content.clone()));
+                if clipped {
+                    window.content_mask_stack.pop();
+                }
+                let draws = &window.next_frame.scene.custom_draws;
+                assert_eq!(draws.len(), 3);
+                for (index, draw) in draws.iter().enumerate() {
+                    let raster = draw
+                        .bounds
+                        .size
+                        .map(|v| crate::DevicePixels(v.0.ceil() as i32));
+                    let default_request = crate::PreparationRequest::new(
+                        draw.bounds.size.map(|v| px(v.0)),
+                        raster,
+                        1.,
+                    )
+                    .unwrap();
+                    let output = draw
+                        .content
+                        .prepare_with_request(&(), &default_request)
+                        .unwrap();
+                    let request = *output.downcast::<crate::PreparationRequest>().unwrap();
+                    let logical = if index == 2 {
+                        path.bounds.size
+                    } else {
+                        bounds.size
+                    };
+                    assert_eq!(request.logical_size(), logical);
+                    assert_eq!(request.scale_factor(), window.scale_factor());
+                    assert_eq!(request.raster_size(), raster);
+                    if clipped {
+                        assert_eq!(request, full_requests[index]);
+                    } else {
+                        full_requests.push(request);
+                    }
+                }
+            }
+        });
+    }
 
     impl Render for UnderlineTestView {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {

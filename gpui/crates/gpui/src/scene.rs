@@ -982,6 +982,59 @@ impl PathVertex<Pixels> {
     }
 }
 
+/// Geometry needed to prepare an unclipped, local custom paint source.
+///
+/// Raster dimensions are chosen by the renderer after snapping. They need not
+/// equal logical dimensions multiplied by the window scale factor. Color,
+/// clipping, opacity and submission are not part of this request.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PreparationRequest {
+    logical_size: Size<Pixels>,
+    raster_size: Size<crate::DevicePixels>,
+    scale_factor: f32,
+}
+
+impl PreparationRequest {
+    /// Construct a request with finite, positive dimensions and scale.
+    pub fn new(
+        logical_size: Size<Pixels>,
+        raster_size: Size<crate::DevicePixels>,
+        scale_factor: f32,
+    ) -> anyhow::Result<Self> {
+        anyhow::ensure!(
+            logical_size.width.0.is_finite()
+                && logical_size.width.0 > 0.
+                && logical_size.height.0.is_finite()
+                && logical_size.height.0 > 0.
+                && raster_size.width.0 > 0
+                && raster_size.height.0 > 0
+                && scale_factor.is_finite()
+                && scale_factor > 0.,
+            "invalid custom preparation geometry"
+        );
+        Ok(Self {
+            logical_size,
+            raster_size,
+            scale_factor,
+        })
+    }
+
+    /// Full source size in logical GPUI pixels, before clipping or snapping.
+    pub fn logical_size(&self) -> Size<Pixels> {
+        self.logical_size
+    }
+
+    /// Exact physical dimensions required for the prepared texture.
+    pub fn raster_size(&self) -> Size<crate::DevicePixels> {
+        self.raster_size
+    }
+
+    /// Window scale factor; use `raster_size` for texture allocation.
+    pub fn scale_factor(&self) -> f32 {
+        self.scale_factor
+    }
+}
+
 /// An immutable, replayable description of independent GPU content.
 /// Backend contexts and outputs use checked type erasure; backend crates define
 /// their concrete types. Implementations must not submit or present GPU work.
@@ -992,7 +1045,61 @@ pub trait CustomContent: std::fmt::Debug + Send + Sync + 'static {
         backend: &dyn std::any::Any,
         size: Size<crate::DevicePixels>,
     ) -> anyhow::Result<Box<dyn std::any::Any>>;
+
+    /// Prepare using logical geometry and the renderer's exact raster extent.
+    /// Existing producers receive the same physical size through `prepare`.
+    /// Request-aware producers may override this without changing submission.
+    fn prepare_with_request(
+        &self,
+        backend: &dyn std::any::Any,
+        request: &PreparationRequest,
+    ) -> anyhow::Result<Box<dyn std::any::Any>> {
+        self.prepare(backend, request.raster_size())
+    }
 }
+
+// Preserve unsnapped logical geometry without adding fields to public scene
+// records. The original producer still owns its snapshots and preparation cache.
+#[derive(Debug)]
+struct ContentWithPreparationGeometry {
+    content: std::sync::Arc<dyn CustomContent>,
+    logical_size: Size<Pixels>,
+    scale_factor: f32,
+}
+
+impl CustomContent for ContentWithPreparationGeometry {
+    fn prepare(
+        &self,
+        backend: &dyn std::any::Any,
+        size: Size<crate::DevicePixels>,
+    ) -> anyhow::Result<Box<dyn std::any::Any>> {
+        let request = PreparationRequest::new(self.logical_size, size, self.scale_factor)?;
+        self.content.prepare_with_request(backend, &request)
+    }
+
+    fn prepare_with_request(
+        &self,
+        backend: &dyn std::any::Any,
+        request: &PreparationRequest,
+    ) -> anyhow::Result<Box<dyn std::any::Any>> {
+        self.prepare(backend, request.raster_size())
+    }
+}
+
+pub(crate) fn content_with_preparation_geometry(
+    content: std::sync::Arc<dyn CustomContent>,
+    logical_size: Size<Pixels>,
+    scale_factor: f32,
+) -> std::sync::Arc<dyn CustomContent> {
+    std::sync::Arc::new(ContentWithPreparationGeometry {
+        content,
+        logical_size,
+        scale_factor,
+    })
+}
+
+#[cfg(test)]
+mod preparation_tests;
 
 /// CPU-side paint source. Native paints keep their existing GPU representation.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
@@ -1080,6 +1187,8 @@ pub struct CustomDraw {
     /// Inherited element opacity, applied once at composition.
     pub opacity: f32,
     /// Owned immutable content snapshot, shared across scene replay.
+    /// Window painting retains original logical geometry internally. For directly
+    /// constructed records, preparation uses `bounds.size` as logical size at 1x.
     pub content: std::sync::Arc<dyn CustomContent>,
     /// Optional native shape mask; None uses rounded rectangle coverage.
     pub coverage: Option<CustomCoverage>,

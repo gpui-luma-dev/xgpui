@@ -4,7 +4,7 @@ Checkpoint: 9504324. Effects belong in xgpui-shader; GPUI owns coverage,
 ordering, inherited clip/opacity, resource submission and presentation.
 
 See [paint contract hardening](paint-contract-hardening.md) for the corrected
-border semantics and the unimplemented preparation/color/coordinate proposal.
+border semantics, preparation request adapter and remaining contract proposals.
 
 ## API
 

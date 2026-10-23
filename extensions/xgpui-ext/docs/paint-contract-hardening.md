@@ -1,7 +1,8 @@
 # Paint contract hardening proposal
 
-Status: design only. Preparation, color and coordinate changes below are not
-implemented. The border semantics fix is implemented separately.
+Status: border fixes and the preparation request/compatibility adapter are
+implemented. Submission validation, failure isolation, color descriptors and
+coordinate extensions below remain proposals.
 
 ## Constraints and border baseline
 
@@ -29,10 +30,39 @@ path; custom and non-solid native paints use the existing coverage path.
 
 ## 1. Preparation: explicit request and validated backend output
 
-Today `CustomContent::prepare(&dyn Any, physical_size)` returns another `Any`.
+The original `CustomContent::prepare(&dyn Any, physical_size)` returns another `Any`.
 Metal recognizes either a texture result or a special native Background result.
 The caller cannot express target color requirements or logical scale, and queue
 ownership depends partly on documentation.
+
+### Implemented first step
+
+`PreparationRequest::new(logical_size, raster_size, scale_factor)` validates
+finite positive geometry and exposes these values through accessors. Its fields
+are private so later additions do not break struct literals. No color fields.
+`CustomContent::prepare_with_request` is a provided method delegating to the
+unchanged required `prepare` method with the exact raster size. Existing producer
+implementations need no changes. Metal now dispatches through the new method;
+output types, validation, submission and error propagation are unchanged.
+
+Window background, border and path painting retain their original logical size
+and scale in a private producer wrapper. The renderer still chooses raster size
+from the existing scaled bounds. This avoids adding fields to public CustomDraw
+or changing its literals. The wrapper costs one small Arc allocation per recorded
+custom draw and forwards to the original producer, which retains cache ownership.
+Replay shares the wrapper. No extra GPU allocation or render pass is introduced.
+Directly constructed scene records have a documented 1x default: their scaled
+bounds supply logical size, and raster extent is rounded up as before. Supporting
+explicit logical geometry on low-level records can be a later additive API if
+needed; do not infer the window scale from these records.
+
+Tests cover an unchanged legacy implementation, exact extent/backend forwarding,
+unchanged errors, request override dispatch, invalid request geometry, retained
+metadata, and all three Window paint sites at 1x/1.25x/1.5x/2x/3x with partial
+clipping. A headless Metal test checks real renderer dispatch and unclipped
+requests, alongside the existing pixel/coverage tests.
+
+### Remaining proposal
 
 Proposed boundary:
 
@@ -56,10 +86,10 @@ Proposed boundary:
   do not invalidate the source texture. Budget and recycle output resources
   independently of the coverage cache.
 
-Migration recommendation: first add a provided `prepare_with_request` method
-that defaults to existing `prepare`, and make the renderer call it. Existing
-implementations keep compiling. The legacy adapter supplies today's fixed color
-descriptor and retains today's size contract. A v2 producer can override the new
+The first migration step is implemented: a provided `prepare_with_request` method
+defaults to existing `prepare`, and the renderer calls it. Existing
+implementations keep compiling. The legacy adapter retains today's size and
+implicit color contract, with no color descriptor fields yet. A v2 producer can override the new
 method; the existing required method can return a descriptive error when used
 by an old renderer. Do not add another required trait method. Typed Metal output
 construction and removal of raw queue access are backend API changes: introduce

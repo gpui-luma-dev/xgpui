@@ -554,7 +554,14 @@ impl MetalRenderer {
             let mut outputs = Vec::new();
             for draw in &scene.custom_draws {
                 let extent = crate::custom_draw::CustomCompositor::extent(draw)?;
-                let raw = draw.content.prepare(&context, extent)?;
+                // Direct scene records use 1x logical geometry. Window records
+                // retain their original logical size/scale in a private adapter.
+                let request = gpui::PreparationRequest::new(
+                    draw.bounds.size.map(|dimension| gpui::px(dimension.0)),
+                    extent,
+                    1.,
+                )?;
+                let raw = draw.content.prepare_with_request(&context, &request)?;
                 let native_source = raw.is::<Background>();
                 let raw = if native_source {
                     let background = *raw.downcast::<Background>().unwrap();
