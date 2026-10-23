@@ -421,3 +421,12 @@ let element = shader(content)
 Create a new immutable snapshot when parameters change. Internally the producer
 uses the host Metal device and queue; application view code does not encode or
 submit GPU commands.
+
+## Extension paint integration
+
+The first generic paint milestone also accepts the same producer in
+`div().bg_paint(mesh.clone())`, `div().border_paint(mesh.clone())`, and
+`window.paint_path_with_paint(path, mesh.clone())`. The mesh mathematics and GPU
+producer stay in this crate. GPUI owns native coverage masks and composition.
+See [paint-lab](../../apps/paint-lab/README.md) and the
+[paint contract](../../docs/extension-paints.md) for current scope and API impact.

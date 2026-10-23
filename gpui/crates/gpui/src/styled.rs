@@ -496,6 +496,24 @@ pub trait Styled: Sized {
         self
     }
 
+    /// Set a native or runtime extension background paint.
+    fn bg_paint(mut self, paint: impl Into<crate::Paint>) -> Self
+    where
+        Self: Sized,
+    {
+        self.style().background = Some(crate::Fill::Paint(paint.into()));
+        self
+    }
+
+    /// Override the border color with a paint over the full outer bounds.
+    fn border_paint(mut self, paint: impl Into<crate::Paint>) -> Self
+    where
+        Self: Sized,
+    {
+        self.style().border_paint = Some(paint.into());
+        self
+    }
+
     /// Sets the border style of the element.
     fn border_dashed(mut self) -> Self {
         self.style().border_style = Some(BorderStyle::Dashed);

@@ -1,0 +1,54 @@
+# Use from this directory, or `just --justfile extensions/xgpui-ext/apps/paint-lab/justfile`.
+set working-directory := "../../../.."
+set positional-arguments
+manifest := "extensions/xgpui-ext/apps/paint-lab/Cargo.toml"
+profile := "dev"
+options := "--offline --locked --config .cargo/validation.toml --manifest-path " + manifest + " --target-dir target --profile " + profile
+
+# List recipes.
+default:
+    @just --justfile '{{justfile()}}' --list
+
+# Launch the paint integration examples; append application flags.
+ui *args:
+    cargo run {{options}} -- "$@"
+
+# Show all app options.
+args:
+    cargo run {{options}} -- --help
+
+# Build without launching.
+build:
+    cargo build {{options}}
+
+# GPU coverage checks and repeated readback timing.
+headless *args:
+    cargo run {{options}} -- --headless "$@"
+
+# Save the three mesh paint examples after running coverage checks.
+capture:
+    cargo run {{options}} -- --headless --frames 60 --png /tmp/paint-lab.png
+
+# Native coverage parity, alpha, clipping, replay, resize and sharing checks.
+test:
+    cargo test {{options}}
+
+# Run GPU tests under Metal API validation.
+[macos]
+metal-test:
+    MTL_DEBUG_LAYER=1 cargo test {{options}}
+
+# Format the app.
+fmt:
+    cargo fmt --manifest-path {{manifest}}
+
+# Check formatting.
+fmt-check:
+    cargo fmt --manifest-path {{manifest}} --check
+
+# Lint all app targets.
+lint:
+    cargo clippy {{options}} --all-targets -- -D warnings
+
+# Format check, GPU tests and lint.
+check: fmt-check test lint

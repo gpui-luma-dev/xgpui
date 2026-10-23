@@ -73,6 +73,7 @@ fn draw(
         corner_radii: Corners::all(px(12.)).scale(1.),
         opacity,
         content,
+        coverage: None,
     }
 }
 fn rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<Pixels> {

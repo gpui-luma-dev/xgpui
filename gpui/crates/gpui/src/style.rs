@@ -281,6 +281,9 @@ pub struct Style {
     /// The border color of this element
     pub border_color: Option<Hsla>,
 
+    /// Optional paint override for the border; runtime producers cannot be serialized.
+    pub border_paint: Option<crate::Paint>,
+
     /// The border style of this element
     pub border_style: BorderStyle,
 
@@ -710,6 +713,9 @@ impl Style {
 
         window.paint_drop_shadows(bounds, corner_radii, &self.box_shadow);
 
+        if let Some(Fill::Paint(crate::Paint::Custom(content))) = &self.background {
+            window.paint_custom(bounds, corner_radii, content.clone());
+        }
         let background_color = self.background.as_ref().and_then(Fill::color);
         if background_color.is_some_and(|color| !color.is_transparent()) {
             let mut border_color = match background_color {
@@ -741,7 +747,20 @@ impl Style {
 
         continuation(window, cx);
 
-        if self.is_border_visible() {
+        if let Some(paint) = &self.border_paint {
+            window.paint_quad_with_paints(
+                quad(
+                    bounds,
+                    corner_radii,
+                    crate::transparent_black(),
+                    self.border_widths.to_pixels(rem_size),
+                    crate::transparent_black(),
+                    self.border_style,
+                ),
+                crate::transparent_black(),
+                paint.clone(),
+            );
+        } else if self.is_border_visible() {
             let border_widths = self.border_widths.to_pixels(rem_size);
             let mut background = self.border_color.unwrap_or_default();
             background.a = 0.;
@@ -803,6 +822,7 @@ impl Default for Style {
             flex_basis: Length::Auto,
             background: None,
             border_color: None,
+            border_paint: None,
             border_style: BorderStyle::default(),
             corner_radii: Corners::default(),
             box_shadow: Default::default(),
@@ -853,6 +873,8 @@ pub struct StrikethroughStyle {
 pub enum Fill {
     /// A solid color fill.
     Color(Background),
+    /// Native or extension-produced paint.
+    Paint(crate::Paint),
 }
 
 impl Fill {
@@ -861,8 +883,15 @@ impl Fill {
     /// If the fill is not a solid color, this method returns `None`.
     pub fn color(&self) -> Option<Background> {
         match self {
-            Fill::Color(color) => Some(*color),
+            Fill::Color(color) | Fill::Paint(crate::Paint::Native(color)) => Some(*color),
+            Fill::Paint(crate::Paint::Custom(_)) => None,
         }
+    }
+}
+
+impl From<crate::Paint> for Fill {
+    fn from(paint: crate::Paint) -> Self {
+        Self::Paint(paint)
     }
 }
 

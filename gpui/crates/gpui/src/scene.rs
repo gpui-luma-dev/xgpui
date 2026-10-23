@@ -994,6 +994,78 @@ pub trait CustomContent: std::fmt::Debug + Send + Sync + 'static {
     ) -> anyhow::Result<Box<dyn std::any::Any>>;
 }
 
+/// CPU-side paint source. Native paints keep their existing GPU representation.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub enum Paint {
+    /// An existing GPUI background.
+    Native(Background),
+    /// Runtime-only producer; serialization returns an error.
+    #[serde(skip)]
+    Custom(std::sync::Arc<dyn CustomContent>),
+}
+impl PartialEq for Paint {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Native(a), Self::Native(b)) => a == b,
+            (Self::Custom(a), Self::Custom(b)) => std::sync::Arc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
+}
+impl From<Background> for Paint {
+    fn from(value: Background) -> Self {
+        Self::Native(value)
+    }
+}
+impl From<Hsla> for Paint {
+    fn from(value: Hsla) -> Self {
+        Self::Native(value.into())
+    }
+}
+impl From<crate::Rgba> for Paint {
+    fn from(value: crate::Rgba) -> Self {
+        Self::Native(value.into())
+    }
+}
+impl<T: CustomContent> From<std::sync::Arc<T>> for Paint {
+    fn from(value: std::sync::Arc<T>) -> Self {
+        Self::Custom(value)
+    }
+}
+impl From<std::sync::Arc<dyn CustomContent>> for Paint {
+    fn from(value: std::sync::Arc<dyn CustomContent>) -> Self {
+        Self::Custom(value)
+    }
+}
+
+/// Reserved native-paint preparation result, interpreted by the host renderer.
+#[doc(hidden)]
+#[derive(Debug)]
+pub(crate) struct NativePaintSource(pub(crate) Background);
+impl CustomContent for NativePaintSource {
+    fn prepare(
+        &self,
+        _: &dyn std::any::Any,
+        _: Size<crate::DevicePixels>,
+    ) -> anyhow::Result<Box<dyn std::any::Any>> {
+        Ok(Box::new(self.0))
+    }
+}
+
+/// Native geometry used as coverage for extension-produced paint.
+#[derive(Clone, Debug)]
+pub enum CustomCoverage {
+    /// Border coverage over the full outer paint rectangle.
+    Border {
+        /// Physical border widths.
+        widths: Edges<ScaledPixels>,
+        /// Existing border style.
+        style: BorderStyle,
+    },
+    /// Existing tessellated path; paint maps over its unclipped bounds.
+    Path(std::sync::Arc<Path<ScaledPixels>>),
+}
+
 /// Retained custom drawing. CPU ownership data is never uploaded as an instance struct.
 #[derive(Clone, Debug)]
 pub struct CustomDraw {
@@ -1009,6 +1081,8 @@ pub struct CustomDraw {
     pub opacity: f32,
     /// Owned immutable content snapshot, shared across scene replay.
     pub content: std::sync::Arc<dyn CustomContent>,
+    /// Optional native shape mask; None uses rounded rectangle coverage.
+    pub coverage: Option<CustomCoverage>,
 }
 
 impl From<CustomDraw> for Primitive {

@@ -4766,6 +4766,87 @@ impl Window {
             .insert_primitive(path.scale(scale_factor));
     }
 
+    /// Paint a path with native or extension-produced color over its unclipped bounds.
+    pub fn paint_path_with_paint(&mut self, path: Path<Pixels>, paint: impl Into<crate::Paint>) {
+        match paint.into() {
+            crate::Paint::Native(color) => self.paint_path(path, color),
+            crate::Paint::Custom(content) => {
+                if path.bounds.is_empty() || path.vertices.is_empty() {
+                    return;
+                }
+                self.invalidator.debug_assert_paint();
+                self.next_frame.scene.insert_primitive(crate::CustomDraw {
+                    order: 0,
+                    bounds: path.bounds.scale(self.scale_factor()),
+                    content_mask: self.snapped_content_mask(),
+                    corner_radii: Corners::default(),
+                    opacity: self.element_opacity(),
+                    content,
+                    coverage: Some(crate::CustomCoverage::Path(std::sync::Arc::new(
+                        path.scale(self.scale_factor()),
+                    ))),
+                });
+            }
+        }
+    }
+
+    /// Paint a quad with independent fill and border sources, preserving native fast paths.
+    pub fn paint_quad_with_paints(
+        &mut self,
+        mut quad: PaintQuad,
+        fill: impl Into<crate::Paint>,
+        border: impl Into<crate::Paint>,
+    ) {
+        let fill = fill.into();
+        let border = border.into();
+        match fill {
+            crate::Paint::Native(color) => {
+                quad.background = color;
+                quad.border_color = crate::transparent_black();
+                self.paint_quad(quad.clone());
+            }
+            crate::Paint::Custom(content) => {
+                self.paint_custom(quad.bounds, quad.corner_radii, content)
+            }
+        }
+        match border {
+            crate::Paint::Native(color) => {
+                quad.background = crate::transparent_black().into();
+                if let Some(color) = color.as_solid() {
+                    quad.border_color = color;
+                    self.paint_quad(quad);
+                } else {
+                    self.paint_quad_with_paints(
+                        quad,
+                        crate::transparent_black(),
+                        crate::Paint::Custom(std::sync::Arc::new(crate::NativePaintSource(color))),
+                    );
+                }
+            }
+            crate::Paint::Custom(content) => {
+                self.invalidator.debug_assert_paint();
+                if quad.border_widths == Edges::default() {
+                    return;
+                }
+                self.next_frame.scene.insert_primitive(crate::CustomDraw {
+                    order: 0,
+                    bounds: self.snap_bounds(quad.bounds),
+                    content_mask: self.snapped_content_mask(),
+                    corner_radii: quad
+                        .corner_radii
+                        .clamp_radii_for_quad_size(quad.bounds.size)
+                        .scale(self.scale_factor()),
+                    opacity: self.element_opacity(),
+                    content,
+                    coverage: Some(crate::CustomCoverage::Border {
+                        widths: self.snap_border_widths(quad.border_widths),
+                        style: quad.border_style,
+                    }),
+                });
+            }
+        }
+    }
+
     /// Paint an underline into the scene for the next frame at the current z-index.
     ///
     /// This method should only be called as part of the paint phase of element drawing.
@@ -5172,6 +5253,7 @@ impl Window {
                 .scale(self.scale_factor()),
             opacity: self.element_opacity(),
             content,
+            coverage: None,
         });
     }
 
