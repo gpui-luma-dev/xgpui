@@ -5,7 +5,7 @@ use gpui::{prelude::*, *};
 use std::{sync::Arc, time::Instant};
 use xgpui_shader::{SolidColor, painted};
 mod checks;
-mod content;
+use xgpui_gamut::WideColor;
 
 #[derive(Parser)]
 #[command(about = "Metal wide-surface / sRGB-control compositing lab (macOS)")]
@@ -34,7 +34,7 @@ struct Lab {
 impl Lab {
     fn source(&self, color: [f64; 4]) -> Arc<dyn CustomContent> {
         if self.wide {
-            Arc::new(content::WideColor(color))
+            Arc::new(WideColor::linear_p3(color.map(|v| v as f32)).unwrap())
         } else {
             Arc::new(SolidColor::new(color.map(|v| v as f32)).unwrap())
         }

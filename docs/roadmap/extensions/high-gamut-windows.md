@@ -1,19 +1,41 @@
-# Wide-gamut presentation extension
+# xgpui-gamut
 
 Opt-in **macOS Metal** presentation: wide SDR surfaces and normal sRGB controls in
 one window. HDR, transparent wide windows and other presentation backends remain deferred.
 
-```sh
-just --justfile apps/gamut-lab/justfile ui
-just --justfile apps/gamut-lab/justfile test
+```toml
+# App under apps/:
+[dependencies]
+xgpui-gamut = { path = "../../extensions/xgpui-ext/crates/xgpui-gamut" }
+xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader" }
 ```
+
+```rust
+use gpui::{prelude::*, *};
+use std::sync::Arc;
+use xgpui_gamut::WideColor;
+use xgpui_shader::painted;
+
+// During window construction/update, outside drawing:
+window.set_color_mode(WindowColorMode::WideGamutSdr)?;
+
+// Linear Display P3/D65, straight input alpha; producer stores associated alpha.
+let red = Arc::new(WideColor::linear_p3([1.0, 0.0, 0.0, 0.5])?);
+painted().w(px(320.0)).h(px(240.0))
+    .bg_paint(red)
+    .child(div().p_4().child("Normal sRGB controls"));
+```
+
+The crates are independent: `xgpui-gamut` produces explicit P3 content;
+`xgpui-shader` supplies optional `painted()` ergonomics here. Neither depends on
+the other. `WideColor` allocates on preparation; pooling/caching is deferred.
 
 | Capability | Owner | Status |
 | --- | --- | --- |
 | Window mode and cached status | `gpui` | Public, opt-in |
 | Typed P3 output and ordered compositor | `gpui-apple` / `gpui-macos` | Native macOS Metal |
-| Example producer and test app | `apps/gamut-lab` | Local implementation |
-| Reusable gamut surface crate | — | Not implemented |
+| Reusable producer | `xgpui-gamut::WideColor` | Metal + typed D3D11 preparation |
+| Test/control app | `apps/gamut-lab` | Uses `xgpui-gamut` |
 
 Independent of the [paint/shader extension](extension-paints.md). Enabling this
 mode does not reinterpret existing gradients, meshes, colors or controls as P3.
@@ -68,80 +90,18 @@ cannot promise identical physical output everywhere.
 | `Default` | Restore legacy presentation; queued commands retain their resources. Subsequent wide outputs are rejected. |
 | Transparency requested while wide | The existing infallible background setter preserves the opaque window and logs a warning. Disable wide mode first. |
 
-## Produce wide content
+## Metal backend contract
 
-Existing `CustomContent` signatures and `PreparationRequest` stay unchanged.
-This complete Metal-only producer clears a texture to a linear P3 color. It
-allocates per preparation for clarity; production producers should cache output.
-Use the same `gpui`, `gpui-apple`, `metal` and `anyhow` dependencies as `gamut-lab`.
+`WideColor` implements the existing `CustomContent` protocol. Its Metal adapter
+uses the typed constructor below; custom producers can use the same contract.
 
 ```rust
-use anyhow::{Result, ensure};
-use gpui::{CustomContent, DevicePixels, Size};
 use gpui_apple::custom_draw::{MetalCustomContext, MetalWideSdrOutput};
-use metal::*;
-use std::any::Any;
 
-#[derive(Debug)]
-pub struct WideColor(pub [f64; 4]);
-impl CustomContent for WideColor {
-    fn prepare(&self, backend: &dyn Any, extent: Size<DevicePixels>) -> Result<Box<dyn Any>> {
-        ensure!(
-            self.0
-                .iter()
-                .all(|c| c.is_finite() && (0.0..=1.0).contains(c)),
-            "invalid SDR P3 color"
-        );
-        let context = backend
-            .downcast_ref::<MetalCustomContext>()
-            .ok_or_else(|| anyhow::anyhow!("gamut-lab requires native Metal"))?;
-        ensure!(
-            extent.width.0 > 0
-                && extent.height.0 > 0
-                && extent.width.0 <= 16384
-                && extent.height.0 <= 16384,
-            "invalid surface extent"
-        );
-        ensure!(
-            extent.width.0 as u64 * extent.height.0 as u64 * 8 <= 64 * 1024 * 1024,
-            "surface exceeds 64 MiB"
-        );
-        let d = TextureDescriptor::new();
-        d.set_width(extent.width.0 as u64);
-        d.set_height(extent.height.0 as u64);
-        d.set_pixel_format(MTLPixelFormat::RGBA16Float);
-        d.set_usage(MTLTextureUsage::ShaderRead | MTLTextureUsage::RenderTarget);
-        d.set_storage_mode(MTLStorageMode::Private);
-        let texture = context.device.new_texture(&d);
-        let command = context.queue.new_command_buffer();
-        let pass = RenderPassDescriptor::new();
-        let c = pass.color_attachments().object_at(0).unwrap();
-        c.set_texture(Some(&texture));
-        c.set_load_action(MTLLoadAction::Clear);
-        c.set_store_action(MTLStoreAction::Store);
-        let [r, g, b, a] = self.0;
-        c.set_clear_color(MTLClearColor::new(r * a, g * a, b * a, a));
-        command.new_render_command_encoder(pass).end_encoding();
-        Ok(Box::new(MetalWideSdrOutput::from_linear_p3_premultiplied(
-            context,
-            texture,
-            vec![command.to_owned()],
-        )?))
-    }
-}
-```
-
-Attach with the existing paint extension (inside a view built for a wide window):
-
-```rust
-use gpui::{prelude::*, *};
-use std::sync::Arc;
-use xgpui_shader::painted;
-
-painted()
-    .w(px(320.0)).h(px(240.0))
-    .bg_paint(Arc::new(WideColor([1.0, 0.0, 0.0, 1.0])))
-    .child(div().p_4().child("Normal sRGB controls"));
+// Backend-owned context, RGBA16Float texture and unsubmitted commands:
+let output = MetalWideSdrOutput::from_linear_p3_premultiplied(
+    context, texture, commands,
+)?;
 ```
 
 ```text
@@ -176,7 +136,7 @@ No CPU wait. Like the legacy protocol, host-only submission is cooperative:
 command status cannot identify who committed a same-queue buffer. Empty commands
 at construction require content already ready/submitted on the host queue.
 Display moves change host mapping, not canonical producer content. Future
-source/profile decoding and a reusable `xgpui-gamut` surface crate are separate work.
+source/profile decoding and additional `xgpui-gamut` producers are separate work.
 
 ## Existing producer compatibility
 
@@ -321,7 +281,7 @@ rustc --edition 2024 --test \
 ```text
 private test-only layer list:
   native Scene run → associated encoded-sRGB BGRA8 scratch → decode → scRGB
-  explicit P3 FP16 texture → linear P3-to-scRGB matrix → associated source-over
+  typed P3 producer → validate/stage/submit → P3-to-scRGB → associated source-over
   repeat in supplied order → offscreen RGBA16Float readback
 ```
 
@@ -335,9 +295,67 @@ private test-only layer list:
 
 Cached LCD coverage conversion is a compatibility path, not fresh grayscale glyph
 rasterization. Native scenes retain GPUI batch order, masks and transforms. The
-private caller supplies UI/surface boundaries; mixed-scene partitioning, typed
-Windows wide producer output, filtering beyond nearest texels, swap-chain color
+private caller supplies UI/surface boundaries; mixed-scene partitioning,
+filtering beyond nearest texels, swap-chain color
 negotiation, display/SDR-white handling and window integration remain deferred.
-The module is compiled only for backend tests; Windows window requests remain
+The accepting compositor is compiled only for backend tests; Windows window requests remain
 unsupported. CPU tests and cross-compilation do not establish GPU pixel results;
 native WARP execution is required.
+
+## Typed Windows output
+
+```rust
+use anyhow::{anyhow, Result};
+use gpui::{CustomContent, DevicePixels, Size};
+use gpui_windows::custom_draw::Dx11CustomContext;
+use std::any::Any;
+
+#[derive(Debug)]
+struct WideRed;
+impl CustomContent for WideRed {
+    fn prepare(&self, backend: &dyn Any, extent: Size<DevicePixels>)
+        -> Result<Box<dyn Any>>
+    {
+        let ctx = backend.downcast_ref::<Dx11CustomContext>()
+            .ok_or_else(|| anyhow!("native D3D11 required"))?;
+        let output = ctx.create_wide_sdr_output(extent)?;
+        ctx.record_wide_sdr(&output, |deferred, target| {
+            // Associated linear P3: red at 50% alpha, not encoded sRGB.
+            unsafe { deferred.ClearRenderTargetView(target, &[0.5, 0.0, 0.0, 0.5]); }
+            Ok(())
+        })?;
+        Ok(Box::new(output)) // host alone finishes and executes the recording
+    }
+}
+```
+
+```rust
+// In a producer cache, scoped by retained host context, extent and revision:
+if let Some(output) = cached.as_ref().filter(|o| ctx.can_reuse_wide_sdr(o)) {
+    return Ok(Box::new(output.clone()));
+}
+```
+
+| Contract | Windows output |
+| --- | --- |
+| Type | Opaque, cloneable `Dx11WideSdrOutput`; `texture()` exposes the host texture |
+| Storage | Host-allocated `R16G16B16A16_FLOAT`, one mip/sample, 2D, sampleable/renderable |
+| Color | Finite linear Display P3/D65; straight RGB/alpha in 0..1, stored associated; RGB zero at alpha zero |
+| Allocation | 1..16384 each dimension; 64 MiB per output, accounting for eight bytes/pixel |
+| Reuse | Local pending, same-batch staged, or submitted on the same retained host context |
+| Writes | `record_wide_sdr` accepts only a fresh output from the current recording |
+| Failure | Recording/validation failure or dropped batch abandons escaped outputs and discards unsubmitted work |
+| Host | Existing `PreparationBatch`; exact extent/device/type/texture validation before submission |
+| Legacy | `Dx11CustomOutput` remains straight-alpha BGRA8/sRGB; types are never inferred from format |
+
+Raw D3D handles and pixel values remain a cooperative in-process contract. Typed
+output is available in the backend SDK; only the private test compositor accepts
+it currently. Default Windows scene rendering rejects it and discards its
+recording. No window, swap-chain, or GPUI core API change is included.
+
+```sh
+# Native Windows recording lifecycle and pixel tests:
+cargo test --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-windows/Cargo.toml \
+  --features test-support --lib custom_draw::wide_output
+```

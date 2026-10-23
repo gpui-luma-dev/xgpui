@@ -1,5 +1,6 @@
 //! DirectX 11 preparation for retained custom paints. Only the host executes work.
 mod coverage_cache;
+mod wide_output;
 use anyhow::{Context as _, Result, ensure};
 pub(crate) use coverage_cache::{CoverageCache, CoverageKey};
 use gpui::{CustomDraw, DevicePixels, Size, size};
@@ -10,6 +11,7 @@ use std::{
         atomic::{AtomicU8, Ordering},
     },
 };
+pub use wide_output::Dx11WideSdrOutput;
 use windows::{
     Win32::Graphics::{
         Direct3D::{Fxc::*, *},
@@ -299,12 +301,20 @@ pub(crate) fn allocate_texture(
     device: &ID3D11Device,
     extent: Size<DevicePixels>,
 ) -> Result<TextureBundle> {
+    allocate_texture_format(device, extent, DXGI_FORMAT_B8G8R8A8_UNORM, 4)
+}
+fn allocate_texture_format(
+    device: &ID3D11Device,
+    extent: Size<DevicePixels>,
+    format: DXGI_FORMAT,
+    bytes_per_pixel: u64,
+) -> Result<TextureBundle> {
     ensure!(
         extent.width.0 > 0
             && extent.height.0 > 0
             && extent.width.0 <= 16384
             && extent.height.0 <= 16384
-            && extent.width.0 as u64 * extent.height.0 as u64 * 4 <= 64 * 1024 * 1024,
+            && extent.width.0 as u64 * extent.height.0 as u64 * bytes_per_pixel <= 64 * 1024 * 1024,
         "invalid DirectX custom texture extent"
     );
     let desc = D3D11_TEXTURE2D_DESC {
@@ -312,7 +322,7 @@ pub(crate) fn allocate_texture(
         Height: extent.height.0 as u32,
         MipLevels: 1,
         ArraySize: 1,
-        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+        Format: format,
         SampleDesc: DXGI_SAMPLE_DESC {
             Count: 1,
             Quality: 0,

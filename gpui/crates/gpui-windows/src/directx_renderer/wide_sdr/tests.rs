@@ -9,7 +9,18 @@ fn setup() -> Result<(Dx11HeadlessRenderer, Compositor)> {
     let compositor = Compositor::new(&renderer.0.devices.as_ref().unwrap().device, extent())?;
     Ok((renderer, compositor))
 }
-fn patch(renderer: &Dx11HeadlessRenderer, color: [f32; 4]) -> Result<Target> {
+#[derive(Debug)]
+struct Patch(crate::custom_draw::Dx11WideSdrOutput);
+impl CustomContent for Patch {
+    fn prepare(
+        &self,
+        _backend: &dyn std::any::Any,
+        _extent: Size<DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        Ok(Box::new(self.0.clone()))
+    }
+}
+fn patch(renderer: &Dx11HeadlessRenderer, color: [f32; 4]) -> Result<Patch> {
     ensure!(
         color
             .iter()
@@ -17,17 +28,23 @@ fn patch(renderer: &Dx11HeadlessRenderer, color: [f32; 4]) -> Result<Target> {
         "invalid test P3 color"
     );
     let d = renderer.0.devices.as_ref().unwrap();
-    let target = Target::new(&d.device, extent())?;
+    let context =
+        crate::custom_draw::Dx11CustomContext::new(d.device.clone(), d.device_context.clone())?;
+    let output = context.create_wide_sdr_output(extent())?;
     let [r, g, b, a] = color;
-    unsafe {
-        d.device_context
-            .ClearRenderTargetView(&target.rtv, &[r * a, g * a, b * a, a]);
-    }
-    Ok(target)
+    context.record_wide_sdr(&output, |deferred, target| {
+        unsafe {
+            deferred.ClearRenderTargetView(target, &[r * a, g * a, b * a, a]);
+        }
+        Ok(())
+    })?;
+    context.submit()?;
+    Ok(Patch(output))
 }
-fn layer(source: &Target, opacity: f32) -> Layer<'_> {
+fn layer(source: &Patch, opacity: f32) -> Layer<'_> {
     Layer::P3 {
         source,
+        extent: extent(),
         bounds: [0., 0., 8., 8.],
         opacity,
     }
@@ -378,6 +395,7 @@ fn native_run_retains_legacy_blending_and_wide_bounds_clip() -> Result<()> {
             Layer::Ui(&native),
             Layer::P3 {
                 source: &blue,
+                extent: extent(),
                 bounds: [4., 2., 8., 4.],
                 opacity: 0.5,
             },
@@ -399,5 +417,187 @@ fn native_run_retains_legacy_blending_and_wide_bounds_clip() -> Result<()> {
         0.005,
     );
     close(pixels[7 * 8 + 5], expected, 0.005);
+    Ok(())
+}
+
+#[derive(Debug, Default)]
+struct RecordingPatch {
+    cached: std::sync::Mutex<Option<crate::custom_draw::Dx11WideSdrOutput>>,
+    allocations: std::sync::atomic::AtomicUsize,
+}
+impl CustomContent for RecordingPatch {
+    fn prepare(
+        &self,
+        backend: &dyn std::any::Any,
+        extent: Size<DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        let context = backend
+            .downcast_ref::<crate::custom_draw::Dx11CustomContext>()
+            .unwrap();
+        let mut cached = self.cached.lock().unwrap();
+        if let Some(output) = cached
+            .as_ref()
+            .filter(|output| context.can_reuse_wide_sdr(output))
+        {
+            return Ok(Box::new(output.clone()));
+        }
+        let output = context.create_wide_sdr_output(extent)?;
+        context.record_wide_sdr(&output, |deferred, target| {
+            unsafe {
+                deferred.ClearRenderTargetView(target, &[0.5, 0., 0., 0.5]);
+            }
+            Ok(())
+        })?;
+        self.allocations
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        *cached = Some(output.clone());
+        Ok(Box::new(output))
+    }
+}
+#[derive(Debug)]
+struct LegacyOutput;
+impl CustomContent for LegacyOutput {
+    fn prepare(
+        &self,
+        backend: &dyn std::any::Any,
+        extent: Size<DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        let context = backend
+            .downcast_ref::<crate::custom_draw::Dx11CustomContext>()
+            .unwrap();
+        Ok(Box::new(context.create_output(extent)?))
+    }
+}
+#[::core::prelude::v1::test]
+fn typed_producer_pending_reuse_and_submitted_cache_hit() -> Result<()> {
+    let (mut r, c) = setup()?;
+    let producer = RecordingPatch::default();
+    for _ in 0..3 {
+        c.render(
+            &mut r.0,
+            &[
+                Layer::P3 {
+                    source: &producer,
+                    extent: extent(),
+                    bounds: [0., 0., 8., 8.],
+                    opacity: 1.,
+                },
+                Layer::P3 {
+                    source: &producer,
+                    extent: extent(),
+                    bounds: [0., 0., 8., 8.],
+                    opacity: 1.,
+                },
+            ],
+        )?;
+        let red = reference::p3([0.5, 0., 0., 0.5]);
+        close(read(&r, &c.target)?[0], reference::over(red, red), 0.002);
+        assert_eq!(
+            producer
+                .allocations
+                .load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+    }
+    Ok(())
+}
+#[::core::prelude::v1::test]
+fn typed_preparation_failure_discards_batch_and_preserves_frame() -> Result<()> {
+    let (mut r, c) = setup()?;
+    let white = patch(&r, [1.; 4])?;
+    c.render(&mut r.0, &[layer(&white, 1.)])?;
+    let producer = RecordingPatch::default();
+    let rejected = c.render(
+        &mut r.0,
+        &[
+            Layer::P3 {
+                source: &producer,
+                extent: extent(),
+                bounds: [0., 0., 8., 8.],
+                opacity: 1.,
+            },
+            Layer::P3 {
+                source: &LegacyOutput,
+                extent: extent(),
+                bounds: [0., 0., 8., 8.],
+                opacity: 1.,
+            },
+        ],
+    );
+    assert!(
+        rejected
+            .unwrap_err()
+            .to_string()
+            .contains("typed Dx11WideSdrOutput")
+    );
+    close(read(&r, &c.target)?[0], [1.; 4], 0.002);
+    let d = r.0.devices.as_ref().unwrap();
+    let context =
+        crate::custom_draw::Dx11CustomContext::new(d.device.clone(), d.device_context.clone())?;
+    assert!(!context.can_reuse_wide_sdr(producer.cached.lock().unwrap().as_ref().unwrap()));
+    c.render(
+        &mut r.0,
+        &[Layer::P3 {
+            source: &producer,
+            extent: extent(),
+            bounds: [0., 0., 8., 8.],
+            opacity: 1.,
+        }],
+    )?;
+    assert_eq!(
+        producer
+            .allocations
+            .load(std::sync::atomic::Ordering::Relaxed),
+        2
+    );
+    close(
+        read(&r, &c.target)?[0],
+        reference::p3([0.5, 0., 0., 0.5]),
+        0.002,
+    );
+    assert!(
+        c.render(
+            &mut r.0,
+            &[Layer::P3 {
+                source: &white,
+                extent: size(DevicePixels(4), DevicePixels(4)),
+                bounds: [0., 0., 8., 8.],
+                opacity: 1.
+            }]
+        )
+        .is_err()
+    );
+    Ok(())
+}
+
+#[::core::prelude::v1::test]
+fn default_scene_renderer_rejects_typed_wide_output_before_submission() -> Result<()> {
+    let mut r = Dx11HeadlessRenderer::new()?;
+    let producer = Arc::new(RecordingPatch::default());
+    let bounds = Bounds::new(
+        point(ScaledPixels(0.), ScaledPixels(0.)),
+        size(ScaledPixels(8.), ScaledPixels(8.)),
+    );
+    let mut scene = Scene::default();
+    scene.insert_primitive(CustomDraw {
+        order: 0,
+        bounds,
+        content_mask: ContentMask { bounds },
+        corner_radii: Corners::default(),
+        opacity: 1.,
+        content: producer.clone(),
+        coverage: None,
+    });
+    scene.finish();
+    assert!(
+        r.0.render(&scene, WindowBackgroundAppearance::Transparent)
+            .is_err()
+    );
+    let devices = r.0.devices.as_ref().unwrap();
+    let context = crate::custom_draw::Dx11CustomContext::new(
+        devices.device.clone(),
+        devices.device_context.clone(),
+    )?;
+    assert!(!context.can_reuse_wide_sdr(producer.cached.lock().unwrap().as_ref().unwrap()));
     Ok(())
 }

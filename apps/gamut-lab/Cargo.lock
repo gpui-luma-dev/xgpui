@@ -1850,8 +1850,8 @@ dependencies = [
  "gpui",
  "gpui-apple",
  "gpui-platform",
- "metal",
  "parking_lot",
+ "xgpui-gamut",
  "xgpui-shader",
 ]
 
@@ -6501,6 +6501,17 @@ name = "xcursor"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
+
+[[package]]
+name = "xgpui-gamut"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gpui",
+ "gpui-apple",
+ "gpui-windows",
+ "metal",
+]
 
 [[package]]
 name = "xgpui-shader"

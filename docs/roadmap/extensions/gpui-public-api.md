@@ -197,6 +197,23 @@ Windows test-support only:
   implements existing PlatformHeadlessRenderer
 ```
 
+Windows also adds an explicit wide-output contract:
+
+```rust
+// gpui_windows::custom_draw — additive backend SDK, no GPUI core changes
+pub struct Dx11WideSdrOutput { /* private fields; Clone */ }
+// Dx11CustomContext methods:
+// create_wide_sdr_output(extent) -> Result<Dx11WideSdrOutput>
+// can_reuse_wide_sdr(&output) -> bool
+// record_wide_sdr(&output, callback) -> Result<T>
+// Dx11WideSdrOutput::texture() -> &ID3D11Texture2D
+```
+
+[Typed Windows output and recording example](high-gamut-windows.md#typed-windows-output).
+Only the private headless compositor accepts this output; Windows wide window
+presentation remains unsupported. Existing producer signatures and sRGB outputs
+are unchanged.
+
 Backend APIs are target/feature dependent. App code normally uses portable
 `xgpui-shader` producers rather than these low-level recording contracts.
 

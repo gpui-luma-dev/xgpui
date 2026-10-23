@@ -75,7 +75,7 @@ function buildFeatureReference() {
     const entries = Object.entries(c.features);
     return '<details><summary>' + escapeHtml(short(c.package)) + ' · ' + entries.length + ' declared feature entries</summary><p><code>' + escapeHtml(c.package) + '</code>. Defaults: <code>' + escapeHtml((c.features.default || []).join(', ') || '(none)') + '</code></p>' +
       (entries.length ? '<div class="table-wrap"><table><thead><tr><th>Feature</th><th>Enables / forwards to</th></tr></thead><tbody>' + entries.map(([key,value]) => '<tr><td><code>' + escapeHtml(key) + '</code></td><td><code>' + escapeHtml(value.join(', ') || '(no forwarding; source cfg flag)') + '</code></td></tr>').join('') + '</tbody></table></div>' : '<p>No explicit feature entries.</p>') +
-      '<p>Optional dependencies can introduce additional implicit features. See the complete manifest below.</p>' + buildFile('gpui/crates/' + c.package + '/Cargo.toml') + '</details>';
+      '<p>Optional dependencies can introduce additional implicit features. See the complete manifest below.</p>' + buildFile((data.extension_packages[c.package] || data.provenance.packages[c.package]) + '/Cargo.toml') + '</details>';
   }).join('');
 }
 function buildGuidePage() {

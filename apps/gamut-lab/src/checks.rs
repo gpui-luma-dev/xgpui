@@ -18,7 +18,7 @@ fn quad(scene: &mut Scene, b: Bounds<ScaledPixels>, color: Rgba) {
 }
 fn surface(scene: &mut Scene, b: Bounds<ScaledPixels>, color: [f64; 4], wide: bool) {
     let source: Arc<dyn CustomContent> = if wide {
-        Arc::new(content::WideColor(color))
+        Arc::new(WideColor::linear_p3(color.map(|v| v as f32)).unwrap())
     } else {
         Arc::new(SolidColor::new(color.map(|v| v as f32)).unwrap())
     };

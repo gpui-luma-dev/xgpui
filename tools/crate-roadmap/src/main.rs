@@ -603,14 +603,26 @@ fn html(value: &str) -> String {
 fn generate(root: &Path) -> Result<()> {
     let provenance: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(root.join("upstream.json"))?)?;
-    let packages = provenance["packages"]
+    let extension_packages = BTreeMap::from([
+        ("xgpui-shader", "extensions/xgpui-ext/crates/xgpui-shader"),
+        ("xgpui-gamut", "extensions/xgpui-ext/crates/xgpui-gamut"),
+    ]);
+    let mut packages = provenance["packages"]
         .as_object()
-        .context("Missing captured package map")?;
+        .context("Missing captured package map")?
+        .clone();
+    // Local extensions are indexed like crates without claiming upstream provenance.
+    for (package, directory) in &extension_packages {
+        packages.insert(
+            (*package).into(),
+            serde_json::Value::String((*directory).into()),
+        );
+    }
     let names: BTreeSet<String> = packages.keys().cloned().collect();
     let output = root.join("docs/roadmap/site");
     fs::create_dir_all(&output)?;
     let mut crates = Vec::new();
-    for (package, directory) in packages {
+    for (package, directory) in &packages {
         let directory = root.join(directory.as_str().context("Invalid package path")?);
         let manifest: toml::Value =
             toml::from_str(&fs::read_to_string(directory.join("Cargo.toml"))?)?;
@@ -831,7 +843,7 @@ fn generate(root: &Path) -> Result<()> {
             serde_json::json!({"title": title, "source": file, "html": html}),
         );
     }
-    let data = serde_json::json!({"extension_documents": extension_documents, "build_files": build_files, "provenance": provenance, "crates": crates, "notes": notes,
+    let data = serde_json::json!({"extension_packages": extension_packages, "extension_documents": extension_documents, "build_files": build_files, "provenance": provenance, "crates": crates, "notes": notes,
         "methodology": "Syntactic Rust inventory, not rustc's resolved public API. pub(crate) excluded; plain cfg(test) modules excluded. Other cfg conditions retained without evaluation. Glob re-exports, associated-type reachability, macro expansions and external re-exports are not resolved. Private-module declarations and trait implementations are candidates, not proof of consumer access. Signatures are source heads; follow source for full bounds and context."});
     let json = serde_json::to_string(&data)?
         .replace('<', "\\u003c")

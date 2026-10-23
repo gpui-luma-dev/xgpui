@@ -1,5 +1,5 @@
 //! Private WARP/headless checkpoint. Deliberately compiled only for backend tests.
-//! Ordered native scene runs and explicit P3 textures; no public producer or window API.
+//! Ordered native scene runs and typed P3 producers; no window integration.
 use super::*;
 use anyhow::ensure;
 
@@ -11,7 +11,8 @@ mod tests;
 enum Layer<'a> {
     Ui(&'a Scene),
     P3 {
-        source: &'a Target,
+        source: &'a dyn CustomContent,
+        extent: Size<DevicePixels>,
         bounds: [f32; 4],
         opacity: f32,
     },
@@ -19,7 +20,6 @@ enum Layer<'a> {
 
 struct Target {
     texture: ID3D11Texture2D,
-    srv: ID3D11ShaderResourceView,
     rtv: ID3D11RenderTargetView,
 }
 impl Target {
@@ -39,16 +39,14 @@ impl Target {
             BindFlags: (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE).0 as u32,
             ..Default::default()
         };
-        let (mut texture, mut srv, mut rtv) = (None, None, None);
+        let (mut texture, mut rtv) = (None, None);
         unsafe {
             device.CreateTexture2D(&desc, None, Some(&mut texture))?;
             let texture = texture.as_ref().context("wide texture missing")?;
-            device.CreateShaderResourceView(texture, None, Some(&mut srv))?;
             device.CreateRenderTargetView(texture, None, Some(&mut rtv))?;
         }
         Ok(Self {
             texture: texture.unwrap(),
-            srv: srv.unwrap(),
             rtv: rtv.unwrap(),
         })
     }
@@ -145,39 +143,61 @@ impl Compositor {
                 .is_none(),
             "private compositor requires a headless target"
         );
-        // Validate every explicit surface before clearing/encoding the frame.
+        // Prepare/validate every wide output before submitting any recording.
+        // Failure drops this batch and abandons all staged output identities.
+        let mut batch = crate::custom_draw::PreparationBatch::new(
+            devices.device.clone(),
+            devices.device_context.clone(),
+        );
+        let mut sources = Vec::with_capacity(layers.len());
         for layer in layers {
-            if let Layer::P3 {
-                source,
-                bounds,
-                opacity,
-            } = layer
-            {
-                ensure!(
-                    bounds.iter().all(|v| v.is_finite()) && bounds[2] > 0. && bounds[3] > 0.,
-                    "invalid surface bounds"
-                );
-                ensure!(
-                    opacity.is_finite() && (0. ..=1.).contains(opacity),
-                    "invalid surface opacity"
-                );
-                ensure!(
-                    unsafe { source.texture.GetDevice()? }.as_raw() == devices.device.as_raw(),
-                    "foreign wide texture"
-                );
-                ensure!(
-                    source.texture.as_raw() != self.target.texture.as_raw(),
-                    "wide target cannot sample itself"
-                );
-            }
+            let source = match layer {
+                Layer::Ui(_) => None,
+                Layer::P3 {
+                    source,
+                    extent,
+                    bounds,
+                    opacity,
+                } => {
+                    ensure!(
+                        bounds.iter().all(|v| v.is_finite()) && bounds[2] > 0. && bounds[3] > 0.,
+                        "invalid surface bounds"
+                    );
+                    ensure!(
+                        opacity.is_finite() && (0. ..=1.).contains(opacity),
+                        "invalid surface opacity"
+                    );
+                    Some(batch.prepare(|context| {
+                        let request = PreparationRequest::new(
+                            size(px(bounds[2]), px(bounds[3])),
+                            *extent,
+                            1.,
+                        )?;
+                        let output = source.prepare_with_request(context, &request)?;
+                        let output = output
+                            .downcast::<crate::custom_draw::Dx11WideSdrOutput>()
+                            .map_err(|_| {
+                                anyhow::anyhow!("wide layer requires typed Dx11WideSdrOutput")
+                            })?
+                            .validate(context, *extent)?;
+                        ensure!(
+                            output.texture.as_raw() != self.target.texture.as_raw(),
+                            "wide target cannot sample itself"
+                        );
+                        Ok(output)
+                    })?)
+                }
+            };
+            sources.push(source);
         }
         renderer.resize(self.extent)?;
+        batch.submit()?;
         unsafe {
             devices
                 .device_context
                 .ClearRenderTargetView(&self.target.rtv, &[0.; 4]);
         }
-        for layer in layers {
+        for (layer, source) in layers.iter().zip(&sources) {
             match layer {
                 Layer::Ui(scene) => {
                     // Scoped substitution handles cached SubpixelSprite batches without
@@ -222,10 +242,14 @@ impl Compositor {
                     )?;
                 }
                 Layer::P3 {
-                    source,
-                    bounds,
-                    opacity,
-                } => self.draw(&devices, &source.srv, *bounds, *opacity, true)?,
+                    bounds, opacity, ..
+                } => self.draw(
+                    &devices,
+                    &source.as_ref().context("wide source missing")?.srv,
+                    *bounds,
+                    *opacity,
+                    true,
+                )?,
             }
         }
         // Do not leave the wide RTV installed in the legacy renderer.

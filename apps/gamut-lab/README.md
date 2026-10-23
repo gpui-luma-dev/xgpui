@@ -1,6 +1,6 @@
 # gamut-lab
 
-macOS Metal lab: wide P3 content and normal sRGB controls in one window.
+`xgpui-gamut` producer + macOS Metal lab: wide P3 content and normal sRGB controls in one window.
 
 ```sh
 just --justfile apps/gamut-lab/justfile ui

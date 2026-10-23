@@ -9,7 +9,7 @@ const sourceUrl = (file, line=1) => 'source/' + file.split('/').map(encodeURICom
 const sourceLink = (file, line=1, label='Source') => '<a href="' + sourceUrl(file,line) + '">' + escapeHtml(label) + '</a>';
 const crateLink = pkg => '<a href="' + crateUrl(pkg) + '">' + escapeHtml(short(pkg)) + '</a>';
 const tag = label => '<span class="tag">' + escapeHtml(label) + '</span>';
-const groups = ["Core", "Platforms & rendering", "Data & runtime", "Transport & tooling"];
+const groups = ["Extensions", "Core", "Platforms & rendering", "Data & runtime", "Transport & tooling"];
 let page = 0;
 function parseRoute(hash) {
   const p = new URLSearchParams(hash.replace(/^#/,''));
@@ -25,8 +25,10 @@ function sidebar(query='') {
   const matches = crates.filter(c => !q || (c.package+' '+notes[c.package].role+' '+c.declarations.map(d=>d.name).join(' ')).toLowerCase().includes(q));
   document.getElementById('crate-list').innerHTML = groups.map(g => {
     const list=matches.filter(c=>notes[c.package].group===g);
-    return list.length ? '<p class="group-label">'+escapeHtml(g)+'</p>'+list.map(c=>'<a class="crate-link" '+(route.pkg===c.package?'aria-current="page" ':'')+'href="'+crateUrl(c.package)+'">'+escapeHtml(short(c.package))+'</a>').join('') : '';
+    const entries = list.map(c=>'<a class="crate-link" '+(route.pkg===c.package || (c.package === 'xgpui-shader' && shaderGuideRoutes.includes(route.global)) || (c.package === 'xgpui-gamut' && route.global === 'high-gamut-windows') ? 'aria-current="page" ' : '')+'href="'+crateUrl(c.package)+'">'+escapeHtml(short(c.package))+'</a>').join('');
+    return entries ? '<p class="group-label">'+escapeHtml(g)+'</p>'+entries : '';
   }).join('') || '<p>No crates match.</p>';
+
 }
 function header(eyebrow,title,lead) {return '<div class="eyebrow">'+escapeHtml(eyebrow)+'</div><h1>'+escapeHtml(title)+'</h1><p class="lead">'+escapeHtml(lead)+'</p>';}
 function overview() {
@@ -40,7 +42,7 @@ function overview() {
 }
 function method() {
   const warnings=crates.filter(c=>c.warnings.length);
-  return header('Evidence & limits','How this map is made','The Rust generator reads upstream.json, each captured Cargo manifest and the modules reachable from its library entrypoint. Curated notes explain responsibilities and suggest review questions.')+
+  return header('Evidence & limits','How this map is made','The Rust generator reads upstream.json, the local extension package map, each Cargo manifest and the modules reachable from its library entrypoint. Curated notes explain responsibilities and suggest review questions.')+
     '<h2>What the counts mean</h2><p>'+escapeHtml(data.methodology)+'</p><ul><li><strong>Root declaration/export:</strong> written at the crate root, or an exported macro. Glob re-exports remain an export statement rather than a resolved list of names.</li><li><strong>Public module path:</strong> all enclosing modules have public visibility. This does not prove that an owner type or a trait implementation is externally reachable.</li><li><strong>Private module path:</strong> may still reach consumers through re-exports. Never use this label as a removal decision.</li><li><strong>Conditional declarations:</strong> cfg attributes are shown without evaluating a target or feature set. Plain cfg(test) items/modules are excluded; other test-support code remains visible.</li><li>Macro-generated styles, derives, includes and external re-exports need compiler/rustdoc inspection. Associated items and generic bounds need their full source context.</li><li>Dependency edges cover captured packages only, with normal, dev, build, optional and target metadata. They describe manifests, not a resolved build graph or actual symbol use.</li><li>The generator inventories library module trees. Separate binary entrypoints, examples and benches are not an exhaustive part of this index.</li></ul>'+
     '<h2>Snapshot provenance</h2><p>Captured release: <code>'+escapeHtml(data.provenance.ref)+'</code><br>Upstream commit: <code>'+escapeHtml(data.provenance.commit)+'</code></p><p>Generated from the local captured files. Downstream patches may differ from the upstream commit. Rebuild after a sync; review curated notes when responsibilities change.</p>'+
     '<h2>Unresolved source items</h2>'+(warnings.length?warnings.map(c=>'<details><summary>'+escapeHtml(short(c.package))+' · '+c.warnings.length+'</summary><ul>'+c.warnings.map(w=>'<li><code>'+escapeHtml(w)+'</code></li>').join('')+'</ul></details>').join(''):'<p>No unresolved file modules or include! calls were recorded. This does not mean macros were expanded.</p>')+
@@ -52,7 +54,7 @@ function review() {
     '<h2>Suggested order of work</h2><ol><li><strong>Establish the baseline.</strong> Compile representative consumers and record the supported targets and feature combinations. Use rustdoc or a compiler-resolved API tool to supplement this syntactic index.</li><li><strong>Define the rendering contract.</strong> Document scene-to-renderer ownership, texture formats, shader inputs and surface color behavior. Begin with Apple/Metal and wgpu source, then compare native window contracts.</li><li><strong>Build focused compatibility probes.</strong> Each probe should exercise a named contract: window creation, entity updates, text layout, image upload or a renderer extension. Design these after choosing the contract.</li><li><strong>Review exposure by subsystem.</strong> Separate supported application APIs, backend contracts, macro support and optional tooling. Trace re-exports and signature types before changing visibility.</li><li><strong>Change one boundary at a time.</strong> Compare the refreshed inventory, compile consumers and review the incoming upstream diff before making a stability promise.</li></ol>'+
     groups.map(g=>'<h2>'+escapeHtml(g)+'</h2>'+crates.filter(c=>notes[c.package].group===g).map(c=>'<article class="card"><h3>'+crateLink(c.package)+'</h3><p>'+escapeHtml(notes[c.package].review)+'</p>'+sourceLink(c.entry,1,'Read crate entrypoint')+'</article>').join('')).join('');
 }
-function tabs(c,active) {return '<nav class="tabs" aria-label="Crate sections">'+[['overview','Role & sources'],['surface','API inventory'],['dependencies','Dependencies'],['review','Trim review']].map(([id,label])=>'<a '+(active===id?'aria-current="page" ':'')+'href="'+crateUrl(c.package,id)+'">'+label+'</a>').join('')+'</nav>';}
+function tabs(c,active) {return '<nav class="tabs" aria-label="Crate sections">'+[['overview',notes[c.package].group === 'Extensions' ? 'Use' : 'Role & sources'],...(notes[c.package].group === 'Extensions' ? [['sources','Role & sources']] : []),['surface','API inventory'],['dependencies','Dependencies'],['review','Trim review']].map(([id,label])=>'<a '+(active===id?'aria-current="page" ':'')+'href="'+crateUrl(c.package,id)+'">'+label+'</a>').join('')+'</nav>';}
 function cratePage(c,tab) {
   const n=notes[c.package];
   let body='';
@@ -65,8 +67,10 @@ function cratePage(c,tab) {
     body='<p>Captured-package manifest edges, including conditional, optional, development and build dependencies. External packages and resolved feature activation are outside this graph.</p><h2>Depends on · '+c.dependencies.length+'</h2>'+(c.dependencies.map(d=>edge(d,false)).join('')||'<p>No captured-package dependencies.</p>')+'<h2>Referenced by · '+incoming.length+'</h2>'+(incoming.map(d=>edge(d,true)).join('')||'<p>No captured-package incoming edges.</p>')+'<h2>Declared features</h2><pre><code>'+escapeHtml(JSON.stringify(c.features,null,2))+'</code></pre>';
   } else if(tab==='review') {
     body='<h2>Boundary to investigate</h2><div class="notice">Review hypothesis. No visibility changes or removal decisions have been made.</div><p class="lead">'+escapeHtml(n.review)+'</p><p>Follow '+sourceLink(c.entry,1,'the entrypoint')+' and inspect incoming dependencies. Then check expanded macros, re-exports and actual downstream consumers before narrowing the API.</p><p><a href="#review">Read the overall review sequence →</a></p>';
+  } else if(notes[c.package].group === 'Extensions' && tab === 'overview') {
+    body=c.package === 'xgpui-shader' ? shaderCrateGuide() : gamutCrateGuide();
   } else {
-    body='<h2>Public surface at a glance</h2><p>'+escapeHtml(n.surface)+'</p><p>'+sourceLink(c.entry,1,'Open library entrypoint →')+'</p><div class="stats"><div class="stat"><strong>'+c.declarations.length+'</strong><span>Declaration / impl candidates</span></div><div class="stat"><strong>'+c.declarations.filter(d=>d.root_export).length+'</strong><span>Root declarations / exports</span></div><div class="stat"><strong>'+c.files.length+'</strong><span>Source files</span></div></div><h2>Source map</h2><div class="source-list">'+c.files.map(file=>sourceLink(file,1,file.replace('gpui/crates/'+c.package+'/',''))).join('')+'</div>'+(c.warnings.length?'<div class="notice">'+c.warnings.length+' unresolved source items. <a href="#method">Inspect inventory limits</a>.</div>':'');
+    body='<h2>Public surface at a glance</h2><p>'+escapeHtml(n.surface)+'</p><p>'+sourceLink(c.entry,1,'Open library entrypoint →')+'</p><div class="stats"><div class="stat"><strong>'+c.declarations.length+'</strong><span>Declaration / impl candidates</span></div><div class="stat"><strong>'+c.declarations.filter(d=>d.root_export).length+'</strong><span>Root declarations / exports</span></div><div class="stat"><strong>'+c.files.length+'</strong><span>Source files</span></div></div><h2>Source map</h2><div class="source-list">'+c.files.map(file=>sourceLink(file,1,file.replace(c.entry.slice(0,c.entry.indexOf('/src/')+1),''))).join('')+'</div>'+(c.warnings.length?'<div class="notice">'+c.warnings.length+' unresolved source items. <a href="#method">Inspect inventory limits</a>.</div>':'');
   }
   return header(n.group,short(c.package),n.role)+'<p class="muted"><code>'+escapeHtml(c.package)+'</code> · '+escapeHtml(c.version)+(c.procedural?' · procedural macro crate':'')+'</p>'+tabs(c,tab)+body;
 }

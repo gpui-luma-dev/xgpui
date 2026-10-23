@@ -1,5 +1,7 @@
 'use strict';
 
+const shaderGuideRoutes = ['extension-paints', 'shader-producers', 'paint-contract-hardening', 'portable-wgsl-v1', 'portable-paints', 'native-dx11-paints'];
+
 function isExtensionRoute(route) {
   return route === 'extensions' || Object.hasOwn(data.extension_documents, route);
 }
@@ -10,8 +12,16 @@ function extensionCode(language, source) {
   return '<pre><code class="language-' + language + '">' + escapeHtml(source) + '</code></pre>';
 }
 function extensionPage(route) {
+  if (route === 'high-gamut-windows') {
+    const doc = data.extension_documents[route];
+    return header('Extensions', 'xgpui-gamut', 'Explicit wide SDR content alongside normal sRGB controls.') +
+      '<p class="muted">' + crateLink('xgpui-gamut') + ' · Backend owners: ' + crateLink('gpui-apple') + ' / ' + crateLink('gpui-windows') + '.</p>' +
+      '<nav class="tabs" aria-label="Wide-gamut sections"><a href="#high-gamut-windows" aria-current="page">Use &amp; contract</a><a href="#high-gamut-windows&section=typed-windows-output">Windows output</a><a href="#gpui-public-api">GPUI API changes</a></nav>' +
+      '<article class="extension-document">' + doc.html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
+  }
+
   const banner = route === 'high-gamut-windows'
-    ? '<p class="guide-intro"><strong>Wide-gamut presentation extension.</strong> Native macOS Metal; per-window opt-in. No reusable gamut crate yet.</p>'
+    ? '<p class="guide-intro"><strong>Wide-gamut presentation extension.</strong> Native xgpui-gamut producers; per-window Metal presentation.</p>'
     : route === 'extensions' || route === 'gpui-public-api'
       ? '<p class="guide-intro"><strong>Downstream extensions to GPUI.</strong> Paint production and window color presentation are independent opt-in capabilities.</p>'
       : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; output retains sRGB semantics.</p>';
@@ -38,7 +48,7 @@ let status = window.color_status();
 
 // Explicit producer output; legacy paints and controls remain sRGB:
 MetalWideSdrOutput::from_linear_p3_premultiplied(context, texture, commands)?;`) +
-    '<p>Native macOS Metal: bounded SDR Display P3 surfaces alongside normal sRGB controls, in scene order. Implemented in GPUI and its Apple backend; the sample producer lives in <code>gamut-lab</code>. A reusable gamut extension crate, HDR and other presentation backends remain future work.</p>' +
+    '<p><code>xgpui-gamut</code> produces bounded linear-P3 SDR surfaces. GPUI backends own window negotiation and composition; Metal presentation is implemented, Windows presentation and Linux remain deferred.</p>' +
     '<div class="cards">' + extensionCard('high-gamut-windows', 'Start here: window setup, complete Metal producer, color contract, composition and validation.') + '</div>' +
     extensionCode('sh', `just --justfile apps/gamut-lab/justfile ui
 just --justfile apps/gamut-lab/justfile test`) +
@@ -72,6 +82,7 @@ function publicApiSourceLinks() {
     ['gpui-wgpu', 'WgpuCustomOutput', 'custom_draw.rs'],
     ['gpui-windows', 'Dx11CustomContext', 'custom_draw.rs'],
     ['gpui-windows', 'Dx11CustomOutput', 'custom_draw.rs'],
+    ['gpui-windows', 'Dx11WideSdrOutput', 'custom_draw/wide_output.rs'],
     ['gpui-windows', 'Dx11HeadlessRenderer', 'directx_renderer.rs'],
   ];
   return '<h2>Jump to the current declarations</h2><ul>' + sites.map(([pkg, name, file]) => {
@@ -79,4 +90,20 @@ function publicApiSourceLinks() {
     const declaration = crates.find(c => c.package === pkg).declarations.find(d => d.name === name && d.file === path);
     return '<li>' + sourceLink(path, declaration.line, pkg + '::' + name) + ' <code>' + escapeHtml(file) + '</code></li>';
   }).join('') + '</ul>';
+}
+
+function shaderCrateGuide() {
+  return '<article class="extension-document">' +
+    data.extension_documents['extension-paints'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') +
+    '</article><h2>Producer and backend references</h2><div class="cards">' +
+    extensionCard('shader-producers', 'Mesh, gradient parameters and caches.') +
+    extensionCard('portable-wgsl-v1', 'Write a portable WGSL producer.') +
+    extensionCard('paint-contract-hardening', 'Preparation and recording transactions.') +
+    extensionCard('portable-paints', 'wgpu backend.') +
+    extensionCard('native-dx11-paints', 'Native Windows D3D11 backend.') + '</div>';
+}
+
+function gamutCrateGuide() {
+  return '<article class="extension-document">' +
+    data.extension_documents['high-gamut-windows'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
 }
