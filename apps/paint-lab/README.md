@@ -11,9 +11,34 @@ renderer has no animation clock.
 Run here with `just ui`. Select a gradient type in the first row (radial is the
 default). Controls animate/pause the shared producer, switch to native
 white coverage, set inherited opacity to 50%, and clip each example without
-resizing its paint field. The default window is 1200x700 logical pixels and the
+resizing its paint field. The default window is 1500x940 logical pixels and the
 three sources are 320x240. Shadows, glyph paints and explicit shared coordinate
 rectangles are not part of this milestone.
+
+## Editor
+
+The left panel edits the selected type; background, border, and path previews
+update together. Each type keeps its own settings for the current session.
+
+- Select a color swatch to edit a stop. Drag its position slider to move it;
+  stops stay sorted and the selected stop follows when it crosses another stop.
+- **Add** inserts a stop in the largest gap, interpolating its color. **Duplicate**
+  makes a coincident stop for a hard edge. **Remove** keeps at least two stops;
+  the maximum is 32.
+- RGB sliders use 0–255 readouts; alpha uses percent. The hexadecimal color
+  readout reflects the selected stop. Small −/+ buttons allow precise steps.
+- Linear exposes angle; radial exposes center X/Y and radius X/Y; conic exposes
+  angle and center; diamond exposes angle, center, and radius.
+- Centers use 0–1 coordinates in the paint bounds. Radius sliders span 0.01–2
+  times the full width/height; 0.5 reaches the corresponding edge midpoint.
+- Mesh exposes nine control-point RGB colors and X/Y positions. Mesh colors are
+  opaque, and its control points replace the stop/angle/center/radius model.
+- Editing pauses animation at the currently displayed geometry. **Reset** restores
+  only the selected type. Settings are in memory and reset when the app closes.
+
+The editor and previews scroll independently on smaller windows. Headless runs
+continue to use deterministic presets and validate rendering independently of
+interactive editor state.
 
 ```sh
 just                       # List recipes
@@ -33,7 +58,8 @@ just --set profile release headless --frames 120
 Paths resolve from the repository root. From there:
 `just --justfile apps/paint-lab/justfile ui`.
 
-The headless checks also verify all analytic gradient geometries at known sample
+Editor model tests cover sorted stop edits, selection, stop limits and freezing
+animation without a geometry jump. The headless checks also verify all analytic gradient geometries at known sample
 positions in non-square bounds, stop clamping, hard stops, premultiplied color
 interpolation with transparent stops, snapshot/resize behavior and pipeline reuse.
 They compare every pixel of native and custom-painted dashed,
