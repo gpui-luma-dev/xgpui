@@ -1,73 +1,75 @@
-# Native Windows DirectX 11 paints
+# Native D3D11 paints
 
-The native Windows adapter is implemented without changing GPUI core's public
-API. Apps continue to construct `MeshGradient`, `Gradient`, `SolidColor`, or an
-experimental `ShaderProgram` paint. No Windows feature flag, binding declaration,
-or OS conditional is needed in app code. The normal Windows window renderer
-remains D3D11. The optional wgpu path remains a separate backend.
+Windows · feature level ≥ 11.0 · `xgpui-shader` · no app-side OS branches.
 
-## Division of responsibilities
+## Use
 
-`gpui-windows::custom_draw` supplies a device, a host-owned deferred recording
-context, immutable-after-submission BGRA8Unorm outputs, and an HLSL pipeline
-helper. The native renderer validates output context/device identity, readiness
-and extent, submits the preparation list, then composes custom batches in scene
-order. Native border/path masks preserve GPUI's existing geometry semantics.
-Clip rectangles, corner coverage and element opacity apply during composition.
-Native background-adapter sources are unpremultiplied before custom composition.
+```rust
+use gpui::{prelude::*, *};
+use std::sync::Arc;
+use xgpui_shader::{painted, MeshGradient, MeshGrid};
 
-`xgpui-shader` owns the effects and WGSL-to-HLSL translation through Naga, with
-explicit constant-buffer register bindings and reflected entry names. Mesh uses
-the same Hermite vertex evaluation, uniform packing and triangle order as the
-wgpu implementation. Analytic gradients share the same uniform packing too.
-There is no second Windows-specific copy of the effect math.
+let grid = MeshGrid::regular(2, 2, vec![
+    [1.0, 0.1, 0.2], [1.0, 0.8, 0.1],
+    [0.2, 0.3, 1.0], [0.1, 0.9, 0.7],
+])?;
+let mesh = Arc::new(MeshGradient::new(grid, 18)?);
+painted().w(px(960.0)).h(px(640.0)).bg_paint(mesh);
+```
 
-Preparations record on a deferred context and only the host executes them. A
-submitted output can be reused without a CPU wait on the same immediate context;
-outputs from abandoned recordings cannot be reused. Context identity is retained
-with each output, preventing pointer reuse. Each snapshot retains outputs within
-a 64 MiB budget; related snapshots share the compiled pipeline on a device.
-Coverage has a separate bounded cache. Device recovery drops the compositor;
-retained effect caches reject old device/context identities on subsequent use.
-Command lists restore immediate-context state so following native batches retain
-their shaders, buffers, render targets and other bindings.
+## Producer API
 
-The current output remains straight-alpha encoded-sRGB SDR. D3D feature level
-11.0 or later is required for custom paints. This does not add high gamut,
-producer failure isolation, or an application fallback policy. Preparation,
-translation, driver compilation and submission errors still fail the frame.
+`gpui_windows::custom_draw` — signature summary:
 
-## Validation
+```rust
+pub struct Dx11CustomContext {
+    pub device: ID3D11Device,
+    // Private recording state.
+}
+impl Dx11CustomContext {
+    pub fn cache_key(&self) -> usize;
+    pub fn create_output(&self, extent: Size<DevicePixels>) -> Result<Dx11CustomOutput>;
+    pub fn can_reuse(&self, output: &Dx11CustomOutput) -> bool;
+    pub fn record<T>(
+        &self,
+        encode: impl FnOnce(&ID3D11DeviceContext) -> Result<T>,
+    ) -> Result<T>;
+}
+pub struct Dx11CustomOutput { /* private fields; Clone */ }
+impl Dx11CustomOutput {
+    pub fn texture(&self) -> &ID3D11Texture2D;
+}
+```
 
-From a Windows checkout, use native D3D11/WARP for deterministic offscreen checks:
+## Contract
+
+```text
+extension   WGSL → Naga → HLSL SM5 → private pipeline → record draws
+host        validate → stage → execute accepted batch → compose
+failure     discard unsubmitted batch → frame error
+reuse       same recording / accepted batch / submitted context
+state       command-list execution restores immediate-context bindings
+
+output      BGRA8Unorm · straight alpha · encoded-sRGB SDR
+coverage    native border/path mask; host clip/corners/opacity
+cache key   retained context identity + extent (+ logical size for WGSL)
+cache       64 MiB live output/snapshot; separate coverage cache
+recovery    reject old device/context caches
+```
+
+[Recording details](../../../docs/roadmap/extensions/paint-contract-hardening.md#implemented-discardable-recording-transactions).
+
+## Windows checks
 
 ```powershell
-cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib dx11_custom -- --nocapture
-cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders -- --nocapture
+cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib dx11_custom
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders
 cargo run --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml -- --headless --effect mesh --frames 3 --png native-dx11-mesh.png
 cargo run --locked --config .cargo/validation.toml --manifest-path apps/shader-lab/Cargo.toml
 ```
 
-`gpui-platform::current_headless_renderer()` now supplies a native WARP renderer
-on Windows when test/bench support is enabled. It reuses the window renderer's
-scene encoding, preparation, mask and composition paths, with an offscreen target
-instead of a swap chain. This is correctness/readback timing, not hardware GPU
-performance. Interactive apps use their normal hardware device selection.
+Cross-compile, HLSL generation and extension Clippy pass. Windows driver/WARP,
+interactive rendering, hardware performance and device-loss runtime acceptance
+remain outstanding. WARP/readback timing is not hardware GPU timing.
 
-Backend tests cover submission, pending/abandoned/foreign output rejection,
-extent limits, alpha/clipping and restoration of immediate-context bindings.
-Paint-lab checks native border/path coverage, analytic reference pixels, shader
-coordinates/parameters, sharing/replay/resize, and mesh parity against wgpu at
-three animation states. The manual `Portable paint GPU checks` workflow includes
-a Windows native job and uploads a mesh capture.
-
-Local evidence is Windows-target cross-compilation of both apps and backend
-tests, HLSL generation tests, and macOS Metal/wgpu regression execution. Native
-Windows shader compilation, WARP pixel tests, real window rendering, hardware
-performance and device-loss stress still require execution on Windows. The
-workflow has not been dispatched from this task.
-
-Windows-target extension Clippy passes with warnings denied. A whole-backend
-Clippy run with warnings denied is blocked by pre-existing warnings in Windows
-clipboard, event, window and renderer code; those unrelated fixes are not part
-of this adapter.
+[wgpu adapter](portable-paints.md) · [WGSL](portable-wgsl-v1.md)

@@ -44,5 +44,10 @@ The root build manifests remain unchanged; follow
 Agree objectives, integration contracts, crate dependencies, compatibility impact,
 and acceptance criteria before coding either capability.
 
-The [extension paint contract](docs/extension-paints.md) describes the additive
+The web documentation has an **Extensions to GPUI** section (`#extensions`),
+which distinguishes these opt-in downstream capabilities from upstream GPUI.
+Integration and API documentation is maintained there; effect/backend-specific
+notes remain in this directory. See the [website build instructions](../../docs/roadmap/BUILDING.md).
+
+The [extension paint contract](../../docs/roadmap/extensions/extension-paints.md) describes the additive
 paint API and coverage integration. See [paint-lab](../../apps/paint-lab/README.md).

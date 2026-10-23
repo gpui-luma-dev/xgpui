@@ -3,6 +3,7 @@ use clap::{Parser, ValueEnum};
 use gpui::{prelude::*, *};
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use xgpui_shader::{Gradient, GradientKind, GradientStop, MeshGradient, SolidColor};
+use xgpui_shader::{Paint, WindowPaintExt, painted};
 mod checks;
 mod editor;
 #[cfg(feature = "portable-shaders")]
@@ -647,7 +648,7 @@ impl Render for Lab {
             .enumerate()
         {
             let p = paint.clone();
-            let mut tile = div().relative().w(px(320.)).h(px(240.));
+            let mut tile = painted().relative().w(px(320.)).h(px(240.));
             match index {
                 0 => {
                     tile = tile

@@ -163,3 +163,162 @@ fn dx11_custom_composition_preserves_alpha_clip_and_immediate_state() -> Result<
     }
     Ok(())
 }
+
+#[test]
+fn dx11_custom_failed_transactions_discard_encoded_work() -> Result<()> {
+    let host = warp()?;
+    let extent = size(DevicePixels(8), DevicePixels(8));
+    for mode in 0..4 {
+        let witness = allocate_texture(&host.device, extent)?;
+        unsafe {
+            host.owner
+                .ClearRenderTargetView(&witness.rtv, &[1., 0., 0., 1.]);
+        }
+        let mut batch = PreparationBatch::new(host.device.clone(), host.owner.clone());
+        let mut rejected_output = None;
+        let result: Result<()> = batch.prepare(|context| {
+            let output = context.create_output(extent)?;
+            rejected_output = Some(output.clone());
+            context.record(|deferred| {
+                unsafe {
+                    deferred.ClearRenderTargetView(&witness.rtv, &[0., 1., 0., 1.]);
+                }
+                Ok(())
+            })?;
+            if mode < 2 {
+                if mode == 0 {
+                    anyhow::bail!("producer rejected after encoding");
+                }
+                output.validate(context, size(DevicePixels(9), DevicePixels(8)))?;
+            } else {
+                let encoded: Result<()> = context.record(|deferred| {
+                    unsafe {
+                        deferred.ClearRenderTargetView(&witness.rtv, &[0., 1., 0., 1.]);
+                    }
+                    anyhow::bail!("encoding rejected");
+                });
+                if mode == 2 {
+                    encoded?;
+                } else {
+                    assert!(encoded.is_err());
+                    assert!(context.record(|_| Ok(())).is_err());
+                    assert!(context.create_output(extent).is_err());
+                }
+            }
+            Ok(())
+        });
+        assert!(result.is_err(), "failure mode {mode} was accepted");
+        let healthy = batch.prepare(|context| {
+            assert!(!context.can_reuse(rejected_output.as_ref().unwrap()));
+            let output = context.create_output(extent)?;
+            context.clear(&output, [0., 0., 1., 1.])?;
+            output.clone().validate(context, extent)?;
+            Ok(output)
+        })?;
+        batch.submit()?;
+        assert!(!host.can_reuse(rejected_output.as_ref().unwrap()));
+        assert!(host.can_reuse(&healthy));
+        assert!(
+            read(&host, &witness.texture)?
+                .iter()
+                .all(|p| *p == [255, 0, 0, 255]),
+            "failed commands ran in mode {mode}"
+        );
+        assert!(
+            read(&host, healthy.texture())?
+                .iter()
+                .all(|p| *p == [0, 0, 255, 255])
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn dx11_custom_staged_reuse_and_submission_order() -> Result<()> {
+    let host = warp()?;
+    let extent = size(DevicePixels(8), DevicePixels(8));
+    let destination = allocate_texture(&host.device, extent)?;
+    let mut batch = PreparationBatch::new(host.device.clone(), host.owner.clone());
+    let output = batch.prepare(|context| {
+        let output = context.create_output(extent)?;
+        context.clear(&output, [0., 1., 0., 1.])?;
+        output.clone().validate(context, extent)?;
+        Ok(output)
+    })?;
+    assert!(!host.can_reuse(&output));
+    let rejected: Result<()> = batch.prepare(|context| {
+        assert!(context.can_reuse(&output));
+        context.record(|deferred| {
+            unsafe {
+                deferred.ClearRenderTargetView(&output.bundle.rtv, &[1., 0., 0., 1.]);
+            }
+            Ok(())
+        })?;
+        anyhow::bail!("failure after a staged cache hit");
+    });
+    assert!(rejected.is_err());
+    batch.prepare(|context| {
+        assert!(context.can_reuse(&output));
+        output.clone().validate(context, extent)?;
+        assert!(context.clear(&output, [1., 0., 0., 1.]).is_err());
+        context.record(|deferred| {
+            unsafe {
+                deferred.CopyResource(&destination.texture, output.texture());
+            }
+            Ok(())
+        })
+    })?;
+    batch.prepare(|context| output.clone().validate(context, extent))?;
+    batch.submit()?;
+    assert!(host.can_reuse(&output));
+    assert!(
+        read(&host, &destination.texture)?
+            .iter()
+            .all(|p| *p == [0, 255, 0, 255])
+    );
+    let mut later = PreparationBatch::new(host.device.clone(), host.owner.clone());
+    later.prepare(|context| output.clone().validate(context, extent))?;
+    drop(later);
+    assert!(host.can_reuse(&output));
+    Ok(())
+}
+
+#[test]
+fn dx11_custom_dropped_batch_abandons_all_staged_work() -> Result<()> {
+    let host = warp()?;
+    let extent = size(DevicePixels(8), DevicePixels(8));
+    let witness = allocate_texture(&host.device, extent)?;
+    unsafe {
+        host.owner
+            .ClearRenderTargetView(&witness.rtv, &[1., 0., 0., 1.]);
+    }
+    let mut batch = PreparationBatch::new(host.device.clone(), host.owner.clone());
+    let first = batch.prepare(|context| {
+        context.record(|deferred| {
+            unsafe {
+                deferred.ClearRenderTargetView(&witness.rtv, &[0., 1., 0., 1.]);
+            }
+            Ok(())
+        })?;
+        context.create_output(extent)
+    })?;
+    let second = batch.prepare(|context| context.create_output(extent))?;
+    let aborted: Result<()> = batch.prepare(|_| anyhow::bail!("later preparation failed"));
+    assert!(aborted.is_err());
+    drop(batch);
+    let mut next = PreparationBatch::new(host.device.clone(), host.owner.clone());
+    next.prepare(|context| {
+        assert!(!context.can_reuse(&first));
+        assert!(!context.can_reuse(&second));
+        assert!(first.clone().validate(context, extent).is_err());
+        assert!(second.clone().validate(context, extent).is_err());
+        Ok(())
+    })?;
+    next.submit()?;
+    assert!(
+        read(&host, &witness.texture)?
+            .iter()
+            .all(|p| *p == [255, 0, 0, 255])
+    );
+    Ok(())
+}

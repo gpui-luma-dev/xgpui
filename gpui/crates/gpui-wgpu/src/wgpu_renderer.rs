@@ -1421,7 +1421,7 @@ impl WgpuRendererCore {
         }
         let device = self.resources.device.clone();
         let queue = self.resources.queue.clone();
-        let context = WgpuCustomContext::new(device.clone(), &queue);
+        let mut batch = PreparationBatch::new(device.clone(), &queue);
         let mut compositor = self
             .custom_compositor
             .take()
@@ -1429,87 +1429,92 @@ impl WgpuRendererCore {
         let result = (|| {
             let mut prepared = Vec::with_capacity(scene.custom_draws.len());
             for draw in &scene.custom_draws {
-                let extent = extent(draw)?;
-                let request = gpui::PreparationRequest::new(
-                    draw.bounds.size.map(|v| gpui::px(v.0)),
-                    extent,
-                    1.,
-                )?;
-                let output = draw.content.prepare_with_request(&context, &request)?;
-                let native = output.is::<Background>();
-                let texture = if native {
-                    let background = *output.downcast::<Background>().unwrap();
-                    let texture = new_texture(&device, extent, self.target_format)?;
-                    let bounds = Bounds::new(
-                        gpui::point(ScaledPixels(0.), ScaledPixels(0.)),
-                        gpui::size(
-                            ScaledPixels(extent.width.0 as f32),
-                            ScaledPixels(extent.height.0 as f32),
-                        ),
-                    );
-                    let mut native_scene = Scene::default();
-                    native_scene.insert_primitive(gpui::Quad {
-                        bounds,
-                        content_mask: gpui::ContentMask { bounds },
-                        background,
-                        ..Default::default()
-                    });
-                    native_scene.finish();
-                    self.render_frame(
-                        &native_scene,
-                        &texture.create_view(&Default::default()),
+                let prepared_draw = batch.prepare(|context| {
+                    let extent = extent(draw)?;
+                    let request = gpui::PreparationRequest::new(
+                        draw.bounds.size.map(|v| gpui::px(v.0)),
                         extent,
-                        false,
-                        wgpu::Color::TRANSPARENT,
+                        1.,
                     )?;
-                    texture
-                } else {
-                    output
-                        .downcast::<WgpuCustomOutput>()
-                        .map_err(|_| anyhow::anyhow!("producer returned a non-wgpu output"))?
-                        .validate(&context, extent)?
-                        .texture()
-                        .clone()
-                };
-                let mask = if draw.coverage.is_some() {
-                    let key = coverage_key(draw);
-                    if let Some(mask) = compositor.masks.get(&key) {
-                        Some(mask.clone())
-                    } else {
-                        let mask = new_texture(&device, extent, self.target_format)?;
-                        let mask_scene = coverage_scene(draw, extent)?;
+                    let output = draw.content.prepare_with_request(context, &request)?;
+                    let native = output.is::<Background>();
+                    let texture = if native {
+                        let background = *output.downcast::<Background>().unwrap();
+                        let texture = new_texture(&device, extent, self.target_format)?;
+                        let bounds = Bounds::new(
+                            gpui::point(ScaledPixels(0.), ScaledPixels(0.)),
+                            gpui::size(
+                                ScaledPixels(extent.width.0 as f32),
+                                ScaledPixels(extent.height.0 as f32),
+                            ),
+                        );
+                        let mut native_scene = Scene::default();
+                        native_scene.insert_primitive(gpui::Quad {
+                            bounds,
+                            content_mask: gpui::ContentMask { bounds },
+                            background,
+                            ..Default::default()
+                        });
+                        native_scene.finish();
                         self.render_frame(
-                            &mask_scene,
-                            &mask.create_view(&Default::default()),
+                            &native_scene,
+                            &texture.create_view(&Default::default()),
                             extent,
                             false,
                             wgpu::Color::TRANSPARENT,
                         )?;
-                        let bytes =
-                            extent.width.0 as usize * extent.height.0 as usize * 4 + key.len() * 4;
-                        if compositor.mask_bytes + bytes > 64 * 1024 * 1024 {
-                            compositor.masks.clear();
-                            compositor.mask_bytes = 0;
+                        texture
+                    } else {
+                        output
+                            .downcast::<WgpuCustomOutput>()
+                            .map_err(|_| anyhow::anyhow!("producer returned a non-wgpu output"))?
+                            .validate(context, extent)?
+                            .texture()
+                            .clone()
+                    };
+                    let mask = if draw.coverage.is_some() {
+                        let key = coverage_key(draw);
+                        if let Some(mask) = compositor.masks.get(&key) {
+                            Some(mask.clone())
+                        } else {
+                            let mask = new_texture(&device, extent, self.target_format)?;
+                            let mask_scene = coverage_scene(draw, extent)?;
+                            self.render_frame(
+                                &mask_scene,
+                                &mask.create_view(&Default::default()),
+                                extent,
+                                false,
+                                wgpu::Color::TRANSPARENT,
+                            )?;
+                            let bytes = extent.width.0 as usize * extent.height.0 as usize * 4
+                                + key.len() * 4;
+                            if compositor.mask_bytes + bytes > 64 * 1024 * 1024 {
+                                compositor.masks.clear();
+                                compositor.mask_bytes = 0;
+                            }
+                            if bytes <= 64 * 1024 * 1024 {
+                                compositor.mask_bytes += bytes;
+                                compositor.masks.insert(key, mask.clone());
+                            }
+                            Some(mask)
                         }
-                        if bytes <= 64 * 1024 * 1024 {
-                            compositor.mask_bytes += bytes;
-                            compositor.masks.insert(key, mask.clone());
-                        }
-                        Some(mask)
-                    }
-                } else {
-                    None
-                };
-                prepared.push(compositor.prepare(
-                    &device,
-                    draw,
-                    &texture,
-                    mask.as_ref(),
-                    native,
-                    viewport,
-                ));
+                    } else {
+                        None
+                    };
+                    Ok(
+                        compositor.prepare(
+                            &device,
+                            draw,
+                            &texture,
+                            mask.as_ref(),
+                            native,
+                            viewport,
+                        ),
+                    )
+                })?;
+                prepared.push(prepared_draw);
             }
-            context.submit()?;
+            batch.submit()?;
             Ok(prepared)
         })();
         self.custom_compositor = Some(compositor);

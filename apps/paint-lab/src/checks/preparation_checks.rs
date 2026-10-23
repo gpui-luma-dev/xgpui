@@ -63,3 +63,61 @@ fn native_preparation_request_preserves_unclipped_source() -> Result<()> {
     assert_eq!(clipped_image.get_pixel(15, 25).0[0], 0);
     Ok(())
 }
+
+#[derive(Debug)]
+struct RejectPreparation;
+impl CustomContent for RejectPreparation {
+    // Deliberately implements only the original producer method.
+    fn prepare(
+        &self,
+        _: &dyn std::any::Any,
+        _: Size<DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        anyhow::bail!("intentional preparation error")
+    }
+}
+
+fn preparation_error_still_fails_frame(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
+    let extent = size(DevicePixels(1024), DevicePixels(320));
+    let source = Arc::new(SolidColor::new([1., 0., 0., 1.])?);
+    let bounds = rect(40., 30., 320., 240.);
+    let healthy = record(bounds, source, None);
+    let mut failing = base();
+    failing.insert_primitive(healthy.clone());
+    failing.insert_primitive(record(
+        rect(420., 30., 320., 240.),
+        Arc::new(RejectPreparation),
+        None,
+    ));
+    failing.finish();
+    let error = renderer
+        .render_scene_to_image(&failing, extent)
+        .unwrap_err();
+    ensure!(
+        format!("{error:#}").contains("intentional preparation error"),
+        "unexpected frame error: {error:#}"
+    );
+    // A cached output from the aborted frame must recover without changing the producer.
+    let mut recovered = base();
+    recovered.insert_primitive(healthy);
+    recovered.finish();
+    let image = renderer.render_scene_to_image(&recovered, extent)?;
+    ensure!(
+        image.get_pixel(100, 100).0 == [255, 0, 0, 255],
+        "legacy producer did not recover after frame failure"
+    );
+    Ok(())
+}
+
+#[::core::prelude::v1::test]
+fn native_preparation_error_still_fails_frame_and_legacy_producer_recovers() -> Result<()> {
+    let mut renderer = gpui_platform::current_headless_renderer()?.expect("native renderer");
+    preparation_error_still_fails_frame(renderer.as_mut())
+}
+
+#[cfg(feature = "wgpu")]
+#[::core::prelude::v1::test]
+fn wgpu_preparation_error_still_fails_frame_and_legacy_producer_recovers() -> Result<()> {
+    let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new()?;
+    preparation_error_still_fails_frame(&mut renderer)
+}

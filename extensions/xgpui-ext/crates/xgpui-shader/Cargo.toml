@@ -13,6 +13,7 @@ portable-shaders = ["dep:naga"]
 
 [dependencies]
 anyhow = "1"
+serde = { version = "1", features = ["derive"] }
 naga = { version = "30.0.1", optional = true, features = ["wgsl-in", "msl-out", "spv-out", "hlsl-out"] }
 gpui-wgpu = { path = "../../../../gpui/crates/gpui-wgpu", optional = true }
 bytemuck = { version = "1", optional = true }
@@ -30,4 +31,4 @@ naga = { version = "30.0.1", features = ["wgsl-in", "spv-out", "hlsl-out"] }
 gpui-windows = { path = "../../../../gpui/crates/gpui-windows" }
 naga = { version = "30.0.1", features = ["wgsl-in", "hlsl-out"] }
 bytemuck = "1"
-windows = { version = "0.62", features = ["Win32_Graphics_Direct3D11"] }
+windows = { version = "0.62", features = ["Win32_Graphics_Direct3D11", "Win32_Graphics_Direct3D_Fxc", "Win32_Graphics_Dxgi_Common"] }

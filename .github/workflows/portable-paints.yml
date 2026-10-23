@@ -22,6 +22,8 @@ jobs:
           sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev mesa-vulkan-drivers
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
+      - name: Test Vulkan preparation transactions
+        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-wgpu/Cargo.toml --features test-support --lib wgpu_custom -- --nocapture
       - name: Run Vulkan paint reference tests
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_extension_paints -- --nocapture
 
@@ -32,6 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Test DirectX 12 preparation transactions
+        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-wgpu/Cargo.toml --features test-support --lib wgpu_custom -- --nocapture
       - name: Run DirectX 12 wgpu paint reference tests
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_extension_paints -- --nocapture
 

@@ -17,29 +17,134 @@ use windows::{
     core::{Interface, PCSTR},
 };
 
+const PENDING: u8 = 0;
+const SUBMITTED: u8 = 1;
+const ABANDONED: u8 = 2;
+const STAGED: u8 = 3;
+
+#[derive(Debug)]
+struct Recording {
+    state: AtomicU8,
+    batch: Option<Arc<()>>,
+}
+impl Recording {
+    fn new(batch: Option<Arc<()>>) -> Self {
+        Self {
+            state: AtomicU8::new(PENDING),
+            batch,
+        }
+    }
+    fn can_reuse(self: &Arc<Self>, output: &Arc<Self>) -> bool {
+        match output.state.load(Ordering::Acquire) {
+            SUBMITTED => true,
+            PENDING => Arc::ptr_eq(output, self),
+            STAGED => self
+                .batch
+                .as_ref()
+                .zip(output.batch.as_ref())
+                .is_some_and(|(a, b)| Arc::ptr_eq(a, b)),
+            _ => false,
+        }
+    }
+    fn abandon(&self, from: u8) {
+        let _ = self
+            .state
+            .compare_exchange(from, ABANDONED, Ordering::AcqRel, Ordering::Acquire);
+    }
+}
+
+struct DeferredState {
+    context: Option<ID3D11DeviceContext>,
+    finished: bool,
+    failed: bool,
+}
+
+pub(crate) struct PreparationBatch {
+    device: ID3D11Device,
+    owner: ID3D11DeviceContext,
+    id: Arc<()>,
+    pending: Vec<(Option<ID3D11CommandList>, Arc<Recording>)>,
+}
+impl PreparationBatch {
+    pub fn new(device: ID3D11Device, owner: ID3D11DeviceContext) -> Self {
+        Self {
+            device,
+            owner,
+            id: Arc::new(()),
+            pending: Vec::new(),
+        }
+    }
+    /// Run producer preparation and host output validation before staging its work.
+    pub fn prepare<T>(
+        &mut self,
+        prepare: impl FnOnce(&Dx11CustomContext) -> Result<T>,
+    ) -> Result<T> {
+        let context = Dx11CustomContext::with_batch(
+            self.device.clone(),
+            self.owner.clone(),
+            Some(self.id.clone()),
+        )?;
+        let output = prepare(&context)?;
+        let command = context.finish()?;
+        context.recording.state.store(STAGED, Ordering::Release);
+        self.pending.push((command, context.recording.clone()));
+        Ok(output)
+    }
+    pub fn submit(self) -> Result<()> {
+        unsafe {
+            self.device.GetDeviceRemovedReason()?;
+        }
+        for (command, recording) in &self.pending {
+            if let Some(command) = command {
+                unsafe {
+                    self.owner.ExecuteCommandList(command, true);
+                    self.device.GetDeviceRemovedReason()?;
+                }
+            }
+            recording.state.store(SUBMITTED, Ordering::Release);
+        }
+        Ok(())
+    }
+}
+impl Drop for PreparationBatch {
+    fn drop(&mut self) {
+        for (_, recording) in &self.pending {
+            recording.abandon(STAGED);
+        }
+    }
+}
+
 /// Host-owned deferred context; app authors normally use xgpui-shader instead.
 pub struct Dx11CustomContext {
     /// Device used for all preparation resources.
     pub device: ID3D11Device,
     owner: ID3D11DeviceContext,
-    deferred: Mutex<Option<ID3D11DeviceContext>>,
-    recording: Arc<AtomicU8>,
+    deferred: Mutex<DeferredState>,
+    recording: Arc<Recording>,
 }
 impl Dx11CustomContext {
+    #[cfg(test)]
     pub(crate) fn new(device: ID3D11Device, owner: ID3D11DeviceContext) -> Result<Self> {
+        Self::with_batch(device, owner, None)
+    }
+    fn with_batch(
+        device: ID3D11Device,
+        owner: ID3D11DeviceContext,
+        batch: Option<Arc<()>>,
+    ) -> Result<Self> {
         ensure!(
             unsafe { device.GetFeatureLevel() }.0 >= D3D_FEATURE_LEVEL_11_0.0,
             "custom paints require Direct3D feature level 11.0"
         );
-        let mut deferred = None;
-        unsafe {
-            device.CreateDeferredContext(0, Some(&mut deferred))?;
-        }
         Ok(Self {
             device,
             owner,
-            deferred: Mutex::new(deferred),
-            recording: Arc::new(AtomicU8::new(0)),
+            deferred: Mutex::new(DeferredState {
+                context: None,
+                finished: false,
+                failed: false,
+            }),
+            recording: Arc::new(Recording::new(batch)),
         })
     }
     /// Immediate-context identity, retained by outputs to prevent address reuse.
@@ -48,107 +153,103 @@ impl Dx11CustomContext {
     }
     /// Allocate an immutable-after-submission straight-alpha BGRA8Unorm source.
     pub fn create_output(&self, extent: Size<DevicePixels>) -> Result<Dx11CustomOutput> {
+        ensure!(
+            self.recording.state.load(Ordering::Acquire) == PENDING,
+            "DirectX preparation is no longer writable"
+        );
         Ok(Dx11CustomOutput {
             bundle: allocate_texture(&self.device, extent)?,
             owner: self.owner.clone(),
             recording: self.recording.clone(),
         })
     }
-    /// Whether output is pending in this recording or submitted on this context.
+    /// Whether output is submitted, local to this recording, or staged earlier in this host batch.
     pub fn can_reuse(&self, output: &Dx11CustomOutput) -> bool {
-        self.owner.as_raw() == output.owner.as_raw()
-            && (output.recording.load(Ordering::Acquire) == 1
-                || (Arc::ptr_eq(&self.recording, &output.recording)
-                    && output.recording.load(Ordering::Acquire) == 0))
+        self.owner.as_raw() == output.owner.as_raw() && self.recording.can_reuse(&output.recording)
     }
     /// Serialize encoding into the host's deferred context. Do not execute work.
+    /// An encoding error invalidates this transaction, including commands recorded earlier.
     pub fn record<T>(&self, encode: impl FnOnce(&ID3D11DeviceContext) -> Result<T>) -> Result<T> {
-        let deferred = self
+        let mut state = self
             .deferred
             .lock()
             .map_err(|_| anyhow::anyhow!("DirectX preparation poisoned"))?;
-        encode(
-            deferred
-                .as_ref()
-                .context("DirectX preparation already finished")?,
-        )
+        ensure!(
+            !state.finished && !state.failed,
+            "DirectX preparation already finished or failed"
+        );
+        let result = (|| {
+            if state.context.is_none() {
+                unsafe {
+                    self.device
+                        .CreateDeferredContext(0, Some(&mut state.context))?;
+                }
+            }
+            encode(
+                state
+                    .context
+                    .as_ref()
+                    .context("missing DirectX deferred context")?,
+            )
+        })();
+        if result.is_err() {
+            state.failed = true;
+            state.context.take();
+            self.recording.abandon(PENDING);
+        }
+        result
     }
-    /// Record a clear for a newly allocated output.
-    pub fn clear(&self, output: &Dx11CustomOutput, color: [f32; 4]) -> Result<()> {
+    #[cfg(test)]
+    fn clear(&self, output: &Dx11CustomOutput, color: [f32; 4]) -> Result<()> {
         self.ensure_writable(output)?;
         self.record(|context| {
             unsafe { context.ClearRenderTargetView(&output.bundle.rtv, &color) };
             Ok(())
         })
     }
-    /// Record an extension pipeline with immutable uniform buffers and no blending.
-    pub fn render(
-        &self,
-        output: &Dx11CustomOutput,
-        pipeline: &Dx11ShaderPipeline,
-        uniforms: &[&[u8]],
-        vertices: u32,
-    ) -> Result<()> {
-        self.ensure_writable(output)?;
-        ensure!(
-            uniforms.len() <= D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT as usize,
-            "too many DirectX uniform buffers"
-        );
-        ensure!(
-            pipeline.device.as_raw() == self.device.as_raw(),
-            "DirectX pipeline belongs to another device"
-        );
-        let buffers: Vec<_> = uniforms
-            .iter()
-            .map(|bytes| constant_buffer(&self.device, bytes).map(Some))
-            .collect::<Result<_>>()?;
-        self.record(|context| {
-            pipeline.bind(context);
-            unsafe {
-                context.OMSetRenderTargets(Some(&[Some(output.bundle.rtv.clone())]), None);
-                context.RSSetViewports(Some(&[viewport(output.bundle.extent)]));
-                context.VSSetConstantBuffers(0, Some(&buffers));
-                context.PSSetConstantBuffers(0, Some(&buffers));
-                context.Draw(vertices, 0);
-            }
-            Ok(())
-        })
-    }
+    #[cfg(test)]
     fn ensure_writable(&self, output: &Dx11CustomOutput) -> Result<()> {
         ensure!(
             Arc::ptr_eq(&self.recording, &output.recording)
-                && self.recording.load(Ordering::Acquire) == 0,
+                && self.recording.state.load(Ordering::Acquire) == PENDING,
             "cannot mutate submitted or foreign DirectX output"
         );
         Ok(())
     }
-    pub(crate) fn submit(&self) -> Result<()> {
-        let context = self
+    fn finish(&self) -> Result<Option<ID3D11CommandList>> {
+        let mut state = self
             .deferred
             .lock()
-            .map_err(|_| anyhow::anyhow!("DirectX preparation poisoned"))?
-            .take()
-            .context("DirectX preparation already finished")?;
+            .map_err(|_| anyhow::anyhow!("DirectX preparation poisoned"))?;
+        ensure!(
+            !state.finished && !state.failed,
+            "DirectX preparation already finished or failed"
+        );
+        state.finished = true;
+        let Some(context) = state.context.take() else {
+            return Ok(None);
+        };
         let mut commands = None;
         unsafe {
             context.FinishCommandList(false, Some(&mut commands))?;
-            self.owner.ExecuteCommandList(
-                commands
-                    .as_ref()
-                    .context("missing DirectX preparation list")?,
-                true,
-            );
-            self.device.GetDeviceRemovedReason()?;
         }
-        self.recording.store(1, Ordering::Release);
+        Ok(Some(commands.context("missing DirectX preparation list")?))
+    }
+    #[cfg(test)]
+    pub(crate) fn submit(&self) -> Result<()> {
+        if let Some(command) = self.finish()? {
+            unsafe {
+                self.owner.ExecuteCommandList(&command, true);
+                self.device.GetDeviceRemovedReason()?;
+            }
+        }
+        self.recording.state.store(SUBMITTED, Ordering::Release);
         Ok(())
     }
 }
 impl Drop for Dx11CustomContext {
     fn drop(&mut self) {
-        let _ = self
-            .recording
-            .compare_exchange(0, 2, Ordering::AcqRel, Ordering::Acquire);
+        self.recording.abandon(PENDING);
     }
 }
 
@@ -157,7 +258,7 @@ impl Drop for Dx11CustomContext {
 pub struct Dx11CustomOutput {
     bundle: TextureBundle,
     owner: ID3D11DeviceContext,
-    recording: Arc<AtomicU8>,
+    recording: Arc<Recording>,
 }
 impl Dx11CustomOutput {
     /// Immutable sampleable texture after host submission.
@@ -243,14 +344,14 @@ pub(crate) fn viewport(extent: Size<DevicePixels>) -> D3D11_VIEWPORT {
 }
 
 /// Backend pipeline compiled from extension-generated HLSL shader model 5.0.
-pub struct Dx11ShaderPipeline {
+struct CompositorPipeline {
     device: ID3D11Device,
     vertex: ID3D11VertexShader,
     fragment: ID3D11PixelShader,
     raster: ID3D11RasterizerState,
     depth: ID3D11DepthStencilState,
 }
-impl Dx11ShaderPipeline {
+impl CompositorPipeline {
     /// Compile shaders; entry names come from the extension's translation metadata.
     pub fn new(
         device: &ID3D11Device,
@@ -382,7 +483,7 @@ pub(crate) struct PreparedDraw {
     pub native: bool,
 }
 pub(crate) struct CustomCompositor {
-    pipeline: Dx11ShaderPipeline,
+    pipeline: CompositorPipeline,
     blend: ID3D11BlendState,
     sampler: ID3D11SamplerState,
     pub masks: std::collections::HashMap<Vec<u32>, TextureBundle>,
@@ -390,7 +491,7 @@ pub(crate) struct CustomCompositor {
 }
 impl CustomCompositor {
     pub fn new(device: &ID3D11Device) -> Result<Self> {
-        let pipeline = Dx11ShaderPipeline::new(
+        let pipeline = CompositorPipeline::new(
             device,
             include_str!("custom_draw.hlsl"),
             "custom_vertex",

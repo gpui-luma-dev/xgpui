@@ -7,27 +7,130 @@ use std::sync::{
 };
 use wgpu::util::DeviceExt;
 
+const PENDING: u8 = 0;
+const SUBMITTED: u8 = 1;
+const ABANDONED: u8 = 2;
+const STAGED: u8 = 3;
+
+#[derive(Debug)]
+struct Recording {
+    state: AtomicU8,
+    batch: Option<Arc<()>>,
+}
+impl Recording {
+    fn new(batch: Option<Arc<()>>) -> Self {
+        Self {
+            state: AtomicU8::new(PENDING),
+            batch,
+        }
+    }
+    fn can_reuse(self: &Arc<Self>, output: &Arc<Self>) -> bool {
+        match output.state.load(Ordering::Acquire) {
+            SUBMITTED => true,
+            PENDING => Arc::ptr_eq(output, self),
+            STAGED => self
+                .batch
+                .as_ref()
+                .zip(output.batch.as_ref())
+                .is_some_and(|(a, b)| Arc::ptr_eq(a, b)),
+            _ => false,
+        }
+    }
+    fn abandon(&self, from: u8) {
+        let _ = self
+            .state
+            .compare_exchange(from, ABANDONED, Ordering::AcqRel, Ordering::Acquire);
+    }
+}
+
+struct EncoderState {
+    encoder: Option<wgpu::CommandEncoder>,
+    finished: bool,
+    failed: bool,
+}
+
+/// A batch owns accepted recordings until all paint preparation succeeds.
+/// Dropping an unfinished batch invalidates its staged outputs without submitting.
+pub(crate) struct PreparationBatch {
+    device: Arc<wgpu::Device>,
+    queue: Arc<wgpu::Queue>,
+    id: Arc<()>,
+    pending: Vec<(Option<wgpu::CommandBuffer>, Arc<Recording>)>,
+}
+impl PreparationBatch {
+    pub fn new(device: Arc<wgpu::Device>, queue: &Arc<wgpu::Queue>) -> Self {
+        Self {
+            device,
+            queue: queue.clone(),
+            id: Arc::new(()),
+            pending: Vec::new(),
+        }
+    }
+    /// Run producer preparation and host output validation before staging its work.
+    pub fn prepare<T>(
+        &mut self,
+        prepare: impl FnOnce(&WgpuCustomContext) -> Result<T>,
+    ) -> Result<T> {
+        let context =
+            WgpuCustomContext::with_batch(self.device.clone(), &self.queue, Some(self.id.clone()));
+        let output = prepare(&context)?;
+        let command = context.finish()?;
+        context.recording.state.store(STAGED, Ordering::Release);
+        self.pending.push((command, context.recording.clone()));
+        Ok(output)
+    }
+    pub fn submit(mut self) -> Result<()> {
+        if self.pending.iter().any(|(command, _)| command.is_some()) {
+            self.queue.submit(
+                self.pending
+                    .iter_mut()
+                    .filter_map(|(command, _)| command.take()),
+            );
+        }
+        for (_, recording) in &self.pending {
+            recording.state.store(SUBMITTED, Ordering::Release);
+        }
+        Ok(())
+    }
+}
+impl Drop for PreparationBatch {
+    fn drop(&mut self) {
+        for (_, recording) in &self.pending {
+            recording.abandon(STAGED);
+        }
+    }
+}
+
 /// Host-owned recording context. Producers record work; only the renderer submits.
 pub struct WgpuCustomContext {
     /// Device on which producer pipelines and buffers must be created.
     pub device: Arc<wgpu::Device>,
     key: usize,
     queue: Arc<wgpu::Queue>,
-    encoder: Mutex<Option<wgpu::CommandEncoder>>,
-    recording: Arc<AtomicU8>,
+    encoder: Mutex<EncoderState>,
+    recording: Arc<Recording>,
 }
 
 impl WgpuCustomContext {
+    #[cfg(test)]
     pub(crate) fn new(device: Arc<wgpu::Device>, queue: &Arc<wgpu::Queue>) -> Self {
-        let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("custom_preparation"),
-        });
+        Self::with_batch(device, queue, None)
+    }
+    fn with_batch(
+        device: Arc<wgpu::Device>,
+        queue: &Arc<wgpu::Queue>,
+        batch: Option<Arc<()>>,
+    ) -> Self {
         Self {
             device,
             key: Arc::as_ptr(queue) as usize,
             queue: queue.clone(),
-            encoder: Mutex::new(Some(encoder)),
-            recording: Arc::new(AtomicU8::new(0)),
+            encoder: Mutex::new(EncoderState {
+                encoder: None,
+                finished: false,
+                failed: false,
+            }),
+            recording: Arc::new(Recording::new(batch)),
         }
     }
     /// Queue-scoped cache identity; cached output retains the device and queue.
@@ -36,6 +139,10 @@ impl WgpuCustomContext {
     }
     /// Allocate a host-device output with straight-alpha encoded-sRGB RGBA8 channels.
     pub fn create_output(&self, extent: Size<DevicePixels>) -> Result<WgpuCustomOutput> {
+        ensure!(
+            self.recording.state.load(Ordering::Acquire) == PENDING,
+            "custom preparation is no longer writable"
+        );
         let texture = new_texture(&self.device, extent, wgpu::TextureFormat::Rgba8Unorm)?;
         Ok(WgpuCustomOutput {
             texture,
@@ -45,46 +152,62 @@ impl WgpuCustomContext {
         })
     }
     /// Record preparation commands. Do not submit work or wait on the GPU here.
+    /// An encoding error invalidates this transaction, including commands recorded earlier.
     pub fn record<T>(
         &self,
         encode: impl FnOnce(&mut wgpu::CommandEncoder) -> Result<T>,
     ) -> Result<T> {
-        let mut encoder = self
+        let mut state = self
             .encoder
             .lock()
             .map_err(|_| anyhow::anyhow!("custom encoder poisoned"))?;
-        encode(
-            encoder
-                .as_mut()
-                .ok_or_else(|| anyhow::anyhow!("custom preparation already finished"))?,
-        )
+        ensure!(
+            !state.finished && !state.failed,
+            "custom preparation already finished or failed"
+        );
+        let encoder = state.encoder.get_or_insert_with(|| {
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("custom_preparation"),
+                })
+        });
+        let result = encode(encoder);
+        if result.is_err() {
+            state.failed = true;
+            state.encoder.take();
+            self.recording.abandon(PENDING);
+        }
+        result
     }
-    /// Whether this output is ready on this queue or pending in this recording.
+    /// Whether output is submitted, local to this recording, or staged earlier in this host batch.
     pub fn can_reuse(&self, output: &WgpuCustomOutput) -> bool {
-        output.key == self.key
-            && (output.recording.load(Ordering::Acquire) == 1
-                || (Arc::ptr_eq(&output.recording, &self.recording)
-                    && output.recording.load(Ordering::Acquire) == 0))
+        output.key == self.key && self.recording.can_reuse(&output.recording)
     }
-    pub(crate) fn submit(&self) -> Result<()> {
-        let command = self
+    fn finish(&self) -> Result<Option<wgpu::CommandBuffer>> {
+        let mut state = self
             .encoder
             .lock()
-            .map_err(|_| anyhow::anyhow!("custom encoder poisoned"))?
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("custom preparation already finished"))?
-            .finish();
-        self.queue.submit([command]);
-        self.recording.store(1, Ordering::Release);
+            .map_err(|_| anyhow::anyhow!("custom encoder poisoned"))?;
+        ensure!(
+            !state.finished && !state.failed,
+            "custom preparation already finished or failed"
+        );
+        state.finished = true;
+        Ok(state.encoder.take().map(|encoder| encoder.finish()))
+    }
+    #[cfg(test)]
+    pub(crate) fn submit(&self) -> Result<()> {
+        if let Some(command) = self.finish()? {
+            self.queue.submit([command]);
+        }
+        self.recording.state.store(SUBMITTED, Ordering::Release);
         Ok(())
     }
 }
 
 impl Drop for WgpuCustomContext {
     fn drop(&mut self) {
-        let _ = self
-            .recording
-            .compare_exchange(0, 2, Ordering::AcqRel, Ordering::Acquire);
+        self.recording.abandon(PENDING);
     }
 }
 
@@ -94,7 +217,7 @@ pub struct WgpuCustomOutput {
     texture: wgpu::Texture,
     key: usize,
     _queue: Arc<wgpu::Queue>,
-    recording: Arc<AtomicU8>,
+    recording: Arc<Recording>,
 }
 impl WgpuCustomOutput {
     /// Texture to render into during preparation; immutable after host submission.

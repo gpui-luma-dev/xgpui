@@ -1,3 +1,9 @@
+> Current SDK boundary: `Paint`, `painted()` and `WindowPaintExt` live in this
+> crate. GPUI retains the producer/preparation protocol and one geometry-aware
+> `Window::paint_custom` hook. Native `Fill`, `Style`, `Styled` and border setters
+> match upstream. Material configuration is explicit; it does not enter native
+> hover/theme refinements. See [the current contract](../../../../docs/roadmap/extensions/extension-paints.md).
+
 # xgpui-shader
 
 Design home for the custom shader and canvas extension described in
@@ -429,11 +435,11 @@ submit GPU commands.
 ## Extension paint integration
 
 The first generic paint milestone also accepts the same producer in
-`div().bg_paint(mesh.clone())`, `div().border_paint(mesh.clone())`, and
+`painted().bg_paint(mesh.clone())`, `painted().border_paint(mesh.clone())`, and
 `window.paint_path_with_paint(path, mesh.clone())`. The mesh mathematics and GPU
 producer stay in this crate. GPUI owns native coverage masks and composition.
 See [paint-lab](../../../../apps/paint-lab/README.md) and the
-[paint contract](../../docs/extension-paints.md) for current scope and API impact.
+[paint contract](../../../../docs/roadmap/extensions/extension-paints.md) for current scope and API impact.
 
 ## Multi-stop analytic gradients (Metal)
 
@@ -442,7 +448,7 @@ contract as the mesh. No additional GPUI changes are needed. For example:
 
 ```rust
 use std::sync::Arc;
-use xgpui_shader::{Gradient, GradientStop};
+use xgpui_shader::{painted, Gradient, GradientStop, WindowPaintExt};
 
 let stops = vec![
     GradientStop::new(0.0, [1.0, 0.1, 0.2, 1.0]),
@@ -450,8 +456,8 @@ let stops = vec![
     GradientStop::new(1.0, [0.1, 0.3, 1.0, 1.0]),
 ];
 let radial = Arc::new(Gradient::radial([0.5, 0.5], [0.5, 0.5], stops)?);
-div().bg_paint(radial.clone());
-div().border_8().border_paint(radial.clone());
+painted().bg_paint(radial.clone());
+painted().border_8().border_paint(radial.clone());
 window.paint_path_with_paint(path, radial.clone());
 ```
 

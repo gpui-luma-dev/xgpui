@@ -718,7 +718,112 @@ fn generate(root: &Path) -> Result<()> {
     ] {
         build_files.insert(file.to_owned(), fs::read_to_string(root.join(file))?);
     }
-    let data = serde_json::json!({"build_files": build_files, "provenance": provenance, "crates": crates, "notes": notes,
+    // Keep cross-project contracts in web docs; extension-specific sources stay
+    // beside the extension. Embed both so navigation works offline without fetch.
+    let document_sources = [
+        (
+            "gpui-public-api",
+            "docs/roadmap/extensions/gpui-public-api.md",
+        ),
+        (
+            "extension-paints",
+            "docs/roadmap/extensions/extension-paints.md",
+        ),
+        (
+            "paint-contract-hardening",
+            "docs/roadmap/extensions/paint-contract-hardening.md",
+        ),
+        (
+            "portable-paints",
+            "extensions/xgpui-ext/docs/portable-paints.md",
+        ),
+        (
+            "native-dx11-paints",
+            "extensions/xgpui-ext/docs/native-dx11-paints.md",
+        ),
+        (
+            "portable-wgsl-v1",
+            "extensions/xgpui-ext/docs/portable-wgsl-v1.md",
+        ),
+    ];
+    let mut extension_documents = BTreeMap::new();
+    for (route, file) in document_sources {
+        let markdown = fs::read_to_string(root.join(file))?;
+        let title = markdown
+            .lines()
+            .next()
+            .unwrap_or(route)
+            .trim_start_matches("# ");
+        let markdown = markdown
+            .lines()
+            .map(|line| {
+                if line.starts_with('#')
+                    && let Some((_, heading)) = line.split_once(' ')
+                {
+                    let slug: String = heading
+                        .to_lowercase()
+                        .chars()
+                        .filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '-')
+                        .map(|c| if c == ' ' { '-' } else { c })
+                        .collect();
+                    format!("{line} {{#{slug}}}")
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let parser = pulldown_cmark::Parser::new_ext(
+            &markdown,
+            pulldown_cmark::Options::ENABLE_TABLES
+                | pulldown_cmark::Options::ENABLE_HEADING_ATTRIBUTES,
+        )
+        .map(|event| match event {
+            pulldown_cmark::Event::Start(pulldown_cmark::Tag::Link {
+                link_type,
+                dest_url,
+                title,
+                id,
+            }) => {
+                let filename = dest_url
+                    .split('#')
+                    .next()
+                    .unwrap_or("")
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or("");
+                let replacement = document_sources
+                    .iter()
+                    .find(|(_, source)| source.rsplit('/').next() == Some(filename));
+                let dest_url = replacement
+                    .map(|(route, _)| {
+                        format!(
+                            "#{route}{}",
+                            dest_url
+                                .split_once('#')
+                                .map(|(_, section)| format!("&section={section}"))
+                                .unwrap_or_default()
+                        )
+                        .into()
+                    })
+                    .unwrap_or(dest_url);
+                pulldown_cmark::Event::Start(pulldown_cmark::Tag::Link {
+                    link_type,
+                    dest_url,
+                    title,
+                    id,
+                })
+            }
+            other => other,
+        });
+        let mut html = String::new();
+        pulldown_cmark::html::push_html(&mut html, parser);
+        extension_documents.insert(
+            route,
+            serde_json::json!({"title": title, "source": file, "html": html}),
+        );
+    }
+    let data = serde_json::json!({"extension_documents": extension_documents, "build_files": build_files, "provenance": provenance, "crates": crates, "notes": notes,
         "methodology": "Syntactic Rust inventory, not rustc's resolved public API. pub(crate) excluded; plain cfg(test) modules excluded. Other cfg conditions retained without evaluation. Glob re-exports, associated-type reachability, macro expansions and external re-exports are not resolved. Private-module declarations and trait implementations are candidates, not proof of consumer access. Signatures are source heads; follow source for full bounds and context."});
     let json = serde_json::to_string(&data)?
         .replace('<', "\\u003c")
@@ -733,6 +838,7 @@ fn generate(root: &Path) -> Result<()> {
         ("style.css", "style.css"),
         ("app.js", "app.js"),
         ("guides.js", "guides.js"),
+        ("extensions.js", "extensions.js"),
         ("build-guide.js", "build-guide.js"),
         ("pipeline.js", "pipeline.js"),
     ] {

@@ -439,8 +439,8 @@ impl DirectXRenderer {
             return Ok(Vec::new());
         }
         let devices = self.devices.as_ref().context("devices missing")?.clone();
-        let context =
-            Dx11CustomContext::new(devices.device.clone(), devices.device_context.clone())?;
+        let mut batch =
+            PreparationBatch::new(devices.device.clone(), devices.device_context.clone());
         let mut compositor = match self.custom_compositor.take() {
             Some(compositor) => compositor,
             None => CustomCompositor::new(&devices.device)?,
@@ -448,64 +448,67 @@ impl DirectXRenderer {
         let result = (|| {
             let mut prepared = Vec::with_capacity(scene.custom_draws.len());
             for draw in &scene.custom_draws {
-                let extent = extent(draw)?;
-                let request =
-                    PreparationRequest::new(draw.bounds.size.map(|v| px(v.0)), extent, 1.)?;
-                let output = draw.content.prepare_with_request(&context, &request)?;
-                let native = output.is::<Background>();
-                let source = if native {
-                    let background = *output.downcast::<Background>().unwrap();
-                    let bounds = Bounds::new(
-                        point(ScaledPixels(0.), ScaledPixels(0.)),
-                        size(
-                            ScaledPixels(extent.width.0 as f32),
-                            ScaledPixels(extent.height.0 as f32),
-                        ),
-                    );
-                    let mut scene = Scene::default();
-                    scene.insert_primitive(Quad {
-                        bounds,
-                        content_mask: ContentMask { bounds },
-                        background,
-                        ..Default::default()
-                    });
-                    scene.finish();
-                    self.render_custom_mask(&scene, extent)?
-                } else {
-                    output
-                        .downcast::<Dx11CustomOutput>()
-                        .map_err(|_| anyhow::anyhow!("producer returned a non-DirectX output"))?
-                        .validate(&context, extent)?
-                };
-                let coverage = if draw.coverage.is_some() {
-                    let key = coverage_key(draw);
-                    if let Some(mask) = compositor.masks.get(&key) {
-                        Some(mask.clone())
+                let prepared_draw = batch.prepare(|context| {
+                    let extent = extent(draw)?;
+                    let request =
+                        PreparationRequest::new(draw.bounds.size.map(|v| px(v.0)), extent, 1.)?;
+                    let output = draw.content.prepare_with_request(context, &request)?;
+                    let native = output.is::<Background>();
+                    let source = if native {
+                        let background = *output.downcast::<Background>().unwrap();
+                        let bounds = Bounds::new(
+                            point(ScaledPixels(0.), ScaledPixels(0.)),
+                            size(
+                                ScaledPixels(extent.width.0 as f32),
+                                ScaledPixels(extent.height.0 as f32),
+                            ),
+                        );
+                        let mut scene = Scene::default();
+                        scene.insert_primitive(Quad {
+                            bounds,
+                            content_mask: ContentMask { bounds },
+                            background,
+                            ..Default::default()
+                        });
+                        scene.finish();
+                        self.render_custom_mask(&scene, extent)?
                     } else {
-                        let mask =
-                            self.render_custom_mask(&coverage_scene(draw, extent)?, extent)?;
-                        let bytes =
-                            extent.width.0 as usize * extent.height.0 as usize * 4 + key.len() * 4;
-                        if compositor.mask_bytes + bytes > 64 * 1024 * 1024 {
-                            compositor.masks.clear();
-                            compositor.mask_bytes = 0;
+                        output
+                            .downcast::<Dx11CustomOutput>()
+                            .map_err(|_| anyhow::anyhow!("producer returned a non-DirectX output"))?
+                            .validate(context, extent)?
+                    };
+                    let coverage = if draw.coverage.is_some() {
+                        let key = coverage_key(draw);
+                        if let Some(mask) = compositor.masks.get(&key) {
+                            Some(mask.clone())
+                        } else {
+                            let mask =
+                                self.render_custom_mask(&coverage_scene(draw, extent)?, extent)?;
+                            let bytes = extent.width.0 as usize * extent.height.0 as usize * 4
+                                + key.len() * 4;
+                            if compositor.mask_bytes + bytes > 64 * 1024 * 1024 {
+                                compositor.masks.clear();
+                                compositor.mask_bytes = 0;
+                            }
+                            if bytes <= 64 * 1024 * 1024 {
+                                compositor.mask_bytes += bytes;
+                                compositor.masks.insert(key, mask.clone());
+                            }
+                            Some(mask)
                         }
-                        if bytes <= 64 * 1024 * 1024 {
-                            compositor.mask_bytes += bytes;
-                            compositor.masks.insert(key, mask.clone());
-                        }
-                        Some(mask)
-                    }
-                } else {
-                    None
-                };
-                prepared.push(PreparedDraw {
-                    source,
-                    coverage,
-                    native,
-                });
+                    } else {
+                        None
+                    };
+                    Ok(PreparedDraw {
+                        source,
+                        coverage,
+                        native,
+                    })
+                })?;
+                prepared.push(prepared_draw);
             }
-            context.submit()?;
+            batch.submit()?;
             Ok(prepared)
         })();
         self.custom_compositor = Some(compositor);

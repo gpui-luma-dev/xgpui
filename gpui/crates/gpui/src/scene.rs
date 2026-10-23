@@ -1101,62 +1101,21 @@ pub(crate) fn content_with_preparation_geometry(
 #[cfg(test)]
 mod preparation_tests;
 
-/// CPU-side paint source. Native paints keep their existing GPU representation.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
-pub enum Paint {
-    /// An existing GPUI background.
-    Native(Background),
-    /// Runtime-only producer; serialization returns an error.
-    #[serde(skip)]
-    Custom(std::sync::Arc<dyn CustomContent>),
-}
-impl PartialEq for Paint {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Native(a), Self::Native(b)) => a == b,
-            (Self::Custom(a), Self::Custom(b)) => std::sync::Arc::ptr_eq(a, b),
-            _ => false,
-        }
-    }
-}
-impl From<Background> for Paint {
-    fn from(value: Background) -> Self {
-        Self::Native(value)
-    }
-}
-impl From<Hsla> for Paint {
-    fn from(value: Hsla) -> Self {
-        Self::Native(value.into())
-    }
-}
-impl From<crate::Rgba> for Paint {
-    fn from(value: crate::Rgba) -> Self {
-        Self::Native(value.into())
-    }
-}
-impl<T: CustomContent> From<std::sync::Arc<T>> for Paint {
-    fn from(value: std::sync::Arc<T>) -> Self {
-        Self::Custom(value)
-    }
-}
-impl From<std::sync::Arc<dyn CustomContent>> for Paint {
-    fn from(value: std::sync::Arc<dyn CustomContent>) -> Self {
-        Self::Custom(value)
-    }
-}
-
-/// Reserved native-paint preparation result, interpreted by the host renderer.
-#[doc(hidden)]
-#[derive(Debug)]
-pub(crate) struct NativePaintSource(pub(crate) Background);
-impl CustomContent for NativePaintSource {
-    fn prepare(
-        &self,
-        _: &dyn std::any::Any,
-        _: Size<crate::DevicePixels>,
-    ) -> anyhow::Result<Box<dyn std::any::Any>> {
-        Ok(Box::new(self.0))
-    }
+/// Logical geometry covered by independent GPU content. GPUI owns snapping,
+/// inherited clipping/opacity, native coverage, and retained scene insertion.
+#[derive(Clone)]
+pub enum CustomGeometry {
+    /// A filled rounded rectangle over its full unclipped bounds.
+    RoundedRect {
+        /// Full source rectangle in logical GPUI pixels.
+        bounds: Bounds<Pixels>,
+        /// Logical corner radii, clamped and scaled by the host.
+        corner_radii: Corners<Pixels>,
+    },
+    /// A native border ring/dashes. Only the quad's geometry fields are used.
+    Border(crate::PaintQuad),
+    /// An existing tessellated native fill or stroke.
+    Path(Path<Pixels>),
 }
 
 /// Native geometry used as coverage for extension-produced paint.

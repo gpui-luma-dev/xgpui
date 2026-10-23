@@ -1,44 +1,18 @@
-# Experimental portable WGSL paint v1
+# Portable WGSL paint v1
 
-This is an experimental vertical slice in `xgpui-shader`, behind the
-`portable-shaders` feature. It adds no GPUI core API. It proves one user-authored
-fragment paint through native Metal and wgpu before stabilizing an authoring API.
-The native Windows DirectX 11 adapter is also implemented; actual Vulkan/Windows
-runtime acceptance remains outstanding. See [native D3D11 status](native-dx11-paints.md).
-Successful code generation is not platform rendering proof.
+Experimental `xgpui-shader/portable-shaders`. Backend selection stays inside the extension.
 
-## Application API
+## Dependency
 
-```rust
-use xgpui_shader::experimental::{ShaderProgram, ShaderParameters};
+From an app under `apps/`:
 
-let program = ShaderProgram::new_v1(include_str!("wash.wgsl"))?;
-let paint = program.paint(
-    ShaderParameters::new()
-        .float("progress", 0.15)
-        .vec3("tint", [0.95, 0.15, 0.35])
-        .float("alpha", 1.0),
-)?;
-
-// Identical app code for either implemented backend.
-let element = div().bg_paint(paint);
+```toml
+[dependencies]
+xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader", features = ["portable-shaders"] }
+# Add "wgpu" for the optional wgpu renderer.
 ```
 
-A paint also implements `CustomContent`, and converts directly into `Paint` for
-border/path entry points. The program owns immutable source, reflection metadata
-and shared backend pipelines. Each `paint` call creates an immutable parameter
-snapshot. Cloning a paint shares that snapshot and its output caches. Keep the
-program in app state; animate by supplying new parameter snapshots. No clock or
-backend handles appear in the authoring API.
-
-Enable `portable-shaders` for native Metal. Also enable `wgpu` when using that
-renderer. These are dependency features, not app-side OS branches. Backend dispatch
-and translation live inside the extension. Existing built-in producer APIs and
-GPUI paint setters remain unchanged.
-
-## User source
-
-The complete app example is `apps/paint-lab/src/shaders/portable-wash.wgsl`:
+## wash.wgsl
 
 ```wgsl
 struct Parameters {
@@ -49,100 +23,136 @@ struct Parameters {
 
 fn paint(input: PaintInput) -> vec4<f32> {
     let blend = clamp(input.uv.x + parameters.progress, 0.0, 1.0);
-    let accent = vec3(0.1, clamp(input.position.y / 160.0, 0.0, 1.0), input.size.x / 400.0);
+    let accent = vec3(
+        0.1,
+        clamp(input.position.y / 160.0, 0.0, 1.0),
+        input.size.x / 400.0,
+    );
     return vec4(mix(parameters.tint, accent, blend), parameters.alpha);
 }
 ```
 
-The extension supplies the `PaintInput` type, `parameters` value, fullscreen
-geometry, resource bindings and entry points. User source contains no binding
-indices, shader-stage annotations or backend code.
+Extension-supplied type (do not redeclare it in user source):
 
-| Input | Meaning |
+```wgsl
+struct PaintInput {
+    uv: vec2<f32>,        // Full source rectangle, normalized.
+    position: vec2<f32>,  // Local logical GPUI pixels: uv * size.
+    size: vec2<f32>,      // Full logical source size.
+}
+// Also supplied: parameters, bindings, fullscreen geometry and stage entry points.
+```
+
+Origin: top-left; +x right, +y down. UV uses raster pixel centers. Clip and border
+coverage never remap the field; the host applies coverage/opacity.
+
+## Rust
+
+```rust
+use gpui::{prelude::*, *};
+use xgpui_shader::{painted, WindowPaintExt};
+use xgpui_shader::experimental::{ShaderProgram, ShaderParameters};
+
+let program = ShaderProgram::new_v1(include_str!("wash.wgsl"))?;
+
+let parameters_at = |progress| {
+    ShaderParameters::new()
+        .float("progress", progress)
+        .vec3("tint", [0.95, 0.15, 0.35])
+        .float("alpha", 1.0)
+};
+
+let paint = program.paint(parameters_at(0.15))?;
+painted().w(px(320.0)).h(px(240.0)).bg_paint(paint.clone());
+painted().border_8().border_paint(paint.clone());
+window.paint_path_with_paint(path, paint.clone());
+
+// Keep program in view state. Animate by creating immutable snapshots.
+let next = program.paint(parameters_at(0.75))?;
+let same = paint.clone(); // Shares parameters + cached output.
+```
+
+## Parameter API
+
+Signature summary:
+
+```rust
+impl ShaderParameters {
+    pub fn new() -> Self;
+    pub fn float(self, name: impl Into<String>, value: f32) -> Self;
+    pub fn vec2(self, name: impl Into<String>, value: [f32; 2]) -> Self;
+    pub fn vec3(self, name: impl Into<String>, value: [f32; 3]) -> Self;
+    pub fn vec4(self, name: impl Into<String>, value: [f32; 4]) -> Self;
+}
+// All members required, even unused ones. Repeated setter: last value wins.
+// Reflected layout/padding is packed by the extension; no Rust layout casts.
+```
+
+| Constraint | v1 |
 | --- | --- |
-| `uv: vec2<f32>` | Normalized coordinates across the full source rectangle |
-| `position: vec2<f32>` | Local position in logical GPUI pixels |
-| `size: vec2<f32>` | Full logical source size |
+| Source size | ≤ 64 KiB |
+| Parameter members | 1–32 |
+| Packed parameter size | ≤ 1024 bytes |
+| Types | `f32`, `vec2/3/4<f32>` |
+| Values | Finite; exact reflected names/types |
+| Allowed | Math, helpers, local values, conditionals |
+| Rejected | Resources/globals, overrides, entry points, textures, storage/compute |
+| Rejected | Derivatives, discard, loops, integer/bool parameters, arrays, matrices |
+| Output | Straight-alpha encoded-sRGB SDR; channels clamped to `0..=1` |
+| Shader obligation | Finite arithmetic; no shape coverage/opacity multiplication |
+| Versioning | Color-contract changes require a new version |
 
-Origin is top-left; x increases right and y increases down. Raster pixel centers
-supply UVs, and logical position is UV multiplied by logical size. Preparation
-keeps exact raster dimensions separate internally; raster size and window scale
-are not public shader inputs in this slice.
+## Compilation and cache
 
-Clipping and border coverage do not remap the field. Backgrounds and borders use
-the full outer element rectangle; paths use their original bounds. GPUI applies
-coverage, clip and inherited opacity after the source is prepared. Low-level
-scene records retain the preparation adapter's documented 1x default unless a
-producer explicitly supplies other logical geometry.
+```text
+new_v1(source)
+  → parse + validate restricted WGSL
+  → reflect parameters/offsets
+  → verify MSL + HLSL SM5 + SPIR-V translation
 
-## Parameters and subset
+paint(parameters)
+  → validate names/types/finite values
+  → pack reflected layout
+  → immutable snapshot
 
-`Parameters` must contain 1..=32 fields of f32 or vec2/3/4<f32>, occupying at most
-1024 bytes. The extension reflects member offsets and packs bytes, including
-padding. The app never reproduces WGSL layouts with Rust casts. All fields must
-be supplied, including unused fields. Unknown names, wrong vector lengths and
-non-finite values fail before creating the snapshot. Repeated parameter setters
-replace the previous value. Arrays, matrices and integer/bool parameters are
-outside this first slice; typed Rust parameter derives are deferred.
+prepare(snapshot, request)
+  → backend pipeline (lazy; shared across related snapshots)
+  → cached output OR record draw
+  → host validation/submission/composition
 
-User source is limited to 64 KiB. Math, helper functions, local values and
-conditional control flow are supported. V1 rejects user resources/global
-variables, overrides, custom entry points, textures, storage/compute, derivatives,
-discard and loops. The private geometry binding is not a user escape hatch; use
-PaintInput. This is a deliberately narrow paint subset, not arbitrary WGSL.
+output key = backend queue/context + exact raster extent + logical source size
+budget     = 64 MiB live output/backend; excludes in-flight resource retention
+```
 
-## Output and versioning
+| Failure | Result |
+| --- | --- |
+| Parse/validation | Original user line when span available + wrapped diagnostic |
+| Parameter set | Field-specific error before snapshot creation |
+| Driver compilation | Generated-source diagnostic; full cross-language map deferred |
+| Preparation/device | Frame error; no paint skipping |
+| Rejected recording | Unsubmitted work discarded on wgpu/D3D11 |
 
-`new_v1` explicitly selects straight-alpha, encoded-sRGB SDR RGBA, matching the
-existing source/compositor convention. The wrapper clamps output channels to
-0..=1; shader arithmetic must produce finite values. User code must not apply
-shape coverage or inherited opacity itself. There is no high-gamut negotiation
-or linear-light filtering change. A later color contract must get an explicit
-version rather than silently changing v1 paints.
+Raw Metal commands retain the compatibility submission contract. No new normal-path
+GPU completion waits. Texture parameters, compute/custom geometry, HDR and stable
+API guarantees are outside v1.
 
-## Compilation, caching and errors
-
-Construction parses and validates WGSL, checks the subset, reflects parameters,
-and verifies MSL, HLSL shader model 5.0 and SPIR-V translation. Metal uses the
-translated MSL and explicit reflected entry-point names; wgpu consumes the
-wrapped WGSL with extension-owned uniform bindings. Even unused uniforms have a
-valid host layout. Device pipelines compile lazily and are shared by snapshots.
-
-Output cache identity includes backend queue, exact raster extent and logical
-source size. Changing logical size at the same raster extent must regenerate
-output. Parameter snapshots have independent output caches; cloning a snapshot
-reuses its cache. Each backend's live output cache is bounded at 64 MiB, excluding
-resources retained by in-flight GPU work. Metal retains pending command buffers;
-wgpu uses the existing host-owned encoder/readiness contract. Neither adapter
-adds a GPU completion wait during normal preparation.
-
-Parse and WGSL validation errors include an original user-source line where a
-source span is available, plus the wrapped-source diagnostic. Parameter errors
-name the field. Native driver compilation errors still refer to generated MSL;
-a complete cross-language source map is deferred. Preparation/device errors
-retain existing frame-error propagation. Failure isolation is not implemented.
-
-## Run and evidence
-
-From the repository root:
+## Test and capture
 
 ```sh
 just --justfile apps/paint-lab/justfile portable-test
 just --justfile apps/paint-lab/justfile portable-headless --frames 2 --png /tmp/portable-metal.png
 just --justfile apps/paint-lab/justfile portable-wgpu --frames 2 --png /tmp/portable-wgpu.png
-cargo test --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --target-dir target
+cargo test --config .cargo/validation.toml \
+  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --features wgpu,portable-shaders --target-dir target
 ```
 
-The app example in `src/portable.rs` has no OS/backend conditionals. Both captures
-use the same source, parameters and shape scene. Pixel checks on native Metal and
-wgpu cover alpha/opacity, partial clipping, logical coordinate input, logical-size
-cache invalidation at a fixed raster extent, immutable parameter snapshots and
-unused uniforms. CPU tests cover reflected vec3 padding, parameter errors,
-subset rejection, source diagnostics and target translation. Existing gradient,
-mesh and coverage reference checks run alongside the experiment.
+| Test group | Coverage |
+| --- | --- |
+| CPU/Naga | vec3 padding, bad parameters, subset rejection, source diagnostics, target translation |
+| Metal + wgpu/Metal | Alpha, opacity, clipping, logical coordinates, logical-size cache invalidation |
+| Snapshots | Parameter immutability, sharing, unused uniforms |
+| Windows/Vulkan | Runtime acceptance outstanding; translation ≠ driver execution |
 
-Local wgpu execution uses its Metal backend. The manual portable-paints workflow
-can run the reference tests on Linux/Vulkan and Windows/wgpu-DX12; it has not been
-dispatched from this task. The native D3D11 job also exercises these paints. Texture parameters,
-compute/custom geometry, full source maps, GPU timing and stable API guarantees
-remain outside this experiment.
+App source: `apps/paint-lab/src/portable.rs`, `src/shaders/portable-wash.wgsl`.
+[Native D3D11](native-dx11-paints.md) · [wgpu adapter](portable-paints.md)

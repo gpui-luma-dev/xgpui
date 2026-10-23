@@ -6511,6 +6511,7 @@ dependencies = [
  "metal",
  "naga",
  "refineable",
+ "serde",
  "windows 0.62.2",
 ]
 

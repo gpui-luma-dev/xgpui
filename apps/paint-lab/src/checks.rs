@@ -3,6 +3,8 @@ mod gradient_checks;
 mod portable_checks;
 #[cfg(test)]
 mod preparation_checks;
+#[cfg(test)]
+mod surface_checks;
 use super::*;
 use std::time::Instant;
 

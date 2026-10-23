@@ -1,7 +1,9 @@
 //! Native D3D11 effects compiled from the same WGSL as the portable backend.
 use anyhow::Result;
 use gpui::{DevicePixels, Size};
-use gpui_windows::custom_draw::{Dx11CustomContext, Dx11CustomOutput, Dx11ShaderPipeline};
+use gpui_windows::custom_draw::{Dx11CustomContext, Dx11CustomOutput};
+mod pipeline;
+use pipeline::ShaderPipeline;
 use std::{
     collections::HashMap,
     sync::{
@@ -13,7 +15,7 @@ use windows::Win32::Graphics::Direct3D11::ID3D11Device;
 
 struct CachedPipeline {
     device: ID3D11Device,
-    pipeline: Arc<Dx11ShaderPipeline>,
+    pipeline: Arc<ShaderPipeline>,
 }
 #[derive(Hash, PartialEq, Eq)]
 struct OutputKey {
@@ -90,7 +92,7 @@ impl PaintCache {
         extent: Size<DevicePixels>,
         rgba: [f32; 4],
     ) -> Result<(Dx11CustomOutput, bool)> {
-        self.output(ctx, extent, None, |o| ctx.clear(o, rgba))
+        self.output(ctx, extent, None, |o| pipeline::clear(ctx, o, rgba))
     }
     fn render(
         &self,
@@ -125,20 +127,19 @@ impl PaintCache {
                 .map_err(|_| anyhow::anyhow!("D3D11 pipeline cache poisoned"))?;
             if cached.as_ref().is_none_or(|p| p.device != ctx.device) {
                 let (source, vertex, fragment) = crate::hlsl::compile_wgsl(source)?;
-                let pipeline = Dx11ShaderPipeline::new(&ctx.device, &source, &vertex, &fragment)?;
+                let pipeline = ShaderPipeline::new(&ctx.device, &source, &vertex, &fragment)?;
                 *cached = Some(CachedPipeline {
                     device: ctx.device.clone(),
                     pipeline: Arc::new(pipeline),
                 });
                 self.compilations.fetch_add(1, Ordering::Relaxed);
             }
-            ctx.clear(output, [0.; 4])?;
-            ctx.render(
-                output,
-                &cached.as_ref().unwrap().pipeline,
-                uniforms,
-                vertices,
-            )
+            pipeline::clear(ctx, output, [0.; 4])?;
+            cached
+                .as_ref()
+                .unwrap()
+                .pipeline
+                .render(ctx, output, uniforms, vertices)
         })
     }
 }

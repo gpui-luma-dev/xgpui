@@ -73,15 +73,20 @@ time or FPS. Coverage is cached separately from the producer with a 64 MiB cap.
 ## Application API
 
 ```rust
+use xgpui_shader::{painted, MeshGradient, WindowPaintExt};
+
 let mesh = Arc::new(MeshGradient::new(grid, 18)?);
-div().rounded_lg().bg_paint(mesh.clone());
-div().border_8().border_paint(mesh.clone());
+painted().rounded_lg().bg_paint(mesh.clone());
+painted().border_8().border_paint(mesh.clone());
 window.paint_path_with_paint(path, mesh.clone());
 ```
 
+`painted()` is an explicit extension container. Materials are set when building
+the element; native hover/theme refinements do not carry custom materials.
+
 Existing `.bg(color)` and `.border_color(color)` methods and Background's GPU
 layout remain unchanged. Paint values containing producers are runtime-only and
-fail serialization explicitly. See the [integration contract](../../extensions/xgpui-ext/docs/extension-paints.md)
+fail serialization explicitly. See the [integration contract](../../docs/roadmap/extensions/extension-paints.md)
 for architecture, compatibility impact, coordinate semantics and remaining work.
 
 ## Portable headless backend

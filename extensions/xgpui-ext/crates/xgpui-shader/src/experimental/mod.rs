@@ -1,8 +1,9 @@
 //! Experimental v1 fragment paints: one WGSL function and reflected f32 parameters.
 //! Output is straight-alpha encoded-sRGB SDR, matching the existing paint path.
 //! V1 semantics will not silently change when other output contracts are added.
+use crate::Paint;
 use anyhow::{Context as _, Result, bail, ensure};
-use gpui::{CustomContent, DevicePixels, Paint, PreparationRequest, Size, px, size};
+use gpui::{CustomContent, DevicePixels, PreparationRequest, Size, px, size};
 use std::{collections::BTreeMap, sync::Arc};
 
 #[cfg(target_os = "macos")]

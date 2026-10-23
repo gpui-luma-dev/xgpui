@@ -1,85 +1,89 @@
-# Portable paint backend checkpoint
+# Portable wgpu paints
 
-The Metal submission validation checkpoint is committed as `20c7e11`.
-This slice adds a wgpu adapter and portable WGSL effects, without changing any
-public GPUI core types, methods or native primitive layouts.
+`xgpui-shader/wgpu` · paint-lab headless path · native window renderers unchanged.
 
-## Implemented
+## Use
 
-Enable `xgpui-shader`'s opt-in `wgpu` feature. The existing `SolidColor`,
-`Gradient` and `MeshGradient` types dispatch on the backend context. The same
-immutable snapshots and styled paint calls work with either Metal or wgpu.
-Linear, elliptical radial, conic, diamond and Hermite mesh implementations remain
-in the extension. The wgpu mesh evaluates Hermite vertices directly in its vertex
-shader, using the same patch-local samples and triangle order as Metal's compute
-pipeline. It uses no storage buffers or compute shaders.
+```toml
+# App under apps/:
+[dependencies]
+xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader", features = ["wgpu"] }
+```
 
-`gpui_wgpu::custom_draw::WgpuCustomContext` supplies a device, a host recording
-closure, and an output allocator. Producers record into one host-owned encoder;
-they do not return independently submitted command buffers. Output construction
-is private to the context and fixes device, queue identity, texture format, extent
-and usages. The host submits preparation before ordered composition. Shader
-validation remains wgpu's responsibility; producer errors still fail the frame.
-No failure isolation or fallback policy is implemented.
+```rust
+use gpui::{prelude::*, *};
+use std::sync::Arc;
+use xgpui_shader::{painted, Gradient, GradientStop, WindowPaintExt};
 
-A cloned `WgpuCustomOutput` retains its queue and recording state. It can be reused
-in the same recording or after submission on that queue, without waiting for
-CPU-observed completion. Dropping an unsubmitted context marks its outputs
-abandoned. Extension caches check `can_reuse` so an aborted frame cannot leave an
-uninitialized cached texture eligible for the next frame. Cache keys include
-queue identity and exact raster extent. The extension keeps multiple extents
-within a 64 MiB live-output budget; in-flight resource retention remains outside
-that budget. Related gradient and mesh snapshots share compiled pipelines.
+let paint = Arc::new(Gradient::linear(45.0, vec![
+    GradientStop::new(0.0, [1.0, 0.2, 0.3, 1.0]),
+    GradientStop::new(1.0, [0.1, 0.3, 1.0, 0.5]),
+])?);
+painted().w(px(320.0)).h(px(240.0)).bg_paint(paint.clone());
+window.paint_path_with_paint(path, paint.clone());
+```
 
-The wgpu compositor owns rounded coverage, inherited rectangular clipping and
-opacity. Native border/path masks preserve the existing white-red-channel
-coverage convention. The mask cache has a separate 64 MiB budget. Non-solid
-native border sources still use the legacy native-background adapter and undo
-premultiplication before composition. RGBA8Unorm output contains straight-alpha
-encoded-sRGB channel values; this does not add high gamut or new color semantics.
+## Producer API
 
-GPUI Window painting retains logical source size/scale through the preparation
-adapter. Low-level scene records retain the documented 1x default. No paint field
-is remapped by clipping or border coverage.
+`gpui_wgpu::custom_draw` — signature summary:
 
-## Run
+```rust
+pub struct WgpuCustomContext {
+    pub device: Arc<wgpu::Device>,
+    // Private recording state.
+}
+impl WgpuCustomContext {
+    pub fn cache_key(&self) -> usize;
+    pub fn create_output(&self, extent: Size<DevicePixels>) -> Result<WgpuCustomOutput>;
+    pub fn record<T>(
+        &self,
+        encode: impl FnOnce(&mut wgpu::CommandEncoder) -> Result<T>,
+    ) -> Result<T>;
+    pub fn can_reuse(&self, output: &WgpuCustomOutput) -> bool;
+}
+pub struct WgpuCustomOutput { /* private fields; Clone */ }
+impl WgpuCustomOutput {
+    pub fn texture(&self) -> &wgpu::Texture;
+}
+```
 
-From the repository root:
+## Contract
+
+```text
+producer    reusable cache hit OR allocate → record → return output
+host        validate → stage → submit accepted batch → compose
+failure     discard unsubmitted batch → frame error
+reuse       same recording / accepted batch / submitted queue
+
+output      RGBA8Unorm · straight alpha · encoded-sRGB SDR
+mapping     full unclipped bounds; logical size ≠ raster extent
+coverage    analytic rounded rect; native border/path mask red channel
+cache key   queue + extent (+ logical size for WGSL)
+cache       64 MiB live output; separate 64 MiB coverage
+mesh        Hermite vertex shader; no compute/storage buffers
+```
+
+No producer submission/GPU wait. Cache budgets exclude in-flight retention.
+[Recording details](../../../docs/roadmap/extensions/paint-contract-hardening.md#implemented-discardable-recording-transactions).
+
+## Checks
 
 ```sh
 just --justfile apps/paint-lab/justfile wgpu-test
 just --justfile apps/paint-lab/justfile wgpu-headless --effect mesh --frames 60 --png /tmp/wgpu-mesh.png
-cargo test --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml --features wgpu --target-dir target
-cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-wgpu/Cargo.toml --lib wgpu_custom --target-dir target -- --nocapture
+
+# One headless backend/device per process; unavailable backend → error.
+WGPU_BACKEND=metal just --justfile apps/paint-lab/justfile wgpu-test
+WGPU_BACKEND=vulkan just --justfile apps/paint-lab/justfile wgpu-test
+# Windows PowerShell: $env:WGPU_BACKEND = "dx12"
+
+cargo test --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-wgpu/Cargo.toml \
+  --features test-support --lib wgpu_custom --target-dir target
 ```
 
-`WGPU_BACKEND=vulkan`, `metal`, or `dx12` forces backend selection. An unavailable
-backend fails explicitly rather than falling back and claiming a successful
-platform test. The process-wide headless device is selected once; use separate
-processes to test different backends. Default macOS GPUI windows still use the
-native Metal renderer; the portable paint-lab option is headless only.
+Executed: macOS wgpu/Metal pixels, geometry, mesh parity, replay/cache and
+transaction tests. SPIR-V/HLSL generation passes; Vulkan/DX12 runtime acceptance
+remains outstanding. Software/readback timing is not hardware GPU timing.
 
-The wgpu test dependency uses GPUI test-support rather than bench-support, which
-previously pulled in the broken standalone bench_metrics dependency path. The
-explicit bench-support feature remains available for benchmark consumers.
-
-## Evidence and remaining platform work
-
-Local macOS runs use wgpu's Metal backend. Tests cover all analytic gradient
-reference pixels, hard stops, transparent interpolation, native/custom border and
-path coverage, opacity, clipping without remapping, replay, sharing and resize.
-Independent Metal/WGSL mesh comparisons sample three animation states. Adapter
-tests cover recording readiness, abandoned output, queue ownership tokens,
-texture extent and one-shot submission. Naga tests validate both effect shaders
-and generate SPIR-V plus HLSL shader model 5.0 for each entry point. These are
-code-generation tests, not driver execution on Windows or Vulkan.
-
-The manual `Portable paint GPU checks` workflow provides Linux/Vulkan (Mesa) and
-Windows/wgpu-DX12 jobs. It has not been dispatched from this local task. Software
-Mesa checks validate correctness, not hardware performance.
-
-GPUI's native Windows renderer is DirectX 11. Its adapter is now implemented;
-see [native D3D11 paints](native-dx11-paints.md) for contracts, commands and remaining
-Windows runtime acceptance. The manual workflow includes a native WARP job.
-Windows window rendering has not been switched to wgpu. Vulkan device/driver runs
-and native Windows rendering remain separate acceptance gates.
+[Native D3D11](native-dx11-paints.md) · [WGSL](portable-wgsl-v1.md)

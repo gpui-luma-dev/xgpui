@@ -41,7 +41,7 @@ node docs/roadmap/verify.mjs
 The JavaScript verifier checks the generated artifact and interaction logic
 without opening a GUI. It does not perform visual browser validation.
 
-Website source: `template.html`, `style.css`, `app.js`, `guides.js`, `build-guide.js`, `notes.json`.
+Website source: `template.html`, `style.css`, `app.js`, `guides.js`, `build-guide.js`, `extensions.js`, `notes.json`.
 The parent `index.html` redirects to the generated site. The architecture and
 execution guides live in `guides.js`; review their source references after syncing.
 The build-options/app/WASM guide lives in `build-guide.js`. Its manifest evidence
@@ -59,3 +59,20 @@ Capture packages use normalized local names. The original gpui-unofficial
 repository and release remain the provenance source; upstream.json records both
 original and local package maps. Review narrative links and examples after a
 normalization-map change as well as after a release sync.
+
+## Extensions to GPUI
+
+The navigation entry **Extensions to GPUI** (`#extensions`) identifies opt-in
+downstream capabilities separately from upstream GPUI. `extensions.js` owns the
+section overview. Integration and API sources live in
+`extensions/extension-paints.md`, `extensions/gpui-public-api.md` and
+`extensions/paint-contract-hardening.md`.
+Portable shader, wgpu and D3D11 notes remain under
+`extensions/xgpui-ext/docs/` at the repository root.
+
+The generator renders those six Markdown documents into `data.js`, including
+tables, code blocks and heading anchors. Internal document links become site
+routes; section links use `&section=heading-id`. No network fetch or Markdown
+runtime is needed in the browser. Edit the maintained sources, then regenerate;
+do not edit the ignored `site/` output. The verifier checks extension routes,
+source locations, internal links and section targets as well as the existing site.
