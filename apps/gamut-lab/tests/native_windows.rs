@@ -1,4 +1,4 @@
-//! Native AppKit windows on the process main thread, not a mocked platform.
+//! Native platform windows on the process main thread, not a mocked platform.
 use gpui::{prelude::*, *};
 use std::{cell::Cell, rc::Rc};
 fn main() {

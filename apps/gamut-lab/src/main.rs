@@ -2,13 +2,13 @@
 use anyhow::{Result, ensure};
 use clap::Parser;
 use gpui::{prelude::*, *};
-use std::{sync::Arc, time::Instant};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 use xgpui_shader::{SolidColor, painted};
 mod checks;
 use xgpui_gamut::WideColor;
 
 #[derive(Parser)]
-#[command(about = "Metal wide-surface / sRGB-control compositing lab (macOS)")]
+#[command(about = "Wide-surface / sRGB-control compositing lab (Metal / Direct3D 11)")]
 struct Options {
     #[arg(long)]
     headless: bool,
@@ -208,57 +208,59 @@ fn main() -> Result<()> {
         (1..=10000).contains(&options.frames),
         "frames must be 1..=10000"
     );
-    if options.headless {
-        let start = Instant::now();
-        checks::run(options.frames, options.png.as_deref(), !options.sdr)?;
-        println!(
-            "{} frames in {:?} (CPU encode + final readback; not GPU timing)",
-            options.frames,
-            start.elapsed()
-        );
-        return Ok(());
-    }
+    let completion = Rc::new(RefCell::new(None));
+    let capture_result = completion.clone();
+    let headless = options.headless;
     gpui_platform::application().run(move |cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1100.), px(920.)), cx);
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                ..Default::default()
-            },
-            |window, cx| {
-                let mode = if options.sdr {
-                    WindowColorMode::Default
-                } else {
-                    WindowColorMode::WideGamutSdr
-                };
-                window
-                    .set_color_mode(mode)
-                    .expect("color presentation negotiation");
-                window.set_window_title("XGPUI Gamut Lab — wide SDR");
-                if let Some(path) = options.ui_png.clone() {
-                    window.on_next_frame(move |window, _| {
-                        window.on_next_frame(move |window, _| {
-                            match window
-                                .render_to_image()
-                                .and_then(|image| image.save(&path).map_err(Into::into))
-                            {
-                                Ok(()) => println!("Control UI sRGB preview: {}", path.display()),
-                                Err(error) => eprintln!("UI capture failed: {error:#}"),
-                            }
-                        });
-                    });
-                }
-                cx.new(|_| Lab {
-                    wide: !options.sdr,
-                    overlay: true,
-                    opacity: 1.,
-                    dark: true,
-                    reverse: false,
+        let window = cx
+            .open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    show: !options.headless,
+                    focus: !options.headless,
+                    ..Default::default()
+                },
+                |window, cx| {
+                    let mode = if options.sdr {
+                        WindowColorMode::Default
+                    } else {
+                        WindowColorMode::WideGamutSdr
+                    };
+                    window
+                        .set_color_mode(mode)
+                        .expect("color presentation negotiation");
+                    window.set_window_title("XGPUI Gamut Lab — wide SDR");
+                    cx.new(|_| Lab {
+                        wide: !options.sdr,
+                        overlay: true,
+                        opacity: 1.,
+                        dark: true,
+                        reverse: false,
+                    })
+                },
+            )
+            .unwrap();
+        if options.headless || options.ui_png.is_some() {
+            let path = options.png.or(options.ui_png);
+            let frames = if headless { options.frames } else { 1 };
+            cx.defer(move |cx| {
+                cx.update_window(window.into(), |_, window, cx| {
+                    checks::capture(window, cx, frames, path, headless, capture_result);
                 })
-            },
-        )
-        .unwrap();
-        cx.activate(true);
+                .expect("capture window");
+            });
+        }
+        if !headless {
+            cx.activate(true);
+        }
     });
+    if headless {
+        completion.borrow_mut().take().unwrap_or_else(|| {
+            Err(anyhow::anyhow!(
+                "application exited before headless capture completed"
+            ))
+        })?;
+    }
     Ok(())
 }

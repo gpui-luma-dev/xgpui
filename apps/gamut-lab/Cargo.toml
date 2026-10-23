@@ -14,8 +14,6 @@ gpui_platform = { package = "gpui-platform", path = "../../gpui/crates/gpui-plat
 xgpui-gamut = { path = "../../extensions/xgpui-ext/crates/xgpui-gamut" }
 xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader" }
 
-gpui-apple = { path = "../../gpui/crates/gpui-apple", features = ["test-support"] }
-parking_lot = "0.12"
 
 [[test]]
 name = "native_windows"

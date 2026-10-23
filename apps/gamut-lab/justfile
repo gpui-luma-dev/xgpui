@@ -13,7 +13,7 @@ build:
 headless *args:
     cargo run {{options}} -- --headless "$@"
 capture:
-    cargo run {{options}} -- --headless --png /tmp/gamut-lab-srgb-preview.png
+    cargo run {{options}} -- --headless --png gamut-lab-srgb-preview.png
 metal-test:
     MTL_DEBUG_LAYER=1 cargo test --offline --config .cargo/validation.toml --manifest-path gpui/crates/gpui-apple/Cargo.toml --features test-support --lib --target-dir target
 fmt:
@@ -23,7 +23,7 @@ lint:
 args:
     cargo run {{options}} -- --help
 ui-capture:
-    cargo run {{options}} -- --ui-png /tmp/gamut-lab-ui.png
+    cargo run {{options}} -- --ui-png gamut-lab-ui.png
 fmt-check:
     cargo fmt --manifest-path {{manifest}} --check
 test:

@@ -311,6 +311,15 @@ fn cached_subpixel_tiles_use_scalar_alpha_and_restore_legacy_pipeline() -> Resul
     }
     // Legacy rendering still uses its original pipeline after the scoped override.
     r.0.render(&text, WindowBackgroundAppearance::Opaque)?;
+    r.0.set_color_mode(
+        WindowColorMode::WideGamutSdr,
+        WindowBackgroundAppearance::Opaque,
+    )?;
+    let image = r.render_scene_to_image(&text, size(DevicePixels(8), DevicePixels(8)))?;
+    let p = image.get_pixel(3, 3).0;
+    assert!(p[3] > 0 && p[3] < 255);
+    assert_eq!(p[0], p[1]);
+    assert_eq!(p[1], p[2]);
     Ok(())
 }
 
@@ -599,5 +608,264 @@ fn default_scene_renderer_rejects_typed_wide_output_before_submission() -> Resul
         devices.device_context.clone(),
     )?;
     assert!(!context.can_reuse_wide_sdr(producer.cached.lock().unwrap().as_ref().unwrap()));
+    Ok(())
+}
+
+fn scene_wide(
+    scene: &mut Scene,
+    content: Arc<dyn CustomContent>,
+    bounds: Bounds<ScaledPixels>,
+    opacity: f32,
+) {
+    scene.insert_primitive(CustomDraw {
+        order: 0,
+        bounds,
+        content_mask: ContentMask { bounds },
+        corner_radii: Corners::default(),
+        opacity,
+        content,
+        coverage: None,
+    });
+}
+fn scene_quad(scene: &mut Scene, color: Rgba, x: f32, width: f32) {
+    let bounds = Bounds::new(
+        point(ScaledPixels(x), ScaledPixels(0.)),
+        size(ScaledPixels(width), ScaledPixels(8.)),
+    );
+    scene.insert_primitive(Quad {
+        bounds,
+        content_mask: ContentMask { bounds },
+        background: color.into(),
+        ..Default::default()
+    });
+}
+#[::core::prelude::v1::test]
+fn integrated_scene_preserves_ui_between_wide_surfaces_and_preview() -> Result<()> {
+    let mut r = Dx11HeadlessRenderer::new()?;
+    r.0.set_color_mode(
+        WindowColorMode::WideGamutSdr,
+        WindowBackgroundAppearance::Opaque,
+    )?;
+    let red = Arc::new(patch(&r, [1., 0., 0., 1.])?);
+    let blue = Arc::new(patch(&r, [0., 0., 1., 0.5])?);
+    let bounds = Bounds::new(
+        point(ScaledPixels(0.), ScaledPixels(0.)),
+        size(ScaledPixels(8.), ScaledPixels(8.)),
+    );
+    let mut scene = Scene::default();
+    scene_quad(&mut scene, rgb(0), 0., 8.);
+    scene_wide(&mut scene, red, bounds, 1.);
+    scene_quad(&mut scene, rgba(0x00ff0080), 0., 4.);
+    scene_wide(&mut scene, blue, bounds, 1.);
+    scene_quad(&mut scene, rgb(0xffffff), 6., 2.);
+    scene.finish();
+    for _ in 0..3 {
+        let image = r.render_scene_to_image(&scene, extent())?;
+        let target = &r.0.wide_sdr.as_ref().unwrap().target;
+        let pixels = read(&r, target)?;
+        let base = reference::p3([1., 0., 0., 1.]);
+        let overlay = [0., 128. / 255., 0., 128. / 255.];
+        close(
+            pixels[1],
+            reference::over(
+                reference::p3([0., 0., 0.5, 0.5]),
+                reference::over(overlay, base),
+            ),
+            0.005,
+        );
+        close(
+            pixels[5],
+            reference::over(reference::p3([0., 0., 0.5, 0.5]), base),
+            0.003,
+        );
+        close(pixels[7], [1.; 4], 0.002);
+        assert_eq!(image.get_pixel(7, 0).0, [255; 4]);
+    }
+    Ok(())
+}
+#[::core::prelude::v1::test]
+fn integrated_adjacent_wide_and_legacy_custom_draws_keep_types_order_masks_and_opacity()
+-> Result<()> {
+    #[derive(Debug)]
+    struct NativeBackground;
+    impl CustomContent for NativeBackground {
+        fn prepare(
+            &self,
+            _: &dyn std::any::Any,
+            _: Size<DevicePixels>,
+        ) -> Result<Box<dyn std::any::Any>> {
+            Ok(Box::new(Background::from(rgba(0x00ff0080))))
+        }
+    }
+    let mut r = Dx11HeadlessRenderer::new()?;
+    r.0.set_color_mode(
+        WindowColorMode::WideGamutSdr,
+        WindowBackgroundAppearance::Opaque,
+    )?;
+    let bounds = Bounds::new(
+        point(ScaledPixels(0.), ScaledPixels(0.)),
+        size(ScaledPixels(8.), ScaledPixels(8.)),
+    );
+    let mut scene = Scene::default();
+    scene_quad(&mut scene, rgb(0), 0., 8.);
+    scene_wide(
+        &mut scene,
+        Arc::new(patch(&r, [1., 0., 0., 1.])?),
+        bounds,
+        1.,
+    );
+    scene_wide(&mut scene, Arc::new(NativeBackground), bounds, 1.);
+    scene_wide(
+        &mut scene,
+        Arc::new(patch(&r, [0., 0., 1., 1.])?),
+        bounds,
+        0.5,
+    );
+    scene.finish();
+    // Even consecutive custom records must be split by actual output kind.
+    r.render_scene(&scene, extent())?;
+    let result = read(&r, &r.0.wide_sdr.as_ref().unwrap().target)?[4 * 8 + 4];
+    let green = [0., 128. / 255., 0., 128. / 255.];
+    close(
+        result,
+        reference::over(
+            reference::p3([0., 0., 0.5, 0.5]),
+            reference::over(green, reference::p3([1., 0., 0., 1.])),
+        ),
+        0.006,
+    );
+    // Native clipping and rounded coverage are applied once to wide output.
+    let mut masked = Scene::default();
+    let mut draw = CustomDraw {
+        order: 0,
+        bounds,
+        content_mask: ContentMask {
+            bounds: Bounds::new(bounds.origin, size(ScaledPixels(4.), ScaledPixels(8.))),
+        },
+        corner_radii: Corners::all(ScaledPixels(3.)),
+        opacity: 0.5,
+        content: Arc::new(patch(&r, [1., 0., 0., 0.5])?),
+        coverage: None,
+    };
+    masked.insert_primitive(draw.clone());
+    masked.finish();
+    r.render_scene(&masked, extent())?;
+    let pixels = read(&r, &r.0.wide_sdr.as_ref().unwrap().target)?;
+    close(
+        pixels[4 * 8 + 2],
+        reference::p3([0.25, 0., 0., 0.25]),
+        0.003,
+    );
+    close(pixels[4 * 8 + 6], [0.; 4], 0.0001);
+    assert!(pixels[0][3] < pixels[4 * 8 + 2][3]);
+    // Border coverage uses the same mask path as legacy output.
+    draw.coverage = Some(CustomCoverage::Border {
+        widths: Edges::all(ScaledPixels(1.)),
+        style: BorderStyle::Solid,
+    });
+    let mut border = Scene::default();
+    border.insert_primitive(draw);
+    border.finish();
+    r.render_scene(&border, extent())?;
+    let pixels = read(&r, &r.0.wide_sdr.as_ref().unwrap().target)?;
+    close(pixels[4 * 8 + 2], [0.; 4], 0.0001);
+    assert!(pixels[4 * 8][3] > 0.);
+    Ok(())
+}
+#[::core::prelude::v1::test]
+fn integrated_mode_isolation_resize_and_canonical_readback_ignore_display_white() -> Result<()> {
+    let mut a = Dx11HeadlessRenderer::new()?;
+    let b = Dx11HeadlessRenderer::new()?;
+    assert!(
+        a.0.set_color_mode(
+            WindowColorMode::WideGamutSdr,
+            WindowBackgroundAppearance::Transparent
+        )
+        .is_err()
+    );
+    assert_eq!(a.0.color_status().effective(), WindowColorMode::Default);
+    a.0.set_color_mode(
+        WindowColorMode::WideGamutSdr,
+        WindowBackgroundAppearance::Opaque,
+    )?;
+    assert_eq!(b.0.color_status().effective(), WindowColorMode::Default);
+    let pipeline = a.0.wide_sdr.as_ref().unwrap().fragment.as_raw();
+    a.0.set_color_mode(
+        WindowColorMode::WideGamutSdr,
+        WindowBackgroundAppearance::Opaque,
+    )?;
+    assert_eq!(a.0.wide_sdr.as_ref().unwrap().fragment.as_raw(), pipeline);
+    let scene = scene(rgb(0x808080), 0., 8.);
+    let image = a.render_scene_to_image(&scene, extent())?;
+    a.0.color_display.white_scale = 2.5;
+    assert_eq!(a.render_scene_to_image(&scene, extent())?, image);
+    let wide = a.0.wide_sdr.as_ref().unwrap();
+    let target = Target::new(&a.0.devices.as_ref().unwrap().device, extent())?;
+    wide.present(a.0.devices.as_ref().unwrap(), &target.rtv, 2.5)?;
+    let p = read(&a, &target)?[3 * 8 + 3];
+    close(
+        p,
+        [
+            reference::decode(128. / 255.) * 2.5,
+            reference::decode(128. / 255.) * 2.5,
+            reference::decode(128. / 255.) * 2.5,
+            1.,
+        ],
+        0.003,
+    );
+    a.render_scene(&scene, size(DevicePixels(16), DevicePixels(16)))?;
+    assert_eq!(
+        a.0.wide_sdr.as_ref().unwrap().extent,
+        size(DevicePixels(16), DevicePixels(16))
+    );
+    a.0.set_color_mode(WindowColorMode::Default, WindowBackgroundAppearance::Opaque)?;
+    assert!(a.0.wide_sdr.is_none());
+    assert_eq!(a.0.color_status().effective(), WindowColorMode::Default);
+    Ok(())
+}
+
+#[::core::prelude::v1::test]
+fn integrated_failed_preparation_preserves_previous_frame_and_abandons_staged_output() -> Result<()>
+{
+    #[derive(Debug)]
+    struct WrongOutput;
+    impl CustomContent for WrongOutput {
+        fn prepare(
+            &self,
+            _: &dyn std::any::Any,
+            _: Size<DevicePixels>,
+        ) -> Result<Box<dyn std::any::Any>> {
+            Ok(Box::new(()))
+        }
+    }
+    let mut r = Dx11HeadlessRenderer::new()?;
+    r.0.set_color_mode(
+        WindowColorMode::WideGamutSdr,
+        WindowBackgroundAppearance::Opaque,
+    )?;
+    let white = scene(rgb(0xffffff), 0., 8.);
+    r.render_scene(&white, extent())?;
+    let producer = Arc::new(RecordingPatch::default());
+    let bounds = Bounds::new(
+        point(ScaledPixels(0.), ScaledPixels(0.)),
+        size(ScaledPixels(8.), ScaledPixels(8.)),
+    );
+    let mut rejected = Scene::default();
+    scene_wide(&mut rejected, producer.clone(), bounds, 1.);
+    scene_wide(&mut rejected, Arc::new(WrongOutput), bounds, 1.);
+    rejected.finish();
+    assert!(r.render_scene(&rejected, extent()).is_err());
+    close(
+        read(&r, &r.0.wide_sdr.as_ref().unwrap().target)?[0],
+        [1.; 4],
+        0.002,
+    );
+    let devices = r.0.devices.as_ref().unwrap();
+    let ctx = crate::custom_draw::Dx11CustomContext::new(
+        devices.device.clone(),
+        devices.device_context.clone(),
+    )?;
+    assert!(!ctx.can_reuse_wide_sdr(producer.cached.lock().unwrap().as_ref().unwrap()));
+    r.render_scene(&white, extent())?;
     Ok(())
 }

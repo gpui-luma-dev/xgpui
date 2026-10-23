@@ -1,5 +1,4 @@
-// Private headless checkpoint; no window or swap-chain integration.
-#[cfg(test)]
+mod color_presentation;
 mod wide_sdr;
 
 use std::{
@@ -48,6 +47,9 @@ pub(crate) struct DirectXRenderer {
     globals: DirectXGlobalElements,
     pipelines: DirectXRenderPipelines,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
+    wide_sdr: Option<wide_sdr::Compositor>,
+    color_mode: WindowColorMode,
+    color_display: color_presentation::DisplayState,
     direct_composition: Option<DirectComposition>,
     font_info: &'static FontInfo,
 
@@ -200,6 +202,9 @@ impl DirectXRenderer {
             globals,
             pipelines,
             custom_compositor: None,
+            wide_sdr: None,
+            color_mode: WindowColorMode::Default,
+            color_display: Default::default(),
             direct_composition,
             font_info: Self::get_font_info(),
             width: 1,
@@ -267,14 +272,20 @@ impl DirectXRenderer {
     }
 
     pub(crate) fn handle_device_lost(&mut self, directx_devices: &DirectXDevices) -> Result<()> {
+        let disable_direct_composition = self.direct_composition.is_none();
         try_to_recover_from_device_lost(|| {
-            self.handle_device_lost_impl(directx_devices)
+            self.handle_device_lost_impl(directx_devices, disable_direct_composition)
                 .context("DirectXRenderer handling device lost")
         })
     }
 
-    fn handle_device_lost_impl(&mut self, directx_devices: &DirectXDevices) -> Result<()> {
-        let disable_direct_composition = self.direct_composition.is_none();
+    fn handle_device_lost_impl(
+        &mut self,
+        directx_devices: &DirectXDevices,
+        disable_direct_composition: bool,
+    ) -> Result<()> {
+        let requested_color = self.color_mode;
+        self.wide_sdr = None;
         self.custom_compositor = None;
 
         unsafe {
@@ -297,6 +308,9 @@ impl DirectXRenderer {
             }
 
             self.direct_composition.take();
+            if let Some(devices) = &self.devices {
+                devices.device_context.Flush();
+            }
             self.devices.take();
         }
 
@@ -342,7 +356,13 @@ impl DirectXRenderer {
         self.globals = globals;
         self.pipelines = pipelines;
         self.direct_composition = direct_composition;
+        self.color_mode = WindowColorMode::Default;
         self.skip_draws = true;
+        if let Err(error) = self.set_color_mode(requested_color, WindowBackgroundAppearance::Opaque)
+        {
+            self.color_mode = requested_color;
+            return Err(error);
+        }
         Ok(())
     }
 
@@ -356,7 +376,20 @@ impl DirectXRenderer {
             // and so likely do not have the textures anymore that are required for drawing
             return Ok(());
         }
+        self.refresh_color_profile()?;
+        self.ensure_color_ready()?;
         self.render(scene, background_appearance)?;
+        if let Some(wide) = &self.wide_sdr {
+            let devices = self.devices.as_ref().context("devices missing")?;
+            let target = self
+                .resources
+                .as_ref()
+                .context("resources missing")?
+                .render_target_view
+                .as_ref()
+                .context("back buffer missing")?;
+            wide.present(devices, target, self.color_display.white_scale)?;
+        }
         self.present()
     }
 
@@ -370,6 +403,15 @@ impl DirectXRenderer {
         scene: &Scene,
         background_appearance: WindowBackgroundAppearance,
     ) -> Result<()> {
+        if let Some(wide) = self.wide_sdr.as_mut() {
+            wide.resize(
+                &self.devices.as_ref().context("devices missing")?.device,
+                size(
+                    DevicePixels(self.width as i32),
+                    DevicePixels(self.height as i32),
+                ),
+            )?;
+        }
         let custom_outputs = self.prepare_custom_draws(scene)?;
         self.pre_draw(&match background_appearance {
             WindowBackgroundAppearance::Opaque => [1.0f32; 4],
@@ -377,61 +419,73 @@ impl DirectXRenderer {
         })?;
         self.upload_scene_buffers(scene)?;
 
+        if let Some(mut wide) = self.wide_sdr.take() {
+            let result = wide.render_scene(self, scene, &custom_outputs, background_appearance);
+            self.wide_sdr = Some(wide);
+            return result;
+        }
+        for batch in scene.batches() {
+            self.render_batch(scene, &custom_outputs, batch)?;
+        }
+        Ok(())
+    }
+
+    fn render_batch(
+        &mut self,
+        scene: &Scene,
+        custom_outputs: &[crate::custom_draw::PreparedDraw],
+        batch: PrimitiveBatch,
+    ) -> Result<()> {
         let annotation = self
             .devices
             .as_ref()
-            .and_then(|devices| devices.annotation.clone())
-            .filter(|annotation| unsafe { annotation.GetStatus().as_bool() });
-        for batch in scene.batches() {
-            let _annotation = annotation
-                .as_ref()
-                .map(|annotation| Annotation::new(annotation, HSTRING::from(batch.label())));
-            match batch {
-                PrimitiveBatch::Shadows(range) => self.draw_shadows(range.start, range.len()),
-                PrimitiveBatch::Quads(range) => self.draw_quads(range.start, range.len()),
-                PrimitiveBatch::Paths(range) => {
-                    let paths = &scene.paths[range];
-                    self.draw_paths_to_intermediate(paths)?;
-                    self.draw_paths_from_intermediate(paths)
-                }
-                PrimitiveBatch::Underlines(range) => self.draw_underlines(range.start, range.len()),
-                PrimitiveBatch::MonochromeSprites { texture_id, range } => {
-                    self.draw_monochrome_sprites(texture_id, range.start, range.len())
-                }
-                PrimitiveBatch::SubpixelSprites { texture_id, range } => {
-                    self.draw_subpixel_sprites(texture_id, range.start, range.len())
-                }
-                PrimitiveBatch::PolychromeSprites { texture_id, range } => {
-                    self.draw_polychrome_sprites(texture_id, range.start, range.len())
-                }
-                PrimitiveBatch::Custom(range) => {
-                    let devices = self.devices.as_ref().context("devices missing")?;
-                    let resources = self.resources.as_ref().context("resources missing")?;
-                    let target = resources.render_target_view.as_ref().context("render target missing")?;
-                    let viewport = size(DevicePixels(resources.viewport.Width as i32), DevicePixels(resources.viewport.Height as i32));
-                    self.custom_compositor.as_ref().context("custom compositor missing")?.draw(
-                        &devices.device_context, target, viewport,
-                        &scene.custom_draws[range.clone()], &custom_outputs[range],
-                    )
-                }
-                PrimitiveBatch::Surfaces(range) => self.draw_surfaces(&scene.surfaces[range]),
+            .and_then(|d| d.annotation.clone())
+            .filter(|a| unsafe { a.GetStatus().as_bool() });
+        let _annotation = annotation
+            .as_ref()
+            .map(|a| Annotation::new(a, HSTRING::from(batch.label())));
+        match batch {
+            PrimitiveBatch::Shadows(range) => self.draw_shadows(range.start, range.len()),
+            PrimitiveBatch::Quads(range) => self.draw_quads(range.start, range.len()),
+            PrimitiveBatch::Paths(range) => {
+                let paths = &scene.paths[range];
+                self.draw_paths_to_intermediate(paths)?;
+                self.draw_paths_from_intermediate(paths)
             }
-            .with_context(|| {
-                format!(
-                    "scene too large:\
-                    {} paths, {} shadows, {} quads, {} underlines, {} mono, {} subpixel, {} poly, {} surfaces",
-                    scene.paths.len(),
-                    scene.shadows.len(),
-                    scene.quads.len(),
-                    scene.underlines.len(),
-                    scene.monochrome_sprites.len(),
-                    scene.subpixel_sprites.len(),
-                    scene.polychrome_sprites.len(),
-                    scene.surfaces.len(),
-                )
-            })?;
+            PrimitiveBatch::Underlines(range) => self.draw_underlines(range.start, range.len()),
+            PrimitiveBatch::MonochromeSprites { texture_id, range } => {
+                self.draw_monochrome_sprites(texture_id, range.start, range.len())
+            }
+            PrimitiveBatch::SubpixelSprites { texture_id, range } => {
+                self.draw_subpixel_sprites(texture_id, range.start, range.len())
+            }
+            PrimitiveBatch::PolychromeSprites { texture_id, range } => {
+                self.draw_polychrome_sprites(texture_id, range.start, range.len())
+            }
+            PrimitiveBatch::Custom(range) => {
+                let devices = self.devices.as_ref().context("devices missing")?;
+                let resources = self.resources.as_ref().context("resources missing")?;
+                let target = resources
+                    .render_target_view
+                    .as_ref()
+                    .context("render target missing")?;
+                let viewport = size(
+                    DevicePixels(resources.viewport.Width as i32),
+                    DevicePixels(resources.viewport.Height as i32),
+                );
+                self.custom_compositor
+                    .as_ref()
+                    .context("custom compositor missing")?
+                    .draw(
+                        &devices.device_context,
+                        target,
+                        viewport,
+                        &scene.custom_draws[range.clone()],
+                        &custom_outputs[range],
+                    )
+            }
+            PrimitiveBatch::Surfaces(range) => self.draw_surfaces(&scene.surfaces[range]),
         }
-        Ok(())
     }
 
     fn prepare_custom_draws(
@@ -458,7 +512,17 @@ impl DirectXRenderer {
                         PreparationRequest::new(draw.bounds.size.map(|v| px(v.0)), extent, 1.)?;
                     let output = draw.content.prepare_with_request(context, &request)?;
                     let native = output.is::<Background>();
-                    let source = if native {
+                    let wide = output.is::<Dx11WideSdrOutput>();
+                    let source = if wide {
+                        anyhow::ensure!(
+                            self.wide_sdr.is_some(),
+                            "wide output requires WideGamutSdr presentation"
+                        );
+                        output
+                            .downcast::<Dx11WideSdrOutput>()
+                            .unwrap()
+                            .validate(context, extent)?
+                    } else if native {
                         let background = *output.downcast::<Background>().unwrap();
                         let bounds = Bounds::new(
                             point(ScaledPixels(0.), ScaledPixels(0.)),
@@ -508,6 +572,7 @@ impl DirectXRenderer {
                         source,
                         coverage,
                         native,
+                        wide,
                     })
                 })?;
                 prepared.push(prepared_draw);
@@ -548,7 +613,9 @@ impl DirectXRenderer {
             path_intermediate_msaa_view,
             viewport: crate::custom_draw::viewport(extent),
         });
+        let wide = self.wide_sdr.take();
         let result = self.render(scene, WindowBackgroundAppearance::Transparent);
+        self.wide_sdr = wide;
         unsafe {
             devices
                 .device_context
@@ -591,10 +658,16 @@ impl DirectXRenderer {
         let device = &devices.device;
         let context = &devices.device_context;
         let resources = self.resources.as_ref().context("resources missing")?;
-        let render_target = resources
-            .render_target
-            .as_ref()
-            .context("render target missing")?;
+        let preview;
+        let render_target = if let Some(wide) = &self.wide_sdr {
+            preview = wide.preview(devices)?;
+            &preview
+        } else {
+            resources
+                .render_target
+                .as_ref()
+                .context("render target missing")?
+        };
 
         // A CPU-readable copy of the render target.
         let mut desc = D3D11_TEXTURE2D_DESC::default();
@@ -651,8 +724,13 @@ impl DirectXRenderer {
         if self.width == width && self.height == height {
             return Ok(());
         }
-        self.width = width;
-        self.height = height;
+        let buffer_format = self.buffer_format();
+        if self.wide_sdr.is_some() {
+            wide_sdr::validate_extent(size(
+                DevicePixels(width as i32),
+                DevicePixels(height as i32),
+            ))?;
+        }
 
         // Clear the render target before resizing
         let devices = self.devices.as_ref().context("devices missing")?;
@@ -660,6 +738,8 @@ impl DirectXRenderer {
         let resources = self.resources.as_mut().context("resources missing")?;
         if resources.swap_chain.is_none() {
             *resources = DirectXResources::offscreen(devices, width, height)?;
+            self.width = width;
+            self.height = height;
             return Ok(());
         }
         resources.render_target.take();
@@ -678,7 +758,7 @@ impl DirectXRenderer {
                     BUFFER_COUNT as u32,
                     width,
                     height,
-                    RENDER_TARGET_FORMAT,
+                    buffer_format,
                     DXGI_SWAP_CHAIN_FLAG(0),
                 )
                 .context("Failed to resize swap chain")?;
@@ -691,6 +771,10 @@ impl DirectXRenderer {
                 .device_context
                 .OMSetRenderTargets(Some(slice::from_ref(&resources.render_target_view)), None);
         }
+
+        self.width = width;
+        self.height = height;
+        self.resize_color_space()?;
 
         Ok(())
     }
@@ -2307,6 +2391,9 @@ impl Dx11HeadlessRenderer {
             globals,
             pipelines,
             custom_compositor: None,
+            wide_sdr: None,
+            color_mode: WindowColorMode::Default,
+            color_display: Default::default(),
             direct_composition: None,
             font_info: DirectXRenderer::get_font_info(),
             width: 1,

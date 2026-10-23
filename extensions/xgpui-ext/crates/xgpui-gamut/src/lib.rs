@@ -12,9 +12,9 @@ mod metal;
 /// Immutable bounded-SDR color in linear Display P3/D65, with straight input alpha.
 /// Prepared textures store associated RGB/alpha and require a wide-capable host.
 ///
-/// Native Metal window presentation is implemented. D3D11 preparation produces a
-/// typed output for the private headless compositor; Windows window presentation
-/// is not yet integrated. Other backends return an explicit preparation error.
+/// Native Metal and D3D11 window presentation accept this output when the host
+/// has enabled `WideGamutSdr`. Windows native execution/display validation remains
+/// outstanding. Other backends return an explicit preparation error.
 /// Preparation allocates a texture; output caching/pooling is not provided yet.
 #[derive(Debug)]
 pub struct WideColor {

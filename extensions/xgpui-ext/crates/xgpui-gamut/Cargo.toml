@@ -16,3 +16,7 @@ metal = "0.33"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 gpui-windows = { path = "../../../../gpui/crates/gpui-windows" }
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+gpui-apple = { path = "../../../../gpui/crates/gpui-apple", features = ["test-support"] }
+parking_lot = "0.12"

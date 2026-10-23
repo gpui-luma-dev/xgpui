@@ -210,9 +210,9 @@ pub struct Dx11WideSdrOutput { /* private fields; Clone */ }
 ```
 
 [Typed Windows output and recording example](high-gamut-windows.md#typed-windows-output).
-Only the private headless compositor accepts this output; Windows wide window
-presentation remains unsupported. Existing producer signatures and sRGB outputs
-are unchanged.
+The Windows renderer accepts this output only while `WideGamutSdr` is active.
+Its existing `PlatformWindow` overrides implement negotiation/status; no extra
+GPUI core API is added. Existing producer signatures and sRGB outputs are unchanged.
 
 Backend APIs are target/feature dependent. App code normally uses portable
 `xgpui-shader` producers rather than these low-level recording contracts.

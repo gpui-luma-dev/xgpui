@@ -48,7 +48,7 @@ let status = window.color_status();
 
 // Explicit producer output; legacy paints and controls remain sRGB:
 MetalWideSdrOutput::from_linear_p3_premultiplied(context, texture, commands)?;`) +
-    '<p><code>xgpui-gamut</code> produces bounded linear-P3 SDR surfaces. GPUI backends own window negotiation and composition; Metal presentation is implemented, Windows presentation and Linux remain deferred.</p>' +
+    '<p><code>xgpui-gamut</code> produces bounded linear-P3 SDR surfaces. GPUI backends own window negotiation and composition; Metal and native D3D11 presentation are implemented. Windows native execution/display validation remains outstanding; Linux is deferred.</p>' +
     '<div class="cards">' + extensionCard('high-gamut-windows', 'Start here: window setup, complete Metal producer, color contract, composition and validation.') + '</div>' +
     extensionCode('sh', `just --justfile apps/gamut-lab/justfile ui
 just --justfile apps/gamut-lab/justfile test`) +

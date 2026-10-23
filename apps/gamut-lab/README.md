@@ -1,12 +1,9 @@
 # gamut-lab
 
-`xgpui-gamut` producer + macOS Metal lab: wide P3 content and normal sRGB controls in one window.
+`xgpui-gamut` lab for macOS Metal and Windows D3D11: wide P3 surfaces and normal sRGB controls in one window.
 
 ```sh
-just --justfile apps/gamut-lab/justfile ui
-just --justfile apps/gamut-lab/justfile baseline
-just --justfile apps/gamut-lab/justfile metal-test
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml
 ```
 
-[Design, compositing contract and run notes](../../docs/roadmap/extensions/high-gamut-windows.md).
-Uses per-window public presentation APIs. HDR and other wide presentation backends remain deferred.
+[Controls, captures, tests and Windows CI builds](../../docs/roadmap/extensions/high-gamut-windows.md#run-gamut-lab).

@@ -140,6 +140,7 @@ fn dx11_custom_composition_preserves_alpha_clip_and_immediate_state() -> Result<
             source: source.validate(&ctx, extent)?,
             coverage: None,
             native: false,
+            wide: false,
         }],
     )?;
     let mut restored = [None];
@@ -373,6 +374,7 @@ fn dx11_custom_uniform_buffer_reuses_storage_and_preserves_queued_draw_values() 
                 source: source.clone(),
                 coverage: None,
                 native: false,
+                wide: false,
             })
             .collect();
         compositor.draw(&ctx.owner, &target.rtv, extent, &draws, &outputs)?;

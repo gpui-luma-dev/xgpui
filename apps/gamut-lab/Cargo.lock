@@ -1848,9 +1848,7 @@ dependencies = [
  "anyhow",
  "clap",
  "gpui",
- "gpui-apple",
  "gpui-platform",
- "parking_lot",
  "xgpui-gamut",
  "xgpui-shader",
 ]

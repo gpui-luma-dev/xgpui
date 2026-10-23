@@ -37,3 +37,17 @@ float4 fragment_main(Vertex input) : SV_Target {
     }
     return c * viewport.z; // opacity multiplies RGB and alpha exactly once
 }
+
+float4 present_main(Vertex input) : SV_Target {
+    float4 c = source.Load(int3(int2(input.position.xy),0));
+    return float4(c.rgb * viewport.z, c.a);
+}
+float encode_srgb(float c) {
+    c = saturate(c);
+    return c <= 0.0031308 ? c*12.92 : 1.055*pow(c,1.0/2.4)-0.055;
+}
+float4 preview_main(Vertex input) : SV_Target {
+    float4 c = source.Load(int3(int2(input.position.xy),0));
+    float3 v = c.a > 0 ? c.rgb/c.a : float3(0,0,0);
+    return float4(float3(encode_srgb(v.r),encode_srgb(v.g),encode_srgb(v.b))*c.a,c.a);
+}

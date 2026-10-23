@@ -220,7 +220,7 @@
     "group": "Extensions",
     "role": "Explicit linear-P3 SDR content producers; normal GPUI controls retain sRGB semantics.",
     "surface": "WideColor::linear_p3 implements existing CustomContent; native Metal and typed D3D11 preparation. Window negotiation and compositing stay in GPUI backends.",
-    "review": "Keep profile decoding and future content producers separate from host presentation. Windows swap-chain integration and Linux remain deferred.",
+    "review": "Keep profile decoding and future content producers separate from host presentation. Windows native swap-chain/display validation remains outstanding; Linux is deferred.",
     "entry": "src/lib.rs"
   }
 }

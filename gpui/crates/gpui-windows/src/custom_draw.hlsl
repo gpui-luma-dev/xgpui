@@ -38,7 +38,15 @@ float4 custom_fragment(Vertex input) : SV_Target {
     if ((uint(viewport.w) & 1) != 0) coverage = shape_mask.Sample(paint_sampler, input.uv).r;
 
     float4 color = image.Sample(paint_sampler, input.uv);
+    if ((uint(viewport.w) & 4) != 0) {
+        // Associated linear P3 -> scRGB. Preserve extended channels.
+        color.rgb = float3(
+            dot(color.rgb, float3(1.22494018,-0.22494018,0)),
+            dot(color.rgb, float3(-0.04205695,1.04205695,0)),
+            dot(color.rgb, float3(-0.01963755,-0.07863605,1.09827360)));
+        return color * (coverage * viewport.z);
+    }
     // The legacy native background adapter produces premultiplied pixels.
-    if (viewport.w > 1.5 && color.a > 0) color.rgb /= color.a;
+    if ((uint(viewport.w) & 2) != 0 && color.a > 0) color.rgb /= color.a;
     return float4(color.rgb, color.a * coverage * viewport.z);
 }

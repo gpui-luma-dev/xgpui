@@ -66,8 +66,6 @@ impl Dx11WideSdrOutput {
         &self.bundle.texture
     }
 
-    // The only accepting host is the private headless checkpoint for now.
-    #[cfg(test)]
     pub(crate) fn validate(
         self,
         context: &Dx11CustomContext,

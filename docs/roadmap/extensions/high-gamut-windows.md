@@ -1,7 +1,9 @@
 # xgpui-gamut
 
-Opt-in **macOS Metal** presentation: wide SDR surfaces and normal sRGB controls in
-one window. HDR, transparent wide windows and other presentation backends remain deferred.
+Opt-in **macOS Metal / Windows D3D11** presentation: wide SDR surfaces and normal
+sRGB controls in one window. Windows integration is cross-compiled here; native
+WARP/desktop execution and physical display checks remain required. Linux, HDR
+content and transparent wide windows remain deferred.
 
 ```toml
 # App under apps/:
@@ -33,7 +35,7 @@ the other. `WideColor` allocates on preparation; pooling/caching is deferred.
 | Capability | Owner | Status |
 | --- | --- | --- |
 | Window mode and cached status | `gpui` | Public, opt-in |
-| Typed P3 output and ordered compositor | `gpui-apple` / `gpui-macos` | Native macOS Metal |
+| Typed P3 output and ordered compositor | `gpui-apple` / `gpui-macos`, `gpui-windows` | Metal + native D3D11 |
 | Reusable producer | `xgpui-gamut::WideColor` | Metal + typed D3D11 preparation |
 | Test/control app | `apps/gamut-lab` | Uses `xgpui-gamut` |
 
@@ -70,8 +72,8 @@ starts in `Default`; enabling one window never changes another.
 ```text
 controls        Rgba / Hsla / Style retain encoded-sRGB meaning
 wide content    explicit linear Display P3/D65, associated alpha
-composition     ordered legacy UI runs + linear P3 source-over
-presentation    tagged linear P3 RGBA16Float, SDR white = 1, EDR off
+composition     ordered legacy UI runs; Metal linear P3 / Windows linear scRGB
+presentation    Metal tagged P3 / Windows tagged scRGB; bounded SDR content
 ```
 
 The report describes negotiated configuration, not proof of physical monitor
@@ -153,7 +155,7 @@ Wide output requires an accepted `WideGamutSdr` request; no texture-format guess
 process switch or tuple tag. Recording validation, batch submission and scene
 ordering are shared with legacy producers.
 
-## Compositing contract
+## Metal compositing contract
 
 ```text
 scene: UI background → wide A → controls → wide B → tooltip
@@ -232,10 +234,42 @@ just --justfile apps/gamut-lab/justfile lint
 just --justfile apps/gamut-lab/justfile ui --ui-png /tmp/gamut-lab-ui.png
 ```
 
+On Windows (PowerShell), no `just` installation required:
+
+```powershell
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml -- --sdr
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml -- --headless --frames 3 --png gamut-lab-preview.png
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --test compatibility
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --test native_windows
+```
+
+`--headless` now captures the full lab UI through a hidden native window on both
+platforms. It requires a desktop session and measures encoding plus readback on
+every iteration. Backend WARP tests remain independent of a visible desktop.
+`--sdr` and the presentation button compare the native sRGB baseline with P3
+surfaces. Overlay, opacity, backdrop and ordering controls are shared.
+
+```sh
+# After pushing the branch: build on GitHub-hosted Windows runners.
+gh workflow run windows-apps.yml --ref codex/high-gamut-windows
+gh run list --workflow windows-apps.yml
+gh run download RUN_ID --name gamut-lab-windows-x64
+# On Windows, launch the downloaded artifact:
+# .\gamut-lab.exe
+```
+
+The **Windows lab applications** workflow also builds `paint-lab` and `shader-lab`,
+compiles their tests and uploads separate x64 release executables. It runs on
+relevant pull requests or manual dispatch. Download builds from the Actions run's
+artifacts. It does not launch desktop windows or establish physical gamut fidelity.
+The separate **Portable paint GPU checks** workflow runs the offscreen WARP suite.
+Neither workflow has been run for these local changes yet.
+
 ```text
 controls    overlays, opacity, light/dark backdrop, reverse surface order
 content     two P3 patches; native labels/buttons/panels
-headless    renderer.set_color_mode(WideGamutSdr); no global activation
+headless    hidden native window; same UI and producers; encode + readback
 capture     explicit clipped sRGB preview; not a wide-gamut export
 ```
 
@@ -244,7 +278,7 @@ pixel diagnostics remain in backend tests; no generic headless trait or image
 API expansion. Backend tests cover queued scratch reuse, P3 preservation, low-alpha
 edges, masks/order/resize, rejection before submission, mode switches, legacy
 outputs and queue-scoped pending/submitted reuse. Native tests create separate
-AppKit windows and verify independent requests and transparency rejection. Compile
+native platform windows and verify independent requests and transparency rejection. Compile
 checks preserve complete window-option literals and unchanged platform defaults.
 
 ## Limits and acceptance
@@ -255,52 +289,106 @@ checks preserve complete window-option literals and unchanged platform defaults.
   drawable, producer, path/atlas and in-flight retention. Float16 is eight bytes/pixel.
 - Physical display/profile comparisons and device-loss stress remain outstanding.
   An sRGB screenshot cannot prove physical wide-gamut output.
-- Source/image profiles, RAW/video, HDR/EDR and Windows/Linux wide presentation are
-  separate milestones. Other backends report unsupported opt-in; legacy UI works.
+- Source/image profiles, RAW/video, HDR/EDR and Linux presentation remain separate
+  milestones. Windows native execution and physical display validation remain
+  outstanding; cross-compilation alone is not acceptance.
 
 [GPUI API delta](gpui-public-api.md) · [Paint integration](extension-paints.md) ·
 [Preparation/recording](paint-contract-hardening.md) ·
 [Apple Display P3](https://developer.apple.com/documentation/coregraphics/cgcolorspace/displayp3) ·
 [Layer color-space configuration](https://developer.apple.com/documentation/quartzcore/cametallayer/colorspace)
 
-## Windows headless checkpoint
+## Windows swap-chain presentation
+
+```rust
+// Existing GPUI API; no new window options, color types or scene variants.
+window.set_color_mode(WindowColorMode::WideGamutSdr)?;
+let status = window.color_status(); // cached; does not query DXGI
+let patch = Arc::new(WideColor::linear_p3([1.0, 0.0, 0.0, 0.5])?);
+painted().bg_paint(patch).child(div().child("Native sRGB controls"));
+
+// Disable before requesting transparency, blur or a Mica backdrop:
+window.set_color_mode(WindowColorMode::Default)?;
+```
+
+```text
+real Scene::batches(), including each custom draw within a batch:
+  native UI + BGRA8/sRGB custom paints → transparent BGRA8 scratch
+  flush run → unpremultiply encoded RGB → sRGB decode → reassociate
+  typed P3 draw → P3-to-scRGB → coverage/opacity once → source-over
+  repeat in scene order; clear scratch only after consuming it
+  final FP16 scRGB target → RGB * SDR-white scale, alpha unchanged → Present
+```
+
+| Resource / policy | Windows |
+| --- | --- |
+| Flip swap chain | `R16G16B16A16_FLOAT`, `RGB_FULL_G10_NONE_P709`; DirectComposition and HWND paths |
+| Producer color | Linear Display P3/D65, associated alpha; identical to Metal input |
+| Composition | Linear scRGB; retain negative and above-one RGB for saturated SDR colors |
+| UI | Existing colors, themes and legacy paints retain encoded-sRGB meaning |
+| Text | Existing capability hook requests grayscale; cached LCD tiles collapse to scalar coverage |
+| Coverage | Native border/path masks, corners, clipping and inherited opacity applied once |
+| White | HDR desktop: `DISPLAYCONFIG_SDR_WHITE_LEVEL / 1000`; SDR desktop: scale 1 |
+| Capture | Explicit clipped-sRGB preview of the canonical target, without display-white scaling |
+| Allocation | FP16 + BGRA frame targets ≤256 MiB; producer outputs separately ≤64 MiB; excludes paths/atlas/replacement peaks/in-flight resources |
+
+```text
+linear P3 → scRGB:
+R =  1.22494018 * r - 0.22494018 * g
+G = -0.04205695 * r + 1.04205695 * g
+B = -0.01963755 * r - 0.07863605 * g + 1.09827360 * b
+```
+
+| Lifecycle | Behavior |
+| --- | --- |
+| Enable | Preflight FP16 blend/sample support, pipelines, targets and display white; release back-buffer references; change format and set color space |
+| Same mode | Preserve compatible pipelines |
+| Shared device | Serialize mode/resize updates against cross-window drawing; defer re-entrant resize messages to the next frame |
+| Recoverable transition failure | Restore previous configuration; return error |
+| Rollback also fails | Preserve prior intent/status, pause drawing and request existing GPU recovery |
+| Resize | Preserve active format; reacquire views and reapply scRGB tag |
+| Device replacement | Drop device-bound outputs/pipelines, restore requested mode and pending size, force scene/atlas rebuild |
+| Transparent/backdrop window | Reject enabling; while wide, preserve opaque appearance and log a warning |
+| Profile/monitor/white changes | Dirty on move/size/DPI/display/settings messages; resample at frame boundaries, with a one-second fallback on requested frames |
+| Missing HDR white evidence | Defer presentation until a valid snapshot is available; no guessed brightness |
+
+Choose the output with the largest window intersection. Report only conservative
+positive wide-gamut evidence from display colorimetry; ambiguous metadata stays
+`None`. Negotiated scRGB does not prove physical delivery. DWM may clip output on
+an ordinary display; no host framebuffer fallback is reported unless performed.
+A spanning window uses one SDR-white reference and cannot promise identical
+physical output across displays. No HDR mode is enabled by the app.
 
 ```sh
-# Native Windows: compiles HLSL at runtime and runs WARP pixel assertions.
+# Native Windows: WARP pixels, producer transactions and presentation policy.
 cargo test --config .cargo/validation.toml \
   --manifest-path gpui/crates/gpui-windows/Cargo.toml \
-  --features test-support --lib directx_renderer::wide_sdr
+  --features test-support --lib
+
+# Requires an interactive Windows desktop: both flip-chain paths,
+# toggles/resize/isolation, retained-buffer failure and device replacement.
+cargo test --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-windows/Cargo.toml \
+  --features test-support --lib directx_renderer::color_presentation \
+  -- --ignored --test-threads=1
 
 # Portable CPU oracle only; does not execute HLSL or D3D11.
 rustc --edition 2024 --test \
   gpui/crates/gpui-windows/src/directx_renderer/wide_sdr/reference.rs \
   -o /tmp/xgpui-wide-sdr-reference-tests
 /tmp/xgpui-wide-sdr-reference-tests
+rustc --edition 2024 --test \
+  gpui/crates/gpui-windows/src/directx_renderer/color_presentation/policy.rs \
+  -o /tmp/xgpui-color-policy-tests
+/tmp/xgpui-color-policy-tests
 ```
 
-```text
-private test-only layer list:
-  native Scene run → associated encoded-sRGB BGRA8 scratch → decode → scRGB
-  typed P3 producer → validate/stage/submit → P3-to-scRGB → associated source-over
-  repeat in supplied order → offscreen RGBA16Float readback
-```
-
-| Checkpoint | Scope |
-| --- | --- |
-| Color | Piecewise sRGB decode; P3 primaries/neutral; preserve negative and above-one scRGB channels |
-| Alpha | Associated source-over, opacity once, zero/tiny alpha, light/dark backgrounds |
-| Ordering | UI between surfaces, tooltip above both, scratch clearing, repeated/reversed frames |
-| Text | Native grayscale tiles; cached LCD RGB coverage collapsed to scalar alpha before correction/blending |
-| Isolation | Validate extent/budget/device/opacity before encoding; restore legacy text pipeline |
-
-Cached LCD coverage conversion is a compatibility path, not fresh grayscale glyph
-rasterization. Native scenes retain GPUI batch order, masks and transforms. The
-private caller supplies UI/surface boundaries; mixed-scene partitioning,
-filtering beyond nearest texels, swap-chain color
-negotiation, display/SDR-white handling and window integration remain deferred.
-The accepting compositor is compiled only for backend tests; Windows window requests remain
-unsupported. CPU tests and cross-compilation do not establish GPU pixel results;
-native WARP execution is required.
+The manual **Portable paint GPU checks** workflow includes WARP composition,
+transaction/policy tests and `xgpui-gamut` checks. Desktop fixtures remain explicitly
+ignored in unattended runs. HLSL compiles during native execution, not Rust
+cross-compilation. `gamut-lab` shares its UI and capture path across macOS and Windows; the backend fixtures
+exercise the renderer directly. Physical HDR/WCG/ordinary-display comparisons,
+monitor moves, live SDR-white changes and display-loss stress remain outstanding.
 
 ## Typed Windows output
 
@@ -349,9 +437,9 @@ if let Some(output) = cached.as_ref().filter(|o| ctx.can_reuse_wide_sdr(o)) {
 | Legacy | `Dx11CustomOutput` remains straight-alpha BGRA8/sRGB; types are never inferred from format |
 
 Raw D3D handles and pixel values remain a cooperative in-process contract. Typed
-output is available in the backend SDK; only the private test compositor accepts
-it currently. Default Windows scene rendering rejects it and discards its
-recording. No window, swap-chain, or GPUI core API change is included.
+output is available in the backend SDK and accepted by the native Windows renderer
+when `WideGamutSdr` is active. Default Windows rendering rejects it and discards
+its recording. GPUI core APIs and existing producer signatures are unchanged.
 
 ```sh
 # Native Windows recording lifecycle and pixel tests:

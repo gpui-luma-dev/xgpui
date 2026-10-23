@@ -73,6 +73,8 @@ pub struct WindowsWindowState {
     /// and when a forced render was requested while another draw was in
     /// progress and had to be deferred.
     pub force_render_pending: Cell<bool>,
+    pub color_profile_dirty: Cell<bool>,
+    pub(crate) pending_renderer_size: Cell<Option<Size<DevicePixels>>>,
 
     pub click_state: ClickState,
     pub current_cursor: Cell<Option<HCURSOR>>,
@@ -178,6 +180,8 @@ impl WindowsWindowState {
             hovered: Cell::new(hovered),
             last_visibility: Cell::new(None),
             renderer: RefCell::new(renderer),
+            color_profile_dirty: Cell::new(true),
+            pending_renderer_size: Cell::new(None),
             force_render_pending: Cell::new(false),
             click_state,
             current_cursor: Cell::new(current_cursor),
@@ -904,7 +908,58 @@ impl PlatformWindow for WindowsWindow {
     }
 
     fn is_subpixel_rendering_supported(&self) -> bool {
-        true
+        self.state.renderer.borrow().color_status().effective() != WindowColorMode::WideGamutSdr
+    }
+
+    fn set_color_mode(&mut self, mode: WindowColorMode) -> Result<WindowColorStatus> {
+        // ClearState/ResizeBuffers affect the shared immediate context. Serialize
+        // against every window and defer WM_PAINT re-entry during the transition.
+        let _transition = self
+            .state
+            .draw_coordinator
+            .try_begin_renderer_update()
+            .ok_or_else(|| {
+                anyhow::anyhow!("cannot change color mode during a Windows draw/transition")
+            })?;
+        let result = self
+            .state
+            .renderer
+            .borrow_mut()
+            .set_color_mode(mode, self.state.background_appearance.get());
+        if result.is_err() && self.state.renderer.borrow().needs_color_recovery() {
+            self.state
+                .invalidate_devices
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        result
+    }
+
+    fn color_status(&self) -> WindowColorStatus {
+        self.state.renderer.borrow().color_status()
+    }
+
+    fn prepare_frame(&self) -> bool {
+        let Ok(mut renderer) = self.state.renderer.try_borrow_mut() else {
+            return false;
+        };
+        let resized = if let Some(size) = self.state.pending_renderer_size.take() {
+            if let Err(error) = renderer.resize(size) {
+                log::error!("deferred renderer resize failed: {error:#}");
+                if self.state.pending_renderer_size.get().is_none() {
+                    self.state.pending_renderer_size.set(Some(size));
+                }
+                self.state
+                    .invalidate_devices
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
+            true
+        } else {
+            false
+        };
+        if self.state.color_profile_dirty.replace(false) {
+            renderer.mark_color_profile_dirty();
+        }
+        renderer.refresh_color_profile().log_err().unwrap_or(false) || resized
     }
 
     fn set_title(&mut self, title: &str) {
@@ -914,6 +969,12 @@ impl PlatformWindow for WindowsWindow {
     }
 
     fn set_background_appearance(&self, background_appearance: WindowBackgroundAppearance) {
+        if self.color_status().effective() == WindowColorMode::WideGamutSdr
+            && background_appearance != WindowBackgroundAppearance::Opaque
+        {
+            log::warn!("disable wide SDR before requesting a transparent/backdrop window");
+            return;
+        }
         self.state.background_appearance.set(background_appearance);
         let hwnd = self.0.hwnd;
 
