@@ -591,7 +591,7 @@ impl MetalRenderer {
                 };
                 let output = crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?;
                 let coverage = if draw.coverage.is_some() {
-                    let key = crate::custom_draw::coverage_key(draw);
+                    let key = crate::custom_draw::CoverageKey::new(draw)?;
                     if let Some(texture) = self.custom_compositor.as_ref().unwrap().masks.get(&key)
                     {
                         Some(texture.clone())
@@ -599,8 +599,8 @@ impl MetalRenderer {
                         let target = crate::custom_draw::texture(&self.device, extent)?;
                         let mask_scene = crate::custom_draw::coverage_scene(draw, extent)?;
                         self.render_paint_mask(&mask_scene, &target, extent, viewport_size)?;
-                        let bytes = extent.width.0 as usize * extent.height.0 as usize * 4
-                            + key.len() * std::mem::size_of::<u32>();
+                        let bytes =
+                            extent.width.0 as usize * extent.height.0 as usize * 4 + key.byte_len();
                         let compositor = self.custom_compositor.as_mut().unwrap();
                         if compositor.mask_bytes + bytes > 64 * 1024 * 1024 {
                             compositor.masks.clear();
@@ -608,7 +608,7 @@ impl MetalRenderer {
                         }
                         if bytes <= 64 * 1024 * 1024 {
                             compositor.mask_bytes += bytes;
-                            compositor.masks.insert(key, target.clone());
+                            compositor.masks.insert(&key, target.clone());
                         }
                         Some(target)
                     }

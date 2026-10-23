@@ -96,8 +96,8 @@ reference checks through wgpu. `just wgpu-headless --effect mesh --frames 60`
 renders the portable mesh; add `--png /tmp/wgpu-mesh.png` for a capture.
 `WGPU_BACKEND=vulkan` or `dx12` forces a platform backend; on this Mac the local
 portable tests use wgpu/Metal. Interactive windows use native Metal on macOS and D3D11 on Windows.
-See [portable paint status](../../extensions/xgpui-ext/docs/portable-paints.md)
-for validation limits. The [native Windows D3D11 adapter](../../extensions/xgpui-ext/docs/native-dx11-paints.md)
+See [portable paint status](../../docs/roadmap/extensions/portable-paints.md)
+for validation limits. The [native Windows D3D11 adapter](../../docs/roadmap/extensions/native-dx11-paints.md)
 uses the same app API; native headless checks use WARP on Windows.
 
 ## Experimental user-authored WGSL
@@ -108,4 +108,4 @@ uses the same app API; native headless checks use WARP on Windows.
 into the three paint sites. The app authoring example in `src/portable.rs` contains
 no OS/backend branches or binding declarations. The interactive editor continues
 to edit built-in gradients; the user WGSL experiment is headless only.
-See [the experimental v1 contract](../../extensions/xgpui-ext/docs/portable-wgsl-v1.md).
+See [the experimental v1 contract](../../docs/roadmap/extensions/portable-wgsl-v1.md).

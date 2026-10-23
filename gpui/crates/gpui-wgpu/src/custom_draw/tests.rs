@@ -235,3 +235,223 @@ fn wgpu_custom_dropped_batch_abandons_all_staged_work() -> Result<()> {
     assert_eq!(read_buffer(&host, &witness)?, vec![17; 16]);
     Ok(())
 }
+
+#[derive(Debug)]
+struct UniformTestProducer;
+impl gpui::CustomContent for UniformTestProducer {
+    fn prepare(
+        &self,
+        _: &dyn std::any::Any,
+        _: gpui::Size<gpui::DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        unreachable!()
+    }
+}
+fn uniform_draw(index: usize, count: usize, phase: usize) -> gpui::CustomDraw {
+    let x = if phase.is_multiple_of(2) {
+        index
+    } else {
+        count - 1 - index
+    } as f32
+        * 2.;
+    let bounds = gpui::Bounds::new(
+        gpui::point(gpui::ScaledPixels(x), gpui::ScaledPixels(0.)),
+        size(gpui::ScaledPixels(2.), gpui::ScaledPixels(8.)),
+    );
+    gpui::CustomDraw {
+        order: 0,
+        bounds,
+        content_mask: gpui::ContentMask {
+            bounds: gpui::Bounds::new(
+                bounds.origin,
+                size(
+                    gpui::ScaledPixels(2.),
+                    gpui::ScaledPixels((4 + index % 3) as f32),
+                ),
+            ),
+        },
+        corner_radii: gpui::Corners::default(),
+        opacity: ((index + phase) % 4 + 1) as f32 / 4.,
+        content: Arc::new(UniformTestProducer),
+        coverage: None,
+    }
+}
+#[test]
+fn wgpu_custom_uniform_arena_preserves_draws_growth_and_queued_frames() -> Result<()> {
+    let (host, format) = crate::WgpuContext::new_headless()?;
+    let device = &host.device;
+    let mut compositor = CustomCompositor::new(device, format);
+    compositor.begin_uniforms(device, 0)?;
+    assert_eq!(compositor.uniforms.creations, 0);
+    let source = new_texture(device, size(DevicePixels(8), DevicePixels(8)), format)?;
+    let view = source.create_view(&Default::default());
+    let mut encoder = device.create_command_encoder(&Default::default());
+    {
+        let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 1.,
+                        g: 0.,
+                        b: 0.,
+                        a: 1.,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            ..Default::default()
+        });
+    }
+    host.queue.submit([encoder.finish()]);
+    let mut frames = Vec::new();
+    for (phase, count) in [2, 7, 60, 300, 3, 300].into_iter().enumerate() {
+        if phase == 3 {
+            let capacity = compositor.uniforms.capacity;
+            assert!(compositor.begin_uniforms(device, usize::MAX).is_err());
+            assert_eq!(compositor.uniforms.capacity, capacity);
+        }
+        let before = compositor.uniforms.creations;
+        compositor.begin_uniforms(device, count)?;
+        assert!(
+            compositor
+                .uniforms
+                .stride
+                .is_multiple_of(device.limits().min_uniform_buffer_offset_alignment as u64)
+        );
+        if phase >= 4 {
+            assert_eq!(compositor.uniforms.creations, before);
+        }
+        let draws: Vec<_> = (0..count).map(|i| uniform_draw(i, count, phase)).collect();
+        let prepared: Vec<_> = draws
+            .iter()
+            .map(|draw| {
+                compositor.prepare(
+                    device,
+                    draw,
+                    &source,
+                    None,
+                    false,
+                    size(DevicePixels(128), DevicePixels(8)),
+                )
+            })
+            .collect();
+        compositor.upload_uniforms(&host.queue);
+        let target = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("uniform_frame_target"),
+            size: wgpu::Extent3d {
+                width: 128,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let target_view = target.create_view(&Default::default());
+        let readback = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("uniform_frame_readback"),
+            size: 128 * 8 * 4,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = device.create_command_encoder(&Default::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &target_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
+            pass.set_pipeline(&compositor.pipeline);
+            for draw in &prepared {
+                pass.set_bind_group(0, &draw.bind_group, &[draw.uniform_offset]);
+                pass.draw(0..6, 0..1);
+            }
+        }
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &target,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(128 * 4),
+                    rows_per_image: Some(8),
+                },
+            },
+            wgpu::Extent3d {
+                width: 128,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+        );
+        let submission = host.queue.submit([encoder.finish()]);
+        // Queue the next frame's upload without a CPU completion wait. Keep each
+        // frame's snapshot for later readback, including frames before growth.
+        frames.push((readback, submission, phase, count));
+    }
+    assert_eq!(
+        compositor.uniforms.creations, 4,
+        "only capacity growth creates uniform buffers"
+    );
+    for (buffer, submission, phase, count) in frames {
+        let (tx, rx) = std::sync::mpsc::channel();
+        buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |result| {
+                tx.send(result).unwrap();
+            });
+        device.poll(wgpu::PollType::Wait {
+            submission_index: Some(submission),
+            timeout: Some(std::time::Duration::from_secs(30)),
+        })?;
+        rx.recv_timeout(std::time::Duration::from_secs(30))??;
+        {
+            let bytes = buffer.slice(..).get_mapped_range()?;
+            for y in 0..8 {
+                for x in 0..128 {
+                    let slot = x / 2;
+                    let index = if phase.is_multiple_of(2) {
+                        slot
+                    } else {
+                        count.saturating_sub(1 + slot)
+                    };
+                    let expected = if slot < count && y < 4 + index % 3 {
+                        (((index + phase) % 4 + 1) as f32 / 4. * 255.).round() as u8
+                    } else {
+                        0
+                    };
+                    let at = (y * 128 + x) * 4;
+                    let red = if format == wgpu::TextureFormat::Bgra8Unorm {
+                        bytes[at + 2]
+                    } else {
+                        bytes[at]
+                    };
+                    assert!(
+                        red.abs_diff(expected) <= 1,
+                        "frame {phase}, ({x},{y}): {red} != {expected}"
+                    );
+                    assert!(bytes[at + 3].abs_diff(expected) <= 1);
+                }
+            }
+        }
+        buffer.unmap();
+    }
+    Ok(())
+}

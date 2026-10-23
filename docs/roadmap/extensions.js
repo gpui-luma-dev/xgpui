@@ -48,7 +48,7 @@ div().bg(rgb(0x223344)).border_1().border_color(white());`) +
 just --justfile apps/paint-lab/justfile mesh
 just --justfile apps/paint-lab/justfile portable-test`) +
     '<h2>API and integration</h2><div class="cards">' + extensionCard('extension-paints', 'Gradients, meshes, borders, paths and the core hook.') + extensionCard('paint-contract-hardening', 'Producer code, preparation, recording and failure behavior.') + '</div>' +
-    '<h2>Extension notes</h2><div class="cards">' + extensionCard('portable-wgsl-v1', 'Rust parameters + WGSL source.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'D3D11 adapter and Windows acceptance.') + '</div>';
+    '<h2>Extension notes</h2><div class="cards">' + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('portable-wgsl-v1', 'Rust parameters + WGSL source.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'D3D11 adapter and Windows acceptance.') + '</div>';
 }
 function extensionCard(route, description) {
   return '<a class="card" href="#' + route + '"><h3>' + escapeHtml(extensionTitle(route)) + ' →</h3><p>' + escapeHtml(description) + '</p></a>';

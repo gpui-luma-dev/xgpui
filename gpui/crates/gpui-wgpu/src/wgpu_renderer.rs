@@ -1427,6 +1427,7 @@ impl WgpuRendererCore {
             .take()
             .unwrap_or_else(|| CustomCompositor::new(&device, self.target_format));
         let result = (|| {
+            compositor.begin_uniforms(&device, scene.custom_draws.len())?;
             let mut prepared = Vec::with_capacity(scene.custom_draws.len());
             for draw in &scene.custom_draws {
                 let prepared_draw = batch.prepare(|context| {
@@ -1473,7 +1474,7 @@ impl WgpuRendererCore {
                             .clone()
                     };
                     let mask = if draw.coverage.is_some() {
-                        let key = coverage_key(draw);
+                        let key = CoverageKey::new(draw)?;
                         if let Some(mask) = compositor.masks.get(&key) {
                             Some(mask.clone())
                         } else {
@@ -1487,14 +1488,14 @@ impl WgpuRendererCore {
                                 wgpu::Color::TRANSPARENT,
                             )?;
                             let bytes = extent.width.0 as usize * extent.height.0 as usize * 4
-                                + key.len() * 4;
+                                + key.byte_len();
                             if compositor.mask_bytes + bytes > 64 * 1024 * 1024 {
                                 compositor.masks.clear();
                                 compositor.mask_bytes = 0;
                             }
                             if bytes <= 64 * 1024 * 1024 {
                                 compositor.mask_bytes += bytes;
-                                compositor.masks.insert(key, mask.clone());
+                                compositor.masks.insert(&key, mask.clone());
                             }
                             Some(mask)
                         }
@@ -1515,6 +1516,8 @@ impl WgpuRendererCore {
                 prepared.push(prepared_draw);
             }
             batch.submit()?;
+            // No uploads from failed preparations; all offsets are distinct.
+            compositor.upload_uniforms(&queue);
             Ok(prepared)
         })();
         self.custom_compositor = Some(compositor);
@@ -1727,7 +1730,7 @@ impl WgpuRendererCore {
                             .expect("prepared custom draws");
                         pass.set_pipeline(&compositor.pipeline);
                         for draw in &custom_draws[range] {
-                            pass.set_bind_group(0, &draw.bind_group, &[]);
+                            pass.set_bind_group(0, &draw.bind_group, &[draw.uniform_offset]);
                             pass.draw(0..6, 0..1);
                         }
                     }

@@ -479,21 +479,21 @@ impl DirectXRenderer {
                             .validate(context, extent)?
                     };
                     let coverage = if draw.coverage.is_some() {
-                        let key = coverage_key(draw);
+                        let key = CoverageKey::new(draw)?;
                         if let Some(mask) = compositor.masks.get(&key) {
                             Some(mask.clone())
                         } else {
                             let mask =
                                 self.render_custom_mask(&coverage_scene(draw, extent)?, extent)?;
                             let bytes = extent.width.0 as usize * extent.height.0 as usize * 4
-                                + key.len() * 4;
+                                + key.byte_len();
                             if compositor.mask_bytes + bytes > 64 * 1024 * 1024 {
                                 compositor.masks.clear();
                                 compositor.mask_bytes = 0;
                             }
                             if bytes <= 64 * 1024 * 1024 {
                                 compositor.mask_bytes += bytes;
-                                compositor.masks.insert(key, mask.clone());
+                                compositor.masks.insert(&key, mask.clone());
                             }
                             Some(mask)
                         }

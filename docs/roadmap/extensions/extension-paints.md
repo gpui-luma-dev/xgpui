@@ -49,6 +49,40 @@ fn gradient_panel() -> Result<impl IntoElement> {
 Explicit materials override native colors on `painted()`. Rebuild to change them;
 custom materials do not participate in native hover/theme refinements.
 
+## Interaction and hover
+
+`Painted` implements `Styled` and `ParentElement`, not `InteractiveElement`.
+Put `.id()`, `.on_click()` and `.hover()` on a native `div()`:
+
+```rust
+fn clickable_panel(material: Arc<Gradient>) -> impl IntoElement {
+    div()
+        .id("paint-card")
+        .on_click(|_, _, _| println!("Card clicked"))
+        .hover(|s| s.opacity(0.85))
+        .child(painted()
+            .w(px(320.0)).h(px(240.0))
+            .bg_paint(material))
+}
+
+// Or put interaction on native children inside the painted container.
+fn panel_with_action(material: Arc<Gradient>) -> impl IntoElement {
+    painted()
+        .w(px(320.0)).h(px(240.0))
+        .bg_paint(material)
+        .child(div()
+            .id("apply")
+            .on_click(|_, _, _| println!("Apply clicked"))
+            .hover(|s| s.bg(rgb(0x334155)))
+            .child("Apply"))
+}
+```
+
+Wrapper hover styles can change native properties such as opacity. Custom
+materials stay outside GPUI's `StyleRefinement`: to swap a material on hover,
+update view state with the wrapper's `.on_hover(...)`, call `cx.notify()`, and
+select `.bg_paint(...)` / `.border_paint(...)` when rebuilding the view.
+
 ## Choose a gradient
 
 Same `stops: Vec<GradientStop>`; angles are clockwise degrees, zero pointing up.
@@ -164,6 +198,7 @@ just --justfile apps/paint-lab/justfile metal-test
 just --justfile apps/paint-lab/justfile portable-test
 ```
 
+[Producer reference](shader-producers.md) ·
 [Preparation and failure contracts](paint-contract-hardening.md) ·
-[Portable backend status](../../../extensions/xgpui-ext/docs/portable-paints.md) ·
-[User-authored WGSL](../../../extensions/xgpui-ext/docs/portable-wgsl-v1.md)
+[Portable backend status](portable-paints.md) ·
+[User-authored WGSL](portable-wgsl-v1.md)

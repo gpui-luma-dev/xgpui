@@ -718,9 +718,13 @@ fn generate(root: &Path) -> Result<()> {
     ] {
         build_files.insert(file.to_owned(), fs::read_to_string(root.join(file))?);
     }
-    // Keep cross-project contracts in web docs; extension-specific sources stay
-    // beside the extension. Embed both so navigation works offline without fetch.
+    // All published extension guides live in the web documentation source tree.
+    // Embed them so navigation works offline without fetch.
     let document_sources = [
+        (
+            "shader-producers",
+            "docs/roadmap/extensions/shader-producers.md",
+        ),
         (
             "gpui-public-api",
             "docs/roadmap/extensions/gpui-public-api.md",
@@ -735,15 +739,15 @@ fn generate(root: &Path) -> Result<()> {
         ),
         (
             "portable-paints",
-            "extensions/xgpui-ext/docs/portable-paints.md",
+            "docs/roadmap/extensions/portable-paints.md",
         ),
         (
             "native-dx11-paints",
-            "extensions/xgpui-ext/docs/native-dx11-paints.md",
+            "docs/roadmap/extensions/native-dx11-paints.md",
         ),
         (
             "portable-wgsl-v1",
-            "extensions/xgpui-ext/docs/portable-wgsl-v1.md",
+            "docs/roadmap/extensions/portable-wgsl-v1.md",
         ),
     ];
     let mut extension_documents = BTreeMap::new();

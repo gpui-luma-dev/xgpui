@@ -64,13 +64,11 @@ normalization-map change as well as after a release sync.
 
 The navigation entry **Extensions to GPUI** (`#extensions`) identifies opt-in
 downstream capabilities separately from upstream GPUI. `extensions.js` owns the
-section overview. Integration and API sources live in
-`extensions/extension-paints.md`, `extensions/gpui-public-api.md` and
-`extensions/paint-contract-hardening.md`.
-Portable shader, wgpu and D3D11 notes remain under
-`extensions/xgpui-ext/docs/` at the repository root.
+section overview. All published extension guides live in `docs/roadmap/extensions/` at the
+repository root, including integration, API, producer and backend references.
+Source-side READMEs link to these maintained guides.
 
-The generator renders those six Markdown documents into `data.js`, including
+The generator renders those seven Markdown documents into `data.js`, including
 tables, code blocks and heading anchors. Internal document links become site
 routes; section links use `&section=heading-id`. No network fetch or Markdown
 runtime is needed in the browser. Edit the maintained sources, then regenerate;

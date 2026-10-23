@@ -1,7 +1,7 @@
 //! Extension-owned paint values and convenience dispatch; GPUI only records geometry.
 use gpui::{
-    Background, CustomContent, CustomGeometry, DevicePixels, Hsla, PaintQuad, Path, Pixels, Size,
-    Window,
+    Background, CustomContent, CustomGeometry, DevicePixels, Edges, Hsla, PaintQuad, Path, Pixels,
+    Size, Window,
 };
 use std::sync::Arc;
 /// CPU-side paint source. Native paints keep their existing GPU representation.
@@ -72,11 +72,12 @@ impl WindowPaintExt for Window {
         border: impl Into<Paint>,
     ) {
         match fill.into() {
-            Paint::Native(color) => {
+            Paint::Native(color) if !color.is_transparent() => {
                 quad.background = color;
                 quad.border_color = gpui::transparent_black();
                 self.paint_quad(quad.clone());
             }
+            Paint::Native(_) => {}
             Paint::Custom(content) => self.paint_custom(
                 CustomGeometry::RoundedRect {
                     bounds: quad.bounds,
@@ -85,8 +86,13 @@ impl WindowPaintExt for Window {
                 content,
             ),
         }
+        // Border dispatch must not emit native strips or prepare an adapter when
+        // no border can be visible. Custom source alpha remains unknown.
+        if quad.border_widths == Edges::default() {
+            return;
+        }
         match border.into() {
-            Paint::Native(color) => {
+            Paint::Native(color) if !color.is_transparent() => {
                 if let Some(color) = color.as_solid() {
                     quad.background = gpui::transparent_black().into();
                     quad.border_color = color;
@@ -98,6 +104,7 @@ impl WindowPaintExt for Window {
                     );
                 }
             }
+            Paint::Native(_) => {}
             Paint::Custom(content) => self.paint_custom(CustomGeometry::Border(quad), content),
         }
     }

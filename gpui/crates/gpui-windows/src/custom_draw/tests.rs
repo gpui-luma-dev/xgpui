@@ -110,7 +110,7 @@ fn dx11_custom_composition_preserves_alpha_clip_and_immediate_state() -> Result<
     ctx.clear(&source, [1., 0., 0., 0.5])?;
     ctx.submit()?;
     let target = allocate_texture(&ctx.device, extent)?;
-    let sentinel = constant_buffer(&ctx.device, &[7; 16])?;
+    let sentinel = dynamic_uniform_buffer(&ctx.device)?;
     unsafe {
         ctx.owner.ClearRenderTargetView(&target.rtv, &[0.; 4]);
         ctx.owner
@@ -320,5 +320,95 @@ fn dx11_custom_dropped_batch_abandons_all_staged_work() -> Result<()> {
             .iter()
             .all(|p| *p == [255, 0, 0, 255])
     );
+    Ok(())
+}
+
+#[test]
+fn dx11_custom_uniform_buffer_reuses_storage_and_preserves_queued_draw_values() -> Result<()> {
+    let ctx = warp()?;
+    let source_extent = size(DevicePixels(8), DevicePixels(8));
+    let output = ctx.create_output(source_extent)?;
+    ctx.clear(&output, [1., 0., 0., 1.])?;
+    ctx.submit()?;
+    let source = output.validate(&ctx, source_extent)?;
+    let compositor = CustomCompositor::new(&ctx.device)?;
+    let uniform = compositor.uniform.clone();
+    let extent = size(DevicePixels(128), DevicePixels(8));
+    let mut frames = Vec::new();
+    for (phase, count) in [2, 7, 60, 300, 3, 300].into_iter().enumerate() {
+        let target = allocate_texture(&ctx.device, extent)?;
+        unsafe {
+            ctx.owner.ClearRenderTargetView(&target.rtv, &[0.; 4]);
+        }
+        let draws: Vec<_> = (0..count)
+            .map(|index| {
+                let x = if phase.is_multiple_of(2) {
+                    index
+                } else {
+                    count - 1 - index
+                } as f32
+                    * 2.;
+                let bounds = Bounds::new(
+                    point(ScaledPixels(x), ScaledPixels(0.)),
+                    size(ScaledPixels(2.), ScaledPixels(8.)),
+                );
+                CustomDraw {
+                    order: 0,
+                    bounds,
+                    content_mask: ContentMask {
+                        bounds: Bounds::new(
+                            bounds.origin,
+                            size(ScaledPixels(2.), ScaledPixels((4 + index % 3) as f32)),
+                        ),
+                    },
+                    corner_radii: Corners::default(),
+                    opacity: ((index + phase) % 4 + 1) as f32 / 4.,
+                    content: Arc::new(Unused),
+                    coverage: None,
+                }
+            })
+            .collect();
+        let outputs: Vec<_> = (0..count)
+            .map(|_| PreparedDraw {
+                source: source.clone(),
+                coverage: None,
+                native: false,
+            })
+            .collect();
+        compositor.draw(&ctx.owner, &target.rtv, extent, &draws, &outputs)?;
+        assert_eq!(compositor.uniform, uniform);
+        assert_eq!(
+            compositor.uniform_creations, 1,
+            "no per-draw or per-frame CreateBuffer"
+        );
+        frames.push((target, phase, count));
+    }
+    // Only read after all frames have been queued; WRITE_DISCARD must preserve
+    // earlier command-list values and frames, not expose the last map everywhere.
+    for (target, phase, count) in frames {
+        let pixels = read(&ctx, &target.texture)?;
+        for y in 0..8 {
+            for x in 0..128 {
+                let slot = x / 2;
+                let index = if phase.is_multiple_of(2) {
+                    slot
+                } else {
+                    count.saturating_sub(1 + slot)
+                };
+                let expected = if slot < count && y < 4 + index % 3 {
+                    (((index + phase) % 4 + 1) as f32 / 4. * 255.).round() as u8
+                } else {
+                    0
+                };
+                let pixel = pixels[y * 128 + x];
+                assert!(
+                    pixel[0].abs_diff(expected) <= 1,
+                    "frame {phase}, ({x},{y}): {pixel:?}"
+                );
+                assert!(pixel[3].abs_diff(expected) <= 1);
+                assert_eq!([pixel[1], pixel[2]], [0, 0]);
+            }
+        }
+    }
     Ok(())
 }

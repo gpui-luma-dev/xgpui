@@ -64,7 +64,7 @@ mesh        Hermite vertex shader; no compute/storage buffers
 ```
 
 No producer submission/GPU wait. Cache budgets exclude in-flight retention.
-[Recording details](../../../docs/roadmap/extensions/paint-contract-hardening.md#implemented-discardable-recording-transactions).
+[Recording details](paint-contract-hardening.md#implemented-discardable-recording-transactions).
 
 ## Checks
 

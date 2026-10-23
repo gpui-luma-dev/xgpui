@@ -1,5 +1,7 @@
 //! DirectX 11 preparation for retained custom paints. Only the host executes work.
+mod coverage_cache;
 use anyhow::{Context as _, Result, ensure};
+pub(crate) use coverage_cache::{CoverageCache, CoverageKey};
 use gpui::{CustomDraw, DevicePixels, Size, size};
 use std::{
     ffi::CString,
@@ -453,28 +455,19 @@ fn compile(source: &str, entry: &str, target: &str) -> Result<Vec<u8>> {
         std::slice::from_raw_parts(code.GetBufferPointer().cast(), code.GetBufferSize()).to_vec()
     })
 }
-fn constant_buffer(device: &ID3D11Device, bytes: &[u8]) -> Result<ID3D11Buffer> {
-    ensure!(
-        !bytes.is_empty() && bytes.len() <= 65536,
-        "invalid DirectX uniform size"
-    );
-    let mut padded = bytes.to_vec();
-    padded.resize(bytes.len().next_multiple_of(16), 0);
+fn dynamic_uniform_buffer(device: &ID3D11Device) -> Result<ID3D11Buffer> {
     let desc = D3D11_BUFFER_DESC {
-        ByteWidth: padded.len() as u32,
-        Usage: D3D11_USAGE_IMMUTABLE,
+        ByteWidth: 64,
+        Usage: D3D11_USAGE_DYNAMIC,
         BindFlags: D3D11_BIND_CONSTANT_BUFFER.0 as u32,
-        ..Default::default()
-    };
-    let data = D3D11_SUBRESOURCE_DATA {
-        pSysMem: padded.as_ptr().cast(),
+        CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0 as u32,
         ..Default::default()
     };
     let mut buffer = None;
     unsafe {
-        device.CreateBuffer(&desc, Some(&data), Some(&mut buffer))?;
+        device.CreateBuffer(&desc, None, Some(&mut buffer))?;
     }
-    buffer.context("missing uniform buffer")
+    buffer.context("missing compositor uniform buffer")
 }
 
 pub(crate) struct PreparedDraw {
@@ -486,7 +479,10 @@ pub(crate) struct CustomCompositor {
     pipeline: CompositorPipeline,
     blend: ID3D11BlendState,
     sampler: ID3D11SamplerState,
-    pub masks: std::collections::HashMap<Vec<u32>, TextureBundle>,
+    uniform: ID3D11Buffer,
+    #[cfg(test)]
+    uniform_creations: usize,
+    pub masks: CoverageCache<TextureBundle>,
     pub mask_bytes: usize,
 }
 impl CustomCompositor {
@@ -527,6 +523,9 @@ impl CustomCompositor {
             pipeline,
             blend: blend.unwrap(),
             sampler: sampler.unwrap(),
+            uniform: dynamic_uniform_buffer(device)?,
+            #[cfg(test)]
+            uniform_creations: 1,
             masks: Default::default(),
             mask_bytes: 0,
         })
@@ -581,16 +580,25 @@ impl CustomCompositor {
                         + if output.native { 2. } else { 0. },
                 ],
             ];
-            let bytes: Vec<_> = params
-                .iter()
-                .flatten()
-                .flat_map(|v| v.to_le_bytes())
-                .collect();
-            let uniform = constant_buffer(&self.pipeline.device, &bytes)?;
+            // Fixed-size stack packing; WRITE_DISCARD preserves earlier draw
+            // snapshots through driver renaming, including deferred command lists.
+            let bytes = params.map(|row| row.map(f32::to_le_bytes));
+            let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+            unsafe {
+                deferred.Map(
+                    &self.uniform,
+                    0,
+                    D3D11_MAP_WRITE_DISCARD,
+                    0,
+                    Some(&mut mapped),
+                )?;
+                std::ptr::copy_nonoverlapping(bytes.as_ptr().cast::<u8>(), mapped.pData.cast(), 64);
+                deferred.Unmap(&self.uniform, 0);
+            }
             let mask = output.coverage.as_ref().unwrap_or(&output.source);
             unsafe {
-                deferred.VSSetConstantBuffers(0, Some(&[Some(uniform.clone())]));
-                deferred.PSSetConstantBuffers(0, Some(&[Some(uniform)]));
+                deferred.VSSetConstantBuffers(0, Some(&[Some(self.uniform.clone())]));
+                deferred.PSSetConstantBuffers(0, Some(&[Some(self.uniform.clone())]));
                 deferred.PSSetShaderResources(
                     0,
                     Some(&[Some(output.source.srv.clone()), Some(mask.srv.clone())]),
@@ -643,42 +651,6 @@ pub(crate) fn extent(draw: &CustomDraw) -> Result<Size<DevicePixels>> {
         DevicePixels(draw.bounds.size.width.0.ceil() as i32),
         DevicePixels(draw.bounds.size.height.0.ceil() as i32),
     ))
-}
-
-/// Exact normalized geometry key: clipping, screen origin and producer are excluded.
-pub(crate) fn coverage_key(draw: &CustomDraw) -> Vec<u32> {
-    let mut key = vec![
-        draw.bounds.size.width.0.to_bits(),
-        draw.bounds.size.height.0.to_bits(),
-    ];
-    for r in [
-        draw.corner_radii.top_left,
-        draw.corner_radii.top_right,
-        draw.corner_radii.bottom_right,
-        draw.corner_radii.bottom_left,
-    ] {
-        key.push(r.0.to_bits());
-    }
-    match draw.coverage.as_ref().expect("coverage") {
-        gpui::CustomCoverage::Border { widths, style } => {
-            key.extend([0, *style as u32]);
-            for w in [widths.top, widths.right, widths.bottom, widths.left] {
-                key.push(w.0.to_bits());
-            }
-        }
-        gpui::CustomCoverage::Path(path) => {
-            key.push(1);
-            for v in &path.vertices {
-                key.extend([
-                    (v.xy_position.x.0 - draw.bounds.origin.x.0).to_bits(),
-                    (v.xy_position.y.0 - draw.bounds.origin.y.0).to_bits(),
-                    v.st_position.x.to_bits(),
-                    v.st_position.y.to_bits(),
-                ]);
-            }
-        }
-    }
-    key
 }
 
 pub(crate) fn coverage_scene(draw: &CustomDraw, extent: Size<DevicePixels>) -> Result<gpui::Scene> {

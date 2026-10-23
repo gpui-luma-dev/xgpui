@@ -1,9 +1,9 @@
 //! Hermite mesh gradient adapted from patskovn/MeshGradient (MIT).
 //! See LICENSE-MeshGradient for the upstream notice and README for changes.
 use anyhow::{Result, ensure};
-use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(target_os = "macos")]
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(target_os = "macos")]
 mod metal;
 
@@ -147,7 +147,7 @@ pub struct MeshGradient {
     #[cfg(target_os = "windows")]
     pub(super) dx11: crate::dx11::PaintCache,
     #[cfg(target_os = "macos")]
-    output: Mutex<Option<metal::CachedOutput>>,
+    output: crate::metal_cache::OutputCache,
     pub(super) preparations: AtomicUsize,
 }
 impl std::fmt::Debug for MeshGradient {
@@ -168,7 +168,7 @@ impl MeshGradient {
             #[cfg(target_os = "macos")]
             pipelines: Arc::new(metal::PipelineCache::default()),
             #[cfg(target_os = "macos")]
-            output: Mutex::new(None),
+            output: crate::metal_cache::OutputCache::default(),
             #[cfg(feature = "wgpu")]
             wgpu: crate::wgpu::PaintCache::default(),
             #[cfg(target_os = "windows")]
@@ -238,12 +238,7 @@ impl MeshGradient {
     }
     #[cfg(target_os = "macos")]
     pub fn cached_texture_info(&self) -> Option<(String, u64)> {
-        let cache = self.output.lock().ok()?;
-        let texture = &cache.as_ref()?.texture;
-        Some((
-            texture.device().name().to_string(),
-            texture.width() * texture.height() * 4,
-        ))
+        self.output.texture_info()
     }
 }
 

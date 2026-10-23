@@ -1,10 +1,16 @@
+#[cfg(test)]
+mod alpha_checks;
 mod gradient_checks;
+#[cfg(test)]
+mod paint_checks;
 #[cfg(feature = "portable-shaders")]
 mod portable_checks;
 #[cfg(test)]
 mod preparation_checks;
 #[cfg(test)]
 mod surface_checks;
+#[cfg(test)]
+mod uniform_checks;
 use super::*;
 use std::time::Instant;
 

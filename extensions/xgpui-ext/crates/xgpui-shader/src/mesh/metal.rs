@@ -1,8 +1,8 @@
 use super::MeshGradient;
 use ::metal::*;
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, bail};
 use gpui::{DevicePixels, Size};
-use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput};
+use gpui_apple::custom_draw::MetalCustomContext;
 use std::{
     any::Any,
     sync::{
@@ -26,13 +26,6 @@ struct Pipelines {
     evaluate: ComputePipelineState,
     triangles: ComputePipelineState,
     draw: RenderPipelineState,
-}
-pub(super) struct CachedOutput {
-    key: u64,
-    extent: Size<DevicePixels>,
-    pub texture: Texture,
-    command: CommandBuffer,
-    _queue: CommandQueue,
 }
 // GPU-shared types use float4/uint4-sized records, with explicit alignment.
 #[repr(C, align(16))]
@@ -140,139 +133,104 @@ impl MeshGradient {
         let Some(ctx) = backend.downcast_ref::<MetalCustomContext>() else {
             bail!("MeshGradient requires the Metal backend");
         };
-        ensure!(
-            size.width.0 > 0
-                && size.height.0 > 0
-                && size.width.0 <= 16384
-                && size.height.0 <= 16384,
-            "invalid mesh texture size"
-        );
-        ensure!(
-            size.width.0 as u64 * size.height.0 as u64 * 4 <= 64 * 1024 * 1024,
-            "mesh output exceeds 64 MiB texture budget"
-        );
-        let mut cached = self
-            .output
-            .lock()
-            .map_err(|_| anyhow::anyhow!("mesh output cache poisoned"))?;
-        if let Some(cache) = cached.as_ref()
-            && cache.key == ctx.cache_key()
-            && cache.extent == size
-        {
-            let commands = match cache.command.status() {
-                MTLCommandBufferStatus::NotEnqueued => vec![cache.command.clone()],
-                MTLCommandBufferStatus::Error => bail!("mesh preparation failed on the GPU"),
-                MTLCommandBufferStatus::Enqueued => bail!("mesh command enqueued outside the host"),
-                _ => vec![],
+        let (output, generated) = self.output.prepare(ctx, size, || {
+            let pipelines = self.pipelines.get(ctx)?;
+            let upload: Vec<UploadControl> = self
+                .grid
+                .points
+                .iter()
+                .map(|p| UploadControl {
+                    position_and_u: [p.position[0], p.position[1], p.u_tangent[0], p.u_tangent[1]],
+                    tangent_v: [p.v_tangent[0], p.v_tangent[1], 0., 0.],
+                    color: [p.color[0], p.color[1], p.color[2], 1.],
+                })
+                .collect();
+            let controls = ctx.device.new_buffer_with_data(
+                upload.as_ptr().cast(),
+                std::mem::size_of_val(upload.as_slice()) as u64,
+                MTLResourceOptions::StorageModeShared,
+            );
+            let patches = ctx.device.new_buffer(
+                self.stats.patches as u64 * 320,
+                MTLResourceOptions::StorageModePrivate,
+            );
+            let vertices = ctx.device.new_buffer(
+                self.stats.evaluated_vertices as u64 * 32,
+                MTLResourceOptions::StorageModePrivate,
+            );
+            let triangles = ctx.device.new_buffer(
+                self.stats.triangles as u64 * 3 * 32,
+                MTLResourceOptions::StorageModePrivate,
+            );
+            let descriptor = TextureDescriptor::new();
+            descriptor.set_texture_type(MTLTextureType::D2);
+            descriptor.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+            descriptor.set_width(size.width.0 as u64);
+            descriptor.set_height(size.height.0 as u64);
+            descriptor.set_storage_mode(MTLStorageMode::Private);
+            descriptor.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
+            let texture = ctx.device.new_texture(&descriptor);
+            let command = ctx.queue.new_command_buffer().to_owned();
+            let params = Params {
+                width: self.grid.width,
+                height: self.grid.height,
+                samples: self.samples,
+                patches: self.stats.patches,
             };
-            return Ok(Box::new(MetalCustomOutput {
-                texture: cache.texture.clone(),
-                commands,
-            }));
+            compute(
+                &command,
+                &pipelines.coefficients,
+                &controls,
+                &patches,
+                &params,
+                self.stats.patches,
+            );
+            compute(
+                &command,
+                &pipelines.evaluate,
+                &patches,
+                &vertices,
+                &params,
+                self.stats.evaluated_vertices,
+            );
+            compute(
+                &command,
+                &pipelines.triangles,
+                &vertices,
+                &triangles,
+                &params,
+                self.stats.triangles / 2,
+            );
+            let pass = RenderPassDescriptor::new();
+            let attachment = pass.color_attachments().object_at(0).unwrap();
+            attachment.set_texture(Some(&texture));
+            attachment.set_load_action(MTLLoadAction::Clear);
+            attachment.set_store_action(MTLStoreAction::Store);
+            attachment.set_clear_color(MTLClearColor::new(0., 0., 0., 0.));
+            let encoder = command.new_render_command_encoder(pass);
+            encoder.set_render_pipeline_state(&pipelines.draw);
+            encoder.set_cull_mode(MTLCullMode::None);
+            encoder.set_viewport(MTLViewport {
+                originX: 0.,
+                originY: 0.,
+                width: size.width.0 as f64,
+                height: size.height.0 as f64,
+                znear: 0.,
+                zfar: 1.,
+            });
+            encoder.set_vertex_buffer(0, Some(&triangles), 0);
+            encoder.draw_primitives(
+                MTLPrimitiveType::Triangle,
+                0,
+                self.stats.triangles as u64 * 3,
+            );
+            encoder.end_encoding();
+            Ok((texture, command))
+        })?;
+        if generated {
+            self.preparations.fetch_add(1, Ordering::Relaxed);
         }
-        let pipelines = self.pipelines.get(ctx)?;
-        let upload: Vec<UploadControl> = self
-            .grid
-            .points
-            .iter()
-            .map(|p| UploadControl {
-                position_and_u: [p.position[0], p.position[1], p.u_tangent[0], p.u_tangent[1]],
-                tangent_v: [p.v_tangent[0], p.v_tangent[1], 0., 0.],
-                color: [p.color[0], p.color[1], p.color[2], 1.],
-            })
-            .collect();
-        let controls = ctx.device.new_buffer_with_data(
-            upload.as_ptr().cast(),
-            std::mem::size_of_val(upload.as_slice()) as u64,
-            MTLResourceOptions::StorageModeShared,
-        );
-        let patches = ctx.device.new_buffer(
-            self.stats.patches as u64 * 320,
-            MTLResourceOptions::StorageModePrivate,
-        );
-        let vertices = ctx.device.new_buffer(
-            self.stats.evaluated_vertices as u64 * 32,
-            MTLResourceOptions::StorageModePrivate,
-        );
-        let triangles = ctx.device.new_buffer(
-            self.stats.triangles as u64 * 3 * 32,
-            MTLResourceOptions::StorageModePrivate,
-        );
-        let descriptor = TextureDescriptor::new();
-        descriptor.set_texture_type(MTLTextureType::D2);
-        descriptor.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-        descriptor.set_width(size.width.0 as u64);
-        descriptor.set_height(size.height.0 as u64);
-        descriptor.set_storage_mode(MTLStorageMode::Private);
-        descriptor.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-        let texture = ctx.device.new_texture(&descriptor);
-        let command = ctx.queue.new_command_buffer().to_owned();
-        let params = Params {
-            width: self.grid.width,
-            height: self.grid.height,
-            samples: self.samples,
-            patches: self.stats.patches,
-        };
-        compute(
-            &command,
-            &pipelines.coefficients,
-            &controls,
-            &patches,
-            &params,
-            self.stats.patches,
-        );
-        compute(
-            &command,
-            &pipelines.evaluate,
-            &patches,
-            &vertices,
-            &params,
-            self.stats.evaluated_vertices,
-        );
-        compute(
-            &command,
-            &pipelines.triangles,
-            &vertices,
-            &triangles,
-            &params,
-            self.stats.triangles / 2,
-        );
-        let pass = RenderPassDescriptor::new();
-        let attachment = pass.color_attachments().object_at(0).unwrap();
-        attachment.set_texture(Some(&texture));
-        attachment.set_load_action(MTLLoadAction::Clear);
-        attachment.set_store_action(MTLStoreAction::Store);
-        attachment.set_clear_color(MTLClearColor::new(0., 0., 0., 0.));
-        let encoder = command.new_render_command_encoder(pass);
-        encoder.set_render_pipeline_state(&pipelines.draw);
-        encoder.set_cull_mode(MTLCullMode::None);
-        encoder.set_viewport(MTLViewport {
-            originX: 0.,
-            originY: 0.,
-            width: size.width.0 as f64,
-            height: size.height.0 as f64,
-            znear: 0.,
-            zfar: 1.,
-        });
-        encoder.set_vertex_buffer(0, Some(&triangles), 0);
-        encoder.draw_primitives(
-            MTLPrimitiveType::Triangle,
-            0,
-            self.stats.triangles as u64 * 3,
-        );
-        encoder.end_encoding();
-        *cached = Some(CachedOutput {
-            key: ctx.cache_key(),
-            extent: size,
-            texture: texture.clone(),
-            command: command.clone(),
-            _queue: ctx.queue.clone(),
-        });
-        self.preparations.fetch_add(1, Ordering::Relaxed);
-        Ok(Box::new(MetalCustomOutput {
-            texture,
-            commands: vec![command],
-        }))
+        Ok(Box::new(output))
     }
 }
 #[cfg(test)]

@@ -57,7 +57,7 @@ cache       64 MiB live output/snapshot; separate coverage cache
 recovery    reject old device/context caches
 ```
 
-[Recording details](../../../docs/roadmap/extensions/paint-contract-hardening.md#implemented-discardable-recording-transactions).
+[Recording details](paint-contract-hardening.md#implemented-discardable-recording-transactions).
 
 ## Windows checks
 

@@ -184,11 +184,12 @@ for(const match of run('pipelinePage()').matchAll(/href="source\/([^"#]+)\.html#
 console.log('Verified scene ordering, clipping, layers, sprite texture boundaries, replay, SVG, reduced motion and playback cleanup.');
 
 // Every extension contract is part of the offline artifact, with working routes
-// and section targets; retained extension sources must also exist.
-assert.equal(Object.keys(data.extension_documents).length, 6);
+// and section targets; all published sources must stay in the web docs tree.
+assert.equal(Object.keys(data.extension_documents).length, 7);
 assert.match(run('extensionPage("extensions")'), /Downstream extension to GPUI/);
 assert.match(index, /href="#extensions"/);
 for (const [route, doc] of Object.entries(data.extension_documents)) {
+  assert.equal(doc.source, 'docs/roadmap/extensions/' + route + '.md');
   await readFile(new URL('../../' + doc.source, import.meta.url));
   context.location.hash = '#' + route;
   run('render()');
@@ -203,7 +204,20 @@ for (const [route, doc] of Object.entries(data.extension_documents)) {
 }
 assert.equal(run('parseRoute("#paint-contract-hardening&section=implemented-discardable-recording-transactions").global'), 'paint-contract-hardening');
 assert.equal(run('parseRoute("#paint-contract-hardening&section=implemented-discardable-recording-transactions").section'), 'implemented-discardable-recording-transactions');
-console.log('Verified extension navigation, offline contracts, retained sources and cross-document links.');
+for (const file of [
+  'extensions/xgpui-ext/README.md',
+  'extensions/xgpui-ext/crates/xgpui-shader/README.md',
+  'apps/paint-lab/README.md',
+  'apps/shader-lab/README.md',
+]) {
+  const url = new URL('../../' + file, import.meta.url);
+  const markdown = await readFile(url, 'utf8');
+  for (const [, link] of markdown.matchAll(/\]\(([^)]+)\)/g)) {
+    if (/^(?:https?:|#)/.test(link)) continue;
+    await readFile(new URL(link.split('#')[0], url));
+  }
+}
+console.log('Verified extension navigation, offline contracts, consolidated sources, README links and cross-document links.');
 
 const apiChanges = data.extension_documents['gpui-public-api'].html;
 for (const term of ['Scene', 'custom_draws', 'PrimitiveBatch', 'CustomContent', 'PreparationRequest', 'CustomGeometry', 'CustomCoverage', 'CustomDraw', 'paint_custom', 'MetalCustomContext', 'WgpuCustomContext', 'Dx11CustomContext', 'source compatibility risks']) assert.ok(apiChanges.includes(term), term);

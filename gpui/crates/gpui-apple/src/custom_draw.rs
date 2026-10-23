@@ -1,5 +1,7 @@
 //! Metal integration for retained, independently rendered GPU content.
+mod coverage_cache;
 use anyhow::{Result, ensure};
+pub(crate) use coverage_cache::{CoverageCache, CoverageKey};
 use foreign_types::ForeignType;
 use gpui::{CustomDraw, DevicePixels, Size, size};
 use metal::*;
@@ -35,7 +37,7 @@ pub struct MetalCustomOutput {
 
 pub(crate) struct CustomCompositor {
     pipeline: RenderPipelineState,
-    pub(crate) masks: std::collections::HashMap<Vec<u32>, Texture>,
+    pub(crate) masks: CoverageCache<Texture>,
     pub(crate) mask_bytes: usize,
 }
 
@@ -232,42 +234,6 @@ pub(crate) fn submit_custom_commands<'a>(
 
 #[cfg(test)]
 mod submission_tests;
-
-/// Exact normalized geometry key: clipping, screen origin and producer are excluded.
-pub(crate) fn coverage_key(draw: &CustomDraw) -> Vec<u32> {
-    let mut key = vec![
-        draw.bounds.size.width.0.to_bits(),
-        draw.bounds.size.height.0.to_bits(),
-    ];
-    for r in [
-        draw.corner_radii.top_left,
-        draw.corner_radii.top_right,
-        draw.corner_radii.bottom_right,
-        draw.corner_radii.bottom_left,
-    ] {
-        key.push(r.0.to_bits());
-    }
-    match draw.coverage.as_ref().expect("coverage") {
-        gpui::CustomCoverage::Border { widths, style } => {
-            key.extend([0, *style as u32]);
-            for w in [widths.top, widths.right, widths.bottom, widths.left] {
-                key.push(w.0.to_bits());
-            }
-        }
-        gpui::CustomCoverage::Path(path) => {
-            key.push(1);
-            for v in &path.vertices {
-                key.extend([
-                    (v.xy_position.x.0 - draw.bounds.origin.x.0).to_bits(),
-                    (v.xy_position.y.0 - draw.bounds.origin.y.0).to_bits(),
-                    v.st_position.x.to_bits(),
-                    v.st_position.y.to_bits(),
-                ]);
-            }
-        }
-    }
-    key
-}
 
 pub(crate) fn texture(device: &DeviceRef, extent: Size<DevicePixels>) -> Result<Texture> {
     ensure!(

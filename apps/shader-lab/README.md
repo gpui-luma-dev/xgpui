@@ -130,7 +130,7 @@ while compiling pipelines once.
 
 Native Metal on macOS and D3D11 on Windows. The extension also offers an opt-in
 wgpu backend, exercised separately in paint-lab. Windows runtime validation is
-still pending; see [native D3D11 status](../../extensions/xgpui-ext/docs/native-dx11-paints.md). No
+still pending; see [native D3D11 status](../../docs/roadmap/extensions/native-dx11-paints.md). No
 high-gamut framebuffer, arbitrary subtree effects, grain, or media engine is
 included. Mesh colors use encoded-sRGB Hermite interpolation, not Oklab.
 Existing view APIs are preserved; public `Primitive` and

@@ -1,10 +1,13 @@
 //! Backend-owned preparation and composition of independent custom paint sources.
+mod coverage_cache;
 use anyhow::{Result, ensure};
+pub(crate) use coverage_cache::{CoverageCache, CoverageKey};
 use gpui::{CustomDraw, DevicePixels, Size, size};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicU8, Ordering},
 };
+#[cfg(test)]
 use wgpu::util::DeviceExt;
 
 const PENDING: u8 = 0;
@@ -310,12 +313,84 @@ pub(crate) fn extent(draw: &CustomDraw) -> Result<Size<DevicePixels>> {
 
 pub(crate) struct PreparedDraw {
     pub bind_group: wgpu::BindGroup,
+    pub uniform_offset: u32,
+}
+
+const UNIFORM_BYTES: u64 = 64;
+/// Renderer-private arena. Reuse only after previous render commands are submitted;
+/// queue-ordered uploads then preserve reads by still-running previous frames.
+struct UniformArena {
+    buffer: Option<wgpu::Buffer>,
+    bytes: Vec<u8>,
+    stride: u64,
+    capacity: u64,
+    cursor: usize,
+    #[cfg(test)]
+    creations: usize,
+}
+impl UniformArena {
+    fn new(device: &wgpu::Device) -> Self {
+        Self {
+            buffer: None,
+            bytes: Vec::new(),
+            stride: UNIFORM_BYTES
+                .next_multiple_of(device.limits().min_uniform_buffer_offset_alignment as u64),
+            capacity: 0,
+            cursor: 0,
+            #[cfg(test)]
+            creations: 0,
+        }
+    }
+    fn begin(&mut self, device: &wgpu::Device, count: usize) -> Result<()> {
+        let required = (count as u64)
+            .checked_mul(self.stride)
+            .ok_or_else(|| anyhow::anyhow!("custom uniform size overflow"))?;
+        let limit = device.limits().max_buffer_size.min(u32::MAX as u64);
+        ensure!(
+            required <= limit,
+            "custom uniforms exceed buffer/offset limits"
+        );
+        if required > self.capacity {
+            let capacity = required
+                .checked_next_power_of_two()
+                .unwrap_or(required)
+                .min(limit);
+            self.buffer = Some(device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("custom_params_arena"),
+                size: capacity,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+            self.capacity = capacity;
+            #[cfg(test)]
+            {
+                self.creations += 1;
+            }
+        }
+        self.bytes.resize(required as usize, 0);
+        self.cursor = 0;
+        Ok(())
+    }
+    fn write(&mut self, params: &[[f32; 4]; 4]) -> u32 {
+        let offset = self.cursor * self.stride as usize;
+        self.cursor += 1;
+        self.bytes[offset..offset + UNIFORM_BYTES as usize]
+            .copy_from_slice(bytemuck::cast_slice(params));
+        offset as u32
+    }
+    fn upload(&self, queue: &wgpu::Queue) {
+        debug_assert_eq!(self.cursor as u64 * self.stride, self.bytes.len() as u64);
+        if !self.bytes.is_empty() {
+            queue.write_buffer(self.buffer.as_ref().expect("uniform arena"), 0, &self.bytes);
+        }
+    }
 }
 pub(crate) struct CustomCompositor {
     pub pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
-    pub masks: std::collections::HashMap<Vec<u32>, wgpu::Texture>,
+    uniforms: UniformArena,
+    pub masks: CoverageCache<wgpu::Texture>,
     pub mask_bytes: usize,
 }
 impl CustomCompositor {
@@ -330,8 +405,8 @@ impl CustomCompositor {
                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+                    has_dynamic_offset: true,
+                    min_binding_size: wgpu::BufferSize::new(UNIFORM_BYTES),
                 },
                 count: None,
             },
@@ -406,12 +481,19 @@ impl CustomCompositor {
             pipeline,
             layout,
             sampler,
+            uniforms: UniformArena::new(device),
             masks: Default::default(),
             mask_bytes: 0,
         }
     }
+    pub(crate) fn begin_uniforms(&mut self, device: &wgpu::Device, count: usize) -> Result<()> {
+        self.uniforms.begin(device, count)
+    }
+    pub(crate) fn upload_uniforms(&self, queue: &wgpu::Queue) {
+        self.uniforms.upload(queue);
+    }
     pub fn prepare(
-        &self,
+        &mut self,
         device: &wgpu::Device,
         draw: &CustomDraw,
         source: &wgpu::Texture,
@@ -445,11 +527,8 @@ impl CustomCompositor {
                 u32::from(mask.is_some()) as f32 + if native { 2. } else { 0. },
             ],
         ];
-        let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("custom_params"),
-            contents: bytemuck::cast_slice(&params),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let uniform_offset = self.uniforms.write(&params);
+        let uniform = self.uniforms.buffer.as_ref().expect("uniform arena");
         let source = source.create_view(&Default::default());
         let mask = mask
             .map(|t| t.create_view(&Default::default()))
@@ -460,7 +539,11 @@ impl CustomCompositor {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: uniform.as_entire_binding(),
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: uniform,
+                        offset: 0,
+                        size: wgpu::BufferSize::new(UNIFORM_BYTES),
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -476,44 +559,11 @@ impl CustomCompositor {
                 },
             ],
         });
-        PreparedDraw { bind_group }
-    }
-}
-
-/// Exact normalized geometry key: clipping, screen origin and producer are excluded.
-pub(crate) fn coverage_key(draw: &CustomDraw) -> Vec<u32> {
-    let mut key = vec![
-        draw.bounds.size.width.0.to_bits(),
-        draw.bounds.size.height.0.to_bits(),
-    ];
-    for r in [
-        draw.corner_radii.top_left,
-        draw.corner_radii.top_right,
-        draw.corner_radii.bottom_right,
-        draw.corner_radii.bottom_left,
-    ] {
-        key.push(r.0.to_bits());
-    }
-    match draw.coverage.as_ref().expect("coverage") {
-        gpui::CustomCoverage::Border { widths, style } => {
-            key.extend([0, *style as u32]);
-            for w in [widths.top, widths.right, widths.bottom, widths.left] {
-                key.push(w.0.to_bits());
-            }
-        }
-        gpui::CustomCoverage::Path(path) => {
-            key.push(1);
-            for v in &path.vertices {
-                key.extend([
-                    (v.xy_position.x.0 - draw.bounds.origin.x.0).to_bits(),
-                    (v.xy_position.y.0 - draw.bounds.origin.y.0).to_bits(),
-                    v.st_position.x.to_bits(),
-                    v.st_position.y.to_bits(),
-                ]);
-            }
+        PreparedDraw {
+            bind_group,
+            uniform_offset,
         }
     }
-    key
 }
 
 pub(crate) fn coverage_scene(draw: &CustomDraw, extent: Size<DevicePixels>) -> Result<gpui::Scene> {

@@ -1,8 +1,8 @@
 //! Analytic multi-stop paints. Geometry and GPU code stay outside GPUI.
 use anyhow::{Result, ensure};
-use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(target_os = "macos")]
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(target_os = "macos")]
 mod metal;
 
@@ -84,7 +84,7 @@ pub struct Gradient {
     #[cfg(target_os = "windows")]
     pub(super) dx11: crate::dx11::PaintCache,
     #[cfg(target_os = "macos")]
-    output: Mutex<Option<metal::CachedOutput>>,
+    output: crate::metal_cache::OutputCache,
     pub(super) preparations: AtomicUsize,
 }
 impl std::fmt::Debug for Gradient {
@@ -124,7 +124,7 @@ impl Gradient {
             #[cfg(target_os = "macos")]
             pipelines: Arc::default(),
             #[cfg(target_os = "macos")]
-            output: Mutex::new(None),
+            output: crate::metal_cache::OutputCache::default(),
             #[cfg(feature = "wgpu")]
             wgpu: crate::wgpu::PaintCache::default(),
             #[cfg(target_os = "windows")]
@@ -170,7 +170,7 @@ impl Gradient {
             #[cfg(target_os = "macos")]
             pipelines: self.pipelines.clone(),
             #[cfg(target_os = "macos")]
-            output: Mutex::new(None),
+            output: crate::metal_cache::OutputCache::default(),
             #[cfg(feature = "wgpu")]
             wgpu: self.wgpu.snapshot(),
             #[cfg(target_os = "windows")]

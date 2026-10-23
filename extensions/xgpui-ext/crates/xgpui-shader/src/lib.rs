@@ -33,3 +33,6 @@ mod dx11;
 mod effect_params;
 #[cfg(any(target_os = "windows", test))]
 mod hlsl;
+
+#[cfg(target_os = "macos")]
+mod metal_cache;
