@@ -282,6 +282,8 @@ pub struct Style {
     pub border_color: Option<Hsla>,
 
     /// Optional paint override for the border; runtime producers cannot be serialized.
+    /// Takes precedence over `border_color`, including transparent native paints.
+    /// The styled setters write this field so the last setter wins in refinements.
     pub border_paint: Option<crate::Paint>,
 
     /// The border style of this element
@@ -652,10 +654,7 @@ impl Style {
                 let mut min = bounds.origin;
                 let mut max = bounds.bottom_right();
 
-                if self
-                    .border_color
-                    .is_some_and(|color| !color.is_transparent())
-                {
+                if self.is_border_visible() {
                     min.x += self.border_widths.left.to_pixels(rem_size);
                     max.x -= self.border_widths.right.to_pixels(rem_size);
                     min.y += self.border_widths.top.to_pixels(rem_size);
@@ -670,13 +669,13 @@ impl Style {
                     (true, true) => return None,
                     // x visible, y hidden
                     (true, false) => Bounds::from_corners(
-                        point(min.x, bounds.origin.y),
-                        point(max.x, bounds.bottom_right().y),
+                        point(bounds.origin.x, min.y),
+                        point(bounds.bottom_right().x, max.y),
                     ),
                     // x hidden, y visible
                     (false, true) => Bounds::from_corners(
-                        point(bounds.origin.x, min.y),
-                        point(bounds.bottom_right().x, max.y),
+                        point(min.x, bounds.origin.y),
+                        point(max.x, bounds.bottom_right().y),
                     ),
                     // both hidden
                     (false, false) => Bounds::from_corners(min, max),
@@ -747,31 +746,38 @@ impl Style {
 
         continuation(window, cx);
 
-        if let Some(paint) = &self.border_paint {
-            window.paint_quad_with_paints(
-                quad(
+        if self.is_border_visible() {
+            let solid_color = match &self.border_paint {
+                Some(crate::Paint::Native(background)) => background.as_solid(),
+                Some(crate::Paint::Custom(_)) => None,
+                None => self.border_color,
+            };
+            if let Some(color) = solid_color {
+                // Preserve the native solid-border path and its transparent RGB.
+                let mut background = color;
+                background.a = 0.;
+                window.paint_quad(quad(
                     bounds,
                     corner_radii,
-                    crate::transparent_black(),
+                    background,
                     self.border_widths.to_pixels(rem_size),
-                    crate::transparent_black(),
+                    color,
                     self.border_style,
-                ),
-                crate::transparent_black(),
-                paint.clone(),
-            );
-        } else if self.is_border_visible() {
-            let border_widths = self.border_widths.to_pixels(rem_size);
-            let mut background = self.border_color.unwrap_or_default();
-            background.a = 0.;
-            window.paint_quad(quad(
-                bounds,
-                corner_radii,
-                background,
-                border_widths,
-                self.border_color.unwrap_or_default(),
-                self.border_style,
-            ));
+                ));
+            } else if let Some(paint) = &self.border_paint {
+                window.paint_quad_with_paints(
+                    quad(
+                        bounds,
+                        corner_radii,
+                        crate::transparent_black(),
+                        self.border_widths.to_pixels(rem_size),
+                        crate::transparent_black(),
+                        self.border_style,
+                    ),
+                    crate::transparent_black(),
+                    paint.clone(),
+                );
+            }
         }
 
         #[cfg(debug_assertions)]
@@ -781,9 +787,16 @@ impl Style {
     }
 
     fn is_border_visible(&self) -> bool {
-        self.border_color
-            .is_some_and(|color| !color.is_transparent())
-            && self.border_widths.any(|length| !length.is_zero())
+        let has_visible_paint = match &self.border_paint {
+            Some(crate::Paint::Native(background)) => !background.is_transparent(),
+            // Producer alpha is unknown until preparation. Do not prepare GPU
+            // content during layout or make clipping depend on animation frames.
+            Some(crate::Paint::Custom(_)) => true,
+            None => self
+                .border_color
+                .is_some_and(|color| !color.is_transparent()),
+        };
+        has_visible_paint && self.border_widths.any(|length| !length.is_zero())
     }
 }
 
@@ -1364,6 +1377,122 @@ mod tests {
     use super::*;
 
     use util_macros::perf;
+
+    #[derive(Debug)]
+    struct BorderTestContent;
+
+    impl crate::CustomContent for BorderTestContent {
+        fn prepare(
+            &self,
+            _: &dyn std::any::Any,
+            _: Size<DevicePixels>,
+        ) -> anyhow::Result<Box<dyn std::any::Any>> {
+            unreachable!("style tests do not prepare GPU content")
+        }
+    }
+
+    fn custom_border() -> crate::Paint {
+        crate::Paint::Custom(std::sync::Arc::new(BorderTestContent))
+    }
+
+    #[test]
+    fn border_paint_setter_precedence() {
+        let custom = custom_border();
+        let color_last = StyleRefinement::default()
+            .border_paint(custom.clone())
+            .border_color(red());
+        assert_eq!(color_last.border_paint, Some(crate::Paint::from(red())));
+        let paint_last = color_last.border_paint(custom.clone());
+        assert_eq!(paint_last.border_paint, Some(custom));
+    }
+
+    #[test]
+    fn border_paint_refinement_precedence() {
+        let mut style = Style::default();
+        style.border_widths = Edges::all(px(2.).into());
+        style.refine(&StyleRefinement::default().border_paint(custom_border()));
+        // A hover/theme refinement must replace the inherited producer, including
+        // when the requested color is transparent.
+        let transparent = crate::transparent_black();
+        let mut refinement = StyleRefinement::default().border_color(transparent);
+        refinement.refine(&StyleRefinement::default().border_color(blue()));
+        style.refine(&refinement);
+        assert_eq!(style.border_paint, Some(crate::Paint::from(blue())));
+        style.refine(&StyleRefinement::default().border_color(transparent));
+        assert!(!style.is_border_visible());
+        style.refine(&StyleRefinement::default().border_paint(custom_border()));
+        assert!(style.is_border_visible());
+    }
+
+    #[test]
+    fn border_paint_overflow_uses_effective_paint() {
+        let bounds = Bounds::new(point(px(10.), px(20.)), size(px(100.), px(80.)));
+        let mut style = Style::default();
+        style.border_widths = Edges {
+            top: px(2.).into(),
+            right: px(3.).into(),
+            bottom: px(4.).into(),
+            left: px(5.).into(),
+        };
+        style.overflow = point(Overflow::Hidden, Overflow::Hidden);
+        let inset = Bounds::new(point(px(15.), px(22.)), size(px(92.), px(74.)));
+        style.border_paint = Some(custom_border());
+        assert!(style.is_border_visible());
+        assert_eq!(style.overflow_mask(bounds, px(16.)).unwrap().bounds, inset);
+        style.border_color = Some(red());
+        style.border_paint = Some(crate::transparent_black().into());
+        assert!(!style.is_border_visible());
+        assert_eq!(style.overflow_mask(bounds, px(16.)).unwrap().bounds, bounds);
+        // Raw legacy styles retain their existing fallback.
+        style.border_paint = None;
+        assert!(style.is_border_visible());
+        assert_eq!(style.overflow_mask(bounds, px(16.)).unwrap().bounds, inset);
+        let transparent = crate::transparent_black();
+        style.border_paint = Some(
+            crate::linear_gradient(
+                90.,
+                crate::linear_color_stop(transparent, 0.),
+                crate::linear_color_stop(transparent, 1.),
+            )
+            .into(),
+        );
+        assert!(!style.is_border_visible());
+        assert_eq!(style.overflow_mask(bounds, px(16.)).unwrap().bounds, bounds);
+        style.border_paint = Some(
+            crate::linear_gradient(
+                90.,
+                crate::linear_color_stop(transparent, 0.),
+                crate::linear_color_stop(blue(), 1.),
+            )
+            .into(),
+        );
+        assert!(style.is_border_visible());
+        assert_eq!(style.overflow_mask(bounds, px(16.)).unwrap().bounds, inset);
+        style.border_paint = Some(custom_border());
+        style.border_widths = Edges::default();
+        assert!(!style.is_border_visible());
+        assert_eq!(style.overflow_mask(bounds, px(16.)).unwrap().bounds, bounds);
+    }
+
+    #[test]
+    fn border_paint_overflow_respects_each_axis() {
+        let bounds = Bounds::new(point(px(10.), px(20.)), size(px(100.), px(80.)));
+        let mut style = Style::default();
+        style.border_widths = Edges::all(px(2.).into());
+        style.border_paint = Some(custom_border());
+        style.overflow = point(Overflow::Visible, Overflow::Hidden);
+        assert_eq!(
+            style.overflow_mask(bounds, px(16.)).unwrap().bounds,
+            Bounds::new(point(px(10.), px(22.)), size(px(100.), px(76.))),
+        );
+        style.overflow = point(Overflow::Hidden, Overflow::Visible);
+        assert_eq!(
+            style.overflow_mask(bounds, px(16.)).unwrap().bounds,
+            Bounds::new(point(px(12.), px(20.)), size(px(96.), px(80.))),
+        );
+        style.overflow = point(Overflow::Visible, Overflow::Visible);
+        assert!(style.overflow_mask(bounds, px(16.)).is_none());
+    }
 
     #[perf]
     fn test_basic_highlight_style_combination() {

@@ -366,12 +366,17 @@ pub fn border_style_methods(input: TokenStream) -> TokenStream {
 
     let output = quote! {
         /// Sets the border color of the element.
+        /// Replaces any border paint, including one inherited through a refinement.
         #visibility fn border_color<C>(mut self, border_color: C) -> Self
         where
             C: Into<gpui::Hsla>,
             Self: Sized,
         {
-            self.style().border_color = Some(border_color.into());
+            let border_color = border_color.into();
+            self.style().border_color = Some(border_color);
+            // An explicit native paint also replaces inherited custom paints
+            // when this style is applied as a refinement (e.g. hover).
+            self.style().border_paint = Some(gpui::Paint::from(border_color));
             self
         }
 

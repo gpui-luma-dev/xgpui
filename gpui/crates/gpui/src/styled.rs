@@ -506,6 +506,8 @@ pub trait Styled: Sized {
     }
 
     /// Override the border color with a paint over the full outer bounds.
+    /// The last `border_color` or `border_paint` setter wins, including in
+    /// refinements. A transparent native paint explicitly hides the border.
     fn border_paint(mut self, paint: impl Into<crate::Paint>) -> Self
     where
         Self: Sized,
