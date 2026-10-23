@@ -617,14 +617,10 @@ impl MetalRenderer {
                 };
                 outputs.push((output, coverage, native_source));
             }
-            let mut submitted = std::collections::HashSet::new();
-            for (output, _, _) in &outputs {
-                for command in &output.commands {
-                    if submitted.insert(command.as_ptr() as usize) {
-                        command.commit();
-                    }
-                }
-            }
+            crate::custom_draw::submit_custom_commands(
+                &context,
+                outputs.iter().map(|(output, _, _)| output),
+            )?;
             outputs
         };
         let mut writer = InstanceBufferWriter::new(
@@ -1821,6 +1817,9 @@ impl gpui::PlatformHeadlessRenderer for MetalHeadlessRenderer {
         self.renderer.sprite_atlas().clone()
     }
 }
+
+#[cfg(test)]
+mod submission_tests;
 
 #[cfg(test)]
 mod tests {

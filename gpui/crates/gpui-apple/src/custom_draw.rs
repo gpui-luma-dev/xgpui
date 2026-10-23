@@ -24,6 +24,8 @@ impl MetalCustomContext {
 /// The host submits them before sampling the texture. Return no commands when
 /// reusing immutable cached output. Resources referenced by commands are retained
 /// by Metal's normal command-buffer resource retention.
+/// Cached output with no commands must already be ready or have been submitted
+/// earlier on the host queue. The host does not wait for CPU-observed completion.
 pub struct MetalCustomOutput {
     /// Immutable sampleable output matching the requested physical extent.
     pub texture: Texture,
@@ -129,12 +131,7 @@ impl CustomCompositor {
                 && output.texture.height() == extent.height.0 as u64,
             "invalid custom texture format, usage, or size"
         );
-        for command in &output.commands {
-            ensure!(
-                command.status() == MTLCommandBufferStatus::NotEnqueued,
-                "custom command already submitted"
-            );
-        }
+        validate_commands(context, &output.commands)?;
         Ok(output)
     }
 
@@ -190,6 +187,51 @@ impl CustomCompositor {
         encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, 6);
     }
 }
+
+fn validate_commands(context: &MetalCustomContext, commands: &[CommandBuffer]) -> Result<()> {
+    for command in commands {
+        // metal-rs does not bind MTLCommandBuffer.commandQueue. Both objects
+        // remain retained while comparing the borrowed queue's identity.
+        let queue: *mut objc2::runtime::AnyObject = unsafe {
+            let object = &*command.as_ptr().cast::<objc2::runtime::AnyObject>();
+            objc2::msg_send![object, commandQueue]
+        };
+        ensure!(
+            queue.cast::<std::ffi::c_void>() == context.queue.as_ptr().cast(),
+            "custom command belongs to another queue"
+        );
+        ensure!(
+            command.status() == MTLCommandBufferStatus::NotEnqueued,
+            "custom command already submitted"
+        );
+    }
+    Ok(())
+}
+
+/// Revalidate the entire producer batch before committing any of its work.
+/// Preparation of a later producer must not invalidate an earlier output.
+pub(crate) fn submit_custom_commands<'a>(
+    context: &MetalCustomContext,
+    outputs: impl IntoIterator<Item = &'a MetalCustomOutput>,
+) -> Result<()> {
+    let mut seen = std::collections::HashSet::new();
+    let mut pending = Vec::new();
+    for output in outputs {
+        validate_commands(context, &output.commands)?;
+        for command in &output.commands {
+            if seen.insert(command.as_ptr() as usize) {
+                pending.push(command);
+            }
+        }
+    }
+    for command in pending {
+        command.commit();
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod submission_tests;
 
 /// Exact normalized geometry key: clipping, screen origin and producer are excluded.
 pub(crate) fn coverage_key(draw: &CustomDraw) -> Vec<u32> {

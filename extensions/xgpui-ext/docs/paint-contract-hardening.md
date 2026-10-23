@@ -1,8 +1,8 @@
 # Paint contract hardening proposal
 
-Status: border fixes and the preparation request/compatibility adapter are
-implemented. Submission validation, failure isolation, color descriptors and
-coordinate extensions below remain proposals.
+Status: border fixes, the preparation request/compatibility adapter and Metal
+submission validation are implemented. Failure isolation, host-managed recording,
+color descriptors and coordinate extensions below remain proposals.
 
 ## Constraints and border baseline
 
@@ -42,8 +42,9 @@ finite positive geometry and exposes these values through accessors. Its fields
 are private so later additions do not break struct literals. No color fields.
 `CustomContent::prepare_with_request` is a provided method delegating to the
 unchanged required `prepare` method with the exact raster size. Existing producer
-implementations need no changes. Metal now dispatches through the new method;
-output types, validation, submission and error propagation are unchanged.
+implementations need no changes. Metal dispatches through the new method;
+output types and error propagation are unchanged. Submission checks were
+subsequently tightened as described below.
 
 Window background, border and path painting retain their original logical size
 and scale in a private producer wrapper. The renderer still chooses raster size
@@ -61,6 +62,31 @@ unchanged errors, request override dispatch, invalid request geometry, retained
 metadata, and all three Window paint sites at 1x/1.25x/1.5x/2x/3x with partial
 clipping. A headless Metal test checks real renderer dispatch and unclipped
 requests, alongside the existing pixel/coverage tests.
+
+### Implemented submission validation
+
+Metal validates output texture device, format, extent and sampling usage, and
+requires every returned preparation command to be NotEnqueued and to belong to
+the exact host queue. Before committing producer commands it revalidates the
+entire batch, then deduplicates command buffers by retained object identity and
+commits each once. Invalid batches submit none of their producer commands; native
+coverage work may already have been submitted by the existing mask path.
+
+Existing producer methods and MetalCustomOutput fields are unchanged. Empty
+command lists remain supported for cached textures: the producer must ensure
+the output is already ready or preparation was submitted earlier on the same
+queue. There is no CPU wait for preparation completion. With raw handles this
+remains a cooperative contract; the host cannot prove that an empty list refers
+to initialized output, or prevent a producer from concurrently submitting work.
+
+GPU tests cover valid and foreign queues, enqueued/completed commands, state
+changes after preparation, all-or-nothing producer batch validation, shared-buffer
+deduplication, invalid extent/format, and foreign-device rejection when a second
+GPU is available. A shared-event-gated renderer test holds preparation pending
+across two frames to verify cached reuse without a CPU wait, then checks pixels.
+Existing paint-lab tests cover unchanged solid, mesh and gradient producers.
+Failure still propagates to the frame; no paint skipping, fallback or diagnostic
+suppression is introduced in this step.
 
 ### Remaining proposal
 
