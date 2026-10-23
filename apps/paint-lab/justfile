@@ -1,7 +1,7 @@
-# Use from this directory, or `just --justfile extensions/xgpui-ext/apps/paint-lab/justfile`.
-set working-directory := "../../../.."
+# Use from this directory, or `just --justfile apps/paint-lab/justfile`.
+set working-directory := "../.."
 set positional-arguments
-manifest := "extensions/xgpui-ext/apps/paint-lab/Cargo.toml"
+manifest := "apps/paint-lab/Cargo.toml"
 profile := "dev"
 options := "--offline --locked --config .cargo/validation.toml --manifest-path " + manifest + " --target-dir target --profile " + profile
 

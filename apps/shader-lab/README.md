@@ -12,7 +12,7 @@ From the repository root, with the normal macOS/Xcode build prerequisites:
 
 ```sh
 cargo run --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/apps/shader-lab/Cargo.toml \
+  --manifest-path apps/shader-lab/Cargo.toml \
   --target-dir target
 ```
 
@@ -39,7 +39,7 @@ just --set profile release submit # Optimized measurement
 Recipes build before running and forward extra flags, for example
 `just headless --grid 3 --subdivisions 32 --frames 30 --json /tmp/mesh.json`.
 All file arguments resolve relative to the repository root. From the root, use
-`just --justfile extensions/xgpui-ext/apps/shader-lab/justfile <recipe>`.
+`just --justfile apps/shader-lab/justfile <recipe>`.
 The UI shows one mesh; effect, baseline and instance-count workloads are headless.
 
 The default window is 1280x960 logical pixels, with 960x640 example panels and
@@ -58,7 +58,7 @@ headless CLI.
 ```sh
 # Real Metal pixel assertions, followed by timed frames and an optional PNG.
 cargo run --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/apps/shader-lab/Cargo.toml \
+  --manifest-path apps/shader-lab/Cargo.toml \
   --target-dir target -- --headless --frames 60 --warmup 10 \
   --png /tmp/shader-lab.png --json /tmp/shader-lab.json
 
@@ -75,7 +75,7 @@ target/debug/shader-lab --headless --grid 3 --subdivisions 32 --animate --width 
 
 # Automated GPU integration tests.
 cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/apps/shader-lab/Cargo.toml --target-dir target
+  --manifest-path apps/shader-lab/Cargo.toml --target-dir target
 ```
 
 Headless runs first assert pixel values for inherited clipping, local rounded

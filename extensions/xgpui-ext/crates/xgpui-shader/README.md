@@ -43,7 +43,7 @@ are not the exact shipped API; see `src/` for the first implementation.
   for them or for iOS consumers. Public primitive enums gain new variants,
   requiring downstream exhaustive matches to be updated.
 
-Run and validation instructions are in [shader-lab](../../apps/shader-lab/README.md).
+Run and validation instructions are in [shader-lab](../../../../apps/shader-lab/README.md).
 Still deferred: GPU timestamp measurement, pipeline compilation
 scheduling beyond the initial compositor, generalized errors/fallback UI,
 transparent-window validation, and device-loss/multi-window stress coverage.
@@ -374,7 +374,7 @@ Keep retained Rust objects outside generated shader structs.
 
 ## Local test/performance app
 
-`../../apps/shader-lab/` is a required deliverable. It should run against local
+`../../../../apps/shader-lab/` is a required deliverable. It should run against local
 path dependencies and provide a baseline UI plus a mesh-gradient panel, effect
 toggle, animation pause, control-point/color editing, and workload presets.
 
@@ -428,5 +428,5 @@ The first generic paint milestone also accepts the same producer in
 `div().bg_paint(mesh.clone())`, `div().border_paint(mesh.clone())`, and
 `window.paint_path_with_paint(path, mesh.clone())`. The mesh mathematics and GPU
 producer stay in this crate. GPUI owns native coverage masks and composition.
-See [paint-lab](../../apps/paint-lab/README.md) and the
+See [paint-lab](../../../../apps/paint-lab/README.md) and the
 [paint contract](../../docs/extension-paints.md) for current scope and API impact.

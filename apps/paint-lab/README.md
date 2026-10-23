@@ -24,7 +24,7 @@ just --set profile release headless --frames 120
 ```
 
 Paths resolve from the repository root. From there:
-`just --justfile extensions/xgpui-ext/apps/paint-lab/justfile ui`.
+`just --justfile apps/paint-lab/justfile ui`.
 
 The headless checks compare every pixel of native and custom-painted dashed,
 asymmetric rounded borders and curved path fills/strokes (tolerance 3/255), and
@@ -45,5 +45,5 @@ window.paint_path_with_paint(path, mesh.clone());
 
 Existing `.bg(color)` and `.border_color(color)` methods and Background's GPU
 layout remain unchanged. Paint values containing producers are runtime-only and
-fail serialization explicitly. See the [integration contract](../../docs/extension-paints.md)
+fail serialization explicitly. See the [integration contract](../../extensions/xgpui-ext/docs/extension-paints.md)
 for architecture, compatibility impact, coordinate semantics and remaining work.

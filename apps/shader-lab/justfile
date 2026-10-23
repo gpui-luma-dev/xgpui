@@ -1,11 +1,11 @@
 # Run here with `just ui`, or from the repository root with:
-# just --justfile extensions/xgpui-ext/apps/shader-lab/justfile ui
+# just --justfile apps/shader-lab/justfile ui
 # Extra application flags are forwarded verbatim. Paths are relative to the repo root.
-set working-directory := "../../../.."
+set working-directory := "../.."
 set positional-arguments
 set shell := ["bash", "-cu"]
 
-manifest := "extensions/xgpui-ext/apps/shader-lab/Cargo.toml"
+manifest := "apps/shader-lab/Cargo.toml"
 config := ".cargo/validation.toml"
 # Override with `just --set profile release ...` for optimized measurements.
 profile := "dev"

@@ -10,13 +10,13 @@ This directory is an umbrella, not a single extension crate.
 extensions/xgpui-ext/
   crates/
     xgpui-shader/    Custom shader and canvas extension (Metal solid-color and mesh producers)
-  apps/
-    shader-lab/     Producer correctness and performance app (macOS Metal)
-    paint-lab/      Extension paint coverage integration app (macOS Metal)
+apps/                         # Repository-level app directory
+  shader-lab/                 Producer correctness and performance app (macOS Metal)
+  paint-lab/                  Extension paint coverage integration app (macOS Metal)
 ```
 
 The shader integration, mesh producer, and local lab use standalone Cargo manifests and
-local path dependencies. See [shader-lab](apps/shader-lab/README.md) for commands.
+local path dependencies. See [shader-lab](../../apps/shader-lab/README.md) for commands.
 The root build manifests remain unchanged; follow
 [the build instructions](../../docs/BUILDING.md) when integrating new crates.
 
@@ -45,4 +45,4 @@ Agree objectives, integration contracts, crate dependencies, compatibility impac
 and acceptance criteria before coding either capability.
 
 The [extension paint contract](docs/extension-paints.md) describes the additive
-paint API and coverage integration. See [paint-lab](apps/paint-lab/README.md).
+paint API and coverage integration. See [paint-lab](../../apps/paint-lab/README.md).
