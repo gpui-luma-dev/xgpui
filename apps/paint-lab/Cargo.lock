@@ -6509,9 +6509,11 @@ dependencies = [
  "gpui",
  "gpui-apple",
  "gpui-wgpu",
+ "gpui-windows",
  "metal",
  "naga",
  "refineable",
+ "windows 0.62.2",
 ]
 
 [[package]]

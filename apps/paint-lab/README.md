@@ -90,9 +90,10 @@ With the opt-in `wgpu` feature, `just wgpu-test` runs the same coverage and grad
 reference checks through wgpu. `just wgpu-headless --effect mesh --frames 60`
 renders the portable mesh; add `--png /tmp/wgpu-mesh.png` for a capture.
 `WGPU_BACKEND=vulkan` or `dx12` forces a platform backend; on this Mac the local
-portable tests use wgpu/Metal. The interactive window remains native Metal.
+portable tests use wgpu/Metal. Interactive windows use native Metal on macOS and D3D11 on Windows.
 See [portable paint status](../../extensions/xgpui-ext/docs/portable-paints.md)
-for validation limits and the separate native Windows DirectX 11 adapter work.
+for validation limits. The [native Windows D3D11 adapter](../../extensions/xgpui-ext/docs/native-dx11-paints.md)
+uses the same app API; native headless checks use WARP on Windows.
 
 ## Experimental user-authored WGSL
 

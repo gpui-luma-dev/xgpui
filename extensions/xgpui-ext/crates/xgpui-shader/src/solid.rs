@@ -21,6 +21,8 @@ pub struct SolidColor {
     cache: Mutex<Option<CachedOutput>>,
     #[cfg(feature = "wgpu")]
     wgpu: crate::wgpu::PaintCache,
+    #[cfg(target_os = "windows")]
+    pub(super) dx11: crate::dx11::PaintCache,
     preparations: AtomicUsize,
 }
 #[cfg(target_os = "macos")]
@@ -53,6 +55,8 @@ impl SolidColor {
             cache: Mutex::new(None),
             #[cfg(feature = "wgpu")]
             wgpu: crate::wgpu::PaintCache::default(),
+            #[cfg(target_os = "windows")]
+            dx11: crate::dx11::PaintCache::default(),
             preparations: AtomicUsize::new(0),
         })
     }
@@ -130,6 +134,7 @@ impl SolidColor {
     }
 }
 
+#[cfg(target_os = "macos")]
 impl SolidColor {
     /// Device name and bytes in the current cached BGRA8 texture, if prepared.
     /// This excludes driver allocations, in-flight old outputs, and GPUI targets.
@@ -149,6 +154,16 @@ impl CustomContent for SolidColor {
         if backend.is::<MetalCustomContext>() {
             return self.prepare_metal(backend, size);
         }
+        #[cfg(target_os = "windows")]
+        if let Some(context) =
+            backend.downcast_ref::<gpui_windows::custom_draw::Dx11CustomContext>()
+        {
+            let (output, generated) = self.dx11.clear(context, size, self.rgba)?;
+            if generated {
+                self.preparations.fetch_add(1, Ordering::Relaxed);
+            }
+            return Ok(Box::new(output));
+        }
         #[cfg(feature = "wgpu")]
         if let Some(context) = backend.downcast_ref::<gpui_wgpu::custom_draw::WgpuCustomContext>() {
             let (output, generated) = self.wgpu.clear(context, size, self.rgba)?;
@@ -158,6 +173,13 @@ impl CustomContent for SolidColor {
             return Ok(Box::new(output));
         }
         bail!("SolidColor does not support this backend")
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl SolidColor {
+    pub fn cached_texture_info(&self) -> Option<(String, u64)> {
+        self.dx11.texture_info()
     }
 }
 

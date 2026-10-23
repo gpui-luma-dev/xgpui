@@ -28,8 +28,8 @@ impl CustomContent for RequestProbe {
 }
 
 #[::core::prelude::v1::test]
-fn metal_preparation_request_preserves_unclipped_source() -> Result<()> {
-    let mut renderer = gpui_platform::current_headless_renderer()?.expect("Metal renderer");
+fn native_preparation_request_preserves_unclipped_source() -> Result<()> {
+    let mut renderer = gpui_platform::current_headless_renderer()?.expect("native renderer");
     let requests = Arc::new(Mutex::new(Vec::new()));
     let probe = Arc::new(RequestProbe {
         requests: requests.clone(),

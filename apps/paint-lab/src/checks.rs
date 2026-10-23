@@ -290,8 +290,8 @@ fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
 }
 #[cfg(test)]
 #[::core::prelude::v1::test]
-fn metal_extension_paints_match_native_geometry() -> Result<()> {
-    let mut renderer = gpui_platform::current_headless_renderer()?.expect("Metal renderer");
+fn native_extension_paints_match_native_geometry() -> Result<()> {
+    let mut renderer = gpui_platform::current_headless_renderer()?.expect("native renderer");
     verify(renderer.as_mut())
 }
 
@@ -302,10 +302,14 @@ fn wgpu_extension_paints_match_native_geometry() -> Result<()> {
     verify(&mut renderer)
 }
 
-#[cfg(all(test, feature = "wgpu", target_os = "macos"))]
+#[cfg(all(
+    test,
+    feature = "wgpu",
+    any(target_os = "macos", target_os = "windows")
+))]
 #[::core::prelude::v1::test]
-fn wgpu_mesh_matches_metal_interior_samples() -> Result<()> {
-    let mut metal = gpui_platform::current_headless_renderer()?.expect("Metal renderer");
+fn wgpu_mesh_matches_native_interior_samples() -> Result<()> {
+    let mut metal = gpui_platform::current_headless_renderer()?.expect("native renderer");
     let mut portable = gpui_wgpu::WgpuHeadlessRenderer::new()?;
     for time in [0., 0.35, 0.8] {
         let mesh = Arc::new(MeshGradient::new(grid(time)?, 18)?);

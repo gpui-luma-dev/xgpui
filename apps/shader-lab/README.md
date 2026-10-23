@@ -1,6 +1,6 @@
 # shader-lab
 
-Local macOS Metal correctness and performance app for
+Local native GPU correctness and performance app for
 [#7](https://github.com/gpui-luma-dev/xgpui/issues/7). The first slice renders a
 solid-color offscreen attachment and the patskovn-based Hermite mesh producer
 through the retained-content integration. Mesh is the default effect. This mesh
@@ -128,7 +128,9 @@ while compiling pipelines once.
 
 ## Scope and compatibility
 
-Metal-first on macOS. Windows and wgpu report unsupported custom content. No
+Native Metal on macOS and D3D11 on Windows. The extension also offers an opt-in
+wgpu backend, exercised separately in paint-lab. Windows runtime validation is
+still pending; see [native D3D11 status](../../extensions/xgpui-ext/docs/native-dx11-paints.md). No
 high-gamut framebuffer, arbitrary subtree effects, grain, or media engine is
 included. Mesh colors use encoded-sRGB Hermite interpolation, not Oklab.
 Existing view APIs are preserved; public `Primitive` and

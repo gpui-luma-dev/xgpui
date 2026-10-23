@@ -25,3 +25,9 @@ metal = "0.33"
 
 [dev-dependencies]
 naga = { version = "30.0.1", features = ["wgsl-in", "spv-out", "hlsl-out"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gpui-windows = { path = "../../../../gpui/crates/gpui-windows" }
+naga = { version = "30.0.1", features = ["wgsl-in", "hlsl-out"] }
+bytemuck = "1"
+windows = { version = "0.62", features = ["Win32_Graphics_Direct3D11"] }

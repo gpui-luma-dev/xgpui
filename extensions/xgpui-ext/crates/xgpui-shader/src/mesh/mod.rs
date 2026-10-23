@@ -144,6 +144,8 @@ pub struct MeshGradient {
     pipelines: Arc<metal::PipelineCache>,
     #[cfg(feature = "wgpu")]
     pub(super) wgpu: crate::wgpu::PaintCache,
+    #[cfg(target_os = "windows")]
+    pub(super) dx11: crate::dx11::PaintCache,
     #[cfg(target_os = "macos")]
     output: Mutex<Option<metal::CachedOutput>>,
     pub(super) preparations: AtomicUsize,
@@ -169,6 +171,8 @@ impl MeshGradient {
             output: Mutex::new(None),
             #[cfg(feature = "wgpu")]
             wgpu: crate::wgpu::PaintCache::default(),
+            #[cfg(target_os = "windows")]
+            dx11: crate::dx11::PaintCache::default(),
             preparations: AtomicUsize::new(0),
         })
     }
@@ -182,6 +186,10 @@ impl MeshGradient {
         {
             next.wgpu = self.wgpu.snapshot();
         }
+        #[cfg(target_os = "windows")]
+        {
+            next.dx11 = self.dx11.snapshot();
+        }
         Ok(next)
     }
     pub fn with_subdivisions(&self, subdivisions: u32) -> Result<Self> {
@@ -193,6 +201,10 @@ impl MeshGradient {
         #[cfg(feature = "wgpu")]
         {
             next.wgpu = self.wgpu.snapshot();
+        }
+        #[cfg(target_os = "windows")]
+        {
+            next.dx11 = self.dx11.snapshot();
         }
         Ok(next)
     }
@@ -218,6 +230,10 @@ impl MeshGradient {
         {
             count += self.wgpu.compilations();
         }
+        #[cfg(target_os = "windows")]
+        {
+            count += self.dx11.compilations();
+        }
         count
     }
     #[cfg(target_os = "macos")]
@@ -241,11 +257,24 @@ impl gpui::CustomContent for MeshGradient {
         if backend.is::<gpui_apple::custom_draw::MetalCustomContext>() {
             return self.prepare_metal(backend, extent);
         }
+        #[cfg(target_os = "windows")]
+        if let Some(context) =
+            backend.downcast_ref::<gpui_windows::custom_draw::Dx11CustomContext>()
+        {
+            return crate::dx11::mesh(self, context, extent);
+        }
         #[cfg(feature = "wgpu")]
         if let Some(context) = backend.downcast_ref::<gpui_wgpu::custom_draw::WgpuCustomContext>() {
             return crate::wgpu::mesh(self, context, extent);
         }
         anyhow::bail!("MeshGradient does not support this backend")
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl MeshGradient {
+    pub fn cached_texture_info(&self) -> Option<(String, u64)> {
+        self.dx11.texture_info()
     }
 }
 

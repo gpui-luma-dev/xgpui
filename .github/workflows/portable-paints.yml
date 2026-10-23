@@ -1,6 +1,6 @@
 name: Portable paint GPU checks
 
-# Explicit platform checks; does not claim native GPUI DirectX 11 integration.
+# Explicit native D3D11 and portable backend correctness checks.
 on:
   workflow_dispatch:
 
@@ -34,3 +34,25 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Run DirectX 12 wgpu paint reference tests
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_extension_paints -- --nocapture
+
+  windows-native:
+    runs-on: windows-latest
+    env:
+      WGPU_BACKEND: dx12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check native applications
+        run: |
+          cargo check --locked --config .cargo/validation.toml --manifest-path apps/shader-lab/Cargo.toml
+          cargo check --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders
+      - name: Test native preparation on WARP
+        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib dx11_custom -- --nocapture
+      - name: Test native paints and mesh parity against wgpu
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders -- --nocapture
+      - name: Render native mesh sample
+        run: cargo run --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders -- --headless --effect mesh --frames 3 --png native-dx11-mesh.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-dx11-mesh
+          path: native-dx11-mesh.png

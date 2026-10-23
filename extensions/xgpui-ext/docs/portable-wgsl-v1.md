@@ -3,8 +3,9 @@
 This is an experimental vertical slice in `xgpui-shader`, behind the
 `portable-shaders` feature. It adds no GPUI core API. It proves one user-authored
 fragment paint through native Metal and wgpu before stabilizing an authoring API.
-The native Windows DirectX 11 adapter and actual Vulkan/Windows driver acceptance
-remain separate work; successful code generation is not platform rendering proof.
+The native Windows DirectX 11 adapter is also implemented; actual Vulkan/Windows
+runtime acceptance remains outstanding. See [native D3D11 status](native-dx11-paints.md).
+Successful code generation is not platform rendering proof.
 
 ## Application API
 
@@ -142,6 +143,6 @@ mesh and coverage reference checks run alongside the experiment.
 
 Local wgpu execution uses its Metal backend. The manual portable-paints workflow
 can run the reference tests on Linux/Vulkan and Windows/wgpu-DX12; it has not been
-dispatched from this task. Native DirectX 11 integration, texture parameters,
+dispatched from this task. The native D3D11 job also exercises these paints. Texture parameters,
 compute/custom geometry, full source maps, GPU timing and stable API guarantees
 remain outside this experiment.

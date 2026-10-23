@@ -9,9 +9,9 @@ the agreed dependency graph permits. GPUI supplies a small retained scene and
 renderer integration contract.
 
 The reference consumer is an animated mesh gradient that composes with normal
-GPUI layout and styling. The Metal producers and an opt-in wgpu backend for solid, analytic gradients
-and Hermite mesh are implemented. See [portable paints](../../docs/portable-paints.md)
-for backend contracts, tests and remaining native Windows work.
+GPUI layout and styling. Metal and native Windows D3D11 adapters, plus an opt-in wgpu backend for solid, analytic gradients
+and Hermite mesh, are implemented. See [portable paints](../../docs/portable-paints.md)
+and [native D3D11 status](../../docs/native-dx11-paints.md) for contracts and validation limits.
 
 ## Proposed first contract
 
@@ -40,9 +40,10 @@ are not the exact shipped API; see `src/` for the first implementation.
 - The compositor shader compiles lazily on first custom use. Existing frames with
   no custom records allocate no custom resources. Normal GPU submission does not
   wait for completion; test/readback paths intentionally do.
-- The native Windows DirectX 11 renderer still rejects custom batches. The wgpu
-  renderer supports custom paints with the opt-in extension feature; actual
-  Vulkan/Windows driver validation remains outstanding. No iOS support is claimed.
+- Native Windows D3D11 supports custom batches through deferred preparation and
+  ordered composition. The wgpu renderer supports custom paints with the opt-in
+  extension feature. Actual Vulkan/Windows runtime validation remains outstanding.
+  No iOS support is claimed.
   Public primitive enums gain new variants,
   requiring downstream exhaustive matches to be updated.
 
@@ -85,8 +86,8 @@ by the existing renderer crates. Those renderer crates never depend on
 No global plugin registration is required for this proposal.
 
 Before selecting dependencies, check target-specific packaging and compile-time
-cost. In particular, Windows' renderer is currently private; its integration
-types would need a new public module without exposing the renderer itself.
+cost. Windows now exports `custom_draw` integration types while the window
+renderer remains private; effects remain in this extension.
 
 ### Core record and preparation protocol
 

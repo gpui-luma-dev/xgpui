@@ -43,6 +43,7 @@ pub(crate) struct DirectXRenderer {
     resources: Option<DirectXResources>,
     globals: DirectXGlobalElements,
     pipelines: DirectXRenderPipelines,
+    custom_compositor: Option<crate::custom_draw::CustomCompositor>,
     direct_composition: Option<DirectComposition>,
     font_info: &'static FontInfo,
 
@@ -69,7 +70,7 @@ pub(crate) struct DirectXRendererDevices {
 
 struct DirectXResources {
     // Direct3D rendering objects
-    swap_chain: IDXGISwapChain1,
+    swap_chain: Option<IDXGISwapChain1>,
     render_target: Option<ID3D11Texture2D>,
     render_target_view: Option<ID3D11RenderTargetView>,
 
@@ -177,7 +178,12 @@ impl DirectXRenderer {
             let composition = DirectComposition::new(devices.dxgi_device.as_ref().unwrap(), hwnd)
                 .context("Creating DirectComposition")?;
             composition
-                .set_swap_chain(&resources.swap_chain)
+                .set_swap_chain(
+                    resources
+                        .swap_chain
+                        .as_ref()
+                        .context("missing swap chain")?,
+                )
                 .context("Setting swap chain for DirectComposition")?;
             Some(composition)
         };
@@ -189,6 +195,7 @@ impl DirectXRenderer {
             resources: Some(resources),
             globals,
             pipelines,
+            custom_compositor: None,
             direct_composition,
             font_info: Self::get_font_info(),
             width: 1,
@@ -248,6 +255,8 @@ impl DirectXRenderer {
                 .as_ref()
                 .expect("resources missing")
                 .swap_chain
+                .as_ref()
+                .context("headless target cannot present")?
                 .Present(0, DXGI_PRESENT(0))
         };
         result.ok().context("Presenting swap chain failed")
@@ -262,6 +271,7 @@ impl DirectXRenderer {
 
     fn handle_device_lost_impl(&mut self, directx_devices: &DirectXDevices) -> Result<()> {
         let disable_direct_composition = self.direct_composition.is_none();
+        self.custom_compositor = None;
 
         unsafe {
             #[cfg(debug_assertions)]
@@ -306,7 +316,12 @@ impl DirectXRenderer {
         } else {
             let composition =
                 DirectComposition::new(devices.dxgi_device.as_ref().unwrap(), self.hwnd)?;
-            composition.set_swap_chain(&resources.swap_chain)?;
+            composition.set_swap_chain(
+                resources
+                    .swap_chain
+                    .as_ref()
+                    .context("missing swap chain")?,
+            )?;
             Some(composition)
         };
 
@@ -351,6 +366,7 @@ impl DirectXRenderer {
         scene: &Scene,
         background_appearance: WindowBackgroundAppearance,
     ) -> Result<()> {
+        let custom_outputs = self.prepare_custom_draws(scene)?;
         self.pre_draw(&match background_appearance {
             WindowBackgroundAppearance::Opaque => [1.0f32; 4],
             _ => [0.0f32; 4],
@@ -384,7 +400,16 @@ impl DirectXRenderer {
                 PrimitiveBatch::PolychromeSprites { texture_id, range } => {
                     self.draw_polychrome_sprites(texture_id, range.start, range.len())
                 }
-                PrimitiveBatch::Custom(_) => anyhow::bail!("custom GPU content is not supported by the DirectX renderer yet"),
+                PrimitiveBatch::Custom(range) => {
+                    let devices = self.devices.as_ref().context("devices missing")?;
+                    let resources = self.resources.as_ref().context("resources missing")?;
+                    let target = resources.render_target_view.as_ref().context("render target missing")?;
+                    let viewport = size(DevicePixels(resources.viewport.Width as i32), DevicePixels(resources.viewport.Height as i32));
+                    self.custom_compositor.as_ref().context("custom compositor missing")?.draw(
+                        &devices.device_context, target, viewport,
+                        &scene.custom_draws[range.clone()], &custom_outputs[range],
+                    )
+                }
                 PrimitiveBatch::Surfaces(range) => self.draw_surfaces(&scene.surfaces[range]),
             }
             .with_context(|| {
@@ -403,6 +428,136 @@ impl DirectXRenderer {
             })?;
         }
         Ok(())
+    }
+
+    fn prepare_custom_draws(
+        &mut self,
+        scene: &Scene,
+    ) -> Result<Vec<crate::custom_draw::PreparedDraw>> {
+        use crate::custom_draw::*;
+        if scene.custom_draws.is_empty() {
+            return Ok(Vec::new());
+        }
+        let devices = self.devices.as_ref().context("devices missing")?.clone();
+        let context =
+            Dx11CustomContext::new(devices.device.clone(), devices.device_context.clone())?;
+        let mut compositor = match self.custom_compositor.take() {
+            Some(compositor) => compositor,
+            None => CustomCompositor::new(&devices.device)?,
+        };
+        let result = (|| {
+            let mut prepared = Vec::with_capacity(scene.custom_draws.len());
+            for draw in &scene.custom_draws {
+                let extent = extent(draw)?;
+                let request =
+                    PreparationRequest::new(draw.bounds.size.map(|v| px(v.0)), extent, 1.)?;
+                let output = draw.content.prepare_with_request(&context, &request)?;
+                let native = output.is::<Background>();
+                let source = if native {
+                    let background = *output.downcast::<Background>().unwrap();
+                    let bounds = Bounds::new(
+                        point(ScaledPixels(0.), ScaledPixels(0.)),
+                        size(
+                            ScaledPixels(extent.width.0 as f32),
+                            ScaledPixels(extent.height.0 as f32),
+                        ),
+                    );
+                    let mut scene = Scene::default();
+                    scene.insert_primitive(Quad {
+                        bounds,
+                        content_mask: ContentMask { bounds },
+                        background,
+                        ..Default::default()
+                    });
+                    scene.finish();
+                    self.render_custom_mask(&scene, extent)?
+                } else {
+                    output
+                        .downcast::<Dx11CustomOutput>()
+                        .map_err(|_| anyhow::anyhow!("producer returned a non-DirectX output"))?
+                        .validate(&context, extent)?
+                };
+                let coverage = if draw.coverage.is_some() {
+                    let key = coverage_key(draw);
+                    if let Some(mask) = compositor.masks.get(&key) {
+                        Some(mask.clone())
+                    } else {
+                        let mask =
+                            self.render_custom_mask(&coverage_scene(draw, extent)?, extent)?;
+                        let bytes =
+                            extent.width.0 as usize * extent.height.0 as usize * 4 + key.len() * 4;
+                        if compositor.mask_bytes + bytes > 64 * 1024 * 1024 {
+                            compositor.masks.clear();
+                            compositor.mask_bytes = 0;
+                        }
+                        if bytes <= 64 * 1024 * 1024 {
+                            compositor.mask_bytes += bytes;
+                            compositor.masks.insert(key, mask.clone());
+                        }
+                        Some(mask)
+                    }
+                } else {
+                    None
+                };
+                prepared.push(PreparedDraw {
+                    source,
+                    coverage,
+                    native,
+                });
+            }
+            context.submit()?;
+            Ok(prepared)
+        })();
+        self.custom_compositor = Some(compositor);
+        result
+    }
+
+    fn render_custom_mask(
+        &mut self,
+        scene: &Scene,
+        extent: Size<DevicePixels>,
+    ) -> Result<crate::custom_draw::TextureBundle> {
+        let devices = self.devices.as_ref().context("devices missing")?.clone();
+        let target = crate::custom_draw::allocate_texture(&devices.device, extent)?;
+        let (path_intermediate_texture, path_intermediate_srv) = create_path_intermediate_texture(
+            &devices.device,
+            extent.width.0 as u32,
+            extent.height.0 as u32,
+        )?;
+        let (path_intermediate_msaa_texture, path_intermediate_msaa_view) =
+            create_path_intermediate_msaa_texture_and_view(
+                &devices.device,
+                extent.width.0 as u32,
+                extent.height.0 as u32,
+            )?;
+        let original = self.resources.take().context("resources missing")?;
+        self.resources = Some(DirectXResources {
+            swap_chain: original.swap_chain.clone(),
+            render_target: Some(target.texture.clone()),
+            render_target_view: Some(target.rtv.clone()),
+            path_intermediate_texture,
+            path_intermediate_srv,
+            path_intermediate_msaa_texture,
+            path_intermediate_msaa_view,
+            viewport: crate::custom_draw::viewport(extent),
+        });
+        let result = self.render(scene, WindowBackgroundAppearance::Transparent);
+        unsafe {
+            devices
+                .device_context
+                .OMSetRenderTargets(Some(slice::from_ref(&original.render_target_view)), None);
+            devices
+                .device_context
+                .RSSetViewports(Some(slice::from_ref(&original.viewport)));
+        }
+        self.resources = Some(original);
+        unsafe {
+            devices
+                .device_context
+                .PSSetShaderResources(0, Some(&[None, None]));
+        }
+        result?;
+        Ok(target)
     }
 
     /// Render `scene` to an offscreen CPU image **without presenting** so
@@ -496,6 +651,10 @@ impl DirectXRenderer {
         let devices = self.devices.as_ref().context("devices missing")?;
         unsafe { devices.device_context.OMSetRenderTargets(None, None) };
         let resources = self.resources.as_mut().context("resources missing")?;
+        if resources.swap_chain.is_none() {
+            *resources = DirectXResources::offscreen(devices, width, height)?;
+            return Ok(());
+        }
         resources.render_target.take();
         resources.render_target_view.take();
 
@@ -506,6 +665,8 @@ impl DirectXRenderer {
         unsafe {
             resources
                 .swap_chain
+                .as_ref()
+                .context("missing swap chain")?
                 .ResizeBuffers(
                     BUFFER_COUNT as u32,
                     width,
@@ -872,6 +1033,24 @@ impl DirectXRenderer {
 }
 
 impl DirectXResources {
+    fn offscreen(devices: &DirectXRendererDevices, width: u32, height: u32) -> Result<Self> {
+        let extent = size(DevicePixels(width as i32), DevicePixels(height as i32));
+        let target = crate::custom_draw::allocate_texture(&devices.device, extent)?;
+        let (path_intermediate_texture, path_intermediate_srv) =
+            create_path_intermediate_texture(&devices.device, width, height)?;
+        let (path_intermediate_msaa_texture, path_intermediate_msaa_view) =
+            create_path_intermediate_msaa_texture_and_view(&devices.device, width, height)?;
+        Ok(Self {
+            swap_chain: None,
+            render_target: Some(target.texture),
+            render_target_view: Some(target.rtv),
+            path_intermediate_texture,
+            path_intermediate_srv,
+            path_intermediate_msaa_texture,
+            path_intermediate_msaa_view,
+            viewport: crate::custom_draw::viewport(extent),
+        })
+    }
     pub fn new(
         devices: &DirectXRendererDevices,
         width: u32,
@@ -902,7 +1081,7 @@ impl DirectXResources {
         set_rasterizer_state(&devices.device, &devices.device_context)?;
 
         Ok(Self {
-            swap_chain,
+            swap_chain: Some(swap_chain),
             render_target: Some(render_target),
             render_target_view,
             path_intermediate_texture,
@@ -928,7 +1107,12 @@ impl DirectXResources {
             path_intermediate_msaa_texture,
             path_intermediate_msaa_view,
             viewport,
-        ) = create_resources(devices, &self.swap_chain, width, height)?;
+        ) = create_resources(
+            devices,
+            self.swap_chain.as_ref().context("missing swap chain")?,
+            width,
+            height,
+        )?;
         self.render_target = Some(render_target);
         self.render_target_view = render_target_view;
         self.path_intermediate_texture = path_intermediate_texture;
@@ -2067,5 +2251,80 @@ mod dxgi {
             (number >> 16) & 0xFFFF,
             number & 0xFFFF
         ))
+    }
+}
+
+/// Native D3D11 offscreen renderer using WARP, for deterministic test/perf apps.
+#[cfg(any(test, feature = "test-support"))]
+pub struct Dx11HeadlessRenderer(DirectXRenderer);
+#[cfg(any(test, feature = "test-support"))]
+impl Dx11HeadlessRenderer {
+    pub fn new() -> Result<Self> {
+        let (mut device, mut immediate) = (None, None);
+        unsafe {
+            D3D11CreateDevice(
+                None,
+                D3D_DRIVER_TYPE_WARP,
+                windows::Win32::Foundation::HMODULE::default(),
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                Some(&[D3D_FEATURE_LEVEL_11_0]),
+                D3D11_SDK_VERSION,
+                Some(&mut device),
+                None,
+                Some(&mut immediate),
+            )?;
+        }
+        let device = device.context("missing WARP device")?;
+        let device_context = immediate.context("missing WARP context")?;
+        let dxgi: IDXGIDevice = device.cast()?;
+        let adapter: IDXGIAdapter1 = unsafe { dxgi.GetAdapter()? }.cast()?;
+        let dxgi_factory: IDXGIFactory6 = unsafe { adapter.GetParent()? };
+        let devices = DirectXRendererDevices {
+            adapter,
+            dxgi_factory,
+            device,
+            device_context,
+            dxgi_device: None,
+            annotation: None,
+        };
+        let atlas = Arc::new(DirectXAtlas::new(&devices.device, &devices.device_context));
+        set_rasterizer_state(&devices.device, &devices.device_context)?;
+        let resources = DirectXResources::offscreen(&devices, 1, 1)?;
+        let globals = DirectXGlobalElements::new(&devices.device)?;
+        let pipelines = DirectXRenderPipelines::new(&devices.device)?;
+        Ok(Self(DirectXRenderer {
+            hwnd: HWND::default(),
+            atlas,
+            devices: Some(devices),
+            resources: Some(resources),
+            globals,
+            pipelines,
+            custom_compositor: None,
+            direct_composition: None,
+            font_info: DirectXRenderer::get_font_info(),
+            width: 1,
+            height: 1,
+            skip_draws: false,
+        }))
+    }
+}
+#[cfg(any(test, feature = "test-support"))]
+impl PlatformHeadlessRenderer for Dx11HeadlessRenderer {
+    fn render_scene_to_image(
+        &mut self,
+        scene: &Scene,
+        size: Size<DevicePixels>,
+    ) -> Result<image::RgbaImage> {
+        self.0.resize(size)?;
+        self.0
+            .render_to_image(scene, WindowBackgroundAppearance::Transparent)
+    }
+    fn render_scene(&mut self, scene: &Scene, size: Size<DevicePixels>) -> Result<()> {
+        self.0.resize(size)?;
+        self.0
+            .render(scene, WindowBackgroundAppearance::Transparent)
+    }
+    fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas> {
+        self.0.sprite_atlas()
     }
 }

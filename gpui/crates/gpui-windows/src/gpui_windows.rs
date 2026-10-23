@@ -1,6 +1,7 @@
 #![cfg(target_os = "windows")]
 
 mod clipboard;
+pub mod custom_draw;
 mod destination_list;
 mod dialog;
 mod direct_manipulation;
@@ -41,3 +42,6 @@ pub(crate) use wrapper::*;
 pub use platform::WindowsPlatform;
 
 pub(crate) use windows::Win32::Foundation::HWND;
+
+#[cfg(any(test, feature = "test-support"))]
+pub use directx_renderer::Dx11HeadlessRenderer;

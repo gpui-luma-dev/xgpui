@@ -48,7 +48,7 @@ struct Field {
 }
 
 struct Program {
-    #[cfg(feature = "wgpu")]
+    #[cfg(any(feature = "wgpu", target_os = "windows"))]
     source: String,
     fields: Vec<Field>,
     uniform_size: usize,
@@ -60,6 +60,8 @@ struct Program {
     metal_pipeline: metal::PipelineCache,
     #[cfg(feature = "wgpu")]
     wgpu: crate::wgpu::PaintCache,
+    #[cfg(target_os = "windows")]
+    dx11: crate::dx11::PaintCache,
 }
 
 /// Validated portable source, reflection and shared backend pipelines.
@@ -118,6 +120,8 @@ impl ShaderProgram {
             metal: Default::default(),
             #[cfg(feature = "wgpu")]
             wgpu: self.0.wgpu.snapshot(),
+            #[cfg(target_os = "windows")]
+            dx11: self.0.dx11.snapshot(),
         })))
     }
 }
@@ -129,6 +133,8 @@ struct Snapshot {
     metal: metal::OutputCache,
     #[cfg(feature = "wgpu")]
     wgpu: crate::wgpu::PaintCache,
+    #[cfg(target_os = "windows")]
+    dx11: crate::dx11::PaintCache,
 }
 impl std::fmt::Debug for Snapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -185,6 +191,22 @@ impl CustomContent for Snapshot {
         {
             return self.prepare_metal(context, request);
         }
+        #[cfg(target_os = "windows")]
+        if let Some(context) =
+            backend.downcast_ref::<gpui_windows::custom_draw::Dx11CustomContext>()
+        {
+            let geometry = self.geometry(request);
+            let bytes: Vec<_> = geometry.iter().flat_map(|v| v.to_le_bytes()).collect();
+            let (output, _) = self.dx11.render_uniforms(
+                context,
+                request.raster_size(),
+                &self.program.0.source,
+                &[&bytes, &self.bytes],
+                6,
+                Some([geometry[0].to_bits(), geometry[1].to_bits()]),
+            )?;
+            return Ok(Box::new(output));
+        }
         #[cfg(feature = "wgpu")]
         if let Some(context) = backend.downcast_ref::<gpui_wgpu::custom_draw::WgpuCustomContext>() {
             let geometry = self.geometry(request);
@@ -205,7 +227,7 @@ impl CustomContent for Snapshot {
             )?;
             return Ok(Box::new(output));
         }
-        bail!("portable shader requires an implemented Metal or wgpu adapter")
+        bail!("portable shader requires an implemented Metal, DirectX 11 or wgpu adapter")
     }
 }
 impl Snapshot {

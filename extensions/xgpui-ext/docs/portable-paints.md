@@ -78,12 +78,8 @@ The manual `Portable paint GPU checks` workflow provides Linux/Vulkan (Mesa) and
 Windows/wgpu-DX12 jobs. It has not been dispatched from this local task. Software
 Mesa checks validate correctness, not hardware performance.
 
-GPUI's native Windows renderer is DirectX 11. It still rejects Custom batches.
-The next native Windows slice needs a D3D11 preparation context/output, execution
-and resource-lifetime rules, native geometry masks and compositor, then HLSL
-producer pipelines in xgpui-shader. Reuse the validated WGSL math through HLSL
-generation where practical; establish explicit constant-buffer bindings before
-connecting it to D3D11. Test it on a Windows host before claiming native Windows
-support. Do not switch the Windows window renderer to wgpu as an incidental part
-of this work. Vulkan device/driver runs and native Windows rendering remain
-separate acceptance gates.
+GPUI's native Windows renderer is DirectX 11. Its adapter is now implemented;
+see [native D3D11 paints](native-dx11-paints.md) for contracts, commands and remaining
+Windows runtime acceptance. The manual workflow includes a native WARP job.
+Windows window rendering has not been switched to wgpu. Vulkan device/driver runs
+and native Windows rendering remain separate acceptance gates.

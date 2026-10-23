@@ -200,7 +200,7 @@ pub(super) fn compile(user: &str) -> Result<Program> {
         );
     }
     Ok(Program {
-        #[cfg(feature = "wgpu")]
+        #[cfg(any(feature = "wgpu", target_os = "windows"))]
         source,
         fields,
         uniform_size: (*span as usize).next_multiple_of(16),
@@ -212,6 +212,8 @@ pub(super) fn compile(user: &str) -> Result<Program> {
         metal_pipeline: Default::default(),
         #[cfg(feature = "wgpu")]
         wgpu: Default::default(),
+        #[cfg(target_os = "windows")]
+        dx11: Default::default(),
     })
 }
 

@@ -81,7 +81,7 @@ wgpu-test:
 wgpu-headless *args:
     cargo run {{options}} --features wgpu -- --headless --wgpu "$@"
 
-# Experimental user WGSL: identical source and parameters on native Metal and wgpu.
+# Experimental user WGSL: identical source and parameters on native backend and wgpu.
 portable-test:
     cargo test {{options}} --features wgpu,portable-shaders
 
