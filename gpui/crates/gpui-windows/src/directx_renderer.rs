@@ -1,3 +1,7 @@
+// Private headless checkpoint; no window or swap-chain integration.
+#[cfg(test)]
+mod wide_sdr;
+
 use std::{
     slice,
     sync::{Arc, OnceLock},

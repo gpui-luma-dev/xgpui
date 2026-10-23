@@ -186,7 +186,15 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
 assert.equal(Object.keys(data.extension_documents).length, 8);
-assert.match(run('extensionPage("extensions")'), /Downstream extension to GPUI/);
+const extensionOverview = run('extensionPage("extensions")');
+assert.match(extensionOverview, /1\. Paints and shaders/);
+assert.match(extensionOverview, /2\. Wide-gamut presentation/);
+assert.match(extensionOverview, /href="#extension-paints"/);
+assert.match(extensionOverview, /href="#high-gamut-windows"/);
+assert.match(data.extension_documents['high-gamut-windows'].html, /impl CustomContent for WideColor/);
+assert.match(data.extension_documents['high-gamut-windows'].html, /Not implemented/);
+
+assert.match(run('extensionPage("extensions")'), /Downstream extensions to GPUI/);
 assert.match(index, /href="#extensions"/);
 for (const [route, doc] of Object.entries(data.extension_documents)) {
   assert.equal(doc.source, 'docs/roadmap/extensions/' + route + '.md');
@@ -221,7 +229,7 @@ for (const file of [
 console.log('Verified extension navigation, offline contracts, consolidated sources, README links and cross-document links.');
 
 const apiChanges = data.extension_documents['gpui-public-api'].html;
-for (const term of ['Scene', 'custom_draws', 'PrimitiveBatch', 'CustomContent', 'PreparationRequest', 'CustomGeometry', 'CustomCoverage', 'CustomDraw', 'paint_custom', 'MetalCustomContext', 'WgpuCustomContext', 'Dx11CustomContext', 'source compatibility risks']) assert.ok(apiChanges.includes(term), term);
+for (const term of ['Scene', 'custom_draws', 'PrimitiveBatch', 'CustomContent', 'PreparationRequest', 'CustomGeometry', 'CustomCoverage', 'CustomDraw', 'paint_custom', 'MetalCustomContext', 'WgpuCustomContext', 'Dx11CustomContext', 'source compatibility risks', 'WindowColorMode', 'WindowColorStatus', 'MetalWideSdrOutput', 'set_color_mode']) assert.ok(apiChanges.includes(term), term);
 assert.match(index, /href="#gpui-public-api"/);
 assert.match(run('extensionPage("extensions")'), /href="#gpui-public-api"/);
 console.log('Verified public API delta documentation and prominent navigation.');

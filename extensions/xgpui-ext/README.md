@@ -7,6 +7,7 @@ never depends on extension crates. Keep renderer integration and API changes sma
 - [Paint integration](../../docs/roadmap/extensions/extension-paints.md) · [GPUI API changes](../../docs/roadmap/extensions/gpui-public-api.md)
 - [Producer reference](../../docs/roadmap/extensions/shader-producers.md) · [preparation and recording](../../docs/roadmap/extensions/paint-contract-hardening.md)
 - Local test/performance apps: [shader-lab](../../apps/shader-lab/README.md) · [paint-lab](../../apps/paint-lab/README.md)
+- [Wide-gamut presentation](../../docs/roadmap/extensions/high-gamut-windows.md): separate capability; native Metal integration and gamut-lab, no reusable gamut crate yet.
 - [Build](../../docs/BUILDING.md) · [web docs generation](../../docs/roadmap/BUILDING.md)
 
 [#7: Custom shaders](https://github.com/gpui-luma-dev/xgpui/issues/7) and

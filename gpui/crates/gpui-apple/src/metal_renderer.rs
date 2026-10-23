@@ -25,8 +25,8 @@ use parking_lot::Mutex;
 
 use std::{cell::Cell, ffi::c_void, mem, mem::MaybeUninit, ops::Range, ptr, slice, sync::Arc};
 
-#[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
-mod gamut_lab;
+#[cfg(target_os = "macos")]
+mod wide_sdr;
 
 // Exported to metal
 pub(crate) type PointF = gpui::Point<f32>;
@@ -111,8 +111,8 @@ impl InstanceBufferPool {
 }
 
 pub struct MetalRenderer {
-    #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
-    gamut_lab: Option<gamut_lab::Prototype>,
+    #[cfg(target_os = "macos")]
+    wide_sdr: Option<wide_sdr::Compositor>,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
     device: metal::Device,
     layer: Option<metal::MetalLayer>,
@@ -161,6 +161,61 @@ impl MetalRenderer {
         Self::new_internal(device, Some(layer), !transparent, instance_buffer_pool)
     }
 
+    /// Negotiate color presentation for this renderer only. Existing UI colors
+    /// retain sRGB meaning. Unsupported requests preserve its configuration.
+    pub fn set_color_mode(
+        &mut self,
+        mode: gpui::WindowColorMode,
+    ) -> Result<gpui::WindowColorStatus> {
+        match mode {
+            gpui::WindowColorMode::Default => {
+                #[cfg(target_os = "macos")]
+                {
+                    if self.wide_sdr.is_some() {
+                        if let Some(layer) = &self.layer {
+                            layer.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+                            let native: &objc2_quartz_core::CAMetalLayer =
+                                unsafe { &*layer.as_ptr().cast() };
+                            native.setColorspace(None);
+                            native.setWantsExtendedDynamicRangeContent(false);
+                        }
+                        self.wide_sdr = None;
+                    }
+                }
+                Ok(self.color_status())
+            }
+            #[cfg(target_os = "macos")]
+            gpui::WindowColorMode::WideGamutSdr => {
+                anyhow::ensure!(self.opaque, "wide-gamut SDR requires an opaque window");
+                if self.wide_sdr.is_none() {
+                    let compositor = wide_sdr::Compositor::new(&self.device)?;
+                    if let Some(layer) = &self.layer {
+                        wide_sdr::configure_layer(layer)?;
+                    }
+                    self.wide_sdr = Some(compositor);
+                }
+                Ok(self.color_status())
+            }
+            _ => anyhow::bail!("unsupported color presentation mode"),
+        }
+    }
+
+    /// Inspect the negotiated renderer configuration. Physical display evidence
+    /// is supplied by the windowing backend; headless renderers report unknown.
+    pub fn color_status(&self) -> gpui::WindowColorStatus {
+        #[cfg(target_os = "macos")]
+        {
+            let mode = if self.wide_sdr.is_some() {
+                gpui::WindowColorMode::WideGamutSdr
+            } else {
+                gpui::WindowColorMode::Default
+            };
+            gpui::WindowColorStatus::new(mode, mode, true, None, None)
+        }
+        #[cfg(not(target_os = "macos"))]
+        gpui::WindowColorStatus::default()
+    }
+
     /// Creates a renderer for a CAMetalLayer owned by a platform view, such as
     /// the backing layer UIKit creates for a view whose `layerClass` is
     /// `CAMetalLayer`. The renderer retains the layer.
@@ -183,10 +238,6 @@ impl MetalRenderer {
     fn configure_layer(layer: &metal::MetalLayerRef, device: &metal::DeviceRef, transparent: bool) {
         layer.set_device(device);
         layer.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
-        if gamut_lab::enabled() {
-            gamut_lab::configure_layer(layer);
-        }
         // Support direct-to-display rendering if the window is not transparent
         // https://developer.apple.com/documentation/metal/managing-your-game-window-for-metal-in-macos
         layer.set_opaque(!transparent);
@@ -394,9 +445,8 @@ impl MetalRenderer {
         };
 
         Self {
-            #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
-            gamut_lab: gamut_lab::enabled()
-                .then(|| gamut_lab::Prototype::new(&device).expect("gamut-lab pipelines")),
+            #[cfg(target_os = "macos")]
+            wide_sdr: None,
             custom_compositor: None,
             device,
             layer,
@@ -492,7 +542,13 @@ impl MetalRenderer {
         }
     }
 
+    /// Update layer opacity. Transparent requests during wide-SDR mode are
+    /// ignored with a warning; disable the mode first to preserve valid state.
     pub fn update_transparency(&mut self, transparent: bool) {
+        if transparent && self.color_status().requested() == gpui::WindowColorMode::WideGamutSdr {
+            log::warn!("disable wide-gamut SDR before enabling transparency");
+            return;
+        }
         self.opaque = !transparent;
         if let Some(layer) = &self.layer {
             layer.set_opaque(!transparent);
@@ -552,10 +608,10 @@ impl MetalRenderer {
         texture: &metal::TextureRef,
         viewport_size: Size<DevicePixels>,
     ) -> Result<metal::CommandBuffer> {
-        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
-        if let Some(lab) = &mut self.gamut_lab {
-            gamut_lab::validate_viewport(viewport_size)?;
-            anyhow::ensure!(self.opaque, "gamut-lab requires an opaque top-level window");
+        #[cfg(target_os = "macos")]
+        if let Some(lab) = &mut self.wide_sdr {
+            wide_sdr::validate_viewport(viewport_size)?;
+            anyhow::ensure!(self.opaque, "wide SDR requires an opaque top-level window");
             lab.wide.clear();
         }
         let custom_outputs = if scene.custom_draws.is_empty() {
@@ -607,29 +663,30 @@ impl MetalRenderer {
                 } else {
                     raw
                 };
-                #[allow(unused_mut)]
-                let mut raw = raw;
-                #[allow(unused_mut)]
-                let mut format = MTLPixelFormat::BGRA8Unorm;
-                #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
-                if let Some(lab) = &mut self.gamut_lab {
-                    if raw.is::<gamut_lab::WideOutput>() {
-                        let (output, tag) = *raw.downcast::<gamut_lab::WideOutput>().unwrap();
+                let output = if raw.is::<crate::custom_draw::MetalWideSdrOutput>() {
+                    #[cfg(target_os = "macos")]
+                    {
                         anyhow::ensure!(
-                            tag == gamut_lab::WIDE_TAG,
-                            "invalid gamut-lab output contract"
+                            self.wide_sdr.is_some(),
+                            "wide output requires WideGamutSdr presentation"
                         );
-                        raw = Box::new(output);
-                        format = MTLPixelFormat::RGBA16Float;
-                        lab.wide.insert(outputs.len());
+                        let output = *raw
+                            .downcast::<crate::custom_draw::MetalWideSdrOutput>()
+                            .unwrap();
+                        output.validate_context(&context)?;
+                        let output = crate::custom_draw::CustomCompositor::validate_format(
+                            &context,
+                            draw,
+                            Box::new(output.into_output()),
+                            MTLPixelFormat::RGBA16Float,
+                        )?;
+                        self.wide_sdr.as_mut().unwrap().wide.insert(outputs.len());
+                        output
                     }
-                }
-                let output = if format == MTLPixelFormat::BGRA8Unorm {
-                    crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?
+                    #[cfg(not(target_os = "macos"))]
+                    anyhow::bail!("wide-gamut SDR presentation is unsupported")
                 } else {
-                    crate::custom_draw::CustomCompositor::validate_format(
-                        &context, draw, raw, format,
-                    )?
+                    crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?
                 };
                 let coverage = if draw.coverage.is_some() {
                     let key = crate::custom_draw::CoverageKey::new(draw)?;
@@ -722,8 +779,8 @@ impl MetalRenderer {
             (viewport_size.width.ceil() as i32).into(),
             (viewport_size.height.ceil() as i32).into(),
         );
-        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
-        if self.gamut_lab.is_some() {
+        #[cfg(target_os = "macos")]
+        if self.wide_sdr.is_some() {
             // Existing image API returns an explicit clipped sRGB preview, not
             // four-byte reads from a Float16 drawable.
             return self.render_scene_to_image(scene, viewport_size);
@@ -753,6 +810,11 @@ impl MetalRenderer {
     ) -> Result<RgbaImage> {
         if size.width.0 <= 0 || size.height.0 <= 0 {
             anyhow::bail!("Invalid size for render_scene_to_image: {:?}", size);
+        }
+
+        #[cfg(target_os = "macos")]
+        if self.wide_sdr.is_some() {
+            wide_sdr::validate_viewport(size)?;
         }
 
         // Headless callers do not have a Cocoa event-loop pool to release
@@ -811,6 +873,10 @@ impl MetalRenderer {
             anyhow::bail!("Invalid size for render_scene: {:?}", size);
         }
 
+        #[cfg(target_os = "macos")]
+        if self.wide_sdr.is_some() {
+            wide_sdr::validate_viewport(size)?;
+        }
         objc2::rc::autoreleasepool(|_| {
             self.update_path_intermediate_textures(size);
 
@@ -853,12 +919,12 @@ impl MetalRenderer {
         let opaque = self.opaque;
         self.opaque = false;
         self.update_path_intermediate_textures(extent);
-        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
-        let lab = self.gamut_lab.take();
+        #[cfg(target_os = "macos")]
+        let lab = self.wide_sdr.take();
         let result = self.render_frame(scene, target, extent);
-        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
+        #[cfg(target_os = "macos")]
         {
-            self.gamut_lab = lab;
+            self.wide_sdr = lab;
         }
         self.opaque = opaque;
         self.update_path_intermediate_textures(viewport);
@@ -879,8 +945,8 @@ impl MetalRenderer {
             bool,
         )],
     ) -> Result<metal::CommandBuffer> {
-        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
-        if let Some(mut lab) = self.gamut_lab.take() {
+        #[cfg(target_os = "macos")]
+        if let Some(mut lab) = self.wide_sdr.take() {
             let result = lab.render(
                 self,
                 scene,
@@ -890,7 +956,7 @@ impl MetalRenderer {
                 viewport_size,
                 custom_outputs,
             );
-            self.gamut_lab = Some(lab);
+            self.wide_sdr = Some(lab);
             return result;
         }
         let command_queue = self.command_queue.clone();

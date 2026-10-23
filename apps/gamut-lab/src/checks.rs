@@ -34,6 +34,11 @@ fn surface(scene: &mut Scene, b: Bounds<ScaledPixels>, color: [f64; 4], wide: bo
 }
 pub(super) fn run(frames: usize, png: Option<&Path>, wide: bool) -> Result<()> {
     let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+    renderer.set_color_mode(if wide {
+        WindowColorMode::WideGamutSdr
+    } else {
+        WindowColorMode::Default
+    })?;
     let mut scene = Scene::default();
     quad(&mut scene, bounds(0., 0., 256., 192.), rgb(0x101010));
     surface(

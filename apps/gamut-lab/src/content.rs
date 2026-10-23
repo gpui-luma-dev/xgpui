@@ -1,11 +1,10 @@
-//! Private lab protocol paired with metal_renderer/gamut_lab.rs; not an SDK.
+//! Explicit wide SDR producer using the same CustomContent protocol as sRGB paints.
 use anyhow::{Result, ensure};
 use gpui::{CustomContent, DevicePixels, Size};
-use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput};
+use gpui_apple::custom_draw::{MetalCustomContext, MetalWideSdrOutput};
 use metal::*;
 use std::any::Any;
 
-const WIDE_TAG: [u32; 4] = [0x50335344, 1, 1, 0];
 #[derive(Debug)]
 pub(crate) struct WideColor(pub [f64; 4]);
 impl CustomContent for WideColor {
@@ -46,12 +45,10 @@ impl CustomContent for WideColor {
         let [r, g, b, a] = self.0;
         c.set_clear_color(MTLClearColor::new(r * a, g * a, b * a, a));
         command.new_render_command_encoder(pass).end_encoding();
-        Ok(Box::new((
-            MetalCustomOutput {
-                texture,
-                commands: vec![command.to_owned()],
-            },
-            WIDE_TAG,
-        )))
+        Ok(Box::new(MetalWideSdrOutput::from_linear_p3_premultiplied(
+            context,
+            texture,
+            vec![command.to_owned()],
+        )?))
     }
 }

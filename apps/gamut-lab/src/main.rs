@@ -1,4 +1,4 @@
-//! macOS-only private composition experiment; no new GPUI API.
+//! Wide SDR content surfaces and native sRGB controls.
 use anyhow::{Result, ensure};
 use clap::Parser;
 use gpui::{prelude::*, *};
@@ -8,7 +8,7 @@ mod checks;
 mod content;
 
 #[derive(Parser)]
-#[command(about = "Private Metal wide-surface / sRGB-control compositing lab (macOS)")]
+#[command(about = "Metal wide-surface / sRGB-control compositing lab (macOS)")]
 struct Options {
     #[arg(long)]
     headless: bool,
@@ -61,7 +61,7 @@ impl Lab {
     }
 }
 impl Render for Lab {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let mode = if self.wide {
             "Linear P3 surfaces · Float16 output"
         } else {
@@ -137,16 +137,69 @@ impl Render for Lab {
                     .child("Native sRGB tooltip above both surfaces"),
             );
         }
-        div().size_full().flex().flex_col().gap_4().p_6().bg(rgb(0x202025)).text_color(white())
-            .child(div().text_xl().child("Gamut Lab — private Metal prototype"))
+        let status = window.color_status();
+        let presentation = div()
+            .id("presentation")
+            .px_3()
+            .py_2()
+            .rounded_md()
+            .bg(rgb(0x374151))
+            .hover(|s| s.bg(rgb(0x4b5563)))
+            .on_click(cx.listener(|this, _, window, cx| {
+                let mode = if this.wide {
+                    WindowColorMode::Default
+                } else {
+                    WindowColorMode::WideGamutSdr
+                };
+                match window.set_color_mode(mode) {
+                    Ok(_) => {
+                        this.wide = !this.wide;
+                        cx.notify();
+                    }
+                    Err(error) => eprintln!("Presentation request failed: {error:#}"),
+                }
+            }))
+            .child(if self.wide {
+                "Switch to sRGB"
+            } else {
+                "Switch to P3"
+            });
+        let controls = div()
+            .flex()
+            .gap_3()
+            .child(presentation)
+            .child(self.button(
+                "overlay",
+                format!("Overlays: {}", self.overlay),
+                |s| s.overlay = !s.overlay,
+                cx,
+            ))
+            .child(self.button(
+                "opacity",
+                format!("Opacity: {:.2}", self.opacity),
+                |s| s.opacity = if s.opacity > 0.9 { 0.5 } else { 1. },
+                cx,
+            ))
+            .child(self.button(
+                "background",
+                format!("Dark: {}", self.dark),
+                |s| s.dark = !s.dark,
+                cx,
+            ))
+            .child(self.button(
+                "order",
+                "Reverse surfaces".into(),
+                |s| s.reverse = !s.reverse,
+                cx,
+            ));
+        div().size_full().flex().flex_col().gap_4().p_6()
+            .bg(rgb(0x202025)).text_color(white())
+            .child(div().text_xl().child("Gamut Lab — wide SDR composition"))
             .child(div().child(mode))
-            .child(div().flex().gap_3()
-                .child(self.button("overlay",format!("Overlays: {}",self.overlay),|s|s.overlay= !s.overlay,cx))
-                .child(self.button("opacity",format!("Surface opacity: {:.2}",self.opacity),|s|s.opacity=if s.opacity>0.9{0.5}else{1.},cx))
-                .child(self.button("background",format!("Dark backdrop: {}",self.dark),|s|s.dark= !s.dark,cx))
-                .child(self.button("order","Reverse surfaces".into(),|s|s.reverse= !s.reverse,cx)))
+            .child(div().text_sm().child(format!("Requested: {:?} · Effective: {:?} · Display wide gamut: {:?}", status.requested(), status.effective(), status.display_wide_gamut())))
+            .child(controls)
             .child(canvas)
-            .child(div().text_sm().child("Controls remain sRGB. P3 red/green content; overlays use linear source-over at surface boundaries. HDR is off."))
+            .child(div().text_sm().child("Controls remain sRGB. Overlays use linear composition at surface boundaries. HDR is off."))
     }
 }
 fn main() -> Result<()> {
@@ -155,24 +208,6 @@ fn main() -> Result<()> {
         (1..=10000).contains(&options.frames),
         "frames must be 1..=10000"
     );
-    ensure!(
-        cfg!(debug_assertions),
-        "gamut-lab requires a debug build; the private host experiment is absent in release"
-    );
-    // Re-exec before threads/GPUI initialize rather than changing process env unsafely.
-    let active = std::env::var_os("XGPUI_GAMUT_LAB").is_some_and(|v| v == "1");
-    if active == options.sdr {
-        let mut command = std::process::Command::new(std::env::current_exe()?);
-        command.args(std::env::args_os().skip(1));
-        if options.sdr {
-            command.env_remove("XGPUI_GAMUT_LAB");
-        } else {
-            command.env("XGPUI_GAMUT_LAB", "1");
-        }
-        let status = command.status()?;
-        ensure!(status.success(), "gamut-lab child failed: {status}");
-        return Ok(());
-    }
     if options.headless {
         let start = Instant::now();
         checks::run(options.frames, options.png.as_deref(), !options.sdr)?;
@@ -191,7 +226,15 @@ fn main() -> Result<()> {
                 ..Default::default()
             },
             |window, cx| {
-                window.set_window_title("XGPUI Gamut Lab — private prototype");
+                let mode = if options.sdr {
+                    WindowColorMode::Default
+                } else {
+                    WindowColorMode::WideGamutSdr
+                };
+                window
+                    .set_color_mode(mode)
+                    .expect("color presentation negotiation");
+                window.set_window_title("XGPUI Gamut Lab — wide SDR");
                 if let Some(path) = options.ui_png.clone() {
                     window.on_next_frame(move |window, _| {
                         window.on_next_frame(move |window, _| {

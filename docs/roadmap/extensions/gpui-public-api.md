@@ -42,6 +42,33 @@ let scene = gpui::Scene {
 // PrimitiveBatch::Custom(range) => ...,
 ```
 
+## ADDED opt-in window presentation
+
+```rust
+use gpui::WindowColorMode;
+
+// Per-window; call outside drawing. Existing default windows stay unchanged.
+let status = window.set_color_mode(WindowColorMode::WideGamutSdr)?;
+let current = window.color_status();
+
+// Restore before requesting a transparent top-level window:
+window.set_color_mode(WindowColorMode::Default)?;
+```
+
+| Surface | Addition |
+| --- | --- |
+| GPUI | `WindowColorMode`, opaque `WindowColorStatus`, `WindowColorFallback`; two `Window` methods. |
+| `PlatformWindow` | Same request/report pair with defaults; no required backend overrides. |
+| `gpui_apple::MetalRenderer` | Same pair across the windowing/renderer crate boundary; supports headless checks. |
+| `gpui_apple::custom_draw` | Opaque `MetalWideSdrOutput`, explicit linear-P3 constructor and `reusable_for`. |
+
+`MetalCustomOutput`, `CustomContent`, `PreparationRequest`, window-option
+structs and native color/style types keep their existing contracts. New
+configuration/fallback enums are non-exhaustive. Additive method names can still
+collide with downstream extension methods. Unsupported requests preserve state.
+
+[Wide surfaces, composition and lifecycle](high-gamut-windows.md).
+
 ## ADDED Window method
 
 `gpui/src/window.rs` — one public recording hook:

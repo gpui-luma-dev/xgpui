@@ -64,7 +64,8 @@ normalization-map change as well as after a release sync.
 
 The navigation entry **Extensions to GPUI** (`#extensions`) identifies opt-in
 downstream capabilities separately from upstream GPUI. `extensions.js` owns the
-section overview. All published extension guides live in `docs/roadmap/extensions/` at the
+section overview, split into paints/shaders and wide-gamut presentation. Each has
+its own code entry point, implementation ownership and support status. All published extension guides live in `docs/roadmap/extensions/` at the
 repository root, including integration, API, producer and backend references.
 Source-side READMEs link to these maintained guides.
 

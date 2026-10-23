@@ -11,47 +11,39 @@ function extensionCode(language, source) {
 }
 function extensionPage(route) {
   const banner = route === 'high-gamut-windows'
-    ? '<p class="guide-intro"><strong>Private prototype.</strong> Wide-gamut content surfaces share a window with normal sRGB controls. Public high-gamut APIs remain design only.</p>'
-    : '<p class="guide-intro"><strong>Downstream extension to GPUI.</strong> Opt in through <code>xgpui-shader</code>. High-gamut window support is separate.</p>';
+    ? '<p class="guide-intro"><strong>Wide-gamut presentation extension.</strong> Native macOS Metal; per-window opt-in. No reusable gamut crate yet.</p>'
+    : route === 'extensions' || route === 'gpui-public-api'
+      ? '<p class="guide-intro"><strong>Downstream extensions to GPUI.</strong> Paint production and window color presentation are independent opt-in capabilities.</p>'
+      : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; output retains sRGB semantics.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
     return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
-  return header('Downstream / opt-in', 'Extensions to GPUI', 'Mesh, gradients and portable shaders through a separate extension crate.') + banner +
-    '<div class="route"><h3><a href="#gpui-public-api">GPUI public API changes →</a></h3><p>Added APIs, altered scene types and source compatibility risks, shown as code.</p></div>' +
-    '<h2>1. Add the crate</h2>' + extensionCode('toml', `[dependencies]
-xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader" }
-# Add features = ["portable-shaders"] for user WGSL.`) +
-    '<h2>2. Build a paint</h2>' + extensionCode('rust', `use gpui::{prelude::*, *};
+  return header('Downstream / opt-in', 'Extensions to GPUI', 'Two independent capabilities: paint production and window color presentation.') + banner +
+    '<h2>1. Paints and shaders</h2>' +
+    extensionCode('rust', `use xgpui_shader::{painted, SolidColor};
 use std::sync::Arc;
-use xgpui_shader::{painted, Gradient, GradientStop, WindowPaintExt};
 
-let paint = Arc::new(Gradient::radial(
-    [0.5, 0.5], [0.5, 0.5],
-    vec![
-        GradientStop::new(0.0, [1.0, 0.2, 0.3, 1.0]),
-        GradientStop::new(1.0, [0.1, 0.3, 1.0, 1.0]),
-    ],
-)?);`) +
-    '<h2>3. Use it across paint sites</h2>' + extensionCode('rust', `painted()
-    .w(px(320.0)).h(px(240.0))
-    .rounded_lg().border_8()
-    .bg_paint(paint.clone())
-    .border_paint(paint.clone())
-    .child(div().p_4().child("Native GPUI children"));
+painted().bg_paint(Arc::new(SolidColor::new([1.0, 0.2, 0.0, 1.0])?));`) +
+    '<p><code>xgpui-shader</code>: gradients, meshes and portable WGSL. Metal, wgpu and native D3D11 adapters; sRGB output. No wide-gamut window required.</p>' +
+    '<div class="cards">' + extensionCard('extension-paints', 'Start here: dependencies, containers, borders, paths and interaction.') + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('paint-contract-hardening', 'Preparation, recording and failure behavior.') + extensionCard('portable-wgsl-v1', 'Rust parameters + portable WGSL source.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'Native D3D11 adapter and Windows acceptance.') + '</div>' +
+    extensionCode('sh', `just --justfile apps/paint-lab/justfile radial
+just --justfile apps/shader-lab/justfile --list`) +
+    '<h2>2. Wide-gamut presentation</h2>' +
+    extensionCode('rust', `use gpui::WindowColorMode;
 
-// Inside a paint callback, using an existing Path<Pixels>:
-window.paint_path_with_paint(path, paint.clone());
+// During window construction or an update outside drawing:
+window.set_color_mode(WindowColorMode::WideGamutSdr)?;
+let status = window.color_status();
 
-// Native styling stays available:
-div().bg(rgb(0x223344)).border_1().border_color(white());`) +
-    '<p>Rebuild the container to change materials. Custom materials do not enter native hover/theme refinements.</p>' +
-    '<h2>4. Run it</h2>' + extensionCode('sh', `just --justfile apps/paint-lab/justfile radial
-just --justfile apps/paint-lab/justfile mesh
-just --justfile apps/paint-lab/justfile portable-test`) +
-    '<h2>API and integration</h2><div class="cards">' + extensionCard('extension-paints', 'Gradients, meshes, borders, paths and the core hook.') + extensionCard('paint-contract-hardening', 'Producer code, preparation, recording and failure behavior.') + '</div>' +
-    '<h2>Window presentation design</h2><div class="cards">' + extensionCard('high-gamut-windows', 'Private Metal prototype: wide content, sRGB controls and ordered composition.') + '</div>' +
-    '<h2>Extension notes</h2><div class="cards">' + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('portable-wgsl-v1', 'Rust parameters + WGSL source.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'D3D11 adapter and Windows acceptance.') + '</div>';
+// Explicit producer output; legacy paints and controls remain sRGB:
+MetalWideSdrOutput::from_linear_p3_premultiplied(context, texture, commands)?;`) +
+    '<p>Native macOS Metal: bounded SDR Display P3 surfaces alongside normal sRGB controls, in scene order. Implemented in GPUI and its Apple backend; the sample producer lives in <code>gamut-lab</code>. A reusable gamut extension crate, HDR and other presentation backends remain future work.</p>' +
+    '<div class="cards">' + extensionCard('high-gamut-windows', 'Start here: window setup, complete Metal producer, color contract, composition and validation.') + '</div>' +
+    extensionCode('sh', `just --justfile apps/gamut-lab/justfile ui
+just --justfile apps/gamut-lab/justfile test`) +
+    '<h2>Shared GPUI integration</h2><div class="cards">' + extensionCard('gpui-public-api', 'Public additions and altered upstream types, separated by capability.') + '</div>';
+
 }
 function extensionCard(route, description) {
   return '<a class="card" href="#' + route + '"><h3>' + escapeHtml(extensionTitle(route)) + ' →</h3><p>' + escapeHtml(description) + '</p></a>';
@@ -68,6 +60,12 @@ function publicApiSourceLinks() {
     ['gpui', 'CustomCoverage', 'scene.rs'],
     ['gpui', 'CustomDraw', 'scene.rs'],
     ['gpui', 'Window::paint_custom', 'window.rs'],
+    ['gpui', 'Window::set_color_mode', 'window.rs'],
+    ['gpui', 'Window::color_status', 'window.rs'],
+    ['gpui', 'WindowColorMode', 'platform/color_presentation.rs'],
+    ['gpui', 'WindowColorStatus', 'platform/color_presentation.rs'],
+    ['gpui-apple', 'MetalWideSdrOutput', 'custom_draw.rs'],
+    ['gpui-apple', 'MetalRenderer::set_color_mode', 'metal_renderer.rs'],
     ['gpui-apple', 'MetalCustomContext', 'custom_draw.rs'],
     ['gpui-apple', 'MetalCustomOutput', 'custom_draw.rs'],
     ['gpui-wgpu', 'WgpuCustomContext', 'custom_draw.rs'],

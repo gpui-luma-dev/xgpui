@@ -5,7 +5,6 @@ use std::{any::Any, sync::Arc};
 #[derive(Debug)]
 struct Patch {
     color: [f64; 4],
-    tag: [u32; 4],
     format: MTLPixelFormat,
     pending: Arc<Mutex<Vec<metal::CommandBuffer>>>,
 }
@@ -13,7 +12,6 @@ impl Patch {
     fn new(color: [f64; 4]) -> Self {
         Self {
             color,
-            tag: WIDE_TAG,
             format: MTLPixelFormat::RGBA16Float,
             pending: Arc::new(Mutex::new(Vec::new())),
         }
@@ -46,18 +44,19 @@ impl CustomContent for Patch {
         ));
         command.new_render_command_encoder(p).end_encoding();
         self.pending.lock().push(command.to_owned());
-        Ok(Box::new((
-            crate::custom_draw::MetalCustomOutput {
+        Ok(Box::new(
+            crate::custom_draw::MetalWideSdrOutput::from_linear_p3_premultiplied(
+                c,
                 texture,
-                commands: vec![command.to_owned()],
-            },
-            self.tag,
-        )))
+                vec![command.to_owned()],
+            )?,
+        ))
     }
 }
 fn renderer() -> MetalRenderer {
     let mut r = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
-    r.gamut_lab = Some(Prototype::new(&r.device).unwrap());
+    r.set_color_mode(gpui::WindowColorMode::WideGamutSdr)
+        .unwrap();
     r
 }
 fn b(x: f32, y: f32, w: f32, h: f32) -> Bounds<ScaledPixels> {
@@ -96,7 +95,7 @@ fn half(v: u16) -> f32 {
     }
 }
 fn snapshot(r: &MetalRenderer) -> (metal::Buffer, usize, usize) {
-    let t = r.gamut_lab.as_ref().unwrap().target.as_ref().unwrap();
+    let t = r.wide_sdr.as_ref().unwrap().target.as_ref().unwrap();
     let stride = (t.width() as usize * 8).div_ceil(256) * 256;
     let output = r.device.new_buffer(
         (stride * t.height() as usize) as u64,
@@ -152,7 +151,7 @@ fn decode(c: f32) -> f32 {
 }
 
 #[test]
-fn gamut_lab_interleaved_ui_wide_order_and_queued_scratch_reuse() -> Result<()> {
+fn wide_sdr_interleaved_ui_wide_order_and_queued_scratch_reuse() -> Result<()> {
     objc2::rc::autoreleasepool(|_| {
         let mut r = renderer();
         let mut snapshots = Vec::new();
@@ -200,7 +199,7 @@ fn gamut_lab_interleaved_ui_wide_order_and_queued_scratch_reuse() -> Result<()> 
 }
 
 #[test]
-fn gamut_lab_opaque_ui_matches_legacy_and_float_target_keeps_p3() -> Result<()> {
+fn wide_sdr_opaque_ui_matches_legacy_and_float_target_keeps_p3() -> Result<()> {
     objc2::rc::autoreleasepool(|_| {
         let mut r = renderer();
         let mut s = Scene::default();
@@ -214,12 +213,12 @@ fn gamut_lab_opaque_ui_matches_legacy_and_float_target_keeps_p3() -> Result<()> 
         }
         s.finish();
         let wide = r.render_scene_to_image(&s, size(DevicePixels(64), DevicePixels(32)))?;
-        r.gamut_lab = None;
+        r.set_color_mode(gpui::WindowColorMode::Default)?;
         let legacy = r.render_scene_to_image(&s, size(DevicePixels(64), DevicePixels(32)))?;
         for (a, b) in wide.pixels().zip(legacy.pixels()) {
             assert!(a.0.iter().zip(b.0).all(|(a, b)| a.abs_diff(b) <= 1));
         }
-        r.gamut_lab = Some(Prototype::new(&r.device)?);
+        r.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
         let mut s = Scene::default();
         s.insert_primitive(draw(
             b(0., 0., 8., 8.),
@@ -238,7 +237,7 @@ fn gamut_lab_opaque_ui_matches_legacy_and_float_target_keeps_p3() -> Result<()> 
 }
 
 #[test]
-fn gamut_lab_low_alpha_clip_rounded_edges_and_opacity() -> Result<()> {
+fn wide_sdr_low_alpha_clip_rounded_edges_and_opacity() -> Result<()> {
     objc2::rc::autoreleasepool(|_| {
         let mut r = renderer();
         for bg in [0x101010, 0xf0f0f0] {
@@ -292,12 +291,12 @@ fn gamut_lab_low_alpha_clip_rounded_edges_and_opacity() -> Result<()> {
 }
 
 #[test]
-fn gamut_lab_invalid_contract_discards_pending_commands_and_recovers() -> Result<()> {
+fn wide_sdr_invalid_contract_discards_pending_commands_and_recovers() -> Result<()> {
     objc2::rc::autoreleasepool(|_| {
         let mut r = renderer();
         let patch = Arc::new(Patch::new([1., 0., 0., 1.]));
         let mut bad = Patch::new([0., 1., 0., 1.]);
-        bad.tag[1] = 99;
+        bad.format = MTLPixelFormat::BGRA8Unorm;
         let mut s = Scene::default();
         s.insert_primitive(draw(b(0., 0., 8., 8.), patch.clone()));
         s.insert_primitive(draw(b(8., 0., 8., 8.), Arc::new(bad)));
@@ -322,7 +321,7 @@ fn gamut_lab_invalid_contract_discards_pending_commands_and_recovers() -> Result
 }
 
 #[test]
-fn gamut_lab_masks_paths_resize_and_target_budget() -> Result<()> {
+fn wide_sdr_masks_paths_resize_and_target_budget() -> Result<()> {
     objc2::rc::autoreleasepool(|_| {
         let mut r = renderer();
         for extent in [(24, 16), (40, 24), (24, 16)] {
@@ -360,7 +359,7 @@ fn gamut_lab_masks_paths_resize_and_target_budget() -> Result<()> {
             let pixel = sample(&shot, 5, 5);
             assert!(pixel[1] > 0.9 && pixel[0] < 0.2);
         }
-        let mut lab = r.gamut_lab.take().unwrap();
+        let mut lab = r.wide_sdr.take().unwrap();
         assert!(
             lab.ensure_targets(&r, size(DevicePixels(16384), DevicePixels(16384)))
                 .is_err()
@@ -374,10 +373,10 @@ fn gamut_lab_masks_paths_resize_and_target_budget() -> Result<()> {
 }
 
 #[test]
-fn gamut_lab_layer_is_explicit_linear_p3_float16_without_edr() {
+fn wide_sdr_layer_is_explicit_linear_p3_float16_without_edr() {
     objc2::rc::autoreleasepool(|_| {
         let layer = metal::MetalLayer::new();
-        configure_layer(&layer);
+        configure_layer(&layer).unwrap();
         assert_eq!(layer.pixel_format(), MTLPixelFormat::RGBA16Float);
         let native: &objc2_quartz_core::CAMetalLayer = unsafe { &*layer.as_ptr().cast() };
         assert!(!native.wantsExtendedDynamicRangeContent());
@@ -399,7 +398,7 @@ fn gamut_lab_layer_is_explicit_linear_p3_float16_without_edr() {
 }
 
 #[test]
-fn gamut_lab_explicit_tag_does_not_accept_an_8bit_texture() -> Result<()> {
+fn wide_sdr_typed_output_rejects_an_8bit_texture() -> Result<()> {
     objc2::rc::autoreleasepool(|_| {
         let mut r = renderer();
         let mut patch = Patch::new([1., 0., 0., 1.]);
@@ -418,4 +417,157 @@ fn gamut_lab_explicit_tag_does_not_accept_an_8bit_texture() -> Result<()> {
         );
         Ok(())
     })
+}
+
+#[test]
+fn wide_sdr_renderer_isolation_mode_switches_and_queued_resources() -> Result<()> {
+    objc2::rc::autoreleasepool(|_| {
+        let pool = Arc::new(Mutex::new(Default::default()));
+        let mut a = MetalRenderer::new(pool.clone(), false);
+        let mut b_renderer = MetalRenderer::new(pool, false);
+        assert_eq!(a.color_status().requested(), gpui::WindowColorMode::Default);
+        a.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
+        let pipeline = a.wide_sdr.as_ref().unwrap().compose.as_ptr();
+        a.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
+        assert_eq!(pipeline, a.wide_sdr.as_ref().unwrap().compose.as_ptr());
+        assert_eq!(
+            a.layer().unwrap().pixel_format(),
+            MTLPixelFormat::RGBA16Float
+        );
+        assert_eq!(
+            b_renderer.layer().unwrap().pixel_format(),
+            MTLPixelFormat::BGRA8Unorm
+        );
+        let mut wide = Scene::default();
+        wide.insert_primitive(draw(
+            b(0., 0., 8., 8.),
+            Arc::new(Patch::new([1., 0., 0., 1.])),
+        ));
+        wide.finish();
+        assert!(
+            b_renderer
+                .render_scene(&wide, size(DevicePixels(8), DevicePixels(8)))
+                .is_err()
+        );
+        a.render_scene(&wide, size(DevicePixels(8), DevicePixels(8)))?;
+        let saved = snapshot(&a); // GPU copy queued, not CPU-complete.
+        a.set_color_mode(gpui::WindowColorMode::Default)?;
+        assert_eq!(
+            a.layer().unwrap().pixel_format(),
+            MTLPixelFormat::BGRA8Unorm
+        );
+        b_renderer.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
+        assert_eq!(a.color_status().requested(), gpui::WindowColorMode::Default);
+        b_renderer.render_scene(&wide, size(DevicePixels(8), DevicePixels(8)))?;
+        wait(&a);
+        close(sample(&saved, 4, 4), [1., 0., 0., 1.], 0.001);
+        // Old producers still work in the opted-in renderer.
+        #[derive(Debug)]
+        struct Native;
+        impl CustomContent for Native {
+            fn prepare(&self, _: &dyn Any, _: Size<DevicePixels>) -> Result<Box<dyn Any>> {
+                Ok(Box::new(gpui::Background::from(rgb(0x808080))))
+            }
+        }
+        let mut legacy = Scene::default();
+        let mut d = draw(b(0., 0., 8., 8.), Arc::new(Patch::new([1., 0., 0., 1.])));
+        d.content = Arc::new(Native);
+        legacy.insert_primitive(d);
+        legacy.finish();
+        let image =
+            b_renderer.render_scene_to_image(&legacy, size(DevicePixels(8), DevicePixels(8)))?;
+        assert!(
+            image.get_pixel(4, 4).0[..3]
+                .iter()
+                .all(|c| c.abs_diff(128) <= 1)
+        );
+        Ok(())
+    })
+}
+
+#[test]
+fn wide_sdr_transparency_failure_preserves_configuration() -> Result<()> {
+    objc2::rc::autoreleasepool(|_| {
+        let mut r = MetalRenderer::new(Arc::new(Mutex::new(Default::default())), true);
+        let status = r.color_status();
+        assert!(
+            r.set_color_mode(gpui::WindowColorMode::WideGamutSdr)
+                .is_err()
+        );
+        assert_eq!(r.color_status(), status);
+        assert_eq!(
+            r.layer().unwrap().pixel_format(),
+            MTLPixelFormat::BGRA8Unorm
+        );
+        r.update_transparency(false);
+        r.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
+        r.update_transparency(true); // Infallible old API must not invalidate the mode.
+        assert!(r.opaque);
+        assert_eq!(
+            r.color_status().requested(),
+            gpui::WindowColorMode::WideGamutSdr
+        );
+        Ok(())
+    })
+}
+
+#[test]
+fn wide_sdr_legacy_gpu_output_remains_srgb_and_requires_no_new_producer_method() -> Result<()> {
+    #[derive(Debug)]
+    struct Legacy;
+    impl CustomContent for Legacy {
+        fn prepare(&self, backend: &dyn Any, extent: Size<DevicePixels>) -> Result<Box<dyn Any>> {
+            let c = backend
+                .downcast_ref::<crate::custom_draw::MetalCustomContext>()
+                .unwrap();
+            let t = crate::custom_draw::texture(&c.device, extent)?;
+            let command = c.queue.new_command_buffer();
+            let p = metal::RenderPassDescriptor::new();
+            let attachment = p.color_attachments().object_at(0).unwrap();
+            attachment.set_texture(Some(&t));
+            attachment.set_load_action(metal::MTLLoadAction::Clear);
+            attachment.set_store_action(metal::MTLStoreAction::Store);
+            attachment.set_clear_color(metal::MTLClearColor::new(0.5, 0.5, 0.5, 1.));
+            command.new_render_command_encoder(p).end_encoding();
+            Ok(Box::new(crate::custom_draw::MetalCustomOutput {
+                texture: t,
+                commands: vec![command.to_owned()],
+            }))
+        }
+    }
+    objc2::rc::autoreleasepool(|_| {
+        let mut r = renderer();
+        let mut s = Scene::default();
+        let mut old = draw(b(0., 0., 8., 8.), Arc::new(Patch::new([1., 0., 0., 1.])));
+        old.content = Arc::new(Legacy);
+        s.insert_primitive(old);
+        s.insert_primitive(draw(
+            b(8., 0., 8., 8.),
+            Arc::new(Patch::new([1., 0., 0., 1.])),
+        ));
+        s.finish();
+        let image = r.render_scene_to_image(&s, size(DevicePixels(16), DevicePixels(8)))?;
+        assert!(
+            image.get_pixel(4, 4).0[..3]
+                .iter()
+                .all(|c| c.abs_diff(128) <= 1)
+        );
+        let raw = snapshot(&r);
+        wait(&r);
+        close(sample(&raw, 12, 4), [1., 0., 0., 1.], 0.001);
+        Ok(())
+    })
+}
+
+#[test]
+fn wide_sdr_invalid_viewport_is_rejected_before_gpu_allocation() -> Result<()> {
+    let mut renderer = renderer();
+    let scene = Scene::default();
+    let invalid = size(DevicePixels(i32::MAX), DevicePixels(i32::MAX));
+    assert!(renderer.render_scene(&scene, invalid).is_err());
+    assert!(renderer.render_scene_to_image(&scene, invalid).is_err());
+    assert!(renderer.headless_render_target.is_none());
+    assert!(renderer.path_intermediate_texture.is_none());
+    assert!(renderer.wide_sdr.as_ref().unwrap().scratch.is_none());
+    Ok(())
 }

@@ -35,6 +35,99 @@ pub struct MetalCustomOutput {
     pub commands: Vec<CommandBuffer>,
 }
 
+/// Immutable wide-SDR output: RGBA16Float, linear Display P3/D65, premultiplied
+/// alpha. Straight RGB and alpha must be finite in 0..=1; associated RGB is in
+/// 0..=alpha and zero at zero alpha. The host applies clip/opacity once.
+///
+/// Requires an accepted `WindowColorMode::WideGamutSdr` request. Producers record
+/// using the host queue and never submit or present. Pixel values are a producer
+/// contract; structural validation cannot prove their color interpretation.
+pub struct MetalWideSdrOutput {
+    output: MetalCustomOutput,
+    queue: CommandQueue,
+}
+impl MetalWideSdrOutput {
+    /// Take ownership of an explicitly described wide texture and pending work.
+    /// Empty commands require content already ready/submitted on the host queue.
+    pub fn from_linear_p3_premultiplied(
+        context: &MetalCustomContext,
+        texture: Texture,
+        commands: Vec<CommandBuffer>,
+    ) -> Result<Self> {
+        let result = Self {
+            output: MetalCustomOutput { texture, commands },
+            queue: context.queue.clone(),
+        };
+        result.validate_context(context)?;
+        Ok(result)
+    }
+
+    /// Reuse immutable cached output. Pending commands retain identity; commands
+    /// submitted by the host are omitted. External enqueue/error or queue changes
+    /// are errors. No CPU wait is introduced. Like the legacy protocol, host-only
+    /// submission is cooperative; command status cannot identify who committed.
+    pub fn reusable_for(&self, context: &MetalCustomContext) -> Result<Self> {
+        self.validate_resources(context)?;
+        let mut commands = Vec::new();
+        for command in &self.output.commands {
+            if wide_command_pending(command.status())? {
+                commands.push(command.clone());
+            }
+        }
+        Ok(Self {
+            output: MetalCustomOutput {
+                texture: self.output.texture.clone(),
+                commands,
+            },
+            queue: self.queue.clone(),
+        })
+    }
+    fn validate_resources(&self, context: &MetalCustomContext) -> Result<()> {
+        ensure!(
+            self.queue.as_ptr() == context.queue.as_ptr(),
+            "wide output belongs to another queue"
+        );
+        ensure!(
+            context.queue.device().registry_id() == context.device.registry_id(),
+            "host queue belongs to another device"
+        );
+        let t = &self.output.texture;
+        ensure!(
+            t.device().registry_id() == context.device.registry_id(),
+            "wide texture belongs to another device"
+        );
+        ensure!(
+            t.pixel_format() == MTLPixelFormat::RGBA16Float
+                && t.texture_type() == MTLTextureType::D2
+                && t.sample_count() == 1
+                && t.usage().contains(MTLTextureUsage::ShaderRead)
+                && t.width() > 0
+                && t.height() > 0
+                && t.width() <= 16384
+                && t.height() <= 16384,
+            "invalid wide texture format, usage, or extent"
+        );
+        Ok(())
+    }
+    pub(crate) fn validate_context(&self, context: &MetalCustomContext) -> Result<()> {
+        self.validate_resources(context)?;
+        validate_commands(context, &self.output.commands)
+    }
+    pub(crate) fn into_output(self) -> MetalCustomOutput {
+        self.output
+    }
+}
+
+fn wide_command_pending(status: MTLCommandBufferStatus) -> Result<bool> {
+    match status {
+        MTLCommandBufferStatus::NotEnqueued => Ok(true),
+        MTLCommandBufferStatus::Committed
+        | MTLCommandBufferStatus::Scheduled
+        | MTLCommandBufferStatus::Completed => Ok(false),
+        _ => anyhow::bail!("wide output command was externally enqueued or failed"),
+    }
+}
+
 pub(crate) struct CustomCompositor {
     pipeline: RenderPipelineState,
     pub(crate) masks: CoverageCache<Texture>,
@@ -245,6 +338,8 @@ pub(crate) fn submit_custom_commands<'a>(
 
 #[cfg(test)]
 mod submission_tests;
+#[cfg(test)]
+mod wide_output_tests;
 
 pub(crate) fn texture(device: &DeviceRef, extent: Size<DevicePixels>) -> Result<Texture> {
     ensure!(

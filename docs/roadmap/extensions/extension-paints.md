@@ -1,4 +1,4 @@
-# GPUI extension paint integration and API
+# Paint and shader extension
 
 Opt-in downstream extension: `xgpui-shader`. No app-side OS branches.
 

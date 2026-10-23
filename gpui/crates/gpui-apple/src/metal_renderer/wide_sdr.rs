@@ -1,51 +1,48 @@
-//! Debug/test-support experiment only. No exported configuration or output API.
-//! The lab-only tuple is an explicit, versioned color contract, never inferred
-//! from a texture's format. Replace it with a reviewed API before production.
+//! Ordered sRGB UI runs and associated linear-P3 SDR composition.
 use super::*;
 use anyhow::ensure;
 use std::collections::HashSet;
 
-pub(super) type WideOutput = (crate::custom_draw::MetalCustomOutput, [u32; 4]);
-pub(super) const WIDE_TAG: [u32; 4] = [0x50335344, 1, 1, 0]; // P3 SDR, v1, associated linear.
-pub(super) fn enabled() -> bool {
-    std::env::var_os("XGPUI_GAMUT_LAB").is_some_and(|v| v == "1")
-}
 pub(super) fn validate_viewport(viewport: Size<DevicePixels>) -> Result<()> {
     ensure!(
-        viewport.width.0 > 0 && viewport.height.0 > 0,
-        "invalid gamut-lab viewport"
+        viewport.width.0 > 0
+            && viewport.height.0 > 0
+            && viewport.width.0 <= 16384
+            && viewport.height.0 <= 16384,
+        "invalid wide SDR viewport"
     );
     let bytes = viewport.width.0 as u64 * viewport.height.0 as u64 * 12;
     ensure!(
         bytes <= 256 * 1024 * 1024,
-        "gamut-lab targets exceed 256 MiB"
+        "wide SDR targets exceed 256 MiB"
     );
     Ok(())
 }
-pub(super) fn configure_layer(layer: &metal::MetalLayerRef) {
+pub(super) fn configure_layer(layer: &metal::MetalLayerRef) -> Result<()> {
     use core_graphics::color_space::{CGColorSpace, kCGColorSpaceExtendedLinearDisplayP3};
     let space = CGColorSpace::create_with_name(unsafe { kCGColorSpaceExtendedLinearDisplayP3 })
-        .expect("linear P3 color space");
+        .ok_or_else(|| anyhow::anyhow!("linear P3 color space unavailable"))?;
     layer.set_pixel_format(MTLPixelFormat::RGBA16Float);
     // Both wrappers borrow the same native objects; CAMetalLayer retains the
     // color space. The typed binding also verifies the correct Objective-C ABI.
     let native: &objc2_quartz_core::CAMetalLayer = unsafe { &*layer.as_ptr().cast() };
     native.setColorspace(Some(unsafe { &*space.as_ptr().cast() }));
     native.setWantsExtendedDynamicRangeContent(false);
+    Ok(())
 }
 
-pub(super) struct Prototype {
+pub(super) struct Compositor {
     pub wide: HashSet<usize>,
     compose: metal::RenderPipelineState,
     preview: metal::RenderPipelineState,
     scratch: Option<metal::Texture>,
     target: Option<metal::Texture>,
 }
-impl Prototype {
+impl Compositor {
     pub fn new(device: &metal::DeviceRef) -> Result<Self> {
         let library = device
             .new_library_with_source(
-                include_str!("gamut_lab.metal"),
+                include_str!("wide_sdr.metal"),
                 &metal::CompileOptions::new(),
             )
             .map_err(anyhow::Error::msg)?;
@@ -200,7 +197,7 @@ impl Prototype {
     ) -> Result<metal::CommandBuffer> {
         ensure!(
             renderer.opaque,
-            "gamut-lab does not support transparent top-level windows"
+            "wide SDR does not support transparent top-level windows"
         );
         self.ensure_targets(renderer, viewport)?;
         let queue = renderer.command_queue.clone();
@@ -306,7 +303,7 @@ impl Prototype {
                 }
                 PrimitiveBatch::SubpixelSprites { .. } => {
                     e.end_encoding();
-                    anyhow::bail!("gamut-lab requires grayscale text")
+                    anyhow::bail!("wide SDR requires grayscale text")
                 }
                 PrimitiveBatch::Custom(_) => unreachable!(),
             }
@@ -333,7 +330,7 @@ impl Prototype {
         } else {
             ensure!(
                 destination.pixel_format() == MTLPixelFormat::BGRA8Unorm,
-                "unsupported gamut-lab destination"
+                "unsupported wide SDR destination"
             );
             let e = new_command_encoder_for_texture(
                 command,

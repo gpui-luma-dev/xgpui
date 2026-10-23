@@ -1,3 +1,6 @@
+mod color_presentation;
+pub use color_presentation::{WindowColorFallback, WindowColorMode, WindowColorStatus};
+
 mod app_menu;
 mod keyboard;
 mod keystroke;
@@ -1191,6 +1194,18 @@ pub enum TextInputStateChange {
 
 #[expect(missing_docs)]
 pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
+    /// Negotiate presentation for one window. Unsupported requests preserve state.
+    fn set_color_mode(&mut self, mode: WindowColorMode) -> anyhow::Result<WindowColorStatus> {
+        match mode {
+            WindowColorMode::Default => Ok(self.color_status()),
+            _ => anyhow::bail!("wide-gamut SDR presentation is unsupported"),
+        }
+    }
+    /// Return a cached configuration snapshot without probing native state.
+    fn color_status(&self) -> WindowColorStatus {
+        WindowColorStatus::default()
+    }
+
     fn bounds(&self) -> Bounds<Pixels>;
     fn is_maximized(&self) -> bool;
     fn window_bounds(&self) -> WindowBounds;
@@ -1208,9 +1223,9 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     /// This requests a frame; backends can sample the new viewport and safe-area
     /// geometry in `prepare_frame` rather than updating it inside the callback.
     fn on_visual_viewport_changed(&self, _callback: Box<dyn FnMut()>) {}
-    /// Samples platform geometry before a draw, returning whether view caches must be invalidated.
+    /// Samples platform geometry/presentation before a draw; returns whether views must be invalidated.
     ///
-    /// Geometry getters must remain consistent throughout the ensuing draw.
+    /// Geometry and presentation getters must remain consistent throughout the ensuing draw.
     /// Do not invoke callbacks here: GPUI is already updating this window.
     fn prepare_frame(&self) -> bool {
         false

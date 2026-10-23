@@ -16,3 +16,8 @@ xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader" }
 gpui-apple = { path = "../../gpui/crates/gpui-apple", features = ["test-support"] }
 metal = "0.33"
 parking_lot = "0.12"
+
+[[test]]
+name = "native_windows"
+path = "tests/native_windows.rs"
+harness = false

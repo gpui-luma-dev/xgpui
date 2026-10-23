@@ -419,7 +419,7 @@ impl CompositorPipeline {
         }
     }
 }
-fn compile(source: &str, entry: &str, target: &str) -> Result<Vec<u8>> {
+pub(crate) fn compile(source: &str, entry: &str, target: &str) -> Result<Vec<u8>> {
     let entry = CString::new(entry)?;
     let target = CString::new(target)?;
     let (mut code, mut errors) = (None, None);
