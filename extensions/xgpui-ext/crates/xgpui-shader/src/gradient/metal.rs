@@ -1,7 +1,7 @@
 use super::{Gradient, GradientKind};
 use ::metal::*;
 use anyhow::{Result, bail, ensure};
-use gpui::{CustomContent, DevicePixels, Size};
+use gpui::{DevicePixels, Size};
 use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput};
 use std::{
     any::Any,
@@ -66,8 +66,12 @@ struct UploadStop {
     color: [f32; 4],
     offset: [f32; 4],
 }
-impl CustomContent for Gradient {
-    fn prepare(&self, backend: &dyn Any, extent: Size<DevicePixels>) -> Result<Box<dyn Any>> {
+impl Gradient {
+    pub(super) fn prepare_metal(
+        &self,
+        backend: &dyn Any,
+        extent: Size<DevicePixels>,
+    ) -> Result<Box<dyn Any>> {
         let Some(ctx) = backend.downcast_ref::<MetalCustomContext>() else {
             bail!("Gradient requires the Metal backend")
         };

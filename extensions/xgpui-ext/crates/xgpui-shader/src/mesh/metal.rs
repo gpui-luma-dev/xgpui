@@ -1,7 +1,7 @@
 use super::MeshGradient;
 use ::metal::*;
 use anyhow::{Result, bail, ensure};
-use gpui::{CustomContent, DevicePixels, Size};
+use gpui::{DevicePixels, Size};
 use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput};
 use std::{
     any::Any,
@@ -131,8 +131,12 @@ fn compute(
     // Separate tracked-resource encoders order writes before the next stage.
     encoder.end_encoding();
 }
-impl CustomContent for MeshGradient {
-    fn prepare(&self, backend: &dyn Any, size: Size<DevicePixels>) -> Result<Box<dyn Any>> {
+impl MeshGradient {
+    pub(super) fn prepare_metal(
+        &self,
+        backend: &dyn Any,
+        size: Size<DevicePixels>,
+    ) -> Result<Box<dyn Any>> {
         let Some(ctx) = backend.downcast_ref::<MetalCustomContext>() else {
             bail!("MeshGradient requires the Metal backend");
         };
@@ -274,6 +278,7 @@ impl CustomContent for MeshGradient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::CustomContent;
     #[test]
     fn upload_layout_is_explicit_and_backend_errors_are_checked() {
         assert_eq!(std::mem::size_of::<UploadControl>(), 48);

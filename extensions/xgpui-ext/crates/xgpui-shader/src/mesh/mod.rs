@@ -1,10 +1,10 @@
 //! Hermite mesh gradient adapted from patskovn/MeshGradient (MIT).
 //! See LICENSE-MeshGradient for the upstream notice and README for changes.
 use anyhow::{Result, ensure};
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicUsize, Ordering},
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(target_os = "macos")]
+use std::sync::{Arc, Mutex};
+#[cfg(target_os = "macos")]
 mod metal;
 
 /// A normalized top-left-origin control point. Tangents are derivatives over a
@@ -140,9 +140,13 @@ pub struct MeshGradient {
     grid: MeshGrid,
     samples: u32,
     stats: MeshStats,
+    #[cfg(target_os = "macos")]
     pipelines: Arc<metal::PipelineCache>,
+    #[cfg(feature = "wgpu")]
+    pub(super) wgpu: crate::wgpu::PaintCache,
+    #[cfg(target_os = "macos")]
     output: Mutex<Option<metal::CachedOutput>>,
-    preparations: AtomicUsize,
+    pub(super) preparations: AtomicUsize,
 }
 impl std::fmt::Debug for MeshGradient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -159,19 +163,37 @@ impl MeshGradient {
             grid,
             samples: subdivisions,
             stats,
+            #[cfg(target_os = "macos")]
             pipelines: Arc::new(metal::PipelineCache::default()),
+            #[cfg(target_os = "macos")]
             output: Mutex::new(None),
+            #[cfg(feature = "wgpu")]
+            wgpu: crate::wgpu::PaintCache::default(),
             preparations: AtomicUsize::new(0),
         })
     }
     pub fn with_grid(&self, grid: MeshGrid) -> Result<Self> {
         let mut next = Self::new(grid, self.samples)?;
-        next.pipelines = self.pipelines.clone();
+        #[cfg(target_os = "macos")]
+        {
+            next.pipelines = self.pipelines.clone();
+        }
+        #[cfg(feature = "wgpu")]
+        {
+            next.wgpu = self.wgpu.snapshot();
+        }
         Ok(next)
     }
     pub fn with_subdivisions(&self, subdivisions: u32) -> Result<Self> {
         let mut next = Self::new(self.grid.clone(), subdivisions)?;
-        next.pipelines = self.pipelines.clone();
+        #[cfg(target_os = "macos")]
+        {
+            next.pipelines = self.pipelines.clone();
+        }
+        #[cfg(feature = "wgpu")]
+        {
+            next.wgpu = self.wgpu.snapshot();
+        }
         Ok(next)
     }
     pub fn grid(&self) -> &MeshGrid {
@@ -187,8 +209,18 @@ impl MeshGradient {
         self.preparations.load(Ordering::Relaxed)
     }
     pub fn pipeline_compilations(&self) -> usize {
-        self.pipelines.compilations.load(Ordering::Relaxed)
+        let mut count = 0;
+        #[cfg(target_os = "macos")]
+        {
+            count += self.pipelines.compilations.load(Ordering::Relaxed);
+        }
+        #[cfg(feature = "wgpu")]
+        {
+            count += self.wgpu.compilations();
+        }
+        count
     }
+    #[cfg(target_os = "macos")]
     pub fn cached_texture_info(&self) -> Option<(String, u64)> {
         let cache = self.output.lock().ok()?;
         let texture = &cache.as_ref()?.texture;
@@ -196,6 +228,24 @@ impl MeshGradient {
             texture.device().name().to_string(),
             texture.width() * texture.height() * 4,
         ))
+    }
+}
+
+impl gpui::CustomContent for MeshGradient {
+    fn prepare(
+        &self,
+        backend: &dyn std::any::Any,
+        extent: gpui::Size<gpui::DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        #[cfg(target_os = "macos")]
+        if backend.is::<gpui_apple::custom_draw::MetalCustomContext>() {
+            return self.prepare_metal(backend, extent);
+        }
+        #[cfg(feature = "wgpu")]
+        if let Some(context) = backend.downcast_ref::<gpui_wgpu::custom_draw::WgpuCustomContext>() {
+            return crate::wgpu::mesh(self, context, extent);
+        }
+        anyhow::bail!("MeshGradient does not support this backend")
     }
 }
 

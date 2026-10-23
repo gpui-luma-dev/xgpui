@@ -72,3 +72,21 @@ lint:
 
 # Format check, GPU tests and lint.
 check: fmt-check test lint
+
+# Run the same paint/coverage checks through the portable wgpu renderer.
+wgpu-test:
+    cargo test {{options}} --features wgpu wgpu_
+
+# Capture or time portable effects; append --effect, --frames, or --png.
+wgpu-headless *args:
+    cargo run {{options}} --features wgpu -- --headless --wgpu "$@"
+
+# Experimental user WGSL: identical source and parameters on native Metal and wgpu.
+portable-test:
+    cargo test {{options}} --features wgpu,portable-shaders
+
+portable-headless *args:
+    cargo run {{options}} --features portable-shaders -- --headless --portable-shader "$@"
+
+portable-wgpu *args:
+    cargo run {{options}} --features wgpu,portable-shaders -- --headless --wgpu --portable-shader "$@"

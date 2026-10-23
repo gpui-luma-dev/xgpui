@@ -472,7 +472,17 @@ impl WgpuContext {
     #[cfg(not(target_family = "wasm"))]
     pub fn instance(display: Option<Box<dyn wgpu::wgt::WgpuHasDisplayHandle>>) -> wgpu::Instance {
         wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN | wgpu::Backends::GL,
+            backends: wgpu::Backends::from_env().unwrap_or_else(|| {
+                wgpu::Backends::VULKAN
+                    | wgpu::Backends::GL
+                    | if cfg!(target_os = "macos") {
+                        wgpu::Backends::METAL
+                    } else if cfg!(target_os = "windows") {
+                        wgpu::Backends::DX12
+                    } else {
+                        wgpu::Backends::empty()
+                    }
+            }),
             flags: wgpu::InstanceFlags::default(),
             backend_options: wgpu::BackendOptions::default(),
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),

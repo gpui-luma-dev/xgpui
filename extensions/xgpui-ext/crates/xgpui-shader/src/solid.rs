@@ -1,23 +1,29 @@
 use anyhow::{Result, bail, ensure};
 use gpui::{CustomContent, DevicePixels, Size};
+#[cfg(target_os = "macos")]
 use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput};
+#[cfg(target_os = "macos")]
 use metal::*;
 use std::{
     any::Any,
-    sync::{
-        Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::atomic::{AtomicUsize, Ordering},
 };
+
+#[cfg(target_os = "macos")]
+use std::sync::Mutex;
 
 /// Immutable straight-alpha encoded-sRGB color with a per-device/extent cache.
 /// Clearing an offscreen attachment is deliberately the smallest GPU producer:
 /// it proves integration without mixing shader math into the first milestone.
 pub struct SolidColor {
     rgba: [f32; 4],
+    #[cfg(target_os = "macos")]
     cache: Mutex<Option<CachedOutput>>,
+    #[cfg(feature = "wgpu")]
+    wgpu: crate::wgpu::PaintCache,
     preparations: AtomicUsize,
 }
+#[cfg(target_os = "macos")]
 struct CachedOutput {
     key: u64,
     extent: Size<DevicePixels>,
@@ -43,7 +49,10 @@ impl SolidColor {
         );
         Ok(Self {
             rgba,
+            #[cfg(target_os = "macos")]
             cache: Mutex::new(None),
+            #[cfg(feature = "wgpu")]
+            wgpu: crate::wgpu::PaintCache::default(),
             preparations: AtomicUsize::new(0),
         })
     }
@@ -52,8 +61,9 @@ impl SolidColor {
         self.preparations.load(Ordering::Relaxed)
     }
 }
-impl CustomContent for SolidColor {
-    fn prepare(&self, backend: &dyn Any, size: Size<DevicePixels>) -> Result<Box<dyn Any>> {
+#[cfg(target_os = "macos")]
+impl SolidColor {
+    fn prepare_metal(&self, backend: &dyn Any, size: Size<DevicePixels>) -> Result<Box<dyn Any>> {
         let Some(context) = backend.downcast_ref::<MetalCustomContext>() else {
             bail!("SolidColor requires the Metal backend");
         };
@@ -130,6 +140,24 @@ impl SolidColor {
             texture.device().name().to_string(),
             texture.width() * texture.height() * 4,
         ))
+    }
+}
+
+impl CustomContent for SolidColor {
+    fn prepare(&self, backend: &dyn Any, size: Size<DevicePixels>) -> Result<Box<dyn Any>> {
+        #[cfg(target_os = "macos")]
+        if backend.is::<MetalCustomContext>() {
+            return self.prepare_metal(backend, size);
+        }
+        #[cfg(feature = "wgpu")]
+        if let Some(context) = backend.downcast_ref::<gpui_wgpu::custom_draw::WgpuCustomContext>() {
+            let (output, generated) = self.wgpu.clear(context, size, self.rgba)?;
+            if generated {
+                self.preparations.fetch_add(1, Ordering::Relaxed);
+            }
+            return Ok(Box::new(output));
+        }
+        bail!("SolidColor does not support this backend")
     }
 }
 

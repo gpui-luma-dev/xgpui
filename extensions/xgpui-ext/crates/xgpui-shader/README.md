@@ -9,8 +9,9 @@ the agreed dependency graph permits. GPUI supplies a small retained scene and
 renderer integration contract.
 
 The reference consumer is an animated mesh gradient that composes with normal
-GPUI layout and styling. The Metal solid-color and Hermite mesh producers are implemented;
-other backend adapters remain future work.
+GPUI layout and styling. The Metal producers and an opt-in wgpu backend for solid, analytic gradients
+and Hermite mesh are implemented. See [portable paints](../../docs/portable-paints.md)
+for backend contracts, tests and remaining native Windows work.
 
 ## Proposed first contract
 
@@ -39,8 +40,10 @@ are not the exact shipped API; see `src/` for the first implementation.
 - The compositor shader compiles lazily on first custom use. Existing frames with
   no custom records allocate no custom resources. Normal GPU submission does not
   wait for completion; test/readback paths intentionally do.
-- Windows and wgpu reject custom batches explicitly; no implementation is claimed
-  for them or for iOS consumers. Public primitive enums gain new variants,
+- The native Windows DirectX 11 renderer still rejects custom batches. The wgpu
+  renderer supports custom paints with the opt-in extension feature; actual
+  Vulkan/Windows driver validation remains outstanding. No iOS support is claimed.
+  Public primitive enums gain new variants,
   requiring downstream exhaustive matches to be updated.
 
 Run and validation instructions are in [shader-lab](../../../../apps/shader-lab/README.md).
@@ -481,3 +484,12 @@ Run `just linear`, `just radial`, `just conic`, `just diamond` or `just mesh` in
 [paint-lab](../../../../apps/paint-lab/README.md). Every type can paint the same
 background, border and path examples. `just headless --effect diamond --frames 30`
 runs GPU checks and a deterministic static workload.
+
+## Experimental portable fragment authoring
+
+The opt-in `portable-shaders` feature exposes `experimental::ShaderProgram`,
+`ShaderParameters` and `ShaderPaint`. Users declare a WGSL paint function and
+parameter struct; the extension supplies bindings, packing, translation and
+backend preparation. Add the `wgpu` feature when using that renderer. No app-side
+OS branches are needed. See [portable WGSL v1](../../docs/portable-wgsl-v1.md) for
+the restricted subset, output convention, tests and remaining platform limits.

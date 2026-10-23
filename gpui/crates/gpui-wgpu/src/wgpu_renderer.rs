@@ -212,6 +212,7 @@ impl WgpuResources {
 
 struct WgpuRendererCore {
     resources: WgpuResources,
+    custom_compositor: Option<crate::custom_draw::CustomCompositor>,
     atlas: Arc<WgpuAtlas>,
     path_globals_offset: u64,
     gamma_offset: u64,
@@ -1332,6 +1333,7 @@ impl WgpuRendererCore {
         let max_texture_size = device.limits().max_texture_dimension_2d;
 
         Self {
+            custom_compositor: None,
             resources: WgpuResources {
                 device,
                 queue,
@@ -1408,6 +1410,112 @@ impl WgpuRendererCore {
         resources.path_msaa_view = path_msaa_view;
     }
 
+    fn prepare_custom_draws(
+        &mut self,
+        scene: &Scene,
+        viewport: Size<DevicePixels>,
+    ) -> Result<Vec<crate::custom_draw::PreparedDraw>> {
+        use crate::custom_draw::*;
+        if scene.custom_draws.is_empty() {
+            return Ok(Vec::new());
+        }
+        let device = self.resources.device.clone();
+        let queue = self.resources.queue.clone();
+        let context = WgpuCustomContext::new(device.clone(), &queue);
+        let mut compositor = self
+            .custom_compositor
+            .take()
+            .unwrap_or_else(|| CustomCompositor::new(&device, self.target_format));
+        let result = (|| {
+            let mut prepared = Vec::with_capacity(scene.custom_draws.len());
+            for draw in &scene.custom_draws {
+                let extent = extent(draw)?;
+                let request = gpui::PreparationRequest::new(
+                    draw.bounds.size.map(|v| gpui::px(v.0)),
+                    extent,
+                    1.,
+                )?;
+                let output = draw.content.prepare_with_request(&context, &request)?;
+                let native = output.is::<Background>();
+                let texture = if native {
+                    let background = *output.downcast::<Background>().unwrap();
+                    let texture = new_texture(&device, extent, self.target_format)?;
+                    let bounds = Bounds::new(
+                        gpui::point(ScaledPixels(0.), ScaledPixels(0.)),
+                        gpui::size(
+                            ScaledPixels(extent.width.0 as f32),
+                            ScaledPixels(extent.height.0 as f32),
+                        ),
+                    );
+                    let mut native_scene = Scene::default();
+                    native_scene.insert_primitive(gpui::Quad {
+                        bounds,
+                        content_mask: gpui::ContentMask { bounds },
+                        background,
+                        ..Default::default()
+                    });
+                    native_scene.finish();
+                    self.render_frame(
+                        &native_scene,
+                        &texture.create_view(&Default::default()),
+                        extent,
+                        false,
+                        wgpu::Color::TRANSPARENT,
+                    )?;
+                    texture
+                } else {
+                    output
+                        .downcast::<WgpuCustomOutput>()
+                        .map_err(|_| anyhow::anyhow!("producer returned a non-wgpu output"))?
+                        .validate(&context, extent)?
+                        .texture()
+                        .clone()
+                };
+                let mask = if draw.coverage.is_some() {
+                    let key = coverage_key(draw);
+                    if let Some(mask) = compositor.masks.get(&key) {
+                        Some(mask.clone())
+                    } else {
+                        let mask = new_texture(&device, extent, self.target_format)?;
+                        let mask_scene = coverage_scene(draw, extent)?;
+                        self.render_frame(
+                            &mask_scene,
+                            &mask.create_view(&Default::default()),
+                            extent,
+                            false,
+                            wgpu::Color::TRANSPARENT,
+                        )?;
+                        let bytes =
+                            extent.width.0 as usize * extent.height.0 as usize * 4 + key.len() * 4;
+                        if compositor.mask_bytes + bytes > 64 * 1024 * 1024 {
+                            compositor.masks.clear();
+                            compositor.mask_bytes = 0;
+                        }
+                        if bytes <= 64 * 1024 * 1024 {
+                            compositor.mask_bytes += bytes;
+                            compositor.masks.insert(key, mask.clone());
+                        }
+                        Some(mask)
+                    }
+                } else {
+                    None
+                };
+                prepared.push(compositor.prepare(
+                    &device,
+                    draw,
+                    &texture,
+                    mask.as_ref(),
+                    native,
+                    viewport,
+                ));
+            }
+            context.submit()?;
+            Ok(prepared)
+        })();
+        self.custom_compositor = Some(compositor);
+        result
+    }
+
     fn render_frame(
         &mut self,
         scene: &Scene,
@@ -1427,6 +1535,7 @@ impl WgpuRendererCore {
             self.max_texture_size
         );
 
+        let custom_draws = self.prepare_custom_draws(scene, size)?;
         self.atlas.before_frame();
         self.ensure_intermediate_textures(size);
 
@@ -1462,7 +1571,7 @@ impl WgpuRendererCore {
             bytemuck::bytes_of(&gamma_params),
         );
 
-        self.record_frame(scene, target_view, clear_color)
+        self.record_frame(scene, target_view, clear_color, &custom_draws)
             .inspect_err(|_| {
                 // Queue writes are staged before encoding; flush them even if the frame fails.
                 self.resources.queue.submit(std::iter::empty());
@@ -1474,6 +1583,7 @@ impl WgpuRendererCore {
         scene: &Scene,
         frame_view: &wgpu::TextureView,
         clear_color: wgpu::Color,
+        custom_draws: &[crate::custom_draw::PreparedDraw],
     ) -> Result<wgpu::SubmissionIndex> {
         let mut instance_offset = 0;
         let instance_bindings = self
@@ -1605,9 +1715,17 @@ impl WgpuRendererCore {
                     }
                     // Surfaces are macOS-only for video playback and are not
                     // implemented by the WGPU renderer.
-                    PrimitiveBatch::Custom(_) => anyhow::bail!(
-                        "custom GPU content is not supported by the wgpu renderer yet"
-                    ),
+                    PrimitiveBatch::Custom(range) => {
+                        let compositor = self
+                            .custom_compositor
+                            .as_ref()
+                            .expect("prepared custom draws");
+                        pass.set_pipeline(&compositor.pipeline);
+                        for draw in &custom_draws[range] {
+                            pass.set_bind_group(0, &draw.bind_group, &[]);
+                            pass.draw(0..6, 0..1);
+                        }
+                    }
                     PrimitiveBatch::Surfaces(_surfaces) => {}
                 }
             }

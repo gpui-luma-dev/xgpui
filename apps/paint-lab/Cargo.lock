@@ -3641,6 +3641,7 @@ dependencies = [
  "clap",
  "gpui",
  "gpui-platform",
+ "gpui-wgpu",
  "serde_json",
  "xgpui-shader",
 ]
@@ -6504,9 +6505,12 @@ name = "xgpui-shader"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytemuck",
  "gpui",
  "gpui-apple",
+ "gpui-wgpu",
  "metal",
+ "naga",
  "refineable",
 ]
 

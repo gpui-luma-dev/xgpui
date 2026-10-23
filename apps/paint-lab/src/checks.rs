@@ -1,4 +1,6 @@
 mod gradient_checks;
+#[cfg(feature = "portable-shaders")]
+mod portable_checks;
 #[cfg(test)]
 mod preparation_checks;
 use super::*;
@@ -71,8 +73,25 @@ fn demo_scene(content: Arc<dyn CustomContent>) -> Scene {
     scene
 }
 
-pub fn run(effect: Effect, frames: usize, png: Option<&std::path::Path>) -> Result<()> {
-    let mut renderer = gpui_platform::current_headless_renderer()?.expect("Metal renderer");
+pub fn run(
+    effect: Effect,
+    frames: usize,
+    png: Option<&std::path::Path>,
+    wgpu: bool,
+    portable_shader: bool,
+) -> Result<()> {
+    let mut renderer: Box<dyn PlatformHeadlessRenderer> = if wgpu {
+        #[cfg(feature = "wgpu")]
+        {
+            Box::new(gpui_wgpu::WgpuHeadlessRenderer::new()?)
+        }
+        #[cfg(not(feature = "wgpu"))]
+        {
+            anyhow::bail!("rebuild paint-lab with --features wgpu");
+        }
+    } else {
+        gpui_platform::current_headless_renderer()?.expect("native renderer")
+    };
     verify(renderer.as_mut())?;
     let mesh = Arc::new(MeshGradient::new(grid(0.)?, 18)?);
     let analytic = Arc::new(Gradient::new(
@@ -81,7 +100,17 @@ pub fn run(effect: Effect, frames: usize, png: Option<&std::path::Path>) -> Resu
             .unwrap_or(GradientKind::Linear { angle: 90. }),
         gradient_stops(),
     )?);
-    let content: Arc<dyn CustomContent> = if effect == Effect::Mesh {
+    let content: Arc<dyn CustomContent> = if portable_shader {
+        #[cfg(feature = "portable-shaders")]
+        {
+            let program = crate::portable::program()?;
+            Arc::new(crate::portable::paint(&program, 0.15, 1.)?)
+        }
+        #[cfg(not(feature = "portable-shaders"))]
+        {
+            anyhow::bail!("rebuild with --features portable-shaders");
+        }
+    } else if effect == Effect::Mesh {
         mesh.clone()
     } else {
         analytic.clone()
@@ -99,7 +128,7 @@ pub fn run(effect: Effect, frames: usize, png: Option<&std::path::Path>) -> Resu
     }
     println!(
         "{}",
-        serde_json::json!({"frames":frames,"cpu_wall_readback_ms":start.elapsed().as_secs_f64()*1000.,"effect":effect.label(),"source_generations":if effect==Effect::Mesh {mesh.preparations()}else{analytic.preparations()},"pipeline_compilations":if effect==Effect::Mesh {mesh.pipeline_compilations()}else{analytic.pipeline_compilations()},"checks":"native coverage, alpha, clip mapping, replay, resize, source sharing","timing_scope":"CPU wall including GPU wait and readback; not GPU-only time or FPS"})
+        serde_json::json!({"frames":frames,"cpu_wall_readback_ms":start.elapsed().as_secs_f64()*1000.,"effect":if portable_shader {"Portable WGSL"}else{effect.label()},"source_generations":if portable_shader {None}else if effect==Effect::Mesh {Some(mesh.preparations())}else{Some(analytic.preparations())},"pipeline_compilations":if portable_shader {None}else if effect==Effect::Mesh {Some(mesh.pipeline_compilations())}else{Some(analytic.pipeline_compilations())},"checks":"native coverage, alpha, clip mapping, replay, resize, source sharing","timing_scope":"CPU wall including GPU wait and readback; not GPU-only time or FPS"})
     );
     Ok(())
 }
@@ -107,6 +136,8 @@ pub fn run(effect: Effect, frames: usize, png: Option<&std::path::Path>) -> Resu
 fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
     let extent = size(DevicePixels(1024), DevicePixels(320));
     gradient_checks::verify(renderer)?;
+    #[cfg(feature = "portable-shaders")]
+    portable_checks::verify(renderer)?;
     // Native white geometry is an independent reference for border and path coverage.
     for stroke in [false, true] {
         let mut native = base();
@@ -262,4 +293,41 @@ fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
 fn metal_extension_paints_match_native_geometry() -> Result<()> {
     let mut renderer = gpui_platform::current_headless_renderer()?.expect("Metal renderer");
     verify(renderer.as_mut())
+}
+
+#[cfg(all(test, feature = "wgpu"))]
+#[::core::prelude::v1::test]
+fn wgpu_extension_paints_match_native_geometry() -> Result<()> {
+    let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new()?;
+    verify(&mut renderer)
+}
+
+#[cfg(all(test, feature = "wgpu", target_os = "macos"))]
+#[::core::prelude::v1::test]
+fn wgpu_mesh_matches_metal_interior_samples() -> Result<()> {
+    let mut metal = gpui_platform::current_headless_renderer()?.expect("Metal renderer");
+    let mut portable = gpui_wgpu::WgpuHeadlessRenderer::new()?;
+    for time in [0., 0.35, 0.8] {
+        let mesh = Arc::new(MeshGradient::new(grid(time)?, 18)?);
+        let bounds = rect(0., 0., 160., 120.);
+        let mut scene = base();
+        let mut draw = record(bounds, mesh, None);
+        draw.corner_radii = Corners::default();
+        scene.insert_primitive(draw);
+        scene.finish();
+        let extent = size(DevicePixels(160), DevicePixels(120));
+        let expected = metal.render_scene_to_image(&scene, extent)?;
+        let actual = portable.render_scene_to_image(&scene, extent)?;
+        for y in (12..108).step_by(12) {
+            for x in (16..144).step_by(16) {
+                let expected = expected.get_pixel(x, y).0;
+                let actual = actual.get_pixel(x, y).0;
+                ensure!(
+                    actual.iter().zip(expected).all(|(a, b)| a.abs_diff(b) <= 3),
+                    "mesh parity at t={time}, {x},{y}: {actual:?} vs {expected:?}"
+                );
+            }
+        }
+    }
+    Ok(())
 }

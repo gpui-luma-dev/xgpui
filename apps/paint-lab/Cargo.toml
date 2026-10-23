@@ -13,6 +13,9 @@ gpui = { path = "../../gpui/crates/gpui", features = ["test-support"] }
 gpui_platform = { package = "gpui-platform", path = "../../gpui/crates/gpui-platform", default-features = false, features = ["test-support", "font-kit"] }
 xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader" }
 serde_json = "1"
+gpui-wgpu = { path = "../../gpui/crates/gpui-wgpu", features = ["test-support"], optional = true }
 
 [features]
+portable-shaders = ["xgpui-shader/portable-shaders"]
+wgpu = ["dep:gpui-wgpu", "xgpui-shader/wgpu"]
 runtime-shaders = ["gpui_platform/runtime_shaders"]

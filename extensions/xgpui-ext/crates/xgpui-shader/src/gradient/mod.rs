@@ -1,9 +1,9 @@
 //! Analytic multi-stop paints. Geometry and GPU code stay outside GPUI.
 use anyhow::{Result, ensure};
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicUsize, Ordering},
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(target_os = "macos")]
+use std::sync::{Arc, Mutex};
+#[cfg(target_os = "macos")]
 mod metal;
 
 /// A stop in normalized gradient space, with straight-alpha encoded-sRGB RGBA.
@@ -70,16 +70,20 @@ impl GradientKind {
     }
 }
 
-/// Immutable Metal paint with 2..=32 sorted stops. Duplicate offsets form hard
+/// Immutable paint with 2..=32 sorted stops. Duplicate offsets form hard
 /// edges (the last stop at an offset wins). Outside stops, endpoint colors clamp.
 /// Colors interpolate in premultiplied encoded sRGB, then output straight alpha.
 /// Related snapshots share their compiled pipeline; static output is cached.
 pub struct Gradient {
     kind: GradientKind,
     stops: Vec<GradientStop>,
+    #[cfg(target_os = "macos")]
     pipelines: Arc<metal::PipelineCache>,
+    #[cfg(feature = "wgpu")]
+    pub(super) wgpu: crate::wgpu::PaintCache,
+    #[cfg(target_os = "macos")]
     output: Mutex<Option<metal::CachedOutput>>,
-    preparations: AtomicUsize,
+    pub(super) preparations: AtomicUsize,
 }
 impl std::fmt::Debug for Gradient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -115,8 +119,12 @@ impl Gradient {
         Ok(Self {
             kind,
             stops,
+            #[cfg(target_os = "macos")]
             pipelines: Arc::default(),
+            #[cfg(target_os = "macos")]
             output: Mutex::new(None),
+            #[cfg(feature = "wgpu")]
+            wgpu: crate::wgpu::PaintCache::default(),
             preparations: AtomicUsize::new(0),
         })
     }
@@ -155,23 +163,61 @@ impl Gradient {
         Ok(Self {
             kind,
             stops: self.stops.clone(),
+            #[cfg(target_os = "macos")]
             pipelines: self.pipelines.clone(),
+            #[cfg(target_os = "macos")]
             output: Mutex::new(None),
+            #[cfg(feature = "wgpu")]
+            wgpu: self.wgpu.snapshot(),
             preparations: AtomicUsize::new(0),
         })
     }
     pub fn with_stops(&self, stops: Vec<GradientStop>) -> Result<Self> {
         let mut snapshot = Self::new(self.kind, stops)?;
-        snapshot.pipelines = self.pipelines.clone();
+        #[cfg(target_os = "macos")]
+        {
+            snapshot.pipelines = self.pipelines.clone();
+        }
+        #[cfg(feature = "wgpu")]
+        {
+            snapshot.wgpu = self.wgpu.snapshot();
+        }
         Ok(snapshot)
     }
     pub fn preparations(&self) -> usize {
         self.preparations.load(Ordering::Relaxed)
     }
     pub fn pipeline_compilations(&self) -> usize {
-        self.pipelines.compilations.load(Ordering::Relaxed)
+        let mut count = 0;
+        #[cfg(target_os = "macos")]
+        {
+            count += self.pipelines.compilations.load(Ordering::Relaxed);
+        }
+        #[cfg(feature = "wgpu")]
+        {
+            count += self.wgpu.compilations();
+        }
+        count
     }
 }
+impl gpui::CustomContent for Gradient {
+    fn prepare(
+        &self,
+        backend: &dyn std::any::Any,
+        extent: gpui::Size<gpui::DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        #[cfg(target_os = "macos")]
+        if backend.is::<gpui_apple::custom_draw::MetalCustomContext>() {
+            return self.prepare_metal(backend, extent);
+        }
+        #[cfg(feature = "wgpu")]
+        if let Some(context) = backend.downcast_ref::<gpui_wgpu::custom_draw::WgpuCustomContext>() {
+            return crate::wgpu::gradient(self, context, extent);
+        }
+        anyhow::bail!("Gradient does not support this backend")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

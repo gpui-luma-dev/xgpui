@@ -53,8 +53,9 @@ Shadows and glyph/decorative paints are follow-up integration sites, not shipped
 by this slice. Shadow mapping will use element bounds with clamp-to-edge sampling
 through its blur region; glyphs need an explicit run/element coordinate policy.
 Explicit cross-shape paint rectangles, coverage pooling/LRU, direct fragment
-producer optimization and portable backend adapters remain later work. Windows
-and wgpu continue to report unsupported custom content. No HDR/gamut changes.
+producer optimization and portable backend adapters remain later work. The native Windows DirectX 11 renderer
+still reports unsupported custom content. The [wgpu adapter](portable-paints.md)
+now supports these paint sites. No HDR/gamut changes.
 
 ## Native border adapter
 

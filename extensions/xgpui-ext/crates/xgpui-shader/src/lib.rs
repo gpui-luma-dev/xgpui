@@ -5,19 +5,19 @@ use gpui::{
 use refineable::Refineable;
 use std::sync::Arc;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", feature = "wgpu"))]
 mod mesh;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", feature = "wgpu"))]
 pub use mesh::{ControlPoint, MeshGradient, MeshGrid, MeshStats};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", feature = "wgpu"))]
 mod solid;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", feature = "wgpu"))]
 pub use solid::SolidColor;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", feature = "wgpu"))]
 mod gradient;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", feature = "wgpu"))]
 pub use gradient::{Gradient, GradientKind, GradientStop};
 
 /// A styled container hosting independently prepared GPU content.
@@ -61,3 +61,10 @@ impl IntoElement for Shader {
         container
     }
 }
+
+#[cfg(feature = "wgpu")]
+mod wgpu;
+
+/// Experimental portable fragment paints. Version one is deliberately restricted.
+#[cfg(feature = "portable-shaders")]
+pub mod experimental;

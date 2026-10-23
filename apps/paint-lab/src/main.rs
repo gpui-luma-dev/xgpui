@@ -5,6 +5,8 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 use xgpui_shader::{Gradient, GradientKind, GradientStop, MeshGradient, SolidColor};
 mod checks;
 mod editor;
+#[cfg(feature = "portable-shaders")]
+mod portable;
 use editor::Settings;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
@@ -61,6 +63,12 @@ fn gradient_stops() -> Vec<GradientStop> {
 struct Options {
     #[arg(long)]
     headless: bool,
+    /// Use the portable wgpu renderer for headless checks (requires feature wgpu).
+    #[arg(long, requires = "headless")]
+    wgpu: bool,
+    /// Render the experimental user WGSL paint (requires feature portable-shaders).
+    #[arg(long, requires = "headless")]
+    portable_shader: bool,
     #[arg(long, value_enum, default_value_t=Effect::Radial)]
     effect: Effect,
     #[arg(long, requires = "headless")]
@@ -733,7 +741,13 @@ fn main() -> Result<()> {
         "frames must be 1..=10000"
     );
     if options.headless {
-        return checks::run(options.effect, options.frames, options.png.as_deref());
+        return checks::run(
+            options.effect,
+            options.frames,
+            options.png.as_deref(),
+            options.wgpu,
+            options.portable_shader,
+        );
     }
     gpui_platform::application().run(move |cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1500.), px(940.)), cx);

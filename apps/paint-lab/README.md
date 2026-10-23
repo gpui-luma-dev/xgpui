@@ -83,3 +83,23 @@ Existing `.bg(color)` and `.border_color(color)` methods and Background's GPU
 layout remain unchanged. Paint values containing producers are runtime-only and
 fail serialization explicitly. See the [integration contract](../../extensions/xgpui-ext/docs/extension-paints.md)
 for architecture, compatibility impact, coordinate semantics and remaining work.
+
+## Portable headless backend
+
+With the opt-in `wgpu` feature, `just wgpu-test` runs the same coverage and gradient
+reference checks through wgpu. `just wgpu-headless --effect mesh --frames 60`
+renders the portable mesh; add `--png /tmp/wgpu-mesh.png` for a capture.
+`WGPU_BACKEND=vulkan` or `dx12` forces a platform backend; on this Mac the local
+portable tests use wgpu/Metal. The interactive window remains native Metal.
+See [portable paint status](../../extensions/xgpui-ext/docs/portable-paints.md)
+for validation limits and the separate native Windows DirectX 11 adapter work.
+
+## Experimental user-authored WGSL
+
+`just portable-test` exercises one user shader through native Metal and wgpu.
+`just portable-headless --frames 2 --png /tmp/portable-metal.png` and
+`just portable-wgpu --frames 2 --png /tmp/portable-wgpu.png` render the same shader
+into the three paint sites. The app authoring example in `src/portable.rs` contains
+no OS/backend branches or binding declarations. The interactive editor continues
+to edit built-in gradients; the user WGSL experiment is headless only.
+See [the experimental v1 contract](../../extensions/xgpui-ext/docs/portable-wgsl-v1.md).
