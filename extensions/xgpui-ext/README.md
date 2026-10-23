@@ -9,7 +9,7 @@ This directory is an umbrella, not a single extension crate.
 ```text
 extensions/xgpui-ext/
   crates/
-    xgpui-shader/    Custom shader and canvas extension (Metal solid-color and mesh producers)
+    xgpui-shader/    Custom shader and paint extension (Metal solid, mesh and analytic gradients)
 apps/                         # Repository-level app directory
   shader-lab/                 Producer correctness and performance app (macOS Metal)
   paint-lab/                  Extension paint coverage integration app (macOS Metal)

@@ -430,3 +430,54 @@ The first generic paint milestone also accepts the same producer in
 producer stay in this crate. GPUI owns native coverage masks and composition.
 See [paint-lab](../../../../apps/paint-lab/README.md) and the
 [paint contract](../../docs/extension-paints.md) for current scope and API impact.
+
+## Multi-stop analytic gradients (Metal)
+
+Linear, elliptical radial, conic and diamond paints use the same `CustomContent`
+contract as the mesh. No additional GPUI changes are needed. For example:
+
+```rust
+use std::sync::Arc;
+use xgpui_shader::{Gradient, GradientStop};
+
+let stops = vec![
+    GradientStop::new(0.0, [1.0, 0.1, 0.2, 1.0]),
+    GradientStop::new(0.4, [1.0, 0.7, 0.1, 1.0]),
+    GradientStop::new(1.0, [0.1, 0.3, 1.0, 1.0]),
+];
+let radial = Arc::new(Gradient::radial([0.5, 0.5], [0.5, 0.5], stops)?);
+div().bg_paint(radial.clone());
+div().border_8().border_paint(radial.clone());
+window.paint_path_with_paint(path, radial.clone());
+```
+
+Constructors: `Gradient::linear(angle, stops)`,
+`Gradient::radial(center, radius, stops)`,
+`Gradient::conic(center, angle, stops)`, and
+`Gradient::diamond(center, radius, angle, stops)`. `Gradient::new(kind, stops)`
+also accepts a `GradientKind`; `with_kind` and `with_stops` make immutable
+snapshots sharing a pipeline cache. `preparations()` counts generated textures;
+`pipeline_compilations()` counts compilations shared by related snapshots.
+
+- 2–32 stops, sorted offsets in 0..=1; duplicates create hard edges. The last
+  stop at a duplicate offset wins. Values outside the first/last stops clamp.
+- RGBA channels are finite encoded-sRGB values in 0..=1. Interpolation uses
+  premultiplied encoded sRGB and returns straight-alpha output, avoiding colored
+  fringes from transparent stops. Oklab, linear-light interpolation, dithering,
+  repeat/mirror spread and HDR are not implemented in these producers.
+- Centers are normalized to the bounds (finite -16..=16). Radius components are
+  fractions of full width/height (0.0001..=16); [0.5, 0.5] reaches edge midpoints.
+- Linear and conic angles are clockwise degrees, zero pointing up. Linear
+  projection and conic angles use physical aspect ratio. At a conic center the
+  first angle is chosen deterministically; differing endpoint colors create a seam.
+- Diamond sampling uses Manhattan distance after rotation in bounds-normalized
+  axes; zero degrees is unrotated. Radial sampling uses elliptical distance.
+- Each generated output uses one full-target render draw into BGRA8Unorm,
+  followed by GPUI's normal custom paint composition. Static output is cached by
+  queue and extent; each texture is capped at 64 MiB. Animation still allocates
+  immutable output textures; resource pooling remains later work.
+
+Run `just linear`, `just radial`, `just conic`, `just diamond` or `just mesh` in
+[paint-lab](../../../../apps/paint-lab/README.md). Every type can paint the same
+background, border and path examples. `just headless --effect diamond --frames 30`
+runs GPU checks and a deterministic static workload.

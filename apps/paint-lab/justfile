@@ -13,6 +13,26 @@ default:
 ui *args:
     cargo run {{options}} -- "$@"
 
+# Open multi-stop linear gradient examples.
+linear *args:
+    cargo run {{options}} -- --effect linear "$@"
+
+# Open elliptical radial gradient examples (also the default).
+radial *args:
+    cargo run {{options}} -- --effect radial "$@"
+
+# Open conic gradient examples.
+conic *args:
+    cargo run {{options}} -- --effect conic "$@"
+
+# Open diamond gradient examples.
+diamond *args:
+    cargo run {{options}} -- --effect diamond "$@"
+
+# Open the original Hermite mesh examples.
+mesh *args:
+    cargo run {{options}} -- --effect mesh "$@"
+
 # Show all app options.
 args:
     cargo run {{options}} -- --help
@@ -25,7 +45,7 @@ build:
 headless *args:
     cargo run {{options}} -- --headless "$@"
 
-# Save the three mesh paint examples after running coverage checks.
+# Save the three selected gradient paint examples after running coverage checks.
 capture:
     cargo run {{options}} -- --headless --frames 60 --png /tmp/paint-lab.png
 

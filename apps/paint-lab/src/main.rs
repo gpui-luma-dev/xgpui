@@ -1,15 +1,66 @@
 use anyhow::{Result, ensure};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use gpui::{prelude::*, *};
 use std::{sync::Arc, time::Instant};
-use xgpui_shader::{MeshGradient, SolidColor};
+use xgpui_shader::{Gradient, GradientKind, GradientStop, MeshGradient, SolidColor};
 mod checks;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum Effect {
+    Mesh,
+    Linear,
+    Radial,
+    Conic,
+    Diamond,
+}
+impl Effect {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Mesh => "Mesh",
+            Self::Linear => "Linear",
+            Self::Radial => "Radial",
+            Self::Conic => "Conic",
+            Self::Diamond => "Diamond",
+        }
+    }
+    fn kind(self, time: f32) -> Option<GradientKind> {
+        match self {
+            Self::Mesh => None,
+            Self::Linear => Some(GradientKind::Linear {
+                angle: 90. + time * 20.,
+            }),
+            Self::Radial => Some(GradientKind::Radial {
+                center: [0.5; 2],
+                radius: [0.5 + 0.12 * time.sin(); 2],
+            }),
+            Self::Conic => Some(GradientKind::Conic {
+                center: [0.5; 2],
+                angle: time * 20.,
+            }),
+            Self::Diamond => Some(GradientKind::Diamond {
+                center: [0.5; 2],
+                radius: [0.5; 2],
+                angle: time * 20.,
+            }),
+        }
+    }
+}
+fn gradient_stops() -> Vec<GradientStop> {
+    vec![
+        GradientStop::new(0., [1., 0.12, 0.18, 1.]),
+        GradientStop::new(0.25, [1., 0.7, 0.12, 1.]),
+        GradientStop::new(0.5, [0.25, 0.25, 1., 1.]),
+        GradientStop::new(0.75, [0.05, 0.85, 0.75, 1.]),
+        GradientStop::new(1., [1., 0.12, 0.18, 1.]),
+    ]
+}
 #[derive(Parser)]
 #[command(about = "Extension paint coverage and Metal integration lab")]
 struct Options {
     #[arg(long)]
     headless: bool,
+    #[arg(long, value_enum, default_value_t=Effect::Radial)]
+    effect: Effect,
     #[arg(long, requires = "headless")]
     png: Option<std::path::PathBuf>,
     #[arg(long, default_value_t = 60)]
@@ -56,6 +107,8 @@ fn shape(bounds: Bounds<Pixels>, stroke: bool) -> Path<Pixels> {
 }
 struct Lab {
     mesh: Arc<MeshGradient>,
+    analytic: Arc<Gradient>,
+    effect: Effect,
     native: bool,
     faded: bool,
     clipped: bool,
@@ -68,14 +121,23 @@ impl Render for Lab {
         let now = Instant::now();
         if self.playing {
             self.time += now.duration_since(self.updated).as_secs_f32();
-            self.mesh = Arc::new(self.mesh.with_grid(grid(self.time).unwrap()).unwrap());
+            if self.effect == Effect::Mesh {
+                self.mesh = Arc::new(self.mesh.with_grid(grid(self.time).unwrap()).unwrap());
+            }
             window.request_animation_frame();
         }
         self.updated = now;
+        if let Some(kind) = self.effect.kind(self.time)
+            && self.analytic.kind() != kind
+        {
+            self.analytic = Arc::new(self.analytic.with_kind(kind).unwrap());
+        }
         let paint = if self.native {
             Paint::Native(white().into())
-        } else {
+        } else if self.effect == Effect::Mesh {
             self.mesh.clone().into()
+        } else {
+            self.analytic.clone().into()
         };
         let button = |id, text: &str| {
             div()
@@ -136,14 +198,40 @@ impl Render for Lab {
             clip = clip.child(tile);
             cards = cards.child(div().flex().flex_col().gap_3().child(label).child(clip));
         }
+        let mut choices = div().flex().gap_3();
+        for (i, effect) in [
+            Effect::Mesh,
+            Effect::Linear,
+            Effect::Radial,
+            Effect::Conic,
+            Effect::Diamond,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            choices = choices.child(
+                button(ElementId::Integer(100 + i as u64), effect.label())
+                    .bg(rgb(if self.effect == effect {
+                        0x375a88
+                    } else {
+                        0x343a45
+                    }))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.effect = effect;
+                        this.native = false;
+                        cx.notify();
+                    })),
+            );
+        }
         div().size_full().flex().flex_col().gap_5().p_6().bg(rgb(0x151922)).text_color(rgb(0xffffff))
             .child(div().text_2xl().child("Extension paint lab"))
-            .child("One mesh producer · GPUI owns the shape coverage")
+            .child(format!("{} paint · one shared producer · GPUI owns the shape coverage",self.effect.label()))
+            .child(choices)
             .child(div().flex().gap_3()
-                .child(button("play", if self.playing {"Pause"} else {"Animate mesh"}).on_click(cx.listener(|this,_,_,cx| { this.updated=Instant::now(); this.playing = !this.playing; cx.notify(); })))
-                .child(button("native", if self.native {"Native white coverage"} else {"Mesh paint"}).on_click(cx.listener(|this,_,_,cx| { this.native = !this.native; cx.notify(); })))
-                .child(button("opacity", if self.faded {"Opacity: 50%"} else {"Opacity: 100%"}).on_click(cx.listener(|this,_,_,cx| { this.faded = !this.faded; cx.notify(); })))
-                .child(button("clip", if self.clipped {"Clip: on"} else {"Clip: off"}).on_click(cx.listener(|this,_,_,cx| { this.clipped = !this.clipped; cx.notify(); }))))
+                .child(button("play".into(), if self.playing {"Pause"} else {"Animate"}).on_click(cx.listener(|this,_,_,cx| { this.updated=Instant::now(); this.playing = !this.playing; cx.notify(); })))
+                .child(button("native".into(), if self.native {"Native white coverage"} else {"Gradient paint"}).on_click(cx.listener(|this,_,_,cx| { this.native = !this.native; cx.notify(); })))
+                .child(button("opacity".into(), if self.faded {"Opacity: 50%"} else {"Opacity: 100%"}).on_click(cx.listener(|this,_,_,cx| { this.faded = !this.faded; cx.notify(); })))
+                .child(button("clip".into(), if self.clipped {"Clip: on"} else {"Clip: off"}).on_click(cx.listener(|this,_,_,cx| { this.clipped = !this.clipped; cx.notify(); }))))
             .child(div().id("examples").overflow_x_scroll().opacity(if self.faded {0.5} else {1.}).child(cards))
             .child(div().text_sm().text_color(rgb(0xaab4c5)).child("Clipping reveals the same field; it does not rescale it. All three shapes share the source texture."))
             .child(div().text_sm().text_color(rgb(0xaab4c5)).child("Metal first · backgrounds, borders and paths · shadows and text follow later"))
@@ -156,10 +244,10 @@ fn main() -> Result<()> {
         "frames must be 1..=10000"
     );
     if options.headless {
-        return checks::run(options.frames, options.png.as_deref());
+        return checks::run(options.effect, options.frames, options.png.as_deref());
     }
-    gpui_platform::application().run(|cx: &mut App| {
-        let bounds = Bounds::centered(None, size(px(1200.), px(620.)), cx);
+    gpui_platform::application().run(move |cx: &mut App| {
+        let bounds = Bounds::centered(None, size(px(1200.), px(700.)), cx);
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -169,6 +257,17 @@ fn main() -> Result<()> {
                 window.set_window_title("XGPUI Paint Lab");
                 cx.new(|_| Lab {
                     mesh: Arc::new(MeshGradient::new(grid(0.).unwrap(), 18).unwrap()),
+                    analytic: Arc::new(
+                        Gradient::new(
+                            options
+                                .effect
+                                .kind(0.)
+                                .unwrap_or(GradientKind::Linear { angle: 90. }),
+                            gradient_stops(),
+                        )
+                        .unwrap(),
+                    ),
+                    effect: options.effect,
                     native: false,
                     faded: false,
                     clipped: false,

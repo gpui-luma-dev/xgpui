@@ -15,6 +15,11 @@ mod solid;
 #[cfg(target_os = "macos")]
 pub use solid::SolidColor;
 
+#[cfg(target_os = "macos")]
+mod gradient;
+#[cfg(target_os = "macos")]
+pub use gradient::{Gradient, GradientKind, GradientStop};
+
 /// A styled container hosting independently prepared GPU content.
 /// Parent opacity/overflow use GPUI's normal div behavior; local corners are
 /// explicitly applied by the custom compositor.

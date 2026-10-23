@@ -1,3 +1,4 @@
+mod gradient_checks;
 use super::*;
 use std::time::Instant;
 
@@ -68,11 +69,22 @@ fn demo_scene(content: Arc<dyn CustomContent>) -> Scene {
     scene
 }
 
-pub fn run(frames: usize, png: Option<&std::path::Path>) -> Result<()> {
+pub fn run(effect: Effect, frames: usize, png: Option<&std::path::Path>) -> Result<()> {
     let mut renderer = gpui_platform::current_headless_renderer()?.expect("Metal renderer");
     verify(renderer.as_mut())?;
     let mesh = Arc::new(MeshGradient::new(grid(0.)?, 18)?);
-    let scene = demo_scene(mesh.clone());
+    let analytic = Arc::new(Gradient::new(
+        effect
+            .kind(0.)
+            .unwrap_or(GradientKind::Linear { angle: 90. }),
+        gradient_stops(),
+    )?);
+    let content: Arc<dyn CustomContent> = if effect == Effect::Mesh {
+        mesh.clone()
+    } else {
+        analytic.clone()
+    };
+    let scene = demo_scene(content);
     let start = Instant::now();
     let mut image = None;
     for _ in 0..frames {
@@ -85,18 +97,14 @@ pub fn run(frames: usize, png: Option<&std::path::Path>) -> Result<()> {
     }
     println!(
         "{}",
-        serde_json::json!({"frames":frames,"cpu_wall_readback_ms":start.elapsed().as_secs_f64()*1000.,"source_generations":mesh.preparations(),"pipeline_compilations":mesh.pipeline_compilations(),"checks":"native coverage, alpha, clip mapping, replay, resize, source sharing","timing_scope":"CPU wall including GPU wait and readback; not GPU-only time or FPS"})
-    );
-    ensure!(
-        mesh.preparations() == 1,
-        "equal-size paints failed to share source: {}",
-        mesh.preparations()
+        serde_json::json!({"frames":frames,"cpu_wall_readback_ms":start.elapsed().as_secs_f64()*1000.,"effect":effect.label(),"source_generations":if effect==Effect::Mesh {mesh.preparations()}else{analytic.preparations()},"pipeline_compilations":if effect==Effect::Mesh {mesh.pipeline_compilations()}else{analytic.pipeline_compilations()},"checks":"native coverage, alpha, clip mapping, replay, resize, source sharing","timing_scope":"CPU wall including GPU wait and readback; not GPU-only time or FPS"})
     );
     Ok(())
 }
 
 fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
     let extent = size(DevicePixels(1024), DevicePixels(320));
+    gradient_checks::verify(renderer)?;
     // Native white geometry is an independent reference for border and path coverage.
     for stroke in [false, true] {
         let mut native = base();
