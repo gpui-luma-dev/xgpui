@@ -116,6 +116,17 @@ impl CustomCompositor {
         draw: &CustomDraw,
         output: Box<dyn std::any::Any>,
     ) -> Result<MetalCustomOutput> {
+        Self::validate_format(context, draw, output, MTLPixelFormat::BGRA8Unorm)
+    }
+
+    // Private prototype can validate an explicitly tagged wide output without
+    // relaxing the existing public producer contract.
+    pub(crate) fn validate_format(
+        context: &MetalCustomContext,
+        draw: &CustomDraw,
+        output: Box<dyn std::any::Any>,
+        format: MTLPixelFormat,
+    ) -> Result<MetalCustomOutput> {
         let extent = Self::extent(draw)?;
         let output = *output
             .downcast::<MetalCustomOutput>()
@@ -125,7 +136,7 @@ impl CustomCompositor {
             "custom texture belongs to another device"
         );
         ensure!(
-            output.texture.pixel_format() == MTLPixelFormat::BGRA8Unorm
+            output.texture.pixel_format() == format
                 && output.texture.texture_type() == MTLTextureType::D2
                 && output.texture.sample_count() == 1
                 && output.texture.usage().contains(MTLTextureUsage::ShaderRead)

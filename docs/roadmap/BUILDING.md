@@ -68,7 +68,7 @@ section overview. All published extension guides live in `docs/roadmap/extension
 repository root, including integration, API, producer and backend references.
 Source-side READMEs link to these maintained guides.
 
-The generator renders those seven Markdown documents into `data.js`, including
+The generator renders those eight Markdown documents into `data.js`, including
 tables, code blocks and heading anchors. Internal document links become site
 routes; section links use `&section=heading-id`. No network fetch or Markdown
 runtime is needed in the browser. Edit the maintained sources, then regenerate;

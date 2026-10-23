@@ -10,7 +10,9 @@ function extensionCode(language, source) {
   return '<pre><code class="language-' + language + '">' + escapeHtml(source) + '</code></pre>';
 }
 function extensionPage(route) {
-  const banner = '<p class="guide-intro"><strong>Downstream extension to GPUI.</strong> Opt in through <code>xgpui-shader</code>. High-gamut window support is separate.</p>';
+  const banner = route === 'high-gamut-windows'
+    ? '<p class="guide-intro"><strong>Private prototype.</strong> Wide-gamut content surfaces share a window with normal sRGB controls. Public high-gamut APIs remain design only.</p>'
+    : '<p class="guide-intro"><strong>Downstream extension to GPUI.</strong> Opt in through <code>xgpui-shader</code>. High-gamut window support is separate.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
     return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
@@ -48,6 +50,7 @@ div().bg(rgb(0x223344)).border_1().border_color(white());`) +
 just --justfile apps/paint-lab/justfile mesh
 just --justfile apps/paint-lab/justfile portable-test`) +
     '<h2>API and integration</h2><div class="cards">' + extensionCard('extension-paints', 'Gradients, meshes, borders, paths and the core hook.') + extensionCard('paint-contract-hardening', 'Producer code, preparation, recording and failure behavior.') + '</div>' +
+    '<h2>Window presentation design</h2><div class="cards">' + extensionCard('high-gamut-windows', 'Private Metal prototype: wide content, sRGB controls and ordered composition.') + '</div>' +
     '<h2>Extension notes</h2><div class="cards">' + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('portable-wgsl-v1', 'Rust parameters + WGSL source.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'D3D11 adapter and Windows acceptance.') + '</div>';
 }
 function extensionCard(route, description) {

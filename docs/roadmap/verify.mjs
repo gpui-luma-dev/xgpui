@@ -185,7 +185,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 7);
+assert.equal(Object.keys(data.extension_documents).length, 8);
 assert.match(run('extensionPage("extensions")'), /Downstream extension to GPUI/);
 assert.match(index, /href="#extensions"/);
 for (const [route, doc] of Object.entries(data.extension_documents)) {
@@ -209,6 +209,7 @@ for (const file of [
   'extensions/xgpui-ext/crates/xgpui-shader/README.md',
   'apps/paint-lab/README.md',
   'apps/shader-lab/README.md',
+  'apps/gamut-lab/README.md',
 ]) {
   const url = new URL('../../' + file, import.meta.url);
   const markdown = await readFile(url, 'utf8');

@@ -25,6 +25,9 @@ use parking_lot::Mutex;
 
 use std::{cell::Cell, ffi::c_void, mem, mem::MaybeUninit, ops::Range, ptr, slice, sync::Arc};
 
+#[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
+mod gamut_lab;
+
 // Exported to metal
 pub(crate) type PointF = gpui::Point<f32>;
 
@@ -108,6 +111,8 @@ impl InstanceBufferPool {
 }
 
 pub struct MetalRenderer {
+    #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
+    gamut_lab: Option<gamut_lab::Prototype>,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
     device: metal::Device,
     layer: Option<metal::MetalLayer>,
@@ -178,6 +183,10 @@ impl MetalRenderer {
     fn configure_layer(layer: &metal::MetalLayerRef, device: &metal::DeviceRef, transparent: bool) {
         layer.set_device(device);
         layer.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
+        if gamut_lab::enabled() {
+            gamut_lab::configure_layer(layer);
+        }
         // Support direct-to-display rendering if the window is not transparent
         // https://developer.apple.com/documentation/metal/managing-your-game-window-for-metal-in-macos
         layer.set_opaque(!transparent);
@@ -385,6 +394,9 @@ impl MetalRenderer {
         };
 
         Self {
+            #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
+            gamut_lab: gamut_lab::enabled()
+                .then(|| gamut_lab::Prototype::new(&device).expect("gamut-lab pipelines")),
             custom_compositor: None,
             device,
             layer,
@@ -540,6 +552,12 @@ impl MetalRenderer {
         texture: &metal::TextureRef,
         viewport_size: Size<DevicePixels>,
     ) -> Result<metal::CommandBuffer> {
+        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
+        if let Some(lab) = &mut self.gamut_lab {
+            gamut_lab::validate_viewport(viewport_size)?;
+            anyhow::ensure!(self.opaque, "gamut-lab requires an opaque top-level window");
+            lab.wide.clear();
+        }
         let custom_outputs = if scene.custom_draws.is_empty() {
             Vec::new()
         } else {
@@ -589,7 +607,30 @@ impl MetalRenderer {
                 } else {
                     raw
                 };
-                let output = crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?;
+                #[allow(unused_mut)]
+                let mut raw = raw;
+                #[allow(unused_mut)]
+                let mut format = MTLPixelFormat::BGRA8Unorm;
+                #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
+                if let Some(lab) = &mut self.gamut_lab {
+                    if raw.is::<gamut_lab::WideOutput>() {
+                        let (output, tag) = *raw.downcast::<gamut_lab::WideOutput>().unwrap();
+                        anyhow::ensure!(
+                            tag == gamut_lab::WIDE_TAG,
+                            "invalid gamut-lab output contract"
+                        );
+                        raw = Box::new(output);
+                        format = MTLPixelFormat::RGBA16Float;
+                        lab.wide.insert(outputs.len());
+                    }
+                }
+                let output = if format == MTLPixelFormat::BGRA8Unorm {
+                    crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?
+                } else {
+                    crate::custom_draw::CustomCompositor::validate_format(
+                        &context, draw, raw, format,
+                    )?
+                };
                 let coverage = if draw.coverage.is_some() {
                     let key = crate::custom_draw::CoverageKey::new(draw)?;
                     if let Some(texture) = self.custom_compositor.as_ref().unwrap().masks.get(&key)
@@ -681,6 +722,12 @@ impl MetalRenderer {
             (viewport_size.width.ceil() as i32).into(),
             (viewport_size.height.ceil() as i32).into(),
         );
+        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
+        if self.gamut_lab.is_some() {
+            // Existing image API returns an explicit clipped sRGB preview, not
+            // four-byte reads from a Float16 drawable.
+            return self.render_scene_to_image(scene, viewport_size);
+        }
         let drawable = layer
             .next_drawable()
             .ok_or_else(|| anyhow::anyhow!("Failed to get drawable for render_to_image"))?;
@@ -806,7 +853,13 @@ impl MetalRenderer {
         let opaque = self.opaque;
         self.opaque = false;
         self.update_path_intermediate_textures(extent);
+        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
+        let lab = self.gamut_lab.take();
         let result = self.render_frame(scene, target, extent);
+        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
+        {
+            self.gamut_lab = lab;
+        }
         self.opaque = opaque;
         self.update_path_intermediate_textures(viewport);
         result?.commit();
@@ -826,6 +879,20 @@ impl MetalRenderer {
             bool,
         )],
     ) -> Result<metal::CommandBuffer> {
+        #[cfg(all(target_os = "macos", debug_assertions, feature = "test-support"))]
+        if let Some(mut lab) = self.gamut_lab.take() {
+            let result = lab.render(
+                self,
+                scene,
+                instance_bindings,
+                writer,
+                texture,
+                viewport_size,
+                custom_outputs,
+            );
+            self.gamut_lab = Some(lab);
+            return result;
+        }
         let command_queue = self.command_queue.clone();
         let command_buffer = command_queue.new_command_buffer();
         let alpha = if self.opaque { 1. } else { 0. };

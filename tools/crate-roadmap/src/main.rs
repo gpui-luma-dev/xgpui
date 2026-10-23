@@ -722,6 +722,10 @@ fn generate(root: &Path) -> Result<()> {
     // Embed them so navigation works offline without fetch.
     let document_sources = [
         (
+            "high-gamut-windows",
+            "docs/roadmap/extensions/high-gamut-windows.md",
+        ),
+        (
             "shader-producers",
             "docs/roadmap/extensions/shader-producers.md",
         ),
