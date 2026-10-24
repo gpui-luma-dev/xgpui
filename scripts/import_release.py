@@ -94,8 +94,8 @@ def main():
         parser.error("expected-sha must be a full 40-character SHA")
 
     root = pathlib.Path(git("rev-parse", "--show-toplevel"))
-    if git("branch", "--show-current", cwd=root) != "upstream":
-        parser.error("Imports must run on the upstream branch")
+    if git("branch", "--show-current", cwd=root) != f"release/{args.release}":
+        parser.error(f"Imports must run on the release/{args.release} branch")
     if git("status", "--porcelain", cwd=root):
         parser.error("The checkout must be clean before importing")
 

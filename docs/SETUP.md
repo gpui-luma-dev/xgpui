@@ -1,35 +1,39 @@
 # xgpui release imports
 
-`main` is the development branch. Synchronization keeps two persistent branches:
+gpui-unofficial is xgpui's upstream repository. `main` is xgpui development.
+Each incoming release gets a matching branch, for example `release/1.26.0`,
+and a draft PR from that branch to `main`. Merging is manual.
 
-- `upstream`: the exact gpui-unofficial capture, with its original names.
-- `upstream-normalized`: the same capture with local crate names, used for merges.
-
-Do not add development patches to either generated branch. Preserve both branches
-and use merge commits when integrating their history; resolve conflicts on a
-development/integration branch based on main.
+gpui-unofficial publishes independent orphan release snapshots. Sync reads those
+files rather than merging their Git histories. xgpui's release branches retain
+connected history so incoming differences can merge with downstream patches.
 
 ## Import a release
 
-Run **Actions → Sync GPUI release** from main, supplying the release number and,
+Run **Actions → Sync GPUI release** from main with the release number and,
 optionally, an expected source SHA. The workflow:
 
-1. Uses the existing importer to replace `gpui/` on upstream and record provenance.
-2. Restores those capture files onto upstream-normalized, replacing the previous
-   generated snapshot rather than overlaying it.
-3. Runs the Rust normalizer with the explicit `scripts/crate-names.json` mapping.
-4. Commits and pushes changes to the generated branches when necessary.
-5. Provides a comparison link against main. Creating/updating a PR requires the
-   dispatch's `open_pr` opt-in and organization permission.
+1. Selects `release/<version>`, based on the previous imported release's branch.
+2. Fetches gpui-unofficial's matching release and compares its captured files,
+   including additions and deletions. Crate names are normalized for xgpui.
+3. Commits and pushes the incoming release differences onto that version branch.
+4. Automatically opens a draft PR to `main`, or updates its existing open PR.
+   Existing PRs retain their current draft/review state. No PR for an empty diff.
 
-Dispatching this workflow authorizes its branch updates. It never publishes
-crates, merges a PR or launches an application. No workflow is dispatched merely
-by changing these files locally.
+Release branches hold imported source, not downstream development patches.
+Basing each import on the prior release keeps xgpui-only edits out of the incoming
+diff. Resolve conflicts during manual integration rather than overwriting main's
+patched files with a new snapshot.
 
-Re-running an unchanged capture is idempotent. Unknown crates or naming collisions
-stop normalization for review; add a reviewed mapping before retrying. Do not
-derive new names silently. When updating the normalizer, retain its schema and
-mapping version in provenance and review the resulting generated diff.
+For migration, the first version branch can use the existing `upstream-normalized`
+branch as its baseline. The baseline's source SHA must match main's recorded
+import. The old `upstream` and `upstream-normalized` branches are not updated by
+sync. Keep version branches available as baselines for later imports.
+
+Dispatching sync authorizes its release branch and draft PR updates. It does not
+merge, publish, or run Windows validation. Unknown crates, name collisions and
+baseline mismatches stop the run for review. Repeating an unchanged import does
+not create another commit or PR.
 
 ## Names and provenance
 
@@ -50,7 +54,7 @@ These local names do not imply ownership of the corresponding crates.io names.
 
 ## Integrate and validate
 
-Merge upstream-normalized into the development/integration branch. Preserve local
+Merge the release-specific branch into the development/integration branch. Preserve local
 Rust edits when resolving conflicts; do not replace main's capture with a fresh
 generated snapshot as a substitute for merging. The first normalization is a
 directory/package migration; later releases use the same stable paths.
@@ -99,14 +103,13 @@ Refresh and review the web documentation after each release; regeneration alone
 does not validate the narrative or SVG teaching model. See
 [roadmap maintenance](roadmap/BUILDING.md) and [build options](BUILDING.md).
 
-The workflow can still validate the original raw upstream paths through its
-`source_ref` input. Native macOS checks do not establish browser, Linux, Windows
-or mobile runtime compatibility.
+Sync imports and normalizes source changes; it does not run platform builds or
+runtime validation. Review and validation happen separately before merging.
 
 ## GitHub settings
 
-Keep main as the default branch and preserve upstream/upstream-normalized after
-merges. If organization policy blocks Actions-created PRs, leave
-`SYNC_AUTO_PR=false`; the workflow supplies the normalized comparison link.
-Even when the organization permits PR creation, the dispatch's `open_pr` input
-defaults to false. Review and authorize each operation separately.
+Keep main as the default branch and preserve imported version branches after
+merges. Enable **Allow GitHub Actions to create and approve pull requests** in the
+repository/organization Actions settings so the workflow can create its draft PR.
+If policy denies PR creation, sync fails at that step; the release branch remains
+available for review. Nothing is merged automatically.

@@ -14,12 +14,6 @@ on:
         default: ""
         type: string
 
-      open_pr:
-        description: Explicitly allow creating or updating the normalized release PR
-        required: false
-        default: false
-        type: boolean
-
 permissions:
   contents: write
   pull-requests: write
@@ -44,63 +38,63 @@ jobs:
           cargo +stable build --locked --release --manifest-path tools/release-sync/Cargo.toml --target-dir "$RUNNER_TEMP/normalization-target"
           cp "$RUNNER_TEMP/normalization-target/release/xgpui-release" "$RUNNER_TEMP/xgpui-release"
           cp scripts/crate-names.json "$RUNNER_TEMP/crate-names.json"
+          cp scripts/import_release.py "$RUNNER_TEMP/import_release.py"
 
-      - name: Import release onto upstream
+      - name: Select release branch
+        env:
+          RELEASE: ${{ inputs.release }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid release"; exit 1; }
+          branch="release/$RELEASE"
+          git check-ref-format --branch "$branch"
+          # The prior imported release is the baseline, not patched main.
+          previous_ref="$(jq -r '.ref' upstream.json)"
+          previous_sha="$(jq -r '.commit' upstream.json)"
+          if [[ -n "$(git ls-remote --heads origin "refs/heads/$branch")" ]]; then
+            git fetch origin "refs/heads/$branch"
+            git switch -c "$branch" FETCH_HEAD
+          else
+            [[ "$previous_ref" =~ ^release/[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid previous release"; exit 1; }
+            if [[ -n "$(git ls-remote --heads origin "refs/heads/$previous_ref")" ]]; then
+              git fetch origin "refs/heads/$previous_ref"
+            else
+              # One-time migration from the old normalized import history.
+              git fetch origin refs/heads/upstream-normalized
+            fi
+            baseline_sha="$(git show FETCH_HEAD:upstream.json | jq -r '.commit')"
+            [[ "$baseline_sha" == "$previous_sha" ]] || { echo "Import baseline differs from main's recorded source; review before syncing"; exit 1; }
+            git switch -c "$branch" FETCH_HEAD
+          fi
+          # gpui-unofficial releases may be orphan snapshots; xgpui's import
+          # branches must remain connected to main for a reviewable merge.
+          git merge-base HEAD origin/main > /dev/null || { echo "Release branch has no shared xgpui history"; exit 1; }
+          echo "SYNC_BRANCH=$branch" >> "$GITHUB_ENV"
+
+      - name: Import and normalize release differences
         env:
           RELEASE: ${{ inputs.release }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         shell: bash
         run: |
           set -euo pipefail
-          # Always use the importer from main, even if upstream has an older copy.
-          cp scripts/import_release.py "$RUNNER_TEMP/import_release.py"
-          git fetch origin upstream
-          git switch -C upstream origin/upstream
           import_args=("$RELEASE")
           if [[ -n "$EXPECTED_SHA" ]]; then
             import_args+=(--expected-sha "$EXPECTED_SHA")
           fi
           python3 "$RUNNER_TEMP/import_release.py" "${import_args[@]}"
+          "$RUNNER_TEMP/xgpui-release" normalize --root "$GITHUB_WORKSPACE" --map "$RUNNER_TEMP/crate-names.json"
+          "$RUNNER_TEMP/xgpui-release" normalize --root "$GITHUB_WORKSPACE" --map "$RUNNER_TEMP/crate-names.json" --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add --all -- gpui .cargo/config.toml upstream.json
           if ! git diff --cached --quiet; then
-            git commit -m "Import gpui-unofficial $RELEASE"
-            git push origin upstream
+            git commit -m "Sync gpui-unofficial $RELEASE"
+            git push origin "HEAD:refs/heads/$SYNC_BRANCH"
           fi
-          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import json
-          import pathlib
-          data = json.loads(pathlib.Path("upstream.json").read_text())
-          print(f"Imported {data['ref']} at `{data['commit']}`.")
-          print(f"Captured {len(data['packages'])} packages.")
-          PY
 
-      - name: Normalize capture on its own persistent branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin upstream
-          remote_ref="$(git ls-remote --heads origin refs/heads/upstream-normalized)"
-          if [[ -n "$remote_ref" ]]; then
-            git fetch origin upstream-normalized
-            git switch -C upstream-normalized origin/upstream-normalized
-          else
-            git switch -c upstream-normalized origin/upstream
-          fi
-          # Replace only capture files on this generated branch, never on main.
-          git restore --source=origin/upstream -- gpui .cargo/config.toml upstream.json
-          "$RUNNER_TEMP/xgpui-release" normalize --root "$GITHUB_WORKSPACE" --map "$RUNNER_TEMP/crate-names.json"
-          "$RUNNER_TEMP/xgpui-release" normalize --root "$GITHUB_WORKSPACE" --map "$RUNNER_TEMP/crate-names.json" --check
-          git add --all -- gpui .cargo/config.toml upstream.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Normalize GPUI crate names"
-            git push origin upstream-normalized
-          fi
-          echo 'Normalized release is ready on upstream-normalized; raw upstream remains unchanged.' >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Open or update sync PR
-        if: inputs.open_pr && vars.SYNC_AUTO_PR != 'false'
+      - name: Open or update release PR
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -108,28 +102,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin main upstream-normalized
-          if git merge-base --is-ancestor origin/upstream-normalized origin/main; then
-            echo "This import is already included in main."
+          git fetch origin main
+          if git merge-base --is-ancestor HEAD origin/main || git diff --quiet origin/main...HEAD; then
+            echo "No new release differences to integrate." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           body_file="$RUNNER_TEMP/sync-pr.md"
           source_sha="$(jq -r '.commit' upstream.json)"
-          printf 'Import gpui-unofficial %s with normalized crate names.\n\nSource commit: %s\n\nRaw capture remains on upstream. This PR comes from upstream-normalized.\nThe name mapping and original package paths are recorded in upstream.json.\n\nReview validation before merging. Resolve conflicts on an integration branch based on main; preserve downstream patches and both upstream branches.\n\nUse a merge commit.\n' "$RELEASE" "$source_sha" > "$body_file"
-          pr_number="$(gh pr list --base main --head upstream-normalized --state open \
+          printf 'Sync gpui-unofficial release/%s into xgpui.\n\nSource commit: %s\nImport branch: %s\n\nIncludes release file differences with xgpui crate-name normalization. Review downstream conflicts and validate separately before manually merging. No automatic merge or platform validation is performed by sync.\n' "$RELEASE" "$source_sha" "$SYNC_BRANCH" > "$body_file"
+          pr_number="$(gh pr list --base main --head "$SYNC_BRANCH" --state open \
             --json number --jq '.[0].number // empty')"
           if [[ -n "$pr_number" ]]; then
             gh pr edit "$pr_number" --title "Sync gpui-unofficial $RELEASE" \
               --body-file "$body_file"
           else
-            gh pr create --base main --head upstream-normalized \
+            gh pr create --draft --base main --head "$SYNC_BRANCH" \
               --title "Sync gpui-unofficial $RELEASE" --body-file "$body_file"
           fi
-
-      - name: Show manual review link when PR creation was not authorized
-        if: ${{ !inputs.open_pr || vars.SYNC_AUTO_PR == 'false' }}
-        env:
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          echo "No PR was created: opt-in authorization or organization permission is missing."
-          echo "[Review upstream and open a PR](https://github.com/$REPOSITORY/compare/main...upstream-normalized?expand=1)" >> "$GITHUB_STEP_SUMMARY"
