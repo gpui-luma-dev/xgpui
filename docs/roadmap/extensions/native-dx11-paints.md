@@ -65,7 +65,7 @@ recovery    reject old device/context caches
 cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib dx11_custom
 cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders
 cargo run --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml -- --headless --effect mesh --frames 3 --png native-dx11-mesh.png
-cargo run --locked --config .cargo/validation.toml --manifest-path apps/shader-lab/Cargo.toml
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml
 ```
 
 Cross-compile, HLSL generation and extension Clippy pass. Windows driver/WARP,

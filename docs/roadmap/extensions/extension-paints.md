@@ -118,8 +118,15 @@ let current = painted().bg_paint(mesh.clone());
 let next = painted().bg_paint(next_mesh);
 ```
 
-Animation interpolates control points, then builds a new snapshot. See shader-lab
-for play/pause, progress and slow morph controls.
+Animation interpolates control points, then builds a new snapshot. Use paint-lab
+for interactive mesh animation and paint editing.
+
+```sh
+# Independent CPU Hermite reference; topology, immutable snapshots and retry.
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml native_mesh_matches_cpu
+# Solid output: alpha, clipping, replay, reuse, resize and aborted preparation.
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml native_producer_pixels
+```
 
 ## Reuse one producer across paint sites
 

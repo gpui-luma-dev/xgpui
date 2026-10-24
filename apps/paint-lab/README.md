@@ -1,6 +1,6 @@
 # paint-lab
 
-Local Metal app proving that one extension producer can paint different GPUI
+Native Metal / Windows D3D11 app proving that one extension producer can paint different GPUI
 shapes. The three examples are a rounded background with normal GPUI children,
 a rounded dashed border, and a curved path fill. Effects live in xgpui-shader;
 GPUI owns coverage, clipping, ordering and opacity. The app offers Hermite mesh

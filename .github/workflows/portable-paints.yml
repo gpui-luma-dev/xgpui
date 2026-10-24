@@ -60,7 +60,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Check native applications
         run: |
-          cargo check --locked --config .cargo/validation.toml --manifest-path apps/shader-lab/Cargo.toml
           cargo check --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders
       - name: Test exact coverage lookups and allocation counts
         run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib coverage_cache

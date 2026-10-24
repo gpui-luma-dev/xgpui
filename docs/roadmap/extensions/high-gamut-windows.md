@@ -259,12 +259,12 @@ gh run download RUN_ID --name gamut-lab-windows-x64
 # .\gamut-lab.exe
 ```
 
-The **Windows lab applications** workflow also builds `paint-lab` and `shader-lab`,
+The **Windows lab applications** workflow also builds `paint-lab`,
 compiles their tests and uploads separate x64 release executables. It runs on
 relevant pull requests or manual dispatch. Download builds from the Actions run's
 artifacts. It does not launch desktop windows or establish physical gamut fidelity.
 The separate **Portable paint GPU checks** workflow runs the offscreen WARP suite.
-Neither workflow has been run for these local changes yet.
+Windows app builds have passed; interactive Windows behavior has also been checked locally by the app developer. Physical color measurement remains separate.
 
 ```text
 controls    overlays, opacity, light/dark backdrop, reverse surface order

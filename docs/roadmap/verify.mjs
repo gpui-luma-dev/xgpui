@@ -219,7 +219,6 @@ for (const file of [
   'extensions/xgpui-ext/README.md',
   'extensions/xgpui-ext/crates/xgpui-shader/README.md',
   'apps/paint-lab/README.md',
-  'apps/shader-lab/README.md',
   'apps/gamut-lab/README.md',
   'extensions/xgpui-ext/crates/xgpui-gamut/README.md',
 ]) {

@@ -38,7 +38,7 @@ painted().bg_paint(Arc::new(SolidColor::new([1.0, 0.2, 0.0, 1.0])?));`) +
     '<p><code>xgpui-shader</code>: gradients, meshes and portable WGSL. Metal, wgpu and native D3D11 adapters; sRGB output. No wide-gamut window required.</p>' +
     '<div class="cards">' + extensionCard('extension-paints', 'Start here: dependencies, containers, borders, paths and interaction.') + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('paint-contract-hardening', 'Preparation, recording and failure behavior.') + extensionCard('portable-wgsl-v1', 'Rust parameters + portable WGSL source.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'Native D3D11 adapter and Windows acceptance.') + '</div>' +
     extensionCode('sh', `just --justfile apps/paint-lab/justfile radial
-just --justfile apps/shader-lab/justfile --list`) +
+just --justfile apps/paint-lab/justfile --list`) +
     '<h2>2. Wide-gamut presentation</h2>' +
     extensionCode('rust', `use gpui::WindowColorMode;
 
