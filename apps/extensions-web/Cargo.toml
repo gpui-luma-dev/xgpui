@@ -1,0 +1,31 @@
+[package]
+name = "extensions-web"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "extensions-web"
+path = "src/main.rs"
+test = false
+bench = false
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+gpui = { path = "../../gpui/crates/gpui" }
+gpui-web = { path = "../../gpui/crates/gpui-web", default-features = false }
+parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
+xgpui-parley = { path = "../../extensions/xgpui-ext/crates/xgpui-parley" }
+xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader", features = ["wgpu", "portable-shaders"] }
+unicode-segmentation = "1"
+web-time = "1"
+wasm-bindgen = "=0.2.129"
+web-sys = { version = "0.3", features = ["Window", "Location", "console"] }
+console_error_panic_hook = "0.1"
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+# GPUI CustomContent is Send + Sync; this app never shares browser GPU handles
+# with workers. wgpu's opt-in is valid only for non-atomic Wasm builds.
+wgpu = { version = "30.0.1", features = ["fragile-send-sync-non-atomic-wasm"] }

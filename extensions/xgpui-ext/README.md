@@ -13,3 +13,5 @@ never depends on extension crates. Keep renderer integration and API changes sma
 
 [#7: Custom shaders](https://github.com/gpui-luma-dev/xgpui/issues/7) and
 [#8: high-gamut windows](https://github.com/gpui-luma-dev/xgpui/issues/8) are separate capabilities.
+
+Browser demos for shader paints and Parley paragraphs: [extensions-web](../../apps/extensions-web/README.md).

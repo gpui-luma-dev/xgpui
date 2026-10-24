@@ -31,7 +31,8 @@ assert.ok(gpuiInventory.files.includes('gpui/crates/gpui/src/text_system/paragra
 assert.ok(!gpuiInventory.warnings.some(w => w.includes('paragraph_cache')));
 assert.ok(data.crates.find(c => c.package === 'gpui-windows').warnings.some(w => w.includes('Unexpanded include! at gpui/crates/gpui-windows/')));
 
-assert.match(run('review()'), /Review hypotheses/);
+assert.match(run('review()'), /<h1>API review<\/h1>/);
+assert.doesNotMatch(run('review()'), /Make the contract deliberate|Suggested order of work/);
 const pages = new Map();
 for (const c of data.crates) {
   assert.ok(data.notes[c.package].role);
@@ -85,6 +86,14 @@ for (const route of ['#extensions', ...Object.keys(data.extension_documents).map
 }
 const index = await readFile(new URL('index.html', site), 'utf8');
 assert.ok(!index.includes('#method'));
+assert.ok(index.includes('href="examples/extensions/"'));
+for (const demo of ['shader', 'parley']) {
+  const html = run(`browserDemoLinks('${demo}')`);
+  assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
+  assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web'));
+  assert.equal(new URL(`examples/extensions/?demo=${demo}`, 'https://example.github.io/xgpui/').pathname, '/xgpui/examples/extensions/');
+}
+
 for (const asset of ['style.css', 'extensions.js', 'guides.js', 'pipeline.js', 'app.js', 'data.js']) {
   assert.ok(index.includes(asset));
   await readFile(new URL(asset, site));

@@ -22,6 +22,15 @@ jobs:
         run: |
           cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
           node docs/verify.mjs
+      - name: Install Wasm target and packaging tool
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo install wasm-bindgen-cli --version 0.2.129 --locked
+      - name: Build browser extension demos
+        run: |
+          bash apps/extensions-web/build.sh --release
+          mkdir -p docs/examples/extensions
+          cp apps/extensions-web/dist/* docs/examples/extensions/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs
