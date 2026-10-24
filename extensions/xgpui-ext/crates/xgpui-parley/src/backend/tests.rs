@@ -237,10 +237,9 @@ fn rejected_layouts_keep_source_indices_and_stable_cached_face() -> Result<()> {
         assert_eq!(rejected.len, source.len());
     }
     let old_metrics = backend
-        .state
-        .lock()
-        .unwrap()
         .faces
+        .read()
+        .unwrap()
         .get(valid.runs[0].font_id)?
         .metrics()?;
     assert_eq!(
@@ -282,5 +281,300 @@ fn unsupported_synthesis_does_not_replace_requested_or_resolved_ids() -> Result<
     let after = backend.try_layout_line("H", px(24.0), &runs)?;
     assert_eq!(before.runs[0].font_id, after.runs[0].font_id);
     assert_eq!(before.width, after.width);
+    Ok(())
+}
+
+#[test]
+fn metrics_and_rasterization_do_not_wait_for_shaping_state() -> Result<()> {
+    let backend = Arc::new(ParleyTextSystem::new(fonts(), "IBM Plex Sans")?);
+    let id = backend.font_id(&font("IBM Plex Sans"))?;
+    let glyph = backend.glyph_for_char(id, 'H').unwrap();
+    let state = backend.state.lock().unwrap();
+    let (send, receive) = std::sync::mpsc::channel();
+    let worker = {
+        let backend = backend.clone();
+        std::thread::spawn(move || {
+            let result = (|| -> Result<()> {
+                assert!(backend.font_metrics(id).units_per_em > 0);
+                assert_eq!(backend.glyph_for_char(id, 'H'), Some(glyph));
+                assert!(backend.advance(id, glyph)?.width > 0.);
+                backend.typographic_bounds(id, glyph)?;
+                let params = RenderGlyphParams {
+                    font_id: id,
+                    glyph_id: glyph,
+                    font_size: px(24.),
+                    scale_factor: 1.,
+                    subpixel_variant: point(0, 0),
+                    is_emoji: false,
+                    subpixel_rendering: false,
+                    dilation: 0,
+                };
+                let bounds = backend.glyph_raster_bounds(&params)?;
+                assert!(!backend.rasterize_glyph(&params, bounds)?.1.is_empty());
+                Ok(())
+            })();
+            send.send(result).unwrap();
+        })
+    };
+    let result = receive.recv_timeout(std::time::Duration::from_secs(2));
+    // Release before checking the result so a regression cannot strand the worker.
+    drop(state);
+    worker.join().unwrap();
+    result.context("metrics/rasterization blocked on shaping state")??;
+    Ok(())
+}
+
+#[test]
+fn descriptor_index_reuses_ids_and_invalidates_only_after_successful_font_loading() -> Result<()> {
+    let backend = ParleyTextSystem::new(fonts(), "IBM Plex Sans")?;
+    let descriptor = font("IBM Plex Sans");
+    let old = backend.font_id(&descriptor)?;
+    let calls = backend.state.lock().unwrap().shape_calls;
+    assert_eq!(backend.font_id(&descriptor)?, old);
+    assert_eq!(backend.state.lock().unwrap().shape_calls, calls);
+
+    assert!(backend.add_fonts(vec![Cow::Borrowed(b"invalid")]).is_err());
+    assert_eq!(backend.font_id(&descriptor)?, old);
+    assert_eq!(backend.state.lock().unwrap().shape_calls, calls);
+
+    backend.add_fonts(vec![Cow::Borrowed(PLEX)])?;
+    assert!(backend.state.lock().unwrap().descriptors.is_empty());
+    let new = backend.font_id(&descriptor)?;
+    assert_eq!(
+        backend.state.lock().unwrap().shape_calls,
+        calls + 1,
+        "font registration must re-resolve the descriptor, even if its face is unchanged"
+    );
+    let calls = backend.state.lock().unwrap().shape_calls;
+    assert_eq!(backend.font_id(&descriptor)?, new);
+    assert_eq!(backend.state.lock().unwrap().shape_calls, calls);
+    assert_eq!(backend.state.lock().unwrap().descriptors.len(), 1);
+
+    // Retained layouts may still ask to shape with the original descriptor ID.
+    let line = backend.try_layout_line(
+        "H",
+        px(16.),
+        &[FontRun {
+            len: 1,
+            font_id: old,
+        }],
+    )?;
+    assert!(!line.runs.is_empty());
+    assert_eq!(
+        backend.font_metrics(old).units_per_em,
+        backend.font_metrics(new).units_per_em
+    );
+    Ok(())
+}
+
+#[test]
+fn unrelated_font_registration_does_not_accumulate_descriptor_aliases() -> Result<()> {
+    let backend = ParleyTextSystem::new(fonts(), "IBM Plex Sans")?;
+    let normal = font("IBM Plex Sans");
+    let mut no_ligatures = normal.clone();
+    no_ligatures.features = gpui::FontFeatures(Arc::new(vec![("liga".into(), 0)]));
+    let normal_id = backend.font_id(&normal)?;
+    let feature_id = backend.font_id(&no_ligatures)?;
+    assert_ne!(normal_id, feature_id);
+    let bindings = backend.state.lock().unwrap().bindings.len();
+    let next_face = FontId(feature_id.0 + 1);
+    assert!(backend.faces.read().unwrap().get(next_face).is_err());
+    for _ in 0..10 {
+        // Changes the collection generation without replacing either Plex face.
+        backend.add_fonts(vec![Cow::Borrowed(INTER)])?;
+        assert_eq!(backend.font_id(&normal)?, normal_id);
+        assert_eq!(backend.font_id(&no_ligatures)?, feature_id);
+        let state = backend.state.lock().unwrap();
+        assert_eq!(state.bindings.len(), bindings);
+        assert_eq!(state.aliases[&normal].len(), 1);
+        assert_eq!(state.aliases[&no_ligatures].len(), 1);
+        drop(state);
+        assert!(backend.faces.read().unwrap().get(next_face).is_err());
+    }
+    // An old requested ID still carries its features after all invalidations.
+    let on = backend.try_layout_line(
+        "office",
+        px(16.),
+        &[FontRun {
+            len: 6,
+            font_id: normal_id,
+        }],
+    )?;
+    let off = backend.try_layout_line(
+        "office",
+        px(16.),
+        &[FontRun {
+            len: 6,
+            font_id: feature_id,
+        }],
+    )?;
+    assert!(
+        on.runs.iter().map(|r| r.glyphs.len()).sum::<usize>()
+            < off.runs.iter().map(|r| r.glyphs.len()).sum::<usize>()
+    );
+    Ok(())
+}
+
+#[test]
+fn duplicate_font_batches_do_not_retain_more_collection_entries() -> Result<()> {
+    let backend = ParleyTextSystem::new(fonts(), "IBM Plex Sans")?;
+    let descriptor = font("IBM Plex Sans");
+    let id = backend.font_id(&descriptor)?;
+    let font_runs = [FontRun {
+        len: 6,
+        font_id: id,
+    }];
+    let paragraph = backend.prepare_paragraph("office", px(24.), &font_runs)?;
+    let old_layout = paragraph.layout(px(150.))?;
+    let glyph = backend.glyph_for_char(id, 'H').unwrap();
+    let params = RenderGlyphParams {
+        font_id: id,
+        glyph_id: glyph,
+        font_size: px(24.),
+        scale_factor: 1.,
+        subpixel_variant: point(0, 0),
+        is_emoji: false,
+        subpixel_rendering: false,
+        dilation: 0,
+    };
+    let bounds = backend.glyph_raster_bounds(&params)?;
+    let original_mask = backend.rasterize_glyph(&params, bounds)?;
+    let counts = || {
+        let mut state = backend.state.lock().unwrap();
+        ["IBM Plex Sans", "Inter Variable"].map(|name| {
+            state
+                .fonts
+                .collection
+                .family_by_name(name)
+                .unwrap()
+                .fonts()
+                .len()
+        })
+    };
+    let original_counts = counts();
+    for _ in 0..10 {
+        backend.add_fonts(vec![
+            Cow::Borrowed(PLEX),
+            Cow::Borrowed(INTER),
+            Cow::Borrowed(PLEX),
+        ])?;
+        assert_eq!(
+            counts(),
+            original_counts,
+            "identical font blobs must not accumulate"
+        );
+        assert_eq!(backend.font_id(&descriptor)?, id);
+    }
+    assert!(
+        backend
+            .add_fonts(vec![Cow::Borrowed(PLEX), Cow::Borrowed(b"invalid")])
+            .is_err()
+    );
+    assert_eq!(counts(), original_counts);
+    assert_eq!(backend.rasterize_glyph(&params, bounds)?, original_mask);
+    assert_eq!(old_layout.source(), "office");
+    assert_eq!(
+        paragraph.layout(px(150.))?.parley_layout().height(),
+        old_layout.parley_layout().height()
+    );
+    assert_eq!(
+        paragraph.layout(px(90.))?.resolved_faces(),
+        old_layout.resolved_faces()
+    );
+    Ok(())
+}
+
+#[test]
+fn new_font_data_is_registered_and_only_identical_copies_are_skipped() -> Result<()> {
+    let mut context = FontContext::new();
+    context
+        .collection
+        .register_fonts(parley::fontique::Blob::new(Arc::new(PLEX.to_vec())), None);
+    let backend = ParleyTextSystem::new(context, "IBM Plex Sans")?;
+    assert!(backend.font_id(&font("Inter Variable")).is_err());
+    backend.add_fonts(vec![Cow::Borrowed(INTER), Cow::Owned(INTER.to_vec())])?;
+    let id = backend.font_id(&font("Inter Variable"))?;
+    assert!(backend.glyph_for_char(id, 'H').is_some());
+    {
+        let mut state = backend.state.lock().unwrap();
+        assert_eq!(
+            state
+                .fonts
+                .collection
+                .family_by_name("Inter Variable")
+                .unwrap()
+                .fonts()
+                .len(),
+            1
+        );
+    }
+    // A distinct valid blob may use the same family, weight and face index.
+    // Never deduplicate solely by those attributes: its outlines could differ.
+    let mut distinct = INTER.to_vec();
+    distinct.extend_from_slice(&[0; 4]);
+    backend.add_fonts(vec![Cow::Owned(distinct)])?;
+    let mut state = backend.state.lock().unwrap();
+    assert_eq!(
+        state
+            .fonts
+            .collection
+            .family_by_name("Inter Variable")
+            .unwrap()
+            .fonts()
+            .len(),
+        2
+    );
+    drop(state);
+    assert!(backend.font_metrics(id).units_per_em > 0);
+    Ok(())
+}
+
+#[test]
+fn rejected_synthesis_does_not_publish_partial_faces() -> Result<()> {
+    let backend = ParleyTextSystem::new(fonts(), "IBM Plex Sans")?;
+    let mut descriptor = font("Inter Variable");
+    descriptor.weight = gpui::FontWeight::BLACK;
+    descriptor.fallbacks = Some(gpui::FontFallbacks::from_fonts(vec![
+        "IBM Plex Sans".into(),
+    ]));
+    let id = backend.font_id(&descriptor)?;
+    let count_faces = || {
+        let faces = backend.faces.read().unwrap();
+        (0..)
+            .take_while(|&index| faces.get(FontId(index)).is_ok())
+            .count()
+    };
+    let before = count_faces();
+    for size in [24., 48., 72.] {
+        let runs = [FontRun {
+            len: "Hŉ".len(),
+            font_id: id,
+        }];
+        assert!(backend.try_layout_line("Hŉ", px(size), &runs).is_err());
+        assert_eq!(count_faces(), before, "rejected line published faces");
+        assert!(backend.prepare_paragraph("Hŉ", px(size), &runs).is_err());
+        assert_eq!(count_faces(), before, "rejected paragraph published faces");
+    }
+    Ok(())
+}
+
+#[test]
+fn overflowing_line_geometry_is_rejected_and_fallback_stays_finite() -> Result<()> {
+    let backend = ParleyTextSystem::new(fonts(), "IBM Plex Sans")?;
+    backend.set_layout_error_handler(Arc::new(|_| {}));
+    let result = backend.try_layout_line("HHHHHH", px(f32::MAX), &[]);
+    assert!(result.is_err(), "unexpected geometry: {result:?}");
+    let rejected = backend.layout_line("HHHHHH", px(f32::MAX), &[]);
+    assert!(f32::from(rejected.width).is_finite());
+    assert!(f32::from(rejected.ascent).is_finite());
+    assert!(f32::from(rejected.descent).is_finite());
+    assert!(
+        rejected
+            .runs
+            .iter()
+            .flat_map(|r| &r.glyphs)
+            .all(|g| f32::from(g.position.x).is_finite() && f32::from(g.position.y).is_finite())
+    );
+    assert!(backend.try_layout_line("normal", px(16.), &[]).is_ok());
     Ok(())
 }

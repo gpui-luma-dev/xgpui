@@ -40,6 +40,7 @@ pub fn line_layout(
         layout.alignment() == Some(Alignment::Start),
         "expected start alignment"
     );
+    validate_layout_geometry(layout)?;
     let line = layout.lines().next().unwrap();
     ensure!(
         layout.text_len() == 0 || line.text_range() == (0..layout.text_len()),
@@ -98,9 +99,14 @@ pub fn line_layout(
         let mut glyphs = Vec::new();
         for cluster in run.visual_clusters() {
             for glyph in cluster.glyphs() {
+                let position = point(px(x + glyph.x), px(glyph.y));
+                ensure!(
+                    f32::from(position.x).is_finite() && f32::from(position.y).is_finite(),
+                    "nonfinite glyph position"
+                );
                 glyphs.push(ShapedGlyph {
                     id: GlyphId(glyph.id),
-                    position: point(px(x + glyph.x), px(glyph.y)),
+                    position,
                     index: cluster.text_range().start,
                     is_emoji: cluster.is_emoji(),
                 });
@@ -110,6 +116,38 @@ pub fn line_layout(
         result.runs.push(ShapedRun { font_id, glyphs });
     }
     Ok(result)
+}
+
+// A finite requested font size can still overflow shaping or line breaking.
+// Reject invalid geometry before exposing it to GPUI or registering its faces.
+fn validate_layout_geometry(layout: &Layout<()>) -> Result<()> {
+    ensure!(
+        [layout.width(), layout.full_width(), layout.height()]
+            .into_iter()
+            .all(f32::is_finite),
+        "nonfinite paragraph geometry"
+    );
+    for line in layout.lines() {
+        let m = line.metrics();
+        ensure!(
+            [
+                m.line_height,
+                m.baseline,
+                m.offset,
+                m.advance,
+                m.block_min_coord,
+                m.block_max_coord,
+                m.content_block_min_coord,
+                m.content_block_max_coord,
+                m.baseline - m.content_block_min_coord,
+                m.content_block_max_coord - m.baseline
+            ]
+            .into_iter()
+            .all(f32::is_finite),
+            "nonfinite line geometry"
+        );
+    }
+    Ok(())
 }
 
 mod paragraph;

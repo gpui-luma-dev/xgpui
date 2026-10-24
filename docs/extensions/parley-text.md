@@ -91,7 +91,9 @@ font selection behavior without adding public API.
 
 Parley owns shaping, BiDi, breaking and interaction geometry. Reflow clones and
 rebreaks retained Parley layout. Skrifa metrics/rasterization use the same
-registered instance; a bounded LRU retains hinting setup. No extension layout or
+registered instance; a bounded LRU retains hinting setup and one staged outline
+avoids repeating extraction between matching bounds and raster calls. Shaping
+and rasterization use separate locks. No extension layout or
 bitmap cache is added. [Core API additions](gpui-public-api.md).
 
 ## Supported subset
