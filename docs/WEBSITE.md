@@ -6,9 +6,9 @@ From the repository root:
 cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
 ```
 
-Open `docs/roadmap/site/index.html` in your browser. The generated site works
+Open `docs/index.html` in your browser. The generated site works
 offline, including search, hash navigation and line-linked source pages. No
-server is needed. The generated `site/` directory is ignored by Git.
+server is needed. Generated `data.js` and `source/` pages are ignored by Git.
 
 The standalone Rust tool reads the captured package map in `upstream.json`,
 Cargo manifests and library module trees. It excludes the transformed staging
@@ -35,19 +35,17 @@ Validation:
 cargo fmt --manifest-path tools/crate-roadmap/Cargo.toml --check
 cargo test --locked --manifest-path tools/crate-roadmap/Cargo.toml
 cargo clippy --locked --manifest-path tools/crate-roadmap/Cargo.toml --all-targets -- -D warnings
-node docs/roadmap/verify.mjs
+node docs/verify.mjs
 ```
 
 The JavaScript verifier checks the generated artifact and interaction logic
 without opening a GUI. It does not perform visual browser validation.
 
-Website source: `template.html`, `style.css`, `app.js`, `guides.js`, `build-guide.js`, `extensions.js`, `notes.json`.
-The parent `index.html` redirects to the generated site. The architecture and
-execution guides live in `guides.js`; review their source references after syncing.
+Website source: `index.html`, `style.css`, `app.js`, `guides.js`, `build-guide.js`, `extensions.js`, `notes.json`.
+The architecture and execution guides live in `guides.js`; review their source references after syncing.
 The build-options/app/WASM guide lives in `build-guide.js`. Its manifest evidence
 and feature reference are refreshed by the Rust generator.
 Generator source: `tools/crate-roadmap` (independent Cargo workspace).
-No upstream Rust sources, release synchronization scripts or README are changed.
 
 The rendering explorer lives in `pipeline.js`. It uses SVG and a deliberately
 small scene model, not the native renderer. Its model tests cover overlap
@@ -68,7 +66,7 @@ entrypoint, with usage code as its default crate page plus source/API/dependency
 tabs. `xgpui-gamut` has its own manifest, source/API/dependency tabs and code-first
 producer/presentation guide. Native backend ownership is documented separately. `#extensions` remains a linkable index.
 The generator keeps local `extension_packages` separate from upstream provenance.
-`extensions.js` owns the feature guides and reference links. All published extension guides live in `docs/roadmap/extensions/` at the
+`extensions.js` owns the feature guides and reference links. All published extension guides live in `docs/extensions/` at the
 repository root, including integration, API, producer and backend references.
 Source-side READMEs link to these maintained guides.
 
@@ -77,5 +75,9 @@ text guide (`parley-text.md`). The generator renders the extension Markdown docu
 tables, code blocks and heading anchors. Internal document links become site
 routes; section links use `&section=heading-id`. No network fetch or Markdown
 runtime is needed in the browser. Edit the maintained sources, then regenerate;
-do not edit the ignored `site/` output. The verifier checks extension routes,
+do not edit generated `data.js` or `source/` output. The verifier checks extension routes,
 source locations, internal links and section targets as well as the existing site.
+
+## GitHub Pages
+
+Select **Settings → Pages → Source: GitHub Actions**. The Pages workflow builds and verifies the website, then publishes `docs/` on pushes to `main` or manual dispatch. Relative asset and source links support the repository URL prefix.

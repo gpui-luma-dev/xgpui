@@ -26,4 +26,4 @@ jobs:
       - name: Build and verify documentation
         run: |
           cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
-          node docs/roadmap/verify.mjs
+          node docs/verify.mjs

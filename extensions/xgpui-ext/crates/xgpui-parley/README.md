@@ -4,7 +4,7 @@ Experimental Parley 0.12/HarfRust backend for GPUI: flat-LTR compatibility,
 opt-in BiDi paragraphs, resolved-face metrics, and grayscale rasterization.
 Native platform initialization remains unchanged.
 
-[Website guide](../../../../docs/roadmap/extensions/parley-text.md).
+[Website guide](../../../../docs/extensions/parley-text.md).
 
 ## Install the backend
 
