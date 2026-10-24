@@ -1,0 +1,27 @@
+[package]
+name = "xgpui-parley"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+system-fonts = ["parley/system"]
+native-test = ["dep:gpui-platform"]
+
+[dependencies]
+anyhow = "1"
+gpui = { path = "../../../../gpui/crates/gpui" }
+parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
+skrifa = "=0.44.0"
+tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd"] }
+gpui-platform = { path = "../../../../gpui/crates/gpui-platform", optional = true }
+
+[[test]]
+name = "construction"
+harness = false
+required-features = ["native-test"]
+
+[dev-dependencies]
+gpui = { path = "../../../../gpui/crates/gpui", features = ["test-support"] }

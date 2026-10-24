@@ -8,6 +8,7 @@ never depends on extension crates. Keep renderer integration and API changes sma
 - [Producer reference](../../docs/roadmap/extensions/shader-producers.md) · [preparation and recording](../../docs/roadmap/extensions/paint-contract-hardening.md)
 - Local test/performance apps: [paint-lab](../../apps/paint-lab/README.md)
 - [`xgpui-gamut`](crates/xgpui-gamut/README.md): linear-P3 SDR producers; [presentation contract](../../docs/roadmap/extensions/high-gamut-windows.md).
+- [`xgpui-parley`](crates/xgpui-parley/README.md): opt-in Parley text backend: flat LTR, BiDi paragraphs, shared font identity and grayscale rasterization.
 - [Build](../../docs/BUILDING.md) · [web docs generation](../../docs/roadmap/BUILDING.md)
 
 [#7: Custom shaders](https://github.com/gpui-luma-dev/xgpui/issues/7) and
