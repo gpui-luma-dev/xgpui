@@ -1,35 +1,50 @@
 # xgpui release imports
 
-`main` is the development branch. Synchronization keeps two persistent branches:
+gpui-unofficial is xgpui's upstream. `main` contains xgpui's maintained code.
+Sync prepares an **incoming tree proposal**, not an integrated or buildable update.
 
-- `upstream`: the exact gpui-unofficial capture, with its original names.
-- `upstream-normalized`: the same capture with local crate names, used for merges.
+## Review a release
 
-Do not add development patches to either generated branch. Preserve both branches
-and use merge commits when integrating their history; resolve conflicts on a
-development/integration branch based on main.
+Run **Actions → Sync GPUI release** on main with a release number and optional
+source SHA. Sync normalizes the release's crate names, compares that tree with
+xgpui's current tree, and opens a **new draft PR on a fresh version-named branch**.
+Existing PRs are never edited, force-pushed or merged.
 
-## Import a release
+The proposal uses separate commits:
 
-Run **Actions → Sync GPUI release** from main, supplying the release number and,
-optionally, an expected source SHA. The workflow:
+1. **Code:** changed source, shaders, build scripts, assets and other package
+   files, including additions and deletions.
+2. **Cargo versions/dependencies:** package versions and dependency requirements,
+   including mirrored manifests. These affect dependency resolution.
+3. **Generated metadata/artifacts:** generated package READMEs, provenance and
+   the remaining duplicate `transformed-crates` files.
 
-1. Uses the existing importer to replace `gpui/` on upstream and record provenance.
-2. Restores those capture files onto upstream-normalized, replacing the previous
-   generated snapshot rather than overlaying it.
-3. Runs the Rust normalizer with the explicit `scripts/crate-names.json` mapping.
-4. Commits and pushes changes to the generated branches when necessary.
-5. Provides a comparison link against main. Creating/updating a PR requires the
-   dispatch's `open_pr` opt-in and organization permission.
+Release context uses the exact old/new Zed SHAs in snapshot provenance, never
+latest-release or previous-stable guesses. Its path filter is the union of both
+captures' `transform-metadata.json` crate inventories, including nested crates.
+It links relevant Zed commits and referenced PRs, with root Cargo dependency
+changes and unrelated range commits labeled separately. Missing provenance,
+incomplete API pagination and non-forward ranges fail context generation rather
+than silently reporting no changes. Markdown/JSON context accompanies the PR and
+workflow artifact; no issue or comment is created in the upstream repository.
 
-Dispatching this workflow authorizes its branch updates. It never publishes
-crates, merges a PR or launches an application. No workflow is dispatched merely
-by changing these files locally.
+The PR links each commit and lists code differences separately. The detailed JSON
+comparison is uploaded as a workflow artifact. A release with no differences
+creates no PR.
 
-Re-running an unchanged capture is idempotent. Unknown crates or naming collisions
-stop normalization for review; add a reviewed mapping before retrying. Do not
-derive new names silently. When updating the normalizer, retain its schema and
-mapping version in provenance and review the resulting generated diff.
+Sync also compares a clean snapshot of the previously recorded source release.
+This labels whether each proposed file changed upstream and whether xgpui has a
+local modification. It does **not** automatically merge or resolve those overlaps.
+A downstream-only code difference is reported and retained, not applied. When
+upstream also changed a file, its incoming version is a manual review proposal:
+combine or reject overlapping changes before any merge.
+
+`main` remains untouched. Complete incoming versions are placed only on the review
+branch. Platform validation, integration, publishing and merging are separate work.
+
+For example, 1.25.3 contains release metadata changes and no upstream Rust source
+changes relative to 1.25.2. The spring clock difference against xgpui is a local
+patch, not an upstream fix; it is retained with its regression assertion.
 
 ## Names and provenance
 
@@ -50,7 +65,7 @@ These local names do not imply ownership of the corresponding crates.io names.
 
 ## Integrate and validate
 
-Merge upstream-normalized into the development/integration branch. Preserve local
+Review and resolve the incoming proposal on a development/integration branch. Preserve local
 Rust edits when resolving conflicts; do not replace main's capture with a fresh
 generated snapshot as a substitute for merging. The first normalization is a
 directory/package migration; later releases use the same stable paths.
@@ -99,14 +114,12 @@ Refresh and review the web documentation after each release; regeneration alone
 does not validate the narrative or SVG teaching model. See
 [roadmap maintenance](roadmap/BUILDING.md) and [build options](BUILDING.md).
 
-The workflow can still validate the original raw upstream paths through its
-`source_ref` input. Native macOS checks do not establish browser, Linux, Windows
-or mobile runtime compatibility.
+Sync performs no platform validation. Its branch is an unintegrated proposal;
+review and test the chosen integration separately.
 
 ## GitHub settings
 
-Keep main as the default branch and preserve upstream/upstream-normalized after
-merges. If organization policy blocks Actions-created PRs, leave
-`SYNC_AUTO_PR=false`; the workflow supplies the normalized comparison link.
-Even when the organization permits PR creation, the dispatch's `open_pr` input
-defaults to false. Review and authorize each operation separately.
+Keep main as the default branch. Enable **Allow GitHub Actions to create and
+approve pull requests** in repository/organization Actions settings. Sync creates
+only new draft PRs; it never approves or merges them. The old persistent `upstream`
+and `upstream-normalized` branches are not used or updated.

@@ -1,6 +1,6 @@
 [package]
 name = "reqwest-client"
-version = "1.25.2"
+version = "1.25.3"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-archipelago/gpui-unofficial"
@@ -17,7 +17,7 @@ doctest = false
 anyhow = { version = "1.0.86" }
 bytes = { version = "1.0" }
 futures = { version = "0.3.34" }
-http_client = { package = "http-client", version = "1.25.2" }
+http_client = { package = "http-client", version = "1.25.3" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 regex = { version = "1.5", default-features = false, features = ["std", "perf"] }
@@ -27,9 +27,9 @@ reqwest = { version = "0.12.15-zed", package = "zed-reqwest", default-features =
     "rustls-tls-native-roots",
     "socks",
     "stream"] }
-gpui_util = { package = "gpui-util", version = "1.25.2" }
+gpui_util = { package = "gpui-util", version = "1.25.3" }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-http_client_tls = { package = "http-client-tls", version = "1.25.2" }
+http_client_tls = { package = "http-client-tls", version = "1.25.3" }
 
 [workspace]

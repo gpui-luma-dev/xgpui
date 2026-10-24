@@ -1,6 +1,6 @@
 [package]
 name = "gpui-linux"
-version = "1.25.2"
+version = "1.25.3"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-archipelago/gpui-unofficial"
@@ -55,12 +55,12 @@ accesskit = { version = "0.24.0", features = ["enumn"] }
 accesskit_unix = { version = "0.22", optional = true }
 anyhow = { version = "1.0.86" }
 bytemuck = { version = "1" }
-collections = { package = "collections", version = "1.25.2" }
+collections = { package = "collections", version = "1.25.3" }
 futures = { version = "0.3.34" }
-gpui = { package = "gpui", version = "1.25.2" }
-gpui_util = { package = "gpui-util", version = "1.25.2" }
-gpui_wgpu = { package = "gpui-wgpu", version = "1.25.2", features = ["font-kit"], optional = true }
-http_client = { package = "http-client", version = "1.25.2" }
+gpui = { package = "gpui", version = "1.25.3" }
+gpui_util = { package = "gpui-util", version = "1.25.3" }
+gpui_wgpu = { package = "gpui-wgpu", version = "1.25.3", features = ["font-kit"], optional = true }
+http_client = { package = "http-client", version = "1.25.3" }
 libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 parking_lot = { version = "0.12.1" }
@@ -125,7 +125,7 @@ xim = { git = "https://github.com/zed-industries/xim-rs.git", rev = "16f35a2c881
 ], package = "zed-xim", version = "0.4.0-zed", optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dev-dependencies]
-gpui = { package = "gpui", version = "1.25.2", features = ["test-support"] }
+gpui = { package = "gpui", version = "1.25.3", features = ["test-support"] }
 
 [lints]
 rust = { unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("nightly_coverage"))'] } }

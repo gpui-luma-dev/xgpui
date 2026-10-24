@@ -1,6 +1,6 @@
 [package]
 name = "gpui-apple"
-version = "1.25.2"
+version = "1.25.3"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-archipelago/gpui-unofficial"
@@ -19,13 +19,13 @@ runtime_shaders = []
 font-kit = ["dep:font-kit", "dep:core-text", "dep:objc2-core-text", "dep:pathfinder_geometry"]
 
 [dependencies]
-gpui = { package = "gpui", version = "1.25.2" }
+gpui = { package = "gpui", version = "1.25.3" }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 anyhow = { version = "1.0.86" }
 async-task = { version = "4.7" }
 block2 = { version = "0.6" }
-collections = { package = "collections", version = "1.25.2" }
+collections = { package = "collections", version = "1.25.3" }
 core-foundation = { version = "0.10" }
 core-foundation-sys = { version = "0.8.6" }
 core-graphics = { version = "0.24" }
@@ -36,7 +36,7 @@ etagere = { version = "0.2" }
 foreign-types = { version = "0.5" }
 futures = { version = "0.3.34" }
 font-kit = { version = "0.14.1-zed", package = "zed-font-kit", default-features = false, features = ["source"], optional = true }
-gpui_util = { package = "gpui-util", version = "1.25.2" }
+gpui_util = { package = "gpui-util", version = "1.25.3" }
 image = { version = "0.25.1", default-features = false, features = [
     "bmp",
     "dds",
@@ -74,7 +74,7 @@ thiserror = { version = "2.0.12" }
 cbindgen = { version = "0.28.0", default-features = false }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dev-dependencies]
-gpui = { package = "gpui", version = "1.25.2", features = ["test-support"] }
+gpui = { package = "gpui", version = "1.25.3", features = ["test-support"] }
 objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVBuffer", "CVImageBuffer", "CVBase"] }
 
 [lints]
