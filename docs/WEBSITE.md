@@ -41,10 +41,9 @@ node docs/verify.mjs
 The JavaScript verifier checks the generated artifact and interaction logic
 without opening a GUI. It does not perform visual browser validation.
 
-Website source: `index.html`, `style.css`, `app.js`, `guides.js`, `build-guide.js`, `extensions.js`, `notes.json`.
-The architecture and execution guides live in `guides.js`; review their source references after syncing.
-The build-options/app/WASM guide lives in `build-guide.js`. Its manifest evidence
-and feature reference are refreshed by the Rust generator.
+Website source: `index.html`, `style.css`, `app.js`, `guides.js`, `extensions.js`, `notes.json`.
+The architecture reference lives in `guides.js`; review its source references after syncing.
+Native build prerequisites and commands remain in [BUILDING.md](BUILDING.md).
 Generator source: `tools/crate-roadmap` (independent Cargo workspace).
 
 The rendering explorer lives in `pipeline.js`. It uses SVG and a deliberately

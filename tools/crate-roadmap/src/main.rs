@@ -145,6 +145,7 @@ impl Scan {
             module,
             &file,
             directory,
+            path.parent().context("Module has no parent")?,
             &conditions,
             public,
         )
@@ -158,6 +159,7 @@ impl Scan {
         module: &str,
         file: &str,
         directory: &Path,
+        path_directory: &Path,
         inherited: &[String],
         public: bool,
     ) -> Result<()> {
@@ -200,34 +202,38 @@ impl Scan {
                     let mut conditions = inherited.to_vec();
                     conditions.extend(guards(attrs));
                     let child_public = public && is_public(&i.vis);
+                    let explicit_path = attrs.iter().find_map(|a| {
+                        if a.path().is_ident("path") {
+                            if let syn::Meta::NameValue(v) = &a.meta
+                                && let syn::Expr::Lit(l) = &v.value
+                                && let syn::Lit::Str(s) = &l.lit
+                            {
+                                return Some(s.value());
+                            }
+                            None
+                        } else {
+                            None
+                        }
+                    });
                     if let Some((_, children)) = &i.content {
+                        let inline_directory = directory
+                            .join(explicit_path.as_deref().unwrap_or(&i.ident.to_string()));
                         self.items(
                             root,
                             children,
                             &child,
                             file,
-                            &directory.join(i.ident.to_string()),
+                            &inline_directory,
+                            &inline_directory,
                             &conditions,
                             child_public,
                         )?;
                     } else {
-                        let explicit = attrs.iter().find_map(|a| {
-                            if a.path().is_ident("path") {
-                                if let syn::Meta::NameValue(v) = &a.meta
-                                    && let syn::Expr::Lit(l) = &v.value
-                                    && let syn::Lit::Str(s) = &l.lit
-                                {
-                                    return Some(directory.join(s.value()));
-                                }
-                                None
-                            } else {
-                                None
-                            }
-                        });
                         let flat = directory.join(format!("{}.rs", i.ident));
                         let nested = directory.join(i.ident.to_string()).join("mod.rs");
-                        let path =
-                            explicit.unwrap_or_else(|| if flat.is_file() { flat } else { nested });
+                        let path = explicit_path
+                            .map(|p| path_directory.join(p))
+                            .unwrap_or_else(|| if flat.is_file() { flat } else { nested });
                         if path.is_file() {
                             let next = if path.file_name().is_some_and(|n| n == "mod.rs") {
                                 path.parent().context("Module has no parent")?.to_path_buf()
@@ -238,8 +244,10 @@ impl Scan {
                             };
                             self.file(root, &path, &child, &next, &conditions, child_public)?;
                         } else {
-                            self.warnings
-                                .push(format!("Unresolved module {child}: {}", path.display()));
+                            self.warnings.push(format!(
+                                "Unresolved module {child}: {}",
+                                path.strip_prefix(root)?.display()
+                            ));
                         }
                     }
                 }
@@ -666,7 +674,7 @@ fn generate(root: &Path) -> Result<()> {
                 })
                 .collect();
             let page = format!(
-                "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{0} · source</title><style>body{{background:#10151c;color:#d4deea;font:14px/1.65 ui-monospace,monospace;margin:24px}}h1{{font:16px system-ui}}pre{{tab-size:4}}.line{{display:block;white-space:pre}}.line a{{display:inline-block;width:5em;color:#73849a;text-decoration:none;user-select:none}}.line:target{{background:#233c4c;color:white}}a{{color:#8dd6c3}}</style><h1>{0}</h1><p>Source snapshot, Apache-2.0. Line anchors are one-based. <a href=\"javascript:history.back()\">Back to roadmap</a></p><div>{1}</div></html>",
+                "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{0} · source</title><style>body{{background:#111111;color:#dddddd;font:14px/1.65 ui-monospace,monospace;margin:24px}}h1{{font:16px system-ui}}pre{{tab-size:4}}.line{{display:block;white-space:pre}}.line a{{display:inline-block;width:5em;color:#999999;text-decoration:none;user-select:none}}.line:target{{background:#333333;color:white}}a{{color:#cccccc}}</style><h1>{0}</h1><p>Source snapshot, Apache-2.0. Line anchors are one-based. <a href=\"javascript:history.back()\">Back to roadmap</a></p><div>{1}</div></html>",
                 html(file),
                 lines
             );
@@ -711,25 +719,6 @@ fn generate(root: &Path) -> Result<()> {
         if notes.get(&krate.package).is_none() {
             bail!("Missing notes for {}", krate.package);
         }
-    }
-    let mut build_files = BTreeMap::new();
-    for directory in packages.values() {
-        let file = format!(
-            "{}/Cargo.toml",
-            directory.as_str().context("Invalid package path")?
-        );
-        build_files.insert(file.clone(), fs::read_to_string(root.join(file))?);
-    }
-    for file in [
-        "Cargo.toml",
-        "tools/build-all/Cargo.toml",
-        ".cargo/config.toml",
-        ".cargo/validation.toml",
-        "gpui/crates/gpui-web/examples/hello_web/Cargo.toml",
-        "gpui/crates/gpui-web/examples/hello_web/.cargo/config.toml",
-        "gpui/crates/gpui-web/examples/hello_web/trunk.toml",
-    ] {
-        build_files.insert(file.to_owned(), fs::read_to_string(root.join(file))?);
     }
     // All published extension guides live in the web documentation source tree.
     // Embed them so navigation works offline without fetch.
@@ -830,7 +819,7 @@ fn generate(root: &Path) -> Result<()> {
             serde_json::json!({"title": title, "source": file, "html": html}),
         );
     }
-    let data = serde_json::json!({"extension_packages": extension_packages, "extension_documents": extension_documents, "build_files": build_files, "provenance": provenance, "crates": crates, "notes": notes,
+    let data = serde_json::json!({"extension_packages": extension_packages, "extension_documents": extension_documents, "provenance": provenance, "crates": crates, "notes": notes,
         "methodology": "Syntactic Rust inventory, not rustc's resolved public API. pub(crate) excluded; plain cfg(test) modules excluded. Other cfg conditions retained without evaluation. Glob re-exports, associated-type reachability, macro expansions and external re-exports are not resolved. Private-module declarations and trait implementations are candidates, not proof of consumer access. Signatures are source heads; follow source for full bounds and context."});
     let json = serde_json::to_string(&data)?
         .replace('<', "\\u003c")
@@ -865,6 +854,7 @@ mod tests {
             "crate",
             "fixture.rs",
             Path::new("."),
+            Path::new("."),
             &[],
             true,
         )
@@ -891,6 +881,67 @@ mod tests {
                 .find(|i| i.name == "helper")
                 .is_some_and(|i| !i.guards.is_empty())
         );
+    }
+
+    #[test]
+    fn explicit_module_paths_and_diagnostics_are_relative() -> Result<()> {
+        let root = std::env::temp_dir().join(format!(
+            "xgpui-module-paths-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_nanos()
+        ));
+        fs::create_dir_all(root.join("src/outer/inline"))?;
+        fs::create_dir_all(root.join("src/nested"))?;
+        fs::write(root.join("src/lib.rs"), "mod outer; mod nested;")?;
+        fs::write(
+            root.join("src/outer.rs"),
+            r##"#[path = "sibling.rs"] mod explicit;
+mod inline { #[path = "leaf.rs"] mod leaf; }
+#[path = "missing.rs"] mod missing;
+include!("generated.rs");"##,
+        )?;
+        fs::write(root.join("src/sibling.rs"), "pub struct Sibling;")?;
+        fs::write(root.join("src/outer/inline/leaf.rs"), "pub struct Leaf;")?;
+        fs::write(
+            root.join("src/nested/mod.rs"),
+            r##"#[path = "child.rs"] mod child;"##,
+        )?;
+        fs::write(root.join("src/nested/child.rs"), "pub struct Child;")?;
+        let mut scan = Scan::default();
+        scan.file(
+            &root,
+            &root.join("src/lib.rs"),
+            "crate",
+            &root.join("src"),
+            &[],
+            true,
+        )?;
+        for (name, module, file) in [
+            ("Sibling", "crate::outer::explicit", "src/sibling.rs"),
+            (
+                "Leaf",
+                "crate::outer::inline::leaf",
+                "src/outer/inline/leaf.rs",
+            ),
+            ("Child", "crate::nested::child", "src/nested/child.rs"),
+        ] {
+            assert!(
+                scan.declarations
+                    .iter()
+                    .any(|d| d.name == name && d.module == module && d.file == file)
+            );
+        }
+        assert_eq!(
+            scan.warnings,
+            [
+                "Unresolved module crate::outer::missing: src/missing.rs",
+                "Unexpanded include! at src/outer.rs:4",
+            ]
+        );
+        fs::remove_dir_all(root)?;
+        Ok(())
     }
 
     #[test]
