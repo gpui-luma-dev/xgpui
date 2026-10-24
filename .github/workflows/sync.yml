@@ -4,21 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: Release number without the release/ prefix
+        description: gpui-unofficial release number without release/
         required: true
-        default: "1.25.2"
+        default: "1.25.3"
         type: string
       expected_sha:
         description: Optional full source commit SHA to verify
         required: false
         default: ""
         type: string
-
-      open_pr:
-        description: Explicitly allow creating or updating the normalized release PR
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: write
@@ -29,7 +23,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  sync:
+  review:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -37,99 +31,85 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-
-      - name: Prepare downstream normalization tool
-        run: |
-          rustup toolchain install stable --profile minimal
-          cargo +stable build --locked --release --manifest-path tools/release-sync/Cargo.toml --target-dir "$RUNNER_TEMP/normalization-target"
-          cp "$RUNNER_TEMP/normalization-target/release/xgpui-release" "$RUNNER_TEMP/xgpui-release"
-          cp scripts/crate-names.json "$RUNNER_TEMP/crate-names.json"
-
-      - name: Import release onto upstream
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build normalization tool
+        run: cargo build --locked --release --manifest-path tools/release-sync/Cargo.toml --target-dir "$RUNNER_TEMP/normalization-target"
+      - name: Prepare release tree comparison
         env:
           RELEASE: ${{ inputs.release }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         shell: bash
         run: |
           set -euo pipefail
-          # Always use the importer from main, even if upstream has an older copy.
-          cp scripts/import_release.py "$RUNNER_TEMP/import_release.py"
-          git fetch origin upstream
-          git switch -C upstream origin/upstream
-          import_args=("$RELEASE")
-          if [[ -n "$EXPECTED_SHA" ]]; then
-            import_args+=(--expected-sha "$EXPECTED_SHA")
-          fi
-          python3 "$RUNNER_TEMP/import_release.py" "${import_args[@]}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add --all -- gpui .cargo/config.toml upstream.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Import gpui-unofficial $RELEASE"
-            git push origin upstream
-          fi
-          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import json
-          import pathlib
-          data = json.loads(pathlib.Path("upstream.json").read_text())
-          print(f"Imported {data['ref']} at `{data['commit']}`.")
-          print(f"Captured {len(data['packages'])} packages.")
-          PY
-
-      - name: Normalize capture on its own persistent branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin upstream
-          remote_ref="$(git ls-remote --heads origin refs/heads/upstream-normalized)"
-          if [[ -n "$remote_ref" ]]; then
-            git fetch origin upstream-normalized
-            git switch -C upstream-normalized origin/upstream-normalized
-          else
-            git switch -c upstream-normalized origin/upstream
-          fi
-          # Replace only capture files on this generated branch, never on main.
-          git restore --source=origin/upstream -- gpui .cargo/config.toml upstream.json
-          "$RUNNER_TEMP/xgpui-release" normalize --root "$GITHUB_WORKSPACE" --map "$RUNNER_TEMP/crate-names.json"
-          "$RUNNER_TEMP/xgpui-release" normalize --root "$GITHUB_WORKSPACE" --map "$RUNNER_TEMP/crate-names.json" --check
-          git add --all -- gpui .cargo/config.toml upstream.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Normalize GPUI crate names"
-            git push origin upstream-normalized
-          fi
-          echo 'Normalized release is ready on upstream-normalized; raw upstream remains unchanged.' >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Open or update sync PR
-        if: inputs.open_pr && vars.SYNC_AUTO_PR != 'false'
+          args=(prepare --release "$RELEASE" --snapshot "$RUNNER_TEMP/incoming" --report "$RUNNER_TEMP/review.json"
+            --normalizer "$RUNNER_TEMP/normalization-target/release/xgpui-release" --map scripts/crate-names.json)
+          if [[ -n "$EXPECTED_SHA" ]]; then args+=(--expected-sha "$EXPECTED_SHA"); fi
+          python3 scripts/release_review.py "${args[@]}"
+          count="$(jq '[.entries[] | select(.retain_local != true)] | length' "$RUNNER_TEMP/review.json")"
+          echo "REVIEW_COUNT=$count" >> "$GITHUB_ENV"
+      - name: Create a fresh review branch and separate commits
+        if: env.REVIEW_COUNT != '0'
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
           RELEASE: ${{ inputs.release }}
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin main upstream-normalized
-          if git merge-base --is-ancestor origin/upstream-normalized origin/main; then
-            echo "This import is already included in main."
-            exit 0
-          fi
-          body_file="$RUNNER_TEMP/sync-pr.md"
-          source_sha="$(jq -r '.commit' upstream.json)"
-          printf 'Import gpui-unofficial %s with normalized crate names.\n\nSource commit: %s\n\nRaw capture remains on upstream. This PR comes from upstream-normalized.\nThe name mapping and original package paths are recorded in upstream.json.\n\nReview validation before merging. Resolve conflicts on an integration branch based on main; preserve downstream patches and both upstream branches.\n\nUse a merge commit.\n' "$RELEASE" "$source_sha" > "$body_file"
-          pr_number="$(gh pr list --base main --head upstream-normalized --state open \
-            --json number --jq '.[0].number // empty')"
-          if [[ -n "$pr_number" ]]; then
-            gh pr edit "$pr_number" --title "Sync gpui-unofficial $RELEASE" \
-              --body-file "$body_file"
-          else
-            gh pr create --base main --head upstream-normalized \
-              --title "Sync gpui-unofficial $RELEASE" --body-file "$body_file"
-          fi
-
-      - name: Show manual review link when PR creation was not authorized
-        if: ${{ !inputs.open_pr || vars.SYNC_AUTO_PR == 'false' }}
-        env:
-          REPOSITORY: ${{ github.repository }}
+          # Fresh per-run branches: never update an existing PR or force-push.
+          branch="sync/review/$RELEASE-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for kind in code cargo metadata; do
+            python3 scripts/release_review.py "$kind" --snapshot "$RUNNER_TEMP/incoming" --report "$RUNNER_TEMP/review.json"
+            git add --all -- gpui .cargo/config.toml upstream.json
+            commit=""
+            if ! git diff --cached --quiet; then
+              git commit -m "Propose gpui-unofficial $RELEASE $kind differences for review"
+              commit="$(git rev-parse HEAD)"
+            fi
+            echo "${kind^^}_COMMIT=$commit" >> "$GITHUB_ENV"
+          done
+          git push origin "HEAD:refs/heads/$branch"
+          echo "REVIEW_BRANCH=$branch" >> "$GITHUB_ENV"
+      - name: Describe unresolved differences
+        if: env.REVIEW_COUNT != '0'
+        shell: bash
         run: |
-          echo "No PR was created: opt-in authorization or organization permission is missing."
-          echo "[Review upstream and open a PR](https://github.com/$REPOSITORY/compare/main...upstream-normalized?expand=1)" >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY'
+          import json, os, pathlib
+          report = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'review.json').read_text())
+          code = [e for e in report['entries'] if e['kind'] == 'code']
+          cargo = [e for e in report['entries'] if e['kind'] == 'cargo']
+          metadata = [e for e in report['entries'] if e['kind'] == 'metadata']
+          lines = [f"Incoming gpui-unofficial {report['release']} tree proposal.",
+                   f"Source commit: `{report['source_commit']}`.", "",
+                   "Unintegrated proposal: complete incoming files, not resolved patches. main is unchanged.",
+                   "Downstream overlaps require manual decisions before merging. No platform validation is performed.", "",
+                   f"## Code differences ({len(code)})", ""]
+          for entry in code:
+              label = 'upstream changed' if entry['upstream_changed'] else 'upstream unchanged; downstream-only difference'
+              if entry.get('retain_local'): label += '; RETAINED: not applied'
+              elif entry['downstream_overlap']: label += '; MANUAL REVIEW: downstream differs'
+              lines.append(f"- `{entry['path']}` — {entry['change']}; {label}")
+          lines += ["", f"## Cargo versions and dependencies ({len(cargo)})", "",
+                    "Separate commit: package versions and dependency requirements, including mirrored manifests.", "",
+                    f"## Generated metadata/artifacts ({len(metadata)})", "",
+                    "Separate commit: generated READMEs, provenance and remaining duplicate transformed-crates artifacts.", ""]
+          for kind in ('CODE', 'CARGO', 'METADATA'):
+              commit = os.environ.get(kind + '_COMMIT')
+              if commit:
+                  lines.append(f"- [{kind.lower()} commit](https://github.com/{os.environ['GITHUB_REPOSITORY']}/commit/{commit})")
+          (pathlib.Path(os.environ['RUNNER_TEMP']) / 'review-pr.md').write_text('\n'.join(lines) + '\n')
+          PY
+      - name: Create a new draft PR
+        if: env.REVIEW_COUNT != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE: ${{ inputs.release }}
+        run: gh pr create --draft --base main --head "$REVIEW_BRANCH" --title "Review gpui-unofficial $RELEASE incoming differences" --body-file "$RUNNER_TEMP/review-pr.md"
+      - name: Save detailed comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-tree-comparison
+          path: ${{ runner.temp }}/review.json
