@@ -64,7 +64,7 @@ wgpu = { version = "30.0.1", default-features = false, features = ["webgl"] }
 
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["html_reports"] }
-gpui = { package = "gpui", version = "1.25.3", features = ["bench-support"] }
+gpui = { package = "gpui", version = "1.25.3", features = ["test-support", "bench-support"] }
 image = { version = "0.25.1", default-features = false, features = [
     "bmp",
     "dds",

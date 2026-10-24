@@ -108,6 +108,7 @@ impl InstanceBufferPool {
 }
 
 pub struct MetalRenderer {
+    custom_compositor: Option<crate::custom_draw::CustomCompositor>,
     device: metal::Device,
     layer: Option<metal::MetalLayer>,
     is_apple_gpu: bool,
@@ -384,6 +385,7 @@ impl MetalRenderer {
         };
 
         Self {
+            custom_compositor: None,
             device,
             layer,
             presents_with_transaction: false,
@@ -538,6 +540,89 @@ impl MetalRenderer {
         texture: &metal::TextureRef,
         viewport_size: Size<DevicePixels>,
     ) -> Result<metal::CommandBuffer> {
+        let custom_outputs = if scene.custom_draws.is_empty() {
+            Vec::new()
+        } else {
+            if self.custom_compositor.is_none() {
+                self.custom_compositor =
+                    Some(crate::custom_draw::CustomCompositor::new(&self.device)?);
+            }
+            let context = crate::custom_draw::MetalCustomContext {
+                device: self.device.clone(),
+                queue: self.command_queue.clone(),
+            };
+            let mut outputs = Vec::new();
+            for draw in &scene.custom_draws {
+                let extent = crate::custom_draw::CustomCompositor::extent(draw)?;
+                // Direct scene records use 1x logical geometry. Window records
+                // retain their original logical size/scale in a private adapter.
+                let request = gpui::PreparationRequest::new(
+                    draw.bounds.size.map(|dimension| gpui::px(dimension.0)),
+                    extent,
+                    1.,
+                )?;
+                let raw = draw.content.prepare_with_request(&context, &request)?;
+                let native_source = raw.is::<Background>();
+                let raw = if native_source {
+                    let background = *raw.downcast::<Background>().unwrap();
+                    let target = crate::custom_draw::texture(&self.device, extent)?;
+                    let bounds = Bounds::new(
+                        point(ScaledPixels(0.), ScaledPixels(0.)),
+                        size(
+                            ScaledPixels(extent.width.0 as f32),
+                            ScaledPixels(extent.height.0 as f32),
+                        ),
+                    );
+                    let mut native = Scene::default();
+                    native.insert_primitive(gpui::Quad {
+                        bounds,
+                        content_mask: ContentMask { bounds },
+                        background,
+                        ..Default::default()
+                    });
+                    native.finish();
+                    self.render_paint_mask(&native, &target, extent, viewport_size)?;
+                    Box::new(crate::custom_draw::MetalCustomOutput {
+                        texture: target,
+                        commands: Vec::new(),
+                    }) as Box<dyn std::any::Any>
+                } else {
+                    raw
+                };
+                let output = crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?;
+                let coverage = if draw.coverage.is_some() {
+                    let key = crate::custom_draw::CoverageKey::new(draw)?;
+                    if let Some(texture) = self.custom_compositor.as_ref().unwrap().masks.get(&key)
+                    {
+                        Some(texture.clone())
+                    } else {
+                        let target = crate::custom_draw::texture(&self.device, extent)?;
+                        let mask_scene = crate::custom_draw::coverage_scene(draw, extent)?;
+                        self.render_paint_mask(&mask_scene, &target, extent, viewport_size)?;
+                        let bytes =
+                            extent.width.0 as usize * extent.height.0 as usize * 4 + key.byte_len();
+                        let compositor = self.custom_compositor.as_mut().unwrap();
+                        if compositor.mask_bytes + bytes > 64 * 1024 * 1024 {
+                            compositor.masks.clear();
+                            compositor.mask_bytes = 0;
+                        }
+                        if bytes <= 64 * 1024 * 1024 {
+                            compositor.mask_bytes += bytes;
+                            compositor.masks.insert(&key, target.clone());
+                        }
+                        Some(target)
+                    }
+                } else {
+                    None
+                };
+                outputs.push((output, coverage, native_source));
+            }
+            crate::custom_draw::submit_custom_commands(
+                &context,
+                outputs.iter().map(|(output, _, _)| output),
+            )?;
+            outputs
+        };
         let mut writer = InstanceBufferWriter::new(
             &self.device,
             &self.instance_buffer_pool,
@@ -561,6 +646,7 @@ impl MetalRenderer {
             &mut writer,
             texture,
             viewport_size,
+            &custom_outputs,
         )?;
 
         let instance_buffer_pool = self.instance_buffer_pool.clone();
@@ -709,6 +795,24 @@ impl MetalRenderer {
         })
     }
 
+    // Mask scenes contain native primitives only. Restore presentation state even on error.
+    fn render_paint_mask(
+        &mut self,
+        scene: &Scene,
+        target: &metal::TextureRef,
+        extent: Size<DevicePixels>,
+        viewport: Size<DevicePixels>,
+    ) -> Result<()> {
+        let opaque = self.opaque;
+        self.opaque = false;
+        self.update_path_intermediate_textures(extent);
+        let result = self.render_frame(scene, target, extent);
+        self.opaque = opaque;
+        self.update_path_intermediate_textures(viewport);
+        result?.commit();
+        Ok(())
+    }
+
     fn draw_primitives_to_texture(
         &mut self,
         scene: &Scene,
@@ -716,6 +820,11 @@ impl MetalRenderer {
         writer: &mut InstanceBufferWriter,
         texture: &metal::TextureRef,
         viewport_size: Size<DevicePixels>,
+        custom_outputs: &[(
+            crate::custom_draw::MetalCustomOutput,
+            Option<metal::Texture>,
+            bool,
+        )],
     ) -> Result<metal::CommandBuffer> {
         let command_queue = self.command_queue.clone();
         let command_buffer = command_queue.new_command_buffer();
@@ -730,6 +839,18 @@ impl MetalRenderer {
 
         for batch in scene.batches() {
             match batch {
+                PrimitiveBatch::Custom(range) => {
+                    for index in range {
+                        self.custom_compositor.as_ref().unwrap().draw(
+                            &scene.custom_draws[index],
+                            &custom_outputs[index].0,
+                            custom_outputs[index].1.as_deref(),
+                            custom_outputs[index].2,
+                            viewport_size,
+                            command_encoder,
+                        );
+                    }
+                }
                 PrimitiveBatch::Shadows(range) => {
                     self.draw_shadows(range, instance_bindings, viewport_size, command_encoder)
                 }
@@ -1696,6 +1817,9 @@ impl gpui::PlatformHeadlessRenderer for MetalHeadlessRenderer {
         self.renderer.sprite_atlas().clone()
     }
 }
+
+#[cfg(test)]
+mod submission_tests;
 
 #[cfg(test)]
 mod tests {

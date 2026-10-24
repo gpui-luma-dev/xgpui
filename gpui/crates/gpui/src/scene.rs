@@ -50,6 +50,7 @@ pub struct Scene {
     pub subpixel_sprites: Vec<SubpixelSprite>,
     pub polychrome_sprites: Vec<PolychromeSprite>,
     pub surfaces: Vec<PaintSurface>,
+    pub custom_draws: Vec<CustomDraw>,
 }
 
 #[expect(missing_docs)]
@@ -66,6 +67,7 @@ impl Scene {
         self.subpixel_sprites.clear();
         self.polychrome_sprites.clear();
         self.surfaces.clear();
+        self.custom_draws.clear();
     }
 
     pub fn len(&self) -> usize {
@@ -129,6 +131,10 @@ impl Scene {
                 sprite.order = order;
                 self.polychrome_sprites.push(*sprite);
             }
+            Primitive::Custom(draw) => {
+                draw.order = order;
+                self.custom_draws.push(draw.clone());
+            }
             Primitive::Surface(surface) => {
                 surface.order = order;
                 self.surfaces.push(surface.clone());
@@ -160,6 +166,7 @@ impl Scene {
         self.polychrome_sprites
             .sort_by_key(|sprite| (sprite.order, sprite.tile.tile_id));
         self.surfaces.sort_by_key(|surface| surface.order);
+        self.custom_draws.sort_by_key(|draw| draw.order);
     }
 
     #[cfg_attr(
@@ -185,6 +192,8 @@ impl Scene {
             subpixel_sprites_iter: self.subpixel_sprites.iter().peekable(),
             polychrome_sprites_start: 0,
             polychrome_sprites_iter: self.polychrome_sprites.iter().peekable(),
+            custom_start: 0,
+            custom_iter: self.custom_draws.iter().peekable(),
             surfaces_start: 0,
             surfaces_iter: self.surfaces.iter().peekable(),
         }
@@ -209,6 +218,7 @@ pub(crate) enum PrimitiveKind {
     SubpixelSprite,
     PolychromeSprite,
     Surface,
+    Custom,
 }
 
 pub(crate) enum PaintOperation {
@@ -228,6 +238,7 @@ pub enum Primitive {
     SubpixelSprite(SubpixelSprite),
     PolychromeSprite(PolychromeSprite),
     Surface(PaintSurface),
+    Custom(CustomDraw),
 }
 
 #[expect(missing_docs)]
@@ -242,6 +253,7 @@ impl Primitive {
             Primitive::SubpixelSprite(sprite) => &sprite.bounds,
             Primitive::PolychromeSprite(sprite) => &sprite.bounds,
             Primitive::Surface(surface) => &surface.bounds,
+            Primitive::Custom(draw) => &draw.bounds,
         }
     }
 
@@ -255,6 +267,7 @@ impl Primitive {
             Primitive::SubpixelSprite(sprite) => &sprite.content_mask,
             Primitive::PolychromeSprite(sprite) => &sprite.content_mask,
             Primitive::Surface(surface) => &surface.content_mask,
+            Primitive::Custom(draw) => &draw.content_mask,
         }
     }
 }
@@ -267,6 +280,8 @@ impl Primitive {
     allow(dead_code)
 )]
 struct BatchIterator<'a> {
+    custom_start: usize,
+    custom_iter: Peekable<slice::Iter<'a, CustomDraw>>,
     shadows_start: usize,
     shadows_iter: Peekable<slice::Iter<'a, Shadow>>,
     quads_start: usize,
@@ -290,6 +305,10 @@ impl<'a> Iterator for BatchIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut orders_and_kinds = [
+            (
+                self.custom_iter.peek().map(|d| d.order),
+                PrimitiveKind::Custom,
+            ),
             (
                 self.shadows_iter.peek().map(|s| s.order),
                 PrimitiveKind::Shadow,
@@ -328,6 +347,19 @@ impl<'a> Iterator for BatchIterator<'a> {
         };
 
         match batch_kind {
+            PrimitiveKind::Custom => {
+                let start = self.custom_start;
+                self.custom_iter.next();
+                self.custom_start += 1;
+                while self
+                    .custom_iter
+                    .next_if(|d| (d.order, batch_kind) < max_order_and_kind)
+                    .is_some()
+                {
+                    self.custom_start += 1;
+                }
+                Some(PrimitiveBatch::Custom(start..self.custom_start))
+            }
             PrimitiveKind::Shadow => {
                 let shadows_start = self.shadows_start;
                 let mut shadows_end = shadows_start + 1;
@@ -493,6 +525,7 @@ pub enum PrimitiveBatch {
         range: Range<usize>,
     },
     Surfaces(Range<usize>),
+    Custom(Range<usize>),
 }
 
 impl PrimitiveBatch {
@@ -524,6 +557,7 @@ impl PrimitiveBatch {
                     texture_id.index
                 )
             }
+            Self::Custom(range) => format!("custom ({})", range.len()),
             Self::Surfaces(range) => format!("surfaces ({})", range.len()),
         }
     }
@@ -945,5 +979,182 @@ impl PathVertex<Pixels> {
             st_position: self.st_position,
             content_mask: self.content_mask.scale(factor),
         }
+    }
+}
+
+/// Geometry needed to prepare an unclipped, local custom paint source.
+///
+/// Raster dimensions are chosen by the renderer after snapping. They need not
+/// equal logical dimensions multiplied by the window scale factor. Color,
+/// clipping, opacity and submission are not part of this request.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PreparationRequest {
+    logical_size: Size<Pixels>,
+    raster_size: Size<crate::DevicePixels>,
+    scale_factor: f32,
+}
+
+impl PreparationRequest {
+    /// Construct a request with finite, positive dimensions and scale.
+    pub fn new(
+        logical_size: Size<Pixels>,
+        raster_size: Size<crate::DevicePixels>,
+        scale_factor: f32,
+    ) -> anyhow::Result<Self> {
+        anyhow::ensure!(
+            logical_size.width.0.is_finite()
+                && logical_size.width.0 > 0.
+                && logical_size.height.0.is_finite()
+                && logical_size.height.0 > 0.
+                && raster_size.width.0 > 0
+                && raster_size.height.0 > 0
+                && scale_factor.is_finite()
+                && scale_factor > 0.,
+            "invalid custom preparation geometry"
+        );
+        Ok(Self {
+            logical_size,
+            raster_size,
+            scale_factor,
+        })
+    }
+
+    /// Full source size in logical GPUI pixels, before clipping or snapping.
+    pub fn logical_size(&self) -> Size<Pixels> {
+        self.logical_size
+    }
+
+    /// Exact physical dimensions required for the prepared texture.
+    pub fn raster_size(&self) -> Size<crate::DevicePixels> {
+        self.raster_size
+    }
+
+    /// Window scale factor; use `raster_size` for texture allocation.
+    pub fn scale_factor(&self) -> f32 {
+        self.scale_factor
+    }
+}
+
+/// An immutable, replayable description of independent GPU content.
+/// Backend contexts and outputs use checked type erasure; backend crates define
+/// their concrete types. Implementations must not submit or present GPU work.
+pub trait CustomContent: std::fmt::Debug + Send + Sync + 'static {
+    /// Prepare content on the host device. Return an explicit error for unsupported backends.
+    fn prepare(
+        &self,
+        backend: &dyn std::any::Any,
+        size: Size<crate::DevicePixels>,
+    ) -> anyhow::Result<Box<dyn std::any::Any>>;
+
+    /// Prepare using logical geometry and the renderer's exact raster extent.
+    /// Existing producers receive the same physical size through `prepare`.
+    /// Request-aware producers may override this without changing submission.
+    fn prepare_with_request(
+        &self,
+        backend: &dyn std::any::Any,
+        request: &PreparationRequest,
+    ) -> anyhow::Result<Box<dyn std::any::Any>> {
+        self.prepare(backend, request.raster_size())
+    }
+}
+
+// Preserve unsnapped logical geometry without adding fields to public scene
+// records. The original producer still owns its snapshots and preparation cache.
+#[derive(Debug)]
+struct ContentWithPreparationGeometry {
+    content: std::sync::Arc<dyn CustomContent>,
+    logical_size: Size<Pixels>,
+    scale_factor: f32,
+}
+
+impl CustomContent for ContentWithPreparationGeometry {
+    fn prepare(
+        &self,
+        backend: &dyn std::any::Any,
+        size: Size<crate::DevicePixels>,
+    ) -> anyhow::Result<Box<dyn std::any::Any>> {
+        let request = PreparationRequest::new(self.logical_size, size, self.scale_factor)?;
+        self.content.prepare_with_request(backend, &request)
+    }
+
+    fn prepare_with_request(
+        &self,
+        backend: &dyn std::any::Any,
+        request: &PreparationRequest,
+    ) -> anyhow::Result<Box<dyn std::any::Any>> {
+        self.prepare(backend, request.raster_size())
+    }
+}
+
+pub(crate) fn content_with_preparation_geometry(
+    content: std::sync::Arc<dyn CustomContent>,
+    logical_size: Size<Pixels>,
+    scale_factor: f32,
+) -> std::sync::Arc<dyn CustomContent> {
+    std::sync::Arc::new(ContentWithPreparationGeometry {
+        content,
+        logical_size,
+        scale_factor,
+    })
+}
+
+#[cfg(test)]
+mod preparation_tests;
+
+/// Logical geometry covered by independent GPU content. GPUI owns snapping,
+/// inherited clipping/opacity, native coverage, and retained scene insertion.
+#[derive(Clone)]
+pub enum CustomGeometry {
+    /// A filled rounded rectangle over its full unclipped bounds.
+    RoundedRect {
+        /// Full source rectangle in logical GPUI pixels.
+        bounds: Bounds<Pixels>,
+        /// Logical corner radii, clamped and scaled by the host.
+        corner_radii: Corners<Pixels>,
+    },
+    /// A native border ring/dashes. Only the quad's geometry fields are used.
+    Border(crate::PaintQuad),
+    /// An existing tessellated native fill or stroke.
+    Path(Path<Pixels>),
+}
+
+/// Native geometry used as coverage for extension-produced paint.
+#[derive(Clone, Debug)]
+pub enum CustomCoverage {
+    /// Border coverage over the full outer paint rectangle.
+    Border {
+        /// Physical border widths.
+        widths: Edges<ScaledPixels>,
+        /// Existing border style.
+        style: BorderStyle,
+    },
+    /// Existing tessellated path; paint maps over its unclipped bounds.
+    Path(std::sync::Arc<Path<ScaledPixels>>),
+}
+
+/// Retained custom drawing. CPU ownership data is never uploaded as an instance struct.
+#[derive(Clone, Debug)]
+pub struct CustomDraw {
+    /// Assigned by scene insertion.
+    pub order: DrawOrder,
+    /// Destination in scaled scene coordinates.
+    pub bounds: Bounds<ScaledPixels>,
+    /// Inherited rectangular clip.
+    pub content_mask: ContentMask<ScaledPixels>,
+    /// Local corner coverage, in scaled pixels.
+    pub corner_radii: Corners<ScaledPixels>,
+    /// Inherited element opacity, applied once at composition.
+    pub opacity: f32,
+    /// Owned immutable content snapshot, shared across scene replay.
+    /// Window painting retains original logical geometry internally. For directly
+    /// constructed records, preparation uses `bounds.size` as logical size at 1x.
+    pub content: std::sync::Arc<dyn CustomContent>,
+    /// Optional native shape mask; None uses rounded rectangle coverage.
+    pub coverage: Option<CustomCoverage>,
+}
+
+impl From<CustomDraw> for Primitive {
+    fn from(draw: CustomDraw) -> Self {
+        Self::Custom(draw)
     }
 }

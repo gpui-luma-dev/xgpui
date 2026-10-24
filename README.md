@@ -35,8 +35,10 @@ cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
 ```
 
 Open `docs/roadmap/site/index.html`. The site includes the crate map,
-architecture, application and WASM build guides, and an interactive rendering
-pipeline explorer. It works offline. Generated pages are not committed.
+architecture, application and WASM build guides, an interactive rendering
+pipeline explorer, and an **Extensions to GPUI** section. The extension section
+distinguishes opt-in downstream APIs from upstream GPUI and documents the
+`xgpui-shader` integration. It works offline. Generated pages are not committed.
 
 See [documentation instructions](docs/roadmap/BUILDING.md) for maintenance and checks.
 

@@ -667,13 +667,13 @@ impl Style {
                     (true, true) => return None,
                     // x visible, y hidden
                     (true, false) => Bounds::from_corners(
-                        point(min.x, bounds.origin.y),
-                        point(max.x, bounds.bottom_right().y),
+                        point(bounds.origin.x, min.y),
+                        point(bounds.bottom_right().x, max.y),
                     ),
                     // x hidden, y visible
                     (false, true) => Bounds::from_corners(
-                        point(bounds.origin.x, min.y),
-                        point(bounds.bottom_right().x, max.y),
+                        point(min.x, bounds.origin.y),
+                        point(max.x, bounds.bottom_right().y),
                     ),
                     // both hidden
                     (false, false) => Bounds::from_corners(min, max),
@@ -1335,6 +1335,35 @@ mod tests {
     use super::*;
 
     use util_macros::perf;
+
+    // Independent upstream-style fix: hidden-axis clipping must leave the visible
+    // axis untouched, including native opaque versus transparent border semantics.
+    #[test]
+    fn overflow_mask_insets_only_hidden_axes_for_native_borders() {
+        let bounds = Bounds::new(point(px(10.), px(20.)), size(px(100.), px(80.)));
+        let mut style = Style {
+            border_color: Some(red()),
+            border_widths: Edges {
+                left: px(2.).into(),
+                right: px(4.).into(),
+                top: px(6.).into(),
+                bottom: px(8.).into(),
+            },
+            ..Default::default()
+        };
+        style.overflow = point(Overflow::Visible, Overflow::Hidden);
+        assert_eq!(
+            style.overflow_mask(bounds, px(16.)).unwrap().bounds,
+            Bounds::new(point(px(10.), px(26.)), size(px(100.), px(66.)))
+        );
+        style.overflow = point(Overflow::Hidden, Overflow::Visible);
+        assert_eq!(
+            style.overflow_mask(bounds, px(16.)).unwrap().bounds,
+            Bounds::new(point(px(12.), px(20.)), size(px(94.), px(80.)))
+        );
+        style.border_color = Some(crate::transparent_black());
+        assert_eq!(style.overflow_mask(bounds, px(16.)).unwrap().bounds, bounds);
+    }
 
     #[perf]
     fn test_basic_highlight_style_combination() {

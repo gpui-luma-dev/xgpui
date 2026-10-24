@@ -10,6 +10,7 @@ vm.runInContext(inventory, context);
 vm.runInContext(await readFile(new URL("guides.js", site), "utf8"), context);
 vm.runInContext(await readFile(new URL("build-guide.js", site), "utf8"), context);
 vm.runInContext(await readFile(new URL("pipeline.js", site), "utf8"), context);
+vm.runInContext(await readFile(new URL("extensions.js", site), "utf8"), context);
 vm.runInContext(source, context);
 const run = code => vm.runInContext(code, context);
 const data = context.window.ROADMAP;
@@ -69,13 +70,13 @@ for (const c of data.crates) {
     }
   }
 }
-for (const route of ['#pipeline', '#build', '#architecture', '#how-gpui-works', '#method', '#review', '#crate=unknown']) {
+for (const route of ['#extensions', ...Object.keys(data.extension_documents).map(route => '#' + route), '#pipeline', '#build', '#architecture', '#how-gpui-works', '#method', '#review', '#crate=unknown']) {
   context.location.hash = route;
   run('render()');
   assert.ok(element('content').innerHTML.length);
 }
 const index = await readFile(new URL('index.html', site), 'utf8');
-for (const asset of ['style.css', 'guides.js', 'build-guide.js', 'pipeline.js', 'app.js', 'data.js']) {
+for (const asset of ['style.css', 'extensions.js', 'guides.js', 'build-guide.js', 'pipeline.js', 'app.js', 'data.js']) {
   assert.ok(index.includes(asset));
   await readFile(new URL(asset, site));
 }
@@ -181,3 +182,52 @@ for(const match of run('pipelinePage()').matchAll(/href="source\/([^"#]+)\.html#
  assert.ok(pages.get(file).includes('id="L'+match[2]+'"'),file+':'+match[2]);
 }
 console.log('Verified scene ordering, clipping, layers, sprite texture boundaries, replay, SVG, reduced motion and playback cleanup.');
+
+// Every extension contract is part of the offline artifact, with working routes
+// and section targets; all published sources must stay in the web docs tree.
+assert.equal(Object.keys(data.extension_documents).length, 7);
+assert.match(run('extensionPage("extensions")'), /Downstream extension to GPUI/);
+assert.match(index, /href="#extensions"/);
+for (const [route, doc] of Object.entries(data.extension_documents)) {
+  assert.equal(doc.source, 'docs/roadmap/extensions/' + route + '.md');
+  await readFile(new URL('../../' + doc.source, import.meta.url));
+  context.location.hash = '#' + route;
+  run('render()');
+  assert.ok(element('content').innerHTML.includes(doc.html));
+  assert.ok(context.document.title.includes(doc.title));
+  assert.ok(!doc.html.includes('.md"'), 'unconverted Markdown link: ' + route);
+  for (const match of doc.html.matchAll(/href="#([^"&]+)(?:&amp;section=([^"&]+))?"/g)) {
+    const target = data.extension_documents[match[1]];
+    assert.ok(target, 'missing extension route: ' + match[1]);
+    if (match[2]) assert.ok(target.html.includes('id="' + match[2] + '"'), 'missing section: ' + match[2]);
+  }
+}
+assert.equal(run('parseRoute("#paint-contract-hardening&section=implemented-discardable-recording-transactions").global'), 'paint-contract-hardening');
+assert.equal(run('parseRoute("#paint-contract-hardening&section=implemented-discardable-recording-transactions").section'), 'implemented-discardable-recording-transactions');
+for (const file of [
+  'extensions/xgpui-ext/README.md',
+  'extensions/xgpui-ext/crates/xgpui-shader/README.md',
+  'apps/paint-lab/README.md',
+  'apps/shader-lab/README.md',
+]) {
+  const url = new URL('../../' + file, import.meta.url);
+  const markdown = await readFile(url, 'utf8');
+  for (const [, link] of markdown.matchAll(/\]\(([^)]+)\)/g)) {
+    if (/^(?:https?:|#)/.test(link)) continue;
+    await readFile(new URL(link.split('#')[0], url));
+  }
+}
+console.log('Verified extension navigation, offline contracts, consolidated sources, README links and cross-document links.');
+
+const apiChanges = data.extension_documents['gpui-public-api'].html;
+for (const term of ['Scene', 'custom_draws', 'PrimitiveBatch', 'CustomContent', 'PreparationRequest', 'CustomGeometry', 'CustomCoverage', 'CustomDraw', 'paint_custom', 'MetalCustomContext', 'WgpuCustomContext', 'Dx11CustomContext', 'source compatibility risks']) assert.ok(apiChanges.includes(term), term);
+assert.match(index, /href="#gpui-public-api"/);
+assert.match(run('extensionPage("extensions")'), /href="#gpui-public-api"/);
+console.log('Verified public API delta documentation and prominent navigation.');
+
+for (const match of run('publicApiSourceLinks()').matchAll(/href="source\/([^"#]+)\.html#L(\d+)"/g)) {
+  const file = decodeURIComponent(match[1]);
+  assert.ok(pages.has(file), file);
+  assert.ok(pages.get(file).includes('id="L' + match[2] + '"'), file + ':' + match[2]);
+}
+console.log('Verified API-change source links against regenerated declaration anchors.');

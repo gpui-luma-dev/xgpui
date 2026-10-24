@@ -202,7 +202,24 @@ impl WgpuContext {
         any(test, feature = "bench-support", feature = "test-support")
     ))]
     fn create_headless() -> anyhow::Result<(Self, wgpu::TextureFormat)> {
-        let instance = Self::instance(None);
+        // Validation-only backend selection; keep normal window instance defaults upstream.
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::from_env().unwrap_or_else(|| {
+                wgpu::Backends::VULKAN
+                    | wgpu::Backends::GL
+                    | if cfg!(target_os = "macos") {
+                        wgpu::Backends::METAL
+                    } else if cfg!(target_os = "windows") {
+                        wgpu::Backends::DX12
+                    } else {
+                        wgpu::Backends::empty()
+                    }
+            }),
+            flags: wgpu::InstanceFlags::default(),
+            backend_options: wgpu::BackendOptions::default(),
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+            display: None,
+        });
         let device_id_filter = Self::device_id_filter();
         let (adapter, device, queue, dual_source_blending, color_texture_format, target_format) =
             gpui::block_on(async {
