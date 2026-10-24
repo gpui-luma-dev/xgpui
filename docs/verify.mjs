@@ -8,7 +8,6 @@ const inventory = await readFile(new URL('data.js', site), 'utf8');
 const context = vm.createContext({ window: {}, URLSearchParams });
 vm.runInContext(inventory, context);
 vm.runInContext(await readFile(new URL("guides.js", site), "utf8"), context);
-vm.runInContext(await readFile(new URL("build-guide.js", site), "utf8"), context);
 vm.runInContext(await readFile(new URL("pipeline.js", site), "utf8"), context);
 vm.runInContext(await readFile(new URL("extensions.js", site), "utf8"), context);
 vm.runInContext(source, context);
@@ -24,8 +23,18 @@ assert.equal(run('parseRoute("#method").global'), 'method');
 assert.equal(run('escapeHtml("<script>&")'), "&lt;script&gt;&amp;");
 assert.equal(run('filterDeclarations([{name:"Example", signature:"", module:"crate", file:"", guards:[],kind:"struct", root_export:false}], "example").length'), 1);
 assert.equal(run('filterDeclarations([{name:"Example", signature:"", module:"crate", file:"", guards:[],kind:"struct", root_export:false}], "", "", true).length'), 0);
-assert.match(run('overview()'), /Know the code/);
+assert.match(run('overview()'), /GPUI architecture and extensions/);
 assert.match(run('method()'), /Syntactic Rust inventory/);
+assert.ok(!run('method()').includes('<h2>Refresh</h2>'));
+assert.ok(!run('method()').includes('cargo run'));
+assert.match(run('method()'), /Expected scanner limitation: release-only DirectX shader data/);
+assert.match(run('method()'), /no public-API inventory impact/);
+assert.ok(data.crates.every(c => c.warnings.every(w => !w.includes('/Users/') && !w.includes('/private/'))));
+const gpuiInventory = data.crates.find(c => c.package === 'gpui');
+assert.ok(gpuiInventory.files.includes('gpui/crates/gpui/src/text_system/paragraph_cache.rs'));
+assert.ok(!gpuiInventory.warnings.some(w => w.includes('paragraph_cache')));
+assert.ok(data.crates.find(c => c.package === 'gpui-windows').warnings.some(w => w.includes('Unexpanded include! at gpui/crates/gpui-windows/')));
+
 assert.match(run('review()'), /Review hypotheses/);
 const pages = new Map();
 for (const c of data.crates) {
@@ -59,7 +68,7 @@ context.location = {hash:''};
 context.window.addEventListener = () => {};
 context.window.scrollTo = () => {};
 run('render()');
-assert.match(element('content').innerHTML, /Know the code/);
+assert.match(element('content').innerHTML, /GPUI architecture and extensions/);
 for (const c of data.crates) {
   for (const tab of ['overview', 'surface', 'dependencies', 'review']) {
     context.location.hash = '#crate=' + c.package + '&tab=' + tab;
@@ -73,13 +82,13 @@ for (const c of data.crates) {
     }
   }
 }
-for (const route of ['#extensions', ...Object.keys(data.extension_documents).map(route => '#' + route), '#pipeline', '#build', '#architecture', '#how-gpui-works', '#method', '#review', '#crate=unknown']) {
+for (const route of ['#extensions', ...Object.keys(data.extension_documents).map(route => '#' + route), '#pipeline', '#architecture', '#method', '#review', '#crate=unknown']) {
   context.location.hash = route;
   run('render()');
   assert.ok(element('content').innerHTML.length);
 }
 const index = await readFile(new URL('index.html', site), 'utf8');
-for (const asset of ['style.css', 'extensions.js', 'guides.js', 'build-guide.js', 'pipeline.js', 'app.js', 'data.js']) {
+for (const asset of ['style.css', 'extensions.js', 'guides.js', 'pipeline.js', 'app.js', 'data.js']) {
   assert.ok(index.includes(asset));
   await readFile(new URL(asset, site));
 }
@@ -92,7 +101,7 @@ for (const match of index.matchAll(/(?:src|href)="([^"#][^"]*)"/g)) {
   assert.ok(new URL(match[1], pagesRoot).pathname.startsWith('/xgpui/'));
 }
 
-for (const [fn, title, sections] of [["architecturePage", "The architecture of GPUI", 8], ["howGpuiWorksPage", "How GPUI works", 10]]) {
+for (const [fn, title, sections] of [["architecturePage", "The architecture of GPUI", 8]]) {
  const html = run(fn + "()");
  assert.ok(html.includes(title));
  assert.equal((html.match(/class="guide-section"/g) || []).length, sections);
@@ -103,23 +112,7 @@ for (const [fn, title, sections] of [["architecturePage", "The architecture of G
   assert.ok(pages.get(file).includes('id="L' + match[2] + '"'), file + ":" + match[2]);
  }
 }
-console.log("Verified both detailed guides and their source references.");
-
-const buildHtml = run("buildGuidePage()");
-for (const term of ["Build GPUI and your app", "wasm32-unknown-unknown", "WebGL2", "runtime-shaders", "Complete captured feature reference"]) assert.ok(buildHtml.includes(term));
-for (const c of data.crates) {
- assert.ok(buildHtml.includes(c.package));
- const manifest = data.build_files[indexedPackages[c.package] + "/Cargo.toml"];
- assert.ok(manifest);
- for (const name of Object.keys(c.features)) assert.ok(manifest.includes(name));
-}
-context.location.hash = "#build";
-run("render()");
-assert.match(element("content").innerHTML, /Build GPUI and your app/);
-assert.match(context.document.title, /Build GPUI/);
-assert.ok(!buildHtml.includes("undefined"));
-console.log("Verified build guide route, complete feature reference and manifest evidence.");
-
+console.log("Verified architecture guide and its source references.");
 
 // Source-grounded fixtures for the illustrative scene model.
 const basePipeline = run('composePipeline(pipelineState)');

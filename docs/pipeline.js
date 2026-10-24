@@ -81,30 +81,30 @@ function composePipeline(state) {
 function pipelineSvg(model,state,previous,reducedMotion=false) {
   const phase=state.stage, ordered=phase>=4?model.batches.flatMap(b=>b.items):model.primitives;
   const old=new Map((previous?.primitives||[]).map(p=>[p.id,p]));
-  const defs='<defs><linearGradient id="pipe-photo" x2="0" y2="1"><stop stop-color="#87bac9"/><stop offset="1" stop-color="#dbe1b0"/></linearGradient>'+ordered.map(p=>'<clipPath id="pipe-clip-'+p.id+'"><rect x="'+p.clipped.x+'" y="'+p.clipped.y+'" width="'+p.clipped.w+'" height="'+p.clipped.h+'"/></clipPath>').join('')+'</defs>';
+  const defs='<defs><linearGradient id="pipe-photo" x2="0" y2="1"><stop stop-color="#b0b0b0"/><stop offset="1" stop-color="#dcdcdc"/></linearGradient>'+ordered.map(p=>'<clipPath id="pipe-clip-'+p.id+'"><rect x="'+p.clipped.x+'" y="'+p.clipped.y+'" width="'+p.clipped.w+'" height="'+p.clipped.h+'"/></clipPath>').join('')+'</defs>';
   const marks=ordered.map(p=>{
     const b=p.bounds, before=old.get(p.id)?.bounds;
     const motion=!reducedMotion && before && (before.x!==b.x || before.y!==b.y)?'<animateTransform attributeName="transform" type="translate" from="'+before.x+' '+before.y+'" to="'+b.x+' '+b.y+'" dur="0.35s" fill="freeze"/>':'';
     let shape;
-    if(phase<2) shape='<rect width="'+b.w+'" height="'+b.h+'" fill="none" stroke="#516963" stroke-dasharray="'+(phase===0?'4 4':'0')+'"/>';
-    else if(p.id==='panel') shape='<rect width="320" height="205" rx="9" fill="#e5ece0"/>';
-    else if(p.id==='photo') shape='<rect width="205" height="136" fill="url(#pipe-photo)"/><circle cx="151" cy="29" r="16" fill="#f4deb0"/><path d="M0 136 L68 40 L125 111 L160 69 L205 136Z" fill="#426d59"/><path d="M48 68 L68 40 L88 66 L68 59Z" fill="#e8eee1"/>';
-    else if(p.id==='badge') shape='<rect width="104" height="58" rx="8" fill="#264c40"/>';
-    else if(p.id==='path') shape='<path d="M9 0 L18 15 L12 15 L12 24 L6 24 L6 15 L0 15Z" fill="#e1be6b"/>';
-    else if(p.id==='label') shape='<text x="0" y="12" fill="#fff2d4" font-size="13">Adjust</text>';
-    else if(p.id==='title-a') shape='<text x="0" y="13" fill="#1b3d33" font-size="14" font-weight="600">Photo canvas</text>';
-    else if(p.id==='title-b') shape='<text x="0" y="13" fill="#405c52" font-size="12">100%</text>';
-    else shape='<rect width="28" height="22" fill="#c78855"/>';
+    if(phase<2) shape='<rect width="'+b.w+'" height="'+b.h+'" fill="none" stroke="#636363" stroke-dasharray="'+(phase===0?'4 4':'0')+'"/>';
+    else if(p.id==='panel') shape='<rect width="320" height="205" rx="9" fill="#eaeaea"/>';
+    else if(p.id==='photo') shape='<rect width="205" height="136" fill="url(#pipe-photo)"/><circle cx="151" cy="29" r="16" fill="#dfdfdf"/><path d="M0 136 L68 40 L125 111 L160 69 L205 136Z" fill="#626262"/><path d="M48 68 L68 40 L88 66 L68 59Z" fill="#ececec"/>';
+    else if(p.id==='badge') shape='<rect width="104" height="58" rx="8" fill="#434343"/>';
+    else if(p.id==='path') shape='<path d="M9 0 L18 15 L12 15 L12 24 L6 24 L6 15 L0 15Z" fill="#bfbfbf"/>';
+    else if(p.id==='label') shape='<text x="0" y="12" fill="#f3f3f3" font-size="13">Adjust</text>';
+    else if(p.id==='title-a') shape='<text x="0" y="13" fill="#353535" font-size="14" font-weight="600">Photo canvas</text>';
+    else if(p.id==='title-b') shape='<text x="0" y="13" fill="#555555" font-size="12">100%</text>';
+    else shape='<rect width="28" height="22" fill="#929292"/>';
     return '<g clip-path="url(#pipe-clip-'+p.id+')"><g transform="translate('+b.x+' '+b.y+')">'+motion+shape+'</g></g>';
   }).join('');
   const selected=model.inputs.find(p=>p.id===state.selected), b=selected?.bounds;
-  const selection=b?'<rect x="'+b.x+'" y="'+b.y+'" width="'+b.w+'" height="'+b.h+'" fill="none" stroke="#a05b0a" stroke-width="2" stroke-dasharray="5 3"/>':'';
-  const mask=state.mask?'<rect x="36" y="70" width="170" height="112" fill="none" stroke="#765184" stroke-dasharray="3 3"/>':'';
-  return '<svg class="pipeline-preview" viewBox="0 0 360 255" role="img" aria-labelledby="pipeline-svg-title pipeline-svg-desc"><title id="pipeline-svg-title">'+escapeHtml(pipelineStages[phase][0])+' · scene composition</title><desc id="pipeline-svg-desc">Illustrative panel, two glyph runs, photo sprite, adjustment badge and path. Dashed purple bounds show the photo content mask. Amber outlines mark the selected primitive.</desc>'+defs+marks+mask+selection+'<text x="20" y="248" font-size="11" fill="#405650">SVG teaching preview · scale factor 1</text></svg>';
+  const selection=b?'<rect x="'+b.x+'" y="'+b.y+'" width="'+b.w+'" height="'+b.h+'" fill="none" stroke="#646464" stroke-width="2" stroke-dasharray="5 3"/>':'';
+  const mask=state.mask?'<rect x="36" y="70" width="170" height="112" fill="none" stroke="#5d5d5d" stroke-dasharray="3 3"/>':'';
+  return '<svg class="pipeline-preview" viewBox="0 0 360 255" role="img" aria-labelledby="pipeline-svg-title pipeline-svg-desc"><title id="pipeline-svg-title">'+escapeHtml(pipelineStages[phase][0])+' · scene composition</title><desc id="pipeline-svg-desc">Illustrative panel, two glyph runs, photo sprite, adjustment badge and path. Fine dashed bounds show the photo content mask. Heavy dashed outlines mark the selected primitive.</desc>'+defs+marks+mask+selection+'<text x="20" y="248" font-size="11" fill="#515151">SVG teaching preview · scale factor 1</text></svg>';
 }
 function pipelineRail(stage,oldStage,reducedMotion=false) {
   const x=20+stage*44, old=20+(oldStage??stage)*44;
-  return '<svg class="pipeline-rail" viewBox="0 0 360 30" role="img" aria-label="Pipeline stage '+(stage+1)+' of 8"><path d="M20 15H328" stroke="#b5c5b9" stroke-width="3"/>'+pipelineStages.map((_,i)=>'<circle cx="'+(20+i*44)+'" cy="15" r="4" fill="#607b6d"/>').join('')+'<circle cx="'+x+'" cy="15" r="8" fill="#166b5d">'+(!reducedMotion && old!==x?'<animate attributeName="cx" from="'+old+'" to="'+x+'" dur="0.35s" fill="freeze"/>':'')+'</circle></svg>';
+  return '<svg class="pipeline-rail" viewBox="0 0 360 30" role="img" aria-label="Pipeline stage '+(stage+1)+' of 8"><path d="M20 15H328" stroke="#c1c1c1" stroke-width="3"/>'+pipelineStages.map((_,i)=>'<circle cx="'+(20+i*44)+'" cy="15" r="4" fill="#747474"/>').join('')+'<circle cx="'+x+'" cy="15" r="8" fill="#585858">'+(!reducedMotion && old!==x?'<animate attributeName="cx" from="'+old+'" to="'+x+'" dur="0.35s" fill="freeze"/>':'')+'</circle></svg>';
 }
 function pipelinePage() {
   return header('Interactive walkthrough / rendering & scene composition','From elements to pixels','Move a badge, change clipping and group a layer. Follow the same small scene from view geometry to ordered primitives, batches and backend work.')+

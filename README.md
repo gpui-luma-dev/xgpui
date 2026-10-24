@@ -7,6 +7,8 @@ The starting point is [gpui-unofficial](https://github.com/gpui-archipelago/gpui
 which captures GPUI and its supporting crates from
 [Zed](https://github.com/zed-industries/zed).
 
+**[Read the documentation →](https://gpui-luma-dev.github.io/xgpui/)**
+
 ## How it works
 
 - Releases are captured under `gpui/`. `upstream.json` records the release,
@@ -35,7 +37,7 @@ cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
 ```
 
 Open `docs/index.html`. The site includes the crate map,
-architecture, application and WASM build guides, an interactive rendering
+an architecture reference, an interactive rendering
 pipeline explorer, and an **Extensions to GPUI** section. The extension section
 distinguishes opt-in downstream APIs from upstream GPUI and documents the
 `xgpui-shader` integration. It works offline. Generated pages are not committed.
