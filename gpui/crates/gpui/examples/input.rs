@@ -36,7 +36,7 @@ actions!(
     ]
 );
 
-struct TextInput {
+pub struct TextInput {
     focus_handle: FocusHandle,
     content: SharedString,
     placeholder: SharedString,
@@ -46,9 +46,26 @@ struct TextInput {
     last_layout: Option<ShapedLine>,
     last_bounds: Option<Bounds<Pixels>>,
     is_selecting: bool,
+    scroll_x: Pixels,
 }
 
 impl TextInput {
+    /// Reusable single-line example editor; native IME is supplied by GPUI.
+    pub fn new(content: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
+        Self {
+            focus_handle: cx.focus_handle(),
+            content: content.into(),
+            placeholder: "Type here...".into(),
+            selected_range: 0..0,
+            selection_reversed: false,
+            marked_range: None,
+            last_layout: None,
+            last_bounds: None,
+            is_selecting: false,
+            scroll_x: px(0.),
+        }
+    }
+
     fn left(&mut self, _: &Left, _: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
             self.move_to(self.previous_boundary(self.cursor_offset()), cx);
@@ -113,9 +130,10 @@ impl TextInput {
     fn on_mouse_down(
         &mut self,
         event: &MouseDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        window.focus(&self.focus_handle, cx);
         self.is_selecting = true;
 
         if event.modifiers.shift {
@@ -167,6 +185,7 @@ impl TextInput {
     }
 
     fn move_to(&mut self, offset: usize, cx: &mut Context<Self>) {
+        self.selection_reversed = false;
         self.selected_range = offset..offset;
         cx.notify()
     }
@@ -194,7 +213,7 @@ impl TextInput {
         if position.y > bounds.bottom() {
             return self.content.len();
         }
-        line.closest_index_for_x(position.x - bounds.left())
+        line.closest_index_for_x(position.x - bounds.left() + self.scroll_x)
     }
 
     fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
@@ -211,18 +230,7 @@ impl TextInput {
     }
 
     fn offset_from_utf16(&self, offset: usize) -> usize {
-        let mut utf8_offset = 0;
-        let mut utf16_count = 0;
-
-        for ch in self.content.chars() {
-            if utf16_count >= offset {
-                break;
-            }
-            utf16_count += ch.len_utf16();
-            utf8_offset += ch.len_utf8();
-        }
-
-        utf8_offset
+        utf16_to_utf8(&self.content, offset)
     }
 
     fn offset_to_utf16(&self, offset: usize) -> usize {
@@ -271,7 +279,23 @@ impl TextInput {
         self.last_layout = None;
         self.last_bounds = None;
         self.is_selecting = false;
+        self.scroll_x = px(0.);
     }
+}
+
+fn utf16_to_utf8(text: &str, offset: usize) -> usize {
+    let mut utf8_offset = 0;
+    let mut utf16_count = 0;
+
+    for ch in text.chars() {
+        if utf16_count >= offset {
+            break;
+        }
+        utf16_count += ch.len_utf16();
+        utf8_offset += ch.len_utf8();
+    }
+
+    utf8_offset
 }
 
 impl EntityInputHandler for TextInput {
@@ -299,6 +323,17 @@ impl EntityInputHandler for TextInput {
         })
     }
 
+    fn set_selected_text_range(
+        &mut self,
+        range: Range<usize>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.selected_range = self.range_from_utf16(&range);
+        self.selection_reversed = false;
+        cx.notify();
+    }
+
     fn marked_text_range(
         &self,
         _window: &mut Window,
@@ -309,8 +344,9 @@ impl EntityInputHandler for TextInput {
             .map(|range| self.range_to_utf16(range))
     }
 
-    fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
+    fn unmark_text(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.marked_range = None;
+        cx.notify();
     }
 
     fn replace_text_in_range(
@@ -326,9 +362,11 @@ impl EntityInputHandler for TextInput {
             .or(self.marked_range.clone())
             .unwrap_or(self.selected_range.clone());
 
+        let new_text = new_text.replace(['\n', '\r', '\u{2028}', '\u{2029}'], " ");
         self.content =
-            (self.content[0..range.start].to_owned() + new_text + &self.content[range.end..])
+            (self.content[0..range.start].to_owned() + &new_text + &self.content[range.end..])
                 .into();
+        self.selection_reversed = false;
         self.selected_range = range.start + new_text.len()..range.start + new_text.len();
         self.marked_range.take();
         cx.notify();
@@ -348,9 +386,11 @@ impl EntityInputHandler for TextInput {
             .or(self.marked_range.clone())
             .unwrap_or(self.selected_range.clone());
 
+        let new_text = new_text.replace(['\n', '\r', '\u{2028}', '\u{2029}'], " ");
         self.content =
-            (self.content[0..range.start].to_owned() + new_text + &self.content[range.end..])
+            (self.content[0..range.start].to_owned() + &new_text + &self.content[range.end..])
                 .into();
+        self.selection_reversed = false;
         if !new_text.is_empty() {
             self.marked_range = Some(range.start..range.start + new_text.len());
         } else {
@@ -358,8 +398,10 @@ impl EntityInputHandler for TextInput {
         }
         self.selected_range = new_selected_range_utf16
             .as_ref()
-            .map(|range_utf16| self.range_from_utf16(range_utf16))
-            .map(|new_range| new_range.start + range.start..new_range.end + range.end)
+            .map(|selection| {
+                range.start + utf16_to_utf8(&new_text, selection.start)
+                    ..range.start + utf16_to_utf8(&new_text, selection.end)
+            })
             .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len());
 
         cx.notify();
@@ -373,14 +415,17 @@ impl EntityInputHandler for TextInput {
         _cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
         let last_layout = self.last_layout.as_ref()?;
+        if last_layout.text != self.content {
+            return None; // IME may query geometry before the replacement is painted.
+        }
         let range = self.range_from_utf16(&range_utf16);
         Some(Bounds::from_corners(
             point(
-                bounds.left() + last_layout.x_for_index(range.start),
+                bounds.left() + last_layout.x_for_index(range.start) - self.scroll_x,
                 bounds.top(),
             ),
             point(
-                bounds.left() + last_layout.x_for_index(range.end),
+                bounds.left() + last_layout.x_for_index(range.end) - self.scroll_x,
                 bounds.bottom(),
             ),
         ))
@@ -395,8 +440,10 @@ impl EntityInputHandler for TextInput {
         let line_point = self.last_bounds?.localize(&point)?;
         let last_layout = self.last_layout.as_ref()?;
 
-        assert_eq!(last_layout.text, self.content);
-        let utf8_index = last_layout.index_for_x(point.x - line_point.x)?;
+        if last_layout.text != self.content {
+            return None;
+        }
+        let utf8_index = last_layout.index_for_x(line_point.x + self.scroll_x)?;
         Some(self.offset_to_utf16(utf8_index))
     }
 }
@@ -506,6 +553,15 @@ impl Element for TextElement {
             .shape_line(display_text, font_size, &runs, None);
 
         let cursor_pos = line.x_for_index(cursor);
+        let visible_width = (bounds.size.width - px(2.)).max(px(0.));
+        let scroll_x = input
+            .scroll_x
+            .min(cursor_pos)
+            .max(cursor_pos - visible_width)
+            .max(px(0.))
+            .min((line.width - visible_width).max(px(0.)));
+        self.input.update(cx, |input, _| input.scroll_x = scroll_x);
+        let cursor_pos = cursor_pos - scroll_x;
         let (selection, cursor) = if selected_range.is_empty() {
             (
                 None,
@@ -522,11 +578,11 @@ impl Element for TextElement {
                 Some(fill(
                     Bounds::from_corners(
                         point(
-                            bounds.left() + line.x_for_index(selected_range.start),
+                            bounds.left() + line.x_for_index(selected_range.start) - scroll_x,
                             bounds.top(),
                         ),
                         point(
-                            bounds.left() + line.x_for_index(selected_range.end),
+                            bounds.left() + line.x_for_index(selected_range.end) - scroll_x,
                             bounds.bottom(),
                         ),
                     ),
@@ -558,29 +614,31 @@ impl Element for TextElement {
             ElementInputHandler::new(bounds, self.input.clone()),
             cx,
         );
-        if let Some(selection) = prepaint.selection.take() {
-            window.paint_quad(selection)
-        }
-        let line = prepaint.line.take().unwrap();
-        line.paint(
-            bounds.origin,
-            window.line_height(),
-            gpui::TextAlign::Left,
-            None,
-            window,
-            cx,
-        )
-        .unwrap();
+        window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+            if let Some(selection) = prepaint.selection.take() {
+                window.paint_quad(selection)
+            }
+            let line = prepaint.line.take().unwrap();
+            line.paint(
+                bounds.origin - point(self.input.read(cx).scroll_x, px(0.)),
+                window.line_height(),
+                gpui::TextAlign::Left,
+                None,
+                window,
+                cx,
+            )
+            .unwrap();
 
-        if focus_handle.is_focused(window)
-            && let Some(cursor) = prepaint.cursor.take()
-        {
-            window.paint_quad(cursor);
-        }
+            if focus_handle.is_focused(window)
+                && let Some(cursor) = prepaint.cursor.take()
+            {
+                window.paint_quad(cursor);
+            }
 
-        self.input.update(cx, |input, _cx| {
-            input.last_layout = Some(line);
-            input.last_bounds = Some(bounds);
+            self.input.update(cx, |input, _cx| {
+                input.last_layout = Some(line);
+                input.last_bounds = Some(bounds);
+            });
         });
     }
 }
@@ -610,10 +668,12 @@ impl Render for TextInput {
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .bg(rgb(0xeeeeee))
+            .text_color(rgb(0x111827))
             .line_height(px(30.))
             .text_size(px(24.))
             .child(
                 div()
+                    .debug_selector(|| "example-text-input".into())
                     .h(px(30. + 4. * 2.))
                     .w_full()
                     .p(px(4.))
@@ -697,27 +757,37 @@ impl Render for InputExample {
     }
 }
 
+/// Install the example editor's shortcuts without claiming application-wide keys.
+pub fn bind_keys(cx: &mut App) {
+    let modifier = if cfg!(target_os = "macos") {
+        "cmd"
+    } else {
+        "ctrl"
+    };
+    cx.bind_keys([
+        KeyBinding::new("backspace", Backspace, Some("TextInput")),
+        KeyBinding::new("delete", Delete, Some("TextInput")),
+        KeyBinding::new("left", Left, Some("TextInput")),
+        KeyBinding::new("right", Right, Some("TextInput")),
+        KeyBinding::new("shift-left", SelectLeft, Some("TextInput")),
+        KeyBinding::new("shift-right", SelectRight, Some("TextInput")),
+        KeyBinding::new(&format!("{modifier}-a"), SelectAll, Some("TextInput")),
+        KeyBinding::new(&format!("{modifier}-v"), Paste, Some("TextInput")),
+        KeyBinding::new(&format!("{modifier}-c"), Copy, Some("TextInput")),
+        KeyBinding::new(&format!("{modifier}-x"), Cut, Some("TextInput")),
+        KeyBinding::new("home", Home, Some("TextInput")),
+        KeyBinding::new("end", End, Some("TextInput")),
+        KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, Some("TextInput")),
+    ]);
+}
+
 fn run_example() {
     application().run(|cx: &mut App| {
         if !example_support::load_fonts(cx) {
             return;
         }
         let bounds = Bounds::centered(None, size(px(300.0), px(300.0)), cx);
-        cx.bind_keys([
-            KeyBinding::new("backspace", Backspace, None),
-            KeyBinding::new("delete", Delete, None),
-            KeyBinding::new("left", Left, None),
-            KeyBinding::new("right", Right, None),
-            KeyBinding::new("shift-left", SelectLeft, None),
-            KeyBinding::new("shift-right", SelectRight, None),
-            KeyBinding::new("cmd-a", SelectAll, None),
-            KeyBinding::new("cmd-v", Paste, None),
-            KeyBinding::new("cmd-c", Copy, None),
-            KeyBinding::new("cmd-x", Cut, None),
-            KeyBinding::new("home", Home, None),
-            KeyBinding::new("end", End, None),
-            KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, None),
-        ]);
+        bind_keys(cx);
 
         let window = cx
             .open_window(
@@ -726,17 +796,7 @@ fn run_example() {
                     ..Default::default()
                 },
                 |_, cx| {
-                    let text_input = cx.new(|cx| TextInput {
-                        focus_handle: cx.focus_handle(),
-                        content: "".into(),
-                        placeholder: "Type here...".into(),
-                        selected_range: 0..0,
-                        selection_reversed: false,
-                        marked_range: None,
-                        last_layout: None,
-                        last_bounds: None,
-                        is_selecting: false,
-                    });
+                    let text_input = cx.new(|cx| TextInput::new("", cx));
                     cx.new(|cx| InputExample {
                         text_input,
                         recent_keystrokes: vec![],
