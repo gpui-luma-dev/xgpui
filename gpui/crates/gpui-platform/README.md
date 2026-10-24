@@ -8,11 +8,11 @@ unofficial, automated builds of [Zed](https://github.com/zed-industries/zed)'s
 GPUI crates, published to crates.io.
 
 This package is the published build of `gpui_platform`, generated from zed
-`v1.25.2` (`d25fa01ccd788d812f236810b71af4feff6b2e38`) at version `1.25.2`.
+`v1.25.3` (`8dd255c3eafb5231056fe4e6f601cedd011f1c93`) at version `1.25.3`.
 
 - **Website and project** — <https://gpui-archipelago.github.io/>
 - **Source and release automation** — <https://github.com/gpui-archipelago/gpui-unofficial>
-- **Original crate** — <https://github.com/zed-industries/zed/tree/v1.25.2/crates/gpui_platform>
+- **Original crate** — <https://github.com/zed-industries/zed/tree/v1.25.3/crates/gpui_platform>
 
 ## Install
 
@@ -29,7 +29,7 @@ name for the entry point. Alias it the way the upstream crates do:
 
 ```toml
 [dependencies]
-gpui_platform = { package = "gpui-platform-gpui-unofficial", version = "1.25.2" }
+gpui_platform = { package = "gpui-platform-gpui-unofficial", version = "1.25.3" }
 ```
 
 ```rust,no_run
@@ -44,7 +44,7 @@ fn main() {
 
 ## Versioning
 
-Versions mirror Zed's release tags: zed `v1.25.2` publishes as `1.25.2`.
+Versions mirror Zed's release tags: zed `v1.25.3` publishes as `1.25.3`.
 Because the version is taken verbatim from Zed's semver, an already-published
 version cannot be replaced; a fix has to wait for the next Zed release.
 
@@ -92,8 +92,8 @@ Industries. For issues with the upstream crate, see the
 
     source:          https://github.com/gpui-archipelago/gpui-unofficial
     upstream:        https://github.com/zed-industries/zed
-    upstream tag:    v1.25.2
-    upstream commit: d25fa01ccd788d812f236810b71af4feff6b2e38
+    upstream tag:    v1.25.3
+    upstream commit: 8dd255c3eafb5231056fe4e6f601cedd011f1c93
     crate:           gpui-platform-gpui-unofficial
     original:        gpui_platform
-    version:         1.25.2
+    version:         1.25.3
