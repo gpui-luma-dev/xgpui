@@ -1,0 +1,60 @@
+{
+  "repository": "zed-industries/zed",
+  "base_commit": "d25fa01ccd788d812f236810b71af4feff6b2e38",
+  "head_commit": "8dd255c3eafb5231056fe4e6f601cedd011f1c93",
+  "paths": [
+    "crates/collections",
+    "crates/gpui",
+    "crates/gpui_apple",
+    "crates/gpui_linux",
+    "crates/gpui_macos",
+    "crates/gpui_macros",
+    "crates/gpui_platform",
+    "crates/gpui_shared_string",
+    "crates/gpui_util",
+    "crates/gpui_web",
+    "crates/gpui_wgpu",
+    "crates/gpui_windows",
+    "crates/http_client",
+    "crates/http_client_tls",
+    "crates/path",
+    "crates/refineable",
+    "crates/refineable/derive_refineable",
+    "crates/reqwest_client",
+    "crates/scheduler",
+    "crates/sum_tree",
+    "crates/tooling/perf",
+    "crates/util",
+    "crates/util_macros",
+    "crates/zlog",
+    "crates/ztracing",
+    "crates/ztracing_macro"
+  ],
+  "commits": [
+    {
+      "sha": "c1e77dce400bcb4abce6f892c84a38215df8baae",
+      "subject": "Update dependencies to address security vulnerabilities (#65956) (cherry-pick to stable) (#65963)",
+      "captured_paths": [],
+      "workspace_paths": [
+        "Cargo.lock",
+        "Cargo.toml"
+      ]
+    },
+    {
+      "sha": "e449d573ab974b93a59a586cb4e581e0de7f79c8",
+      "subject": "Update dependencies to address security vulnerabilities (#65997) (cherry-pick to stable) (#66023)",
+      "captured_paths": [],
+      "workspace_paths": [
+        "Cargo.lock"
+      ]
+    },
+    {
+      "sha": "8dd255c3eafb5231056fe4e6f601cedd011f1c93",
+      "subject": "Bump to 1.25.3 for @JosephTLyons",
+      "captured_paths": [],
+      "workspace_paths": [
+        "Cargo.lock"
+      ]
+    }
+  ]
+}
