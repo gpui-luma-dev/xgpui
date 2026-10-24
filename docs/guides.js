@@ -6,14 +6,9 @@ function guideSource(file, line, label, pkg = 'gpui') {
 function guideSection(title, body, evidence) {
   return '<section class="guide-section"><h2>' + title + '</h2>' + body + '<p class="evidence"><strong>Source trail:</strong> ' + evidence + '</p></section>';
 }
-function guideFlow(labels, label) {
-  return '<div class="guide-flow" role="group" aria-label="' + escapeHtml(label) + '">' + labels.map((text,i) => '<div><span>' + String(i+1).padStart(2,'0') + '</span>' + escapeHtml(text) + '</div>').join('') + '</div>';
-}
-
 function architecturePage() {
   const s = guideSource;
   return header('Architecture / captured source', 'The architecture of GPUI', 'GPUI coordinates persistent Rust application state, temporary element trees, a frame scene and native platform services. These layers meet through explicit context, element and platform contracts.') +
-    guideFlow(['Application state & entities','Views & element trees','Layout, prepaint & scene','Platform window & GPU backend'], 'Conceptual application-to-display layers') +
     guideSection('Package boundaries',
       '<p>The core <code>gpui</code> crate owns entities, contexts, elements, input, text coordination and scene construction. <code>gpui-platform</code> selects the platform; native packages implement windowing and OS services. Metal lives in <code>gpui-apple</code>, wgpu in <code>gpui-wgpu</code>, and DirectX in the Windows implementation. Supporting crates provide scheduling, data structures, macros, transport and instrumentation. Manifest dependencies describe package coupling, not runtime stages or API stability.</p>',
       s('gpui.rs',34,'Core module structure') + ' · ' + s('gpui_platform.rs',1,'Platform facade','gpui-platform')) +

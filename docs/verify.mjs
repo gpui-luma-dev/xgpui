@@ -19,16 +19,12 @@ assert.equal(data.extension_packages['xgpui-shader'], 'extensions/xgpui-ext/crat
 assert.ok(!data.provenance.packages['xgpui-shader'], 'local extension must not claim upstream provenance');
 assert.equal(Object.keys(data.notes).sort().join(), data.crates.map(c => c.package).sort().join());
 assert.equal(run('parseRoute(crateUrl("gpui", "surface")).tab'), 'surface');
-assert.equal(run('parseRoute("#method").global'), 'method');
 assert.equal(run('escapeHtml("<script>&")'), "&lt;script&gt;&amp;");
 assert.equal(run('filterDeclarations([{name:"Example", signature:"", module:"crate", file:"", guards:[],kind:"struct", root_export:false}], "example").length'), 1);
 assert.equal(run('filterDeclarations([{name:"Example", signature:"", module:"crate", file:"", guards:[],kind:"struct", root_export:false}], "", "", true).length'), 0);
 assert.match(run('overview()'), /GPUI architecture and extensions/);
-assert.match(run('method()'), /Syntactic Rust inventory/);
-assert.ok(!run('method()').includes('<h2>Refresh</h2>'));
-assert.ok(!run('method()').includes('cargo run'));
-assert.match(run('method()'), /Expected scanner limitation: release-only DirectX shader data/);
-assert.match(run('method()'), /no public-API inventory impact/);
+assert.doesNotMatch(run('overview()'), /Inventory limits|compiler-resolved public API report|#method/);
+assert.equal(run('typeof method'), 'undefined');
 assert.ok(data.crates.every(c => c.warnings.every(w => !w.includes('/Users/') && !w.includes('/private/'))));
 const gpuiInventory = data.crates.find(c => c.package === 'gpui');
 assert.ok(gpuiInventory.files.includes('gpui/crates/gpui/src/text_system/paragraph_cache.rs'));
@@ -82,12 +78,13 @@ for (const c of data.crates) {
     }
   }
 }
-for (const route of ['#extensions', ...Object.keys(data.extension_documents).map(route => '#' + route), '#pipeline', '#architecture', '#method', '#review', '#crate=unknown']) {
+for (const route of ['#extensions', ...Object.keys(data.extension_documents).map(route => '#' + route), '#pipeline', '#architecture', '#review', '#crate=unknown']) {
   context.location.hash = route;
   run('render()');
   assert.ok(element('content').innerHTML.length);
 }
 const index = await readFile(new URL('index.html', site), 'utf8');
+assert.ok(!index.includes('#method'));
 for (const asset of ['style.css', 'extensions.js', 'guides.js', 'pipeline.js', 'app.js', 'data.js']) {
   assert.ok(index.includes(asset));
   await readFile(new URL(asset, site));
@@ -105,6 +102,7 @@ for (const [fn, title, sections] of [["architecturePage", "The architecture of G
  const html = run(fn + "()");
  assert.ok(html.includes(title));
  assert.equal((html.match(/class="guide-section"/g) || []).length, sections);
+ assert.ok(!html.includes('class="guide-flow"'));
  assert.ok(!html.includes("undefined"));
  for (const match of html.matchAll(/href="source\/([^"#]+)\.html#L(\d+)"/g)) {
   const file = decodeURIComponent(match[1]);
