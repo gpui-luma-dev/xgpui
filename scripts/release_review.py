@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 
 from import_release import SOURCE, capture, git
+from release_context import context_inputs
 
 SCOPES = ("gpui", ".cargo/config.toml", "upstream.json")
 
@@ -115,6 +116,7 @@ def prepare(root, incoming, report_path, source, revision, release, normalizer, 
             subprocess.run(command, check=True)
             subprocess.run([*command, "--check"], check=True)
         report = compare(root, before, incoming, release)
+        report["zed_context"] = context_inputs(before, incoming)
     report_path.write_text(json.dumps(report, indent=2) + "\n")
     return report
 

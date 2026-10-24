@@ -47,6 +47,10 @@ jobs:
           python3 scripts/release_review.py "${args[@]}"
           count="$(jq '[.entries[] | select(.retain_local != true)] | length' "$RUNNER_TEMP/review.json")"
           echo "REVIEW_COUNT=$count" >> "$GITHUB_ENV"
+      - name: Collect exact Zed release context
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release_context.py --report "$RUNNER_TEMP/review.json" --output "$RUNNER_TEMP/zed-context.md" --json-output "$RUNNER_TEMP/zed-context.json"
       - name: Create a fresh review branch and separate commits
         if: env.REVIEW_COUNT != '0'
         env:
@@ -99,6 +103,7 @@ jobs:
               commit = os.environ.get(kind + '_COMMIT')
               if commit:
                   lines.append(f"- [{kind.lower()} commit](https://github.com/{os.environ['GITHUB_REPOSITORY']}/commit/{commit})")
+          lines += ['', (pathlib.Path(os.environ['RUNNER_TEMP']) / 'zed-context.md').read_text()]
           (pathlib.Path(os.environ['RUNNER_TEMP']) / 'review-pr.md').write_text('\n'.join(lines) + '\n')
           PY
       - name: Create a new draft PR
@@ -112,4 +117,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-tree-comparison
-          path: ${{ runner.temp }}/review.json
+          path: |
+            ${{ runner.temp }}/review.json
+            ${{ runner.temp }}/zed-context.md
+            ${{ runner.temp }}/zed-context.json

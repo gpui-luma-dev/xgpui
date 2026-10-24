@@ -19,6 +19,15 @@ The proposal uses separate commits:
 3. **Generated metadata/artifacts:** generated package READMEs, provenance and
    the remaining duplicate `transformed-crates` files.
 
+Release context uses the exact old/new Zed SHAs in snapshot provenance, never
+latest-release or previous-stable guesses. Its path filter is the union of both
+captures' `transform-metadata.json` crate inventories, including nested crates.
+It links relevant Zed commits and referenced PRs, with root Cargo dependency
+changes and unrelated range commits labeled separately. Missing provenance,
+incomplete API pagination and non-forward ranges fail context generation rather
+than silently reporting no changes. Markdown/JSON context accompanies the PR and
+workflow artifact; no issue or comment is created in the upstream repository.
+
 The PR links each commit and lists code differences separately. The detailed JSON
 comparison is uploaded as a workflow artifact. A release with no differences
 creates no PR.
