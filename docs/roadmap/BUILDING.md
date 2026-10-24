@@ -72,7 +72,8 @@ The generator keeps local `extension_packages` separate from upstream provenance
 repository root, including integration, API, producer and backend references.
 Source-side READMEs link to these maintained guides.
 
-The generator renders those eight Markdown documents into `data.js`, including
+`xgpui-parley` is indexed with its source/API/dependency tabs and a code-first
+text guide (`parley-text.md`). The generator renders the extension Markdown documents into `data.js`, including
 tables, code blocks and heading anchors. Internal document links become site
 routes; section links use `&section=heading-id`. No network fetch or Markdown
 runtime is needed in the browser. Edit the maintained sources, then regenerate;

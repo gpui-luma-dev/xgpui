@@ -222,5 +222,13 @@
     "surface": "WideColor::linear_p3 implements existing CustomContent; native Metal and typed D3D11 preparation. Window negotiation and compositing stay in GPUI backends.",
     "review": "Keep profile decoding and future content producers separate from host presentation. Windows native swap-chain/display validation remains outstanding; Linux is deferred.",
     "entry": "src/lib.rs"
+  },
+  "xgpui-parley": {
+    "short": "xgpui-parley",
+    "group": "Extensions",
+    "role": "Opt-in Parley/HarfRust text shaping, BiDi paragraphs and grayscale rasterization.",
+    "surface": "ParleyTextSystem, retained face/variation identity and optional GPUI paragraph shaping/geometry. GPUI owns frame caches and the glyph atlas.",
+    "review": "Preserve descriptor/resolved-face identity and immutable layouts. Explicit direction/language and Unicode conformance remain follow-ups; Windows/Linux runtime and paragraph conversion IMEs need validation.",
+    "entry": "src/lib.rs"
   }
 }

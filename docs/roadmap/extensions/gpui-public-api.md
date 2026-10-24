@@ -2,7 +2,40 @@
 
 Compared with pre-feature main `9b64657`. **Opt-in usage does not mean zero SDK changes.**
 
+## Changes by extension
+
+| GPUI change | Required by | Role |
+| --- | --- | --- |
+| Backend construction override; optional paragraph traits, geometry types, cache and paint entry points | [xgpui-parley](parley-text.md) | Install the text backend; retain shaping/reflow and paint BiDi runs |
+| `Scene::custom_draws`, `Primitive::Custom`, `PrimitiveBatch::Custom`, `Window::paint_custom` | [xgpui-shader](extension-paints.md); reused by xgpui-gamut | Record ordered custom content in the native scene |
+| `CustomContent`, `PreparationRequest`, `CustomGeometry`, `CustomCoverage`, `CustomDraw` | xgpui-shader; reused by xgpui-gamut | Producer preparation, retained geometry and host coverage |
+| Renderer `custom_draw` contexts and ordinary outputs | xgpui-shader; shared contexts also serve xgpui-gamut | Metal/wgpu/D3D11 producer recording and host submission |
+| Window color mode/status; typed Metal/D3D11 wide-SDR outputs | [xgpui-gamut](high-gamut-windows.md) | Negotiate and compose explicit linear-P3 surfaces |
+| `Style::overflow_mask` border-inset correction | Independent fix | Behavior only; no signature change |
+| macOS variable-font selection/identity correction | Native comparison baseline for the Parley lab | Behavior only; no public API addition |
+
+Paint recording is shared infrastructure; window color negotiation is specific
+to wide-gamut presentation. Parley uses the existing glyph atlas, not custom-draw
+or wide-gamut APIs. Extensions do not depend on each other.
+
+## ADDED text backend and paragraph seams
+
+**Required by:** xgpui-parley.
+
+- `Application::with_platform_and_text_system(platform, text_system)` selects
+  an `Arc<dyn PlatformTextSystem>` before constructing GPUI caches; skips
+  `Platform::text_system()`. Existing construction/native initialization is unchanged.
+- `PlatformTextSystem::shape_paragraph` is optional and defaults to Unsupported.
+- `WindowTextSystem::layout_paragraph` caches immutable
+  `PlatformParagraphShape`/`PlatformParagraphLayout` results.
+- `paint_paragraph` paints visual glyph runs through the existing atlas.
+  `ParagraphPosition` carries logical UTF-8 offset and `TextAffinity`.
+
+[Paragraph contracts](parley-text.md#contracts).
+
 ## ALTERED existing public types — source compatibility risks
+
+**Required by:** xgpui-shader; shared custom-content recording is reused by xgpui-gamut.
 
 `gpui/src/scene.rs` — structural diff, unchanged members omitted:
 
@@ -44,6 +77,8 @@ let scene = gpui::Scene {
 
 ## ADDED opt-in window presentation
 
+**Required by:** xgpui-gamut.
+
 ```rust
 use gpui::WindowColorMode;
 
@@ -71,6 +106,8 @@ collide with downstream extension methods. Unsupported requests preserve state.
 
 ## ADDED Window method
 
+**Required by:** xgpui-shader; also records xgpui-gamut producers.
+
 `gpui/src/window.rs` — one public recording hook:
 
 ```rust
@@ -88,6 +125,8 @@ Existing native `paint_quad` and `paint_path` signatures remain unchanged.
 The new method records during painting; it does not expose command submission.
 
 ## ADDED producer trait and preparation request
+
+**Required by:** xgpui-shader; reused by xgpui-gamut producers.
 
 `gpui/src/scene.rs` — public signatures; constructor/accessor bodies omitted:
 
@@ -127,6 +166,8 @@ defaults to `prepare()`; producers override it only when they need logical geome
 
 ## ADDED geometry and retained records
 
+**Required by:** xgpui-shader; shared recording/coverage for xgpui-gamut.
+
 `gpui/src/scene.rs` — declarations, derives/docs omitted:
 
 ```rust
@@ -158,6 +199,8 @@ impl From<CustomDraw> for Primitive { /* Custom(draw) */ }
 ```
 
 ## ADDED backend-crate public APIs
+
+**Required by:** xgpui-shader for ordinary outputs; xgpui-gamut for typed wide-SDR outputs and shared contexts.
 
 These are GPUI renderer SDK additions, not `xgpui-shader` exports.
 Each renderer crate adds `pub mod custom_draw`.
@@ -250,6 +293,9 @@ window.paint_path_with_paint(path, mesh.clone());  // WindowPaintExt trait.
 // With the portable-shaders feature:
 use xgpui_shader::experimental::{ShaderProgram, ShaderParameters};
 ```
+
+`xgpui_gamut::WideColor` and `xgpui_parley::ParleyTextSystem`, `FaceRegistry`,
+`GlyphRasterizer`, `ParagraphShape` and `ParagraphLayout` are also extension-owned.
 
 ## Inspect the cumulative patch
 

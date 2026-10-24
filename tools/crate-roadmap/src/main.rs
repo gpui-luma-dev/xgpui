@@ -606,6 +606,7 @@ fn generate(root: &Path) -> Result<()> {
     let extension_packages = BTreeMap::from([
         ("xgpui-shader", "extensions/xgpui-ext/crates/xgpui-shader"),
         ("xgpui-gamut", "extensions/xgpui-ext/crates/xgpui-gamut"),
+        ("xgpui-parley", "extensions/xgpui-ext/crates/xgpui-parley"),
     ]);
     let mut packages = provenance["packages"]
         .as_object()
@@ -733,6 +734,7 @@ fn generate(root: &Path) -> Result<()> {
     // All published extension guides live in the web documentation source tree.
     // Embed them so navigation works offline without fetch.
     let document_sources = [
+        ("parley-text", "docs/roadmap/extensions/parley-text.md"),
         (
             "high-gamut-windows",
             "docs/roadmap/extensions/high-gamut-windows.md",
