@@ -3,7 +3,8 @@ use collections::{HashMap, HashSet};
 use core_foundation::{
     array::{CFArray, CFArrayRef},
     attributed_string::CFMutableAttributedString,
-    base::{CFRange, TCFType},
+    base::{CFHash, CFRange, TCFType},
+    dictionary::{CFDictionary, CFDictionaryRef, CFMutableDictionary},
     number::CFNumber,
     string::CFString,
 };
@@ -14,11 +15,11 @@ use core_graphics::{
     geometry::CGPoint,
 };
 use core_text::{
-    font::CTFont,
+    font::{CTFont, CTFontRef},
     font_collection::CTFontCollectionRef,
     font_descriptor::{
-        CTFontDescriptor, kCTFontSlantTrait, kCTFontSymbolicTrait, kCTFontWeightTrait,
-        kCTFontWidthTrait,
+        CTFontDescriptor, kCTFontSizeAttribute, kCTFontSlantTrait, kCTFontSymbolicTrait,
+        kCTFontVariationAttribute, kCTFontWeightTrait, kCTFontWidthTrait,
     },
     line::CTLine,
     string_attributes::kCTFontAttributeName,
@@ -45,7 +46,13 @@ use pathfinder_geometry::{
     vector::Vector2F,
 };
 use smallvec::SmallVec;
-use std::{borrow::Cow, char, convert::TryFrom, sync::Arc};
+use std::{
+    borrow::Cow,
+    char,
+    convert::TryFrom,
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 
 #[cfg(target_os = "macos")]
 use {
@@ -69,12 +76,113 @@ struct FontKey {
     font_fallbacks: Option<FontFallbacks>,
 }
 
+// Descriptor identity retains features/cascade lists and effective variations.
+// Point size belongs to the glyph cache key, not the font instance identity.
+#[derive(PartialEq, Eq)]
+struct NativeFontKey(CTFontDescriptor);
+
+impl Hash for NativeFontKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        unsafe { CFHash(self.0.as_CFTypeRef()) }.hash(state);
+    }
+}
+
+unsafe extern "C" {
+    fn CTFontCopyVariation(font: CTFontRef) -> CFDictionaryRef;
+    static kCTFontVariationAxisIdentifierKey: core_foundation::string::CFStringRef;
+    static kCTFontVariationAxisMinimumValueKey: core_foundation::string::CFStringRef;
+    static kCTFontVariationAxisMaximumValueKey: core_foundation::string::CFStringRef;
+}
+
+fn variations(font: &CTFont) -> CFMutableDictionary<CFNumber, CFNumber> {
+    let raw = unsafe { CTFontCopyVariation(font.as_concrete_TypeRef()) };
+    if raw.is_null() {
+        CFMutableDictionary::new()
+    } else {
+        let values = unsafe { CFDictionary::<CFNumber, CFNumber>::wrap_under_create_rule(raw) };
+        // copy_with_capacity in core-foundation 0.10 uses the wrong ownership rule.
+        unsafe {
+            CFMutableDictionary::wrap_under_create_rule(
+                core_foundation::dictionary::CFDictionaryCreateMutableCopy(
+                    std::ptr::null(),
+                    0,
+                    values.as_concrete_TypeRef(),
+                ),
+            )
+        }
+    }
+}
+
+impl NativeFontKey {
+    fn new(font: &CTFont) -> Self {
+        let attrs = CFDictionary::from_CFType_pairs(&[
+            (
+                unsafe { CFString::wrap_under_get_rule(kCTFontSizeAttribute) },
+                CFNumber::from(0).as_CFType(),
+            ),
+            (
+                unsafe { CFString::wrap_under_get_rule(kCTFontVariationAttribute) },
+                variations(font).as_CFType(),
+            ),
+        ]);
+        Self(
+            font.copy_descriptor()
+                .create_copy_with_attributes(attrs.to_untyped())
+                .unwrap(),
+        )
+    }
+}
+
+fn with_weight(font: &CTFont, weight: FontWeight) -> Result<CTFont> {
+    anyhow::ensure!(weight.0.is_finite(), "invalid font weight");
+    if let Some(axes) = font.get_variation_axes() {
+        for axis in axes.iter() {
+            let number = |key| {
+                axis.find(key)
+                    .and_then(|v| v.downcast::<CFNumber>())
+                    .and_then(|v| v.to_f64())
+            };
+            if number(unsafe { kCTFontVariationAxisIdentifierKey })
+                != Some(u32::from_be_bytes(*b"wght") as f64)
+            {
+                continue;
+            }
+            let min = number(unsafe { kCTFontVariationAxisMinimumValueKey })
+                .ok_or_else(|| anyhow!("missing weight minimum"))?;
+            let max = number(unsafe { kCTFontVariationAxisMaximumValueKey })
+                .ok_or_else(|| anyhow!("missing weight maximum"))?;
+            anyhow::ensure!(
+                min.is_finite() && max.is_finite() && min <= max,
+                "invalid weight axis range"
+            );
+            let mut coords = variations(font);
+            coords.set(
+                CFNumber::from(i32::from_be_bytes(*b"wght")),
+                CFNumber::from((weight.0 as f64).clamp(min, max)),
+            );
+            let attrs = CFDictionary::from_CFType_pairs(&[(
+                unsafe { CFString::wrap_under_get_rule(kCTFontVariationAttribute) },
+                coords.to_immutable(),
+            )]);
+            let descriptor = font
+                .copy_descriptor()
+                .create_copy_with_attributes(attrs.to_untyped())
+                .map_err(|_| anyhow!("could not set font weight"))?;
+            return Ok(core_text::font::new_from_descriptor(
+                &descriptor,
+                font.pt_size(),
+            ));
+        }
+    }
+    Ok(font.clone())
+}
+
 struct AppleTextSystemState {
     memory_source: MemSource,
     system_source: SystemSource,
     fonts: Vec<FontKitFont>,
     font_selections: HashMap<Font, FontId>,
-    font_ids_by_postscript_name: HashMap<String, FontId>,
+    font_ids_by_native_font: HashMap<NativeFontKey, FontId>,
     font_ids_by_font_key: HashMap<FontKey, SmallVec<[FontId; 4]>>,
     postscript_names_by_font_id: HashMap<FontId, String>,
 }
@@ -87,7 +195,7 @@ impl AppleTextSystem {
             system_source: SystemSource::new(),
             fonts: Vec::new(),
             font_selections: HashMap::default(),
-            font_ids_by_postscript_name: HashMap::default(),
+            font_ids_by_native_font: HashMap::default(),
             font_ids_by_font_key: HashMap::default(),
             postscript_names_by_font_id: HashMap::default(),
         }))
@@ -173,7 +281,10 @@ impl PlatformTextSystem for AppleTextSystem {
                 },
             )?;
 
-            let font_id = candidates[ix];
+            let base_id = candidates[ix];
+            let native = lock.fonts[base_id.0].native_font();
+            let instance = with_weight(&native, font.weight)?;
+            let font_id = lock.id_for_native_font(instance);
             lock.font_selections.insert(font.clone(), font_id);
             Ok(font_id)
         }
@@ -290,7 +401,7 @@ impl AppleTextSystemState {
         let name = gpui::font_name_with_fallbacks(name, ".AppleSystemUIFont");
 
         let mut font_ids = SmallVec::new();
-        let mut postscript_names_seen = HashSet::default();
+        let mut native_fonts_seen = HashSet::default();
         let family = self
             .memory_source
             .select_family_by_name(name)
@@ -367,9 +478,9 @@ impl AppleTextSystemState {
             // Dedup is scoped to this single `load_family` call (issue #55472).
             // The same family can be reloaded later under a different `FontKey`
             // (different features/fallbacks); a global check against
-            // `font_ids_by_postscript_name` would skip every already-registered
+            // `font_ids_by_native_font` would skip every already-registered
             // font and leave the second call's `font_ids` empty.
-            if !postscript_names_seen.insert(postscript_name.clone()) {
+            if !native_fonts_seen.insert(NativeFontKey::new(&font.native_font())) {
                 log::warn!(
                     "skipping duplicate font {:?} with PostScript name {:?} \
                      in family {:?}",
@@ -381,8 +492,8 @@ impl AppleTextSystemState {
             }
             let font_id = FontId(self.fonts.len());
             font_ids.push(font_id);
-            self.font_ids_by_postscript_name
-                .insert(postscript_name.clone(), font_id);
+            self.font_ids_by_native_font
+                .insert(NativeFontKey::new(&font.native_font()), font_id);
             self.postscript_names_by_font_id
                 .insert(font_id, postscript_name);
             self.fonts.push(font);
@@ -401,19 +512,17 @@ impl AppleTextSystemState {
     }
 
     fn id_for_native_font(&mut self, requested_font: CTFont) -> FontId {
-        let postscript_name = requested_font.postscript_name();
-        if let Some(font_id) = self.font_ids_by_postscript_name.get(&postscript_name) {
+        let key = NativeFontKey::new(&requested_font);
+        if let Some(font_id) = self.font_ids_by_native_font.get(&key) {
             *font_id
         } else {
             let font_id = FontId(self.fonts.len());
-            self.font_ids_by_postscript_name
-                .insert(postscript_name.clone(), font_id);
+            self.font_ids_by_native_font.insert(key, font_id);
             self.postscript_names_by_font_id
-                .insert(font_id, postscript_name);
+                .insert(font_id, requested_font.postscript_name());
+            // Keep variations, features and cascade attributes through rasterization.
             self.fonts
-                .push(font_kit::font::Font::from_core_graphics_font(
-                    requested_font.copy_to_CGFont(),
-                ));
+                .push(unsafe { FontKitFont::from_native_font(&requested_font) });
             font_id
         }
     }
@@ -799,6 +908,16 @@ mod tests {
         );
         assert_eq!(layout.len, 6);
         assert!(!layout.runs.is_empty());
+        assert!(layout.runs.iter().all(|run| run.font_id == configured_id));
+        let original = fonts.layout_line(
+            "office",
+            px(28.),
+            &[FontRun {
+                font_id: original_id,
+                len: 6,
+            }],
+        );
+        assert!(original.runs.iter().all(|run| run.font_id == original_id));
     }
 
     #[test]
