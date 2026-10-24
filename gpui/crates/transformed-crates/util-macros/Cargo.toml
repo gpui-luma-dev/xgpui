@@ -1,6 +1,6 @@
 [package]
 name = "util-macros"
-version = "1.25.2"
+version = "1.25.3"
 edition = "2024"
 license = "Apache-2.0"
 description = "Utility macros for Zed"
@@ -14,7 +14,7 @@ test = false
 [dependencies]
 quote = { version = "1.0.9" }
 syn = { version = "2.0", default-features = false, features = ["proc-macro", "full", "extra-traits", "clone-impls", "parsing", "printing"] }
-perf = { package = "perf", version = "1.25.2" }
+perf = { package = "perf", version = "1.25.3" }
 
 [features]
 perf-enabled = []
