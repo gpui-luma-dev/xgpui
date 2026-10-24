@@ -26,8 +26,9 @@ diff. Resolve conflicts during manual integration rather than overwriting main's
 patched files with a new snapshot.
 
 For migration, the first version branch can use the existing `upstream-normalized`
-branch as its baseline. The baseline's source SHA must match main's recorded
-import. The old `upstream` and `upstream-normalized` branches are not updated by
+branch as its baseline. If that branch is absent, sync discovers the first
+normalized import commit in main's provenance history. The baseline's source SHA
+must match main's recorded import. The old `upstream` and `upstream-normalized` branches are not updated by
 sync. Keep version branches available as baselines for later imports.
 
 Dispatching sync authorizes its release branch and draft PR updates. It does not
