@@ -31,7 +31,8 @@ assert.ok(gpuiInventory.files.includes('gpui/crates/gpui/src/text_system/paragra
 assert.ok(!gpuiInventory.warnings.some(w => w.includes('paragraph_cache')));
 assert.ok(data.crates.find(c => c.package === 'gpui-windows').warnings.some(w => w.includes('Unexpanded include! at gpui/crates/gpui-windows/')));
 
-assert.match(run('review()'), /Review hypotheses/);
+assert.match(run('review()'), /<h1>API review<\/h1>/);
+assert.doesNotMatch(run('review()'), /Make the contract deliberate|Suggested order of work/);
 const pages = new Map();
 for (const c of data.crates) {
   assert.ok(data.notes[c.package].role);
