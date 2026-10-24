@@ -1,3 +1,6 @@
+#[path = "paragraph_cache.rs"]
+mod paragraph_cache;
+
 use crate::{FontId, GlyphId, Pixels, PlatformTextSystem, Point, SharedString, Size, point, px};
 use collections::FxHashMap;
 use parking_lot::{Mutex, RwLock, RwLockUpgradableReadGuard};
@@ -467,6 +470,7 @@ pub(crate) struct LineLayoutCache {
 
 #[derive(Default)]
 struct FrameCache {
+    paragraphs: paragraph_cache::ParagraphFrameCache,
     lines: FxHashMap<Arc<CacheKey>, Arc<LineLayout>>,
     wrapped_lines: FxHashMap<Arc<CacheKey>, Arc<WrappedLineLayout>>,
     used_lines: Vec<Arc<CacheKey>>,
@@ -487,6 +491,7 @@ struct FrameCache {
 #[derive(Clone, Default)]
 pub(crate) struct LineLayoutIndex {
     font_generation: usize,
+    paragraphs: paragraph_cache::ParagraphIndex,
     lines_index: usize,
     wrapped_lines_index: usize,
     lines_by_hash_index: usize,
@@ -513,6 +518,7 @@ impl LineLayoutCache {
         let frame = self.current_frame.read();
         LineLayoutIndex {
             font_generation,
+            paragraphs: frame.paragraphs.index(),
             lines_index: frame.used_lines.len(),
             wrapped_lines_index: frame.used_wrapped_lines.len(),
             lines_by_hash_index: frame.used_lines_by_hash.len(),
@@ -529,6 +535,11 @@ impl LineLayoutCache {
         }
         let mut current_frame = &mut *self.current_frame.write();
         let mut previous_frame = &mut *self.previous_frame.lock();
+
+        current_frame.paragraphs.reuse_from(
+            &mut previous_frame.paragraphs,
+            range.start.paragraphs..range.end.paragraphs,
+        );
 
         for key in &previous_frame.used_lines[range.start.lines_index..range.end.lines_index] {
             if let Some((key, line)) = previous_frame.lines.remove_entry(key) {
@@ -571,6 +582,7 @@ impl LineLayoutCache {
             return;
         }
         let mut current_frame = &mut *self.current_frame.write();
+        current_frame.paragraphs.truncate(index.paragraphs);
         current_frame.used_lines.truncate(index.lines_index);
         current_frame
             .used_wrapped_lines
@@ -588,6 +600,7 @@ impl LineLayoutCache {
         let mut curr_frame = self.current_frame.write();
         let mut prev_frame = self.previous_frame.lock();
         std::mem::swap(&mut *prev_frame, &mut *curr_frame);
+        curr_frame.paragraphs.clear();
         curr_frame.lines.clear();
         curr_frame.wrapped_lines.clear();
         curr_frame.used_lines.clear();

@@ -46,6 +46,8 @@ pub(crate) struct TestPlatform {
     pub opened_url: RefCell<Option<String>>,
     pub(crate) system_notifications: RefCell<TestSystemNotifications>,
     pub text_system: Arc<dyn PlatformTextSystem>,
+    #[cfg(test)]
+    pub(crate) text_system_calls: Cell<usize>,
     pub expect_restart:
         RefCell<Option<oneshot::Sender<(Option<PathBuf>, Vec<std::ffi::OsString>)>>>,
     idle_sleep_prevention_count: Arc<AtomicUsize>,
@@ -223,6 +225,8 @@ impl TestPlatform {
             opened_url: Default::default(),
             system_notifications: Default::default(),
             text_system,
+            #[cfg(test)]
+            text_system_calls: Cell::new(0),
             headless_renderer_factory,
             menus: Default::default(),
         })
@@ -437,6 +441,8 @@ impl Platform for TestPlatform {
     }
 
     fn text_system(&self) -> Arc<dyn PlatformTextSystem> {
+        #[cfg(test)]
+        self.text_system_calls.set(self.text_system_calls.get() + 1);
         self.text_system.clone()
     }
 
