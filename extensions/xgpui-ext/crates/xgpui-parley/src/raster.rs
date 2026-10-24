@@ -1,4 +1,4 @@
-use crate::FaceRegistry;
+use crate::{FaceRegistry, RegisteredFace};
 use anyhow::{Context, Result, ensure};
 use gpui::{
     Bounds, DevicePixels, RenderGlyphParams, SUBPIXEL_VARIANTS_X, SUBPIXEL_VARIANTS_Y, Size, point,
@@ -6,31 +6,46 @@ use gpui::{
 };
 use skrifa::{
     FontRef, MetadataProvider,
-    instance::{LocationRef, Size as FontSize},
+    instance::{LocationRef, NormalizedCoord, Size as FontSize},
     outline::{DrawSettings, HintingInstance, HintingOptions, OutlinePen, SmoothMode, Target},
 };
-use std::collections::VecDeque;
+use std::sync::Arc;
+
+mod hints;
+use hints::HintCache;
 use tiny_skia::{FillRule, Mask, Path, PathBuilder, Transform};
 
 const HINT_LIMIT: usize = 64;
 const MAX_EXTENT: f32 = 4096.0;
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 struct HintKey {
     blob: u64,
     index: u32,
-    coords: Vec<i16>,
+    coords: Arc<[NormalizedCoord]>,
     ppem: u32,
 }
 
 /// Grayscale outline rasterization. Retain one instance per backend/scaler thread.
-/// Only hinting setup is cached here (64 recent face/location/size instances).
+/// Retains 64 hinting instances and one prepared outline for bounds-to-raster reuse.
 /// GPUI's TextSystem and sprite atlas retain bounds and final glyph bitmaps.
 #[derive(Default)]
 pub struct GlyphRasterizer {
-    hints: VecDeque<(HintKey, HintingInstance)>,
+    hints: HintCache,
+    prepared: Option<PreparedOutline>,
+    #[cfg(test)]
+    outline_builds: usize,
     #[cfg(test)]
     hint_builds: usize,
+}
+
+struct PreparedOutline {
+    params: RenderGlyphParams,
+    blob: u64,
+    index: u32,
+    coords: Arc<[NormalizedCoord]>,
+    path: Option<Path>,
+    bounds: Bounds<DevicePixels>,
 }
 
 impl GlyphRasterizer {
@@ -41,7 +56,16 @@ impl GlyphRasterizer {
         faces: &FaceRegistry,
         params: &RenderGlyphParams,
     ) -> Result<Bounds<DevicePixels>> {
-        Ok(self.prepare(faces, params)?.1)
+        self.raster_bounds_for_face(faces.get(params.font_id)?, params)
+    }
+
+    pub(crate) fn raster_bounds_for_face(
+        &mut self,
+        face: &RegisteredFace,
+        params: &RenderGlyphParams,
+    ) -> Result<Bounds<DevicePixels>> {
+        self.prepare_cached(face, params)?;
+        Ok(self.prepared.as_ref().unwrap().bounds)
     }
 
     /// Produce a one-byte-per-pixel coverage mask matching previously measured bounds.
@@ -52,7 +76,17 @@ impl GlyphRasterizer {
         params: &RenderGlyphParams,
         expected: Bounds<DevicePixels>,
     ) -> Result<(Size<DevicePixels>, Vec<u8>)> {
-        let (path, bounds) = self.prepare(faces, params)?;
+        self.rasterize_face(faces.get(params.font_id)?, params, expected)
+    }
+
+    pub(crate) fn rasterize_face(
+        &mut self,
+        face: &RegisteredFace,
+        params: &RenderGlyphParams,
+        expected: Bounds<DevicePixels>,
+    ) -> Result<(Size<DevicePixels>, Vec<u8>)> {
+        self.prepare_cached(face, params)?;
+        let PreparedOutline { path, bounds, .. } = self.prepared.take().unwrap();
         ensure!(bounds == expected, "glyph raster bounds changed");
         let Some(path) = path else {
             return Ok((bounds.size, Vec::new()));
@@ -65,12 +99,35 @@ impl GlyphRasterizer {
             true,
             Transform::from_translate(-bounds.origin.x.0 as f32, -bounds.origin.y.0 as f32),
         );
-        Ok((bounds.size, mask.data().to_vec()))
+        Ok((bounds.size, mask.take()))
+    }
+
+    fn prepare_cached(&mut self, face: &RegisteredFace, params: &RenderGlyphParams) -> Result<()> {
+        if self.prepared.as_ref().is_some_and(|cached| {
+            cached.params == *params
+                && cached.blob == face.data().data.id()
+                && cached.index == face.data().index
+                && cached.coords.as_ref() == face.normalized_coords()
+        }) {
+            return Ok(());
+        }
+        // Drop the previous outline before allocating its replacement.
+        self.prepared = None;
+        let (path, bounds) = self.prepare(face, params)?;
+        self.prepared = Some(PreparedOutline {
+            params: params.clone(),
+            blob: face.data().data.id(),
+            index: face.data().index,
+            coords: face.coordinate_handle(),
+            path,
+            bounds,
+        });
+        Ok(())
     }
 
     fn prepare(
         &mut self,
-        faces: &FaceRegistry,
+        face: &RegisteredFace,
         params: &RenderGlyphParams,
     ) -> Result<(Option<Path>, Bounds<DevicePixels>)> {
         let ppem = f32::from(params.font_size) * params.scale_factor;
@@ -91,7 +148,6 @@ impl GlyphRasterizer {
                 && params.subpixel_variant.y < SUBPIXEL_VARIANTS_Y,
             "invalid subpixel variant"
         );
-        let face = faces.get(params.font_id)?;
         let font = FontRef::from_index(face.data().data.data(), face.data().index)?;
         let outlines = font.outline_glyphs();
         let glyph = outlines
@@ -100,21 +156,15 @@ impl GlyphRasterizer {
         let key = HintKey {
             blob: face.data().data.id(),
             index: face.data().index,
-            coords: face
-                .normalized_coords()
-                .iter()
-                .map(|coord| coord.to_bits())
-                .collect(),
+            coords: face.coordinate_handle(),
             ppem: ppem.to_bits(),
         };
-        let hint = if let Some(index) = self.hints.iter().position(|(cached, _)| cached == &key) {
-            self.hints.remove(index).unwrap().1
-        } else {
+        let hint = self.hints.get_or_insert(key, || {
             #[cfg(test)]
             {
                 self.hint_builds += 1;
             }
-            HintingInstance::new(
+            Ok(HintingInstance::new(
                 &outlines,
                 FontSize::new(ppem),
                 LocationRef::new(face.normalized_coords()),
@@ -126,17 +176,14 @@ impl GlyphRasterizer {
                     },
                     ..Default::default()
                 },
-            )?
-        };
-        if self.hints.len() == HINT_LIMIT {
-            self.hints.pop_front();
+            )?)
+        })?;
+        #[cfg(test)]
+        {
+            self.outline_builds += 1;
         }
-        self.hints.push_back((key, hint));
         let mut pen = Pen(PathBuilder::new());
-        glyph.draw(
-            DrawSettings::hinted(&self.hints.back().unwrap().1, false),
-            &mut pen,
-        )?;
+        glyph.draw(DrawSettings::hinted(hint, false), &mut pen)?;
         let Some(path) = pen.0.finish() else {
             return Ok((None, Bounds::default()));
         };

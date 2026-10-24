@@ -11,15 +11,19 @@ use parley::{
 };
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ops::Range,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 /// Experimental flat-LTR backend with an opt-in paragraph path. Select fonts before constructing GPUI;
 /// GPUI owns the font-metric, line-layout, wrapping and final raster caches.
 pub struct ParleyTextSystem {
     state: Mutex<State>,
+    faces: RwLock<FaceRegistry>,
+    raster: Mutex<GlyphRasterizer>,
+    #[cfg(test)]
+    raster_calls: std::sync::atomic::AtomicUsize,
     rejected: RejectedFace,
 }
 
@@ -37,19 +41,19 @@ pub type LayoutErrorHandler = Arc<dyn Fn(&anyhow::Error) + Send + Sync>;
 struct State {
     fonts: FontContext,
     layout: LayoutContext<()>,
-    faces: FaceRegistry,
-    raster: GlyphRasterizer,
     default_family: String,
     // Identity bindings, not a second layout/raster cache. Old bindings remain
     // valid for in-flight layouts after GPUI invalidates its font generation.
-    bindings: HashMap<FontId, (Font, u64)>,
+    bindings: HashMap<FontId, Font>,
+    // Reuse historical aliases when a descriptor resolves to the same face.
+    aliases: HashMap<Font, HashMap<FontId, FontId>>,
+    // Only current-generation descriptors; old ID bindings above remain valid.
+    descriptors: HashMap<Font, FontId>,
     generation: u64,
     missing_sink: Option<Arc<dyn gpui::MissingGlyphSink>>,
     layout_error_handler: LayoutErrorHandler,
     #[cfg(test)]
     shape_calls: usize,
-    #[cfg(test)]
-    raster_calls: usize,
 }
 
 impl ParleyTextSystem {
@@ -66,16 +70,14 @@ impl ParleyTextSystem {
             fonts,
             default_family,
             layout: LayoutContext::new(),
-            faces: FaceRegistry::default(),
-            raster: GlyphRasterizer::default(),
             bindings: HashMap::new(),
+            aliases: HashMap::new(),
+            descriptors: HashMap::new(),
             generation: 0,
             missing_sink: None,
             layout_error_handler: Arc::new(|error| eprintln!("Parley layout rejected: {error:#}")),
             #[cfg(test)]
             shape_calls: 0,
-            #[cfg(test)]
-            raster_calls: 0,
         };
         // Resolve once, in the same registry as every shaped/rasterized face.
         // Construction fails if the explicit default cannot provide real metrics.
@@ -87,8 +89,9 @@ impl ParleyTextSystem {
             .runs()
             .next()
             .context("missing default face")?;
-        let id = state.faces.register(&run)?;
-        let face = state.faces.get(id)?;
+        let mut faces = FaceRegistry::default();
+        let id = faces.register(&run)?;
+        let face = faces.get(id)?;
         let metrics = face.metrics()?;
         let advance = face.advance(GlyphId(0))?.width;
         ensure!(
@@ -102,8 +105,18 @@ impl ParleyTextSystem {
         };
         Ok(Self {
             state: Mutex::new(state),
+            faces: RwLock::new(faces),
+            raster: Mutex::new(GlyphRasterizer::default()),
+            #[cfg(test)]
+            raster_calls: std::sync::atomic::AtomicUsize::new(0),
             rejected,
         })
+    }
+
+    // Clone the immutable face handle under a short read lock; font parsing and
+    // raster work must never retain the registry lock or acquire shaping state.
+    fn face(&self, id: FontId) -> Result<Arc<crate::RegisteredFace>> {
+        self.faces.read().unwrap().shared(id)
     }
 
     /// Replace the rejection diagnostic (default: stderr). Rejections remain
@@ -118,7 +131,16 @@ impl ParleyTextSystem {
         } else {
             px(16.0)
         };
-        let scale = f32::from(size) / self.rejected.metrics.units_per_em as f32;
+        let count = text.chars().count();
+        let mut size = size;
+        let mut scale = f32::from(size) / self.rejected.metrics.units_per_em as f32;
+        let max_units = (self.rejected.advance * count as f32)
+            .max(self.rejected.metrics.ascent.abs())
+            .max(self.rejected.metrics.descent.abs());
+        if !(max_units * scale).is_finite() {
+            size = px(16.0);
+            scale = f32::from(size) / self.rejected.metrics.units_per_em as f32;
+        }
         let advance = px(self.rejected.advance * scale);
         let glyphs = text
             .char_indices()
@@ -132,7 +154,7 @@ impl ParleyTextSystem {
             .collect();
         LineLayout {
             font_size: size,
-            width: advance * text.chars().count() as f32,
+            width: advance * count as f32,
             ascent: px(self.rejected.metrics.ascent * scale),
             descent: px(self.rejected.metrics.descent.abs() * scale),
             runs: vec![ShapedRun {
@@ -155,7 +177,9 @@ impl ParleyTextSystem {
         let mut state = self.state.lock().unwrap();
         let styles = state.styles(text, runs)?;
         let layout = state.shape(text, size, &styles)?;
-        let result = line_layout(&layout, size, |run| state.faces.register(run))?;
+        let result = line_layout(&layout, size, |run| {
+            self.faces.write().unwrap().register(run)
+        })?;
         let sink = state.missing_sink.clone();
         let mut missing = Vec::new();
         if sink.is_some() && !text.is_empty() {
@@ -213,17 +237,21 @@ impl ParleyTextSystem {
         let mut layout = state.build(text, size, &styles)?;
         layout.break_all_lines(None);
         layout.align(Alignment::Start, AlignmentOptions::default());
+        crate::validate_layout_geometry(&layout)?;
         let mut faces = Vec::new();
+        let mut seen_faces = HashSet::new();
         let mut face_runs = Vec::new();
+        let mut registry = self.faces.write().unwrap();
         for line in layout.lines() {
             for run in line.runs() {
-                let id = state.faces.register(&run)?;
+                let id = registry.register(&run)?;
                 face_runs.push((run.text_range(), id));
-                if !faces.contains(&id) {
+                if seen_faces.insert(id) {
                     faces.push(id);
                 }
             }
         }
+        drop(registry);
         face_runs.sort_by_key(|(range, _)| range.start);
         Ok(crate::ParagraphShape::new(
             Arc::from(text),
@@ -245,7 +273,7 @@ impl State {
                 end <= text.len() && text.is_char_boundary(start) && text.is_char_boundary(end),
                 "invalid font run range"
             );
-            let (font, _) = self
+            let font = self
                 .bindings
                 .get(&run.font_id)
                 .context("unknown requested font ID")?;
@@ -284,19 +312,20 @@ impl State {
             } else {
                 font.family.as_ref()
             };
-            let mut families = vec![FontFamilyName::named(primary)];
-            if let Some(fallbacks) = &font.fallbacks {
-                families.extend(
-                    fallbacks
-                        .fallback_list()
-                        .iter()
-                        .map(|name| FontFamilyName::named(name)),
-                );
-            }
-            builder.push(
-                StyleProperty::FontFamily(FontFamily::List(Cow::Owned(families))),
-                range.clone(),
-            );
+            let fallbacks = font
+                .fallbacks
+                .as_ref()
+                .map(|f| f.fallback_list())
+                .unwrap_or(&[]);
+            let family = if fallbacks.is_empty() {
+                FontFamily::named(primary)
+            } else {
+                let mut families = Vec::with_capacity(1 + fallbacks.len());
+                families.push(FontFamilyName::named(primary));
+                families.extend(fallbacks.iter().map(|name| FontFamilyName::named(name)));
+                FontFamily::List(Cow::Owned(families))
+            };
+            builder.push(StyleProperty::FontFamily(family), range.clone());
             builder.push(
                 StyleProperty::FontWeight(parley::FontWeight::new(font.weight.0)),
                 range.clone(),
@@ -355,18 +384,41 @@ impl PlatformTextSystem for ParleyTextSystem {
             .into_iter()
             .map(|bytes| {
                 let blob = parley::fontique::Blob::new(Arc::new(bytes.into_owned()));
-                ensure!(
-                    !validation.register_fonts(blob.clone(), None).is_empty(),
-                    "invalid or unnamed font data"
-                );
-                Ok(blob)
+                let registered = validation.register_fonts(blob.clone(), None);
+                ensure!(!registered.is_empty(), "invalid or unnamed font data");
+                let families = registered
+                    .into_iter()
+                    .map(|(id, fonts)| {
+                        let name = validation
+                            .family_name(id)
+                            .context("missing validated family")?
+                            .to_owned();
+                        let indices = fonts.iter().map(|font| font.index()).collect::<Vec<_>>();
+                        Ok((name, indices))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                Ok((blob, families))
             })
             .collect::<Result<Vec<_>>>()?;
         let mut state = self.state.lock().unwrap();
-        for blob in blobs {
-            state.fonts.collection.register_fonts(blob, None);
+        for (blob, families) in blobs {
+            // Fontique appends even identical memory fonts. Check every face of
+            // the blob against its target family, including collection indices.
+            // Do not keep a separate index that would itself retain font bytes.
+            let duplicate = families.iter().all(|(name, indices)| {
+                state.fonts.collection.family_by_name(name).is_some_and(|family| {
+                    indices.iter().all(|index| family.fonts().iter().any(|font| {
+                        font.index() == *index && matches!(font.source().kind(),
+                            parley::fontique::SourceKind::Memory(data) if data.data() == blob.data())
+                    }))
+                })
+            });
+            if !duplicate {
+                state.fonts.collection.register_fonts(blob, None);
+            }
         }
         state.generation += 1;
+        state.descriptors.clear();
         Ok(())
     }
 
@@ -387,11 +439,7 @@ impl PlatformTextSystem for ParleyTextSystem {
 
     fn font_id(&self, descriptor: &Font) -> Result<FontId> {
         let mut state = self.state.lock().unwrap();
-        if let Some((&id, _)) = state
-            .bindings
-            .iter()
-            .find(|(_, (font, generation))| font == descriptor && *generation == state.generation)
-        {
+        if let Some(&id) = state.descriptors.get(descriptor) {
             return Ok(id);
         }
         let family = if descriptor.family.as_ref() == ".SystemUIFont" {
@@ -409,59 +457,61 @@ impl PlatformTextSystem for ParleyTextSystem {
             .next()
             .context("font probe produced no line")?;
         let run = line.runs().next().context("font probe produced no face")?;
-        let resolved = state.faces.register(&run)?;
-        let id = state.faces.alias(resolved)?;
-        let generation = state.generation;
-        state.bindings.insert(id, (descriptor.clone(), generation));
+        let resolved = self.faces.write().unwrap().register(&run)?;
+        let id = if let Some(&id) = state
+            .aliases
+            .get(descriptor)
+            .and_then(|ids| ids.get(&resolved))
+        {
+            id
+        } else {
+            let id = self.faces.write().unwrap().alias(resolved)?;
+            state.bindings.insert(id, descriptor.clone());
+            state
+                .aliases
+                .entry(descriptor.clone())
+                .or_default()
+                .insert(resolved, id);
+            id
+        };
+        state.descriptors.insert(descriptor.clone(), id);
         Ok(id)
     }
 
     fn font_metrics(&self, id: FontId) -> FontMetrics {
-        self.state
-            .lock()
-            .unwrap()
-            .faces
-            .get(id)
+        self.face(id)
             .and_then(|face| face.metrics())
             .expect("invalid Parley font metrics")
     }
     fn typographic_bounds(&self, id: FontId, glyph: GlyphId) -> Result<Bounds<f32>> {
-        self.state
-            .lock()
-            .unwrap()
-            .faces
-            .get(id)?
-            .typographic_bounds(glyph)
+        self.face(id)?.typographic_bounds(glyph)
     }
     fn advance(&self, id: FontId, glyph: GlyphId) -> Result<Size<f32>> {
-        self.state.lock().unwrap().faces.get(id)?.advance(glyph)
+        self.face(id)?.advance(glyph)
     }
     fn glyph_for_char(&self, id: FontId, ch: char) -> Option<GlyphId> {
-        self.state
-            .lock()
-            .unwrap()
-            .faces
-            .get(id)
-            .ok()?
-            .glyph_for_char(ch)
+        self.face(id).ok()?.glyph_for_char(ch)
     }
     fn glyph_raster_bounds(&self, params: &RenderGlyphParams) -> Result<Bounds<DevicePixels>> {
-        let mut state = self.state.lock().unwrap();
-        let State { raster, faces, .. } = &mut *state;
-        raster.raster_bounds(faces, params)
+        let face = self.face(params.font_id)?;
+        self.raster
+            .lock()
+            .unwrap()
+            .raster_bounds_for_face(&face, params)
     }
     fn rasterize_glyph(
         &self,
         params: &RenderGlyphParams,
         bounds: Bounds<DevicePixels>,
     ) -> Result<(Size<DevicePixels>, Vec<u8>)> {
-        let mut state = self.state.lock().unwrap();
+        let face = self.face(params.font_id)?;
         #[cfg(test)]
-        {
-            state.raster_calls += 1;
-        }
-        let State { raster, faces, .. } = &mut *state;
-        raster.rasterize_glyph(faces, params, bounds)
+        self.raster_calls
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.raster
+            .lock()
+            .unwrap()
+            .rasterize_face(&face, params, bounds)
     }
     fn layout_line(&self, text: &str, size: Pixels, runs: &[FontRun]) -> LineLayout {
         match self.try_layout_line(text, size, runs) {

@@ -6,9 +6,9 @@ use skrifa::{
     instance::{LocationRef, NormalizedCoord, Size as FontSize},
     metrics::BoundingBox,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Clone, Default, Hash, PartialEq, Eq)]
 struct FaceKey {
     blob: u64,
     index: u32,
@@ -21,7 +21,9 @@ struct FaceKey {
 #[derive(Default)]
 pub struct FaceRegistry {
     ids: HashMap<FaceKey, FontId>,
-    faces: Vec<RegisteredFace>,
+    // Reuse query coordinates; registering an existing run must not allocate a key.
+    query: FaceKey,
+    faces: Vec<Arc<RegisteredFace>>,
 }
 
 impl FaceRegistry {
@@ -37,26 +39,27 @@ impl FaceRegistry {
         let coords = run
             .normalized_coords()
             .iter()
-            .map(|coord| NormalizedCoord::from_bits(coord.to_bits()))
-            .collect();
+            .map(|coord| NormalizedCoord::from_bits(coord.to_bits()));
         self.insert(run.font(), coords)
     }
 
-    fn insert(&mut self, font: &FontData, coords: Vec<NormalizedCoord>) -> Result<FontId> {
-        // Parley can omit trailing default axes. Canonicalize equivalent
-        // locations without changing any non-default coordinate bits.
-        let mut coords = coords;
-        while coords.last() == Some(&NormalizedCoord::default()) {
-            coords.pop();
+    fn insert(
+        &mut self,
+        font: &FontData,
+        coords: impl IntoIterator<Item = NormalizedCoord>,
+    ) -> Result<FontId> {
+        self.query.blob = font.data.id();
+        self.query.index = font.index;
+        self.query.coords.clear();
+        self.query.coords.extend(coords);
+        // Parley can omit trailing default axes. Equivalent locations share IDs.
+        while self.query.coords.last() == Some(&NormalizedCoord::default()) {
+            self.query.coords.pop();
         }
-        let key = FaceKey {
-            blob: font.data.id(),
-            index: font.index,
-            coords,
-        };
-        if let Some(id) = self.ids.get(&key) {
+        if let Some(id) = self.ids.get(&self.query) {
             return Ok(*id);
         }
+        let key = &self.query;
         let parsed = FontRef::from_index(font.data.data(), font.index)?;
         ensure!(
             key.coords.len() <= parsed.axes().len(),
@@ -70,23 +73,33 @@ impl FaceRegistry {
             "invalid font metrics"
         );
         let id = FontId(self.faces.len());
-        self.faces.push(RegisteredFace {
+        self.faces.push(Arc::new(RegisteredFace {
             font: font.clone(),
-            coords: key.coords.clone(),
-        });
-        self.ids.insert(key, id);
+            coords: key.coords.clone().into(),
+        }));
+        self.ids.insert(key.clone(), id);
         Ok(id)
     }
 
     /// Look up the immutable face instance retained under a GPUI font ID.
     pub fn get(&self, id: FontId) -> Result<&RegisteredFace> {
-        self.faces.get(id.0).context("unknown registered font ID")
+        self.faces
+            .get(id.0)
+            .map(Arc::as_ref)
+            .context("unknown registered font ID")
+    }
+
+    pub(crate) fn shared(&self, id: FontId) -> Result<Arc<RegisteredFace>> {
+        self.faces
+            .get(id.0)
+            .cloned()
+            .context("unknown registered font ID")
     }
 
     // Requested styles need distinct IDs even when they resolve to the same
     // face: their features/fallbacks may differ. Resolved runs keep canonical IDs.
     pub(crate) fn alias(&mut self, id: FontId) -> Result<FontId> {
-        let face = self.get(id)?.clone();
+        let face = self.shared(id)?;
         let id = FontId(self.faces.len());
         self.faces.push(face);
         Ok(id)
@@ -98,7 +111,7 @@ impl FaceRegistry {
 #[derive(Clone)]
 pub struct RegisteredFace {
     font: FontData,
-    coords: Vec<NormalizedCoord>,
+    coords: Arc<[NormalizedCoord]>,
 }
 
 impl RegisteredFace {
@@ -111,6 +124,10 @@ impl RegisteredFace {
     /// values preserve Parley's fixed-point bits; omitted axes remain at default.
     pub fn normalized_coords(&self) -> &[NormalizedCoord] {
         &self.coords
+    }
+
+    pub(crate) fn coordinate_handle(&self) -> Arc<[NormalizedCoord]> {
+        self.coords.clone()
     }
 
     fn font(&self) -> Result<FontRef<'_>> {

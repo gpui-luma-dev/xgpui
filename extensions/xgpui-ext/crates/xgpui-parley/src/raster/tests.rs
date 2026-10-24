@@ -177,3 +177,75 @@ fn rejects_unsupported_modes_and_invalid_requests() -> Result<()> {
     assert!(raster.hints.is_empty());
     Ok(())
 }
+
+#[test]
+fn bounds_then_raster_reuses_outline_and_interleaving_remains_correct() -> Result<()> {
+    let layout = shape(&mut fonts(), "Hg", "IBM Plex Sans", 400.0);
+    let mut faces = FaceRegistry::default();
+    let run = layout.lines().next().unwrap().runs().next().unwrap();
+    let id = faces.register(&run)?;
+    let face = faces.get(id)?;
+    let h = params(id, face.glyph_for_char('H').unwrap());
+    let g = params(id, face.glyph_for_char('g').unwrap());
+    let mut raster = GlyphRasterizer::default();
+    let h_bounds = raster.raster_bounds(&faces, &h)?;
+    assert_eq!(raster.outline_builds, 1);
+    assert_eq!(raster.raster_bounds(&faces, &h)?, h_bounds);
+    let h_mask = raster.rasterize_glyph(&faces, &h, h_bounds)?;
+    assert_eq!(
+        raster.outline_builds, 1,
+        "bounds and bitmap share one outline"
+    );
+    assert!(
+        raster.prepared.is_none(),
+        "raster consumes the staged outline"
+    );
+
+    // Bounds calls may be interleaved or cached by GPUI; raster must still work.
+    raster.raster_bounds(&faces, &h)?;
+    let g_bounds = raster.raster_bounds(&faces, &g)?;
+    assert_eq!(raster.rasterize_glyph(&faces, &h, h_bounds)?, h_mask);
+    let direct = GlyphRasterizer::default().rasterize_glyph(&faces, &g, g_bounds)?;
+    assert_eq!(raster.rasterize_glyph(&faces, &g, g_bounds)?, direct);
+    Ok(())
+}
+
+#[test]
+fn hint_cache_hits_refresh_recency_and_evict_only_the_oldest() -> Result<()> {
+    let layout = shape(&mut fonts(), "H", "Inter Variable", 900.0);
+    let mut faces = FaceRegistry::default();
+    let run = layout.lines().next().unwrap().runs().next().unwrap();
+    let id = faces.register(&run)?;
+    let face = faces.get(id)?;
+    assert!(!face.normalized_coords().is_empty());
+    let first = face.coordinate_handle();
+    let second = face.coordinate_handle();
+    assert!(
+        std::sync::Arc::ptr_eq(&first, &second),
+        "lookup keys share coordinate storage"
+    );
+    let base = params(id, face.glyph_for_char('H').unwrap());
+    let sized = |size| RenderGlyphParams {
+        font_size: px(size as f32),
+        ..base.clone()
+    };
+    let mut raster = GlyphRasterizer::default();
+    for size in 1..=HINT_LIMIT {
+        raster.raster_bounds(&faces, &sized(size))?;
+    }
+    assert_eq!(raster.hint_builds, HINT_LIMIT);
+    // Refresh the oldest entry, then exceed capacity: size 2 must be evicted.
+    raster.raster_bounds(&faces, &sized(1))?;
+    assert_eq!(raster.hint_builds, HINT_LIMIT);
+    raster.raster_bounds(&faces, &sized(HINT_LIMIT + 1))?;
+    raster.raster_bounds(&faces, &sized(1))?;
+    assert_eq!(raster.hint_builds, HINT_LIMIT + 1);
+    raster.raster_bounds(&faces, &sized(2))?;
+    assert_eq!(raster.hint_builds, HINT_LIMIT + 2);
+    assert_eq!(raster.hints.len(), HINT_LIMIT);
+    let bounds = raster.raster_bounds(&faces, &base)?;
+    let actual = raster.rasterize_glyph(&faces, &base, bounds)?;
+    let expected = GlyphRasterizer::default().rasterize_glyph(&faces, &base, bounds)?;
+    assert_eq!(actual, expected, "eviction and reuse preserve glyph output");
+    Ok(())
+}

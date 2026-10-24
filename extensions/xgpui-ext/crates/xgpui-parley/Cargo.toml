@@ -15,7 +15,7 @@ anyhow = "1"
 gpui = { path = "../../../../gpui/crates/gpui" }
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
 skrifa = "=0.44.0"
-tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd"] }
+tiny-skia = { version = "=0.12.0", default-features = false, features = ["std", "simd"] }
 gpui-platform = { path = "../../../../gpui/crates/gpui-platform", optional = true }
 
 [[test]]

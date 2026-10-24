@@ -49,6 +49,20 @@ fn mixed_scripts_reflow_without_reshaping_or_mutating_prior_results() -> Result<
     assert_eq!(narrow.source(), text);
     assert!(narrow.resolved_faces().len() >= 3);
     assert_eq!(wide.resolved_faces(), narrow.resolved_faces());
+    let mut expected_faces = Vec::new();
+    for line in wide.parley_layout().lines() {
+        for run in line.runs() {
+            let id = backend.faces.write().unwrap().register(&run)?;
+            if !expected_faces.contains(&id) {
+                expected_faces.push(id);
+            }
+        }
+    }
+    assert_eq!(
+        narrow.resolved_faces(),
+        expected_faces,
+        "preserve first-seen face order"
+    );
     let mut rtl = false;
     let mut covered = 0;
     for line in narrow.parley_layout().lines() {
@@ -144,7 +158,7 @@ fn paragraph_boundaries_empty_layout_and_invalid_geometry_are_explicit() -> Resu
             .is_empty()
     );
     assert!(shape.layout(px(f32::NAN)).is_err());
-    assert!(shape.layout(px(0.0)).is_err());
+    assert!(shape.layout(px(-1.0)).is_err());
     let text = "a\u{2028}אבג\u{2028}";
     let hard = backend
         .prepare_paragraph(text, px(24.0), &runs(&backend, text)?)?
@@ -308,7 +322,9 @@ fn paragraph_paint_reuses_the_existing_atlas_across_repaints_and_colors() -> Res
                 .size_full()
             },
         );
-        let calls = backend.state.lock().unwrap().raster_calls;
+        let calls = backend
+            .raster_calls
+            .load(std::sync::atomic::Ordering::Relaxed);
         if pass == 0 {
             assert!(calls > 0);
         } else {
@@ -319,5 +335,78 @@ fn paragraph_paint_reuses_the_existing_atlas_across_repaints_and_colors() -> Res
             first_raster_calls = calls;
         }
     }
+    Ok(())
+}
+
+#[test]
+fn zero_width_reflows_preserve_content_and_work_through_gpui_cache() -> Result<()> {
+    use gpui::{PlatformParagraphLayout, TextSystem, WindowTextSystem};
+    let backend = Arc::new(backend()?);
+    let cache = WindowTextSystem::new(Arc::new(TextSystem::new(backend.clone())));
+    for text in ["", "office אבג e\u{301} words"] {
+        let runs = runs(&backend, text)?;
+        let shape = backend.prepare_paragraph(text, px(24.), &runs)?;
+        let wide = shape.layout(px(500.))?;
+        let zero = shape.layout(px(0.))?;
+        assert_eq!(zero.size().width, px(0.));
+        assert_eq!(zero.source(), text);
+        assert!(f32::from(zero.size().height).is_finite());
+        assert!(zero.size().height > px(0.));
+        assert!(zero.caret_bounds(at(0, Affinity::Downstream))?.size.height > px(0.));
+        if text.is_empty() {
+            assert!(zero.runs().is_empty());
+        } else {
+            assert!(zero.runs().iter().any(|run| !run.glyphs.is_empty()));
+            assert!(
+                zero.runs()
+                    .iter()
+                    .flat_map(|run| &run.glyphs)
+                    .all(|glyph| text.is_char_boundary(glyph.index))
+            );
+        }
+        assert_eq!(wide.size().width, px(500.));
+        assert_eq!(shape.layout(px(500.))?.size(), wide.size());
+
+        let first = cache.layout_paragraph(text.into(), px(24.), &runs, px(0.))?;
+        let calls = backend.state.lock().unwrap().shape_calls;
+        let again = cache.layout_paragraph(text.into(), px(24.), &runs, px(0.))?;
+        assert!(Arc::ptr_eq(&first, &again));
+        assert_eq!(first.size().width, px(0.));
+        assert_eq!(first.source(), text);
+        cache.layout_paragraph(text.into(), px(24.), &runs, px(500.))?;
+        assert_eq!(backend.state.lock().unwrap().shape_calls, calls);
+        for invalid in [-1., f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert!(shape.layout(px(invalid)).is_err());
+            assert!(
+                cache
+                    .layout_paragraph(text.into(), px(24.), &runs, px(invalid))
+                    .is_err()
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn overflowing_paragraph_geometry_is_rejected_without_breaking_old_layouts() -> Result<()> {
+    let backend = backend()?;
+    let text = "HHHHHH";
+    let runs = runs(&backend, text)?;
+    let old_shape = backend.prepare_paragraph(text, px(24.), &runs)?;
+    let old_layout = old_shape.layout(px(100.))?;
+    assert!(
+        backend
+            .prepare_paragraph(text, px(f32::MAX), &runs)
+            .is_err()
+    );
+    assert_eq!(old_layout.source(), text);
+    assert_eq!(
+        old_shape.layout(px(100.))?.parley_layout().height(),
+        old_layout.parley_layout().height()
+    );
+    assert_eq!(
+        old_shape.layout(px(200.))?.resolved_faces(),
+        old_layout.resolved_faces()
+    );
     Ok(())
 }

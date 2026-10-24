@@ -47,14 +47,17 @@ impl ParagraphShape {
 
     /// Clone Parley's layout and rebreak, without rebuilding/shaping the text.
     /// Clone allocation costs are intentionally not hidden behind another cache.
+    /// Width must be finite and nonnegative. Zero preserves content with a zero
+    /// available width; unbreakable glyphs may overflow, as at other narrow widths.
     pub fn layout(&self, width: Pixels) -> Result<ParagraphLayout> {
         ensure!(
-            f32::from(width).is_finite() && width > px(0.0),
+            f32::from(width).is_finite() && width >= px(0.0),
             "invalid paragraph width"
         );
         let mut layout = self.layout.clone();
         layout.break_all_lines(Some(f32::from(width)));
         layout.align(Alignment::Start, AlignmentOptions::default());
+        crate::validate_layout_geometry(&layout)?;
         let mut runs = Vec::new();
         for line in layout.lines().filter(|_| !self.source.is_empty()) {
             for item in line.items() {
@@ -71,29 +74,32 @@ impl ParagraphShape {
                     .filter(|(original, _)| original.end >= range.end)
                     .map(|(_, id)| *id)
                     .ok_or_else(|| anyhow::anyhow!("unregistered paragraph run"))?;
-                let indices: Vec<_> = item
-                    .run()
-                    .visual_clusters()
-                    .flat_map(|cluster| {
-                        let index = cluster.text_range().start;
-                        let emoji = cluster.is_emoji();
-                        cluster.glyphs().map(move |_| (index, emoji))
-                    })
-                    .collect();
-                ensure!(
-                    indices.len() == item.glyphs().count(),
-                    "split style clusters are unsupported"
-                );
-                let glyphs = item
-                    .positioned_glyphs()
-                    .zip(indices)
-                    .map(|(glyph, (index, is_emoji))| ShapedGlyph {
+                let run = item.run();
+                let mut indices = run.visual_clusters().flat_map(|cluster| {
+                    let index = cluster.text_range().start;
+                    let emoji = cluster.is_emoji();
+                    cluster.glyphs().map(move |_| (index, emoji))
+                });
+                let glyph_count = item.glyphs().count();
+                let mut glyphs = Vec::with_capacity(glyph_count);
+                for (glyph, (index, is_emoji)) in item.positioned_glyphs().zip(indices.by_ref()) {
+                    ensure!(
+                        glyph.x.is_finite() && glyph.y.is_finite(),
+                        "nonfinite glyph position"
+                    );
+                    glyphs.push(ShapedGlyph {
                         id: GlyphId(glyph.id),
                         position: point(px(glyph.x), px(glyph.y)),
                         index,
                         is_emoji,
-                    })
-                    .collect();
+                    });
+                }
+                // zip stops at the shorter iterator. Check both sides so split
+                // style clusters still fail instead of silently dropping glyphs.
+                ensure!(
+                    glyphs.len() == glyph_count && indices.next().is_none(),
+                    "split style clusters are unsupported"
+                );
                 runs.push(ShapedRun { font_id, glyphs });
             }
         }

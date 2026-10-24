@@ -151,3 +151,27 @@ fn collection_index_is_part_of_identity() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn repeated_variable_face_registration_reuses_query_storage() -> Result<()> {
+    let mut fonts = fonts();
+    let light = shape(&mut fonts, "H", "Inter Variable", 100.0);
+    let heavy = shape(&mut fonts, "H", "Inter Variable", 900.0);
+    let light = light.lines().next().unwrap().runs().next().unwrap();
+    let heavy = heavy.lines().next().unwrap().runs().next().unwrap();
+    let mut registry = FaceRegistry::default();
+    let light_id = registry.register(&light)?;
+    let heavy_id = registry.register(&heavy)?;
+    assert_ne!(light_id, heavy_id);
+    let pointer = registry.query.coords.as_ptr();
+    let capacity = registry.query.coords.capacity();
+    assert!(capacity > 0, "fixture must exercise coordinate storage");
+    for _ in 0..100 {
+        assert_eq!(registry.register(&light)?, light_id);
+        assert_eq!(registry.register(&heavy)?, heavy_id);
+        assert_eq!(registry.query.coords.as_ptr(), pointer);
+        assert_eq!(registry.query.coords.capacity(), capacity);
+    }
+    assert_eq!(registry.faces.len(), 2);
+    Ok(())
+}

@@ -61,7 +61,7 @@ impl LineLayoutCache {
             "invalid font size"
         );
         anyhow::ensure!(
-            f32::from(width).is_finite() && width > px(0.0),
+            f32::from(width).is_finite() && width >= px(0.0),
             "invalid paragraph width"
         );
         let mut end = 0usize;
