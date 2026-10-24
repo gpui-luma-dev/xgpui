@@ -1,40 +1,50 @@
 # xgpui release imports
 
-gpui-unofficial is xgpui's upstream repository. `main` is xgpui development.
-Each incoming release gets a matching branch, for example `release/1.26.0`,
-and a draft PR from that branch to `main`. Merging is manual.
+gpui-unofficial is xgpui's upstream. `main` contains xgpui's maintained code.
+Sync prepares an **incoming tree proposal**, not an integrated or buildable update.
 
-gpui-unofficial publishes independent orphan release snapshots. Sync reads those
-files rather than merging their Git histories. xgpui's release branches retain
-connected history so incoming differences can merge with downstream patches.
+## Review a release
 
-## Import a release
+Run **Actions → Sync GPUI release** on main with a release number and optional
+source SHA. Sync normalizes the release's crate names, compares that tree with
+xgpui's current tree, and opens a **new draft PR on a fresh version-named branch**.
+Existing PRs are never edited, force-pushed or merged.
 
-Run **Actions → Sync GPUI release** from main with the release number and,
-optionally, an expected source SHA. The workflow:
+The proposal uses separate commits:
 
-1. Selects `release/<version>`, based on the previous imported release's branch.
-2. Fetches gpui-unofficial's matching release and compares its captured files,
-   including additions and deletions. Crate names are normalized for xgpui.
-3. Commits and pushes the incoming release differences onto that version branch.
-4. Automatically opens a draft PR to `main`, or updates its existing open PR.
-   Existing PRs retain their current draft/review state. No PR for an empty diff.
+1. **Code:** changed source, shaders, build scripts, assets and other package
+   files, including additions and deletions.
+2. **Cargo versions/dependencies:** package versions and dependency requirements,
+   including mirrored manifests. These affect dependency resolution.
+3. **Generated metadata/artifacts:** generated package READMEs, provenance and
+   the remaining duplicate `transformed-crates` files.
 
-Release branches hold imported source, not downstream development patches.
-Basing each import on the prior release keeps xgpui-only edits out of the incoming
-diff. Resolve conflicts during manual integration rather than overwriting main's
-patched files with a new snapshot.
+Release context uses the exact old/new Zed SHAs in snapshot provenance, never
+latest-release or previous-stable guesses. Its path filter is the union of both
+captures' `transform-metadata.json` crate inventories, including nested crates.
+It links relevant Zed commits and referenced PRs, with root Cargo dependency
+changes and unrelated range commits labeled separately. Missing provenance,
+incomplete API pagination and non-forward ranges fail context generation rather
+than silently reporting no changes. Markdown/JSON context accompanies the PR and
+workflow artifact; no issue or comment is created in the upstream repository.
 
-For migration, the first version branch can use the existing `upstream-normalized`
-branch as its baseline. If that branch is absent, sync discovers the first
-normalized import commit in main's provenance history. The baseline's source SHA
-must match main's recorded import. The old `upstream` and `upstream-normalized` branches are not updated by
-sync. Keep version branches available as baselines for later imports.
+The PR links each commit and lists code differences separately. The detailed JSON
+comparison is uploaded as a workflow artifact. A release with no differences
+creates no PR.
 
-Dispatching sync authorizes its release branch and draft PR updates. It does not
-merge, publish, or run Windows validation. Unknown crates, name collisions and
-baseline mismatches stop the run for review. Repeating an unchanged import does
-not create another commit or PR.
+Sync also compares a clean snapshot of the previously recorded source release.
+This labels whether each proposed file changed upstream and whether xgpui has a
+local modification. It does **not** automatically merge or resolve those overlaps.
+A downstream-only code difference is reported and retained, not applied. When
+upstream also changed a file, its incoming version is a manual review proposal:
+combine or reject overlapping changes before any merge.
+
+`main` remains untouched. Complete incoming versions are placed only on the review
+branch. Platform validation, integration, publishing and merging are separate work.
+
+For example, 1.25.3 contains release metadata changes and no upstream Rust source
+changes relative to 1.25.2. The spring clock difference against xgpui is a local
+patch, not an upstream fix; it is retained with its regression assertion.
 
 ## Names and provenance
 
@@ -55,7 +65,7 @@ These local names do not imply ownership of the corresponding crates.io names.
 
 ## Integrate and validate
 
-Merge the release-specific branch into the development/integration branch. Preserve local
+Review and resolve the incoming proposal on a development/integration branch. Preserve local
 Rust edits when resolving conflicts; do not replace main's capture with a fresh
 generated snapshot as a substitute for merging. The first normalization is a
 directory/package migration; later releases use the same stable paths.
@@ -104,13 +114,12 @@ Refresh and review the web documentation after each release; regeneration alone
 does not validate the narrative or SVG teaching model. See
 [roadmap maintenance](roadmap/BUILDING.md) and [build options](BUILDING.md).
 
-Sync imports and normalizes source changes; it does not run platform builds or
-runtime validation. Review and validation happen separately before merging.
+Sync performs no platform validation. Its branch is an unintegrated proposal;
+review and test the chosen integration separately.
 
 ## GitHub settings
 
-Keep main as the default branch and preserve imported version branches after
-merges. Enable **Allow GitHub Actions to create and approve pull requests** in the
-repository/organization Actions settings so the workflow can create its draft PR.
-If policy denies PR creation, sync fails at that step; the release branch remains
-available for review. Nothing is merged automatically.
+Keep main as the default branch. Enable **Allow GitHub Actions to create and
+approve pull requests** in repository/organization Actions settings. Sync creates
+only new draft PRs; it never approves or merges them. The old persistent `upstream`
+and `upstream-normalized` branches are not used or updated.
