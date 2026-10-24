@@ -1842,6 +1842,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gamut-lab"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "gpui",
+ "gpui-platform",
+ "xgpui-gamut",
+ "xgpui-shader",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3335,6 +3347,7 @@ dependencies = [
  "block2 0.6.2",
  "objc2 0.6.5",
  "objc2-core-foundation",
+ "objc2-core-graphics",
  "objc2-foundation 0.3.2",
 ]
 
@@ -4708,18 +4721,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
-]
-
-[[package]]
-name = "shader-lab"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "gpui",
- "gpui-platform",
- "serde_json",
- "xgpui-shader",
 ]
 
 [[package]]
@@ -6498,6 +6499,17 @@ name = "xcursor"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
+
+[[package]]
+name = "xgpui-gamut"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gpui",
+ "gpui-apple",
+ "gpui-windows",
+ "metal",
+]
 
 [[package]]
 name = "xgpui-shader"

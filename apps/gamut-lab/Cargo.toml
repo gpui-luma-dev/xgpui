@@ -1,5 +1,5 @@
 [package]
-name = "shader-lab"
+name = "gamut-lab"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -11,8 +11,11 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 gpui = { path = "../../gpui/crates/gpui", features = ["test-support"] }
 gpui_platform = { package = "gpui-platform", path = "../../gpui/crates/gpui-platform", default-features = false, features = ["test-support", "font-kit"] }
+xgpui-gamut = { path = "../../extensions/xgpui-ext/crates/xgpui-gamut" }
 xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader" }
-serde_json = "1"
 
-[features]
-runtime-shaders = ["gpui_platform/runtime_shaders"]
+
+[[test]]
+name = "native_windows"
+path = "tests/native_windows.rs"
+harness = false

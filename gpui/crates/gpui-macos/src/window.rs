@@ -473,6 +473,10 @@ unsafe fn build_window_class(name: &'static str, superclass: &Class) -> *const C
             window_did_change_screen as extern "C" fn(&Object, Sel, id),
         );
         decl.add_method(
+            sel!(windowDidChangeScreenProfile:),
+            window_did_change_color_profile as extern "C" fn(&Object, Sel, id),
+        );
+        decl.add_method(
             sel!(windowDidBecomeKey:),
             window_did_change_key_status as extern "C" fn(&Object, Sel, id),
         );
@@ -667,6 +671,8 @@ struct MacWindowState {
     cursor_visible: Arc<AtomicBool>,
     frame_source: Option<WindowFrameSource>,
     renderer: renderer::Renderer,
+    color_status: gpui::WindowColorStatus,
+    color_profile_dirty: bool,
     request_frame_callback: Option<Box<dyn FnMut(RequestFrameOptions)>>,
     event_callback: Option<Box<dyn FnMut(PlatformInput) -> gpui::DispatchEventResult>>,
     activate_callback: Option<Box<dyn FnMut(bool)>>,
@@ -1107,6 +1113,14 @@ impl MacWindow {
                     bounds.size.map(|pixels| pixels.as_f32()),
                     false,
                 ),
+                color_status: gpui::WindowColorStatus::new(
+                    gpui::WindowColorMode::Default,
+                    gpui::WindowColorMode::Default,
+                    true,
+                    None,
+                    None,
+                ),
+                color_profile_dirty: true,
                 request_frame_callback: None,
                 event_callback: None,
                 activate_callback: None,
@@ -1423,7 +1437,51 @@ fn if_window_not_closed(closed: Arc<AtomicBool>, f: impl FnOnce()) {
     }
 }
 
+// Read display evidence only at negotiation/frame boundaries. The public getter
+// remains a cheap cached snapshot; ColorSync still owns physical display mapping.
+fn color_status_for_window(state: &MacWindowState) -> gpui::WindowColorStatus {
+    let renderer = state.renderer.color_status();
+    let evidence = state
+        .native_window()
+        .screen()
+        .and_then(|screen| screen.colorSpace())
+        .and_then(|space| space.CGColorSpace())
+        .map(|space| space.is_wide_gamut_rgb());
+    gpui::WindowColorStatus::new(
+        renderer.requested(),
+        renderer.effective(),
+        renderer.supports_wide_gamut_sdr(),
+        evidence,
+        renderer.fallback(),
+    )
+}
+
 impl PlatformWindow for MacWindow {
+    fn set_color_mode(
+        &mut self,
+        mode: gpui::WindowColorMode,
+    ) -> anyhow::Result<gpui::WindowColorStatus> {
+        let mut state = self.0.lock();
+        state.renderer.set_color_mode(mode)?;
+        state.color_status = color_status_for_window(&state);
+        state.color_profile_dirty = false;
+        Ok(state.color_status)
+    }
+
+    fn color_status(&self) -> gpui::WindowColorStatus {
+        self.0.lock().color_status
+    }
+
+    fn prepare_frame(&self) -> bool {
+        let mut state = self.0.lock();
+        if !state.color_profile_dirty {
+            return false;
+        }
+        state.color_status = color_status_for_window(&state);
+        state.color_profile_dirty = false;
+        true
+    }
+
     fn bounds(&self) -> Bounds<Pixels> {
         self.0.as_ref().lock().bounds()
     }
@@ -1863,6 +1921,14 @@ impl PlatformWindow for MacWindow {
 
     fn set_background_appearance(&self, background_appearance: WindowBackgroundAppearance) {
         let mut this = self.0.as_ref().lock();
+        // Existing setter is infallible. Preserve the last valid opaque window
+        // rather than creating an unsupported partially configured wide window.
+        if background_appearance != WindowBackgroundAppearance::Opaque
+            && this.renderer.color_status().requested() == gpui::WindowColorMode::WideGamutSdr
+        {
+            log::warn!("disable wide-gamut SDR before enabling a transparent window");
+            return;
+        }
         this.background_appearance = background_appearance;
 
         let opaque = background_appearance == WindowBackgroundAppearance::Opaque;
@@ -3118,10 +3184,23 @@ fn update_window_scale_factor(window_state: &Arc<Mutex<MacWindowState>>) {
     };
 }
 
+extern "C" fn window_did_change_color_profile(this: &Object, _: Sel, _: id) {
+    let state = unsafe { get_window_state(this) };
+    let mut state = state.lock();
+    state.color_profile_dirty = true;
+    unsafe {
+        let _: () = msg_send![state.native_view.as_ptr(), setNeedsDisplay: YES];
+    }
+}
+
 extern "C" fn window_did_change_screen(this: &Object, _: Sel, _: id) {
     let window_state = unsafe { get_window_state(this) };
     let mut lock = window_state.as_ref().lock();
     lock.start_display_link();
+    lock.color_profile_dirty = true;
+    unsafe {
+        let _: () = msg_send![lock.native_view.as_ptr(), setNeedsDisplay: YES];
+    }
     drop(lock);
     update_window_scale_factor(&window_state);
     report_display_change(&window_state);

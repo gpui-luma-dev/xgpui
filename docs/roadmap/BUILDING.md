@@ -62,13 +62,17 @@ normalization-map change as well as after a release sync.
 
 ## Extensions to GPUI
 
-The navigation entry **Extensions to GPUI** (`#extensions`) identifies opt-in
-downstream capabilities separately from upstream GPUI. `extensions.js` owns the
-section overview. All published extension guides live in `docs/roadmap/extensions/` at the
+The sidebar group **Extensions** immediately precedes **Core**, using the same
+heading and link styles. `xgpui-shader` is indexed from its actual manifest and
+entrypoint, with usage code as its default crate page plus source/API/dependency
+tabs. `xgpui-gamut` has its own manifest, source/API/dependency tabs and code-first
+producer/presentation guide. Native backend ownership is documented separately. `#extensions` remains a linkable index.
+The generator keeps local `extension_packages` separate from upstream provenance.
+`extensions.js` owns the feature guides and reference links. All published extension guides live in `docs/roadmap/extensions/` at the
 repository root, including integration, API, producer and backend references.
 Source-side READMEs link to these maintained guides.
 
-The generator renders those seven Markdown documents into `data.js`, including
+The generator renders those eight Markdown documents into `data.js`, including
 tables, code blocks and heading anchors. Internal document links become site
 routes; section links use `&section=heading-id`. No network fetch or Markdown
 runtime is needed in the browser. Edit the maintained sources, then regenerate;

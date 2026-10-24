@@ -14,7 +14,10 @@ vm.runInContext(await readFile(new URL("extensions.js", site), "utf8"), context)
 vm.runInContext(source, context);
 const run = code => vm.runInContext(code, context);
 const data = context.window.ROADMAP;
-assert.equal(data.crates.length, Object.keys(data.provenance.packages).length);
+const indexedPackages = {...data.provenance.packages, ...data.extension_packages};
+assert.equal(data.crates.length, Object.keys(indexedPackages).length);
+assert.equal(data.extension_packages['xgpui-shader'], 'extensions/xgpui-ext/crates/xgpui-shader');
+assert.ok(!data.provenance.packages['xgpui-shader'], 'local extension must not claim upstream provenance');
 assert.equal(Object.keys(data.notes).sort().join(), data.crates.map(c => c.package).sort().join());
 assert.equal(run('parseRoute(crateUrl("gpui", "surface")).tab'), 'surface');
 assert.equal(run('parseRoute("#method").global'), 'method');
@@ -35,7 +38,7 @@ for (const c of data.crates) {
     assert.ok(html.includes(c.package));
     assert.ok(!html.includes('undefined'));
   }
-  for (const dep of c.dependencies) assert.ok(data.provenance.packages[dep.package]);
+  for (const dep of c.dependencies) assert.ok(indexedPackages[dep.package]);
   for (const file of c.files) {
     assert.ok(!file.includes('..'));
     if (!pages.has(file)) pages.set(file, await readFile(new URL('source/' + file + '.html', site), 'utf8'));
@@ -104,7 +107,7 @@ const buildHtml = run("buildGuidePage()");
 for (const term of ["Build GPUI and your app", "wasm32-unknown-unknown", "WebGL2", "runtime-shaders", "Complete captured feature reference"]) assert.ok(buildHtml.includes(term));
 for (const c of data.crates) {
  assert.ok(buildHtml.includes(c.package));
- const manifest = data.build_files["gpui/crates/" + c.package + "/Cargo.toml"];
+ const manifest = data.build_files[indexedPackages[c.package] + "/Cargo.toml"];
  assert.ok(manifest);
  for (const name of Object.keys(c.features)) assert.ok(manifest.includes(name));
 }
@@ -185,15 +188,23 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 7);
-assert.match(run('extensionPage("extensions")'), /Downstream extension to GPUI/);
-assert.match(index, /href="#extensions"/);
+assert.equal(Object.keys(data.extension_documents).length, 8);
+const extensionOverview = run('extensionPage("extensions")');
+assert.match(extensionOverview, /1\. Paints and shaders/);
+assert.match(extensionOverview, /2\. Wide-gamut presentation/);
+assert.match(extensionOverview, /href="#extension-paints"/);
+assert.match(extensionOverview, /href="#high-gamut-windows"/);
+assert.match(data.extension_documents['high-gamut-windows'].html, /WideColor::linear_p3/);
+assert.match(data.extension_documents['high-gamut-windows'].html, /xgpui-gamut/);
+
+assert.match(run('extensionPage("extensions")'), /Downstream extensions to GPUI/);
+assert.ok(!index.includes('<a href="#extensions">Extensions to GPUI</a>'), 'extensions belong in the crate group');
 for (const [route, doc] of Object.entries(data.extension_documents)) {
   assert.equal(doc.source, 'docs/roadmap/extensions/' + route + '.md');
   await readFile(new URL('../../' + doc.source, import.meta.url));
   context.location.hash = '#' + route;
   run('render()');
-  assert.ok(element('content').innerHTML.includes(doc.html));
+  assert.ok(element('content').innerHTML.includes(route === 'high-gamut-windows' ? doc.html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') : doc.html));
   assert.ok(context.document.title.includes(doc.title));
   assert.ok(!doc.html.includes('.md"'), 'unconverted Markdown link: ' + route);
   for (const match of doc.html.matchAll(/href="#([^"&]+)(?:&amp;section=([^"&]+))?"/g)) {
@@ -208,7 +219,8 @@ for (const file of [
   'extensions/xgpui-ext/README.md',
   'extensions/xgpui-ext/crates/xgpui-shader/README.md',
   'apps/paint-lab/README.md',
-  'apps/shader-lab/README.md',
+  'apps/gamut-lab/README.md',
+  'extensions/xgpui-ext/crates/xgpui-gamut/README.md',
 ]) {
   const url = new URL('../../' + file, import.meta.url);
   const markdown = await readFile(url, 'utf8');
@@ -217,10 +229,36 @@ for (const file of [
     await readFile(new URL(link.split('#')[0], url));
   }
 }
-console.log('Verified extension navigation, offline contracts, consolidated sources, README links and cross-document links.');
+context.location.hash = '#crate=xgpui-shader&tab=overview';
+run('render()');
+assert.match(element('content').innerHTML, /fn gradient_panel/);
+assert.match(element('content').innerHTML, /API inventory/);
+assert.match(element('content').innerHTML, /Role &amp; sources|Role & sources/);
+let extensionRail = element('crate-list').innerHTML;
+assert.ok(extensionRail.indexOf('>Extensions</p>') < extensionRail.indexOf('>Core</p>'));
+assert.match(extensionRail, /class="crate-link" aria-current="page" href="#crate=xgpui-shader/);
+assert.match(extensionRail, /class="crate-link" href="#crate=xgpui-gamut&amp;tab=overview">xgpui-gamut|class="crate-link" href="#crate=xgpui-gamut&tab=overview">xgpui-gamut/);
+run('sidebar("linear-p3")');
+assert.match(element('crate-list').innerHTML, />Extensions<.*xgpui-gamut/s);
+assert.ok(!element('crate-list').innerHTML.includes('>Core</p>'));
+context.location.hash = '#high-gamut-windows';
+run('render()');
+assert.match(element('crate-list').innerHTML, /aria-current="page" href="#crate=xgpui-gamut/);
+assert.match(element('content').innerHTML, /Backend owners:/);
+assert.match(element('content').innerHTML, /set_color_mode/);
+assert.match(element('content').innerHTML, /Dx11WideSdrOutput/);
+context.location.hash = '#crate=xgpui-gamut&tab=overview';
+run('render()');
+assert.match(element('content').innerHTML, /WideColor::linear_p3/);
+assert.match(element('content').innerHTML, /API inventory/);
+const gamutCrate = data.crates.find(c => c.package === 'xgpui-gamut');
+const shaderCrate = data.crates.find(c => c.package === 'xgpui-shader');
+assert.ok(!gamutCrate.dependencies.some(d => d.package === 'xgpui-shader'));
+assert.ok(!shaderCrate.dependencies.some(d => d.package === 'xgpui-gamut'));
+console.log('Verified extension crate navigation, individual code-first guides, filtering and source links.');
 
 const apiChanges = data.extension_documents['gpui-public-api'].html;
-for (const term of ['Scene', 'custom_draws', 'PrimitiveBatch', 'CustomContent', 'PreparationRequest', 'CustomGeometry', 'CustomCoverage', 'CustomDraw', 'paint_custom', 'MetalCustomContext', 'WgpuCustomContext', 'Dx11CustomContext', 'source compatibility risks']) assert.ok(apiChanges.includes(term), term);
+for (const term of ['Scene', 'custom_draws', 'PrimitiveBatch', 'CustomContent', 'PreparationRequest', 'CustomGeometry', 'CustomCoverage', 'CustomDraw', 'paint_custom', 'MetalCustomContext', 'WgpuCustomContext', 'Dx11CustomContext', 'source compatibility risks', 'WindowColorMode', 'WindowColorStatus', 'MetalWideSdrOutput', 'Dx11WideSdrOutput', 'set_color_mode']) assert.ok(apiChanges.includes(term), term);
 assert.match(index, /href="#gpui-public-api"/);
 assert.match(run('extensionPage("extensions")'), /href="#gpui-public-api"/);
 console.log('Verified public API delta documentation and prominent navigation.');

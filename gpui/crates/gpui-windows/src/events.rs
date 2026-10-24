@@ -53,6 +53,10 @@ impl DrawCoordinator {
         }
     }
 
+    pub(crate) fn try_begin_renderer_update(&self) -> Option<DrawWindowGuard<'_>> {
+        self.try_begin_draw()
+    }
+
     fn try_begin_draw(&self) -> Option<DrawWindowGuard<'_>> {
         // This only covers the `draw_window` span (which extends past the GPUI
         // draw, through presentation and IME updates). Requests that arrive
@@ -68,7 +72,7 @@ impl DrawCoordinator {
     }
 }
 
-struct DrawWindowGuard<'a> {
+pub(crate) struct DrawWindowGuard<'a> {
     coordinator: &'a DrawCoordinator,
 }
 
@@ -86,6 +90,12 @@ impl WindowsWindowInner {
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> LRESULT {
+        if matches!(
+            msg,
+            WM_MOVE | WM_SIZE | WM_DPICHANGED | WM_DISPLAYCHANGE | WM_SETTINGCHANGE
+        ) {
+            self.state.color_profile_dirty.set(true);
+        }
         let handled = match msg {
             // `DefWindowProc` answers `MA_NOACTIVATE` for a left click on `HTCAPTION`.
             // The activation is only triggered when `DefWindowProc` handles the following `WM_NCLBUTTONDOWN`.
@@ -262,13 +272,26 @@ impl WindowsWindowInner {
         let new_logical_size = device_size.to_pixels(scale_factor);
 
         self.state.logical_size.set(new_logical_size);
-        if should_resize_renderer
-            && let Err(e) = self.state.renderer.borrow_mut().resize(device_size)
-        {
-            log::error!("Failed to resize renderer, invalidating devices: {}", e);
-            self.state
-                .invalidate_devices
-                .store(true, std::sync::atomic::Ordering::Release);
+        if should_resize_renderer {
+            self.state.pending_renderer_size.set(Some(device_size));
+            // ResizeBuffers/Present can pump Win32 messages. A resize that arrives
+            // during another renderer operation is applied at the next frame boundary.
+            if let Some(_update) = self.state.draw_coordinator.try_begin_renderer_update()
+                && let Ok(mut renderer) = self.state.renderer.try_borrow_mut()
+            {
+                self.state.pending_renderer_size.set(None);
+                if let Err(error) = renderer.resize(device_size) {
+                    log::error!("Failed to resize renderer, invalidating devices: {error:#}");
+                    if self.state.pending_renderer_size.get().is_none() {
+                        self.state.pending_renderer_size.set(Some(device_size));
+                    }
+                    self.state
+                        .invalidate_devices
+                        .store(true, std::sync::atomic::Ordering::Release);
+                }
+            } else {
+                self.state.force_render_pending.set(true);
+            }
         }
         if let Some(mut callback) = self.state.callbacks.resize.take() {
             callback(new_logical_size, scale_factor);

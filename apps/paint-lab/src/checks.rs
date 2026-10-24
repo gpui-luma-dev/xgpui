@@ -8,6 +8,8 @@ mod portable_checks;
 #[cfg(test)]
 mod preparation_checks;
 #[cfg(test)]
+mod producer_checks;
+#[cfg(test)]
 mod surface_checks;
 #[cfg(test)]
 mod uniform_checks;

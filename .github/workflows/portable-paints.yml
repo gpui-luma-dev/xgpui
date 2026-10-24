@@ -60,12 +60,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Check native applications
         run: |
-          cargo check --locked --config .cargo/validation.toml --manifest-path apps/shader-lab/Cargo.toml
           cargo check --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders
       - name: Test exact coverage lookups and allocation counts
         run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib coverage_cache
       - name: Test native preparation on WARP
         run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib dx11_custom -- --nocapture
+      - name: Test typed wide SDR recording transactions
+        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib custom_draw::wide_output -- --nocapture
+      - name: Test ordered wide SDR composition on WARP
+        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib directx_renderer::wide_sdr -- --nocapture
+      - name: Test presentation policy and transition isolation
+        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib directx_renderer::color_presentation -- --nocapture
+      - name: Test independent gamut producers
+        run: cargo test --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-gamut/Cargo.toml
       - name: Test native paints and mesh parity against wgpu
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders -- --nocapture
       - name: Render native mesh sample

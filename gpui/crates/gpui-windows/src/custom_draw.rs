@@ -1,5 +1,6 @@
 //! DirectX 11 preparation for retained custom paints. Only the host executes work.
 mod coverage_cache;
+mod wide_output;
 use anyhow::{Context as _, Result, ensure};
 pub(crate) use coverage_cache::{CoverageCache, CoverageKey};
 use gpui::{CustomDraw, DevicePixels, Size, size};
@@ -10,6 +11,7 @@ use std::{
         atomic::{AtomicU8, Ordering},
     },
 };
+pub use wide_output::Dx11WideSdrOutput;
 use windows::{
     Win32::Graphics::{
         Direct3D::{Fxc::*, *},
@@ -299,12 +301,42 @@ pub(crate) fn allocate_texture(
     device: &ID3D11Device,
     extent: Size<DevicePixels>,
 ) -> Result<TextureBundle> {
+    allocate_texture_format(device, extent, DXGI_FORMAT_B8G8R8A8_UNORM, 4)
+}
+fn allocate_texture_format(
+    device: &ID3D11Device,
+    extent: Size<DevicePixels>,
+    format: DXGI_FORMAT,
+    bytes_per_pixel: u64,
+) -> Result<TextureBundle> {
+    allocate_texture_limited(device, extent, format, bytes_per_pixel, 64 * 1024 * 1024)
+}
+// Frame scratch has its own combined UI+FP16 budget, not the producer-cache cap.
+pub(crate) fn allocate_frame_texture(
+    device: &ID3D11Device,
+    extent: Size<DevicePixels>,
+) -> Result<TextureBundle> {
+    allocate_texture_limited(
+        device,
+        extent,
+        DXGI_FORMAT_B8G8R8A8_UNORM,
+        4,
+        256 * 1024 * 1024,
+    )
+}
+fn allocate_texture_limited(
+    device: &ID3D11Device,
+    extent: Size<DevicePixels>,
+    format: DXGI_FORMAT,
+    bytes_per_pixel: u64,
+    limit: u64,
+) -> Result<TextureBundle> {
     ensure!(
         extent.width.0 > 0
             && extent.height.0 > 0
             && extent.width.0 <= 16384
             && extent.height.0 <= 16384
-            && extent.width.0 as u64 * extent.height.0 as u64 * 4 <= 64 * 1024 * 1024,
+            && extent.width.0 as u64 * extent.height.0 as u64 * bytes_per_pixel <= limit,
         "invalid DirectX custom texture extent"
     );
     let desc = D3D11_TEXTURE2D_DESC {
@@ -312,7 +344,7 @@ pub(crate) fn allocate_texture(
         Height: extent.height.0 as u32,
         MipLevels: 1,
         ArraySize: 1,
-        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+        Format: format,
         SampleDesc: DXGI_SAMPLE_DESC {
             Count: 1,
             Quality: 0,
@@ -419,7 +451,7 @@ impl CompositorPipeline {
         }
     }
 }
-fn compile(source: &str, entry: &str, target: &str) -> Result<Vec<u8>> {
+pub(crate) fn compile(source: &str, entry: &str, target: &str) -> Result<Vec<u8>> {
     let entry = CString::new(entry)?;
     let target = CString::new(target)?;
     let (mut code, mut errors) = (None, None);
@@ -474,10 +506,12 @@ pub(crate) struct PreparedDraw {
     pub source: TextureBundle,
     pub coverage: Option<TextureBundle>,
     pub native: bool,
+    pub wide: bool,
 }
 pub(crate) struct CustomCompositor {
     pipeline: CompositorPipeline,
     blend: ID3D11BlendState,
+    wide_blend: ID3D11BlendState,
     sampler: ID3D11SamplerState,
     uniform: ID3D11Buffer,
     #[cfg(test)]
@@ -519,8 +553,14 @@ impl CustomCompositor {
                 Some(&mut sampler),
             )?;
         }
+        desc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+        let mut wide_blend = None;
+        unsafe {
+            device.CreateBlendState(&desc, Some(&mut wide_blend))?;
+        }
         Ok(Self {
             pipeline,
+            wide_blend: wide_blend.unwrap(),
             blend: blend.unwrap(),
             sampler: sampler.unwrap(),
             uniform: dynamic_uniform_buffer(device)?,
@@ -552,6 +592,7 @@ impl CustomCompositor {
             deferred.RSSetViewports(Some(&[viewport(viewport_size)]));
             deferred.PSSetSamplers(0, Some(&[Some(self.sampler.clone())]));
         }
+        let mut wide_blending = false;
         for (draw, output) in draws.iter().zip(outputs) {
             let params: [[f32; 4]; 4] = [
                 [
@@ -577,7 +618,8 @@ impl CustomCompositor {
                     viewport_size.height.0 as f32,
                     draw.opacity,
                     u32::from(output.coverage.is_some()) as f32
-                        + if output.native { 2. } else { 0. },
+                        + if output.native { 2. } else { 0. }
+                        + if output.wide { 4. } else { 0. },
                 ],
             ];
             // Fixed-size stack packing; WRITE_DISCARD preserves earlier draw
@@ -597,6 +639,18 @@ impl CustomCompositor {
             }
             let mask = output.coverage.as_ref().unwrap_or(&output.source);
             unsafe {
+                if wide_blending != output.wide {
+                    deferred.OMSetBlendState(
+                        if output.wide {
+                            &self.wide_blend
+                        } else {
+                            &self.blend
+                        },
+                        None,
+                        u32::MAX,
+                    );
+                    wide_blending = output.wide;
+                }
                 deferred.VSSetConstantBuffers(0, Some(&[Some(self.uniform.clone())]));
                 deferred.PSSetConstantBuffers(0, Some(&[Some(self.uniform.clone())]));
                 deferred.PSSetShaderResources(

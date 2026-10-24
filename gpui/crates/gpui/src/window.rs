@@ -3055,7 +3055,30 @@ impl Window {
         self.platform_window.set_app_id(app_id);
     }
 
-    /// Sets the window background appearance.
+    /// Negotiate this window's color presentation without reinterpreting UI colors.
+    /// Call during construction or an event update, outside layout/prepaint/paint.
+    /// Unsupported requests and negotiation failures leave the previous state intact.
+    pub fn set_color_mode(
+        &mut self,
+        mode: crate::WindowColorMode,
+    ) -> anyhow::Result<crate::WindowColorStatus> {
+        anyhow::ensure!(
+            self.invalidator.not_drawing(),
+            "cannot change color presentation during drawing"
+        );
+        let status = self.platform_window.set_color_mode(mode)?;
+        self.refresh();
+        Ok(status)
+    }
+
+    /// Inspect this window's last negotiated color configuration.
+    pub fn color_status(&self) -> crate::WindowColorStatus {
+        self.platform_window.color_status()
+    }
+
+    /// Sets the window background appearance. Native Metal wide-SDR mode requires
+    /// opacity: disable it before requesting transparency. While it is enabled,
+    /// transparent requests preserve the opaque window and emit a warning.
     pub fn set_background_appearance(&self, background_appearance: WindowBackgroundAppearance) {
         self.platform_window
             .set_background_appearance(background_appearance);
@@ -8532,6 +8555,43 @@ mod tests {
             test_window.frame_wake_count() > baseline || callback_ran.get(),
             "a frame request with pending next-frame callbacks must either run them or re-arm the frame source"
         );
+    }
+
+    #[gpui::test]
+    fn color_mode_default_platform_is_compatible_and_rejects_drawing(cx: &mut TestAppContext) {
+        let handle = cx.add_window(|_, _| EmptyView);
+        handle
+            .update(cx, |_, window, _| {
+                let original = window.color_status();
+                assert_eq!(original, crate::WindowColorStatus::default());
+                assert_eq!(
+                    window
+                        .set_color_mode(crate::WindowColorMode::Default)
+                        .unwrap(),
+                    original
+                );
+                assert!(
+                    window
+                        .set_color_mode(crate::WindowColorMode::WideGamutSdr)
+                        .is_err()
+                );
+                assert_eq!(window.color_status(), original);
+                for phase in [
+                    super::DrawPhase::Prepaint,
+                    super::DrawPhase::Paint,
+                    super::DrawPhase::Focus,
+                ] {
+                    window.invalidator.set_phase(phase);
+                    assert!(
+                        window
+                            .set_color_mode(crate::WindowColorMode::Default)
+                            .is_err()
+                    );
+                    assert_eq!(window.color_status(), original);
+                }
+                window.invalidator.set_phase(super::DrawPhase::None);
+            })
+            .unwrap();
     }
 
     #[gpui::test]

@@ -42,6 +42,33 @@ let scene = gpui::Scene {
 // PrimitiveBatch::Custom(range) => ...,
 ```
 
+## ADDED opt-in window presentation
+
+```rust
+use gpui::WindowColorMode;
+
+// Per-window; call outside drawing. Existing default windows stay unchanged.
+let status = window.set_color_mode(WindowColorMode::WideGamutSdr)?;
+let current = window.color_status();
+
+// Restore before requesting a transparent top-level window:
+window.set_color_mode(WindowColorMode::Default)?;
+```
+
+| Surface | Addition |
+| --- | --- |
+| GPUI | `WindowColorMode`, opaque `WindowColorStatus`, `WindowColorFallback`; two `Window` methods. |
+| `PlatformWindow` | Same request/report pair with defaults; no required backend overrides. |
+| `gpui_apple::MetalRenderer` | Same pair across the windowing/renderer crate boundary; supports headless checks. |
+| `gpui_apple::custom_draw` | Opaque `MetalWideSdrOutput`, explicit linear-P3 constructor and `reusable_for`. |
+
+`MetalCustomOutput`, `CustomContent`, `PreparationRequest`, window-option
+structs and native color/style types keep their existing contracts. New
+configuration/fallback enums are non-exhaustive. Additive method names can still
+collide with downstream extension methods. Unsupported requests preserve state.
+
+[Wide surfaces, composition and lifecycle](high-gamut-windows.md).
+
 ## ADDED Window method
 
 `gpui/src/window.rs` — one public recording hook:
@@ -169,6 +196,23 @@ Windows test-support only:
   Dx11HeadlessRenderer::new()
   implements existing PlatformHeadlessRenderer
 ```
+
+Windows also adds an explicit wide-output contract:
+
+```rust
+// gpui_windows::custom_draw — additive backend SDK, no GPUI core changes
+pub struct Dx11WideSdrOutput { /* private fields; Clone */ }
+// Dx11CustomContext methods:
+// create_wide_sdr_output(extent) -> Result<Dx11WideSdrOutput>
+// can_reuse_wide_sdr(&output) -> bool
+// record_wide_sdr(&output, callback) -> Result<T>
+// Dx11WideSdrOutput::texture() -> &ID3D11Texture2D
+```
+
+[Typed Windows output and recording example](high-gamut-windows.md#typed-windows-output).
+The Windows renderer accepts this output only while `WideGamutSdr` is active.
+Its existing `PlatformWindow` overrides implement negotiation/status; no extra
+GPUI core API is added. Existing producer signatures and sRGB outputs are unchanged.
 
 Backend APIs are target/feature dependent. App code normally uses portable
 `xgpui-shader` producers rather than these low-level recording contracts.
