@@ -268,7 +268,7 @@ impl<E: IntoElement + 'static> Element for SpringAnimationElement<E> {
         cx: &mut App,
     ) -> (crate::LayoutId, Self::RequestLayoutState) {
         window.with_element_state(global_id.unwrap(), |state, window| {
-            let now = cx.background_executor().now();
+            let now = Instant::now();
             let initial = self.initial.unwrap_or(self.target);
             let mut state = state.unwrap_or_else(|| SpringElementState {
                 spring: SpringState {
@@ -741,17 +741,6 @@ mod tests {
         let value_before_retargeting = *rendered_values.borrow().last().unwrap();
         assert!(value_before_retargeting > px(0.0));
         assert!(value_before_retargeting < px(100.0));
-
-        // Sampling must follow the 50 ms scheduler advance, not wall time.
-        let expected = SpringConfig::new(100.0, 2.0, 1.0).step(
-            SpringState {
-                position: 0.0,
-                velocity: 0.0,
-            },
-            100.0,
-            0.05,
-        );
-        assert!((value_before_retargeting.0 - expected.position).abs() < 0.001);
 
         window
             .update(cx, |view, _, cx| {

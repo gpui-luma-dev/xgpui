@@ -1,5 +1,5 @@
 {
-  "commit": "4eadf3cd8c4bcbdd4e8652aa0fbe5e20712cc8c6",
+  "commit": "39d276b1500d503ec6d37efcaaa0dc0c00730576",
   "destination": "gpui",
   "normalization": {
     "crate_names": {
@@ -60,7 +60,7 @@
     "ztracing": "gpui/crates/ztracing",
     "ztracing-macro": "gpui/crates/ztracing-macro"
   },
-  "ref": "release/1.25.2",
+  "ref": "release/1.25.3",
   "repository": "https://github.com/gpui-archipelago/gpui-unofficial",
   "source_packages": {
     "collections-gpui-unofficial": "gpui/crates/collections-gpui-unofficial",
@@ -90,6 +90,6 @@
     "ztracing-gpui-unofficial": "gpui/crates/ztracing-gpui-unofficial",
     "ztracing-macro-gpui-unofficial": "gpui/crates/ztracing-macro-gpui-unofficial"
   },
-  "zed_commit": "d25fa01ccd788d812f236810b71af4feff6b2e38",
-  "zed_tag": "v1.25.2"
+  "zed_commit": "8dd255c3eafb5231056fe4e6f601cedd011f1c93",
+  "zed_tag": "v1.25.3"
 }

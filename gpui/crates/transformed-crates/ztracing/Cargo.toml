@@ -1,6 +1,6 @@
 [package]
 name = "ztracing"
-version = "1.25.2"
+version = "1.25.3"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-archipelago/gpui-unofficial"
@@ -22,10 +22,10 @@ web = [
 ]
 
 [dependencies]
-zlog = { package = "zlog", version = "1.25.2", optional = true }
+zlog = { package = "zlog", version = "1.25.3", optional = true }
 tracing = { version = "0.1.40" }
 tracing-subscriber = { version = "0.3", optional = true }
-ztracing_macro = { package = "ztracing-macro", version = "1.25.2" }
+ztracing_macro = { package = "ztracing-macro", version = "1.25.3" }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tracing-tracy = { version = "0.11", optional = true, features = ["ondemand"] }
