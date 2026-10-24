@@ -1,0 +1,24 @@
+[package]
+name = "xgpui-lifecycle"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+runtime-shaders = ["gpui_platform/runtime_shaders"]
+
+[dependencies]
+anyhow = "1"
+gpui = { path = "../../gpui/crates/gpui" }
+gpui_platform = { package = "gpui-platform", path = "../../gpui/crates/gpui-platform", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui_platform = { package = "gpui-platform", path = "../../gpui/crates/gpui-platform", default-features = false, features = ["font-kit"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+gpui_platform = { package = "gpui-platform", path = "../../gpui/crates/gpui-platform", default-features = false, features = ["wayland", "x11"] }
+
+[dev-dependencies]
+gpui = { path = "../../gpui/crates/gpui", features = ["test-support"] }

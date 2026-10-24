@@ -1,0 +1,22 @@
+set working-directory := "../.."
+set positional-arguments
+options := "--locked --config .cargo/validation.toml --manifest-path apps/lifecycle-lab/Cargo.toml --target-dir target"
+
+default:
+    @just --justfile '{{justfile()}}' --list
+
+# Open the native lifecycle exercise.
+ui:
+    cargo run {{options}}
+
+# Compile the native executable without opening windows.
+build:
+    cargo build {{options}}
+
+# Run deterministic tests with mock windows.
+test:
+    cargo test {{options}} --lib
+
+lint:
+    cargo fmt --manifest-path apps/lifecycle-lab/Cargo.toml -- --check
+    cargo clippy {{options}} --all-targets -- -D warnings

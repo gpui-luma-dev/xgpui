@@ -27,3 +27,21 @@ jobs:
         run: |
           cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
           node docs/verify.mjs
+
+  lifecycle:
+    name: Lifecycle consumer contracts (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust tools
+        run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
+      - name: Check lifecycle formatting
+        run: cargo +stable fmt --manifest-path apps/lifecycle-lab/Cargo.toml -- --check
+      # This job validates lifecycle behavior, so it does not need the optional
+      # Xcode Metal compiler package on the hosted runner.
+      - name: Check lifecycle consumer and tests
+        run: cargo +stable clippy --locked --config .cargo/validation.toml --manifest-path apps/lifecycle-lab/Cargo.toml --features runtime-shaders --all-targets -- -D warnings
+      - name: Build native lifecycle executable
+        run: cargo +stable build --locked --config .cargo/validation.toml --manifest-path apps/lifecycle-lab/Cargo.toml --features runtime-shaders
+      - name: Test headless lifecycle contracts
+        run: cargo +stable test --locked --config .cargo/validation.toml --manifest-path apps/lifecycle-lab/Cargo.toml --features runtime-shaders --lib

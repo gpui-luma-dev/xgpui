@@ -43,6 +43,21 @@ Root Clippy and formatting checks target the harness; imported libraries are
 dependencies, not root workspace members. Existing platform/library validation
 is still run separately by validate.yml.
 
+## Standalone consumer labs
+
+The [lifecycle lab](../apps/lifecycle-lab/README.md) exercises window closure,
+entity ownership, subscriptions, and action routing through public GPUI APIs.
+It has a separate workspace and lockfile; it is not part of the root build.
+
+```sh
+cargo test --locked --config .cargo/validation.toml \
+  --manifest-path apps/lifecycle-lab/Cargo.toml --lib --target-dir target
+```
+
+Its focused macOS CI job builds the native executable, runs headless tests, and
+checks formatting and Clippy. Native manual checks remain separate.
+See [API coverage](API_COVERAGE.md) for the other consumer labs and evidence gaps.
+
 ## Compile the captured examples
 
 ```sh
