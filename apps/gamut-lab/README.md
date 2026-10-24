@@ -6,4 +6,4 @@
 cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml
 ```
 
-[Controls, captures, tests and Windows CI builds](../../docs/roadmap/extensions/high-gamut-windows.md#run-gamut-lab).
+[Controls, captures, tests and Windows CI builds](../../docs/extensions/high-gamut-windows.md#run-gamut-lab).

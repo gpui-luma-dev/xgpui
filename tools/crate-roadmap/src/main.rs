@@ -606,6 +606,7 @@ fn generate(root: &Path) -> Result<()> {
     let extension_packages = BTreeMap::from([
         ("xgpui-shader", "extensions/xgpui-ext/crates/xgpui-shader"),
         ("xgpui-gamut", "extensions/xgpui-ext/crates/xgpui-gamut"),
+        ("xgpui-parley", "extensions/xgpui-ext/crates/xgpui-parley"),
     ]);
     let mut packages = provenance["packages"]
         .as_object()
@@ -619,7 +620,7 @@ fn generate(root: &Path) -> Result<()> {
         );
     }
     let names: BTreeSet<String> = packages.keys().cloned().collect();
-    let output = root.join("docs/roadmap/site");
+    let output = root.join("docs");
     fs::create_dir_all(&output)?;
     let mut crates = Vec::new();
     for (package, directory) in &packages {
@@ -702,7 +703,7 @@ fn generate(root: &Path) -> Result<()> {
         });
     }
     let notes: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(root.join("docs/roadmap/notes.json"))?)?;
+        serde_json::from_str(&fs::read_to_string(root.join("docs/notes.json"))?)?;
     if notes.as_object().map_or(0, |n| n.len()) != crates.len() {
         bail!("Notes must cover exactly the captured crates");
     }
@@ -733,38 +734,24 @@ fn generate(root: &Path) -> Result<()> {
     // All published extension guides live in the web documentation source tree.
     // Embed them so navigation works offline without fetch.
     let document_sources = [
+        ("parley-text", "docs/extensions/parley-text.md"),
         (
             "high-gamut-windows",
-            "docs/roadmap/extensions/high-gamut-windows.md",
+            "docs/extensions/high-gamut-windows.md",
         ),
-        (
-            "shader-producers",
-            "docs/roadmap/extensions/shader-producers.md",
-        ),
-        (
-            "gpui-public-api",
-            "docs/roadmap/extensions/gpui-public-api.md",
-        ),
-        (
-            "extension-paints",
-            "docs/roadmap/extensions/extension-paints.md",
-        ),
+        ("shader-producers", "docs/extensions/shader-producers.md"),
+        ("gpui-public-api", "docs/extensions/gpui-public-api.md"),
+        ("extension-paints", "docs/extensions/extension-paints.md"),
         (
             "paint-contract-hardening",
-            "docs/roadmap/extensions/paint-contract-hardening.md",
+            "docs/extensions/paint-contract-hardening.md",
         ),
-        (
-            "portable-paints",
-            "docs/roadmap/extensions/portable-paints.md",
-        ),
+        ("portable-paints", "docs/extensions/portable-paints.md"),
         (
             "native-dx11-paints",
-            "docs/roadmap/extensions/native-dx11-paints.md",
+            "docs/extensions/native-dx11-paints.md",
         ),
-        (
-            "portable-wgsl-v1",
-            "docs/roadmap/extensions/portable-wgsl-v1.md",
-        ),
+        ("portable-wgsl-v1", "docs/extensions/portable-wgsl-v1.md"),
     ];
     let mut extension_documents = BTreeMap::new();
     for (route, file) in document_sources {
@@ -853,17 +840,6 @@ fn generate(root: &Path) -> Result<()> {
         output.join("data.js"),
         format!("window.ROADMAP = {json};\n"),
     )?;
-    for (source, target) in [
-        ("template.html", "index.html"),
-        ("style.css", "style.css"),
-        ("app.js", "app.js"),
-        ("guides.js", "guides.js"),
-        ("extensions.js", "extensions.js"),
-        ("build-guide.js", "build-guide.js"),
-        ("pipeline.js", "pipeline.js"),
-    ] {
-        fs::copy(root.join("docs/roadmap").join(source), output.join(target))?;
-    }
     Ok(())
 }
 

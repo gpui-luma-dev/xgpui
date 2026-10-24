@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const site = new URL('./site/', import.meta.url);
+const site = new URL('./', import.meta.url);
 const source = await readFile(new URL('app.js', site), 'utf8');
 const inventory = await readFile(new URL('data.js', site), 'utf8');
 const context = vm.createContext({ window: {}, URLSearchParams });
@@ -85,10 +85,12 @@ for (const asset of ['style.css', 'extensions.js', 'guides.js', 'build-guide.js'
 }
 console.log('Verified ' + data.crates.length + ' crates, ' + pages.size + ' source pages, declaration anchors, routes, filtering and assets.');
 
-const entry = await readFile(new URL("./index.html", import.meta.url), "utf8");
-assert.match(entry, /http-equiv="refresh" content="0;url=site\/index.html"/);
-assert.match(entry, /href="site\/index.html"/);
-assert.ok(!entry.includes("src=\"data.js\""));
+assert.ok(!index.includes('http-equiv="refresh"'), 'Pages root must serve the website directly');
+// Relative URLs must retain the repository prefix on project Pages sites.
+const pagesRoot = new URL('https://example.github.io/xgpui/');
+for (const match of index.matchAll(/(?:src|href)="([^"#][^"]*)"/g)) {
+  assert.ok(new URL(match[1], pagesRoot).pathname.startsWith('/xgpui/'));
+}
 
 for (const [fn, title, sections] of [["architecturePage", "The architecture of GPUI", 8], ["howGpuiWorksPage", "How GPUI works", 10]]) {
  const html = run(fn + "()");
@@ -188,20 +190,25 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 8);
+assert.equal(Object.keys(data.extension_documents).length, 9);
+assert.equal(data.extension_packages['xgpui-parley'], 'extensions/xgpui-ext/crates/xgpui-parley');
+assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
 assert.match(extensionOverview, /1\. Paints and shaders/);
 assert.match(extensionOverview, /2\. Wide-gamut presentation/);
 assert.match(extensionOverview, /href="#extension-paints"/);
 assert.match(extensionOverview, /href="#high-gamut-windows"/);
+assert.match(extensionOverview, /href="#parley-text"/);
+assert.match(run('cratePage(crates.find(c => c.package === "xgpui-parley"), "overview")'), /layout_paragraph/);
+assert.match(run('extensionPage("parley-text")'), /Text backend extension/);
 assert.match(data.extension_documents['high-gamut-windows'].html, /WideColor::linear_p3/);
 assert.match(data.extension_documents['high-gamut-windows'].html, /xgpui-gamut/);
 
 assert.match(run('extensionPage("extensions")'), /Downstream extensions to GPUI/);
 assert.ok(!index.includes('<a href="#extensions">Extensions to GPUI</a>'), 'extensions belong in the crate group');
 for (const [route, doc] of Object.entries(data.extension_documents)) {
-  assert.equal(doc.source, 'docs/roadmap/extensions/' + route + '.md');
-  await readFile(new URL('../../' + doc.source, import.meta.url));
+  assert.equal(doc.source, 'docs/extensions/' + route + '.md');
+  await readFile(new URL('../' + doc.source, import.meta.url));
   context.location.hash = '#' + route;
   run('render()');
   assert.ok(element('content').innerHTML.includes(route === 'high-gamut-windows' ? doc.html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') : doc.html));
@@ -222,7 +229,7 @@ for (const file of [
   'apps/gamut-lab/README.md',
   'extensions/xgpui-ext/crates/xgpui-gamut/README.md',
 ]) {
-  const url = new URL('../../' + file, import.meta.url);
+  const url = new URL('../' + file, import.meta.url);
   const markdown = await readFile(url, 'utf8');
   for (const [, link] of markdown.matchAll(/\]\(([^)]+)\)/g)) {
     if (/^(?:https?:|#)/.test(link)) continue;

@@ -20,16 +20,18 @@ function extensionPage(route) {
       '<article class="extension-document">' + doc.html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
   }
 
-  const banner = route === 'high-gamut-windows'
+  const banner = route === 'parley-text'
+    ? '<p class="guide-intro"><strong>Text backend extension.</strong> Parley shaping and geometry; GPUI caches, atlas and native input.</p>'
+    : route === 'high-gamut-windows'
     ? '<p class="guide-intro"><strong>Wide-gamut presentation extension.</strong> Native xgpui-gamut producers; per-window Metal presentation.</p>'
     : route === 'extensions' || route === 'gpui-public-api'
-      ? '<p class="guide-intro"><strong>Downstream extensions to GPUI.</strong> Paint production and window color presentation are independent opt-in capabilities.</p>'
+      ? '<p class="guide-intro"><strong>Downstream extensions to GPUI.</strong> Paints, window color presentation and text backends are independent opt-in capabilities.</p>'
       : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; output retains sRGB semantics.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
     return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
-  return header('Downstream / opt-in', 'Extensions to GPUI', 'Two independent capabilities: paint production and window color presentation.') + banner +
+  return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation and text extensions.') + banner +
     '<h2>1. Paints and shaders</h2>' +
     extensionCode('rust', `use xgpui_shader::{painted, SolidColor};
 use std::sync::Arc;
@@ -52,6 +54,8 @@ MetalWideSdrOutput::from_linear_p3_premultiplied(context, texture, commands)?;`)
     '<div class="cards">' + extensionCard('high-gamut-windows', 'Start here: window setup, complete Metal producer, color contract, composition and validation.') + '</div>' +
     extensionCode('sh', `just --justfile apps/gamut-lab/justfile ui
 just --justfile apps/gamut-lab/justfile test`) +
+    '<h2>3. Parley text</h2><p>Shared text backend with flat-LTR compatibility, BiDi paragraph layout and editing/IME geometry. Existing GPUI caches and glyph atlas; Windows/Linux runtime validation remains outstanding.</p>' +
+    '<div class="cards">' + extensionCard('parley-text', 'Construction, paragraph/input seams, cache and face identity, supported subset and validation.') + '</div>' +
     '<h2>Shared GPUI integration</h2><div class="cards">' + extensionCard('gpui-public-api', 'Public additions and altered upstream types, separated by capability.') + '</div>';
 
 }
@@ -61,6 +65,14 @@ function extensionCard(route, description) {
 
 function publicApiSourceLinks() {
   const sites = [
+    ['gpui', 'Application::with_platform_and_text_system', 'app.rs'],
+    ['gpui', 'PlatformTextSystem', 'platform.rs'],
+    ['gpui', 'WindowTextSystem::layout_paragraph', 'text_system.rs'],
+    ['gpui', 'PlatformParagraphShape', 'text_system/paragraph.rs'],
+    ['gpui', 'PlatformParagraphLayout', 'text_system/paragraph.rs'],
+    ['gpui', 'ParagraphRequest', 'text_system/paragraph.rs'],
+    ['gpui', 'ParagraphPosition', 'text_system/paragraph.rs'],
+    ['gpui', 'paint_paragraph', 'text_system/paragraph.rs'],
     ['gpui', 'Scene', 'scene.rs'],
     ['gpui', 'Primitive', 'scene.rs'],
     ['gpui', 'PrimitiveBatch', 'scene.rs'],
@@ -106,4 +118,9 @@ function shaderCrateGuide() {
 function gamutCrateGuide() {
   return '<article class="extension-document">' +
     data.extension_documents['high-gamut-windows'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
+}
+
+function parleyCrateGuide() {
+  return '<article class="extension-document">' +
+    data.extension_documents['parley-text'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
 }

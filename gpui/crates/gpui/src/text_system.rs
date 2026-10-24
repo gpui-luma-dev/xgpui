@@ -3,12 +3,14 @@ mod font_features;
 mod line;
 mod line_layout;
 mod line_wrapper;
+mod paragraph;
 
 pub use font_fallbacks::*;
 pub use font_features::*;
 pub use line::*;
 pub use line_layout::*;
 pub use line_wrapper::*;
+pub use paragraph::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -932,6 +934,20 @@ impl WindowTextSystem {
         self.font_runs_pool.lock().push(font_runs);
 
         layout
+    }
+
+    /// Layout one paragraph through an optional backend capability. Uses the
+    /// existing frame cache lifecycle; colors/decorations are paint-only inputs.
+    /// This initial API takes resolved FontRuns and automatic direction/start alignment.
+    pub fn layout_paragraph(
+        &self,
+        text: SharedString,
+        font_size: Pixels,
+        runs: &[FontRun],
+        width: Pixels,
+    ) -> Result<Arc<dyn PlatformParagraphLayout>> {
+        self.line_layout_cache
+            .layout_paragraph(text, font_size, runs, width)
     }
 
     /// Returns the shaped layout width of for the given character, in the given font and size.

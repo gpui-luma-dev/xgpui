@@ -50,12 +50,12 @@ use crate::{
     DisplayId, EventEmitter, ExternalDragPayload, FocusHandle, FocusMap, ForegroundExecutor,
     Global, KeyBinding, KeyContext, Keymap, Keystroke, LayoutId, Menu, MenuItem, MissingGlyph,
     OwnedMenu, PathPromptOptions, Pixels, Platform, PlatformDisplay, PlatformKeyboardLayout,
-    PlatformKeyboardMapper, Point, Priority, PromptBuilder, PromptButton, PromptHandle,
-    PromptLevel, Render, RenderImage, RenderablePromptHandle, Reservation, ScreenCaptureSource,
-    SharedString, SubscriberSet, Subscription, SvgRenderer, SystemNotification,
-    SystemNotificationResponse, Task, TextRenderingMode, TextSystem, ThermalState, Window,
-    WindowAppearance, WindowButtonLayout, WindowHandle, WindowId, WindowInvalidator,
-    WindowingRequest,
+    PlatformKeyboardMapper, PlatformTextSystem, Point, Priority, PromptBuilder, PromptButton,
+    PromptHandle, PromptLevel, Render, RenderImage, RenderablePromptHandle, Reservation,
+    ScreenCaptureSource, SharedString, SubscriberSet, Subscription, SvgRenderer,
+    SystemNotification, SystemNotificationResponse, Task, TextRenderingMode, TextSystem,
+    ThermalState, Window, WindowAppearance, WindowButtonLayout, WindowHandle, WindowId,
+    WindowInvalidator, WindowingRequest,
     colors::{Colors, GlobalColors},
     hash, init_app_menus,
 };
@@ -181,6 +181,22 @@ impl Application {
             platform,
             Arc::new(()),
             Arc::new(NullHttpClient),
+        ))
+    }
+
+    /// Builds an app with a caller-provided platform and text backend.
+    ///
+    /// Selects the backend before GPUI initializes its text caches. This does not
+    /// change native services initialized by the platform itself.
+    pub fn with_platform_and_text_system(
+        platform: Rc<dyn Platform>,
+        text_system: Arc<dyn PlatformTextSystem>,
+    ) -> Self {
+        Self(App::new_app_with_text_system(
+            platform,
+            Arc::new(()),
+            Arc::new(NullHttpClient),
+            Some(text_system),
         ))
     }
 
@@ -922,6 +938,15 @@ impl App {
         asset_source: Arc<dyn AssetSource>,
         http_client: Arc<dyn HttpClient>,
     ) -> Rc<AppCell> {
+        Self::new_app_with_text_system(platform, asset_source, http_client, None)
+    }
+
+    fn new_app_with_text_system(
+        platform: Rc<dyn Platform>,
+        asset_source: Arc<dyn AssetSource>,
+        http_client: Arc<dyn HttpClient>,
+        text_override: Option<Arc<dyn PlatformTextSystem>>,
+    ) -> Rc<AppCell> {
         let background_executor = platform.background_executor();
         let foreground_executor = platform.foreground_executor();
         assert!(
@@ -932,7 +957,8 @@ impl App {
         let foreground_journal = crate::profiler::journal::install_foreground_journal();
         let synced_animation_epoch = background_executor.now();
 
-        let text_system = Arc::new(TextSystem::new(platform.text_system()));
+        let backend = text_override.unwrap_or_else(|| platform.text_system());
+        let text_system = Arc::new(TextSystem::new(backend));
         let entities = EntityMap::new();
         let keyboard_layout = platform.keyboard_layout();
         let keyboard_mapper = platform.keyboard_mapper();
@@ -3582,6 +3608,48 @@ mod test {
         AppContext, Context, Empty, FallbackFontClass, IntoElement, MissingGlyph, Render,
         TestAppContext, Window,
     };
+
+    fn construction_platform() -> Rc<crate::TestPlatform> {
+        let dispatcher = std::sync::Arc::new(crate::TestDispatcher::new(0));
+        crate::TestPlatform::new(
+            crate::BackgroundExecutor::new(dispatcher.clone()),
+            crate::ForegroundExecutor::new(dispatcher),
+        )
+    }
+
+    #[test]
+    fn application_construction_uses_text_override_without_querying_platform() {
+        use std::sync::Arc;
+
+        let platform = construction_platform();
+        let backend: Arc<dyn crate::PlatformTextSystem> = Arc::new(crate::NoopTextSystem);
+        let native_references = Arc::strong_count(&platform.text_system);
+        let app =
+            super::Application::with_platform_and_text_system(platform.clone(), backend.clone());
+
+        assert_eq!(platform.text_system_calls.get(), 0);
+        assert_eq!(Arc::strong_count(&platform.text_system), native_references);
+        assert_eq!(Arc::strong_count(&backend), 2);
+        drop(app);
+        assert_eq!(Arc::strong_count(&backend), 1);
+    }
+
+    #[test]
+    fn application_construction_uses_platform_text_by_default() {
+        use std::sync::Arc;
+
+        let platform = construction_platform();
+        let native_references = Arc::strong_count(&platform.text_system);
+        let app = super::Application::with_platform(platform.clone());
+
+        assert_eq!(platform.text_system_calls.get(), 1);
+        assert_eq!(
+            Arc::strong_count(&platform.text_system),
+            native_references + 1
+        );
+        drop(app);
+        assert_eq!(Arc::strong_count(&platform.text_system), native_references);
+    }
 
     struct RenderCounter(Rc<Cell<usize>>);
 
