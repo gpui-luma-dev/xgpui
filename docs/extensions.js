@@ -8,6 +8,9 @@ function isExtensionRoute(route) {
 function extensionTitle(route) {
   return route === 'extensions' ? 'Extensions to GPUI' : data.extension_documents[route].title;
 }
+function browserDemoLinks(demo) {
+  return '<p><a href="examples/extensions/?demo=' + demo + '">Run browser demo →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>';
+}
 function extensionCode(language, source) {
   return '<pre><code class="language-' + language + '">' + escapeHtml(source) + '</code></pre>';
 }
@@ -32,6 +35,7 @@ function extensionPage(route) {
     return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
   return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation and text extensions.') + banner +
+    '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>' +
     '<h2>1. Paints and shaders</h2>' +
     extensionCode('rust', `use xgpui_shader::{painted, SolidColor};
 use std::sync::Arc;
@@ -105,7 +109,7 @@ function publicApiSourceLinks() {
 }
 
 function shaderCrateGuide() {
-  return '<article class="extension-document">' +
+  return browserDemoLinks('shader') + '<article class="extension-document">' +
     data.extension_documents['extension-paints'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') +
     '</article><h2>Producer and backend references</h2><div class="cards">' +
     extensionCard('shader-producers', 'Mesh, gradient parameters and caches.') +
@@ -121,6 +125,6 @@ function gamutCrateGuide() {
 }
 
 function parleyCrateGuide() {
-  return '<article class="extension-document">' +
+  return browserDemoLinks('parley') + '<article class="extension-document">' +
     data.extension_documents['parley-text'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
 }

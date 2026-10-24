@@ -1,4 +1,5 @@
 //! Editable paragraph probe; uses GPUI caches, Parley geometry and the glyph atlas.
+#[path = "paragraph/input.rs"]
 mod input;
 
 use anyhow::{Result, ensure};
@@ -8,7 +9,11 @@ use gpui::{
     PlatformParagraphLayout, Point, Render, TextAffinity, TextSystem, VisualDirection, Window,
     WindowTextSystem, canvas, div, fill, paint_paragraph, prelude::*, px, rgb,
 };
-use std::{hint::black_box, sync::Arc, time::Instant};
+#[cfg(not(target_family = "wasm"))]
+use std::time::Instant;
+use std::{hint::black_box, sync::Arc};
+#[cfg(target_family = "wasm")]
+use web_time::Instant;
 
 pub const FONTS: [&[u8]; 2] = [
     include_bytes!(

@@ -85,6 +85,14 @@ for (const route of ['#extensions', ...Object.keys(data.extension_documents).map
 }
 const index = await readFile(new URL('index.html', site), 'utf8');
 assert.ok(!index.includes('#method'));
+assert.ok(index.includes('href="examples/extensions/"'));
+for (const demo of ['shader', 'parley']) {
+  const html = run(`browserDemoLinks('${demo}')`);
+  assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
+  assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web'));
+  assert.equal(new URL(`examples/extensions/?demo=${demo}`, 'https://example.github.io/xgpui/').pathname, '/xgpui/examples/extensions/');
+}
+
 for (const asset of ['style.css', 'extensions.js', 'guides.js', 'pipeline.js', 'app.js', 'data.js']) {
   assert.ok(index.includes(asset));
   await readFile(new URL(asset, site));

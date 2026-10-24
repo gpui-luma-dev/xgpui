@@ -80,3 +80,13 @@ source locations, internal links and section targets as well as the existing sit
 ## GitHub Pages
 
 Select **Settings → Pages → Source: GitHub Actions**. The Pages workflow builds and verifies the website, then publishes `docs/` on pushes to `main` or manual dispatch. Relative asset and source links support the repository URL prefix.
+
+
+## Browser extension demos
+
+The sidebar's **Browser extension demos** link opens `examples/extensions/`.
+The gallery and both extension crate guides link to the demo source on GitHub.
+The Pages workflow builds `apps/extensions-web` in release mode with the pinned
+wasm-bindgen CLI and copies its generated assets into `docs/examples/extensions/`
+before uploading the site. These artifacts are ignored by Git. For local testing,
+use the build and server commands in [extensions-web](../apps/extensions-web/README.md).

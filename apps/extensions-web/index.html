@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xgpui extension examples</title>
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; font: 16px system-ui, sans-serif; background: #111827; color: #eff4fc; }
+  main { max-width: 52rem; margin: auto; padding: 3rem 1.5rem; }
+  article { padding: 1.5rem; border: 1px solid #4b5563; border-radius: 12px; margin: 1rem 0; }
+  a { color: #a5c8ff; }
+  nav { display: flex; flex-wrap: wrap; gap: 1rem; }
+  #back { position: fixed; right: 1rem; bottom: 1rem; padding: .5rem; background: #111827ee; z-index: 2; }
+  #status { position: fixed; inset: 1rem 1rem auto; white-space: pre-wrap; background: #111827; padding: 1rem; z-index: 3; }
+  canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; user-select: none; -webkit-user-select: none; }
+</style>
+<main id="gallery">
+  <h1>xgpui extension examples</h1>
+  <p><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source on GitHub</a> · <a href="https://gpui-luma-dev.github.io/xgpui/#extensions">Extension documentation</a></p>
+  <p>Choose a demo and graphics backend. Each link reloads the application with a fresh Wasm instance.</p>
+  <article>
+    <h2>Shader paints</h2>
+    <p>Solids, linear, radial, conic and diamond gradients, hard stops, elliptical and off-center fades, rainbow, Hermite mesh and portable WGSL. Rounded backgrounds, borders, paths, opacity and animation.</p>
+    <nav><a href="?demo=shader">Automatic backend</a><a href="?demo=shader&backend=webgpu">WebGPU</a><a href="?demo=shader&backend=webgl">WebGL2</a></nav>
+  </article>
+  <article>
+    <h2>Parley paragraphs</h2>
+    <p>Bundled Latin, Hebrew and Arabic fonts. Wrapping, visual caret movement, drag selection, typing, clipboard and IME.</p>
+    <nav><a href="?demo=parley">Automatic backend</a><a href="?demo=parley&backend=webgpu">WebGPU</a><a href="?demo=parley&backend=webgl">WebGL2</a></nav>
+  </article>
+  <p>Gamut is deferred: the extension currently requires native Metal or D3D11 wide-gamut presentation.</p>
+</main>
+<nav id="back" hidden><a href="?">All examples</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></nav>
+<p id="status" role="status" hidden></p>
+<script type="module">
+  const demo = new URLSearchParams(location.search).get("demo");
+  if (demo) {
+    document.getElementById("gallery").hidden = true;
+    document.getElementById("back").hidden = false;
+    const status = document.getElementById("status");
+    const showError = (error) => {
+      status.hidden = false;
+      status.setAttribute("role", "alert");
+      status.textContent = `Unable to run demo: ${error?.message ?? error}. See the browser console for details.`;
+      console.error(error);
+    };
+    window.addEventListener("error", event => showError(event.error ?? event.message));
+    window.addEventListener("unhandledrejection", event => showError(event.reason));
+    status.hidden = false;
+    status.textContent = "Loading extension demo…";
+    try {
+      if (!["shader", "parley"].includes(demo)) throw new Error(`Unknown demo: ${demo}`);
+      const bindings = await import("./extensions_web.js");
+      await bindings.default();
+      window.wasmBindings = bindings;
+      status.hidden = true;
+      document.title = `${demo === "shader" ? "Shader paints" : "Parley paragraphs"} · xgpui`;
+    } catch (error) { showError(error); }
+  }
+</script>
+</html>

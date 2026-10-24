@@ -167,6 +167,10 @@ impl PaintCache {
                 .as_ref()
                 .is_none_or(|cached| !Arc::ptr_eq(&cached.device, &ctx.device))
             {
+                // Browser error-scope futures require returning to the JS event loop.
+                // Keep native synchronous validation; on Wasm, use the host device's
+                // uncaptured-error handler rather than blocking or swallowing errors.
+                #[cfg(not(target_family = "wasm"))]
                 let error_scope = ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
                 let module = ctx
                     .device
@@ -228,6 +232,7 @@ impl PaintCache {
                         multiview_mask: None,
                         cache: None,
                     });
+                #[cfg(not(target_family = "wasm"))]
                 if let Some(error) = gpui::block_on(error_scope.pop()) {
                     anyhow::bail!("wgpu paint pipeline: {error}");
                 }
