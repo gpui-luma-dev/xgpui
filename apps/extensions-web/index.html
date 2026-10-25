@@ -31,7 +31,7 @@
   </article>
   <article>
     <h2>Progressive SVG</h2>
-    <p>Full-color curves, gradients, clipping and shadows. Compare synchronized bounded and viewport-rerasterized views: zoom and drag artwork, switch attributed samples, and mount a gallery sharing one bounded rendering pool. Single-threaded Wasm: individual CPU raster jobs still run on the browser thread.</p>
+    <p>Full-color curves, gradients, clipping and shadows. Compare synchronized bounded and viewport-rerasterized views: zoom and drag artwork, switch attributed samples, and mount a gallery sharing one bounded rendering pool. Hybrid zoom transforms cached pixels while moving, then sharpens in a Web Worker after settling. Bounded rendering still uses the browser thread.</p>
     <nav><a href="?demo=svg">Automatic backend</a><a href="?demo=svg&backend=webgpu">WebGPU</a><a href="?demo=svg&backend=webgl">WebGL2</a><a href="svg-attribution.html">Artwork attribution</a></nav>
   </article>
   <p>Gamut is deferred: the extension currently requires native Metal or D3D11 wide-gamut presentation.</p>
@@ -56,6 +56,7 @@
     status.textContent = "Loading extension demo…";
     try {
       if (!["shader", "parley", "svg"].includes(demo)) throw new Error(`Unknown demo: ${demo}`);
+      await import("./svg-worker-client.mjs");
       const bindings = await import("./extensions_web.js");
       await bindings.default();
       window.wasmBindings = bindings;

@@ -150,20 +150,34 @@ a ten-tile gallery, and switchable 8/32 MiB shared pools. The rerasterized view
 uses `SvgSize::Viewport` to render only visible pixels at display density, keeping
 curves sharp at deep zoom. It is a demo comparison outside the bounded scheduler,
 with separate output-size and timing diagnostics. Camera/viewport changes rebuild
-its raster; ordinary redraws reuse it. **Sharp SVG zoom: ON/OFF** switches the
-right view between crisp CPU rerasterization and GPU texture zoom of a cached
-100% raster. With it off, zoom/pan leaves the right raster count unchanged;
-artwork selection or resize can still rebuild the base raster. The notice
-explains the speed/detail tradeoff and that the left bounded view still refines.
-Its diagnostics report element raster latency and accounted bytes, not total
-browser memory. The current non-atomic Wasm platform runs raster jobs on the
-browser thread: progressive rendering and admission limits apply, but a costly
-filter can still block input. Native worker responsiveness measurements above
-do not establish browser responsiveness. The browser demo caps concurrency at
-one and bounded-element output at 2 MiB. The viewport comparison rejects
-output edges above 8192 device pixels. Complex filter intermediates can still
-be costly; a 1600% leaf render took about 2.5 seconds in one browser check. Use the gallery's artwork credits link for
-creator, source, license and unchanged SVG downloads.
+its raster; ordinary redraws reuse it. The comparison defaults to **Hybrid ·
+worker**: it transforms a cached full-artwork base texture during gestures and sends the visible
+region to an isolated module Web Worker after 160 ms idle. Document/camera/viewport
+generations discard stale results. The worker retains its parsed document and
+transfers pixel buffers; it does not create a GPUI platform or GPU objects.
+
+**Sharp · UI thread** retains synchronous rendering for comparison; **Texture
+only** scales a base raster without right-view camera rasterization. Hybrid queues
+one running and at most one latest request. Errors/timeouts retain the preview
+and report failure rather than falling back to synchronous work. Reselect Hybrid
+or move the camera to retry. Keeping a base texture alongside the latest detail
+raster avoids preview holes during pan/zoom-out. If an obsolete worker is still
+busy at the next settled request, it is terminated/recreated so fresh detail does
+not wait behind stale synchronous work.
+
+The worker rejects output above 32 MiB or an 8192-pixel edge; these bounds exclude
+filter intermediates, the main thread's base/detail pair, and the worker's
+separate Wasm memory. Worker timing includes
+parse on a document change and conversion, but excludes transfer/upload/display.
+The left bounded element and gallery still run raster work on the browser thread;
+their scheduler is capped at one job with 2 MiB per-element output. Neither these
+limits nor the worker guarantee total browser memory or frame latency. Native
+responsiveness measurements above do not establish browser results. A historical
+1600% leaf render took about 2.5 seconds in synchronous mode.
+
+Use the gallery's artwork credits link for creator, source, license and unchanged
+SVG downloads. The browser build also stages the worker assets in the local docs
+preview; no atomic/shared-memory Wasm configuration is required.
 
 ## Limits and follow-ups
 

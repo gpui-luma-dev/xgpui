@@ -12,6 +12,7 @@ use std::{borrow::Cow, cell::RefCell, rc::Rc, sync::Arc};
 mod paragraph;
 mod shader;
 mod svg;
+mod svg_worker;
 
 const PLEX: &[u8] = include_bytes!(
     "../../../gpui/crates/gpui-web/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
@@ -23,6 +24,11 @@ thread_local! {
 
 fn main() {
     console_error_panic_hook::set_once();
+    // The module worker imports the same non-atomic Wasm module, but must
+    // never start the GPUI browser platform or create GPU handles.
+    if web_sys::window().is_none() {
+        return;
+    }
     gpui_web::init_logging();
     if let Err(error) = launch() {
         web_sys::console::error_1(&format!("Extension demo: {error:#}").into());

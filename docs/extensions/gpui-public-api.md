@@ -335,5 +335,5 @@ Each output edge must be 1..=8192; invalid, nonfinite or nonpositive rectangles
 return `InvalidSize`. Existing sizing modes retain their behavior. Adding an
 enum variant requires downstream exhaustive `SvgSize` matches to handle it.
 This output bounds the destination buffer, not resvg filter intermediates or
-whole-process memory. It does not add cropped scheduling to `SvgImage` or make
-browser rasterization run on a worker.
+whole-process memory. It does not add cropped scheduling to `SvgImage` or dispatch workers itself.
+The browser demo separately manages a module worker for its Hybrid comparison.

@@ -5,9 +5,10 @@ limits, progressive background rendering, shared admission/accounting, attribute
 offline samples, tests and reproducible measurements. The following are deferred,
 not blockers or claims of existing support:
 
-- **Browser workers:** move synchronous raster jobs off the browser thread. The
-  non-atomic Wasm demo currently shares the browser event loop; output limits
-  do not guarantee input responsiveness. Validate browser performance separately.
+- **Reusable browser workers:** the demo's Hybrid comparison now uses an isolated
+  module worker. Integrating workers into `SvgImage` scheduling/accounting remains
+  follow-up work; bounded elements/gallery still rasterize on the browser thread.
+  Validate browser performance and the separate Wasm memory footprint.
 - **Viewport tiling/cropped rasterization:** preserve sharp deep zoom within
   small budgets instead of rasterizing the entire artwork at reduced resolution.
   The browser demo now compares a separate `SvgSize::Viewport` raster, but this

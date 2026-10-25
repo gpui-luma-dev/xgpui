@@ -22,6 +22,7 @@ done
 mkdir -p "$app/dist"
 wasm-bindgen --target web --out-dir "$app/dist" --out-name extensions_web \
     "$app/target/wasm32-unknown-unknown/$profile/extensions-web.wasm"
+cp "$app/svg-worker-client.mjs" "$app/svg-worker.mjs" "$app/dist/"
 cp "$app/index.html" "$app/dist/index.html"
 cp "$app/svg-attribution.html" "$app/dist/svg-attribution.html"
 cp apps/svg-lab/samples/ATTRIBUTION.md "$app/dist/svg-ATTRIBUTION.md"
