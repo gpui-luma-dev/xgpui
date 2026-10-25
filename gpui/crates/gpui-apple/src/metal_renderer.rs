@@ -616,6 +616,18 @@ impl MetalRenderer {
             anyhow::ensure!(self.opaque, "wide SDR requires an opaque top-level window");
             lab.wide.clear();
         }
+        #[cfg(target_os = "macos")]
+        anyhow::ensure!(self.wide_sdr.is_some() || scene.shader_draws.iter().all(|d|
+            d.program.output_encoding() == gpui::ShaderOutputEncoding::EncodedSrgb),
+            "linear P3 shaders require WideGamutSdr");
+        #[cfg(not(target_os = "macos"))]
+        anyhow::ensure!(
+            scene
+                .shader_draws
+                .iter()
+                .all(|d| d.program.output_encoding() == gpui::ShaderOutputEncoding::EncodedSrgb),
+            "linear P3 shaders require a native wide-SDR compositor"
+        );
         let custom_outputs = if scene.custom_draws.is_empty() {
             Vec::new()
         } else {
@@ -1974,6 +1986,14 @@ pub struct MetalHeadlessRenderer {
 
 #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
 impl MetalHeadlessRenderer {
+    /// Configure native wide-SDR composition for offscreen validation.
+    #[cfg(target_os = "macos")]
+    pub fn set_color_mode(
+        &mut self,
+        mode: gpui::WindowColorMode,
+    ) -> Result<gpui::WindowColorStatus> {
+        self.renderer.set_color_mode(mode)
+    }
     pub fn new() -> Self {
         let instance_buffer_pool = Arc::new(Mutex::new(InstanceBufferPool::default()));
         let renderer = MetalRenderer::new_headless(instance_buffer_pool);
@@ -2109,9 +2129,18 @@ fn create_shader_pipeline(
     buffer.set_step_rate(1);
     descriptor.set_vertex_descriptor(Some(&layout));
     let color = descriptor.color_attachments().object_at(0).unwrap();
-    color.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+    let wide = program.output_encoding() == gpui::ShaderOutputEncoding::LinearDisplayP3;
+    color.set_pixel_format(if wide {
+        MTLPixelFormat::RGBA16Float
+    } else {
+        MTLPixelFormat::BGRA8Unorm
+    });
     color.set_blending_enabled(true);
-    color.set_source_rgb_blend_factor(MTLBlendFactor::SourceAlpha);
+    color.set_source_rgb_blend_factor(if wide {
+        MTLBlendFactor::One
+    } else {
+        MTLBlendFactor::SourceAlpha
+    });
     color.set_destination_rgb_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
     color.set_source_alpha_blend_factor(MTLBlendFactor::One);
     color.set_destination_alpha_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);

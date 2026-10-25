@@ -39,6 +39,8 @@ jobs:
         run: |
           rustup target add wasm32-unknown-unknown
           cargo install wasm-bindgen-cli --version 0.2.129 --locked
+      - name: Check browser color preview samples
+        run: bash apps/extensions-web/check-color.sh
       - name: Build browser extension demos
         run: |
           bash apps/extensions-web/build.sh --release

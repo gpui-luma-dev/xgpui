@@ -13,6 +13,7 @@ bench = false
 [workspace]
 
 [dependencies]
+xgpui-color = { path = "../../extensions/xgpui-ext/crates/xgpui-color" }
 anyhow = "1"
 gpui = { path = "../../gpui/crates/gpui" }
 gpui-web = { path = "../../gpui/crates/gpui-web", default-features = false }

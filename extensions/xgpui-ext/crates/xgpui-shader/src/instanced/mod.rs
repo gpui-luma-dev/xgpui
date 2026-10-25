@@ -1,7 +1,7 @@
 //! Experimental v2: ordered, main-pass fragment shaders with typed instances.
 //! Transport is limited to 128 bytes of f32 scalars/vectors for WebGL2 parity.
 use anyhow::{Result, ensure};
-use gpui::{Bounds, Pixels, SceneShaderProgram, Window};
+use gpui::{Bounds, Pixels, SceneShaderProgram, ShaderOutputEncoding, Window};
 use std::{marker::PhantomData, sync::Arc};
 mod border;
 mod compiler;
@@ -43,10 +43,25 @@ impl<T: ShaderInstance> ShaderProgram<T> {
     /// Source declares `Parameters` and `fn shade(ShaderInput, Parameters) -> vec4<f32>`.
     /// Output is straight-alpha encoded-sRGB SDR. Host applies clipping/opacity.
     pub fn new(source: &str) -> Result<Self> {
+        Self::with_encoding(source, ShaderOutputEncoding::EncodedSrgb)
+    }
+    /// Bounded straight-alpha linear Display P3/D65 output. The wrapper clamps
+    /// producer channels to [0,1]; map gamut explicitly before returning them.
+    /// Requires an active native WideGamutSdr window. Host associates alpha and
+    /// converts to the backend composition space after producer clamping.
+    pub fn new_linear_p3(source: &str) -> Result<Self> {
+        Self::with_encoding(source, ShaderOutputEncoding::LinearDisplayP3)
+    }
+    fn with_encoding(source: &str, encoding: ShaderOutputEncoding) -> Result<Self> {
         Ok(Self {
-            program: Arc::new(compiler::compile::<T>(source)?),
+            program: Arc::new(compiler::compile::<T>(source, encoding)?),
             _instance: PhantomData,
         })
+    }
+    /// Retain the compiled program for low-level GPUI scene recording.
+    /// Parameter slots must match this program's validated `ShaderInstance` ABI.
+    pub fn scene_program(&self) -> Arc<SceneShaderProgram> {
+        self.program.clone()
     }
     /// Stable program identity, useful when examining batch diagnostics.
     pub fn id(&self) -> u64 {
@@ -94,6 +109,12 @@ impl WindowShaderExt for Window {
             .all(|v| v.is_finite()),
             "non-finite shader bounds"
         );
+        if program.program.output_encoding() == ShaderOutputEncoding::LinearDisplayP3 {
+            ensure!(
+                self.color_status().effective() == gpui::WindowColorMode::WideGamutSdr,
+                "linear P3 shaders require an active native WideGamutSdr window"
+            );
+        }
         let data = program.pack(&instance)?;
         self.paint_shader(bounds, program.program.clone(), data);
         Ok(())

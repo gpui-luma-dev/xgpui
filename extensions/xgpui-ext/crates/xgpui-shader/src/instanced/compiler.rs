@@ -3,7 +3,10 @@ use anyhow::{Context, bail};
 use naga::{ScalarKind, TypeInner};
 const PRELUDE: &str = "struct ShaderInput { uv: vec2<f32>, position: vec2<f32>, size: vec2<f32>, scale_factor: f32, }";
 
-pub(super) fn compile<T: ShaderInstance>(user: &str) -> Result<SceneShaderProgram> {
+pub(super) fn compile<T: ShaderInstance>(
+    user: &str,
+    encoding: ShaderOutputEncoding,
+) -> Result<SceneShaderProgram> {
     ensure!(user.len() <= 64 * 1024, "shader source exceeds 64 KiB");
     let user_source = format!("{PRELUDE}\n{user}");
     let parsed = naga::front::wgsl::parse_str(&user_source).map_err(|e| {
@@ -97,6 +100,18 @@ pub(super) fn compile<T: ShaderInstance>(user: &str) -> Result<SceneShaderProgra
     let copy = (0..8)
         .map(|i| format!("out.data{i} = instance.data{i};"))
         .collect::<String>();
+    let output = if encoding == ShaderOutputEncoding::LinearDisplayP3 {
+        // pad is the host composition-space selector: 0=P3, 1=scRGB.
+        r#"var rgb = color.rgb;
+        if host.pad != 0u {
+            rgb = vec3(1.2249401763 * rgb.r - 0.2249401763 * rgb.g,
+                -0.0420569547 * rgb.r + 1.0420569547 * rgb.g,
+                -0.0196375546 * rgb.r - 0.0786360456 * rgb.g + 1.0982736002 * rgb.b);
+        }
+        return vec4(rgb * alpha, alpha);"#
+    } else {
+        "return vec4(select(color.rgb, color.rgb * alpha, host.premultiplied != 0u), alpha);"
+    };
     let source = format!(
         r#"
 {PRELUDE}
@@ -128,7 +143,7 @@ struct HostVarying {{
     let parameters = Parameters({parameters});
     let color = clamp(shade(ShaderInput(input.local, input.local * input.extent, input.extent, input.misc.y), parameters), vec4(0.), vec4(1.));
     let alpha = color.a * input.misc.x;
-    return vec4(select(color.rgb, color.rgb * alpha, host.premultiplied != 0u), alpha);
+    {output}
 }}
 "#,
         parameters = args.join(",")
@@ -205,9 +220,10 @@ struct HostVarying {{
         )
         .context("SPIR-V translation")?;
     }
-    Ok(SceneShaderProgram::new(
+    Ok(SceneShaderProgram::new_with_output_encoding(
         source,
         (metal, names[0].clone(), names[1].clone()),
         (hlsl, hlsl_names[0].clone(), hlsl_names[1].clone()),
+        encoding,
     ))
 }

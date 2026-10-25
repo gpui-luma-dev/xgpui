@@ -38,7 +38,12 @@ fn reference(grid: &MeshGrid, x: u32, y: u32, u: f32, v: f32) -> ([f32; 2], [f32
     });
     (position, color)
 }
-pub fn verify_mesh(renderer: &mut dyn gpui::PlatformHeadlessRenderer) -> Result<()> {
+// Metal retains unsubmitted producer commands; wgpu/D3D11 discard abandoned
+// batches and regenerate output. Pipeline compilations must remain cached.
+pub fn verify_mesh(
+    renderer: &mut dyn gpui::PlatformHeadlessRenderer,
+    expected_retry_preparations: usize,
+) -> Result<()> {
     let extent = size(DevicePixels(257), DevicePixels(193));
     let bounds = rect(0., 0., 257., 193.);
     for (width, height) in [(2, 2), (3, 2), (3, 3)] {
@@ -151,6 +156,10 @@ pub fn verify_mesh(renderer: &mut dyn gpui::PlatformHeadlessRenderer) -> Result<
         renderer.render_scene_to_image(&failed, extent).is_err(),
         "bad producer should abort mesh frame"
     );
+    ensure!(
+        mesh.preparations() == 1 && mesh.pipeline_compilations() == 1,
+        "failed batch did not share mesh resources"
+    );
     let mut retry = Scene::default();
     retry.replay(0..2, &failed);
     retry.finish();
@@ -161,8 +170,18 @@ pub fn verify_mesh(renderer: &mut dyn gpui::PlatformHeadlessRenderer) -> Result<
         "pending mesh outputs did not initialize on retry"
     );
     ensure!(
-        mesh.preparations() == 1 && mesh.pipeline_compilations() == 1,
-        "retry rebuilt mesh resources"
+        mesh.preparations() == expected_retry_preparations && mesh.pipeline_compilations() == 1,
+        "unexpected mesh retry resources: {} preparations (expected {expected_retry_preparations}), {} pipeline compilations",
+        mesh.preparations(),
+        mesh.pipeline_compilations()
+    );
+    ensure!(
+        renderer.render_scene_to_image(&retry, extent)? == image,
+        "submitted mesh retry changed pixels"
+    );
+    ensure!(
+        mesh.preparations() == expected_retry_preparations && mesh.pipeline_compilations() == 1,
+        "submitted mesh retry rebuilt resources"
     );
     Ok(())
 }

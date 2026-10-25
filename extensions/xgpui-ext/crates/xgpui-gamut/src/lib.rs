@@ -1,8 +1,18 @@
 //! Opt-in wide SDR content producers. Window presentation remains a host concern.
 //! Colors are explicitly linear Display P3/D65; native GPUI colors remain sRGB.
+/// Shared CPU color math, also available independently as `xgpui-color`.
+pub use xgpui_color as color;
+
+#[cfg(feature = "instanced")]
+pub mod instanced;
+
 use anyhow::{Result, ensure};
 use gpui::{CustomContent, DevicePixels, Size};
 use std::any::Any;
+
+#[cfg(test)]
+static PRODUCER_ALLOCATIONS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 
 #[cfg(target_os = "windows")]
 mod dx11;

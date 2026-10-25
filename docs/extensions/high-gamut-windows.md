@@ -45,9 +45,12 @@ painted().w(px(320.0)).h(px(240.0))
     .child(div().p_4().child("Normal sRGB controls"));
 ```
 
-The crates are independent: `xgpui-gamut` produces explicit P3 content;
-`xgpui-shader` supplies optional `painted()` ergonomics here. Neither depends on
-the other. `WideColor` allocates on preparation; pooling/caching is deferred.
+The default `xgpui-gamut` producer is usable without `xgpui-shader`;
+`xgpui-shader` supplies optional `painted()` ergonomics here. Enabling gamut's
+`instanced` feature adds a shader dependency for `WidePainter`/`WideGradient`.
+Shared CPU math lives in the standalone `xgpui-color` crate. `WideColor` retains
+its texture preparation path; instanced fills avoid producer textures/passes.
+See [wide fills and gradients](instanced-wgsl-v2.md#reusable-wide-fills-and-gradients).
 
 | Capability | Owner | Status |
 | --- | --- | --- |
@@ -238,10 +241,35 @@ impl Window {
 milestone. Default trait methods preserve platforms without overrides. Additive
 method names can still collide with downstream extension methods.
 
+## Compare sRGB and native Display P3
+
+The desktop color companion uses `WidePainter` to display native P3 swatches
+beside ordinary mapped sRGB swatches. Both use the same 32 CPU reference samples
+as the browser Color / Gamut demo: encoded sRGB, linear RGB, OkLab and shorter-hue
+OkLCh. Change endpoint presets, gamut mapping and end alpha interactively.
+
+```sh
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --bin color-lab
+```
+
+Move the window to your P3 monitor and check `Effective: WideGamutSdr` and
+`Display wide gamut: Some(true)`. `None` means display capability is unknown.
+macOS Metal runtime presentation was checked; Windows cross-compilation passes,
+while Windows native execution and physical display acceptance remain separate.
+The status reports negotiation and capability, not calibrated color accuracy.
+
+The [browser comparison and runtime diagnostics](color-math.md#browser-color--gamut-lab)
+remain an sRGB preview. A P3-capable display alone does not change its output:
+WebGL reads `drawingBufferColorSpace`, and WebGPU queries its canvas configuration
+where supported. Unavailable queries report unknown. Screenshots cannot prove
+physical P3 output.
+
 ## Run gamut-lab
 
 ```sh
 just --justfile apps/gamut-lab/justfile ui
+just --justfile apps/gamut-lab/justfile ui --instanced
+just --justfile apps/gamut-lab/justfile ui --instanced --gradient
 just --justfile apps/gamut-lab/justfile baseline
 just --justfile apps/gamut-lab/justfile headless --frames 60
 just --justfile apps/gamut-lab/justfile capture

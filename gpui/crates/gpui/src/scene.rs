@@ -1207,11 +1207,24 @@ impl From<CustomDraw> for Primitive {
 /// Maximum portable payload: eight float4 slots (128 bytes) per instance.
 pub const SHADER_DATA_SLOTS: usize = 8;
 
+/// Explicit color meaning of an instanced fragment program's output.
+/// Wide output requires an opted-in native wide-SDR compositor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ShaderOutputEncoding {
+    /// Legacy straight-alpha encoded-sRGB SDR producer output.
+    EncodedSrgb,
+    /// Bounded straight-alpha linear Display P3/D65 producer output.
+    /// The host wrapper associates alpha and converts to composition primaries.
+    LinearDisplayP3,
+}
+
 /// Backend-independent compiled fragment program. Created by shader extensions;
 /// backend pipeline caches belong to the host renderer and its device.
 #[derive(Debug)]
 pub struct SceneShaderProgram {
     id: u64,
+    output_encoding: ShaderOutputEncoding,
     /// Validated WGSL with host vertex/fragment entry points.
     wgsl: String,
     /// Translated Metal source and actual generated entry point names.
@@ -1226,13 +1239,28 @@ impl SceneShaderProgram {
         metal: (String, String, String),
         hlsl: (String, String, String),
     ) -> Self {
+        Self::new_with_output_encoding(wgsl, metal, hlsl, ShaderOutputEncoding::EncodedSrgb)
+    }
+    /// Create an immutable program with explicit output meaning. Encoding is part
+    /// of the unique program identity used by backend pipeline caches.
+    pub fn new_with_output_encoding(
+        wgsl: String,
+        metal: (String, String, String),
+        hlsl: (String, String, String),
+        output_encoding: ShaderOutputEncoding,
+    ) -> Self {
         static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         Self {
             id: NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            output_encoding,
             wgsl,
             metal,
             hlsl,
         }
+    }
+    /// Immutable output meaning; part of this program's unique cache identity.
+    pub fn output_encoding(&self) -> ShaderOutputEncoding {
+        self.output_encoding
     }
     /// Immutable validated WGSL source.
     pub fn wgsl(&self) -> &str {

@@ -111,6 +111,13 @@ cache-only preparation → no recorder, no empty submission
 failed later attempt → previously submitted cache stays valid
 ```
 
+Retry allocation counts differ by backend: wgpu and D3D11 abandon staged output
+when a later producer aborts the batch, so the first successful retry regenerates
+the output once. Compiled pipelines remain reusable. Metal's legacy producer path
+retains its unsubmitted command and reuses it on retry. After a successful retry,
+all paths must reuse the submitted output without another preparation; pixels and
+pipeline compilation counts must remain stable.
+
 No new public GPUI methods. No normal-path GPU completion wait. Native mask work
 has an independent submission path and is not rolled back. Raw GPU handles remain
 a cooperative contract; transactions cannot undo externally submitted work.

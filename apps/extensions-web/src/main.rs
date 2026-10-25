@@ -8,6 +8,8 @@ use gpui_web::{WebBackendPreference, WebPlatform};
 use std::{borrow::Cow, cell::RefCell, rc::Rc, sync::Arc};
 
 // Share the native lab's editor, including its UTF-16/IME bridge and BiDi geometry.
+mod color;
+mod color_samples;
 #[path = "../../text-lab/src/paragraph.rs"]
 mod paragraph;
 mod shader;
@@ -36,6 +38,7 @@ pub fn demo_behavior(demo: &str) -> String {
         "svg" => "SVG: independent views • sharp / texture zoom • no worker",
         "parley" => "Parley: editable paragraphs • selection and BiDi",
         "shader" => "Shader: gradients, paths and animation",
+        "color" => "Color / Gamut: interpolation and mapping • sRGB preview",
         _ => "Unknown demo",
     }
     .into()
@@ -66,6 +69,7 @@ fn launch() -> anyhow::Result<()> {
     };
     let parley = parameters.contains(&"demo=parley");
     let svg = parameters.contains(&"demo=svg");
+    let color = parameters.contains(&"demo=color");
     // These demos need no worker pool or shared Wasm memory.
     let platform = Rc::new(WebPlatform::new_with_backend(false, backend));
     let http = Arc::new(platform.fetch_http_client());
@@ -98,6 +102,9 @@ fn launch() -> anyhow::Result<()> {
                 view
             })
             .expect("open Parley demo");
+        } else if color {
+            cx.open_window(options, |_, cx| cx.new(|_| color::ColorDemo::new()))
+                .expect("open color demo");
         } else if svg {
             cx.open_window(options, |_, cx| {
                 cx.new(|cx| svg::SvgDemo::new(cx).expect("bundled SVG samples"))

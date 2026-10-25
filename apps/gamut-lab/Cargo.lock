@@ -1849,6 +1849,7 @@ dependencies = [
  "clap",
  "gpui",
  "gpui-platform",
+ "xgpui-color",
  "xgpui-gamut",
  "xgpui-shader",
 ]
@@ -6501,14 +6502,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
 
 [[package]]
+name = "xgpui-color"
+version = "0.1.0"
+
+[[package]]
 name = "xgpui-gamut"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytemuck",
  "gpui",
  "gpui-apple",
  "gpui-windows",
  "metal",
+ "xgpui-color",
+ "xgpui-shader",
 ]
 
 [[package]]

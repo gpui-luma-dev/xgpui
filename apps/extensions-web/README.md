@@ -1,9 +1,22 @@
 # WebAssembly demo index and extension examples
 
-A standalone Wasm app for `xgpui-shader`, `xgpui-parley`, and `xgpui-svg`. All use the existing
+A standalone Wasm app for `xgpui-shader`, `xgpui-parley`, `xgpui-svg`, and `xgpui-color`. All use the existing
 GPUI web platform and wgpu renderer. The gallery offers automatic selection
 (WebGPU with WebGL2 fallback), forced WebGPU, and forced WebGL2. A forced backend
 fails explicitly if unavailable; check the browser console for adapter details.
+
+## Extension demos
+
+| Crate | URL query | What it demonstrates |
+| --- | --- | --- |
+| `xgpui-color` | `?demo=color` | Display P3 endpoints, encoded sRGB / linear RGB / OkLab / OkLCh interpolation, gamut mapping and alpha. Runtime diagnostics distinguish the sRGB canvas from P3 display capability. |
+| `xgpui-shader` | `?demo=shader` | Gradients, meshes and portable WGSL paints. |
+| `xgpui-parley` | `?demo=parley` | Paragraph shaping, bidirectional text and editing. |
+| `xgpui-svg` | `?demo=svg` | Progressive SVG rendering and viewport rasterization. |
+
+The Color / Gamut demo uses the standalone `xgpui-color` math crate directly.
+Its browser output is mapped to sRGB. For actual native Display P3 comparison,
+see the [color-lab desktop companion](../gamut-lab/README.md#native-color-comparison).
 
 The landing page also lists all seven interactive examples from the older
 `gpui-web/examples/hello_web` gallery and its three browser-test Wasm modules.
@@ -34,6 +47,11 @@ host Rust flags so native linker options cannot leak into the Wasm link. Serve o
 clipboard access. The supplied server also sends cross-origin isolation headers.
 
 ## Local checks
+
+- Color / Gamut: open `?demo=color` with each forced backend. Cycle endpoint
+  presets, mapping policy and ending alpha. Check all four interpolation rows
+  and the amber out-of-sRGB indicators. Confirm the runtime panel reports the
+  canvas color space separately from browser-reported P3 display support.
 
 - Shader: run both forced backends. All eleven cards should show the same paint
   in a rounded background, border and diamond path.
@@ -113,3 +131,24 @@ each panel's renderer while preserving panel dimensions and the shared camera.
 An off panel performs no new raster work; switching off the comparison also
 releases its cached raster. Re-enabling a panel renders the current camera.
 Unmount the separate gallery as well when comparing a single renderer's cost.
+
+
+## Color / Gamut demo
+
+Open `?demo=color` (or force `&backend=webgpu` / `&backend=webgl`). Four rows compare
+encoded sRGB, linear RGB, OkLab and shorter-hue OkLCh interpolation from the same
+Display P3 endpoints. Cycle three endpoint presets, toggle clipping/chroma
+reduction, and change ending alpha. Amber strips mark out-of-sRGB samples before
+mapping. The app uses `xgpui-color` directly; it does not depend on native gamut
+producers. Output is a mapped sRGB preview, with 32 CPU samples per row displayed
+through ordinary shader paints. This does not establish physical P3 presentation.
+
+
+Run `bash apps/extensions-web/check-color.sh` for the CPU preview-sampler tests.
+The script compiles the dependency-free color core and sampler directly with
+rustc, avoiding the browser platform dependencies for native test execution.
+
+The runtime panel distinguishes P3 source endpoints, sRGB preview mapping, actual
+canvas color space (or unknown when unavailable), and browser-reported P3 display
+capability. For native P3 versus sRGB comparison, run the
+[color-lab desktop companion](../gamut-lab/README.md#native-color-comparison).

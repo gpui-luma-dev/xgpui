@@ -413,6 +413,33 @@ impl Compositor {
             })?;
             let mut dirty = true; // includes the initial window background
             for batch in scene.batches() {
+                if let PrimitiveBatch::Shaders {
+                    program_id,
+                    ref range,
+                } = batch
+                {
+                    if scene.shader_draws[range.start].program.output_encoding()
+                        == gpui::ShaderOutputEncoding::LinearDisplayP3
+                    {
+                        if dirty {
+                            self.flush_ui(&devices)?;
+                        }
+                        renderer
+                            .shaders
+                            .as_ref()
+                            .context("shader renderer missing")?
+                            .draw(
+                                &devices.device_context,
+                                &self.target.rtv,
+                                self.extent,
+                                program_id,
+                                range.clone(),
+                            )?;
+                        renderer.pre_draw(&[0.; 4])?;
+                        dirty = false;
+                        continue;
+                    }
+                }
                 if let PrimitiveBatch::Custom(range) = batch {
                     for index in range {
                         if outputs[index].wide {

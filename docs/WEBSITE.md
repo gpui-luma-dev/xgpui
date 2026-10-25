@@ -59,6 +59,11 @@ normalization-map change as well as after a release sync.
 
 ## Extensions to GPUI
 
+`xgpui-color` is indexed with its own Use/source/API/dependency tabs and the
+`color-math.md` guide. It is a standalone math crate with no runtime dependencies
+and introduces no GPUI API changes. Gamut depends on color; its shader rendering adapter is optional and comparison
+tests use shader as a development dependency. Shader remains independent of both crates.
+
 The sidebar group **Extensions** immediately precedes **Core**, using the same
 heading and link styles. `xgpui-shader` is indexed from its actual manifest and
 entrypoint, with usage code as its default crate page plus source/API/dependency
@@ -139,3 +144,22 @@ Open `http://localhost:8000/#instanced-wgsl-v2` or
 `http://localhost:8000/examples/shaders/`. These are separate from the older
 `examples/extensions/` gallery. Deploying updated sources still requires the
 normal Pages workflow; local regeneration alone does not update the public site.
+
+## To-do
+
+- [x] Update the web docs crate list with `xgpui-color`, including its standalone
+  color-math role and dependency relationships; regenerate and verify the site.
+
+
+## Color runtime diagnostics and desktop comparison
+
+The Color / Gamut browser demo is linked from the Extensions overview and color
+crate Use guide. It reports P3 source endpoints, sRGB mapping, renderer canvas
+color space (or unknown), and `(color-gamut: p3)` display capability. Native P3
+output is demonstrated by `color-lab`, with paired sRGB/P3 reference swatches and
+window negotiation status. Launch instructions and interpretation are maintained
+in `extensions/color-math.md`, `extensions/high-gamut-windows.md` and the native
+app README, with a link from the instanced WGSL guide. These are demo additions;
+no new GPUI API or crate dependencies between extension libraries are introduced.
+Rebuild the Wasm assets for runtime changes and regenerate the site for guide
+changes before previewing or publishing. The sidebar wordmark has no boxed icon.

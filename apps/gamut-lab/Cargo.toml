@@ -3,15 +3,21 @@ name = "gamut-lab"
 version = "0.1.0"
 edition = "2024"
 publish = false
+default-run = "gamut-lab"
 
 [workspace]
 
+[[bin]]
+name = "color-lab"
+path = "src/color_main.rs"
+
 [dependencies]
+xgpui-color = { path = "../../extensions/xgpui-ext/crates/xgpui-color" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 gpui = { path = "../../gpui/crates/gpui", features = ["test-support"] }
 gpui_platform = { package = "gpui-platform", path = "../../gpui/crates/gpui-platform", default-features = false, features = ["test-support", "font-kit"] }
-xgpui-gamut = { path = "../../extensions/xgpui-ext/crates/xgpui-gamut" }
+xgpui-gamut = { path = "../../extensions/xgpui-ext/crates/xgpui-gamut", features = ["instanced"] }
 xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader" }
 
 
