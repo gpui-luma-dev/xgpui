@@ -91,3 +91,11 @@ Viewport comparison validated locally on 2026-10-24: WebGPU and WebGL2, synchron
 wheel zoom and drag pan, and sharp leaf detail through 1600%. Native tests compare
 a viewport crop against a full raster (including curves, gradients, clipping and
 shadow), verify fixed output dimensions at deep zoom, and reject invalid regions.
+
+Use **Sharp SVG zoom: ON/OFF** to compare CPU rerasterization with GPU texture
+zoom. ON preserves crisp detail by rebuilding visible pixels on camera changes.
+OFF renders a base raster at 100% once, then applies synchronized zoom/pan while
+keeping the right raster count unchanged. Selecting artwork or resizing still
+rebuilds the base raster. The left bounded element/gallery retain progressive
+refinement, so this switch does not claim to disable all CPU work in the app.
+The notice and right-hand raster counter show the active mode and its cost.

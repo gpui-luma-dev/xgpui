@@ -150,7 +150,11 @@ a ten-tile gallery, and switchable 8/32 MiB shared pools. The rerasterized view
 uses `SvgSize::Viewport` to render only visible pixels at display density, keeping
 curves sharp at deep zoom. It is a demo comparison outside the bounded scheduler,
 with separate output-size and timing diagnostics. Camera/viewport changes rebuild
-its raster; ordinary redraws reuse it.
+its raster; ordinary redraws reuse it. **Sharp SVG zoom: ON/OFF** switches the
+right view between crisp CPU rerasterization and GPU texture zoom of a cached
+100% raster. With it off, zoom/pan leaves the right raster count unchanged;
+artwork selection or resize can still rebuild the base raster. The notice
+explains the speed/detail tradeoff and that the left bounded view still refines.
 Its diagnostics report element raster latency and accounted bytes, not total
 browser memory. The current non-atomic Wasm platform runs raster jobs on the
 browser thread: progressive rendering and admission limits apply, but a costly

@@ -61,6 +61,8 @@ pub struct SvgDemo {
     sharp_key: Option<ViewportKey>,
     sharp_image: Option<Arc<RenderImage>>,
     sharp_ms: f64,
+    sharp_enabled: bool,
+    sharp_rasters: usize,
     sharp_error: Option<String>,
     drag: Option<Point<Pixels>>,
     light: bool,
@@ -91,6 +93,8 @@ impl SvgDemo {
             sharp_key: None,
             sharp_image: None,
             sharp_ms: 0.,
+            sharp_enabled: true,
+            sharp_rasters: 0,
             sharp_error: None,
             drag: None,
             light: true,
@@ -114,8 +118,12 @@ impl SvgDemo {
         );
         let key = ViewportKey {
             selected: self.selected,
-            zoom: self.zoom,
-            pan: self.pan,
+            zoom: if self.sharp_enabled { self.zoom } else { 1. },
+            pan: if self.sharp_enabled {
+                self.pan
+            } else {
+                point(px(0.), px(0.))
+            },
             pixels,
             logical: bounds.size,
         };
@@ -124,13 +132,13 @@ impl SvgDemo {
             let intrinsic = self.docs[self.selected].size();
             let factor = (f32::from(bounds.size.width) / intrinsic.width)
                 .min(f32::from(bounds.size.height) / intrinsic.height)
-                * self.zoom;
+                * key.zoom;
             let view_box = Bounds::new(
                 point(
                     intrinsic.width / 2.
-                        - (f32::from(bounds.size.width) / 2. + f32::from(self.pan.x)) / factor,
+                        - (f32::from(bounds.size.width) / 2. + f32::from(key.pan.x)) / factor,
                     intrinsic.height / 2.
-                        - (f32::from(bounds.size.height) / 2. + f32::from(self.pan.y)) / factor,
+                        - (f32::from(bounds.size.height) / 2. + f32::from(key.pan.y)) / factor,
                 ),
                 size(
                     f32::from(bounds.size.width) / factor,
@@ -152,12 +160,18 @@ impl SvgDemo {
             }
             match result {
                 Ok(image) => {
+                    self.sharp_rasters += 1;
                     self.sharp_image = Some(image);
                     self.sharp_error = None;
                 }
                 Err(error) => self.sharp_error = Some(error.to_string()),
             }
-            cx.notify();
+            // Prepaint updates happen after the diagnostic labels are built.
+            // Notify after this frame so the new count/time appear immediately.
+            let entity = cx.entity().downgrade();
+            cx.defer(move |cx| {
+                let _ = entity.update(cx, |_, cx| cx.notify());
+            });
         }
         self.sharp_image.clone()
     }
@@ -199,6 +213,21 @@ impl Render for SvgDemo {
             );
         }
         zooms = zooms
+            .child(
+                button(
+                    "sharp-zoom",
+                    if self.sharp_enabled {
+                        "Sharp SVG zoom: ON"
+                    } else {
+                        "Sharp SVG zoom: OFF"
+                    },
+                    self.sharp_enabled,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.sharp_enabled = !this.sharp_enabled;
+                    cx.notify();
+                })),
+            )
             .child(
                 button("reset", "Reset", false).on_click(cx.listener(|this, _, _, cx| {
                     this.reset();
@@ -307,6 +336,9 @@ impl Render for SvgDemo {
                             })),
                     );
             } else {
+                let sharp_enabled = self.sharp_enabled;
+                let zoom = self.zoom;
+                let pan = self.pan;
                 viewport = viewport.child(
                     canvas(
                         move |bounds, window, cx| {
@@ -318,12 +350,28 @@ impl Render for SvgDemo {
                                 .ok()
                                 .flatten()
                         },
-                        |bounds, image, window, _| {
+                        move |bounds, image, window, _| {
                             if let Some(image) = image {
                                 window.with_content_mask(Some(ContentMask { bounds }), |window| {
+                                    let image_bounds = if sharp_enabled {
+                                        bounds
+                                    } else {
+                                        let image_size = size(
+                                            bounds.size.width * zoom,
+                                            bounds.size.height * zoom,
+                                        );
+                                        Bounds::new(
+                                            bounds.center() + pan
+                                                - point(
+                                                    image_size.width / 2.,
+                                                    image_size.height / 2.,
+                                                ),
+                                            image_size,
+                                        )
+                                    };
                                     if let Err(error) = window.paint_image(
-                                        bounds,
-                                        bounds,
+                                        image_bounds,
+                                        image_bounds,
                                         Corners::default(),
                                         image,
                                         0,
@@ -349,26 +397,34 @@ impl Render for SvgDemo {
                     .gap_2()
                     .child(if mode == 0 {
                         "Bounded · 2 MiB output cap"
-                    } else {
+                    } else if self.sharp_enabled {
                         "Rerasterized · viewport pixels"
+                    } else {
+                        "Texture zoom · cached SVG raster"
                     })
                     .child(viewport),
             );
         }
+        let right_mode = if self.sharp_enabled {
+            "Rerasterized"
+        } else {
+            "Texture zoom"
+        };
         let sharp_progress = if let Some(error) = &self.sharp_error {
-            format!("Rerasterized: {error}")
+            format!("{right_mode}: {error}")
         } else if let Some(image) = &self.sharp_image {
             let pixels = image.size(0);
             format!(
-                "Rerasterized: {} × {} px • {:.2} MiB output • last {:.1} ms",
+                "{right_mode}: {} × {} px • {:.2} MiB output • {} rasters • last {:.1} ms",
                 i32::from(pixels.width),
                 i32::from(pixels.height),
                 (i32::from(pixels.width) as f64 * i32::from(pixels.height) as f64 * 4.)
                     / MIB as f64,
+                self.sharp_rasters,
                 self.sharp_ms
             )
         } else {
-            "Rerasterized: waiting for layout".into()
+            format!("{right_mode}: waiting for layout")
         };
         let progress = self
             .status
@@ -413,6 +469,11 @@ impl Render for SvgDemo {
             .child("Single-threaded Wasm: scheduled raster jobs run on the browser thread and cannot be interrupted. The sharp comparison rerasterizes visible pixels outside the pool; pool accounting is not total browser memory.")
             .child(samples)
             .child(zooms)
+            .child(div().p_3().rounded_md().bg(rgb(0x273449)).child(if self.sharp_enabled {
+                "Sharp SVG zoom ON: the right view rerasterizes on zoom/pan for crisp detail. On Wasm this blocks the browser thread; deep zoom and shadows can take seconds. Turn it OFF to compare texture-only zoom speed."
+            } else {
+                "Sharp SVG zoom OFF: the right view scales a cached raster with the GPU (texture zoom), so zoom/pan adds no SVG raster work. Detail softens as you zoom. Changing artwork or resizing rebuilds the base raster once. The bounded left view may still refine."
+            }))
             .child(comparison)
             .child(sharp_progress)
             .child(format!("Zoom {:.0}% • {progress}", self.zoom * 100.))
