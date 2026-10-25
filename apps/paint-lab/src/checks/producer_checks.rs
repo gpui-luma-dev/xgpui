@@ -124,7 +124,8 @@ fn verify(renderer: &mut dyn gpui::PlatformHeadlessRenderer) -> Result<()> {
         "resize did not regenerate output"
     );
     // A later bad producer aborts preparation before any commands are submitted.
-    // Retrying the earlier cached pending output must still initialize it.
+    // Metal retains the pending command; D3D11 abandons the failed batch.
+    // Both must recover correct pixels, then cache the submitted output.
     let pending = producer([0., 0., 1., 1.]);
     let mut failed = Scene::default();
     failed.insert_primitive(draw(rect(0., 0., 48., 48.), bounds, 1., pending.clone()));
@@ -139,20 +140,31 @@ fn verify(renderer: &mut dyn gpui::PlatformHeadlessRenderer) -> Result<()> {
         renderer.render_scene_to_image(&failed, extent).is_err(),
         "invalid output was accepted"
     );
+    ensure!(
+        pending.preparations() == 1,
+        "failed frame did not prepare once"
+    );
     let mut retry = Scene::default();
     retry.insert_primitive(draw(rect(0., 0., 48., 48.), bounds, 1., pending.clone()));
     retry.finish();
+    let recovered = renderer.render_scene_to_image(&retry, extent)?;
     ensure!(
-        renderer
-            .render_scene_to_image(&retry, extent)?
-            .get_pixel(24, 24)
-            .0[2]
-            == 255,
+        recovered.get_pixel(24, 24).0[2] == 255,
         "aborted preparation poisoned cache"
     );
+    let expected_preparations = if cfg!(target_os = "macos") { 1 } else { 2 };
     ensure!(
-        pending.preparations() == 1,
-        "pending output was unnecessarily rebuilt"
+        pending.preparations() == expected_preparations,
+        "unexpected retry preparation count: {} (expected {expected_preparations})",
+        pending.preparations()
+    );
+    ensure!(
+        renderer.render_scene_to_image(&retry, extent)? == recovered,
+        "submitted retry output changed pixels"
+    );
+    ensure!(
+        pending.preparations() == expected_preparations,
+        "submitted retry output was unnecessarily rebuilt"
     );
     let mut clipped = Scene::default();
     clipped.insert_primitive(draw(
@@ -187,10 +199,13 @@ fn native_producer_pixels_replay_cache_and_failures() -> Result<()> {
 #[::core::prelude::v1::test]
 fn native_mesh_matches_cpu_and_preserves_snapshots() -> Result<()> {
     let mut renderer = gpui_platform::current_headless_renderer()?.expect("native renderer");
-    mesh_checks::verify_mesh(renderer.as_mut())
+    mesh_checks::verify_mesh(
+        renderer.as_mut(),
+        if cfg!(target_os = "macos") { 1 } else { 2 },
+    )
 }
 #[cfg(feature = "wgpu")]
 #[::core::prelude::v1::test]
 fn wgpu_mesh_matches_cpu_and_preserves_snapshots() -> Result<()> {
-    mesh_checks::verify_mesh(&mut gpui_wgpu::WgpuHeadlessRenderer::new()?)
+    mesh_checks::verify_mesh(&mut gpui_wgpu::WgpuHeadlessRenderer::new()?, 2)
 }
