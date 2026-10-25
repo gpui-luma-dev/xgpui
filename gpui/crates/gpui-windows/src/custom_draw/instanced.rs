@@ -6,6 +6,7 @@ use std::{collections::HashMap, ops::Range};
 struct Pipeline {
     shader: CompositorPipeline,
     layout: ID3D11InputLayout,
+    wide: bool,
 }
 impl Pipeline {
     fn new(device: &ID3D11Device, program: &SceneShaderProgram) -> Result<Self> {
@@ -29,6 +30,7 @@ impl Pipeline {
         Ok(Self {
             shader: CompositorPipeline::new(device, source, vertex, fragment)?,
             layout: layout.context("shader input layout")?,
+            wide: program.output_encoding() == gpui::ShaderOutputEncoding::LinearDisplayP3,
         })
     }
 }
@@ -39,6 +41,7 @@ pub(crate) struct ShaderRenderer {
     capacity: usize,
     globals: ID3D11Buffer,
     blend: ID3D11BlendState,
+    wide_blend: ID3D11BlendState,
     deferred: ID3D11DeviceContext,
 }
 impl ShaderRenderer {
@@ -59,12 +62,18 @@ impl ShaderRenderer {
             device.CreateBlendState(&desc, Some(&mut blend))?;
             device.CreateDeferredContext(0, Some(&mut deferred))?;
         }
+        desc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+        let mut wide_blend = None;
+        unsafe {
+            device.CreateBlendState(&desc, Some(&mut wide_blend))?;
+        }
         Ok(Self {
             pipelines: HashMap::new(),
             instances: instance_buffer(device, 176)?,
             capacity: 176,
             globals: dynamic_uniform_buffer(device)?,
             blend: blend.context("shader blend")?,
+            wide_blend: wide_blend.context("wide shader blend")?,
             deferred: deferred.context("shader context")?,
         })
     }
@@ -135,7 +144,12 @@ impl ShaderRenderer {
         let pipeline = &self.pipelines[&program];
         let dc = &self.deferred;
         pipeline.shader.bind(dc);
-        let globals = [extent.width.0 as f32, extent.height.0 as f32, 0., 0.];
+        let globals = [
+            (extent.width.0 as f32).to_bits(),
+            (extent.height.0 as f32).to_bits(),
+            u32::from(pipeline.wide),
+            u32::from(pipeline.wide),
+        ];
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
         unsafe {
             dc.Map(
@@ -149,7 +163,15 @@ impl ShaderRenderer {
             dc.Unmap(&self.globals, 0);
             dc.OMSetRenderTargets(Some(&[Some(target.clone())]), None);
             dc.RSSetViewports(Some(&[viewport(extent)]));
-            dc.OMSetBlendState(&self.blend, None, u32::MAX);
+            dc.OMSetBlendState(
+                if pipeline.wide {
+                    &self.wide_blend
+                } else {
+                    &self.blend
+                },
+                None,
+                u32::MAX,
+            );
             dc.IASetInputLayout(&pipeline.layout);
             dc.IASetVertexBuffers(
                 0,

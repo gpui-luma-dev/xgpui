@@ -1,0 +1,15 @@
+[package]
+name = "xgpui-color"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+
+[dev-dependencies]
+naga = { version = "30.0.1", features = ["wgsl-in", "msl-out", "hlsl-out", "spv-out"] }
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+metal = "0.33"

@@ -6,7 +6,14 @@ publish = false
 
 [workspace]
 
+[features]
+default = []
+instanced = ["dep:xgpui-shader", "dep:bytemuck"]
+
 [dependencies]
+xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"], optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+xgpui-color = { path = "../xgpui-color" }
 anyhow = "1"
 gpui = { path = "../../../../gpui/crates/gpui" }
 
@@ -20,3 +27,9 @@ gpui-windows = { path = "../../../../gpui/crates/gpui-windows" }
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui-apple = { path = "../../../../gpui/crates/gpui-apple", features = ["test-support"] }
 parking_lot = "0.12"
+
+[dev-dependencies]
+xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"] }
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+gpui-windows = { path = "../../../../gpui/crates/gpui-windows", features = ["test-support"] }

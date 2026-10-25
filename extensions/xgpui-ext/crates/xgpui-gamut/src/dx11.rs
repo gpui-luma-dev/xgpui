@@ -11,6 +11,8 @@ impl WideColor {
             .downcast_ref::<Dx11CustomContext>()
             .ok_or_else(|| anyhow::anyhow!("WideColor requires native D3D11"))?;
         let output = context.create_wide_sdr_output(extent)?;
+        #[cfg(test)]
+        super::PRODUCER_ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let [r, g, b, a] = self.rgba;
         context.record_wide_sdr(&output, |deferred, target| {
             unsafe {

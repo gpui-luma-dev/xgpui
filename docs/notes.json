@@ -211,7 +211,7 @@
     "short": "xgpui-shader",
     "group": "Extensions",
     "role": "Opt-in gradients, mesh paints and portable WGSL through existing GPUI paint sites.",
-    "surface": "painted(), Paint, WindowPaintExt, SolidColor, Gradient, MeshGradient and portable shader producers. Colors retain sRGB semantics.",
+    "surface": "painted(), Paint, WindowPaintExt, SolidColor, Gradient, MeshGradient and portable shader producers. Ordinary programs retain sRGB semantics; new_linear_p3 opts into native wide-SDR output.",
     "review": "Keep effects and caching in the extension; preserve the small GPUI recording/preparation contract. Wide-gamut presentation is a separate backend capability.",
     "entry": "src/lib.rs"
   },
@@ -219,7 +219,7 @@
     "short": "xgpui-gamut",
     "group": "Extensions",
     "role": "Explicit linear-P3 SDR content producers; normal GPUI controls retain sRGB semantics.",
-    "surface": "WideColor::linear_p3 implements existing CustomContent; native Metal and typed D3D11 preparation. Window negotiation and compositing stay in GPUI backends.",
+    "surface": "WideColor::linear_p3 supports CustomContent; optional instanced WidePainter/WideGradient use explicit P3 shaders. Shared color math lives in xgpui-color; GPUI backends own presentation.",
     "review": "Keep profile decoding and future content producers separate from host presentation. Windows native swap-chain/display validation remains outstanding; Linux is deferred.",
     "entry": "src/lib.rs"
   },
@@ -237,6 +237,14 @@
     "role": "Experimental full-color progressive SVG elements with optional shared raster scheduling and aggregate image accounting.",
     "surface": "SvgDocument, SvgImage/svg_image, RasterPolicy and SvgScheduler. Stable IDs retain progressive jobs; shared pools cap admitted jobs and accounted image costs.",
     "review": "Preserve stale-result rejection, atlas cleanup and reservation lifetimes. Accounting is not a hard process/GPU memory limit; viewport tiling and broader hardware validation remain follow-ups.",
+    "entry": "src/lib.rs"
+  },
+  "xgpui-color": {
+    "short": "xgpui-color",
+    "group": "Extensions",
+    "role": "Standalone CPU color science and reusable WGSL math, with zero runtime dependencies.",
+    "surface": "EncodedRgb, LinearRgb, RgbSpace, XyzD65, Oklab, Oklch, GamutMapping, LinearRgba, LinearGradient and WGSL_COLOR_MATH. No GPUI or GPU context required.",
+    "review": "Keep conversion separate from gamut mapping and rendering. Preserve finite extended values, explicit alpha/hue rules and CPU/GPU reference tolerances.",
     "entry": "src/lib.rs"
   }
 }

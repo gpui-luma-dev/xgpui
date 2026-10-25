@@ -1,6 +1,6 @@
 # WebAssembly demo index and extension examples
 
-A standalone Wasm app for `xgpui-shader`, `xgpui-parley`, and `xgpui-svg`. All use the existing
+A standalone Wasm app for `xgpui-shader`, `xgpui-parley`, `xgpui-svg`, and `xgpui-color`. All use the existing
 GPUI web platform and wgpu renderer. The gallery offers automatic selection
 (WebGPU with WebGL2 fallback), forced WebGPU, and forced WebGL2. A forced backend
 fails explicitly if unavailable; check the browser console for adapter details.
@@ -113,3 +113,19 @@ each panel's renderer while preserving panel dimensions and the shared camera.
 An off panel performs no new raster work; switching off the comparison also
 releases its cached raster. Re-enabling a panel renders the current camera.
 Unmount the separate gallery as well when comparing a single renderer's cost.
+
+
+## Color / Gamut demo
+
+Open `?demo=color` (or force `&backend=webgpu` / `&backend=webgl`). Four rows compare
+encoded sRGB, linear RGB, OkLab and shorter-hue OkLCh interpolation from the same
+Display P3 endpoints. Cycle three endpoint presets, toggle clipping/chroma
+reduction, and change ending alpha. Amber strips mark out-of-sRGB samples before
+mapping. The app uses `xgpui-color` directly; it does not depend on native gamut
+producers. Output is a mapped sRGB preview, with 32 CPU samples per row displayed
+through ordinary shader paints. This does not establish physical P3 presentation.
+
+
+Run `bash apps/extensions-web/check-color.sh` for the CPU preview-sampler tests.
+The script compiles the dependency-free color core and sampler directly with
+rustc, avoiding the browser platform dependencies for native test execution.

@@ -406,6 +406,9 @@ impl DirectXRenderer {
         scene: &Scene,
         background_appearance: WindowBackgroundAppearance,
     ) -> Result<()> {
+        anyhow::ensure!(self.wide_sdr.is_some() || scene.shader_draws.iter().all(|d|
+            d.program.output_encoding() == gpui::ShaderOutputEncoding::EncodedSrgb),
+            "linear P3 shaders require WideGamutSdr");
         if let Some(wide) = self.wide_sdr.as_mut() {
             wide.resize(
                 &self.devices.as_ref().context("devices missing")?.device,
@@ -2384,6 +2387,11 @@ mod dxgi {
 pub struct Dx11HeadlessRenderer(DirectXRenderer);
 #[cfg(any(test, feature = "test-support"))]
 impl Dx11HeadlessRenderer {
+    /// Configure native wide-SDR composition for offscreen validation.
+    pub fn set_color_mode(&mut self, mode: WindowColorMode) -> Result<gpui::WindowColorStatus> {
+        self.0
+            .set_color_mode(mode, WindowBackgroundAppearance::Opaque)
+    }
     pub fn new() -> Result<Self> {
         let (mut device, mut immediate) = (None, None);
         unsafe {

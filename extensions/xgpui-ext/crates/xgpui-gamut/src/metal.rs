@@ -18,6 +18,8 @@ impl WideColor {
         d.set_usage(MTLTextureUsage::ShaderRead | MTLTextureUsage::RenderTarget);
         d.set_storage_mode(MTLStorageMode::Private);
         let texture = context.device.new_texture(&d);
+        #[cfg(test)]
+        super::PRODUCER_ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let command = context.queue.new_command_buffer();
         let pass = RenderPassDescriptor::new();
         let c = pass.color_attachments().object_at(0).unwrap();

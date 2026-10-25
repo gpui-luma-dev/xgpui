@@ -71,8 +71,12 @@ jobs:
         run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib directx_renderer::wide_sdr -- --nocapture
       - name: Test presentation policy and transition isolation
         run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib directx_renderer::color_presentation -- --nocapture
+      - name: Test standalone color math and shader translation
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-color/Cargo.toml
       - name: Test independent gamut producers
         run: cargo test --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-gamut/Cargo.toml
+      - name: Test optional wide fill and gradient adapters
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-gamut/Cargo.toml --features instanced
       - name: Test native paints and mesh parity against wgpu
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders -- --nocapture
       - name: Render native mesh sample

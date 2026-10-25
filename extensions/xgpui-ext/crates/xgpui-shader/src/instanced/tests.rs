@@ -204,3 +204,37 @@ fn scalar_after_vec3_uses_reflected_offset_without_rust_alignment_casts() {
         [0.1, 0.2, 0.3, 0.4]
     );
 }
+
+#[test]
+fn explicit_encoding_is_immutable_and_defaults_to_srgb() {
+    let ordinary = program();
+    let wide = ShaderProgram::<EffectInstance>::new_linear_p3(ROUNDED_BOX).unwrap();
+    assert_eq!(
+        ordinary.program.output_encoding(),
+        ShaderOutputEncoding::EncodedSrgb
+    );
+    assert_eq!(
+        wide.program.output_encoding(),
+        ShaderOutputEncoding::LinearDisplayP3
+    );
+    assert_ne!(ordinary.id(), wide.id());
+    assert_eq!(wide.clone().id(), wide.id());
+    assert!(wide.program.wgsl().contains("if host.pad != 0u"));
+    assert!(!ordinary.program.wgsl().contains("if host.pad != 0u"));
+}
+
+#[cfg(feature = "wgpu")]
+#[test]
+fn wgpu_rejects_wide_encoding() {
+    use gpui::{DevicePixels, PlatformHeadlessRenderer};
+    let wide = ShaderProgram::<EffectInstance>::new_linear_p3(ROUNDED_BOX).unwrap();
+    let mut scene = Scene::default();
+    scene.insert_primitive(Primitive::Shader(draw(&wide, 4., [1.; 4])));
+    scene.finish();
+    let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new().unwrap();
+    assert!(
+        renderer
+            .render_scene_to_image(&scene, size(DevicePixels(64), DevicePixels(32)))
+            .is_err()
+    );
+}

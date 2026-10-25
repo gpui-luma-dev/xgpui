@@ -255,6 +255,26 @@ impl Compositor {
                 }
                 continue;
             }
+            if let PrimitiveBatch::Shaders {
+                program_id,
+                ref range,
+            } = batch
+            {
+                if scene.shader_draws[range.start].program.output_encoding()
+                    == gpui::ShaderOutputEncoding::LinearDisplayP3
+                {
+                    self.flush(command, &mut ui, viewport);
+                    let e = new_command_encoder_for_texture(
+                        command,
+                        self.target.as_ref().unwrap(),
+                        viewport,
+                        None,
+                    );
+                    renderer.draw_shaders(program_id, range.clone(), bindings, viewport, e);
+                    e.end_encoding();
+                    continue;
+                }
+            }
             let mut e = *ui.get_or_insert_with(|| {
                 new_command_encoder_for_texture(
                     command,

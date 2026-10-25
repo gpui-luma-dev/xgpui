@@ -27,8 +27,9 @@ opt-in SDR API, not the complete unrestricted shader system proposed in the RFC.
 | Browser WebGPU and WebGL2 | Implemented; local Chromium smoke checks passed |
 | Rounded-box, pulse-glow and soft particle presets | Implemented |
 | Local native demo and shared WASM companion | Implemented; same Rust example views and shader sources |
+| Explicit linear-P3 shader output and optional gamut fills/gradients (#25) | Implemented; Metal reference checks passed, Windows cross-compiled |
 
-The shader crate's 23 tests passed, including Metal/wgpu pixel checks, ABI and
+The shader regression suite passed, including Metal/wgpu pixel checks, ABI and
 invalid-input rejection, native/shader ordering, replay, and a 5,000-instance
 single-run case. Native app launch and controls were checked on macOS. The
 optimized browser particle demo showed roughly 16.7 ms redraw intervals at
@@ -264,3 +265,127 @@ pixel test exercises multiple instances, clipping, opacity and interleaved nativ
 geometry. Shader translation and cross-compilation do not establish D3D11 runtime
 correctness. Redraw intervals in the demo include scheduling and are not GPU
 execution timings; use platform GPU captures for draw-count/timing acceptance.
+
+## Explicit wide-SDR output
+
+`ShaderProgram::new` retains straight-alpha encoded-sRGB SDR semantics.
+`ShaderProgram::new_linear_p3` instead declares bounded straight-alpha linear
+Display P3/D65 producer output. Both wrappers clamp producer RGBA to [0,1]; use
+explicit gamut mapping inside the producer when clipping is unsuitable.
+
+Enable `WindowColorMode::WideGamutSdr` outside painting before recording a wide
+program. `paint_custom_shader` rejects a wide program in an ordinary window;
+renderers also reject unsupported scenes before preparation/submission. wgpu
+and non-macOS Apple rendering currently reject wide programs explicitly.
+
+The generated wrapper applies inherited opacity and associates RGB once. On
+Metal, wide instances draw into the linear-P3 Float16 composition target with
+premultiplied blending. On D3D11, the host selects conversion from linear P3 to
+linear scRGB before association; negative and above-one scRGB survive because
+producer clamping happens before that conversion. No per-instance offscreen
+producer texture is allocated. Legacy UI runs still require conversion, and
+presentation still has its existing overhead.
+
+Output meaning lives in immutable `SceneShaderProgram` metadata. Unique program
+IDs include that choice by construction; cached Metal pipelines therefore keep
+compatible pixel formats and blend state across mode changes. Wide instances
+batch by program identity within scene ordering rules. The compositor flushes
+pending legacy UI before a wide shader run and resumes legacy composition in
+order afterward. Clip bounds, per-instance opacity and paint replay retain
+existing behavior. Analytical shape coverage remains the shader's responsibility.
+
+The gamut-owned native regression (`xgpui-gamut/tests/instanced_output.rs`) compares instanced P3 fills against typed `WideColor`
+producers with translucent overlapping fills, ordinary shaders, native controls,
+clipping, resize, replay and mode changes. It executes on Metal locally; the
+same test is wired into the Windows WARP workflow. Windows cross-compilation
+alone does not validate native HLSL execution or physical display fidelity.
+
+
+Color conversion, mapping and interpolation math live independently in
+[`xgpui-color`](color-math.md).
+`xgpui-shader` has no runtime or development dependency on gamut or color.
+Cross-extension comparisons belong to gamut's development tests. Its existing
+producer has no default runtime shader dependency; the `instanced` feature adds
+optional wide fill/gradient adapters.
+
+For low-level scene adapters, `ShaderProgram::scene_program()` returns an `Arc`
+to its immutable compiled `SceneShaderProgram`. Raw `ShaderDraw` parameter slots
+must obey the program's validated instance ABI; ordinary applications should
+continue using `WindowShaderExt::paint_custom_shader` for validated packing.
+
+
+## Reusable wide fills and gradients
+
+Enable `xgpui-gamut`'s optional `instanced` feature. `WidePainter` compiles a shared
+program once and paints bounded `WideColor` solids or `WideGradient` two-stop
+linear gradients. No new dependency is added to `xgpui-shader`.
+
+```rust
+use xgpui_gamut::{color::*, instanced::{WideGradient, WidePainter}};
+
+let painter = WidePainter::new()?;
+let red = LinearRgba::new(LinearRgb::new(RgbSpace::DisplayP3, [1., 0., 0.])?, 1.)?;
+let blue = LinearRgba::new(LinearRgb::new(RgbSpace::DisplayP3, [0., 0., 1.])?, 0.5)?;
+let gradient = WideGradient::linear(
+    [0., 0.], [1., 0.], [red, blue],
+    ColorInterpolation::Oklab, GamutMapping::ReduceChroma,
+)?;
+// During a canvas/element paint callback in an enabled WideGamutSdr window:
+painter.paint_gradient(window, bounds, gpui::px(16.), &gradient)?;
+```
+
+Start/end coordinates are normalized to fill bounds. Radius is a uniform logical
+pixel value clamped to half the shorter dimension. Host clipping/opacity and
+analytic antialiasing combine once. Gamut mapping follows interpolation before
+coverage/output association. Gradient uploads are bounded to finite magnitudes
+<=65504, including the precomputed axis projection coefficients. Unrepresentable
+or extremely short axes return errors; coincident endpoints select the second stop.
+The shared 80-byte parameter ABI fits the existing 128-byte transport.
+
+The native gradient reference test covers six interpolation/hue choices, both
+mapping policies, endpoint extension, degenerate axes, rounded coverage, masks and
+opacity against CPU-derived expected pixels. A scene test verifies 5,000 instances
+form one ordered shader run with no custom producer draws.
+
+Run `gamut-lab --instanced` for solids, or `gamut-lab --instanced --gradient` for
+OkLab gradients. Omit the flags to compare the existing offscreen producer path.
+`--sdr` retains the solid sRGB baseline. Captures are clipped sRGB previews.
+
+A manual allocation/timing test is available:
+
+```sh
+cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-gamut/Cargo.toml --features instanced --lib compare_producer_allocations_and_frame_readback -- --ignored --nocapture --test-threads=1
+```
+
+This test counts actual producer texture allocations, warms the renderer, and
+reports three-frame averages at 512×512 for 1 and 16 8×8 solid fills on both
+paths, plus 1,000 instanced fills. The larger legacy preparation run stalled on
+this Metal host, so the baseline is capped rather than assigned a timing.
+Producer pass/fill draw counts follow the recorded path; timing includes CPU
+encoding, GPU completion and readback, not isolated GPU timestamps. Run it alone
+so the test-only allocation counter is scoped. Physical display measurements and
+native Windows execution remain separate acceptance work.
+
+
+Local debug measurement on Apple M4 Max, 512×512 target, three measured frames
+after warmup (milliseconds include encode, completion and readback):
+
+| Fills | Path | Producer textures/frame | Fill draws/frame | Mean frame ms |
+| --- | --- | --- | --- | --- |
+| 1 | Offscreen | 1 | 1 | 11.531 |
+| 1 | Instanced | 0 | 1 | 11.359 |
+| 16 | Offscreen | 16 | 16 | 11.997 |
+| 16 | Instanced | 0 | 1 | 11.326 |
+| 1,000 | Instanced | 0 | 1 | 11.948 |
+
+The allocation/draw reduction is directly exercised. Readback dominates these
+small frames; this sample does not establish isolated GPU speed or a frame-rate
+guarantee. The legacy 100-fill run stalled during preparation and was stopped. The
+renderer creates its Metal queue with the default capacity of 64 outstanding
+command buffers. Each legacy WideColor preparation records one uncommitted
+buffer, while the host submits only after all producers are prepared; allocation
+of the next buffer can block before submission is reached. See
+[Apple's queue capacity contract](https://developer.apple.com/documentation/metal/mtldevice/makecommandqueue%28%29?changes=_11&language=objc).
+The instanced path records no per-producer buffers and avoids this cycle.
+Changing legacy preparation/submission semantics is deferred; no timing is
+inferred for the stalled case.

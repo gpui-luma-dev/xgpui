@@ -42,6 +42,11 @@
     <p>Full-color curves, gradients, clipping and shadows. Compare synchronized bounded and viewport-rerasterized views: zoom and drag artwork, switch attributed samples, and mount a gallery sharing one bounded rendering pool. Single-threaded Wasm: individual CPU raster jobs still run on the browser thread.</p>
     <nav><a href="?demo=svg">Automatic backend</a><a href="?demo=svg&backend=webgpu">WebGPU</a><a href="?demo=svg&backend=webgl">WebGL2</a><a href="svg-attribution.html">Artwork attribution</a></nav>
   </article>
+  <article>
+    <h3>Color / Gamut</h3>
+    <p>Compare encoded sRGB, linear RGB, OkLab and OkLCh gradients. Switch P3 endpoints, clipping/chroma reduction and alpha. Amber strips mark out-of-sRGB samples; output is an explicitly mapped sRGB preview.</p>
+    <nav><a href="?demo=color">Automatic backend</a><a href="?demo=color&backend=webgpu">WebGPU</a><a href="?demo=color&backend=webgl">WebGL2</a></nav>
+  </article>
   <h2>GPUI source-gallery demos</h2>
   <p>These examples are not published on this site. Links open their source in GitHub. The <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/gpui/crates/gpui-web/examples/hello_web">standalone gallery source</a> contains the local build configuration.</p>
   <ul id="source-demos">
@@ -60,7 +65,7 @@
     <li><a data-wasm-module="queue_test" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-web/examples/hello_web/queue_test.rs">Worker queue stress tests</a> — shared priority queues and real worker contention.</li>
     <li><a data-wasm-module="http_client_test" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-web/examples/hello_web/http_client_test.rs">Fetch worker tests</a> — streamed response-body contention across workers.</li>
   </ul>
-  <p>Gamut is deferred: the extension currently requires native Metal or D3D11 wide-gamut presentation.</p>
+  <p>The Color / Gamut demo uses standalone xgpui-color math. Native wide-gamut presentation still requires Metal or D3D11.</p>
 </main>
 <nav id="back" hidden><a href="svg-attribution.html">Artwork credits</a><a href="?">All examples</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></nav>
 <aside id="revision" aria-label="Loaded build">
@@ -92,7 +97,7 @@
     status.hidden = false;
     status.textContent = "Loading extension demo…";
     try {
-      if (!["shader", "parley", "svg"].includes(demo)) throw new Error(`Unknown demo: ${demo}`);
+      if (!["shader", "parley", "svg", "color"].includes(demo)) throw new Error(`Unknown demo: ${demo}`);
       const jsUrl = new URL("./extensions_web.js", location.href);
       const wasmUrl = new URL("./extensions_web_bg.wasm", location.href);
       jsUrl.searchParams.set("rev", pageRevision);
@@ -108,7 +113,7 @@
       }
       window.wasmBindings = bindings;
       status.hidden = true;
-      document.title = `${demo === "shader" ? "Shader paints" : demo === "svg" ? "Progressive SVG" : "Parley paragraphs"} · xgpui`;
+      document.title = `${demo === "shader" ? "Shader paints" : demo === "svg" ? "Progressive SVG" : demo === "color" ? "Color / Gamut" : "Parley paragraphs"} · xgpui`;
     } catch (error) { showError(error); }
   }
 </script>

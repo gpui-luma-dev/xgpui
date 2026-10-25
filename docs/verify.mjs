@@ -88,7 +88,7 @@ const index = await readFile(new URL('index.html', site), 'utf8');
 assert.ok(!index.includes('#method'));
 assert.ok(index.includes('href="examples/extensions/"'));
 assert.ok(index.includes('href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>'));
-for (const demo of ['shader', 'parley', 'svg']) {
+for (const demo of ['shader', 'parley', 'svg', 'color']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web'));
@@ -107,7 +107,7 @@ const listedModules = [...wasmIndex.matchAll(/data-wasm-module="([^"]+)"/g)].map
 const legacyModules = [...legacyManifest.matchAll(/\[\[bin\]\]\s+name = "([^"]+)"/g)].map(m => m[1]);
 assert.deepEqual(listedModules.slice().sort(), legacyModules.sort(), 'every legacy Wasm binary needs an index entry');
 for (const [, module] of legacyGallery.matchAll(/data-module="([^"]+)"/g)) assert.ok(listedModules.includes(module), module);
-for (const demo of ['shader', 'parley', 'svg']) {
+for (const demo of ['shader', 'parley', 'svg', 'color']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="?demo=' + demo + suffix + '"'), demo + suffix);
   }
@@ -212,7 +212,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 11);
+assert.equal(Object.keys(data.extension_documents).length, 12);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/xgpui-ext/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -306,7 +306,10 @@ assert.match(element('content').innerHTML, /Native sample and validation/);
 assert.match(element('content').innerHTML, /API inventory/);
 const gamutCrate = data.crates.find(c => c.package === 'xgpui-gamut');
 const shaderCrate = data.crates.find(c => c.package === 'xgpui-shader');
-assert.ok(!gamutCrate.dependencies.some(d => d.package === 'xgpui-shader'));
+assert.ok(!gamutCrate.dependencies.some(d => d.package === 'xgpui-shader' && d.kind !== 'dev' && !d.optional));
+assert.ok(gamutCrate.dependencies.some(d => d.package === 'xgpui-color' && d.kind === 'normal'));
+assert.ok(gamutCrate.dependencies.some(d => d.package === 'xgpui-shader' && d.kind === 'normal' && d.optional));
+assert.ok(gamutCrate.features.instanced.includes('dep:xgpui-shader'));
 assert.ok(!shaderCrate.dependencies.some(d => d.package === 'xgpui-gamut'));
 console.log('Verified extension crate navigation, individual code-first guides, filtering and source links.');
 
@@ -320,7 +323,7 @@ const extensionApiGuides = {
   'xgpui-parley': ['parley-text', 'added-text-backend-and-paragraph-seams'],
   'xgpui-svg': ['svg-rendering', 'added-svg-viewport-size'],
 };
-assert.deepEqual(Object.keys(extensionApiGuides).sort(), Object.keys(data.extension_packages).sort(), 'every extension needs an API compatibility guide');
+assert.deepEqual(Object.keys(extensionApiGuides).sort(), Object.keys(data.extension_packages).filter(p => p !== 'xgpui-color').sort(), 'every rendering extension needs an API compatibility guide');
 for (const [pkg, [route, section]] of Object.entries(extensionApiGuides)) {
   const guide = data.extension_documents[route].html;
   assert.ok(guide.includes('id="gpui-public-api-changes-additions-and-compatibility"'), pkg);
@@ -358,3 +361,25 @@ assert.ok(pagesWorkflow.includes('bash apps/shader-examples/build.sh --release')
 const shaderBuild = await readFile(new URL('../apps/shader-examples/build.sh', import.meta.url), 'utf8');
 assert.ok(shaderBuild.includes('docs/examples/shaders/'));
 console.log('Verified instanced WGSL guide, native-first launch, companion links and Pages packaging.');
+
+// The standalone color crate must have its own guide and no rendering dependencies.
+const colorCrate = data.crates.find(c => c.package === 'xgpui-color');
+assert.equal(data.extension_packages['xgpui-color'], 'extensions/xgpui-ext/crates/xgpui-color');
+assert.ok(!data.provenance.packages['xgpui-color']);
+assert.equal(colorCrate.dependencies.length, 0);
+assert.ok(!shaderCrate.dependencies.some(d => ['xgpui-color', 'xgpui-gamut'].includes(d.package)));
+assert.match(run('cratePage(crates.find(c => c.package === "xgpui-color"), "overview")'), /EncodedRgb/);
+assert.match(run('extensionPage("extensions")'), /href="#color-math"/);
+context.location.hash = '#color-math';
+run('render()');
+assert.match(element('content').innerHTML, /zero runtime dependencies/);
+assert.match(element('crate-list').innerHTML, /aria-current="page" href="#crate=xgpui-color/);
+context.location.hash = '#crate=xgpui-color&tab=overview';
+run('render()');
+assert.match(element('content').innerHTML, /GPUI API compatibility/);
+run('sidebar("standalone")');
+assert.match(element('crate-list').innerHTML, />Extensions<.*xgpui-color/s);
+console.log('Verified standalone color crate navigation, guide and dependency boundaries.');
+
+assert.match(run('cratePage(crates.find(c => c.package === "xgpui-color"), "overview")'), /examples\/extensions\/\?demo=color/);
+assert.match(wasmIndex, /Color \/ Gamut/);

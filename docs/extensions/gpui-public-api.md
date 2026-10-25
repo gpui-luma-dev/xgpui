@@ -347,3 +347,17 @@ and enum matches must accommodate these additions. Ordinary styled elements
 retain their existing call sites. Programs and backend pipeline ownership are
 separate: the extension validates/translates sources, and each host renderer
 creates pipelines on its own device.
+
+### Explicit instanced shader output encoding
+
+`ShaderOutputEncoding` is a new non-exhaustive enum with `EncodedSrgb` and
+`LinearDisplayP3`. `SceneShaderProgram::new` retains its signature and sRGB
+behavior; additive `new_with_output_encoding` and `output_encoding` methods
+allow extension compilers to declare immutable output meaning. Its fields remain
+private. A wide program's generated wrapper must follow the host color/alpha
+contract; metadata alone does not transform arbitrary user shader source.
+
+`MetalHeadlessRenderer::set_color_mode` (macOS) and
+`Dx11HeadlessRenderer::set_color_mode` are additive test-support APIs for native
+offscreen validation. Window APIs and existing scene/primitive layouts are
+unchanged by this addition.

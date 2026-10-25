@@ -45,9 +45,12 @@ painted().w(px(320.0)).h(px(240.0))
     .child(div().p_4().child("Normal sRGB controls"));
 ```
 
-The crates are independent: `xgpui-gamut` produces explicit P3 content;
-`xgpui-shader` supplies optional `painted()` ergonomics here. Neither depends on
-the other. `WideColor` allocates on preparation; pooling/caching is deferred.
+The default `xgpui-gamut` producer is usable without `xgpui-shader`;
+`xgpui-shader` supplies optional `painted()` ergonomics here. Enabling gamut's
+`instanced` feature adds a shader dependency for `WidePainter`/`WideGradient`.
+Shared CPU math lives in the standalone `xgpui-color` crate. `WideColor` retains
+its texture preparation path; instanced fills avoid producer textures/passes.
+See [wide fills and gradients](instanced-wgsl-v2.md#reusable-wide-fills-and-gradients).
 
 | Capability | Owner | Status |
 | --- | --- | --- |
@@ -242,6 +245,8 @@ method names can still collide with downstream extension methods.
 
 ```sh
 just --justfile apps/gamut-lab/justfile ui
+just --justfile apps/gamut-lab/justfile ui --instanced
+just --justfile apps/gamut-lab/justfile ui --instanced --gradient
 just --justfile apps/gamut-lab/justfile baseline
 just --justfile apps/gamut-lab/justfile headless --frames 60
 just --justfile apps/gamut-lab/justfile capture

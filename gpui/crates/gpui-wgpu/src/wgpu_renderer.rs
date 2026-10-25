@@ -1545,6 +1545,13 @@ impl WgpuRendererCore {
             self.max_texture_size
         );
 
+        anyhow::ensure!(
+            scene
+                .shader_draws
+                .iter()
+                .all(|d| d.program.output_encoding() == gpui::ShaderOutputEncoding::EncodedSrgb),
+            "linear P3 shaders require a native wide-SDR compositor"
+        );
         let custom_draws = self.prepare_custom_draws(scene, size)?;
         if !scene.shader_draws.is_empty() && self.shaders.premultiplied != premultiplied_alpha {
             self.shaders.pipelines.clear();

@@ -1,8 +1,10 @@
 # xgpui-ext
 
-Independent, opt-in GPUI extension crates. Extensions depend on GPUI; GPUI core
+Independently usable, opt-in extension crates. Rendering extensions depend on
+GPUI; the shared `xgpui-color` math crate has no runtime dependencies. GPUI core
 never depends on extension crates. Keep renderer integration and API changes small.
 
+- [`xgpui-color`](crates/xgpui-color/README.md): CPU color conversions, gamut mapping, gradient math and reusable WGSL, usable without GPUI.
 - [`xgpui-shader`](crates/xgpui-shader/README.md): mesh, gradients and portable shaders.
 - [Paint integration](../../docs/extensions/extension-paints.md) · [GPUI API changes](../../docs/extensions/gpui-public-api.md)
 - [Producer reference](../../docs/extensions/shader-producers.md) · [preparation and recording](../../docs/extensions/paint-contract-hardening.md)
