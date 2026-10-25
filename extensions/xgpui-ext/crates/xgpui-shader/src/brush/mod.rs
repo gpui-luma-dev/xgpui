@@ -2,7 +2,8 @@
 //! Colors interpolate in premultiplied encoded sRGB; the host associates alpha
 //! after analytic coverage and inherited opacity. No intermediate color or
 //! geometry-mask texture is allocated for analytic fills; text reuses the glyph
-//! atlas, while paths reuse the existing native path coverage target/pass.
+//! atlas. Certified polygon paths use direct main-pass coverage; unsupported
+//! geometry falls back to the existing native path coverage target/pass.
 use crate::instanced::{InstanceField, ShaderInstance, ShaderProgram, WindowShaderExt};
 use anyhow::{Result, ensure};
 use gpui::{BorderStyle, Bounds, Corners, PaintQuad, Pixels, Window};

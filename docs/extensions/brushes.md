@@ -583,7 +583,8 @@ inside a captured group currently returns an explicit error: its relationship
 to the external backdrop needs a separate sampling contract.
 
 Limits are **four groups total per frame**, including nested groups; a maximum
-**1024×1024 device-pixel rectangle per group** after clipping; and at most
+**1024×1024 device-pixel source rectangle per group**, including the sampling
+halo and bounded by the viewport; and at most
 65,536 retained descendant command identities per group. Each group retains two
 full-resolution RGBA8 textures, at most 8 MiB, plus two optional blur textures
 only while its radius is positive. Four groups retain at most 32 MiB without
@@ -1007,6 +1008,35 @@ cargo test --locked --config .cargo/validation.toml \
   --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib subtree_blur
 ```
+
+## Issue #22 completion review
+
+All five roadmap phases have bounded implementations in the existing
+`xgpui-shader` crate, using explicit `Painted` receivers rather than adding
+brush setters to every core GPUI element.
+
+| RFC phase | Implemented behavior | Deliberate limits |
+| --- | --- | --- |
+| 1. Universal brushes | Solid, linear and radial backgrounds and borders in the main pass | SDR; up to three stops; solid-style borders |
+| 2. Noise and dithering | Simplex, Worley F1/F2, blue-noise ranked dithering; all seven brush blend modes | Bounded octave counts and fixed procedural dither pattern |
+| 3. Glyph masks | `text_brush` evaluates color through the existing monochrome glyph atlas in the main pass | Color emoji retain native rendering; colored text uses coverage rather than native subpixel color blending |
+| 4. Freeform and mesh | IDW freeform fields; instanced Hermite patches with per-point U/V tangent controls | Up to 16 freeform points and 3×3 mesh grids; certified distortion; biharmonic diffusion deferred |
+| 5. Layer effects | Explicit cached backdrop blur; subtree blur, opacity, color filters and destination blending; adaptive filter buffers | Four groups and four backdrops per frame; 1024-device-pixel source sides; viewport-bounded sampling; backdrop inside a captured group rejected |
+
+Path brushes also have certified direct polygon coverage with no intermediate
+mask pass. Arbitrary analytic paths and geometry beyond the documented bounds
+use native coverage through `paint_path`; strict direct APIs return an error.
+Thus the RFC's unrestricted zero-pass path claim remains only partially met.
+
+Validation at this review: 100 shader library tests passed, including Metal
+and wgpu pixel references; the paint-lab demo compiled; Windows MSVC test
+cross-check compiled. Blur halo checks cover clipping after filtering, restoring
+the destination outside the clip, continuous content behind ancestor clips,
+and interaction bounds. Windows runtime rendering and the RFC's 120 FPS target
+on 4K/5K displays have not been measured by these checks.
+
+The paint-lab demo remains one gallery. Splitting it into smaller demos is a
+separate maintenance follow-up.
 
 ## Later milestones
 
