@@ -2,7 +2,20 @@
 
 Opt-in downstream extension: `xgpui-shader`. No app-side OS branches.
 
-**[GPUI public API changes: additions, altered types and compatibility risks](gpui-public-api.md).**
+## GPUI public API changes: additions and compatibility
+
+This crate requires GPUI's `Window::paint_custom`, producer/preparation traits,
+geometry and retained custom-draw records, plus backend recording adapters.
+It also alters existing public types: `Scene` gains `custom_draws`, and
+`Primitive` / `PrimitiveBatch` gain `Custom` variants. Complete struct literals
+and exhaustive matches must be updated. Ordinary `div().bg(...)` callers need
+no call-site changes; opting out of the crate does not undo these SDK changes.
+
+**[GPUI public API changes: additions and compatibility](gpui-public-api.md#altered-existing-public-types--source-compatibility-risks).**
+See also [added paint entry point](gpui-public-api.md#added-window-method),
+[producer/preparation traits](gpui-public-api.md#added-producer-trait-and-preparation-request),
+[geometry and retained records](gpui-public-api.md#added-geometry-and-retained-records),
+and [backend APIs](gpui-public-api.md#added-backend-crate-public-apis).
 
 ## Add the crate
 

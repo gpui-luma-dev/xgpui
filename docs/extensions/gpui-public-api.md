@@ -6,6 +6,7 @@ Compared with pre-feature main `9b64657`. **Opt-in usage does not mean zero SDK 
 
 | GPUI change | Required by | Role |
 | --- | --- | --- |
+| `SvgSize::Viewport { size, view_box }` | Browser SVG comparison | Rerasterize a visible document rectangle at exact device-pixel dimensions |
 | `ParsedSvg::size()` | [xgpui-svg](svg-rendering.md) | Read the resolved SVG viewport size without reparsing |
 | Backend construction override; optional paragraph traits, geometry types, cache and paint entry points | [xgpui-parley](parley-text.md) | Install the text backend; retain shaping/reflow and paint BiDi runs |
 | `Scene::custom_draws`, `Primitive::Custom`, `PrimitiveBatch::Custom`, `Window::paint_custom` | [xgpui-shader](extension-paints.md); reused by xgpui-gamut | Record ordered custom content in the native scene |
@@ -321,3 +322,18 @@ the document a second time. Existing parsing/rasterization signatures remain
 unchanged. `SvgImage`, policy, scheduler, atlas lifetime handling and aggregate
 image accounting live in the extension and depend on existing GPUI element,
 executor, state and image APIs.
+
+## ADDED SVG viewport rasterization
+
+`SvgSize::Viewport { size: Size<DevicePixels>, view_box: Bounds<f32> }` lets
+`SvgRenderer::render_parsed` rasterize a visible rectangle in resolved document
+coordinates into an exact output. The browser comparison uses this to keep curves
+sharp while zooming without growing the whole-document output. It retains the
+parsed tree and caches unchanged camera/viewport output in the demo.
+
+Each output edge must be 1..=8192; invalid, nonfinite or nonpositive rectangles
+return `InvalidSize`. Existing sizing modes retain their behavior. Adding an
+enum variant requires downstream exhaustive `SvgSize` matches to handle it.
+This output bounds the destination buffer, not resvg filter intermediates or
+whole-process memory. It does not add cropped scheduling to `SvgImage` or make
+browser rasterization run on a worker.

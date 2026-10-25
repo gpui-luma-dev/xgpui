@@ -209,7 +209,7 @@ assert.match(extensionOverview, /href="#svg-rendering"/);
 assert.match(run('extensionPage("svg-rendering")'), /Experimental SVG extension/);
 assert.match(run('cratePage(crates.find(c => c.package === "xgpui-svg"), "overview")'), /SvgScheduler/);
 const svgDoc = data.extension_documents['svg-rendering'].html;
-for (const term of ['svg_image', 'SchedulerLimits', 'Queued', '3 × output RGBA', '2 × RGBA', 'process/GPU-memory ceiling', 'samples', 'attributed']) assert.ok(svgDoc.includes(term), term);
+for (const term of ['svg_image', 'SchedulerLimits', 'Queued', '3 × output RGBA', '2 × RGBA', 'process/GPU-memory ceiling', 'samples', 'attributed', 'SvgSize::Viewport']) assert.ok(svgDoc.includes(term), term);
 assert.match(run('cratePage(crates.find(c => c.package === "xgpui-svg"), "overview")'), /Run browser demo/);
 const svgCrate = data.crates.find(c => c.package === 'xgpui-svg');
 for (const name of ['SvgImage', 'SvgDocument', 'SvgScheduler', 'SchedulerStats', 'RasterPolicy']) assert.ok(svgCrate.declarations.some(d => d.name === name), name);
@@ -243,6 +243,7 @@ for (const file of [
   'apps/gamut-lab/README.md',
   'extensions/xgpui-ext/crates/xgpui-gamut/README.md',
   'extensions/xgpui-ext/crates/xgpui-svg/README.md',
+  'extensions/xgpui-ext/crates/xgpui-parley/README.md',
 ]) {
   const url = new URL('../' + file, import.meta.url);
   const markdown = await readFile(url, 'utf8');
@@ -293,7 +294,24 @@ const apiChanges = data.extension_documents['gpui-public-api'].html;
 for (const term of ['Scene', 'custom_draws', 'PrimitiveBatch', 'CustomContent', 'PreparationRequest', 'CustomGeometry', 'CustomCoverage', 'CustomDraw', 'paint_custom', 'MetalCustomContext', 'WgpuCustomContext', 'Dx11CustomContext', 'source compatibility risks', 'WindowColorMode', 'WindowColorStatus', 'MetalWideSdrOutput', 'Dx11WideSdrOutput', 'set_color_mode', 'ParsedSvg::size()', 'xgpui-svg']) assert.ok(apiChanges.includes(term), term);
 assert.match(index, /href="#gpui-public-api"/);
 assert.match(run('extensionPage("extensions")'), /href="#gpui-public-api"/);
-console.log('Verified public API delta documentation and prominent navigation.');
+const extensionApiGuides = {
+  'xgpui-shader': ['extension-paints', 'altered-existing-public-types--source-compatibility-risks'],
+  'xgpui-gamut': ['high-gamut-windows', 'added-opt-in-window-presentation'],
+  'xgpui-parley': ['parley-text', 'added-text-backend-and-paragraph-seams'],
+  'xgpui-svg': ['svg-rendering', 'added-svg-viewport-size'],
+};
+assert.deepEqual(Object.keys(extensionApiGuides).sort(), Object.keys(data.extension_packages).sort(), 'every extension needs an API compatibility guide');
+for (const [pkg, [route, section]] of Object.entries(extensionApiGuides)) {
+  const guide = data.extension_documents[route].html;
+  assert.ok(guide.includes('id="gpui-public-api-changes-additions-and-compatibility"'), pkg);
+  assert.ok(guide.includes('#gpui-public-api&amp;section=' + section), pkg);
+  assert.ok(apiChanges.includes('id="' + section + '"'), pkg);
+  assert.ok(run(`cratePage(crates.find(c => c.package === "${pkg}"), "overview")`).includes(guide.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '')), pkg);
+  const readme = await readFile(new URL('../' + data.extension_packages[pkg] + '/README.md', import.meta.url), 'utf8');
+  assert.ok(readme.includes('## GPUI public API changes: additions and compatibility'), pkg);
+  assert.ok(readme.includes('gpui-public-api.md#' + section), pkg);
+}
+console.log('Verified public API additions and compatibility sections for every extension crate.');
 
 for (const match of run('publicApiSourceLinks()').matchAll(/href="source\/([^"#]+)\.html#L(\d+)"/g)) {
   const file = decodeURIComponent(match[1]);

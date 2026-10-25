@@ -112,3 +112,8 @@ discovery. Native construction smoke runs on the main thread, without windows:
 cargo test --locked --offline --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-parley/Cargo.toml --target-dir target
 # Add --features native-test --test construction for host construction/raster smoke.
 ```
+
+## GPUI public API changes: additions and compatibility
+
+[GPUI public API changes: additions and compatibility](../../../../docs/extensions/gpui-public-api.md#added-text-backend-and-paragraph-seams).
+See the [crate guide](../../../../docs/extensions/parley-text.md#gpui-public-api-changes-additions-and-compatibility) for required additions and downstream compatibility impact.

@@ -82,7 +82,8 @@ tabs. Its maintained contract is `docs/extensions/svg-rendering.md`; the crate
 README points to that source to avoid a second copy. The guide covers native
 samples and attribution, shared scheduling/accounting, measurements and deferred
 work. The browser gallery includes `?demo=svg`, with attributed source downloads,
-zoom/pan, shared budget controls and a ten-tile gallery. Wasm rasterization is
+synchronized bounded/viewport-rerasterized views, zoom/pan, shared budget controls
+and a ten-tile gallery. Wasm rasterization is
 currently on the browser thread; native responsiveness results do not transfer.
 
 ## GitHub Pages

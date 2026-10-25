@@ -5,6 +5,23 @@ sRGB controls in one window. Windows integration is cross-compiled here; native
 WARP/desktop execution and physical display checks remain required. Linux, HDR
 content and transparent wide windows remain deferred.
 
+## GPUI public API changes: additions and compatibility
+
+This crate requires per-window color request/status APIs and typed wide-SDR
+backend outputs. `PlatformWindow` supplies default request/report methods, so
+existing platform implementations need no required overrides. Default windows
+and legacy sRGB paints retain their behavior; additive method names can still
+collide with downstream extension methods.
+
+It reuses the custom-content recording changes: complete `Scene` literals must
+include `custom_draws`, and exhaustive `Primitive` / `PrimitiveBatch` matches
+must handle `Custom`. Window-option structs and existing ordinary output types
+retain their contracts. New color configuration/fallback enums are non-exhaustive.
+
+**[GPUI public API changes: additions and compatibility](gpui-public-api.md#added-opt-in-window-presentation).**
+See also [shared structural compatibility risks](gpui-public-api.md#altered-existing-public-types--source-compatibility-risks)
+and [backend APIs](gpui-public-api.md#added-backend-crate-public-apis).
+
 ```toml
 # App under apps/:
 [dependencies]

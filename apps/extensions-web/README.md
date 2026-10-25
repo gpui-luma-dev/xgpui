@@ -50,11 +50,21 @@ the checklist above is intended for local interactive acceptance.
 Open `?demo=svg` (or force `&backend=webgpu` / `&backend=webgl`). Select one of
 five samples, wheel to zoom around the pointer, drag to pan, or use preset zooms.
 Toggle the backdrop, mount ten gallery tiles, and switch the shared 8/32 MiB
-pool. The gallery shares zoom and the scheduler; pan applies to the large viewer.
-Check clipping, gradients, shadows and curve detail as the preview settles.
+pool. Two side-by-side views share wheel zoom, preset zooms and drag pan:
+
+- **Bounded:** the reusable progressive element, with a 2 MiB output cap and
+  optional shared pool. Deep zoom eventually enlarges a limited-resolution image.
+- **Rerasterized:** renders the visible rectangle at device-pixel resolution on
+  camera or viewport changes. Output dimensions depend on the viewport, rather
+  than zoom, so curves stay sharp through 1600%. The parsed document is retained;
+  unchanged redraws reuse the raster. Replaced atlas images are released.
+
+The ten-tile gallery still uses bounded elements and the shared scheduler.
+The comparison raster is outside that pool and reports its own size and latency.
+Check clipping, gradients, shadows and curve detail as the bounded preview settles.
 
 Diagnostics expose raster latency, phase and accounted pool reservations, not
-total browser/GPU memory. Each element caps output at 2 MiB, with one admitted
+total browser/GPU memory. Each bounded element caps output at 2 MiB, with one admitted
 job in the pool. This non-atomic Wasm platform runs raster work on the browser
 thread; complex filters can still block interaction. Worker-based rendering is
 a follow-up. Native latency/memory benchmarks do not establish browser results.
@@ -69,3 +79,15 @@ automatic, forced WebGPU and forced WebGL2 rendered; wheel zoom, drag pan,
 reset, sample selection, gallery mounting and scrolling worked without console
 errors. The 8 MiB pool with 11 mounted elements displayed a 7.98 MiB accounted
 peak. This is an interactive smoke check, not a browser memory benchmark.
+
+The viewport comparison uses `SvgSize::Viewport` in the GPUI renderer. Each output
+edge must be 1..=8192 device pixels; oversized outputs fail visibly instead of
+silently reducing detail. Visible-region rendering does not bound all resvg
+filter intermediates. A 1600% leaf shadow render took about 2.5 seconds in one
+local browser check; synchronous rasterization can pause input. This is a
+quality comparison, not a worker-based responsiveness improvement.
+
+Viewport comparison validated locally on 2026-10-24: WebGPU and WebGL2, synchronized
+wheel zoom and drag pan, and sharp leaf detail through 1600%. Native tests compare
+a viewport crop against a full raster (including curves, gradients, clipping and
+shadow), verify fixed output dimensions at deep zoom, and reject invalid regions.
