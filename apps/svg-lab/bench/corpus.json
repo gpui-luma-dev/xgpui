@@ -1,0 +1,99 @@
+[
+  {
+    "id": "tiger",
+    "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/tiger.svg",
+    "coverage": "dense stroked illustration",
+    "license": "Original artwork terms; fetched locally, not redistributed in this repository",
+    "sha256": "e14dab6b4811a6a12abf9aefe69b5e4d5e8af43f9e1cc2dc22416eebf87ed0c7",
+    "bundled": false
+  },
+  {
+    "id": "gallardo",
+    "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/gallardo.svg",
+    "coverage": "gradient-heavy vehicle illustration",
+    "license": "Michael Grosberg; CC BY-NC-SA 2.5 (noncommercial); optional fetch only; not bundled",
+    "sha256": "1d6884541b38811528ce93495ca941e2e60e5927f81dc814d3914c1084f8bb62",
+    "bundled": false,
+    "license_url": "https://creativecommons.org/licenses/by-nc-sa/2.5/"
+  },
+  {
+    "id": "AJ_Digital_Camera",
+    "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/AJ_Digital_Camera.svg",
+    "coverage": "product illustration",
+    "license": "Public-domain dedication (embedded RDF); Openclipart public-domain collection",
+    "sha256": "e8efd9d45b027782d1b7cd57830c29c27850ea067c2c141ff4be9d2e5a1c314e",
+    "bundled": true,
+    "author": "AJ Ashton",
+    "license_url": "http://web.resource.org/cc/PublicDomain",
+    "attribution_source": "https://openclipart.org/share",
+    "local": "apps/svg-lab/samples/AJ_Digital_Camera.svg"
+  },
+  {
+    "id": "USStates",
+    "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/USStates.svg",
+    "coverage": "geographic paths and labels",
+    "license": "Embedded notice: Jon Relf; map/illustration GNU FDL, script GNU GPL, versions unspecified; optional fetch only",
+    "sha256": "615f7c8c43e4d7181969496643ed8f35d74fc29fea391c8d8dd219aa6547136b",
+    "bundled": false
+  },
+  {
+    "id": "rg1024_green_grapes",
+    "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/rg1024_green_grapes.svg",
+    "coverage": "organic gradients and filters",
+    "license": "Openclipart public domain / CC0-1.0",
+    "sha256": "c5982a7b24fc10bd8212f03f15f4d368d1022ae9ef15996fa98cfca3dfa0c011",
+    "bundled": true,
+    "author": "rg1024",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_source": "https://openclipart.org/detail/20104/green-grapes",
+    "local": "apps/svg-lab/samples/rg1024_green_grapes.svg"
+  },
+  {
+    "id": "rg1024_metal_effect",
+    "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/rg1024_metal_effect.svg",
+    "coverage": "metallic gradients and filters",
+    "license": "Openclipart public domain / CC0-1.0",
+    "sha256": "bea3712e842b247bfab90ab373355fffe3be933f8a33df55ea193036e0812983",
+    "bundled": true,
+    "author": "rg1024",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_source": "https://openclipart.org/detail/20070/metal-effect",
+    "local": "apps/svg-lab/samples/rg1024_metal_effect.svg"
+  },
+  {
+    "id": "displayWebStats",
+    "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/displayWebStats.svg",
+    "coverage": "script/animation-dependent web statistics chart compatibility case",
+    "license": "Original artwork terms; fetched locally, not redistributed in this repository",
+    "sha256": "bd78273e2605d4d039c766f2d5a1c294e21df06a8261b4cca1a1e15b9b7c3869",
+    "bundled": false
+  },
+  {
+    "id": "dragon",
+    "local": "apps/svg-lab/samples/dragon.svg",
+    "url": "https://commons.wikimedia.org/wiki/File:Dragon_clip_art.svg",
+    "coverage": "Inkscape illustration already bundled with GPUI",
+    "license": "CC-BY-SA-3.0",
+    "sha256": "a66278ec0c72d70152ab05fc9dd122ad094a262d96fa6f61fba6b12e128e0e47",
+    "bundled": true,
+    "author": "Ebaychatter0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "attribution_source": "https://commons.wikimedia.org/wiki/File:Dragon_clip_art.svg"
+  },
+  {
+    "id": "Steps",
+    "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/Steps.svg",
+    "coverage": "script-driven game compatibility case (not a static technical diagram)",
+    "license": "Original artwork terms; fetched locally, not redistributed in this repository",
+    "sha256": "bb86d3eca3502649661d892cbfdb8ad604611b3cdf48b5f131461536476715af",
+    "bundled": false
+  },
+  {
+    "id": "ny1",
+    "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/ny1.svg",
+    "coverage": "static poll chart with 50 text elements and 20 tspans",
+    "license": "Original artwork terms; fetched locally, not redistributed in this repository",
+    "sha256": "195ffe176cab06b14d3e502e43541a89f27b17fb2f1cca4bc1e02cbe40e80e08",
+    "bundled": false
+  }
+]

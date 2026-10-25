@@ -6,6 +6,8 @@ never depends on extension crates. Keep renderer integration and API changes sma
 - [`xgpui-shader`](crates/xgpui-shader/README.md): mesh, gradients and portable shaders.
 - [Paint integration](../../docs/extensions/extension-paints.md) · [GPUI API changes](../../docs/extensions/gpui-public-api.md)
 - [Producer reference](../../docs/extensions/shader-producers.md) · [preparation and recording](../../docs/extensions/paint-contract-hardening.md)
+- [`xgpui-svg`](crates/xgpui-svg/README.md): a reusable full-color SVG element, immutable documents, bounded progressive rendering, and shared job/image-memory scheduling.
+- SVG scaling and native path comparison: [svg-lab](../../apps/svg-lab/README.md).
 - Local test/performance apps: [paint-lab](../../apps/paint-lab/README.md)
 - [`xgpui-gamut`](crates/xgpui-gamut/README.md): linear-P3 SDR producers; [presentation contract](../../docs/extensions/high-gamut-windows.md).
 - [`xgpui-parley`](crates/xgpui-parley/README.md): opt-in Parley text backend: flat LTR, BiDi paragraphs, shared font identity and grayscale rasterization.

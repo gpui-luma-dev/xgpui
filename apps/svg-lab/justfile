@@ -1,0 +1,42 @@
+set working-directory := "../.."
+set positional-arguments
+manifest := "apps/svg-lab/Cargo.toml"
+options := "--offline --locked --config .cargo/validation.toml --manifest-path " + manifest + " --target-dir target"
+
+default:
+    @just --justfile '{{justfile()}}' --list
+
+ui *args:
+    cargo run {{options}} -- "$@"
+
+# Offline gallery using the committed license-audited subset.
+gallery *args:
+    cargo run {{options}} --release -- --gallery apps/svg-lab/samples --scheduler-mib 64 --scheduler-jobs 2 "$@"
+
+release:
+    cargo run {{options}} --release
+
+test:
+    cargo test {{options}}
+
+lint:
+    cargo clippy {{options}} --all-targets -- -D warnings
+
+fmt:
+    cargo fmt --manifest-path {{manifest}}
+
+# Fetch the full optional historical corpus; see samples/ATTRIBUTION.md.
+corpus:
+    python3 apps/svg-lab/bench/fetch.py /tmp/xgpui-svg-corpus
+
+# Isolated release CPU latency and RSS measurements; serial workers.
+benchmark *args:
+    cargo build {{options}} --release
+    python3 apps/svg-lab/bench/run.py --corpus /tmp/xgpui-svg-corpus --output /tmp/svg-bench-results "$@"
+    python3 apps/svg-lab/bench/report.py /tmp/svg-bench-results
+
+# Compare 16/32 MiB budgets and replay recorded zoom bursts.
+policy-benchmark:
+    cargo build {{options}} --release
+    python3 apps/svg-lab/bench/policy_run.py --output /tmp/svg-policy-results
+    python3 apps/svg-lab/bench/policy_report.py /tmp/svg-policy-results

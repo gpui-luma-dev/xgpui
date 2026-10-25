@@ -1,0 +1,281 @@
+{
+  "binary_sha256": "92accea7008ec0bcbb5f9bc063bf054282b2a9e91e79836af898ae303343cfd8",
+  "cases": [
+    {
+      "mode": "sequence",
+      "file": "/tmp/xgpui-svg-corpus/gallardo.svg",
+      "release": true,
+      "budget_mib": 16,
+      "density": 2.0,
+      "events": [
+        [
+          0,
+          1.0
+        ],
+        [
+          20,
+          2.0
+        ],
+        [
+          40,
+          4.0
+        ],
+        [
+          60,
+          8.0
+        ],
+        [
+          80,
+          16.0
+        ],
+        [
+          100,
+          4.0
+        ],
+        [
+          120,
+          16.0
+        ]
+      ],
+      "jobs": [
+        {
+          "stage": "Preview",
+          "width": 640,
+          "height": 343,
+          "started_ms": 20.229332999999997,
+          "completed_ms": 46.310167,
+          "raster_ms": 25.794166,
+          "accepted": true
+        },
+        {
+          "stage": "Detail",
+          "width": 2798,
+          "height": 1498,
+          "started_ms": 240.284167,
+          "completed_ms": 500.79675000000003,
+          "raster_ms": 259.918625,
+          "accepted": true
+        }
+      ],
+      "first_preview_ready_ms": 46.310167,
+      "final_detail_after_last_request_ms": 380.80629200000004,
+      "total_ms": 500.80629200000004,
+      "final_width": 2798,
+      "final_height": 1498,
+      "final_output_bytes": 16765616,
+      "resolution_limited": true,
+      "requested_width": 10240,
+      "requested_height": 5484,
+      "peak_known_image_bytes": 17863856,
+      "process_peak_rss_bytes": 85475328,
+      "rss_end_bytes": 85491712
+    },
+    {
+      "mode": "sequence",
+      "file": "/tmp/xgpui-svg-corpus/gallardo.svg",
+      "release": true,
+      "budget_mib": 32,
+      "density": 2.0,
+      "events": [
+        [
+          0,
+          1.0
+        ],
+        [
+          20,
+          2.0
+        ],
+        [
+          40,
+          4.0
+        ],
+        [
+          60,
+          8.0
+        ],
+        [
+          80,
+          16.0
+        ],
+        [
+          100,
+          4.0
+        ],
+        [
+          120,
+          16.0
+        ]
+      ],
+      "jobs": [
+        {
+          "stage": "Preview",
+          "width": 640,
+          "height": 343,
+          "started_ms": 20.2915,
+          "completed_ms": 45.473084,
+          "raster_ms": 24.466041,
+          "accepted": true
+        },
+        {
+          "stage": "Detail",
+          "width": 3957,
+          "height": 2119,
+          "started_ms": 241.062084,
+          "completed_ms": 797.2660000000001,
+          "raster_ms": 555.331458,
+          "accepted": true
+        }
+      ],
+      "first_preview_ready_ms": 45.473084,
+      "final_detail_after_last_request_ms": 677.36825,
+      "total_ms": 797.36825,
+      "final_width": 3957,
+      "final_height": 2119,
+      "final_output_bytes": 33539532,
+      "resolution_limited": true,
+      "requested_width": 10240,
+      "requested_height": 5484,
+      "peak_known_image_bytes": 34637772,
+      "process_peak_rss_bytes": 159694848,
+      "rss_end_bytes": 159694848
+    },
+    {
+      "mode": "sequence",
+      "file": "/tmp/xgpui-svg-corpus/rg1024_metal_effect.svg",
+      "release": true,
+      "budget_mib": 16,
+      "density": 2.0,
+      "events": [
+        [
+          0,
+          1.0
+        ],
+        [
+          20,
+          2.0
+        ],
+        [
+          40,
+          4.0
+        ],
+        [
+          60,
+          8.0
+        ],
+        [
+          80,
+          16.0
+        ],
+        [
+          100,
+          4.0
+        ],
+        [
+          120,
+          16.0
+        ]
+      ],
+      "jobs": [
+        {
+          "stage": "Preview",
+          "width": 595,
+          "height": 640,
+          "started_ms": 20.217792,
+          "completed_ms": 52.96425,
+          "raster_ms": 31.872249999999998,
+          "accepted": true
+        },
+        {
+          "stage": "Detail",
+          "width": 1974,
+          "height": 2124,
+          "started_ms": 160.1975,
+          "completed_ms": 369.966625,
+          "raster_ms": 209.515167,
+          "accepted": true
+        }
+      ],
+      "first_preview_ready_ms": 52.96425,
+      "final_detail_after_last_request_ms": 249.971542,
+      "total_ms": 369.971542,
+      "final_width": 1974,
+      "final_height": 2124,
+      "final_output_bytes": 16771104,
+      "resolution_limited": true,
+      "requested_width": 9514,
+      "requested_height": 10240,
+      "peak_known_image_bytes": 18675744,
+      "process_peak_rss_bytes": 89112576,
+      "rss_end_bytes": 89128960
+    },
+    {
+      "mode": "sequence",
+      "file": "/tmp/xgpui-svg-corpus/rg1024_metal_effect.svg",
+      "release": true,
+      "budget_mib": 32,
+      "density": 2.0,
+      "events": [
+        [
+          0,
+          1.0
+        ],
+        [
+          20,
+          2.0
+        ],
+        [
+          40,
+          4.0
+        ],
+        [
+          60,
+          8.0
+        ],
+        [
+          80,
+          16.0
+        ],
+        [
+          100,
+          4.0
+        ],
+        [
+          120,
+          16.0
+        ]
+      ],
+      "jobs": [
+        {
+          "stage": "Preview",
+          "width": 595,
+          "height": 640,
+          "started_ms": 20.234208,
+          "completed_ms": 54.124708,
+          "raster_ms": 32.99675,
+          "accepted": true
+        },
+        {
+          "stage": "Detail",
+          "width": 2791,
+          "height": 3004,
+          "started_ms": 241.262125,
+          "completed_ms": 705.2391660000001,
+          "raster_ms": 462.709791,
+          "accepted": true
+        }
+      ],
+      "first_preview_ready_ms": 54.124708,
+      "final_detail_after_last_request_ms": 585.252333,
+      "total_ms": 705.252333,
+      "final_width": 2791,
+      "final_height": 3004,
+      "final_output_bytes": 33536656,
+      "resolution_limited": true,
+      "requested_width": 9514,
+      "requested_height": 10240,
+      "peak_known_image_bytes": 35441296,
+      "process_peak_rss_bytes": 172146688,
+      "rss_end_bytes": 172163072
+    }
+  ]
+}

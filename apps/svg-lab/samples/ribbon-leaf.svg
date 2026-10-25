@@ -1,0 +1,13 @@
+<!-- Copyright 2026 xgpui contributors. SPDX-License-Identifier: Apache-2.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
+<defs>
+ <linearGradient id="r"><stop stop-color="#7761ff"/><stop offset="1" stop-color="#f478b1"/></linearGradient>
+ <linearGradient id="l"><stop stop-color="#3ce6c0"/><stop offset="1" stop-color="#187ea5"/></linearGradient>
+ <clipPath id="clip"><rect x="30" y="30" width="260" height="180"/></clipPath>
+ <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="8" stdDeviation="5" flood-color="#020617" flood-opacity="0.65"/></filter>
+</defs>
+<g clip-path="url(#clip)">
+ <path d="M-15 165C45 25 105 225 160 90C210 -20 265 155 340 40L340 125C255 235 215 65 165 165C100 290 45 95 -15 220Z" fill="url(#r)"/>
+ <path d="M105 165C80 55 170 35 225 55C235 125 170 190 105 165Z" fill="url(#l)" filter="url(#shadow)"/>
+ <path d="M108 162C133 122 173 92 213 65M139 122C129 101 130 83 139 70M162 100C180 107 193 109 207 104" fill="none" stroke="#d6fff4" stroke-width="1.3"/>
+</g></svg>

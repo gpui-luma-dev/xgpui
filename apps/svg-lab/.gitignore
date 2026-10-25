@@ -1,0 +1,2 @@
+# Native launcher logs are transient; committed JSON/reports contain the evidence.
+bench/results/**/*.log

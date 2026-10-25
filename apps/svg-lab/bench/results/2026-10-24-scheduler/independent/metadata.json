@@ -1,0 +1,70 @@
+{
+  "started_utc": "2026-10-25T01:35:30.645477+00:00",
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "binary_sha256": "a50d465c68b6547904ca55dc416b06f4396ab98b795508acd183cb8cb9697cf9",
+  "scheduler_mib": null,
+  "scheduler_jobs": 2,
+  "tiles": 24,
+  "app_bundle": "/var/folders/b8/w8lqj8kn7ps6lhkpjhy2v7v80000gn/T/xgpui-svg-stress-wdf9fz78/SVG Scheduler Stress.app",
+  "corpus": [
+    {
+      "id": "tiger",
+      "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/tiger.svg",
+      "coverage": "dense stroked illustration",
+      "license": "Original artwork terms; fetched locally, not redistributed in this repository",
+      "sha256": "e14dab6b4811a6a12abf9aefe69b5e4d5e8af43f9e1cc2dc22416eebf87ed0c7"
+    },
+    {
+      "id": "gallardo",
+      "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/gallardo.svg",
+      "coverage": "gradient-heavy vehicle illustration",
+      "license": "Michael Grosberg; metadata specifies CC BY-NC-SA 2.5; https://creativecommons.org/licenses/by-nc-sa/2.5/; local testing only, not redistributed",
+      "sha256": "1d6884541b38811528ce93495ca941e2e60e5927f81dc814d3914c1084f8bb62"
+    },
+    {
+      "id": "AJ_Digital_Camera",
+      "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/AJ_Digital_Camera.svg",
+      "coverage": "product illustration",
+      "license": "AJ Ashton; metadata specifies public domain dedication http://web.resource.org/cc/PublicDomain",
+      "sha256": "e8efd9d45b027782d1b7cd57830c29c27850ea067c2c141ff4be9d2e5a1c314e"
+    },
+    {
+      "id": "USStates",
+      "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/USStates.svg",
+      "coverage": "geographic paths and labels",
+      "license": "Original artwork terms; fetched locally, not redistributed in this repository",
+      "sha256": "615f7c8c43e4d7181969496643ed8f35d74fc29fea391c8d8dd219aa6547136b"
+    },
+    {
+      "id": "rg1024_green_grapes",
+      "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/rg1024_green_grapes.svg",
+      "coverage": "organic gradients and filters",
+      "license": "Original artwork terms; fetched locally, not redistributed in this repository",
+      "sha256": "c5982a7b24fc10bd8212f03f15f4d368d1022ae9ef15996fa98cfca3dfa0c011"
+    },
+    {
+      "id": "rg1024_metal_effect",
+      "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/rg1024_metal_effect.svg",
+      "coverage": "metallic gradients and filters",
+      "license": "Original artwork terms; fetched locally, not redistributed in this repository",
+      "sha256": "bea3712e842b247bfab90ab373355fffe3be933f8a33df55ea193036e0812983"
+    },
+    {
+      "id": "dragon",
+      "local": "gpui/crates/gpui/examples/svg/dragon.svg",
+      "url": "https://commons.wikimedia.org/wiki/File:Dragon_clip_art.svg",
+      "coverage": "Inkscape illustration already bundled with GPUI",
+      "license": "CC BY-SA 3.0, see source header",
+      "sha256": "a66278ec0c72d70152ab05fc9dd122ad094a262d96fa6f61fba6b12e128e0e47"
+    },
+    {
+      "id": "ny1",
+      "url": "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/ny1.svg",
+      "coverage": "static poll chart with 50 text elements and 20 tspans",
+      "license": "Original artwork terms; fetched locally, not redistributed in this repository",
+      "sha256": "195ffe176cab06b14d3e502e43541a89f27b17fb2f1cca4bc1e02cbe40e80e08"
+    }
+  ],
+  "hardware": "Apple M4 Max\n137438953472"
+}

@@ -1,0 +1,5387 @@
+{
+  "metadata": {
+    "started_utc": "2026-10-25T00:51:15.195738+00:00",
+    "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "binary_sha256": "7bda29804585ce593cd38f78d3809bdd677304e1b2893d53d9752fa0f08b28ff",
+    "budgets_mib": [
+      16,
+      32
+    ],
+    "density": 2,
+    "raster_repeats": 5,
+    "sequence_ms": [
+      [
+        0,
+        1
+      ],
+      [
+        20,
+        2
+      ],
+      [
+        40,
+        4
+      ],
+      [
+        60,
+        8
+      ],
+      [
+        80,
+        16
+      ],
+      [
+        100,
+        4
+      ],
+      [
+        120,
+        16
+      ]
+    ],
+    "scope": "Serial isolated CPU workers; GPU/UI residency excluded. Sequence replays shared queue on a worker thread; it does not measure UI frame latency.",
+    "implementation_stage": "Policy/queue modules in svg-lab before mechanical extraction into xgpui-svg; post-extraction spot checks saved separately"
+  },
+  "cases": [
+    {
+      "id": "tiger",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 16,
+      "sha256": "e14dab6b4811a6a12abf9aefe69b5e4d5e8af43f9e1cc2dc22416eebf87ed0c7",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/tiger.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 96719,
+        "read_ms": 0.023334,
+        "renderer_init_ms": 0.005417,
+        "parse_first_ms": 0.957916,
+        "parse": {
+          "samples_ms": [
+            0.856958,
+            0.8354159999999999,
+            0.786583,
+            0.77525,
+            0.7357079999999999
+          ],
+          "median_ms": 0.786583,
+          "max_ms": 0.856958
+        },
+        "raster_first_ms": 5.566375,
+        "raster": {
+          "samples_ms": [
+            5.423833,
+            5.440041,
+            5.5573749999999995,
+            5.490125,
+            5.522042
+          ],
+          "median_ms": 5.490125,
+          "max_ms": 5.5573749999999995
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 509.947509765625,
+        "intrinsic_height": 564.801025390625,
+        "logical_width": 288.92156982421875,
+        "logical_height": 320.0,
+        "pixel_width": 578,
+        "pixel_height": 640,
+        "visible_pixels": 212654,
+        "output_bytes": 1479680,
+        "base_bytes": 369920,
+        "replacement_image_bytes": 3329280,
+        "rss_start_bytes": 9175040,
+        "rss_parsed_bytes": 10600448,
+        "rss_base_bytes": 11845632,
+        "rss_one_zoom_bytes": 13565952,
+        "rss_two_zoom_bytes": 15155200,
+        "process_peak_rss_bytes": 15171584,
+        "rss_after_drop_bytes": 15171584
+      }
+    },
+    {
+      "id": "tiger",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 16,
+      "sha256": "e14dab6b4811a6a12abf9aefe69b5e4d5e8af43f9e1cc2dc22416eebf87ed0c7",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/tiger.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 96719,
+        "read_ms": 0.040292,
+        "renderer_init_ms": 0.0043749999999999995,
+        "parse_first_ms": 0.862834,
+        "parse": {
+          "samples_ms": [
+            0.771542,
+            0.7380000000000001,
+            0.714666,
+            0.699625,
+            0.701875
+          ],
+          "median_ms": 0.714666,
+          "max_ms": 0.771542
+        },
+        "raster_first_ms": 20.913042,
+        "raster": {
+          "samples_ms": [
+            22.231625,
+            20.687916,
+            20.442292000000002,
+            20.575166,
+            20.503125
+          ],
+          "median_ms": 20.575166,
+          "max_ms": 22.231625
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 509.947509765625,
+        "intrinsic_height": 564.801025390625,
+        "logical_width": 288.92156982421875,
+        "logical_height": 320.0,
+        "pixel_width": 1946,
+        "pixel_height": 2155,
+        "visible_pixels": 2390450,
+        "output_bytes": 16774520,
+        "base_bytes": 369920,
+        "replacement_image_bytes": 33918960,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 10600448,
+        "rss_base_bytes": 11911168,
+        "rss_one_zoom_bytes": 29147136,
+        "rss_two_zoom_bytes": 46088192,
+        "process_peak_rss_bytes": 46104576,
+        "rss_after_drop_bytes": 46104576
+      }
+    },
+    {
+      "id": "tiger",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "e14dab6b4811a6a12abf9aefe69b5e4d5e8af43f9e1cc2dc22416eebf87ed0c7",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/tiger.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 96719,
+        "read_ms": 0.029249999999999998,
+        "renderer_init_ms": 0.005541,
+        "parse_first_ms": 0.9021250000000001,
+        "parse": {
+          "samples_ms": [
+            0.784917,
+            0.740208,
+            0.7274999999999999,
+            0.738208,
+            0.715125
+          ],
+          "median_ms": 0.738208,
+          "max_ms": 0.784917
+        },
+        "raster_first_ms": 21.565583,
+        "raster": {
+          "samples_ms": [
+            21.141958,
+            20.456041000000003,
+            20.467541999999998,
+            20.119,
+            20.148792
+          ],
+          "median_ms": 20.456041000000003,
+          "max_ms": 21.141958
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 509.947509765625,
+        "intrinsic_height": 564.801025390625,
+        "logical_width": 288.92156982421875,
+        "logical_height": 320.0,
+        "pixel_width": 1946,
+        "pixel_height": 2155,
+        "visible_pixels": 2390450,
+        "output_bytes": 16774520,
+        "base_bytes": 369920,
+        "replacement_image_bytes": 33918960,
+        "rss_start_bytes": 9175040,
+        "rss_parsed_bytes": 10567680,
+        "rss_base_bytes": 11845632,
+        "rss_one_zoom_bytes": 29065216,
+        "rss_two_zoom_bytes": 45973504,
+        "process_peak_rss_bytes": 45989888,
+        "rss_after_drop_bytes": 45989888
+      }
+    },
+    {
+      "id": "tiger",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "e14dab6b4811a6a12abf9aefe69b5e4d5e8af43f9e1cc2dc22416eebf87ed0c7",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/tiger.svg",
+        "release": true,
+        "budget_mib": 16,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 578,
+            "height": 640,
+            "started_ms": 20.166916999999998,
+            "completed_ms": 26.498625,
+            "raster_ms": 6.077417,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 1946,
+            "height": 2155,
+            "started_ms": 160.665333,
+            "completed_ms": 193.426667,
+            "raster_ms": 32.1265,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 26.498625,
+        "final_detail_after_last_request_ms": 73.447292,
+        "total_ms": 193.447292,
+        "final_width": 1946,
+        "final_height": 2155,
+        "final_output_bytes": 16774520,
+        "resolution_limited": true,
+        "requested_width": 9246,
+        "requested_height": 10240,
+        "peak_known_image_bytes": 18624120,
+        "process_peak_rss_bytes": 30801920,
+        "rss_end_bytes": 30818304
+      }
+    },
+    {
+      "id": "tiger",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 32,
+      "sha256": "e14dab6b4811a6a12abf9aefe69b5e4d5e8af43f9e1cc2dc22416eebf87ed0c7",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/tiger.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 96719,
+        "read_ms": 0.03375,
+        "renderer_init_ms": 0.006417,
+        "parse_first_ms": 1.128875,
+        "parse": {
+          "samples_ms": [
+            0.995667,
+            0.949167,
+            0.9039999999999999,
+            0.875833,
+            0.880792
+          ],
+          "median_ms": 0.9039999999999999,
+          "max_ms": 0.995667
+        },
+        "raster_first_ms": 6.44,
+        "raster": {
+          "samples_ms": [
+            6.162624999999999,
+            5.9402919999999995,
+            5.840917,
+            5.753167,
+            5.523125
+          ],
+          "median_ms": 5.840917,
+          "max_ms": 6.162624999999999
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 509.947509765625,
+        "intrinsic_height": 564.801025390625,
+        "logical_width": 288.92156982421875,
+        "logical_height": 320.0,
+        "pixel_width": 578,
+        "pixel_height": 640,
+        "visible_pixels": 212654,
+        "output_bytes": 1479680,
+        "base_bytes": 369920,
+        "replacement_image_bytes": 3329280,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 10600448,
+        "rss_base_bytes": 11911168,
+        "rss_one_zoom_bytes": 13664256,
+        "rss_two_zoom_bytes": 15319040,
+        "process_peak_rss_bytes": 15335424,
+        "rss_after_drop_bytes": 15335424
+      }
+    },
+    {
+      "id": "tiger",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 32,
+      "sha256": "e14dab6b4811a6a12abf9aefe69b5e4d5e8af43f9e1cc2dc22416eebf87ed0c7",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/tiger.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 96719,
+        "read_ms": 0.024749999999999998,
+        "renderer_init_ms": 0.004541,
+        "parse_first_ms": 0.8744999999999999,
+        "parse": {
+          "samples_ms": [
+            0.77875,
+            0.807416,
+            0.745208,
+            0.710417,
+            0.7072499999999999
+          ],
+          "median_ms": 0.745208,
+          "max_ms": 0.807416
+        },
+        "raster_first_ms": 25.846625000000003,
+        "raster": {
+          "samples_ms": [
+            26.138541,
+            25.286083,
+            26.072292,
+            25.318417,
+            25.639875
+          ],
+          "median_ms": 25.639875,
+          "max_ms": 26.138541
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 509.947509765625,
+        "intrinsic_height": 564.801025390625,
+        "logical_width": 288.92156982421875,
+        "logical_height": 320.0,
+        "pixel_width": 2312,
+        "pixel_height": 2560,
+        "visible_pixels": 3371972,
+        "output_bytes": 23674880,
+        "base_bytes": 369920,
+        "replacement_image_bytes": 47719680,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 10616832,
+        "rss_base_bytes": 11894784,
+        "rss_one_zoom_bytes": 36061184,
+        "rss_two_zoom_bytes": 59932672,
+        "process_peak_rss_bytes": 59949056,
+        "rss_after_drop_bytes": 59949056
+      }
+    },
+    {
+      "id": "tiger",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "e14dab6b4811a6a12abf9aefe69b5e4d5e8af43f9e1cc2dc22416eebf87ed0c7",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/tiger.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 96719,
+        "read_ms": 0.02875,
+        "renderer_init_ms": 0.005125,
+        "parse_first_ms": 0.875667,
+        "parse": {
+          "samples_ms": [
+            0.775667,
+            0.841333,
+            0.792458,
+            0.702417,
+            0.699584
+          ],
+          "median_ms": 0.775667,
+          "max_ms": 0.841333
+        },
+        "raster_first_ms": 33.400917,
+        "raster": {
+          "samples_ms": [
+            33.310541,
+            32.301916999999996,
+            32.305792,
+            32.343875000000004,
+            32.015042
+          ],
+          "median_ms": 32.305792,
+          "max_ms": 33.310541
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": true,
+        "intrinsic_width": 509.947509765625,
+        "intrinsic_height": 564.801025390625,
+        "logical_width": 288.92156982421875,
+        "logical_height": 320.0,
+        "pixel_width": 2752,
+        "pixel_height": 3048,
+        "visible_pixels": 4776356,
+        "output_bytes": 33552384,
+        "base_bytes": 369920,
+        "replacement_image_bytes": 67474688,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 10584064,
+        "rss_base_bytes": 11829248,
+        "rss_one_zoom_bytes": 45793280,
+        "rss_two_zoom_bytes": 79429632,
+        "process_peak_rss_bytes": 79446016,
+        "rss_after_drop_bytes": 79446016
+      }
+    },
+    {
+      "id": "tiger",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "e14dab6b4811a6a12abf9aefe69b5e4d5e8af43f9e1cc2dc22416eebf87ed0c7",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/tiger.svg",
+        "release": true,
+        "budget_mib": 32,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 578,
+            "height": 640,
+            "started_ms": 20.279042,
+            "completed_ms": 26.611833,
+            "raster_ms": 6.104541,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 2752,
+            "height": 3048,
+            "started_ms": 240.816875,
+            "completed_ms": 274.71275,
+            "raster_ms": 33.462792,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 26.611833,
+        "final_detail_after_last_request_ms": 154.726042,
+        "total_ms": 274.726042,
+        "final_width": 2752,
+        "final_height": 3048,
+        "final_output_bytes": 33552384,
+        "resolution_limited": true,
+        "requested_width": 9246,
+        "requested_height": 10240,
+        "peak_known_image_bytes": 35401984,
+        "process_peak_rss_bytes": 47497216,
+        "rss_end_bytes": 47497216
+      }
+    },
+    {
+      "id": "gallardo",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 16,
+      "sha256": "1d6884541b38811528ce93495ca941e2e60e5927f81dc814d3914c1084f8bb62",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/gallardo.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 340873,
+        "read_ms": 0.040542,
+        "renderer_init_ms": 0.005083000000000001,
+        "parse_first_ms": 2.766541,
+        "parse": {
+          "samples_ms": [
+            2.512125,
+            2.479959,
+            2.4372920000000002,
+            2.479125,
+            2.475542
+          ],
+          "median_ms": 2.479125,
+          "max_ms": 2.512125
+        },
+        "raster_first_ms": 23.411709,
+        "raster": {
+          "samples_ms": [
+            23.355625,
+            23.534917,
+            23.356958000000002,
+            23.64875,
+            23.410125
+          ],
+          "median_ms": 23.410125,
+          "max_ms": 23.64875
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 1901.0,
+        "intrinsic_height": 1018.0,
+        "logical_width": 320.0,
+        "logical_height": 171.36244201660156,
+        "pixel_width": 640,
+        "pixel_height": 343,
+        "visible_pixels": 145304,
+        "output_bytes": 878080,
+        "base_bytes": 220160,
+        "replacement_image_bytes": 1976320,
+        "rss_start_bytes": 9404416,
+        "rss_parsed_bytes": 12156928,
+        "rss_base_bytes": 14008320,
+        "rss_one_zoom_bytes": 16465920,
+        "rss_two_zoom_bytes": 17514496,
+        "process_peak_rss_bytes": 17530880,
+        "rss_after_drop_bytes": 17530880
+      }
+    },
+    {
+      "id": "gallardo",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 16,
+      "sha256": "1d6884541b38811528ce93495ca941e2e60e5927f81dc814d3914c1084f8bb62",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/gallardo.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 340873,
+        "read_ms": 0.046416,
+        "renderer_init_ms": 0.004958,
+        "parse_first_ms": 2.722,
+        "parse": {
+          "samples_ms": [
+            2.497042,
+            2.469584,
+            2.465292,
+            2.418375,
+            2.4202500000000002
+          ],
+          "median_ms": 2.465292,
+          "max_ms": 2.497042
+        },
+        "raster_first_ms": 197.710625,
+        "raster": {
+          "samples_ms": [
+            199.038625,
+            201.553167,
+            199.55629199999998,
+            203.768708,
+            200.22941699999998
+          ],
+          "median_ms": 200.22941699999998,
+          "max_ms": 203.768708
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 1901.0,
+        "intrinsic_height": 1018.0,
+        "logical_width": 320.0,
+        "logical_height": 171.36244201660156,
+        "pixel_width": 2560,
+        "pixel_height": 1371,
+        "visible_pixels": 2317418,
+        "output_bytes": 14039040,
+        "base_bytes": 220160,
+        "replacement_image_bytes": 28298240,
+        "rss_start_bytes": 9437184,
+        "rss_parsed_bytes": 12255232,
+        "rss_base_bytes": 13942784,
+        "rss_one_zoom_bytes": 72974336,
+        "rss_two_zoom_bytes": 87113728,
+        "process_peak_rss_bytes": 87130112,
+        "rss_after_drop_bytes": 87130112
+      }
+    },
+    {
+      "id": "gallardo",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "1d6884541b38811528ce93495ca941e2e60e5927f81dc814d3914c1084f8bb62",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/gallardo.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 340873,
+        "read_ms": 0.053875,
+        "renderer_init_ms": 0.005125,
+        "parse_first_ms": 2.6982500000000003,
+        "parse": {
+          "samples_ms": [
+            2.522,
+            2.937083,
+            2.6705,
+            2.4793749999999997,
+            2.551541
+          ],
+          "median_ms": 2.551541,
+          "max_ms": 2.937083
+        },
+        "raster_first_ms": 243.04775,
+        "raster": {
+          "samples_ms": [
+            234.451625,
+            235.557208,
+            234.889875,
+            237.35233399999998,
+            235.7515
+          ],
+          "median_ms": 235.557208,
+          "max_ms": 237.35233399999998
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 1901.0,
+        "intrinsic_height": 1018.0,
+        "logical_width": 320.0,
+        "logical_height": 171.36244201660156,
+        "pixel_width": 2798,
+        "pixel_height": 1498,
+        "visible_pixels": 2764889,
+        "output_bytes": 16765616,
+        "base_bytes": 220160,
+        "replacement_image_bytes": 33751392,
+        "rss_start_bytes": 9420800,
+        "rss_parsed_bytes": 12337152,
+        "rss_base_bytes": 14057472,
+        "rss_one_zoom_bytes": 86130688,
+        "rss_two_zoom_bytes": 107937792,
+        "process_peak_rss_bytes": 107954176,
+        "rss_after_drop_bytes": 107954176
+      }
+    },
+    {
+      "id": "gallardo",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "1d6884541b38811528ce93495ca941e2e60e5927f81dc814d3914c1084f8bb62",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/gallardo.svg",
+        "release": true,
+        "budget_mib": 16,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 343,
+            "started_ms": 20.275708,
+            "completed_ms": 45.440957999999995,
+            "raster_ms": 24.376375,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 2798,
+            "height": 1498,
+            "started_ms": 240.57145799999998,
+            "completed_ms": 495.445291,
+            "raster_ms": 253.80045800000002,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 45.440957999999995,
+        "final_detail_after_last_request_ms": 375.481,
+        "total_ms": 495.481,
+        "final_width": 2798,
+        "final_height": 1498,
+        "final_output_bytes": 16765616,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 5484,
+        "peak_known_image_bytes": 17863856,
+        "process_peak_rss_bytes": 87883776,
+        "rss_end_bytes": 87883776
+      }
+    },
+    {
+      "id": "gallardo",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 32,
+      "sha256": "1d6884541b38811528ce93495ca941e2e60e5927f81dc814d3914c1084f8bb62",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/gallardo.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 340873,
+        "read_ms": 0.049499999999999995,
+        "renderer_init_ms": 0.004875,
+        "parse_first_ms": 2.736958,
+        "parse": {
+          "samples_ms": [
+            2.528916,
+            2.505416,
+            2.480875,
+            2.487917,
+            2.480041
+          ],
+          "median_ms": 2.487917,
+          "max_ms": 2.528916
+        },
+        "raster_first_ms": 23.908084,
+        "raster": {
+          "samples_ms": [
+            23.736417,
+            23.8185,
+            23.6005,
+            23.4205,
+            23.638209
+          ],
+          "median_ms": 23.638209,
+          "max_ms": 23.8185
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 1901.0,
+        "intrinsic_height": 1018.0,
+        "logical_width": 320.0,
+        "logical_height": 171.36244201660156,
+        "pixel_width": 640,
+        "pixel_height": 343,
+        "visible_pixels": 145304,
+        "output_bytes": 878080,
+        "base_bytes": 220160,
+        "replacement_image_bytes": 1976320,
+        "rss_start_bytes": 9437184,
+        "rss_parsed_bytes": 12238848,
+        "rss_base_bytes": 13959168,
+        "rss_one_zoom_bytes": 16433152,
+        "rss_two_zoom_bytes": 17498112,
+        "process_peak_rss_bytes": 17514496,
+        "rss_after_drop_bytes": 17514496
+      }
+    },
+    {
+      "id": "gallardo",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 32,
+      "sha256": "1d6884541b38811528ce93495ca941e2e60e5927f81dc814d3914c1084f8bb62",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/gallardo.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 340873,
+        "read_ms": 0.049332999999999995,
+        "renderer_init_ms": 0.0050420000000000005,
+        "parse_first_ms": 2.701583,
+        "parse": {
+          "samples_ms": [
+            2.583292,
+            2.507334,
+            2.579375,
+            2.5005420000000003,
+            2.4924169999999997
+          ],
+          "median_ms": 2.507334,
+          "max_ms": 2.583292
+        },
+        "raster_first_ms": 202.32862500000002,
+        "raster": {
+          "samples_ms": [
+            201.260958,
+            208.069291,
+            199.255083,
+            203.382166,
+            198.037375
+          ],
+          "median_ms": 201.260958,
+          "max_ms": 208.069291
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 1901.0,
+        "intrinsic_height": 1018.0,
+        "logical_width": 320.0,
+        "logical_height": 171.36244201660156,
+        "pixel_width": 2560,
+        "pixel_height": 1371,
+        "visible_pixels": 2317418,
+        "output_bytes": 14039040,
+        "base_bytes": 220160,
+        "replacement_image_bytes": 28298240,
+        "rss_start_bytes": 9404416,
+        "rss_parsed_bytes": 12222464,
+        "rss_base_bytes": 14008320,
+        "rss_one_zoom_bytes": 73039872,
+        "rss_two_zoom_bytes": 87162880,
+        "process_peak_rss_bytes": 87179264,
+        "rss_after_drop_bytes": 87179264
+      }
+    },
+    {
+      "id": "gallardo",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "1d6884541b38811528ce93495ca941e2e60e5927f81dc814d3914c1084f8bb62",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/gallardo.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 340873,
+        "read_ms": 0.049125,
+        "renderer_init_ms": 0.005208,
+        "parse_first_ms": 2.7585,
+        "parse": {
+          "samples_ms": [
+            2.5761249999999998,
+            2.5920409999999996,
+            2.5442080000000002,
+            2.5976660000000003,
+            2.499917
+          ],
+          "median_ms": 2.5761249999999998,
+          "max_ms": 2.5976660000000003
+        },
+        "raster_first_ms": 529.974334,
+        "raster": {
+          "samples_ms": [
+            526.822292,
+            529.483666,
+            527.1391669999999,
+            525.873959,
+            525.517791
+          ],
+          "median_ms": 526.822292,
+          "max_ms": 529.483666
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": true,
+        "intrinsic_width": 1901.0,
+        "intrinsic_height": 1018.0,
+        "logical_width": 320.0,
+        "logical_height": 171.36244201660156,
+        "pixel_width": 3957,
+        "pixel_height": 2119,
+        "visible_pixels": 5537163,
+        "output_bytes": 33539532,
+        "base_bytes": 220160,
+        "replacement_image_bytes": 67299224,
+        "rss_start_bytes": 9404416,
+        "rss_parsed_bytes": 12189696,
+        "rss_base_bytes": 14041088,
+        "rss_one_zoom_bytes": 159711232,
+        "rss_two_zoom_bytes": 193314816,
+        "process_peak_rss_bytes": 193331200,
+        "rss_after_drop_bytes": 193331200
+      }
+    },
+    {
+      "id": "gallardo",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "1d6884541b38811528ce93495ca941e2e60e5927f81dc814d3914c1084f8bb62",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/gallardo.svg",
+        "release": true,
+        "budget_mib": 32,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 343,
+            "started_ms": 20.292458,
+            "completed_ms": 45.245792,
+            "raster_ms": 24.696709000000002,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 3957,
+            "height": 2119,
+            "started_ms": 240.581083,
+            "completed_ms": 795.968917,
+            "raster_ms": 554.671542,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 45.245792,
+        "final_detail_after_last_request_ms": 675.9982920000001,
+        "total_ms": 795.9982920000001,
+        "final_width": 3957,
+        "final_height": 2119,
+        "final_output_bytes": 33539532,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 5484,
+        "peak_known_image_bytes": 34637772,
+        "process_peak_rss_bytes": 160104448,
+        "rss_end_bytes": 160104448
+      }
+    },
+    {
+      "id": "AJ_Digital_Camera",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 16,
+      "sha256": "e8efd9d45b027782d1b7cd57830c29c27850ea067c2c141ff4be9d2e5a1c314e",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/AJ_Digital_Camera.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 132619,
+        "read_ms": 0.0285,
+        "renderer_init_ms": 0.005208,
+        "parse_first_ms": 0.9790000000000001,
+        "parse": {
+          "samples_ms": [
+            0.882917,
+            0.854792,
+            0.815459,
+            0.8185830000000001,
+            0.840584
+          ],
+          "median_ms": 0.840584,
+          "max_ms": 0.882917
+        },
+        "raster_first_ms": 11.211458,
+        "raster": {
+          "samples_ms": [
+            11.131167000000001,
+            11.112334,
+            11.077917,
+            11.079625,
+            11.042292
+          ],
+          "median_ms": 11.079625,
+          "max_ms": 11.131167000000001
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 406.25,
+        "intrinsic_height": 206.25,
+        "logical_width": 320.0,
+        "logical_height": 162.4615478515625,
+        "pixel_width": 640,
+        "pixel_height": 325,
+        "visible_pixels": 188817,
+        "output_bytes": 832000,
+        "base_bytes": 208640,
+        "replacement_image_bytes": 1872640,
+        "rss_start_bytes": 9207808,
+        "rss_parsed_bytes": 10797056,
+        "rss_base_bytes": 12058624,
+        "rss_one_zoom_bytes": 13271040,
+        "rss_two_zoom_bytes": 14155776,
+        "process_peak_rss_bytes": 14172160,
+        "rss_after_drop_bytes": 14172160
+      }
+    },
+    {
+      "id": "AJ_Digital_Camera",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 16,
+      "sha256": "e8efd9d45b027782d1b7cd57830c29c27850ea067c2c141ff4be9d2e5a1c314e",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/AJ_Digital_Camera.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 132619,
+        "read_ms": 0.027792,
+        "renderer_init_ms": 0.004459,
+        "parse_first_ms": 0.958334,
+        "parse": {
+          "samples_ms": [
+            0.8472500000000001,
+            0.842333,
+            0.809791,
+            0.813334,
+            0.822667
+          ],
+          "median_ms": 0.822667,
+          "max_ms": 0.8472500000000001
+        },
+        "raster_first_ms": 119.267083,
+        "raster": {
+          "samples_ms": [
+            119.04733300000001,
+            117.930208,
+            117.129583,
+            117.305,
+            118.858084
+          ],
+          "median_ms": 117.930208,
+          "max_ms": 119.04733300000001
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 406.25,
+        "intrinsic_height": 206.25,
+        "logical_width": 320.0,
+        "logical_height": 162.4615478515625,
+        "pixel_width": 2560,
+        "pixel_height": 1300,
+        "visible_pixels": 3021028,
+        "output_bytes": 13312000,
+        "base_bytes": 208640,
+        "replacement_image_bytes": 26832640,
+        "rss_start_bytes": 9207808,
+        "rss_parsed_bytes": 10797056,
+        "rss_base_bytes": 11960320,
+        "rss_one_zoom_bytes": 31571968,
+        "rss_two_zoom_bytes": 46858240,
+        "process_peak_rss_bytes": 46874624,
+        "rss_after_drop_bytes": 46874624
+      }
+    },
+    {
+      "id": "AJ_Digital_Camera",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "e8efd9d45b027782d1b7cd57830c29c27850ea067c2c141ff4be9d2e5a1c314e",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/AJ_Digital_Camera.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 132619,
+        "read_ms": 0.035542,
+        "renderer_init_ms": 0.005084,
+        "parse_first_ms": 0.9822500000000001,
+        "parse": {
+          "samples_ms": [
+            0.852167,
+            0.826375,
+            0.8174589999999999,
+            0.825292,
+            0.787666
+          ],
+          "median_ms": 0.825292,
+          "max_ms": 0.852167
+        },
+        "raster_first_ms": 145.709917,
+        "raster": {
+          "samples_ms": [
+            145.843042,
+            145.388083,
+            145.9165,
+            146.34575,
+            145.30954200000002
+          ],
+          "median_ms": 145.843042,
+          "max_ms": 146.34575
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 406.25,
+        "intrinsic_height": 206.25,
+        "logical_width": 320.0,
+        "logical_height": 162.4615478515625,
+        "pixel_width": 2874,
+        "pixel_height": 1459,
+        "visible_pixels": 3801970,
+        "output_bytes": 16772664,
+        "base_bytes": 208640,
+        "replacement_image_bytes": 33753968,
+        "rss_start_bytes": 9224192,
+        "rss_parsed_bytes": 10878976,
+        "rss_base_bytes": 12009472,
+        "rss_one_zoom_bytes": 38617088,
+        "rss_two_zoom_bytes": 55590912,
+        "process_peak_rss_bytes": 55607296,
+        "rss_after_drop_bytes": 55607296
+      }
+    },
+    {
+      "id": "AJ_Digital_Camera",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "e8efd9d45b027782d1b7cd57830c29c27850ea067c2c141ff4be9d2e5a1c314e",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/AJ_Digital_Camera.svg",
+        "release": true,
+        "budget_mib": 16,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 325,
+            "started_ms": 20.157083,
+            "completed_ms": 32.546208,
+            "raster_ms": 11.462208,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 2874,
+            "height": 1459,
+            "started_ms": 240.271458,
+            "completed_ms": 397.44174999999996,
+            "raster_ms": 156.529166,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 32.546208,
+        "final_detail_after_last_request_ms": 277.47425,
+        "total_ms": 397.47425,
+        "final_width": 2874,
+        "final_height": 1459,
+        "final_output_bytes": 16772664,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 5199,
+        "peak_known_image_bytes": 17813304,
+        "process_peak_rss_bytes": 40009728,
+        "rss_end_bytes": 40026112
+      }
+    },
+    {
+      "id": "AJ_Digital_Camera",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 32,
+      "sha256": "e8efd9d45b027782d1b7cd57830c29c27850ea067c2c141ff4be9d2e5a1c314e",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/AJ_Digital_Camera.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 132619,
+        "read_ms": 0.031625,
+        "renderer_init_ms": 0.005791999999999999,
+        "parse_first_ms": 0.9940829999999999,
+        "parse": {
+          "samples_ms": [
+            0.85275,
+            0.813625,
+            0.79825,
+            0.783875,
+            0.797583
+          ],
+          "median_ms": 0.79825,
+          "max_ms": 0.85275
+        },
+        "raster_first_ms": 11.13625,
+        "raster": {
+          "samples_ms": [
+            11.086749999999999,
+            11.053792,
+            11.009542000000001,
+            11.030041,
+            11.015166
+          ],
+          "median_ms": 11.030041,
+          "max_ms": 11.086749999999999
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 406.25,
+        "intrinsic_height": 206.25,
+        "logical_width": 320.0,
+        "logical_height": 162.4615478515625,
+        "pixel_width": 640,
+        "pixel_height": 325,
+        "visible_pixels": 188817,
+        "output_bytes": 832000,
+        "base_bytes": 208640,
+        "replacement_image_bytes": 1872640,
+        "rss_start_bytes": 9207808,
+        "rss_parsed_bytes": 10895360,
+        "rss_base_bytes": 12173312,
+        "rss_one_zoom_bytes": 13451264,
+        "rss_two_zoom_bytes": 14352384,
+        "process_peak_rss_bytes": 14368768,
+        "rss_after_drop_bytes": 14368768
+      }
+    },
+    {
+      "id": "AJ_Digital_Camera",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 32,
+      "sha256": "e8efd9d45b027782d1b7cd57830c29c27850ea067c2c141ff4be9d2e5a1c314e",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/AJ_Digital_Camera.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 132619,
+        "read_ms": 0.031583,
+        "renderer_init_ms": 0.004875,
+        "parse_first_ms": 0.978083,
+        "parse": {
+          "samples_ms": [
+            0.842958,
+            0.826959,
+            0.79625,
+            0.816875,
+            0.8047920000000001
+          ],
+          "median_ms": 0.816875,
+          "max_ms": 0.842958
+        },
+        "raster_first_ms": 118.698542,
+        "raster": {
+          "samples_ms": [
+            118.112042,
+            117.039041,
+            119.350042,
+            117.665375,
+            119.015875
+          ],
+          "median_ms": 118.112042,
+          "max_ms": 119.350042
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 406.25,
+        "intrinsic_height": 206.25,
+        "logical_width": 320.0,
+        "logical_height": 162.4615478515625,
+        "pixel_width": 2560,
+        "pixel_height": 1300,
+        "visible_pixels": 3021028,
+        "output_bytes": 13312000,
+        "base_bytes": 208640,
+        "replacement_image_bytes": 26832640,
+        "rss_start_bytes": 9207808,
+        "rss_parsed_bytes": 10846208,
+        "rss_base_bytes": 12107776,
+        "rss_one_zoom_bytes": 31670272,
+        "rss_two_zoom_bytes": 45088768,
+        "process_peak_rss_bytes": 45105152,
+        "rss_after_drop_bytes": 45105152
+      }
+    },
+    {
+      "id": "AJ_Digital_Camera",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "e8efd9d45b027782d1b7cd57830c29c27850ea067c2c141ff4be9d2e5a1c314e",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/AJ_Digital_Camera.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 132619,
+        "read_ms": 0.036791,
+        "renderer_init_ms": 0.00625,
+        "parse_first_ms": 0.9875,
+        "parse": {
+          "samples_ms": [
+            0.847209,
+            0.830167,
+            0.804,
+            0.803292,
+            0.8245
+          ],
+          "median_ms": 0.8245,
+          "max_ms": 0.847209
+        },
+        "raster_first_ms": 280.997875,
+        "raster": {
+          "samples_ms": [
+            281.94004099999995,
+            278.89104199999997,
+            281.727417,
+            279.43075,
+            279.295167
+          ],
+          "median_ms": 279.43075,
+          "max_ms": 281.94004099999995
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": true,
+        "intrinsic_width": 406.25,
+        "intrinsic_height": 206.25,
+        "logical_width": 320.0,
+        "logical_height": 162.4615478515625,
+        "pixel_width": 4064,
+        "pixel_height": 2063,
+        "visible_pixels": 7603490,
+        "output_bytes": 33536128,
+        "base_bytes": 208640,
+        "replacement_image_bytes": 67280896,
+        "rss_start_bytes": 9207808,
+        "rss_parsed_bytes": 10895360,
+        "rss_base_bytes": 12091392,
+        "rss_one_zoom_bytes": 66584576,
+        "rss_two_zoom_bytes": 100302848,
+        "process_peak_rss_bytes": 100319232,
+        "rss_after_drop_bytes": 100319232
+      }
+    },
+    {
+      "id": "AJ_Digital_Camera",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "e8efd9d45b027782d1b7cd57830c29c27850ea067c2c141ff4be9d2e5a1c314e",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/AJ_Digital_Camera.svg",
+        "release": true,
+        "budget_mib": 32,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 325,
+            "started_ms": 20.296875,
+            "completed_ms": 32.9355,
+            "raster_ms": 11.408208,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 4064,
+            "height": 2063,
+            "started_ms": 241.065958,
+            "completed_ms": 551.590083,
+            "raster_ms": 310.261417,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 32.9355,
+        "final_detail_after_last_request_ms": 431.599875,
+        "total_ms": 551.599875,
+        "final_width": 4064,
+        "final_height": 2063,
+        "final_output_bytes": 33536128,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 5199,
+        "peak_known_image_bytes": 34576768,
+        "process_peak_rss_bytes": 67616768,
+        "rss_end_bytes": 67633152
+      }
+    },
+    {
+      "id": "USStates",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 16,
+      "sha256": "615f7c8c43e4d7181969496643ed8f35d74fc29fea391c8d8dd219aa6547136b",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/USStates.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 90035,
+        "read_ms": 0.024875,
+        "renderer_init_ms": 0.006292,
+        "parse_first_ms": 11.786541,
+        "parse": {
+          "samples_ms": [
+            1.7853750000000002,
+            1.7467089999999998,
+            1.700958,
+            1.709083,
+            1.71075
+          ],
+          "median_ms": 1.71075,
+          "max_ms": 1.7853750000000002
+        },
+        "raster_first_ms": 2.090125,
+        "raster": {
+          "samples_ms": [
+            2.017709,
+            1.931791,
+            1.891709,
+            1.87925,
+            1.911958
+          ],
+          "median_ms": 1.911958,
+          "max_ms": 2.017709
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 1000.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 192.0,
+        "pixel_width": 640,
+        "pixel_height": 384,
+        "visible_pixels": 138000,
+        "output_bytes": 983040,
+        "base_bytes": 245760,
+        "replacement_image_bytes": 2211840,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 12500992,
+        "rss_base_bytes": 13615104,
+        "rss_one_zoom_bytes": 14712832,
+        "rss_two_zoom_bytes": 15745024,
+        "process_peak_rss_bytes": 15761408,
+        "rss_after_drop_bytes": 15761408
+      }
+    },
+    {
+      "id": "USStates",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 16,
+      "sha256": "615f7c8c43e4d7181969496643ed8f35d74fc29fea391c8d8dd219aa6547136b",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/USStates.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 90035,
+        "read_ms": 0.032792,
+        "renderer_init_ms": 0.004625,
+        "parse_first_ms": 8.207291999999999,
+        "parse": {
+          "samples_ms": [
+            2.016666,
+            1.803792,
+            1.726458,
+            1.739958,
+            1.704458
+          ],
+          "median_ms": 1.739958,
+          "max_ms": 2.016666
+        },
+        "raster_first_ms": 12.187292000000001,
+        "raster": {
+          "samples_ms": [
+            12.194416,
+            11.536583,
+            11.502,
+            11.460958,
+            11.478333000000001
+          ],
+          "median_ms": 11.502,
+          "max_ms": 12.194416
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 1000.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 192.0,
+        "pixel_width": 2560,
+        "pixel_height": 1536,
+        "visible_pixels": 2173662,
+        "output_bytes": 15728640,
+        "base_bytes": 245760,
+        "replacement_image_bytes": 31703040,
+        "rss_start_bytes": 9175040,
+        "rss_parsed_bytes": 12419072,
+        "rss_base_bytes": 13713408,
+        "rss_one_zoom_bytes": 29573120,
+        "rss_two_zoom_bytes": 45318144,
+        "process_peak_rss_bytes": 45334528,
+        "rss_after_drop_bytes": 45334528
+      }
+    },
+    {
+      "id": "USStates",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "615f7c8c43e4d7181969496643ed8f35d74fc29fea391c8d8dd219aa6547136b",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/USStates.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 90035,
+        "read_ms": 0.028541999999999998,
+        "renderer_init_ms": 0.0050420000000000005,
+        "parse_first_ms": 8.358708,
+        "parse": {
+          "samples_ms": [
+            1.7326659999999998,
+            1.678667,
+            1.654833,
+            1.6821659999999998,
+            1.651041
+          ],
+          "median_ms": 1.678667,
+          "max_ms": 1.7326659999999998
+        },
+        "raster_first_ms": 12.792792,
+        "raster": {
+          "samples_ms": [
+            12.753250000000001,
+            12.2445,
+            12.121208,
+            12.136332999999999,
+            12.095167
+          ],
+          "median_ms": 12.136332999999999,
+          "max_ms": 12.753250000000001
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 1000.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 192.0,
+        "pixel_width": 2643,
+        "pixel_height": 1586,
+        "visible_pixels": 2316765,
+        "output_bytes": 16767192,
+        "base_bytes": 245760,
+        "replacement_image_bytes": 33780144,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 12435456,
+        "rss_base_bytes": 13631488,
+        "rss_one_zoom_bytes": 30572544,
+        "rss_two_zoom_bytes": 47431680,
+        "process_peak_rss_bytes": 47448064,
+        "rss_after_drop_bytes": 47448064
+      }
+    },
+    {
+      "id": "USStates",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "615f7c8c43e4d7181969496643ed8f35d74fc29fea391c8d8dd219aa6547136b",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/USStates.svg",
+        "release": true,
+        "budget_mib": 16,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 384,
+            "started_ms": 20.309542,
+            "completed_ms": 22.868416999999997,
+            "raster_ms": 2.163375,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 2643,
+            "height": 1586,
+            "started_ms": 240.623667,
+            "completed_ms": 259.536667,
+            "raster_ms": 18.714624999999998,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 22.868416999999997,
+        "final_detail_after_last_request_ms": 139.544958,
+        "total_ms": 259.544958,
+        "final_width": 2643,
+        "final_height": 1586,
+        "final_output_bytes": 16767192,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 6144,
+        "peak_known_image_bytes": 17995992,
+        "process_peak_rss_bytes": 31768576,
+        "rss_end_bytes": 31784960
+      }
+    },
+    {
+      "id": "USStates",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 32,
+      "sha256": "615f7c8c43e4d7181969496643ed8f35d74fc29fea391c8d8dd219aa6547136b",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/USStates.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 90035,
+        "read_ms": 0.043291,
+        "renderer_init_ms": 0.006459,
+        "parse_first_ms": 10.351041,
+        "parse": {
+          "samples_ms": [
+            2.058458,
+            1.9625419999999998,
+            1.896,
+            1.9002089999999998,
+            1.892917
+          ],
+          "median_ms": 1.9002089999999998,
+          "max_ms": 2.058458
+        },
+        "raster_first_ms": 2.2590000000000003,
+        "raster": {
+          "samples_ms": [
+            2.186458,
+            2.045417,
+            2.006792,
+            1.9449999999999998,
+            1.910709
+          ],
+          "median_ms": 2.006792,
+          "max_ms": 2.186458
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 1000.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 192.0,
+        "pixel_width": 640,
+        "pixel_height": 384,
+        "visible_pixels": 138000,
+        "output_bytes": 983040,
+        "base_bytes": 245760,
+        "replacement_image_bytes": 2211840,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 12402688,
+        "rss_base_bytes": 13713408,
+        "rss_one_zoom_bytes": 14811136,
+        "rss_two_zoom_bytes": 15810560,
+        "process_peak_rss_bytes": 15826944,
+        "rss_after_drop_bytes": 15826944
+      }
+    },
+    {
+      "id": "USStates",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 32,
+      "sha256": "615f7c8c43e4d7181969496643ed8f35d74fc29fea391c8d8dd219aa6547136b",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/USStates.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 90035,
+        "read_ms": 0.028041,
+        "renderer_init_ms": 0.005542,
+        "parse_first_ms": 8.275457999999999,
+        "parse": {
+          "samples_ms": [
+            1.7164579999999998,
+            1.722834,
+            1.7855830000000001,
+            1.720208,
+            1.718875
+          ],
+          "median_ms": 1.720208,
+          "max_ms": 1.7855830000000001
+        },
+        "raster_first_ms": 12.506625,
+        "raster": {
+          "samples_ms": [
+            12.4915,
+            12.227417,
+            11.933375,
+            11.659209,
+            11.4785
+          ],
+          "median_ms": 11.933375,
+          "max_ms": 12.4915
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 1000.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 192.0,
+        "pixel_width": 2560,
+        "pixel_height": 1536,
+        "visible_pixels": 2173662,
+        "output_bytes": 15728640,
+        "base_bytes": 245760,
+        "replacement_image_bytes": 31703040,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 12468224,
+        "rss_base_bytes": 13631488,
+        "rss_one_zoom_bytes": 29573120,
+        "rss_two_zoom_bytes": 45367296,
+        "process_peak_rss_bytes": 45383680,
+        "rss_after_drop_bytes": 45383680
+      }
+    },
+    {
+      "id": "USStates",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "615f7c8c43e4d7181969496643ed8f35d74fc29fea391c8d8dd219aa6547136b",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/USStates.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 90035,
+        "read_ms": 0.030000000000000002,
+        "renderer_init_ms": 0.005208,
+        "parse_first_ms": 8.340375,
+        "parse": {
+          "samples_ms": [
+            1.6895829999999998,
+            1.674542,
+            1.6838339999999998,
+            1.65425,
+            1.6832500000000001
+          ],
+          "median_ms": 1.6832500000000001,
+          "max_ms": 1.6895829999999998
+        },
+        "raster_first_ms": 21.995875,
+        "raster": {
+          "samples_ms": [
+            22.2285,
+            21.515417,
+            21.4455,
+            20.818959000000003,
+            21.283875000000002
+          ],
+          "median_ms": 21.4455,
+          "max_ms": 22.2285
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": true,
+        "intrinsic_width": 1000.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 192.0,
+        "pixel_width": 3739,
+        "pixel_height": 2243,
+        "visible_pixels": 4626233,
+        "output_bytes": 33546308,
+        "base_bytes": 245760,
+        "replacement_image_bytes": 67338376,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 12550144,
+        "rss_base_bytes": 13664256,
+        "rss_one_zoom_bytes": 47464448,
+        "rss_two_zoom_bytes": 81068032,
+        "process_peak_rss_bytes": 81084416,
+        "rss_after_drop_bytes": 81084416
+      }
+    },
+    {
+      "id": "USStates",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "615f7c8c43e4d7181969496643ed8f35d74fc29fea391c8d8dd219aa6547136b",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/USStates.svg",
+        "release": true,
+        "budget_mib": 32,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 384,
+            "started_ms": 20.293459,
+            "completed_ms": 22.856417,
+            "raster_ms": 2.197708,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 3739,
+            "height": 2243,
+            "started_ms": 240.848917,
+            "completed_ms": 267.314292,
+            "raster_ms": 25.246417,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 22.856417,
+        "final_detail_after_last_request_ms": 147.344834,
+        "total_ms": 267.344834,
+        "final_width": 3739,
+        "final_height": 2243,
+        "final_output_bytes": 33546308,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 6144,
+        "peak_known_image_bytes": 34775108,
+        "process_peak_rss_bytes": 48660480,
+        "rss_end_bytes": 48660480
+      }
+    },
+    {
+      "id": "rg1024_green_grapes",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 16,
+      "sha256": "c5982a7b24fc10bd8212f03f15f4d368d1022ae9ef15996fa98cfca3dfa0c011",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_green_grapes.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 73520,
+        "read_ms": 0.031666,
+        "renderer_init_ms": 0.006709,
+        "parse_first_ms": 0.893292,
+        "parse": {
+          "samples_ms": [
+            0.754042,
+            0.7102080000000001,
+            0.6914170000000001,
+            0.689416,
+            0.696042
+          ],
+          "median_ms": 0.696042,
+          "max_ms": 0.754042
+        },
+        "raster_first_ms": 40.581708,
+        "raster": {
+          "samples_ms": [
+            36.631208,
+            35.361416999999996,
+            35.740583,
+            36.074792,
+            35.358582999999996
+          ],
+          "median_ms": 35.740583,
+          "max_ms": 36.631208
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 557.9032592773438,
+        "intrinsic_height": 781.4940185546875,
+        "logical_width": 228.44581604003906,
+        "logical_height": 320.0,
+        "pixel_width": 457,
+        "pixel_height": 640,
+        "visible_pixels": 137953,
+        "output_bytes": 1169920,
+        "base_bytes": 293120,
+        "replacement_image_bytes": 2632960,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 10436608,
+        "rss_base_bytes": 11911168,
+        "rss_one_zoom_bytes": 13746176,
+        "rss_two_zoom_bytes": 14991360,
+        "process_peak_rss_bytes": 15007744,
+        "rss_after_drop_bytes": 15007744
+      }
+    },
+    {
+      "id": "rg1024_green_grapes",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 16,
+      "sha256": "c5982a7b24fc10bd8212f03f15f4d368d1022ae9ef15996fa98cfca3dfa0c011",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_green_grapes.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 73520,
+        "read_ms": 0.028708,
+        "renderer_init_ms": 0.0049169999999999995,
+        "parse_first_ms": 0.620209,
+        "parse": {
+          "samples_ms": [
+            0.520625,
+            0.4885,
+            0.48008300000000004,
+            0.483208,
+            0.480375
+          ],
+          "median_ms": 0.483208,
+          "max_ms": 0.520625
+        },
+        "raster_first_ms": 152.712542,
+        "raster": {
+          "samples_ms": [
+            152.873791,
+            151.04666699999999,
+            150.856458,
+            151.283291,
+            151.119917
+          ],
+          "median_ms": 151.119917,
+          "max_ms": 152.873791
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 557.9032592773438,
+        "intrinsic_height": 781.4940185546875,
+        "logical_width": 228.44581604003906,
+        "logical_height": 320.0,
+        "pixel_width": 1730,
+        "pixel_height": 2423,
+        "visible_pixels": 1970150,
+        "output_bytes": 16767160,
+        "base_bytes": 293120,
+        "replacement_image_bytes": 33827440,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 10436608,
+        "rss_base_bytes": 11911168,
+        "rss_one_zoom_bytes": 46809088,
+        "rss_two_zoom_bytes": 63651840,
+        "process_peak_rss_bytes": 63668224,
+        "rss_after_drop_bytes": 63668224
+      }
+    },
+    {
+      "id": "rg1024_green_grapes",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "c5982a7b24fc10bd8212f03f15f4d368d1022ae9ef15996fa98cfca3dfa0c011",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_green_grapes.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 73520,
+        "read_ms": 0.032209,
+        "renderer_init_ms": 0.0051660000000000005,
+        "parse_first_ms": 0.634334,
+        "parse": {
+          "samples_ms": [
+            0.533375,
+            0.49775,
+            0.48579199999999995,
+            0.49020800000000003,
+            0.490292
+          ],
+          "median_ms": 0.490292,
+          "max_ms": 0.533375
+        },
+        "raster_first_ms": 152.987833,
+        "raster": {
+          "samples_ms": [
+            151.088084,
+            151.748166,
+            150.811,
+            150.825333,
+            150.917792
+          ],
+          "median_ms": 150.917792,
+          "max_ms": 151.748166
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 557.9032592773438,
+        "intrinsic_height": 781.4940185546875,
+        "logical_width": 228.44581604003906,
+        "logical_height": 320.0,
+        "pixel_width": 1730,
+        "pixel_height": 2423,
+        "visible_pixels": 1970150,
+        "output_bytes": 16767160,
+        "base_bytes": 293120,
+        "replacement_image_bytes": 33827440,
+        "rss_start_bytes": 9142272,
+        "rss_parsed_bytes": 10420224,
+        "rss_base_bytes": 11960320,
+        "rss_one_zoom_bytes": 46825472,
+        "rss_two_zoom_bytes": 69730304,
+        "process_peak_rss_bytes": 69746688,
+        "rss_after_drop_bytes": 69746688
+      }
+    },
+    {
+      "id": "rg1024_green_grapes",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "c5982a7b24fc10bd8212f03f15f4d368d1022ae9ef15996fa98cfca3dfa0c011",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/rg1024_green_grapes.svg",
+        "release": true,
+        "budget_mib": 16,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 457,
+            "height": 640,
+            "started_ms": 20.304792,
+            "completed_ms": 61.688417,
+            "raster_ms": 41.270709000000004,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 1730,
+            "height": 2423,
+            "started_ms": 160.57325,
+            "completed_ms": 336.02216699999997,
+            "raster_ms": 174.48412499999998,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 61.688417,
+        "final_detail_after_last_request_ms": 216.04558299999997,
+        "total_ms": 336.04558299999997,
+        "final_width": 1730,
+        "final_height": 2423,
+        "final_output_bytes": 16767160,
+        "resolution_limited": true,
+        "requested_width": 7311,
+        "requested_height": 10240,
+        "peak_known_image_bytes": 18230200,
+        "process_peak_rss_bytes": 47054848,
+        "rss_end_bytes": 47071232
+      }
+    },
+    {
+      "id": "rg1024_green_grapes",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 32,
+      "sha256": "c5982a7b24fc10bd8212f03f15f4d368d1022ae9ef15996fa98cfca3dfa0c011",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_green_grapes.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 73520,
+        "read_ms": 0.028374999999999997,
+        "renderer_init_ms": 0.0050420000000000005,
+        "parse_first_ms": 0.617666,
+        "parse": {
+          "samples_ms": [
+            0.519,
+            0.516833,
+            0.502,
+            0.496625,
+            0.503875
+          ],
+          "median_ms": 0.503875,
+          "max_ms": 0.519
+        },
+        "raster_first_ms": 36.013833000000005,
+        "raster": {
+          "samples_ms": [
+            36.215458,
+            35.970208,
+            35.947584,
+            35.750084,
+            36.034833
+          ],
+          "median_ms": 35.970208,
+          "max_ms": 36.215458
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 557.9032592773438,
+        "intrinsic_height": 781.4940185546875,
+        "logical_width": 228.44581604003906,
+        "logical_height": 320.0,
+        "pixel_width": 457,
+        "pixel_height": 640,
+        "visible_pixels": 137953,
+        "output_bytes": 1169920,
+        "base_bytes": 293120,
+        "replacement_image_bytes": 2632960,
+        "rss_start_bytes": 9142272,
+        "rss_parsed_bytes": 10403840,
+        "rss_base_bytes": 11927552,
+        "rss_one_zoom_bytes": 13778944,
+        "rss_two_zoom_bytes": 15040512,
+        "process_peak_rss_bytes": 15056896,
+        "rss_after_drop_bytes": 15056896
+      }
+    },
+    {
+      "id": "rg1024_green_grapes",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 32,
+      "sha256": "c5982a7b24fc10bd8212f03f15f4d368d1022ae9ef15996fa98cfca3dfa0c011",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_green_grapes.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 73520,
+        "read_ms": 0.027209,
+        "renderer_init_ms": 0.005083000000000001,
+        "parse_first_ms": 0.621833,
+        "parse": {
+          "samples_ms": [
+            0.555542,
+            0.498292,
+            0.475792,
+            0.481792,
+            0.477416
+          ],
+          "median_ms": 0.481792,
+          "max_ms": 0.555542
+        },
+        "raster_first_ms": 168.807334,
+        "raster": {
+          "samples_ms": [
+            169.00975,
+            168.131625,
+            168.335917,
+            167.48433300000002,
+            169.764167
+          ],
+          "median_ms": 168.335917,
+          "max_ms": 169.764167
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 557.9032592773438,
+        "intrinsic_height": 781.4940185546875,
+        "logical_width": 228.44581604003906,
+        "logical_height": 320.0,
+        "pixel_width": 1828,
+        "pixel_height": 2560,
+        "visible_pixels": 2197710,
+        "output_bytes": 18718720,
+        "base_bytes": 293120,
+        "replacement_image_bytes": 37730560,
+        "rss_start_bytes": 9142272,
+        "rss_parsed_bytes": 10420224,
+        "rss_base_bytes": 11894784,
+        "rss_one_zoom_bytes": 55492608,
+        "rss_two_zoom_bytes": 74366976,
+        "process_peak_rss_bytes": 74383360,
+        "rss_after_drop_bytes": 74383360
+      }
+    },
+    {
+      "id": "rg1024_green_grapes",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "c5982a7b24fc10bd8212f03f15f4d368d1022ae9ef15996fa98cfca3dfa0c011",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_green_grapes.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 73520,
+        "read_ms": 0.032292,
+        "renderer_init_ms": 0.005208,
+        "parse_first_ms": 0.655208,
+        "parse": {
+          "samples_ms": [
+            0.5764159999999999,
+            0.5238750000000001,
+            0.514667,
+            0.513666,
+            0.515875
+          ],
+          "median_ms": 0.515875,
+          "max_ms": 0.5764159999999999
+        },
+        "raster_first_ms": 312.186167,
+        "raster": {
+          "samples_ms": [
+            311.569292,
+            310.57566599999996,
+            312.886834,
+            310.5505,
+            313.648416
+          ],
+          "median_ms": 311.569292,
+          "max_ms": 313.648416
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": true,
+        "intrinsic_width": 557.9032592773438,
+        "intrinsic_height": 781.4940185546875,
+        "logical_width": 228.44581604003906,
+        "logical_height": 320.0,
+        "pixel_width": 2447,
+        "pixel_height": 3427,
+        "visible_pixels": 3937003,
+        "output_bytes": 33543476,
+        "base_bytes": 293120,
+        "replacement_image_bytes": 67380072,
+        "rss_start_bytes": 9142272,
+        "rss_parsed_bytes": 10452992,
+        "rss_base_bytes": 11993088,
+        "rss_one_zoom_bytes": 103432192,
+        "rss_two_zoom_bytes": 137314304,
+        "process_peak_rss_bytes": 137330688,
+        "rss_after_drop_bytes": 137330688
+      }
+    },
+    {
+      "id": "rg1024_green_grapes",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "c5982a7b24fc10bd8212f03f15f4d368d1022ae9ef15996fa98cfca3dfa0c011",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/rg1024_green_grapes.svg",
+        "release": true,
+        "budget_mib": 32,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 457,
+            "height": 640,
+            "started_ms": 20.233333,
+            "completed_ms": 58.95,
+            "raster_ms": 37.864291,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 2447,
+            "height": 3427,
+            "started_ms": 240.899583,
+            "completed_ms": 577.933,
+            "raster_ms": 336.785583,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 58.95,
+        "final_detail_after_last_request_ms": 457.943125,
+        "total_ms": 577.943125,
+        "final_width": 2447,
+        "final_height": 3427,
+        "final_output_bytes": 33543476,
+        "resolution_limited": true,
+        "requested_width": 7311,
+        "requested_height": 10240,
+        "peak_known_image_bytes": 35006516,
+        "process_peak_rss_bytes": 108855296,
+        "rss_end_bytes": 108871680
+      }
+    },
+    {
+      "id": "rg1024_metal_effect",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 16,
+      "sha256": "bea3712e842b247bfab90ab373355fffe3be933f8a33df55ea193036e0812983",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_metal_effect.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 55748,
+        "read_ms": 0.028584,
+        "renderer_init_ms": 0.005332999999999999,
+        "parse_first_ms": 0.523416,
+        "parse": {
+          "samples_ms": [
+            0.420167,
+            0.380083,
+            0.368792,
+            0.39354100000000003,
+            0.380459
+          ],
+          "median_ms": 0.380459,
+          "max_ms": 0.420167
+        },
+        "raster_first_ms": 32.31275,
+        "raster": {
+          "samples_ms": [
+            31.89425,
+            32.147333,
+            31.684375,
+            31.820583,
+            31.680374999999998
+          ],
+          "median_ms": 31.820583,
+          "max_ms": 32.147333
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 445.0,
+        "intrinsic_height": 479.0,
+        "logical_width": 297.2860107421875,
+        "logical_height": 320.0,
+        "pixel_width": 595,
+        "pixel_height": 640,
+        "visible_pixels": 380800,
+        "output_bytes": 1523200,
+        "base_bytes": 381440,
+        "replacement_image_bytes": 3427840,
+        "rss_start_bytes": 9142272,
+        "rss_parsed_bytes": 10403840,
+        "rss_base_bytes": 12566528,
+        "rss_one_zoom_bytes": 16596992,
+        "rss_two_zoom_bytes": 18907136,
+        "process_peak_rss_bytes": 18923520,
+        "rss_after_drop_bytes": 18923520
+      }
+    },
+    {
+      "id": "rg1024_metal_effect",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 16,
+      "sha256": "bea3712e842b247bfab90ab373355fffe3be933f8a33df55ea193036e0812983",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_metal_effect.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 55748,
+        "read_ms": 0.026792,
+        "renderer_init_ms": 0.0052499999999999995,
+        "parse_first_ms": 0.502958,
+        "parse": {
+          "samples_ms": [
+            0.41162499999999996,
+            0.401834,
+            0.37220800000000004,
+            0.386083,
+            0.37916700000000003
+          ],
+          "median_ms": 0.386083,
+          "max_ms": 0.41162499999999996
+        },
+        "raster_first_ms": 198.884917,
+        "raster": {
+          "samples_ms": [
+            197.910625,
+            195.8315,
+            195.722208,
+            196.021709,
+            197.713
+          ],
+          "median_ms": 196.021709,
+          "max_ms": 197.910625
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 445.0,
+        "intrinsic_height": 479.0,
+        "logical_width": 297.2860107421875,
+        "logical_height": 320.0,
+        "pixel_width": 1974,
+        "pixel_height": 2124,
+        "visible_pixels": 4192776,
+        "output_bytes": 16771104,
+        "base_bytes": 381440,
+        "replacement_image_bytes": 33923648,
+        "rss_start_bytes": 9125888,
+        "rss_parsed_bytes": 10420224,
+        "rss_base_bytes": 12713984,
+        "rss_one_zoom_bytes": 87359488,
+        "rss_two_zoom_bytes": 104300544,
+        "process_peak_rss_bytes": 104316928,
+        "rss_after_drop_bytes": 104316928
+      }
+    },
+    {
+      "id": "rg1024_metal_effect",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "bea3712e842b247bfab90ab373355fffe3be933f8a33df55ea193036e0812983",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_metal_effect.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 55748,
+        "read_ms": 0.025833000000000002,
+        "renderer_init_ms": 0.005208,
+        "parse_first_ms": 0.496958,
+        "parse": {
+          "samples_ms": [
+            0.397917,
+            0.373458,
+            0.401458,
+            0.371792,
+            0.39312499999999995
+          ],
+          "median_ms": 0.39312499999999995,
+          "max_ms": 0.401458
+        },
+        "raster_first_ms": 198.480875,
+        "raster": {
+          "samples_ms": [
+            195.876708,
+            192.394334,
+            195.69129199999998,
+            197.931792,
+            198.40466700000002
+          ],
+          "median_ms": 195.876708,
+          "max_ms": 198.40466700000002
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 445.0,
+        "intrinsic_height": 479.0,
+        "logical_width": 297.2860107421875,
+        "logical_height": 320.0,
+        "pixel_width": 1974,
+        "pixel_height": 2124,
+        "visible_pixels": 4192776,
+        "output_bytes": 16771104,
+        "base_bytes": 381440,
+        "replacement_image_bytes": 33923648,
+        "rss_start_bytes": 9125888,
+        "rss_parsed_bytes": 10403840,
+        "rss_base_bytes": 12599296,
+        "rss_one_zoom_bytes": 87293952,
+        "rss_two_zoom_bytes": 105168896,
+        "process_peak_rss_bytes": 105185280,
+        "rss_after_drop_bytes": 105185280
+      }
+    },
+    {
+      "id": "rg1024_metal_effect",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "bea3712e842b247bfab90ab373355fffe3be933f8a33df55ea193036e0812983",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/rg1024_metal_effect.svg",
+        "release": true,
+        "budget_mib": 16,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 595,
+            "height": 640,
+            "started_ms": 20.202250000000003,
+            "completed_ms": 54.187208,
+            "raster_ms": 33.300749999999994,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 1974,
+            "height": 2124,
+            "started_ms": 160.33075,
+            "completed_ms": 370.895458,
+            "raster_ms": 209.893417,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 54.187208,
+        "final_detail_after_last_request_ms": 250.93212499999998,
+        "total_ms": 370.932125,
+        "final_width": 1974,
+        "final_height": 2124,
+        "final_output_bytes": 16771104,
+        "resolution_limited": true,
+        "requested_width": 9514,
+        "requested_height": 10240,
+        "peak_known_image_bytes": 18675744,
+        "process_peak_rss_bytes": 92372992,
+        "rss_end_bytes": 92389376
+      }
+    },
+    {
+      "id": "rg1024_metal_effect",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 32,
+      "sha256": "bea3712e842b247bfab90ab373355fffe3be933f8a33df55ea193036e0812983",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_metal_effect.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 55748,
+        "read_ms": 0.041041999999999995,
+        "renderer_init_ms": 0.005958000000000001,
+        "parse_first_ms": 0.5592499999999999,
+        "parse": {
+          "samples_ms": [
+            0.4855,
+            0.427625,
+            0.42029099999999997,
+            0.395083,
+            0.412459
+          ],
+          "median_ms": 0.42029099999999997,
+          "max_ms": 0.4855
+        },
+        "raster_first_ms": 34.181584,
+        "raster": {
+          "samples_ms": [
+            32.899291,
+            32.452917,
+            32.100833,
+            32.895208000000004,
+            33.22725
+          ],
+          "median_ms": 32.895208000000004,
+          "max_ms": 33.22725
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 445.0,
+        "intrinsic_height": 479.0,
+        "logical_width": 297.2860107421875,
+        "logical_height": 320.0,
+        "pixel_width": 595,
+        "pixel_height": 640,
+        "visible_pixels": 380800,
+        "output_bytes": 1523200,
+        "base_bytes": 381440,
+        "replacement_image_bytes": 3427840,
+        "rss_start_bytes": 9125888,
+        "rss_parsed_bytes": 10452992,
+        "rss_base_bytes": 12632064,
+        "rss_one_zoom_bytes": 16678912,
+        "rss_two_zoom_bytes": 22659072,
+        "process_peak_rss_bytes": 22675456,
+        "rss_after_drop_bytes": 22675456
+      }
+    },
+    {
+      "id": "rg1024_metal_effect",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 32,
+      "sha256": "bea3712e842b247bfab90ab373355fffe3be933f8a33df55ea193036e0812983",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_metal_effect.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 55748,
+        "read_ms": 0.031875,
+        "renderer_init_ms": 0.0067079999999999996,
+        "parse_first_ms": 0.516375,
+        "parse": {
+          "samples_ms": [
+            0.467875,
+            0.400083,
+            0.416542,
+            0.430083,
+            0.40879099999999996
+          ],
+          "median_ms": 0.416542,
+          "max_ms": 0.467875
+        },
+        "raster_first_ms": 295.23,
+        "raster": {
+          "samples_ms": [
+            294.10675,
+            288.9835,
+            289.468292,
+            292.72337500000003,
+            293.971834
+          ],
+          "median_ms": 292.72337500000003,
+          "max_ms": 294.10675
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 445.0,
+        "intrinsic_height": 479.0,
+        "logical_width": 297.2860107421875,
+        "logical_height": 320.0,
+        "pixel_width": 2379,
+        "pixel_height": 2560,
+        "visible_pixels": 6090240,
+        "output_bytes": 24360960,
+        "base_bytes": 381440,
+        "replacement_image_bytes": 49103360,
+        "rss_start_bytes": 9142272,
+        "rss_parsed_bytes": 10403840,
+        "rss_base_bytes": 12632064,
+        "rss_one_zoom_bytes": 121667584,
+        "rss_two_zoom_bytes": 150945792,
+        "process_peak_rss_bytes": 150962176,
+        "rss_after_drop_bytes": 150962176
+      }
+    },
+    {
+      "id": "rg1024_metal_effect",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "bea3712e842b247bfab90ab373355fffe3be933f8a33df55ea193036e0812983",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/rg1024_metal_effect.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 55748,
+        "read_ms": 0.033667,
+        "renderer_init_ms": 0.005,
+        "parse_first_ms": 0.5339999999999999,
+        "parse": {
+          "samples_ms": [
+            0.444041,
+            0.409959,
+            0.405625,
+            0.392542,
+            0.385209
+          ],
+          "median_ms": 0.405625,
+          "max_ms": 0.444041
+        },
+        "raster_first_ms": 414.923834,
+        "raster": {
+          "samples_ms": [
+            455.275625,
+            438.80875000000003,
+            418.76633400000003,
+            436.708959,
+            453.852333
+          ],
+          "median_ms": 438.80875000000003,
+          "max_ms": 455.275625
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": true,
+        "intrinsic_width": 445.0,
+        "intrinsic_height": 479.0,
+        "logical_width": 297.2860107421875,
+        "logical_height": 320.0,
+        "pixel_width": 2791,
+        "pixel_height": 3004,
+        "visible_pixels": 8384164,
+        "output_bytes": 33536656,
+        "base_bytes": 381440,
+        "replacement_image_bytes": 67454752,
+        "rss_start_bytes": 9142272,
+        "rss_parsed_bytes": 10436608,
+        "rss_base_bytes": 12582912,
+        "rss_one_zoom_bytes": 170065920,
+        "rss_two_zoom_bytes": 203980800,
+        "process_peak_rss_bytes": 203997184,
+        "rss_after_drop_bytes": 204029952
+      }
+    },
+    {
+      "id": "rg1024_metal_effect",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "bea3712e842b247bfab90ab373355fffe3be933f8a33df55ea193036e0812983",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/rg1024_metal_effect.svg",
+        "release": true,
+        "budget_mib": 32,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 595,
+            "height": 640,
+            "started_ms": 21.129583,
+            "completed_ms": 55.078042,
+            "raster_ms": 32.635999999999996,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 2791,
+            "height": 3004,
+            "started_ms": 240.046125,
+            "completed_ms": 714.336833,
+            "raster_ms": 473.17749999999995,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 55.078042,
+        "final_detail_after_last_request_ms": 594.373958,
+        "total_ms": 714.373958,
+        "final_width": 2791,
+        "final_height": 3004,
+        "final_output_bytes": 33536656,
+        "resolution_limited": true,
+        "requested_width": 9514,
+        "requested_height": 10240,
+        "peak_known_image_bytes": 35441296,
+        "process_peak_rss_bytes": 175177728,
+        "rss_end_bytes": 175194112
+      }
+    },
+    {
+      "id": "displayWebStats",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 16,
+      "sha256": "bd78273e2605d4d039c766f2d5a1c294e21df06a8261b4cca1a1e15b9b7c3869",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/displayWebStats.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 85737,
+        "read_ms": 0.025625,
+        "renderer_init_ms": 0.006,
+        "parse_first_ms": 16.678208,
+        "parse": {
+          "samples_ms": [
+            6.616750000000001,
+            6.4680420000000005,
+            6.435,
+            6.47175,
+            6.436540999999999
+          ],
+          "median_ms": 6.4680420000000005,
+          "max_ms": 6.616750000000001
+        },
+        "raster_first_ms": 5.741916,
+        "raster": {
+          "samples_ms": [
+            5.651917,
+            5.510916,
+            5.5374170000000005,
+            5.515458,
+            5.489708
+          ],
+          "median_ms": 5.515458,
+          "max_ms": 5.651917
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 800.0,
+        "intrinsic_height": 450.0,
+        "logical_width": 320.0,
+        "logical_height": 180.0,
+        "pixel_width": 640,
+        "pixel_height": 360,
+        "visible_pixels": 205847,
+        "output_bytes": 921600,
+        "base_bytes": 230400,
+        "replacement_image_bytes": 2073600,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 13828096,
+        "rss_base_bytes": 15351808,
+        "rss_one_zoom_bytes": 16760832,
+        "rss_two_zoom_bytes": 17711104,
+        "process_peak_rss_bytes": 17727488,
+        "rss_after_drop_bytes": 17727488
+      }
+    },
+    {
+      "id": "displayWebStats",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 16,
+      "sha256": "bd78273e2605d4d039c766f2d5a1c294e21df06a8261b4cca1a1e15b9b7c3869",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/displayWebStats.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 85737,
+        "read_ms": 0.027,
+        "renderer_init_ms": 0.004875,
+        "parse_first_ms": 13.652875,
+        "parse": {
+          "samples_ms": [
+            6.619708,
+            6.612584,
+            6.745083,
+            6.538625000000001,
+            6.488207999999999
+          ],
+          "median_ms": 6.612584,
+          "max_ms": 6.745083
+        },
+        "raster_first_ms": 36.257040999999994,
+        "raster": {
+          "samples_ms": [
+            35.548875,
+            34.972667,
+            35.437999999999995,
+            36.900000000000006,
+            37.058415999999994
+          ],
+          "median_ms": 35.548875,
+          "max_ms": 37.058415999999994
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 800.0,
+        "intrinsic_height": 450.0,
+        "logical_width": 320.0,
+        "logical_height": 180.0,
+        "pixel_width": 2560,
+        "pixel_height": 1440,
+        "visible_pixels": 3287465,
+        "output_bytes": 14745600,
+        "base_bytes": 230400,
+        "replacement_image_bytes": 29721600,
+        "rss_start_bytes": 9175040,
+        "rss_parsed_bytes": 13795328,
+        "rss_base_bytes": 15286272,
+        "rss_one_zoom_bytes": 41123840,
+        "rss_two_zoom_bytes": 55902208,
+        "process_peak_rss_bytes": 55918592,
+        "rss_after_drop_bytes": 55918592
+      }
+    },
+    {
+      "id": "displayWebStats",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "bd78273e2605d4d039c766f2d5a1c294e21df06a8261b4cca1a1e15b9b7c3869",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/displayWebStats.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 85737,
+        "read_ms": 0.029791,
+        "renderer_init_ms": 0.0049169999999999995,
+        "parse_first_ms": 14.948209,
+        "parse": {
+          "samples_ms": [
+            6.765542,
+            6.750209,
+            6.844334,
+            7.042542,
+            7.0141659999999995
+          ],
+          "median_ms": 6.844334,
+          "max_ms": 7.042542
+        },
+        "raster_first_ms": 42.624292000000004,
+        "raster": {
+          "samples_ms": [
+            42.257041,
+            41.457750000000004,
+            41.410375,
+            40.757792,
+            40.937208000000005
+          ],
+          "median_ms": 41.410375,
+          "max_ms": 42.257041
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 800.0,
+        "intrinsic_height": 450.0,
+        "logical_width": 320.0,
+        "logical_height": 180.0,
+        "pixel_width": 2730,
+        "pixel_height": 1536,
+        "visible_pixels": 3741192,
+        "output_bytes": 16773120,
+        "base_bytes": 230400,
+        "replacement_image_bytes": 33776640,
+        "rss_start_bytes": 9175040,
+        "rss_parsed_bytes": 13762560,
+        "rss_base_bytes": 15335424,
+        "rss_one_zoom_bytes": 44695552,
+        "rss_two_zoom_bytes": 61505536,
+        "process_peak_rss_bytes": 61521920,
+        "rss_after_drop_bytes": 61521920
+      }
+    },
+    {
+      "id": "displayWebStats",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "bd78273e2605d4d039c766f2d5a1c294e21df06a8261b4cca1a1e15b9b7c3869",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/displayWebStats.svg",
+        "release": true,
+        "budget_mib": 16,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 360,
+            "started_ms": 20.233874999999998,
+            "completed_ms": 26.494459000000003,
+            "raster_ms": 5.790541,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 2730,
+            "height": 1536,
+            "started_ms": 240.117875,
+            "completed_ms": 308.15854199999995,
+            "raster_ms": 67.289083,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 26.494459000000003,
+        "final_detail_after_last_request_ms": 188.173542,
+        "total_ms": 308.173542,
+        "final_width": 2730,
+        "final_height": 1536,
+        "final_output_bytes": 16773120,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 5760,
+        "peak_known_image_bytes": 17925120,
+        "process_peak_rss_bytes": 45858816,
+        "rss_end_bytes": 45875200
+      }
+    },
+    {
+      "id": "displayWebStats",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 32,
+      "sha256": "bd78273e2605d4d039c766f2d5a1c294e21df06a8261b4cca1a1e15b9b7c3869",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/displayWebStats.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 85737,
+        "read_ms": 0.037958,
+        "renderer_init_ms": 0.005875,
+        "parse_first_ms": 14.983416,
+        "parse": {
+          "samples_ms": [
+            7.206167000000001,
+            7.045958,
+            6.8642080000000005,
+            6.667083,
+            6.438875
+          ],
+          "median_ms": 6.8642080000000005,
+          "max_ms": 7.206167000000001
+        },
+        "raster_first_ms": 5.726209000000001,
+        "raster": {
+          "samples_ms": [
+            5.646333,
+            5.912458,
+            5.804875,
+            5.834874999999999,
+            5.781208
+          ],
+          "median_ms": 5.804875,
+          "max_ms": 5.912458
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 800.0,
+        "intrinsic_height": 450.0,
+        "logical_width": 320.0,
+        "logical_height": 180.0,
+        "pixel_width": 640,
+        "pixel_height": 360,
+        "visible_pixels": 205847,
+        "output_bytes": 921600,
+        "base_bytes": 230400,
+        "replacement_image_bytes": 2073600,
+        "rss_start_bytes": 9158656,
+        "rss_parsed_bytes": 13746176,
+        "rss_base_bytes": 15269888,
+        "rss_one_zoom_bytes": 16662528,
+        "rss_two_zoom_bytes": 17629184,
+        "process_peak_rss_bytes": 17645568,
+        "rss_after_drop_bytes": 17645568
+      }
+    },
+    {
+      "id": "displayWebStats",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 32,
+      "sha256": "bd78273e2605d4d039c766f2d5a1c294e21df06a8261b4cca1a1e15b9b7c3869",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/displayWebStats.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 85737,
+        "read_ms": 0.036542,
+        "renderer_init_ms": 0.005542,
+        "parse_first_ms": 14.884209,
+        "parse": {
+          "samples_ms": [
+            7.035459,
+            6.660208,
+            6.915958,
+            6.799875,
+            6.797041
+          ],
+          "median_ms": 6.799875,
+          "max_ms": 7.035459
+        },
+        "raster_first_ms": 37.680084,
+        "raster": {
+          "samples_ms": [
+            36.796666,
+            36.759042,
+            36.681625000000004,
+            36.030959,
+            35.720666
+          ],
+          "median_ms": 36.681625000000004,
+          "max_ms": 36.796666
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 800.0,
+        "intrinsic_height": 450.0,
+        "logical_width": 320.0,
+        "logical_height": 180.0,
+        "pixel_width": 2560,
+        "pixel_height": 1440,
+        "visible_pixels": 3287465,
+        "output_bytes": 14745600,
+        "base_bytes": 230400,
+        "replacement_image_bytes": 29721600,
+        "rss_start_bytes": 9191424,
+        "rss_parsed_bytes": 13746176,
+        "rss_base_bytes": 15253504,
+        "rss_one_zoom_bytes": 41041920,
+        "rss_two_zoom_bytes": 55853056,
+        "process_peak_rss_bytes": 55869440,
+        "rss_after_drop_bytes": 55869440
+      }
+    },
+    {
+      "id": "displayWebStats",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "bd78273e2605d4d039c766f2d5a1c294e21df06a8261b4cca1a1e15b9b7c3869",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/displayWebStats.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 85737,
+        "read_ms": 0.038792,
+        "renderer_init_ms": 0.005625000000000001,
+        "parse_first_ms": 17.854292,
+        "parse": {
+          "samples_ms": [
+            7.0385,
+            6.870084,
+            6.900667,
+            6.729916,
+            6.8521659999999995
+          ],
+          "median_ms": 6.870084,
+          "max_ms": 7.0385
+        },
+        "raster_first_ms": 74.43216699999999,
+        "raster": {
+          "samples_ms": [
+            73.237333,
+            73.93745799999999,
+            72.388958,
+            72.438417,
+            72.122958
+          ],
+          "median_ms": 72.438417,
+          "max_ms": 73.93745799999999
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": true,
+        "intrinsic_width": 800.0,
+        "intrinsic_height": 450.0,
+        "logical_width": 320.0,
+        "logical_height": 180.0,
+        "pixel_width": 3861,
+        "pixel_height": 2172,
+        "visible_pixels": 7478028,
+        "output_bytes": 33544368,
+        "base_bytes": 230400,
+        "replacement_image_bytes": 67319136,
+        "rss_start_bytes": 9191424,
+        "rss_parsed_bytes": 13795328,
+        "rss_base_bytes": 15286272,
+        "rss_one_zoom_bytes": 74235904,
+        "rss_two_zoom_bytes": 107872256,
+        "process_peak_rss_bytes": 107888640,
+        "rss_after_drop_bytes": 107888640
+      }
+    },
+    {
+      "id": "displayWebStats",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "bd78273e2605d4d039c766f2d5a1c294e21df06a8261b4cca1a1e15b9b7c3869",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/displayWebStats.svg",
+        "release": true,
+        "budget_mib": 32,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 360,
+            "started_ms": 20.260666,
+            "completed_ms": 26.595708,
+            "raster_ms": 5.795625,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 3861,
+            "height": 2172,
+            "started_ms": 240.45925000000003,
+            "completed_ms": 339.99679100000003,
+            "raster_ms": 98.513292,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 26.595708,
+        "final_detail_after_last_request_ms": 220.04075,
+        "total_ms": 340.04075,
+        "final_width": 3861,
+        "final_height": 2172,
+        "final_output_bytes": 33544368,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 5760,
+        "peak_known_image_bytes": 34696368,
+        "process_peak_rss_bytes": 76087296,
+        "rss_end_bytes": 76087296
+      }
+    },
+    {
+      "id": "dragon",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 16,
+      "sha256": "a66278ec0c72d70152ab05fc9dd122ad094a262d96fa6f61fba6b12e128e0e47",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/dragon.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 20111,
+        "read_ms": 0.028292,
+        "renderer_init_ms": 0.00575,
+        "parse_first_ms": 0.309375,
+        "parse": {
+          "samples_ms": [
+            0.230042,
+            0.213708,
+            0.17175,
+            0.167708,
+            0.16470800000000002
+          ],
+          "median_ms": 0.17175,
+          "max_ms": 0.230042
+        },
+        "raster_first_ms": 3.3401669999999997,
+        "raster": {
+          "samples_ms": [
+            3.3085419999999996,
+            3.206667,
+            3.188708,
+            3.15625,
+            3.129209
+          ],
+          "median_ms": 3.188708,
+          "max_ms": 3.3085419999999996
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 273.5575866699219,
+        "intrinsic_height": 297.81951904296875,
+        "logical_width": 293.9311218261719,
+        "logical_height": 320.0,
+        "pixel_width": 588,
+        "pixel_height": 640,
+        "visible_pixels": 170436,
+        "output_bytes": 1505280,
+        "base_bytes": 376320,
+        "replacement_image_bytes": 3386880,
+        "rss_start_bytes": 9109504,
+        "rss_parsed_bytes": 9977856,
+        "rss_base_bytes": 11452416,
+        "rss_one_zoom_bytes": 13074432,
+        "rss_two_zoom_bytes": 14745600,
+        "process_peak_rss_bytes": 14761984,
+        "rss_after_drop_bytes": 14778368
+      }
+    },
+    {
+      "id": "dragon",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 16,
+      "sha256": "a66278ec0c72d70152ab05fc9dd122ad094a262d96fa6f61fba6b12e128e0e47",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/dragon.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 20111,
+        "read_ms": 0.022708,
+        "renderer_init_ms": 0.0052499999999999995,
+        "parse_first_ms": 0.260834,
+        "parse": {
+          "samples_ms": [
+            0.205583,
+            0.18170799999999998,
+            0.16712500000000002,
+            0.169459,
+            0.166
+          ],
+          "median_ms": 0.169459,
+          "max_ms": 0.205583
+        },
+        "raster_first_ms": 13.791584,
+        "raster": {
+          "samples_ms": [
+            13.932291,
+            13.209042,
+            13.076792000000001,
+            13.101833000000001,
+            13.652
+          ],
+          "median_ms": 13.209042,
+          "max_ms": 13.932291
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 273.5575866699219,
+        "intrinsic_height": 297.81951904296875,
+        "logical_width": 293.9311218261719,
+        "logical_height": 320.0,
+        "pixel_width": 1963,
+        "pixel_height": 2136,
+        "visible_pixels": 1878137,
+        "output_bytes": 16771872,
+        "base_bytes": 376320,
+        "replacement_image_bytes": 33920064,
+        "rss_start_bytes": 9093120,
+        "rss_parsed_bytes": 9994240,
+        "rss_base_bytes": 11452416,
+        "rss_one_zoom_bytes": 28508160,
+        "rss_two_zoom_bytes": 45465600,
+        "process_peak_rss_bytes": 45481984,
+        "rss_after_drop_bytes": 45481984
+      }
+    },
+    {
+      "id": "dragon",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "a66278ec0c72d70152ab05fc9dd122ad094a262d96fa6f61fba6b12e128e0e47",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/dragon.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 20111,
+        "read_ms": 0.038166,
+        "renderer_init_ms": 0.005582999999999999,
+        "parse_first_ms": 0.274417,
+        "parse": {
+          "samples_ms": [
+            0.209916,
+            0.18275,
+            0.164791,
+            0.162916,
+            0.159167
+          ],
+          "median_ms": 0.164791,
+          "max_ms": 0.209916
+        },
+        "raster_first_ms": 13.647417,
+        "raster": {
+          "samples_ms": [
+            13.864833,
+            13.283916999999999,
+            13.507333,
+            13.848084,
+            13.918
+          ],
+          "median_ms": 13.848084,
+          "max_ms": 13.918
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 273.5575866699219,
+        "intrinsic_height": 297.81951904296875,
+        "logical_width": 293.9311218261719,
+        "logical_height": 320.0,
+        "pixel_width": 1962,
+        "pixel_height": 2136,
+        "visible_pixels": 1877206,
+        "output_bytes": 16763328,
+        "base_bytes": 376320,
+        "replacement_image_bytes": 33902976,
+        "rss_start_bytes": 9093120,
+        "rss_parsed_bytes": 9994240,
+        "rss_base_bytes": 11436032,
+        "rss_one_zoom_bytes": 28426240,
+        "rss_two_zoom_bytes": 45367296,
+        "process_peak_rss_bytes": 45383680,
+        "rss_after_drop_bytes": 45383680
+      }
+    },
+    {
+      "id": "dragon",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "a66278ec0c72d70152ab05fc9dd122ad094a262d96fa6f61fba6b12e128e0e47",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/dragon.svg",
+        "release": true,
+        "budget_mib": 16,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 588,
+            "height": 640,
+            "started_ms": 20.071958000000002,
+            "completed_ms": 23.864832999999997,
+            "raster_ms": 3.456,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 1962,
+            "height": 2136,
+            "started_ms": 240.836125,
+            "completed_ms": 267.339208,
+            "raster_ms": 25.778792,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 23.864832999999997,
+        "final_detail_after_last_request_ms": 147.379167,
+        "total_ms": 267.379167,
+        "final_width": 1962,
+        "final_height": 2136,
+        "final_output_bytes": 16763328,
+        "resolution_limited": true,
+        "requested_width": 9406,
+        "requested_height": 10240,
+        "peak_known_image_bytes": 18644928,
+        "process_peak_rss_bytes": 29949952,
+        "rss_end_bytes": 29966336
+      }
+    },
+    {
+      "id": "dragon",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 32,
+      "sha256": "a66278ec0c72d70152ab05fc9dd122ad094a262d96fa6f61fba6b12e128e0e47",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/dragon.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 20111,
+        "read_ms": 0.038833,
+        "renderer_init_ms": 0.006834,
+        "parse_first_ms": 0.386459,
+        "parse": {
+          "samples_ms": [
+            0.29520799999999997,
+            0.26125,
+            0.24479200000000004,
+            0.238875,
+            0.233875
+          ],
+          "median_ms": 0.24479200000000004,
+          "max_ms": 0.29520799999999997
+        },
+        "raster_first_ms": 4.413917,
+        "raster": {
+          "samples_ms": [
+            4.167458,
+            3.932959,
+            3.790292,
+            3.6805000000000003,
+            3.569209
+          ],
+          "median_ms": 3.790292,
+          "max_ms": 4.167458
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 273.5575866699219,
+        "intrinsic_height": 297.81951904296875,
+        "logical_width": 293.9311218261719,
+        "logical_height": 320.0,
+        "pixel_width": 588,
+        "pixel_height": 640,
+        "visible_pixels": 170436,
+        "output_bytes": 1505280,
+        "base_bytes": 376320,
+        "replacement_image_bytes": 3386880,
+        "rss_start_bytes": 9109504,
+        "rss_parsed_bytes": 9977856,
+        "rss_base_bytes": 11354112,
+        "rss_one_zoom_bytes": 12976128,
+        "rss_two_zoom_bytes": 14680064,
+        "process_peak_rss_bytes": 14696448,
+        "rss_after_drop_bytes": 14712832
+      }
+    },
+    {
+      "id": "dragon",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 32,
+      "sha256": "a66278ec0c72d70152ab05fc9dd122ad094a262d96fa6f61fba6b12e128e0e47",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/dragon.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 20111,
+        "read_ms": 0.024042,
+        "renderer_init_ms": 0.005915999999999999,
+        "parse_first_ms": 0.313458,
+        "parse": {
+          "samples_ms": [
+            0.24020899999999998,
+            0.217417,
+            0.2,
+            0.196416,
+            0.191333
+          ],
+          "median_ms": 0.2,
+          "max_ms": 0.24020899999999998
+        },
+        "raster_first_ms": 18.135542,
+        "raster": {
+          "samples_ms": [
+            17.559083,
+            17.094708999999998,
+            17.010208,
+            17.269625,
+            17.001417
+          ],
+          "median_ms": 17.094708999999998,
+          "max_ms": 17.559083
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 273.5575866699219,
+        "intrinsic_height": 297.81951904296875,
+        "logical_width": 293.9311218261719,
+        "logical_height": 320.0,
+        "pixel_width": 2352,
+        "pixel_height": 2560,
+        "visible_pixels": 2694690,
+        "output_bytes": 24084480,
+        "base_bytes": 376320,
+        "replacement_image_bytes": 48545280,
+        "rss_start_bytes": 9093120,
+        "rss_parsed_bytes": 10010624,
+        "rss_base_bytes": 11452416,
+        "rss_one_zoom_bytes": 35799040,
+        "rss_two_zoom_bytes": 60162048,
+        "process_peak_rss_bytes": 60178432,
+        "rss_after_drop_bytes": 60178432
+      }
+    },
+    {
+      "id": "dragon",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "a66278ec0c72d70152ab05fc9dd122ad094a262d96fa6f61fba6b12e128e0e47",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/dragon.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 20111,
+        "read_ms": 0.024292,
+        "renderer_init_ms": 0.005708,
+        "parse_first_ms": 0.269875,
+        "parse": {
+          "samples_ms": [
+            0.207042,
+            0.181709,
+            0.16783299999999998,
+            0.169833,
+            0.16924999999999998
+          ],
+          "median_ms": 0.169833,
+          "max_ms": 0.207042
+        },
+        "raster_first_ms": 22.245082999999997,
+        "raster": {
+          "samples_ms": [
+            22.522875000000003,
+            21.579082999999997,
+            21.765375,
+            21.070458,
+            21.470042000000003
+          ],
+          "median_ms": 21.579082999999997,
+          "max_ms": 22.522875000000003
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": true,
+        "intrinsic_width": 273.5575866699219,
+        "intrinsic_height": 297.81951904296875,
+        "logical_width": 293.9311218261719,
+        "logical_height": 320.0,
+        "pixel_width": 2775,
+        "pixel_height": 3021,
+        "visible_pixels": 3749766,
+        "output_bytes": 33533100,
+        "base_bytes": 376320,
+        "replacement_image_bytes": 67442520,
+        "rss_start_bytes": 9093120,
+        "rss_parsed_bytes": 10010624,
+        "rss_base_bytes": 11452416,
+        "rss_one_zoom_bytes": 45285376,
+        "rss_two_zoom_bytes": 79069184,
+        "process_peak_rss_bytes": 79085568,
+        "rss_after_drop_bytes": 79085568
+      }
+    },
+    {
+      "id": "dragon",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "a66278ec0c72d70152ab05fc9dd122ad094a262d96fa6f61fba6b12e128e0e47",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/dragon.svg",
+        "release": true,
+        "budget_mib": 32,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 588,
+            "height": 640,
+            "started_ms": 20.268333,
+            "completed_ms": 24.079667,
+            "raster_ms": 3.453083,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 2775,
+            "height": 3021,
+            "started_ms": 240.745417,
+            "completed_ms": 285.922958,
+            "raster_ms": 44.559625,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 24.079667,
+        "final_detail_after_last_request_ms": 165.948375,
+        "total_ms": 285.948375,
+        "final_width": 2775,
+        "final_height": 3021,
+        "final_output_bytes": 33533100,
+        "resolution_limited": true,
+        "requested_width": 9406,
+        "requested_height": 10240,
+        "peak_known_image_bytes": 35414700,
+        "process_peak_rss_bytes": 46776320,
+        "rss_end_bytes": 46792704
+      }
+    },
+    {
+      "id": "Steps",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 16,
+      "sha256": "bb86d3eca3502649661d892cbfdb8ad604611b3cdf48b5f131461536476715af",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/Steps.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 16453,
+        "read_ms": 0.024333,
+        "renderer_init_ms": 0.006542,
+        "parse_first_ms": 12.837416000000001,
+        "parse": {
+          "samples_ms": [
+            4.1354169999999995,
+            4.002000000000001,
+            3.832916,
+            3.750584,
+            3.690459
+          ],
+          "median_ms": 3.832916,
+          "max_ms": 4.1354169999999995
+        },
+        "raster_first_ms": 1.588042,
+        "raster": {
+          "samples_ms": [
+            1.524542,
+            1.425375,
+            1.426,
+            1.4050829999999999,
+            1.3886669999999999
+          ],
+          "median_ms": 1.425375,
+          "max_ms": 1.524542
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 320.0,
+        "pixel_width": 640,
+        "pixel_height": 640,
+        "visible_pixels": 218940,
+        "output_bytes": 1638400,
+        "base_bytes": 409600,
+        "replacement_image_bytes": 3686400,
+        "rss_start_bytes": 9093120,
+        "rss_parsed_bytes": 12976128,
+        "rss_base_bytes": 14188544,
+        "rss_one_zoom_bytes": 15826944,
+        "rss_two_zoom_bytes": 17498112,
+        "process_peak_rss_bytes": 17514496,
+        "rss_after_drop_bytes": 17514496
+      }
+    },
+    {
+      "id": "Steps",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 16,
+      "sha256": "bb86d3eca3502649661d892cbfdb8ad604611b3cdf48b5f131461536476715af",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/Steps.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 16453,
+        "read_ms": 0.023375,
+        "renderer_init_ms": 0.005083000000000001,
+        "parse_first_ms": 10.870875,
+        "parse": {
+          "samples_ms": [
+            3.671708,
+            3.588208,
+            3.5300409999999998,
+            3.5208340000000002,
+            3.510417
+          ],
+          "median_ms": 3.5300409999999998,
+          "max_ms": 3.671708
+        },
+        "raster_first_ms": 8.392458,
+        "raster": {
+          "samples_ms": [
+            8.33075,
+            7.637458,
+            7.537792,
+            7.3945,
+            7.669124999999999
+          ],
+          "median_ms": 7.637458,
+          "max_ms": 8.33075
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 320.0,
+        "pixel_width": 2048,
+        "pixel_height": 2048,
+        "visible_pixels": 2222360,
+        "output_bytes": 16777216,
+        "base_bytes": 409600,
+        "replacement_image_bytes": 33964032,
+        "rss_start_bytes": 9093120,
+        "rss_parsed_bytes": 12861440,
+        "rss_base_bytes": 14106624,
+        "rss_one_zoom_bytes": 30916608,
+        "rss_two_zoom_bytes": 47759360,
+        "process_peak_rss_bytes": 47775744,
+        "rss_after_drop_bytes": 47775744
+      }
+    },
+    {
+      "id": "Steps",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "bb86d3eca3502649661d892cbfdb8ad604611b3cdf48b5f131461536476715af",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/Steps.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 16453,
+        "read_ms": 0.023,
+        "renderer_init_ms": 0.005084,
+        "parse_first_ms": 10.425083,
+        "parse": {
+          "samples_ms": [
+            4.05875,
+            3.557584,
+            3.571167,
+            3.520417,
+            3.5575419999999998
+          ],
+          "median_ms": 3.557584,
+          "max_ms": 4.05875
+        },
+        "raster_first_ms": 8.60575,
+        "raster": {
+          "samples_ms": [
+            8.622541,
+            8.221124999999999,
+            8.084834,
+            8.053083,
+            7.878833
+          ],
+          "median_ms": 8.084834,
+          "max_ms": 8.622541
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 320.0,
+        "pixel_width": 2048,
+        "pixel_height": 2048,
+        "visible_pixels": 2222360,
+        "output_bytes": 16777216,
+        "base_bytes": 409600,
+        "replacement_image_bytes": 33964032,
+        "rss_start_bytes": 9093120,
+        "rss_parsed_bytes": 12943360,
+        "rss_base_bytes": 14139392,
+        "rss_one_zoom_bytes": 30949376,
+        "rss_two_zoom_bytes": 47792128,
+        "process_peak_rss_bytes": 47808512,
+        "rss_after_drop_bytes": 47808512
+      }
+    },
+    {
+      "id": "Steps",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "bb86d3eca3502649661d892cbfdb8ad604611b3cdf48b5f131461536476715af",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/Steps.svg",
+        "release": true,
+        "budget_mib": 16,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 640,
+            "started_ms": 20.2415,
+            "completed_ms": 22.791667,
+            "raster_ms": 1.944375,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 2048,
+            "height": 2048,
+            "started_ms": 160.56025,
+            "completed_ms": 177.02779199999998,
+            "raster_ms": 15.235583,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 22.791667,
+        "final_detail_after_last_request_ms": 57.06399999999999,
+        "total_ms": 177.064,
+        "final_width": 2048,
+        "final_height": 2048,
+        "final_output_bytes": 16777216,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 10240,
+        "peak_known_image_bytes": 18825216,
+        "process_peak_rss_bytes": 32620544,
+        "rss_end_bytes": 32620544
+      }
+    },
+    {
+      "id": "Steps",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 32,
+      "sha256": "bb86d3eca3502649661d892cbfdb8ad604611b3cdf48b5f131461536476715af",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/Steps.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 16453,
+        "read_ms": 0.0395,
+        "renderer_init_ms": 0.007584,
+        "parse_first_ms": 14.063958999999999,
+        "parse": {
+          "samples_ms": [
+            4.4350830000000006,
+            4.205333,
+            4.176291,
+            3.993084,
+            3.8763330000000003
+          ],
+          "median_ms": 4.176291,
+          "max_ms": 4.4350830000000006
+        },
+        "raster_first_ms": 1.6485409999999998,
+        "raster": {
+          "samples_ms": [
+            1.5958750000000002,
+            1.513375,
+            1.492917,
+            1.4514580000000001,
+            1.415875
+          ],
+          "median_ms": 1.492917,
+          "max_ms": 1.5958750000000002
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 320.0,
+        "pixel_width": 640,
+        "pixel_height": 640,
+        "visible_pixels": 218940,
+        "output_bytes": 1638400,
+        "base_bytes": 409600,
+        "replacement_image_bytes": 3686400,
+        "rss_start_bytes": 9109504,
+        "rss_parsed_bytes": 12910592,
+        "rss_base_bytes": 14123008,
+        "rss_one_zoom_bytes": 15777792,
+        "rss_two_zoom_bytes": 17448960,
+        "process_peak_rss_bytes": 17465344,
+        "rss_after_drop_bytes": 17481728
+      }
+    },
+    {
+      "id": "Steps",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 32,
+      "sha256": "bb86d3eca3502649661d892cbfdb8ad604611b3cdf48b5f131461536476715af",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/Steps.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 16453,
+        "read_ms": 0.024042,
+        "renderer_init_ms": 0.0055,
+        "parse_first_ms": 10.897458,
+        "parse": {
+          "samples_ms": [
+            3.4485840000000003,
+            3.482041,
+            3.46825,
+            3.473,
+            3.5822499999999997
+          ],
+          "median_ms": 3.473,
+          "max_ms": 3.5822499999999997
+        },
+        "raster_first_ms": 12.065375,
+        "raster": {
+          "samples_ms": [
+            11.974959,
+            11.345666000000001,
+            11.391250000000001,
+            11.111832999999999,
+            11.154084
+          ],
+          "median_ms": 11.345666000000001,
+          "max_ms": 11.974959
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 320.0,
+        "pixel_width": 2560,
+        "pixel_height": 2560,
+        "visible_pixels": 3471145,
+        "output_bytes": 26214400,
+        "base_bytes": 409600,
+        "replacement_image_bytes": 52838400,
+        "rss_start_bytes": 9093120,
+        "rss_parsed_bytes": 12992512,
+        "rss_base_bytes": 14106624,
+        "rss_one_zoom_bytes": 40353792,
+        "rss_two_zoom_bytes": 66617344,
+        "process_peak_rss_bytes": 66633728,
+        "rss_after_drop_bytes": 66633728
+      }
+    },
+    {
+      "id": "Steps",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "bb86d3eca3502649661d892cbfdb8ad604611b3cdf48b5f131461536476715af",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/Steps.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 16453,
+        "read_ms": 0.02175,
+        "renderer_init_ms": 0.005208999999999999,
+        "parse_first_ms": 10.319083,
+        "parse": {
+          "samples_ms": [
+            3.55775,
+            3.576791,
+            3.523041,
+            3.536125,
+            3.4932499999999997
+          ],
+          "median_ms": 3.536125,
+          "max_ms": 3.576791
+        },
+        "raster_first_ms": 14.883624999999999,
+        "raster": {
+          "samples_ms": [
+            15.080875,
+            14.392792,
+            14.119,
+            13.812625,
+            13.730041
+          ],
+          "median_ms": 14.119,
+          "max_ms": 15.080875
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": true,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 600.0,
+        "logical_width": 320.0,
+        "logical_height": 320.0,
+        "pixel_width": 2896,
+        "pixel_height": 2896,
+        "visible_pixels": 4442297,
+        "output_bytes": 33547264,
+        "base_bytes": 409600,
+        "replacement_image_bytes": 67504128,
+        "rss_start_bytes": 9093120,
+        "rss_parsed_bytes": 12926976,
+        "rss_base_bytes": 14041088,
+        "rss_one_zoom_bytes": 47677440,
+        "rss_two_zoom_bytes": 81297408,
+        "process_peak_rss_bytes": 81313792,
+        "rss_after_drop_bytes": 81313792
+      }
+    },
+    {
+      "id": "Steps",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "bb86d3eca3502649661d892cbfdb8ad604611b3cdf48b5f131461536476715af",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/Steps.svg",
+        "release": true,
+        "budget_mib": 32,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 640,
+            "started_ms": 20.286749999999998,
+            "completed_ms": 22.902583,
+            "raster_ms": 1.568875,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 2896,
+            "height": 2896,
+            "started_ms": 242.061792,
+            "completed_ms": 276.254958,
+            "raster_ms": 33.567833,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 22.902583,
+        "final_detail_after_last_request_ms": 156.28216700000002,
+        "total_ms": 276.282167,
+        "final_width": 2896,
+        "final_height": 2896,
+        "final_output_bytes": 33547264,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 10240,
+        "peak_known_image_bytes": 35595264,
+        "process_peak_rss_bytes": 49479680,
+        "rss_end_bytes": 49479680
+      }
+    },
+    {
+      "id": "ny1",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 16,
+      "sha256": "195ffe176cab06b14d3e502e43541a89f27b17fb2f1cca4bc1e02cbe40e80e08",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/ny1.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 8792,
+        "read_ms": 0.028666999999999998,
+        "renderer_init_ms": 0.007416,
+        "parse_first_ms": 24.426541999999998,
+        "parse": {
+          "samples_ms": [
+            10.448667,
+            9.186542000000001,
+            8.507917,
+            8.574958,
+            8.083083
+          ],
+          "median_ms": 8.574958,
+          "max_ms": 10.448667
+        },
+        "raster_first_ms": 2.86525,
+        "raster": {
+          "samples_ms": [
+            2.836459,
+            2.7733329999999996,
+            2.702125,
+            2.67475,
+            2.657834
+          ],
+          "median_ms": 2.702125,
+          "max_ms": 2.836459
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": false,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 388.0,
+        "logical_width": 320.0,
+        "logical_height": 206.93331909179688,
+        "pixel_width": 640,
+        "pixel_height": 414,
+        "visible_pixels": 51008,
+        "output_bytes": 1059840,
+        "base_bytes": 264960,
+        "replacement_image_bytes": 2384640,
+        "rss_start_bytes": 9076736,
+        "rss_parsed_bytes": 13991936,
+        "rss_base_bytes": 15597568,
+        "rss_one_zoom_bytes": 16596992,
+        "rss_two_zoom_bytes": 17711104,
+        "process_peak_rss_bytes": 17727488,
+        "rss_after_drop_bytes": 17727488
+      }
+    },
+    {
+      "id": "ny1",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 16,
+      "sha256": "195ffe176cab06b14d3e502e43541a89f27b17fb2f1cca4bc1e02cbe40e80e08",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/ny1.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 8792,
+        "read_ms": 0.021041,
+        "renderer_init_ms": 0.0050420000000000005,
+        "parse_first_ms": 15.365416999999999,
+        "parse": {
+          "samples_ms": [
+            8.440584,
+            8.144542,
+            8.305959,
+            8.22175,
+            8.432958000000001
+          ],
+          "median_ms": 8.305959,
+          "max_ms": 8.440584
+        },
+        "raster_first_ms": 11.193041000000001,
+        "raster": {
+          "samples_ms": [
+            11.137583,
+            10.671625,
+            10.654083,
+            10.138667,
+            10.175583999999999
+          ],
+          "median_ms": 10.654083,
+          "max_ms": 11.137583
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 388.0,
+        "logical_width": 320.0,
+        "logical_height": 206.93331909179688,
+        "pixel_width": 2546,
+        "pixel_height": 1647,
+        "visible_pixels": 679716,
+        "output_bytes": 16773048,
+        "base_bytes": 264960,
+        "replacement_image_bytes": 33811056,
+        "rss_start_bytes": 9076736,
+        "rss_parsed_bytes": 13795328,
+        "rss_base_bytes": 15187968,
+        "rss_one_zoom_bytes": 32063488,
+        "rss_two_zoom_bytes": 48922624,
+        "process_peak_rss_bytes": 48939008,
+        "rss_after_drop_bytes": 48939008
+      }
+    },
+    {
+      "id": "ny1",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "195ffe176cab06b14d3e502e43541a89f27b17fb2f1cca4bc1e02cbe40e80e08",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/ny1.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 8792,
+        "read_ms": 0.021292,
+        "renderer_init_ms": 0.005208,
+        "parse_first_ms": 15.42675,
+        "parse": {
+          "samples_ms": [
+            8.296292000000001,
+            8.140833,
+            8.1265,
+            8.19975,
+            8.167292
+          ],
+          "median_ms": 8.167292,
+          "max_ms": 8.296292000000001
+        },
+        "raster_first_ms": 10.72975,
+        "raster": {
+          "samples_ms": [
+            10.660833,
+            9.902875,
+            9.871,
+            9.718833,
+            9.769125
+          ],
+          "median_ms": 9.871,
+          "max_ms": 10.660833
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 16,
+        "resolution_limited": true,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 388.0,
+        "logical_width": 320.0,
+        "logical_height": 206.93331909179688,
+        "pixel_width": 2546,
+        "pixel_height": 1646,
+        "visible_pixels": 675484,
+        "output_bytes": 16762864,
+        "base_bytes": 264960,
+        "replacement_image_bytes": 33790688,
+        "rss_start_bytes": 9093120,
+        "rss_parsed_bytes": 13860864,
+        "rss_base_bytes": 15187968,
+        "rss_one_zoom_bytes": 32079872,
+        "rss_two_zoom_bytes": 48955392,
+        "process_peak_rss_bytes": 48971776,
+        "rss_after_drop_bytes": 48971776
+      }
+    },
+    {
+      "id": "ny1",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 16,
+      "sha256": "195ffe176cab06b14d3e502e43541a89f27b17fb2f1cca4bc1e02cbe40e80e08",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/ny1.svg",
+        "release": true,
+        "budget_mib": 16,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 414,
+            "started_ms": 20.294791,
+            "completed_ms": 24.122833,
+            "raster_ms": 3.042791,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 2546,
+            "height": 1646,
+            "started_ms": 240.706333,
+            "completed_ms": 267.327875,
+            "raster_ms": 25.806040999999997,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 24.122833,
+        "final_detail_after_last_request_ms": 147.35566599999999,
+        "total_ms": 267.355666,
+        "final_width": 2546,
+        "final_height": 1646,
+        "final_output_bytes": 16762864,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 6622,
+        "peak_known_image_bytes": 18087664,
+        "process_peak_rss_bytes": 33210368,
+        "rss_end_bytes": 33210368
+      }
+    },
+    {
+      "id": "ny1",
+      "mode": "raster",
+      "zoom": 1,
+      "budget_mib": 32,
+      "sha256": "195ffe176cab06b14d3e502e43541a89f27b17fb2f1cca4bc1e02cbe40e80e08",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/ny1.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 8792,
+        "read_ms": 0.035625,
+        "renderer_init_ms": 0.008584,
+        "parse_first_ms": 22.0715,
+        "parse": {
+          "samples_ms": [
+            9.735833,
+            9.0525,
+            8.686208,
+            8.508541,
+            8.159375
+          ],
+          "median_ms": 8.686208,
+          "max_ms": 9.735833
+        },
+        "raster_first_ms": 2.897083,
+        "raster": {
+          "samples_ms": [
+            2.844875,
+            2.7251659999999998,
+            2.682583,
+            2.655209,
+            2.6270830000000003
+          ],
+          "median_ms": 2.682583,
+          "max_ms": 2.844875
+        },
+        "zoom": 1.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 388.0,
+        "logical_width": 320.0,
+        "logical_height": 206.93331909179688,
+        "pixel_width": 640,
+        "pixel_height": 414,
+        "visible_pixels": 51008,
+        "output_bytes": 1059840,
+        "base_bytes": 264960,
+        "replacement_image_bytes": 2384640,
+        "rss_start_bytes": 9076736,
+        "rss_parsed_bytes": 13844480,
+        "rss_base_bytes": 15138816,
+        "rss_one_zoom_bytes": 16121856,
+        "rss_two_zoom_bytes": 17219584,
+        "process_peak_rss_bytes": 17235968,
+        "rss_after_drop_bytes": 17235968
+      }
+    },
+    {
+      "id": "ny1",
+      "mode": "raster",
+      "zoom": 4,
+      "budget_mib": 32,
+      "sha256": "195ffe176cab06b14d3e502e43541a89f27b17fb2f1cca4bc1e02cbe40e80e08",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/ny1.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 8792,
+        "read_ms": 0.020625,
+        "renderer_init_ms": 0.004834,
+        "parse_first_ms": 15.115291,
+        "parse": {
+          "samples_ms": [
+            8.702207999999999,
+            9.368666,
+            8.232209000000001,
+            8.690458999999999,
+            8.219209
+          ],
+          "median_ms": 8.690458999999999,
+          "max_ms": 9.368666
+        },
+        "raster_first_ms": 10.955540999999998,
+        "raster": {
+          "samples_ms": [
+            11.021292,
+            10.286667,
+            10.258458,
+            10.221041,
+            10.078999999999999
+          ],
+          "median_ms": 10.258458,
+          "max_ms": 11.021292
+        },
+        "zoom": 4.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": false,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 388.0,
+        "logical_width": 320.0,
+        "logical_height": 206.93331909179688,
+        "pixel_width": 2560,
+        "pixel_height": 1656,
+        "visible_pixels": 686465,
+        "output_bytes": 16957440,
+        "base_bytes": 264960,
+        "replacement_image_bytes": 34179840,
+        "rss_start_bytes": 9093120,
+        "rss_parsed_bytes": 13795328,
+        "rss_base_bytes": 15269888,
+        "rss_one_zoom_bytes": 32276480,
+        "rss_two_zoom_bytes": 49266688,
+        "process_peak_rss_bytes": 49283072,
+        "rss_after_drop_bytes": 49283072
+      }
+    },
+    {
+      "id": "ny1",
+      "mode": "raster",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "195ffe176cab06b14d3e502e43541a89f27b17fb2f1cca4bc1e02cbe40e80e08",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "file": "/tmp/xgpui-svg-corpus/ny1.svg",
+        "os": "macos",
+        "arch": "aarch64",
+        "release": true,
+        "input_bytes": 8792,
+        "read_ms": 0.022125,
+        "renderer_init_ms": 0.005125,
+        "parse_first_ms": 15.347249999999999,
+        "parse": {
+          "samples_ms": [
+            8.20575,
+            8.312709,
+            8.117708,
+            8.248292000000001,
+            8.157083
+          ],
+          "median_ms": 8.20575,
+          "max_ms": 8.312709
+        },
+        "raster_first_ms": 16.29575,
+        "raster": {
+          "samples_ms": [
+            16.595916,
+            15.180166999999999,
+            14.7225,
+            14.921,
+            14.784333
+          ],
+          "median_ms": 14.921,
+          "max_ms": 16.595916
+        },
+        "zoom": 16.0,
+        "density": 2.0,
+        "budget_mib": 32,
+        "resolution_limited": true,
+        "intrinsic_width": 600.0,
+        "intrinsic_height": 388.0,
+        "logical_width": 320.0,
+        "logical_height": 206.93331909179688,
+        "pixel_width": 3601,
+        "pixel_height": 2329,
+        "visible_pixels": 1331787,
+        "output_bytes": 33546916,
+        "base_bytes": 264960,
+        "replacement_image_bytes": 67358792,
+        "rss_start_bytes": 9076736,
+        "rss_parsed_bytes": 13795328,
+        "rss_base_bytes": 15204352,
+        "rss_one_zoom_bytes": 48824320,
+        "rss_two_zoom_bytes": 82395136,
+        "process_peak_rss_bytes": 82411520,
+        "rss_after_drop_bytes": 82411520
+      }
+    },
+    {
+      "id": "ny1",
+      "mode": "sequence",
+      "zoom": 16,
+      "budget_mib": 32,
+      "sha256": "195ffe176cab06b14d3e502e43541a89f27b17fb2f1cca4bc1e02cbe40e80e08",
+      "exit_code": 0,
+      "stderr": "",
+      "measurement": {
+        "mode": "sequence",
+        "file": "/tmp/xgpui-svg-corpus/ny1.svg",
+        "release": true,
+        "budget_mib": 32,
+        "density": 2.0,
+        "events": [
+          [
+            0,
+            1.0
+          ],
+          [
+            20,
+            2.0
+          ],
+          [
+            40,
+            4.0
+          ],
+          [
+            60,
+            8.0
+          ],
+          [
+            80,
+            16.0
+          ],
+          [
+            100,
+            4.0
+          ],
+          [
+            120,
+            16.0
+          ]
+        ],
+        "jobs": [
+          {
+            "stage": "Preview",
+            "width": 640,
+            "height": 414,
+            "started_ms": 20.287665999999998,
+            "completed_ms": 24.121958,
+            "raster_ms": 2.929083,
+            "accepted": true
+          },
+          {
+            "stage": "Detail",
+            "width": 3601,
+            "height": 2329,
+            "started_ms": 241.15104100000002,
+            "completed_ms": 265.99195799999995,
+            "raster_ms": 23.509583,
+            "accepted": true
+          }
+        ],
+        "first_preview_ready_ms": 24.121958,
+        "final_detail_after_last_request_ms": 146.02550000000002,
+        "total_ms": 266.0255,
+        "final_width": 3601,
+        "final_height": 2329,
+        "final_output_bytes": 33546916,
+        "resolution_limited": true,
+        "requested_width": 10240,
+        "requested_height": 6622,
+        "peak_known_image_bytes": 34871716,
+        "process_peak_rss_bytes": 49938432,
+        "rss_end_bytes": 49938432
+      }
+    }
+  ]
+}

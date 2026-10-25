@@ -1,0 +1,13 @@
+<!-- Copyright 2026 xgpui contributors. SPDX-License-Identifier: Apache-2.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="640" viewBox="0 0 160 640">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#211d65"/><stop offset="1" stop-color="#fca878"/></linearGradient>
+    <clipPath id="window"><rect x="10" y="10" width="140" height="620" rx="65"/></clipPath>
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dy="8" stdDeviation="4"/></filter>
+  </defs>
+  <g clip-path="url(#window)">
+    <path d="M0 0H160V640H0Z" fill="url(#sky)"/>
+    <path d="M-10 540C150 440 -40 320 120 220S10 80 140 0" fill="none" stroke="#aaffee" stroke-width="14" filter="url(#shadow)"/>
+    <circle cx="75" cy="510" r="26" fill="#fff0ae"/>
+  </g>
+</svg>
