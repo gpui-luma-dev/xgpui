@@ -99,6 +99,26 @@ for (const asset of ['style.css', 'extensions.js', 'guides.js', 'pipeline.js', '
   assert.ok(index.includes(asset));
   await readFile(new URL(asset, site));
 }
+// Keep the Wasm landing page complete as either gallery gains new demos.
+const wasmIndex = await readFile(new URL('../apps/extensions-web/index.html', import.meta.url), 'utf8');
+const legacyGallery = await readFile(new URL('../gpui/crates/gpui-web/examples/hello_web/index.html', import.meta.url), 'utf8');
+const legacyManifest = await readFile(new URL('../gpui/crates/gpui-web/examples/hello_web/Cargo.toml', import.meta.url), 'utf8');
+const listedModules = [...wasmIndex.matchAll(/data-wasm-module="([^"]+)"/g)].map(m => m[1]);
+const legacyModules = [...legacyManifest.matchAll(/\[\[bin\]\]\s+name = "([^"]+)"/g)].map(m => m[1]);
+assert.deepEqual(listedModules.slice().sort(), legacyModules.sort(), 'every legacy Wasm binary needs an index entry');
+for (const [, module] of legacyGallery.matchAll(/data-module="([^"]+)"/g)) assert.ok(listedModules.includes(module), module);
+for (const demo of ['shader', 'parley', 'svg']) {
+  for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
+    assert.ok(wasmIndex.includes('href="?demo=' + demo + suffix + '"'), demo + suffix);
+  }
+}
+for (const [, path] of wasmIndex.matchAll(/href="https:\/\/github.com\/gpui-luma-dev\/xgpui\/blob\/main\/([^"]+)"/g)) {
+  await readFile(new URL('../' + path, import.meta.url));
+}
+assert.ok(wasmIndex.includes('These examples are not published on this site.'));
+assert.ok(wasmIndex.includes('not interactive hosted demos'));
+console.log('Verified complete Wasm demo index, backend links and source targets.');
+
 console.log('Verified ' + data.crates.length + ' crates, ' + pages.size + ' source pages, declaration anchors, routes, filtering and assets.');
 
 assert.ok(!index.includes('http-equiv="refresh"'), 'Pages root must serve the website directly');

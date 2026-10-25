@@ -2,13 +2,14 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>xgpui extension examples</title>
+<title>xgpui WebAssembly demos</title>
 <style>
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; font: 16px system-ui, sans-serif; background: #111827; color: #eff4fc; }
   main { max-width: 52rem; margin: auto; padding: 3rem 1.5rem; }
   article { padding: 1.5rem; border: 1px solid #4b5563; border-radius: 12px; margin: 1rem 0; }
+  li { margin: .75rem 0; line-height: 1.6; }
   a { color: #a5c8ff; }
   nav { display: flex; flex-wrap: wrap; gap: 1rem; }
   #back { position: fixed; right: 1rem; bottom: 1rem; padding: .5rem; background: #111827ee; z-index: 2; }
@@ -16,24 +17,44 @@
   canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; user-select: none; -webkit-user-select: none; }
 </style>
 <main id="gallery">
-  <h1>xgpui extension examples</h1>
+  <h1>xgpui WebAssembly demos</h1>
   <p><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source on GitHub</a> · <a href="https://gpui-luma-dev.github.io/xgpui/#extensions">Extension documentation</a></p>
-  <p>Choose a demo and graphics backend. Each link reloads the application with a fresh Wasm instance.</p>
+  <p>All WebAssembly demos and browser test harnesses in this repository. The extension demos below run here; the older GPUI examples and developer harnesses link to their source.</p>
+  <h2>Run in your browser</h2>
+  <p>Choose automatic selection, WebGPU, or WebGL2. Each link starts a fresh Wasm instance.</p>
   <article>
-    <h2>Shader paints</h2>
+    <h3>Shader paints</h3>
     <p>Solids, linear, radial, conic and diamond gradients, hard stops, elliptical and off-center fades, rainbow, Hermite mesh and portable WGSL. Rounded backgrounds, borders, paths, opacity and animation.</p>
     <nav><a href="?demo=shader">Automatic backend</a><a href="?demo=shader&backend=webgpu">WebGPU</a><a href="?demo=shader&backend=webgl">WebGL2</a></nav>
   </article>
   <article>
-    <h2>Parley paragraphs</h2>
+    <h3>Parley paragraphs</h3>
     <p>Bundled Latin, Hebrew and Arabic fonts. Wrapping, visual caret movement, drag selection, typing, clipboard and IME.</p>
     <nav><a href="?demo=parley">Automatic backend</a><a href="?demo=parley&backend=webgpu">WebGPU</a><a href="?demo=parley&backend=webgl">WebGL2</a></nav>
   </article>
   <article>
-    <h2>Progressive SVG</h2>
+    <h3>Progressive SVG comparison and gallery</h3>
     <p>Full-color curves, gradients, clipping and shadows. Compare synchronized bounded and viewport-rerasterized views: zoom and drag artwork, switch attributed samples, and mount a gallery sharing one bounded rendering pool. Single-threaded Wasm: individual CPU raster jobs still run on the browser thread.</p>
     <nav><a href="?demo=svg">Automatic backend</a><a href="?demo=svg&backend=webgpu">WebGPU</a><a href="?demo=svg&backend=webgl">WebGL2</a><a href="svg-attribution.html">Artwork attribution</a></nav>
   </article>
+  <h2>GPUI source-gallery demos</h2>
+  <p>These examples are not published on this site. Links open their source in GitHub. The <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/gpui/crates/gpui-web/examples/hello_web">standalone gallery source</a> contains the local build configuration.</p>
+  <ul id="source-demos">
+    <li><a data-wasm-module="hello_world" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/examples/hello_world.rs">Hello world</a> — basic layout and styling.</li>
+    <li><a data-wasm-module="text" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/examples/text.rs">Styled text</a> — typography, font sizes and line heights.</li>
+    <li><a data-wasm-module="text_layout" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/examples/text_layout.rs">Text layout</a> — alignment, decorations and font weights.</li>
+    <li><a data-wasm-module="text_wrapper" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/examples/text_wrapper.rs">Text wrapping</a> — wrapping, truncation and CJK text.</li>
+    <li><a data-wasm-module="input" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/examples/input.rs">Text input</a> — typing, cursor movement and selection.</li>
+    <li><a data-wasm-module="dynamic_fonts" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-web/examples/hello_web/dynamic_fonts.rs">Dynamic fonts</a> — fetch a fallback font on missing-glyph notifications.</li>
+    <li><a data-wasm-module="hello_web" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-web/examples/hello_web/main.rs">Prime sieve</a> — background workers and progress updates.</li>
+  </ul>
+  <h2>Developer Wasm test harnesses</h2>
+  <p>Source modules invoked by browser tests; these are not interactive hosted demos.</p>
+  <ul id="wasm-harnesses">
+    <li><a data-wasm-module="font_fallback_test" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-web/examples/hello_web/font_fallback_test.rs">Font fallback tests</a> — missing-glyph notifications and font preservation.</li>
+    <li><a data-wasm-module="queue_test" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-web/examples/hello_web/queue_test.rs">Worker queue stress tests</a> — shared priority queues and real worker contention.</li>
+    <li><a data-wasm-module="http_client_test" href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-web/examples/hello_web/http_client_test.rs">Fetch worker tests</a> — streamed response-body contention across workers.</li>
+  </ul>
   <p>Gamut is deferred: the extension currently requires native Metal or D3D11 wide-gamut presentation.</p>
 </main>
 <nav id="back" hidden><a href="svg-attribution.html">Artwork credits</a><a href="?">All examples</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></nav>
