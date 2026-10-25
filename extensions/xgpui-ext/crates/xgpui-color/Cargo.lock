@@ -392,6 +392,11 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "async-process"
+version = "2.5.0"
+source = "git+https://github.com/zed-industries/async-process.git?rev=0b6d6713570af61806e1e5cb40e0f757cb93fd9d#0b6d6713570af61806e1e5cb40e0f757cb93fd9d"
+
+[[patch.unused]]
 name = "collections"
 version = "1.25.3"
 
@@ -458,6 +463,11 @@ version = "1.25.3"
 [[patch.unused]]
 name = "perf"
 version = "1.25.3"
+
+[[patch.unused]]
+name = "proptest"
+version = "1.10.0"
+source = "git+https://github.com/proptest-rs/proptest?rev=3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b#3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b"
 
 [[patch.unused]]
 name = "refineable"
