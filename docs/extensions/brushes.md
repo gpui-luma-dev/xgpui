@@ -547,7 +547,7 @@ Inside the boundary, descendants start with local opacity one; their own native
 nested isolated images. Captured glyphs use grayscale alpha rather than subpixel
 coverage, including cached views moving into or out of an isolation scope.
 
-The capture clips overflow to the container rectangle and ancestor content mask.
+The finished capture clips overflow to the container rectangle and ancestor content mask; source sampling includes a halo before that clip.
 Rounded backgrounds retain their shape, but the group boundary itself does not
 add a rounded child mask. Deferred overlays paint later outside the capture,
 following GPUI's existing overlay behavior. Layout, hit testing and events still
@@ -587,10 +587,11 @@ Limits are **four groups total per frame**, including nested groups; a maximum
 65,536 retained descendant command identities per group. Each group retains two
 full-resolution RGBA8 textures, at most 8 MiB, plus two optional blur textures
 only while its radius is positive. Four groups retain at most 32 MiB without
-subtree blur, or 64 MiB when all four use blur, plus at most 4 MiB of
-current/retained command identities. Including four backdrop slots, retained
-working texture storage is at most 50 MiB without subtree blur or 82 MiB with
-all groups blurred. Replacing a group slot can transiently retain the old slot;
+subtree blur, 34 MiB with quarter-resolution blur on all four, or 64 MiB with
+full-resolution blur on all four, plus at most 4 MiB of current/retained command
+identities. Including four backdrop slots, retained working texture storage is
+at most 50 MiB without subtree blur, 52 MiB with quarter-resolution blur, or
+82 MiB at the full-resolution upper bound. Replacing a group slot can transiently retain the old slot;
 driver allocations and in-flight GPU references are excluded.
 A frame with no layer or backdrop boundaries releases all retained effect
 textures and cache identities, while preserving compiled pipelines and cumulative
@@ -767,62 +768,99 @@ cargo test --offline --locked --config .cargo/validation.toml \
   --features wgpu,portable-shaders --lib invert_tests
 ```
 
-## Brushes on native vector fills and strokes
+## Brushes on vector fills and strokes
 
-```rust
+```rust,ignore
 let mut builder = gpui::PathBuilder::stroke(px(7.));
 builder.move_to(point(px(12.), px(20.)));
 builder.curve_to(point(px(96.), px(48.)), point(px(60.), px(0.)));
 let path = builder.build()?;
-brush.paint_path(window, path)?; // call during paint, for example in a canvas
+
+// Prepare once; retain alongside the brush. Paint with a logical translation.
+let prepared = brush.prepare_path(&path)?;
+prepared.paint(window, point(px(20.), px(10.)))?;
+
+// Immediate strict direct coverage, with an error for unsupported geometry.
+brush.paint_path_direct(window, path.clone())?;
+// Automatic direct coverage with native fallback for unsupported geometry.
+brush.paint_path(window, path.clone())?;
+// Explicit native coverage reference/fallback.
+brush.paint_path_native(window, path)?;
 ```
 
-`Brush::paint_path` accepts the same tessellated `Path<Pixels>` used by native
-GPUI painting. Use `PathBuilder::fill()` for filled geometry and
-`PathBuilder::stroke(width)` for strokes, including the builder's joins, caps,
-curves and dash options. Fill contours retain native winding/hole behavior.
-Empty paths are no-ops. Nonempty inputs must contain complete triangles, at most
-65,536 vertices, with finite geometry and brush bounds.
+Use `PathBuilder::fill()` and `PathBuilder::stroke(width)` for tessellated curves,
+holes, caps, joins and dashes. Empty immediate paths are no-ops. Nonempty paths
+must contain complete triangles, at most 65,536 vertices, with finite geometry.
+Every material, including noise and Hermite fields, spans the path's full
+unclipped tessellated bounds. Clipping does not restart the field; stroke bounds
+include stroke geometry. Inherited opacity is applied once after material alpha
+and coverage. Captured layers can retain and filter the resulting pixels.
 
-Every brush kind (including noise) evaluates over the path's **full unclipped
-tessellated bounds**. For strokes, those bounds include stroke geometry rather
-than just the centerline. Ancestor clipping does not shrink or restart the field.
-The host applies inherited opacity once after brush alpha and path coverage.
-Captured groups and their color filters can include brushed paths and reuse the
-result when their retained commands remain unchanged.
+### Direct coverage
 
-Native GPUI paths already rasterize analytic/MSAA coverage into a shared path
-intermediate before final composition. This implementation reuses that target
-and its native coverage pass, paints opaque-white coverage there, then evaluates
-the material in the main-target shader while multiplying by the resolved alpha.
-It adds no brush color texture or separate custom-producer coverage texture.
-**It is not a new zero-pass-break path rasterizer.** Compatible adjacent brushed paths share one coverage/composition batch when
-all composite bounds are disjoint, including a one-device-pixel gutter on each
-rectangle. Overlapping bounds split batches to prevent coverage leakage. Batches
-are limited to 64 paths to bound pairwise overlap checks. The paint-lab path
-batching panel shows 24 separate shapes sharing one planned coverage batch;
-this is a scene batching count, not a GPU timing measurement.
+The direct route uses an ordinary main-pass brush quad. Shared triangle edges
+are cancelled on the CPU; the fragment shader integrates the remaining directed
+edges over the physical pixel square using Green's theorem. This computes a
+box-filtered polygon area, including holes, thin features and T-junctions,
+without a path-mask texture, resolve, framebuffer copy or coverage render pass.
+Each path is composed once, so internal triangles do not introduce alpha seams.
+Separate overlapping paths retain normal source-over ordering and can batch.
 
-Path programs reuse the 128-byte brush payload and 176-byte host transport.
-Programs share by material variant; retained scene records own their path
-geometry. Backends validate mask/program agreement, separate path and atlas
-resources, and preserve native sibling ordering. Metal, wgpu and D3D11 bind the
-existing path target to the host-owned mask texture slot. Native wide-SDR
-presentation currently rejects brushed paths explicitly; use the SDR pipeline.
+Direct coverage is certified for non-overlapping solid triangle interiors, with
+at most **512 triangles**, **256 uncancelled edges**, and a maximum width/height
+of **16,384 device pixels**. Triangle orientation is normalized before shared-edge
+cancellation. A bounded separating-axis check rejects overlapping interiors;
+analytic ST curve triangles also require native coverage. CPU certification has
+quadratic worst-case cost within the triangle limit. The shader evaluates a
+bounded edge loop per receiving fragment; zero pass breaks is not a throughput
+or 120-FPS guarantee.
 
-The gallery starts with a curved blue/orange fill containing a hole, beside a
-noisy mesh stroke. Tests compare each field against the corresponding rectangle
-field multiplied by independently rendered native path coverage at 1×, 1.5× and
-2× DPI, including translucent materials, clipping, curves, holes and strokes.
-Further checks cover transport/program identity, independent path batches,
-replay, native sibling order, inherited opacity, group filters and invalid input.
-Metal and wgpu/Metal run locally; D3D11/Vulkan runtime checks use the paint CI
-lanes. Focused checks:
+Programs specialize immutable normalized geometry, retaining full f32 coordinates
+and the existing 128-byte material / 176-byte host instance transport. A 16-entry
+LRU bounds compiled specializations; a separate 16-entry cache remembers rejected
+geometry. `DirectPath` retains its program independently of LRU eviction. The
+same geometry and material variant share a program, while colors, opacity,
+clipping, placement and DPI remain instance data. Distinct geometry generally
+splits shader batches.
+
+Retain `brush.prepare_path(...)` for moving or repeatedly drawn geometry.
+`DirectPath::paint` translates an immutable prepared path without repeating
+certification or specialization. Passing freshly translated tessellations to the
+immediate APIs may create different geometry keys due to f32 rounding. The
+paint-lab gallery prepares each source shape once and reuses it for placement.
+
+`prepare_path` and `paint_path_direct` fail explicitly for unsupported geometry;
+`paint_path` uses native coverage as a compatibility fallback. Use the strict
+APIs when zero coverage passes are required. Geometry outside these bounds and
+arbitrary analytic paths remain a follow-up to the RFC's unrestricted path claim.
+
+### Native reference and fallback
+
+The native route rasterizes opaque-white analytic/MSAA coverage into GPUI's
+existing intermediate target, then evaluates material in the main target against
+that alpha. Compatible disjoint bounds share a coverage/composition batch, with
+a device-pixel gutter and at most 64 paths. Overlapping bounds split batches to
+prevent mask leakage. Native masked paths continue to require SDR presentation;
+direct paths follow ordinary brush-shader presentation rules.
+
+In paint-lab, use **Paths: Direct / Native** above the curved fill and noisy
+stroke to compare both routes. The same control switches the 24-shape panel:
+direct mode has zero coverage passes; native mode plans one compatible coverage
+batch. These describe encoded scene work, not GPU timing. Box-filter coverage
+can differ slightly from the native MSAA pattern at edges.
+
+Tests compare direct pixels against independent triangle/pixel polygon clipping
+at 1×, 1.5× and 2×, including translucent colors, holes, strokes, quarter-pixel
+features and T-junctions. Additional checks cover material coordinates, noise,
+Hermite fields, repeated placement, program reuse, replay, overlapping draws and
+native fallback. Native tests retain field-times-MSAA coverage references,
+clipping, sibling ordering, inherited opacity and captured group filtering.
+Metal and wgpu/Metal run locally; D3D11/Vulkan runtime checks use the paint lanes.
 
 ```sh
 cargo test --locked --config .cargo/validation.toml \
   --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
-  --features wgpu,portable-shaders --lib brush::tests::path_tests
+  --features wgpu,portable-shaders --lib direct_path
 ```
 
 ## Destination blend modes
@@ -892,24 +930,54 @@ let combined = LayerEffect::opacity(0.7)?
 
 `LayerEffect::blur` and `with_blur` accept a finite Gaussian support radius in
 `[0,16]` logical pixels, bounded to 64 device pixels after scaling. Zero disables
-blur. The standard deviation is `radius / 3`, floored at 0.1 device pixels for
-very small radii; each axis samples the integer offsets through `ceil(radius)`.
-Two full-resolution passes filter premultiplied encoded-sRGB RGBA, with an
-8-bit intermediate and normalized Gaussian weights. Pixels outside the capture
-are transparent, so edge coverage fades instead of repeating edge colors.
+blur. The Gaussian standard deviation is the radius on the working grid divided by
+three, floored at 0.1 working pixels; each axis samples integer offsets through
+the ceiling of its working-grid radius.
+The default `LayerBlurQuality::Adaptive` selects full-resolution filter buffers
+below 4 device pixels, half resolution from 4 to below 8, and quarter resolution
+at 8 or above. Odd crop dimensions use ceiling division; each axis scales its
+Gaussian radius using the actual source/target ratio. Both passes filter
+premultiplied encoded-sRGB RGBA with an 8-bit intermediate and normalized weights.
 
-The layer's own bounds and ancestor clip define the crop. This first version
-does not expand layout or add an outward blur halo, and does not include content
-outside the crop. Use padding inside the captured layer if a child needs room
-for its blur. Order is completed subtree → blur → saturation → brightness →
+The horizontal pass combines area downsampling with Gaussian filtering, so no
+separate downsampling pass or texture is required. Area weights preserve small
+features and average high-frequency input before decimation. The vertical pass
+uses the reduced grid, then the existing composition pass reconstructs with
+bilinear sampling. Area filtering and reconstruction add softness, so adaptive
+and full-resolution output are approximations of the same nominal radius and
+need not match pixel-for-pixel. Pixels outside the source sampling rectangle are transparent.
+
+Use `with_blur_quality(LayerBlurQuality::FullResolution)` for the original
+full-resolution Gaussian reference, or `LayerBlurQuality::Adaptive` for reduced
+buffers. The quality enum is exported by both GPUI and `xgpui_shader`. Below the
+adaptive thresholds, small-radius detail uses the same full-resolution path.
+
+The layer's own bounds and ancestor clip define the visible output, applied
+**after filtering**. Source capture includes surrounding subtree content so an
+artificial clip does not introduce a transparent rim. Real content edges still
+fade: extend the background beyond the visible box when it represents a
+continuous surface. Layout and hit-testing remain confined to the visible box.
+
+Source capture reserves 16 logical pixels plus eight device pixels per remaining
+supported nesting level (up to four). Keeping this reservation independent of the
+current radius preserves raw captures during radius edits. Sampling is bounded
+by the viewport and enclosing capture; offscreen content cannot contribute.
+The 1024×1024 device-pixel capture limit includes this halo. Low-level
+`LayerCapture` callers provide source `bounds` and an optional final `clip`;
+`None` uses the source rectangle as the output clip. Order is completed subtree → blur → saturation → brightness →
 contrast → inversion → group opacity → destination blend/source-over.
 
 Group slots retain the saved destination and raw subtree. A positive radius
 allocates two additional bounded textures for horizontal scratch and the blurred
 subtree; returning to zero releases those textures and their bindings while
 preserving the raw capture. Re-enabling blur recreates the working textures and
-reruns filtering. With four 1024×1024 BGRA8 groups, this is at most 32 MiB without
-blur or 64 MiB with blur on all groups. Zero radius skips filter passes. A positive
+reruns filtering. Changing the working resolution resizes only the two filter
+textures, retaining raw source pixels and destination storage. At quarter
+resolution, the two filter textures have 1/16 of the full-resolution texel count.
+With four 1024×1024 BGRA8 groups, this is at most 32 MiB without blur, 34 MiB with
+quarter-resolution blur on all groups, or 64 MiB with full-resolution blur on all
+groups. These are allocation bounds, not measured frame-time claims.
+Zero radius skips filter passes. A positive
 radius adds two passes when raw source pixels or radius change; unchanged raw
 pixels and radius reuse the blurred result even when opacity, color filters,
 blend mode or destination change. Radius-only edits reuse raw source pixels and
@@ -919,11 +987,20 @@ Existing live-producer and capture limits still apply.
 In paint-lab, leave **Blend: Normal** selected and click **Subtree blur** to cycle
 0 → 4 → 8 → 16 → 0 pixels. Both colored shapes and text soften, while the
 underlying yellow/cyan destination and neighboring cards remain sharp. Returning
-to zero restores the original appearance. Blend and blur controls can be combined.
+to zero restores the original appearance. Use **Blur: Adaptive / Full resolution**
+to compare quality at a fixed radius. Slight differences in softness are expected;
+look for missing content, block artifacts, flicker or stale results after switches.
+Blend and blur controls can be combined. The blurred card extends its background
+into the sampling halo: with Multiply and 16px blur, its enclosing edge should
+stay uniform without a lighter rim, and no blurred pixels should escape the box.
 
 Tests compare both GPU backends against an independent Gaussian reference at
 1×, 1.5× and 2×, including translucent overlap, cropped edges, opacity, filter
 and destination composition, nested cache invalidation and live radius edits.
+An odd-sized stripe reference also checks actual GPU allocation sizes, all three
+working resolutions, quality changes and raw-source cache reuse. Halo regressions
+check continuous color across clip edges, destination restoration outside the
+clip, sampling through ancestor clips, and unchanged hit-testing bounds.
 
 ```sh
 cargo test --locked --config .cargo/validation.toml \
@@ -933,7 +1010,7 @@ cargo test --locked --config .cargo/validation.toml \
 
 ## Later milestones
 
-Direct single-pass brushed paths, point sets above 16 or dynamically
+Direct coverage for geometry beyond the documented limits, point sets above 16 or dynamically
 transported larger point sets,
 biharmonic diffusion, more general distortion and grids larger than 3x3,
 backdrop sampling inside groups and further subtree filters remain follow-up work.

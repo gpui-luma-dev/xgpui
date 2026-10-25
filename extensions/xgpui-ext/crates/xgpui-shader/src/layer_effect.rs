@@ -106,6 +106,12 @@ impl LayerEffect {
         self.color_filter.blur_radius = radius;
         Ok(self)
     }
+    /// Select adaptive working resolution or the full-resolution blur reference.
+    /// Changing quality reuses the raw capture and refreshes filtered pixels.
+    pub fn with_blur_quality(mut self, quality: gpui::LayerBlurQuality) -> Self {
+        self.color_filter.blur_quality = quality;
+        self
+    }
     /// Blend the completed subtree with destination pixels, in encoded sRGB.
     /// Filtering and group opacity are applied before source-over blending.
     pub fn blend(mode: crate::BlendMode) -> Result<Self> {

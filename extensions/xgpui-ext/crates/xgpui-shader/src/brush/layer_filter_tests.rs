@@ -2,6 +2,8 @@ use super::*;
 
 fn filtered_capture(saturation: f32, opacity: f32, scale: f32) -> Arc<LayerCapture> {
     Arc::new(LayerCapture {
+        clip: None,
+        blur_quality: gpui::LayerBlurQuality::Adaptive,
         blur_radius: ScaledPixels(0.),
         blend_mode: gpui::LayerBlendMode::Normal,
         bounds: Bounds::new(point(px(8.25), px(8.25)), size(px(79.5), px(47.5))).scale(scale),

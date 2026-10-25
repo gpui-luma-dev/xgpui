@@ -465,3 +465,6 @@ mod path_tests;
 
 #[path = "hermite_tests.rs"]
 mod hermite_tests;
+
+#[path = "direct_path_tests.rs"]
+mod direct_path_tests;

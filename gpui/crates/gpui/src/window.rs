@@ -1253,6 +1253,8 @@ pub struct Window {
     pub(crate) element_offset_stack: Vec<Point<Pixels>>,
     pub(crate) element_opacity: f32,
     layer_capture_depth: usize,
+    layer_capture_sources: Vec<Bounds<Pixels>>,
+    layer_capture_clips: Vec<Bounds<Pixels>>,
     pub(crate) content_mask_stack: Vec<ContentMask<Pixels>>,
     pub(crate) requested_autoscroll: Option<Bounds<Pixels>>,
     /// The [`TextInputConfiguration`] most recently forwarded to the platform
@@ -2160,6 +2162,8 @@ impl Window {
             content_mask_stack: Vec::new(),
             element_opacity: 1.0,
             layer_capture_depth: 0,
+            layer_capture_sources: Vec::new(),
+            layer_capture_clips: Vec::new(),
             requested_autoscroll: None,
             last_text_input_configuration: None,
             focused_text_input_active: false,
@@ -4813,8 +4817,8 @@ impl Window {
             .insert_primitive(path.scale(scale_factor));
     }
 
-    /// Record a validated native-path brush. The host applies inherited opacity
-    /// once; the retained path is only geometry coverage, independent of color.
+    /// Record a validated path brush. The host applies inherited opacity once.
+    /// Programs may evaluate direct coverage or use retained native geometry.
     pub fn paint_brushed_path(&mut self, mut draw: crate::ShaderDraw) {
         self.invalidator.debug_assert_paint();
         draw.opacity *= self.element_opacity();
@@ -5299,11 +5303,67 @@ impl Window {
         bounds: Bounds<Pixels>,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
+        let source = bounds.intersect(&self.content_mask().bounds);
+        self.with_layer_capture_masks(source, source, f)
+    }
+
+    /// Prepaint a captured subtree with a sampling halo and a separate visible clip.
+    /// Reserve the supported remaining nesting budget so later radius edits and
+    /// nested filters can reuse raw source pixels without painting past the crop.
+    pub fn with_layer_effect_scope<R>(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let (source, clip) = self.layer_capture_regions(bounds);
+        self.with_layer_capture_masks(source, clip, f)
+    }
+    fn layer_capture_regions(&self, bounds: Bounds<Pixels>) -> (Bounds<Pixels>, Bounds<Pixels>) {
+        let viewport = Bounds::new(Point::default(), self.viewport_size);
+        let clip = bounds
+            .intersect(&self.content_mask().bounds)
+            .intersect(&viewport);
+        if clip.is_empty() {
+            return (clip, clip);
+        }
+        let levels = crate::MAX_LAYER_GROUPS
+            .saturating_sub(self.layer_capture_depth)
+            .max(1) as f32;
+        // 16 logical pixels per Gaussian plus eight device pixels for area
+        // downsampling, reconstruction and integer crop rounding per level.
+        let halo = px((16. + 8. / self.scale_factor()) * levels);
+        let mut source = clip.dilate(halo).intersect(&viewport);
+        if let Some(parent) = self.layer_capture_sources.last() {
+            source = source.intersect(parent);
+        }
+        (source, clip)
+    }
+    pub(crate) fn layer_capture_visible_bounds(&self) -> Option<Bounds<Pixels>> {
+        self.layer_capture_clips.last().copied()
+    }
+    fn with_layer_capture_masks<R>(
+        &mut self,
+        source: Bounds<Pixels>,
+        clip: Bounds<Pixels>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
         self.invalidator.debug_assert_paint_or_prepaint();
         let previous = self.element_opacity;
         self.element_opacity = 1.;
         self.layer_capture_depth += 1;
-        let result = self.with_content_mask(Some(ContentMask { bounds }), f);
+        self.layer_capture_sources.push(source);
+        let visible = self
+            .layer_capture_clips
+            .last()
+            .map_or(clip, |parent| clip.intersect(parent));
+        self.layer_capture_clips.push(visible);
+        // Bypass ancestor paint clips for source sampling; descendant clips still
+        // intersect this mask. Interaction keeps the original final visible clip.
+        self.content_mask_stack.push(ContentMask { bounds: source });
+        let result = f(self);
+        self.content_mask_stack.pop();
+        self.layer_capture_clips.pop();
+        self.layer_capture_sources.pop();
         self.layer_capture_depth -= 1;
         self.element_opacity = previous;
         result
@@ -5355,18 +5415,18 @@ impl Window {
     ) -> R {
         self.invalidator.debug_assert_paint();
         let viewport = Bounds::new(Point::default(), self.viewport_size);
-        let clipped = bounds
-            .intersect(&self.content_mask().bounds)
-            .intersect(&viewport);
+        let (source, clipped) = self.layer_capture_regions(bounds);
         let effective = opacity * self.element_opacity();
         if clipped.is_empty() {
             return self.with_layer_capture_scope(clipped, f);
         }
         let scale = self.scale_factor();
         let capture = Arc::new(crate::LayerCapture {
+            blur_quality: color_filter.blur_quality,
             blur_radius: crate::ScaledPixels(f32::from(color_filter.blur_radius) * scale),
             blend_mode: color_filter.blend_mode,
-            bounds: clipped.scale(scale),
+            bounds: source.scale(scale),
+            clip: Some(clipped.scale(scale)),
             opacity: effective,
             saturation: color_filter.saturation,
             brightness: color_filter.brightness,
@@ -5380,7 +5440,7 @@ impl Window {
         self.next_frame
             .scene
             .begin_layer_capture(capture.clone(), fence);
-        let result = self.with_layer_capture_scope(clipped, f);
+        let result = self.with_layer_capture_masks(source, clipped, f);
         self.next_frame.scene.end_layer_capture(capture, fence);
         result
     }
@@ -5670,7 +5730,10 @@ impl Window {
     pub fn insert_hitbox(&mut self, bounds: Bounds<Pixels>, behavior: HitboxBehavior) -> Hitbox {
         self.invalidator.debug_assert_prepaint();
 
-        let content_mask = self.content_mask();
+        let mut content_mask = self.content_mask();
+        if let Some(clip) = self.layer_capture_visible_bounds() {
+            content_mask.bounds = content_mask.bounds.intersect(&clip);
+        }
         let mut id = self.next_hitbox_id;
         self.next_hitbox_id = self.next_hitbox_id.next();
         let hitbox = Hitbox {

@@ -415,7 +415,7 @@ impl Element for PaintedElement {
         };
         #[cfg(feature = "portable-shaders")]
         if captured {
-            return window.with_layer_capture_scope(bounds, prepaint);
+            return window.with_layer_effect_scope(bounds, prepaint);
         }
         prepaint(window)
     }

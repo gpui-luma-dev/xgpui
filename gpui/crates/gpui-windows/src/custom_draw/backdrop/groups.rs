@@ -2,6 +2,7 @@ use super::*;
 use gpui::{LayerCacheStats, LayerPlan};
 struct Slot {
     size: [u32; 2],
+    blur_size: [u32; 2],
     // Saved destination, raw subtree, horizontal scratch, filtered subtree.
     textures: Vec<TextureBundle>,
     retained: Option<LayerPlan>,
@@ -22,6 +23,13 @@ impl Groups {
     pub fn texture_count(&self) -> usize {
         self.slots.iter().map(|slot| slot.textures.len()).sum()
     }
+    pub fn texture_bytes(&self) -> u64 {
+        self.slots
+            .iter()
+            .flat_map(|slot| &slot.textures)
+            .map(|texture| texture.extent.width.0 as u64 * texture.extent.height.0 as u64 * 4)
+            .sum()
+    }
     pub fn prepare(
         &mut self,
         device: &ID3D11Device,
@@ -34,6 +42,7 @@ impl Groups {
             if self.slots.get(i).is_none_or(|s| s.size != p.size) {
                 let slot = Slot {
                     size: p.size,
+                    blur_size: p.blur_size,
                     textures: Vec::new(),
                     retained: None,
                 };
@@ -44,6 +53,14 @@ impl Groups {
                 }
             }
             let slot = &mut self.slots[i];
+            if slot.blur_size != p.blur_size {
+                // Preserve destination/raw textures while resizing only the filters.
+                slot.textures.truncate(2);
+                slot.blur_size = p.blur_size;
+                if let Some(old) = &mut slot.retained {
+                    old.blur_radius = 0.;
+                }
+            }
             let count = if p.blur_radius > 0. { 4 } else { 2 };
             if slot.textures.len() != count {
                 // Keep raw pixels; recreated blur targets need fresh filtering.
@@ -53,11 +70,16 @@ impl Groups {
             }
             slot.textures.truncate(count);
             while slot.textures.len() < count {
+                let extent = if slot.textures.len() < 2 {
+                    p.size
+                } else {
+                    p.blur_size
+                };
                 slot.textures.push(allocate_texture_limited(
                     device,
                     gpui::size(
-                        DevicePixels(p.size[0] as i32),
-                        DevicePixels(p.size[1] as i32),
+                        DevicePixels(extent[0] as i32),
+                        DevicePixels(extent[1] as i32),
                     ),
                     DXGI_FORMAT_B8G8R8A8_UNORM,
                     4,

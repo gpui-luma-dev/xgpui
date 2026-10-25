@@ -10,6 +10,16 @@ pub const MAX_LAYER_SIDE: u32 = 1024;
 /// Maximum retained command identities per group.
 pub const MAX_LAYER_COMMANDS: usize = 65_536;
 
+/// Working resolution for a captured subtree Gaussian blur.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LayerBlurQuality {
+    /// Full resolution below 4 device pixels, half below 8, quarter otherwise.
+    #[default]
+    Adaptive,
+    /// Full-resolution reference, preserving the original Gaussian sampling.
+    FullResolution,
+}
+
 /// Blend a completed isolated subtree with its saved destination in encoded sRGB.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(u8)]
@@ -35,6 +45,8 @@ pub enum LayerBlendMode {
 /// followed by group opacity and destination blending.
 #[derive(Clone, Copy, Debug)]
 pub struct LayerColorFilter {
+    /// Working resolution policy for subtree blur.
+    pub blur_quality: LayerBlurQuality,
     /// Gaussian support radius in logical pixels; zero disables blur.
     pub blur_radius: Pixels,
     /// Destination blend, applied after filtering and group opacity.
@@ -51,6 +63,7 @@ pub struct LayerColorFilter {
 impl Default for LayerColorFilter {
     fn default() -> Self {
         Self {
+            blur_quality: LayerBlurQuality::Adaptive,
             blur_radius: px(0.),
             blend_mode: LayerBlendMode::Normal,
             saturation: 1.,
@@ -64,12 +77,16 @@ impl Default for LayerColorFilter {
 /// Immutable capture description shared by its paired scene boundaries.
 #[derive(Debug)]
 pub struct LayerCapture {
+    /// Working resolution policy for subtree blur.
+    pub blur_quality: LayerBlurQuality,
     /// Gaussian support radius in device pixels, in [0,64].
     pub blur_radius: ScaledPixels,
     /// Destination blend for the completed group.
     pub blend_mode: LayerBlendMode,
-    /// Physical capture bounds, already intersected with ancestor masks.
+    /// Source sampling rectangle, including any halo; bounded by the viewport/parent.
     pub bounds: Bounds<ScaledPixels>,
+    /// Visible output clip, applied after filtering. None uses the source bounds.
+    pub clip: Option<Bounds<ScaledPixels>>,
     /// Opacity of the completed group, including inherited opacity exactly once.
     pub opacity: f32,
     /// Encoded-sRGB saturation in [0,2], with 0 grayscale and 1 unchanged.
@@ -112,6 +129,8 @@ pub struct LayerPlan {
     pub parameters: [[[f32; 4]; 6]; 4],
     /// Device-pixel Gaussian support radius; zero skips filter passes.
     pub blur_radius: f32,
+    /// Horizontal and vertical filter target extent.
+    pub blur_size: [u32; 2],
     /// Exact immutable command identities; preserved by Scene::replay.
     pub revision: Arc<[u64]>,
     /// Live external content cannot use retained filtered results.
@@ -201,6 +220,43 @@ impl LayerPlan {
             (0. ..=64.).contains(&capture.blur_radius.0),
             "layer blur radius must be in [0,64] device pixels"
         );
+        let factor = match capture.blur_quality {
+            LayerBlurQuality::FullResolution => 1,
+            LayerBlurQuality::Adaptive if capture.blur_radius.0 >= 8. => 4,
+            LayerBlurQuality::Adaptive if capture.blur_radius.0 >= 4. => 2,
+            LayerBlurQuality::Adaptive => 1,
+        };
+        let blur_size = size.map(|v| v.div_ceil(factor));
+        let output_clip = capture.clip.unwrap_or(b);
+        ensure!(
+            [
+                output_clip.origin.x.0,
+                output_clip.origin.y.0,
+                output_clip.size.width.0,
+                output_clip.size.height.0
+            ]
+            .iter()
+            .all(|v| v.is_finite())
+                && output_clip.size.width.0 >= 0.
+                && output_clip.size.height.0 >= 0.,
+            "layer output clip must be finite and nonnegative"
+        );
+        let clip = output_clip.intersect(&Bounds::new(
+            Point::default(),
+            viewport.map(|p| ScaledPixels(p.0 as f32)),
+        ));
+        ensure!(
+            [
+                clip.origin.x.0,
+                clip.origin.y.0,
+                clip.size.width.0,
+                clip.size.height.0
+            ]
+            .iter()
+            .all(|v| v.is_finite())
+                && clip.intersect(&b) == clip,
+            "layer output clip must fit within its source capture"
+        );
         let mut parameters = [[[0.; 4]; 6]; 4];
         for pass in 0..2 {
             parameters[pass][0] = [
@@ -222,6 +278,10 @@ impl LayerPlan {
                 end[0] as f32,
                 end[1] as f32,
             ];
+            if pass == 1 {
+                parameters[pass][3] =
+                    [clip.left().0, clip.top().0, clip.right().0, clip.bottom().0];
+            }
             parameters[pass][4][2] = capture.opacity;
             parameters[pass][4][3] = capture.saturation;
             parameters[pass][5] = [
@@ -232,18 +292,19 @@ impl LayerPlan {
             ];
         }
         for pass in 0..2 {
-            parameters[pass + 2][0] = [size[0] as f32, size[1] as f32, 5., 0.];
-            parameters[pass + 2][1] = [0., 0., size[0] as f32, size[1] as f32];
+            parameters[pass + 2][0] = [blur_size[0] as f32, blur_size[1] as f32, 5., 0.];
+            parameters[pass + 2][1] = [0., 0., blur_size[0] as f32, blur_size[1] as f32];
             parameters[pass + 2][2] = [0., 0., 1., 1.];
             parameters[pass + 2][4] = [
                 if pass == 0 { 1. } else { 0. },
                 if pass == 1 { 1. } else { 0. },
-                capture.blur_radius.0,
+                capture.blur_radius.0 * blur_size[pass] as f32 / size[pass] as f32,
                 0.,
             ];
         }
         Ok(Self {
             blur_radius: capture.blur_radius.0,
+            blur_size,
             begin_index,
             end_index: 0,
             origin,
@@ -257,7 +318,11 @@ impl LayerPlan {
     /// can survive radius edits, but filtered pixels must match the current radius.
     pub fn needs_blur(&self, previous: Option<&Self>) -> bool {
         self.blur_radius > 0.
-            && previous.is_none_or(|old| !self.matches(old) || old.blur_radius != self.blur_radius)
+            && previous.is_none_or(|old| {
+                !self.matches(old)
+                    || old.blur_radius != self.blur_radius
+                    || old.blur_size != self.blur_size
+            })
     }
     /// Whether a previous raw capture is safe to reuse. Own opacity/color filters
     /// are evaluated at composition and do not invalidate the raw child pixels.

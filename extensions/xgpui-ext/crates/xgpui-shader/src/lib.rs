@@ -47,7 +47,10 @@ pub use instanced::WindowShaderExt;
 #[cfg(feature = "portable-shaders")]
 pub mod brush;
 #[cfg(feature = "portable-shaders")]
-pub use brush::{BlendMode, Brush, BrushMeshPoint, BrushPoint, BrushStop, Noise, NoiseKind};
+pub use brush::{
+    BlendMode, Brush, BrushMeshPoint, BrushPoint, BrushStop, DirectPath, MAX_DIRECT_PATH_EDGES,
+    MAX_DIRECT_PATH_EXTENT, MAX_DIRECT_PATH_TRIANGLES, Noise, NoiseKind,
+};
 
 #[cfg(feature = "portable-shaders")]
 mod backdrop;
@@ -56,5 +59,7 @@ pub use backdrop::BackdropBlur;
 
 #[cfg(feature = "portable-shaders")]
 mod layer_effect;
+#[cfg(feature = "portable-shaders")]
+pub use gpui::LayerBlurQuality;
 #[cfg(feature = "portable-shaders")]
 pub use layer_effect::LayerEffect;

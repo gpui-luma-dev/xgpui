@@ -1,7 +1,7 @@
 use super::*;
 use gpui::{DevicePixels, Path, PathBuilder, PlatformHeadlessRenderer, Quad};
 
-fn shape(kind: usize) -> Path<Pixels> {
+pub(super) fn shape(kind: usize) -> Path<Pixels> {
     let mut p = if kind == 2 {
         PathBuilder::stroke(px(7.))
     } else {

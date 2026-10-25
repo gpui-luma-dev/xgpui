@@ -14,8 +14,12 @@ mod cache;
 use cache::ProgramCache;
 mod hermite;
 pub use hermite::BrushMeshPoint;
+mod direct_path;
 mod noise;
 mod path;
+pub use direct_path::{
+    DirectPath, MAX_DIRECT_PATH_EDGES, MAX_DIRECT_PATH_EXTENT, MAX_DIRECT_PATH_TRIANGLES,
+};
 mod spatial;
 pub use spatial::{BrushPoint, MAX_FREEFORM_POINTS};
 pub(crate) mod text;

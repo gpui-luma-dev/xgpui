@@ -11,6 +11,8 @@ fn viewport() -> ContentMask<ScaledPixels> {
 }
 fn capture(opacity: f32) -> Arc<LayerCapture> {
     Arc::new(LayerCapture {
+        clip: None,
+        blur_quality: gpui::LayerBlurQuality::Adaptive,
         blur_radius: ScaledPixels(0.),
         blend_mode: gpui::LayerBlendMode::Normal,
         bounds: Bounds::new(point(px(8.), px(8.)), size(px(80.), px(48.))).scale(1.),
@@ -128,6 +130,8 @@ fn layer_validation_replay_revisions_and_limits() {
         bounds: Bounds::new(point(px(0.), px(0.)), size(px(2048.), px(2048.))).scale(1.),
     };
     let large = Arc::new(LayerCapture {
+        clip: None,
+        blur_quality: gpui::LayerBlurQuality::Adaptive,
         blur_radius: ScaledPixels(0.),
         blend_mode: gpui::LayerBlendMode::Normal,
         bounds: full.bounds,
@@ -151,6 +155,7 @@ fn layer_validation_replay_revisions_and_limits() {
 trait TestRenderer: PlatformHeadlessRenderer {
     fn stats(&self) -> LayerCacheStats;
     fn effect_texture_count(&self) -> usize;
+    fn layer_texture_bytes(&self) -> u64;
     fn backdrop_stats(&self) -> gpui::BackdropCacheStats;
 }
 #[cfg(feature = "wgpu")]
@@ -160,6 +165,9 @@ impl TestRenderer for gpui_wgpu::WgpuHeadlessRenderer {
     }
     fn effect_texture_count(&self) -> usize {
         self.effect_texture_count()
+    }
+    fn layer_texture_bytes(&self) -> u64 {
+        self.layer_texture_bytes()
     }
     fn backdrop_stats(&self) -> gpui::BackdropCacheStats {
         self.backdrop_cache_stats()
@@ -173,6 +181,9 @@ impl TestRenderer for gpui_apple::metal_renderer::MetalHeadlessRenderer {
     fn effect_texture_count(&self) -> usize {
         self.effect_texture_count()
     }
+    fn layer_texture_bytes(&self) -> u64 {
+        self.layer_texture_bytes()
+    }
     fn backdrop_stats(&self) -> gpui::BackdropCacheStats {
         self.backdrop_cache_stats()
     }
@@ -184,6 +195,9 @@ impl TestRenderer for gpui_windows::Dx11HeadlessRenderer {
     }
     fn effect_texture_count(&self) -> usize {
         self.effect_texture_count()
+    }
+    fn layer_texture_bytes(&self) -> u64 {
+        self.layer_texture_bytes()
     }
     fn backdrop_stats(&self) -> gpui::BackdropCacheStats {
         self.backdrop_cache_stats()

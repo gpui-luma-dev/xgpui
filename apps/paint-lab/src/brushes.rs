@@ -91,8 +91,8 @@ pub fn gallery(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoEleme
         .child(hermite_demo(lab, cx))
         .child(worley_demo())
         .child(blue_noise_demo())
-        .child(path_brush_demo())
-        .child(path_batch_demo())
+        .child(path_brush_demo(lab, cx))
+        .child(path_batch_demo(lab.direct_paths))
         .child(group_filter_demo(lab, cx))
         .child(group_opacity_demo())
         .child("Main-pass brushes · solid, linear, radial")
@@ -418,6 +418,11 @@ fn group_filter_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl Int
     ];
     let (blend_label, blend_mode) = modes[lab.layer_blend_step];
     let blur_radius = [0., 4., 8., 16.][lab.layer_blur_step];
+    let blur_quality = if lab.layer_blur_full_resolution {
+        LayerBlurQuality::FullResolution
+    } else {
+        LayerBlurQuality::Adaptive
+    };
 
     let (label, effect) = match lab.layer_filter_step {
         0 => (
@@ -433,12 +438,21 @@ fn group_filter_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl Int
             LayerEffect::saturation(2.).unwrap(),
         ),
     };
-    let sample = || {
+    let sample = |continuous_background: bool| {
         div()
             .relative()
             .w(px(176.))
             .h(px(112.))
             .bg(rgb(0x213c54))
+            .children(continuous_background.then(|| {
+                div()
+                    .absolute()
+                    .left(px(-64.))
+                    .top(px(-64.))
+                    .w(px(304.))
+                    .h(px(240.))
+                    .bg(rgb(0x213c54))
+            }))
             .child(
                 div()
                     .absolute()
@@ -486,7 +500,7 @@ fn group_filter_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl Int
                         .flex_col()
                         .gap_2()
                         .child("Original · saturation 1")
-                        .child(sample()),
+                        .child(sample(false)),
                 )
                 .child(
                     div()
@@ -499,7 +513,7 @@ fn group_filter_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl Int
                                 .w(px(176.))
                                 .h(px(112.))
                                 .layer_effect(LayerEffect::grayscale(1.).unwrap())
-                                .child(sample()),
+                                .child(sample(false)),
                         ),
                 )
                 .child(
@@ -520,7 +534,7 @@ fn group_filter_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl Int
                                 .w(px(176.))
                                 .h(px(112.))
                                 .layer_effect(effect)
-                                .child(sample()),
+                                .child(sample(false)),
                         ),
                 )
                 .child(
@@ -542,6 +556,20 @@ fn group_filter_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl Int
                             )
                             .on_click(cx.listener(|lab, _, _, cx| {
                                 lab.layer_blur_step = (lab.layer_blur_step + 1) % 4;
+                                cx.notify();
+                            })),
+                        )
+                        .child(
+                            super::button(
+                                "layer-blur-quality",
+                                if lab.layer_blur_full_resolution {
+                                    "Blur: Full resolution"
+                                } else {
+                                    "Blur: Adaptive"
+                                },
+                            )
+                            .on_click(cx.listener(|lab, _, _, cx| {
+                                lab.layer_blur_full_resolution = !lab.layer_blur_full_resolution;
                                 cx.notify();
                             })),
                         )
@@ -569,16 +597,18 @@ fn group_filter_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl Int
                                             LayerEffect::blend(blend_mode)
                                                 .unwrap()
                                                 .with_blur(px(blur_radius))
-                                                .unwrap(),
+                                                .unwrap()
+                                                .with_blur_quality(blur_quality),
                                         )
-                                        .child(sample()),
+                                        .child(sample(true)),
                                 ),
                         ),
                 ),
         )
 }
 
-fn path_brush_demo() -> impl IntoElement {
+fn path_brush_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoElement {
+    let direct = lab.direct_paths;
     let gradient = Brush::linear(
         65.,
         vec![
@@ -602,10 +632,48 @@ fn path_brush_demo() -> impl IntoElement {
         .gap_2()
         .child("Vector brushes · curved fill, a hole, and a stroked path")
         .child(
+            super::button(
+                "path-route",
+                if direct {
+                    "Paths: Direct · switch to native"
+                } else {
+                    "Paths: Native · switch to direct"
+                },
+            )
+            .on_click(cx.listener(|lab, _, _, cx| {
+                lab.direct_paths = !lab.direct_paths;
+                cx.notify();
+            })),
+        )
+        .child(
             div().flex().flex_wrap().gap_4().children(
                 [(false, gradient), (true, mesh)]
                     .into_iter()
                     .map(|(stroke, brush)| {
+                        let mut p = if stroke {
+                            PathBuilder::stroke(px(12.))
+                        } else {
+                            PathBuilder::fill()
+                        };
+                        p.move_to(point(px(16.), px(26.)));
+                        p.cubic_bezier_to(
+                            point(px(188.), px(32.)),
+                            point(px(62.), px(-4.)),
+                            point(px(162.), px(4.)),
+                        );
+                        p.curve_to(point(px(166.), px(114.)), point(px(208.), px(112.)));
+                        p.line_to(point(px(38.), px(108.)));
+                        p.close();
+                        if !stroke {
+                            p.move_to(point(px(78.), px(48.)));
+                            p.line_to(point(px(78.), px(82.)));
+                            p.line_to(point(px(130.), px(82.)));
+                            p.line_to(point(px(130.), px(48.)));
+                            p.close();
+                        }
+
+                        let path = p.build().unwrap();
+                        let prepared = brush.prepare_path(&path).unwrap();
                         div()
                             .flex()
                             .flex_col()
@@ -619,32 +687,16 @@ fn path_brush_demo() -> impl IntoElement {
                                 canvas(
                                     |_, _, _| (),
                                     move |bounds, (), window, _| {
-                                        let mut p = if stroke {
-                                            PathBuilder::stroke(px(12.))
+                                        if direct {
+                                            prepared.paint(window, bounds.origin).unwrap();
                                         } else {
-                                            PathBuilder::fill()
-                                        };
-                                        p.move_to(point(px(16.), px(26.)));
-                                        p.cubic_bezier_to(
-                                            point(px(188.), px(32.)),
-                                            point(px(62.), px(-4.)),
-                                            point(px(162.), px(4.)),
-                                        );
-                                        p.curve_to(
-                                            point(px(166.), px(114.)),
-                                            point(px(208.), px(112.)),
-                                        );
-                                        p.line_to(point(px(38.), px(108.)));
-                                        p.close();
-                                        if !stroke {
-                                            p.move_to(point(px(78.), px(48.)));
-                                            p.line_to(point(px(78.), px(82.)));
-                                            p.line_to(point(px(130.), px(82.)));
-                                            p.line_to(point(px(130.), px(48.)));
-                                            p.close();
+                                            let mut path = path.clone();
+                                            path.bounds.origin += bounds.origin;
+                                            for vertex in &mut path.vertices {
+                                                vertex.xy_position += bounds.origin;
+                                            }
+                                            brush.paint_path_native(window, path).unwrap();
                                         }
-                                        p.translate(bounds.origin);
-                                        brush.paint_path(window, p.build().unwrap()).unwrap();
                                     },
                                 )
                                 .w(px(224.))
@@ -920,7 +972,7 @@ fn hermite_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoElem
     demo
 }
 
-fn path_batch_demo() -> impl IntoElement {
+fn path_batch_demo(direct: bool) -> impl IntoElement {
     let brush = Brush::linear(
         45.,
         vec![
@@ -929,31 +981,44 @@ fn path_batch_demo() -> impl IntoElement {
         ],
     )
     .unwrap();
+    let mut path = PathBuilder::fill();
+    path.move_to(point(px(4.), px(4.)));
+    path.cubic_bezier_to(
+        point(px(40.), px(36.)),
+        point(px(48.), px(0.)),
+        point(px(0.), px(44.)),
+    );
+    path.line_to(point(px(4.), px(36.)));
+    path.close();
+    let path = path.build().unwrap();
+    let prepared = brush.prepare_path(&path).unwrap();
     div()
         .flex()
         .flex_col()
         .gap_2()
         .child("Path batching · 24 separate curved shapes")
-        .child("Planned: 24 paths → 1 coverage batch; overlapping bounds split batches")
+        .child(if direct {
+            "Direct: 24 shapes · 0 coverage passes"
+        } else {
+            "Native: 24 paths · 1 planned coverage batch"
+        })
         .child(
             canvas(
                 |_, _, _| (),
                 move |bounds, (), window, _| {
                     for index in 0..24 {
-                        let mut path = PathBuilder::fill();
-                        path.move_to(point(px(4.), px(4.)));
-                        path.cubic_bezier_to(
-                            point(px(40.), px(36.)),
-                            point(px(48.), px(0.)),
-                            point(px(0.), px(44.)),
-                        );
-                        path.line_to(point(px(4.), px(36.)));
-                        path.close();
-                        path.translate(
-                            bounds.origin
-                                + point(px((index % 8) as f32 * 56.), px((index / 8) as f32 * 48.)),
-                        );
-                        brush.paint_path(window, path.build().unwrap()).unwrap();
+                        let offset = bounds.origin
+                            + point(px((index % 8) as f32 * 56.), px((index / 8) as f32 * 48.));
+                        if direct {
+                            prepared.paint(window, offset).unwrap();
+                        } else {
+                            let mut path = path.clone();
+                            path.bounds.origin += offset;
+                            for vertex in &mut path.vertices {
+                                vertex.xy_position += offset;
+                            }
+                            brush.paint_path_native(window, path).unwrap();
+                        }
                     }
                 },
             )

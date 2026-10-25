@@ -2130,6 +2130,15 @@ pub struct MetalHeadlessRenderer {
 
 #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
 impl MetalHeadlessRenderer {
+    /// Bytes in retained subtree textures, excluding driver/in-flight references.
+    pub fn layer_texture_bytes(&self) -> u64 {
+        self.renderer
+            .backdrops
+            .as_ref()
+            .map(|effects| effects.groups.texture_bytes())
+            .unwrap_or(0)
+    }
+
     /// Number of retained effect textures; excludes driver and in-flight references.
     pub fn effect_texture_count(&self) -> usize {
         self.renderer

@@ -1,6 +1,7 @@
 use super::*;
 struct Slot {
     size: [u32; 2],
+    blur_size: [u32; 2],
     // Saved destination, raw subtree, horizontal scratch, filtered subtree.
     textures: Vec<Texture>,
     views: Vec<TextureView>,
@@ -23,6 +24,13 @@ impl Groups {
     pub fn texture_count(&self) -> usize {
         self.slots.iter().map(|slot| slot.textures.len()).sum()
     }
+    pub fn texture_bytes(&self) -> u64 {
+        self.slots
+            .iter()
+            .flat_map(|slot| &slot.textures)
+            .map(|texture| u64::from(texture.width()) * u64::from(texture.height()) * 4)
+            .sum()
+    }
     pub fn prepare(
         &mut self,
         device: &Device,
@@ -40,6 +48,7 @@ impl Groups {
             if self.slots.get(i).is_none_or(|s| s.size != plan.size) {
                 let slot = Slot {
                     size: plan.size,
+                    blur_size: plan.blur_size,
                     textures: Vec::new(),
                     views: Vec::new(),
                     bind_groups: Vec::new(),
@@ -52,6 +61,16 @@ impl Groups {
                 }
             }
             let slot = &mut self.slots[i];
+            if slot.blur_size != plan.blur_size {
+                // Preserve destination/raw textures while resizing only the filters.
+                slot.bind_groups.truncate(2);
+                slot.views.truncate(2);
+                slot.textures.truncate(2);
+                slot.blur_size = plan.blur_size;
+                if let Some(old) = &mut slot.retained {
+                    old.blur_radius = 0.;
+                }
+            }
             let count = if plan.blur_radius > 0. { 4 } else { 2 };
             if slot.textures.len() != count {
                 // Allocation changes invalidate only filtered pixels. Keep the
@@ -64,11 +83,16 @@ impl Groups {
             slot.views.truncate(count);
             slot.textures.truncate(count);
             while slot.textures.len() < count {
+                let extent = if slot.textures.len() < 2 {
+                    plan.size
+                } else {
+                    plan.blur_size
+                };
                 let texture = device.create_texture(&TextureDescriptor {
                     label: Some("captured layer"),
                     size: Extent3d {
-                        width: plan.size[0],
-                        height: plan.size[1],
+                        width: extent[0],
+                        height: extent[1],
                         depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,

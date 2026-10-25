@@ -27,6 +27,22 @@ fn subtree_blur_validates_radius_and_plans() {
                 .is_err()
         );
     }
+    for value in [f32::NAN, f32::INFINITY, -1.] {
+        let mut c = blur_capture(8., 1., 1.);
+        Arc::get_mut(&mut c).unwrap().clip = Some(Bounds::new(
+            point(ScaledPixels(8.), ScaledPixels(8.)),
+            size(ScaledPixels(value), ScaledPixels(16.)),
+        ));
+        let mut scene = Scene::default();
+        scene.begin_layer_capture(c.clone(), viewport());
+        scene.end_layer_capture(c, viewport());
+        scene.finish();
+        assert!(
+            scene
+                .layer_plans(size(DevicePixels(96), DevicePixels(64)))
+                .is_err()
+        );
+    }
     let mut scene = Scene::default();
     let c = blur_capture(4., 2., 0.5);
     let mask = ContentMask {
@@ -52,8 +68,9 @@ fn subtree_blur_validates_radius_and_plans() {
     changed.revision = Arc::from([123]);
     assert!(changed.needs_blur(Some(&plan)));
 
-    assert_eq!(plan.parameters[2][4], [1., 0., 8., 0.]);
-    assert_eq!(plan.parameters[3][4], [0., 1., 8., 0.]);
+    assert_eq!(plan.blur_size, [40, 24]);
+    assert_eq!(plan.parameters[2][4], [1., 0., 2., 0.]);
+    assert_eq!(plan.parameters[3][4], [0., 1., 2., 0.]);
 }
 fn quantize(value: [f64; 4]) -> [f64; 4] {
     value.map(|v| (v * 255.).round() / 255.)
@@ -68,17 +85,24 @@ fn over(color: [u8; 4], destination: [f64; 4]) -> [f64; 4] {
         }
     }))
 }
-fn cpu_blur(mut pixels: Vec<[f64; 4]>, width: usize, height: usize, radius: f64) -> Vec<[f64; 4]> {
+fn cpu_gaussian(
+    mut pixels: Vec<[f64; 4]>,
+    width: usize,
+    height: usize,
+    radii: [f64; 2],
+) -> Vec<[f64; 4]> {
+    let radius = radii[0];
     if radius == 0. {
         return pixels;
     }
-    let n = radius.ceil() as isize;
-    let sigma = (radius / 3.).max(0.1);
-    let weights: Vec<_> = (-n..=n)
-        .map(|i| (-0.5 * (i * i) as f64 / sigma.powi(2)).exp())
-        .collect();
-    let total: f64 = weights.iter().sum();
-    for (dx, dy) in [(1, 0), (0, 1)] {
+    for (axis, (dx, dy)) in [(1, 0), (0, 1)].into_iter().enumerate() {
+        let radius = radii[axis];
+        let n = radius.ceil() as isize;
+        let sigma = (radius / 3.).max(0.1);
+        let weights: Vec<_> = (-n..=n)
+            .map(|i| (-0.5 * (i * i) as f64 / sigma.powi(2)).exp())
+            .collect();
+        let total: f64 = weights.iter().sum();
         let mut out = vec![[0.; 4]; pixels.len()];
         for y in 0..height {
             for x in 0..width {
@@ -99,6 +123,67 @@ fn cpu_blur(mut pixels: Vec<[f64; 4]>, width: usize, height: usize, radius: f64)
         pixels = out;
     }
     pixels
+}
+fn cpu_blur(pixels: Vec<[f64; 4]>, width: usize, height: usize, radius: f64) -> Vec<[f64; 4]> {
+    cpu_blur_quality(pixels, width, height, radius, true)
+}
+fn cpu_blur_quality(
+    pixels: Vec<[f64; 4]>,
+    width: usize,
+    height: usize,
+    radius: f64,
+    adaptive: bool,
+) -> Vec<[f64; 4]> {
+    let factor = if !adaptive || radius < 4. {
+        1
+    } else if radius < 8. {
+        2
+    } else {
+        4
+    };
+    let rw = width.div_ceil(factor);
+    let rh = height.div_ceil(factor);
+    let sx = width as f64 / rw as f64;
+    let sy = height as f64 / rh as f64;
+    let mut reduced = vec![[0.; 4]; rw * rh];
+    // Independent area resampling, expressed as overlap with source texel boxes.
+    for y in 0..rh {
+        for x in 0..rw {
+            let left = x as f64 * sx;
+            let right = (x + 1) as f64 * sx;
+            let top = y as f64 * sy;
+            let bottom = (y + 1) as f64 * sy;
+            for iy in top.floor() as usize..(bottom.ceil() as usize).min(height) {
+                for ix in left.floor() as usize..(right.ceil() as usize).min(width) {
+                    let area = (right.min((ix + 1) as f64) - left.max(ix as f64))
+                        * (bottom.min((iy + 1) as f64) - top.max(iy as f64));
+                    for c in 0..4 {
+                        reduced[y * rw + x][c] += pixels[iy * width + ix][c] * area / (sx * sy);
+                    }
+                }
+            }
+        }
+    }
+    let filtered = cpu_gaussian(reduced, rw, rh, [radius / sx, radius / sy]);
+    let mut output = vec![[0.; 4]; width * height];
+    for y in 0..height {
+        for x in 0..width {
+            let fx = (x as f64 + 0.5) / sx - 0.5;
+            let fy = (y as f64 + 0.5) / sy - 0.5;
+            let ix = fx.floor() as isize;
+            let iy = fy.floor() as isize;
+            for (ox, wx) in [(0, 1. - (fx - fx.floor())), (1, fx - fx.floor())] {
+                for (oy, wy) in [(0, 1. - (fy - fy.floor())), (1, fy - fy.floor())] {
+                    let xx = (ix + ox).clamp(0, rw as isize - 1) as usize;
+                    let yy = (iy + oy).clamp(0, rh as isize - 1) as usize;
+                    for c in 0..4 {
+                        output[y * width + x][c] += filtered[yy * rw + xx][c] * wx * wy;
+                    }
+                }
+            }
+        }
+    }
+    output
 }
 #[cfg(feature = "wgpu")]
 #[test]
@@ -336,7 +421,15 @@ fn subtree_blur_nested_radius_edit_invalidates_parent_but_reuses_inner_source() 
             })
         })
         .collect();
-    let expected = cpu_blur(cpu_blur(raw, 80, 48, 8.), 80, 48, 4.);
+    let expected = cpu_blur(
+        cpu_blur(raw, 80, 48, 8.)
+            .into_iter()
+            .map(quantize)
+            .collect(),
+        80,
+        48,
+        4.,
+    );
     for mut renderer in renderers() {
         renderer.render_scene_to_image(&frame(2.), extent).unwrap();
         let before = renderer.stats();
@@ -357,5 +450,236 @@ fn subtree_blur_nested_radius_edit_invalidates_parent_but_reuses_inner_source() 
                 std::array::from_fn(|i| ((source[i] + 1. - source[3]) * 255.).round() as u8),
             );
         }
+    }
+}
+
+#[cfg(feature = "wgpu")]
+#[test]
+fn subtree_blur_quality_switches_resize_only_filter_buffers_on_odd_crops() {
+    use gpui::LayerBlurQuality::{Adaptive, FullResolution};
+    let extent = size(DevicePixels(96), DevicePixels(64));
+    let (width, height) = (79, 47);
+    let mut source = Scene::default();
+    // Fine one-pixel stripes expose aliasing and center/extent mistakes.
+    for x in 0..width {
+        rect(
+            &mut source,
+            (8 + x) as f32,
+            8.,
+            1.,
+            height as f32,
+            gpui::rgba(if x % 2 == 0 { 0xff402080 } else { 0x2060e0c0 }).into(),
+        );
+    }
+    source.finish();
+    let raw: Vec<_> = (0..height)
+        .flat_map(|_| {
+            (0..width).map(|x| {
+                over(
+                    if x % 2 == 0 {
+                        [255, 64, 32, 128]
+                    } else {
+                        [32, 96, 224, 192]
+                    },
+                    [0.; 4],
+                )
+            })
+        })
+        .collect();
+    let settings = [
+        (0., Adaptive),
+        (3.9, Adaptive),
+        (4., Adaptive),
+        (7.9, Adaptive),
+        (8., Adaptive),
+        (8., FullResolution),
+        (8., Adaptive),
+        (0., Adaptive),
+        (8., Adaptive),
+    ];
+    for mut renderer in renderers() {
+        for (index, (radius, quality)) in settings.into_iter().enumerate() {
+            let mut scene = Scene::default();
+            rect(&mut scene, 0., 0., 96., 64., gpui::rgb(0x336699).into());
+            let mut c = blur_capture(radius, 1., 0.7);
+            let fields = Arc::get_mut(&mut c).unwrap();
+            fields.bounds = Bounds::new(
+                point(px(8.), px(8.)),
+                size(px(width as f32), px(height as f32)),
+            )
+            .scale(1.);
+            fields.blur_quality = quality;
+            scene.begin_layer_capture(c.clone(), viewport());
+            scene.replay(0..source.len(), &source);
+            scene.end_layer_capture(c, viewport());
+            scene.finish();
+            let image = renderer.render_scene_to_image(&scene, extent).unwrap();
+            let plan = scene.layer_plans(extent).unwrap().remove(0);
+            let expected_bytes = 2 * width as u64 * height as u64 * 4
+                + if radius > 0. {
+                    2 * plan.blur_size[0] as u64 * plan.blur_size[1] as u64 * 4
+                } else {
+                    0
+                };
+            assert_eq!(
+                renderer.layer_texture_bytes(),
+                expected_bytes,
+                "actual texture extents must follow the plan"
+            );
+            assert_eq!(
+                renderer.stats(),
+                LayerCacheStats {
+                    captures: 1,
+                    hits: index as u64
+                }
+            );
+            let expected = cpu_blur_quality(
+                raw.clone(),
+                width,
+                height,
+                radius as f64,
+                quality == Adaptive,
+            );
+            for y in (0..height).step_by(3) {
+                for x in (0..width).step_by(3) {
+                    let value = expected[y * width + x].map(|v| v * 0.7);
+                    let bg = [0.2, 0.4, 0.6, 1.];
+                    pixel(
+                        &image,
+                        x as u32 + 8,
+                        y as u32 + 8,
+                        std::array::from_fn(|i| {
+                            ((value[i] + bg[i] * (1. - value[3])) * 255.).round() as u8
+                        }),
+                    );
+                }
+            }
+            if radius == 8. && quality == Adaptive {
+                assert_eq!(plan.blur_size, [20, 12]);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "wgpu")]
+#[test]
+fn subtree_blur_halo_clips_after_filtering_and_restores_destination() {
+    for mut renderer in renderers() {
+        for quality in [
+            gpui::LayerBlurQuality::Adaptive,
+            gpui::LayerBlurQuality::FullResolution,
+        ] {
+            for mode in [gpui::LayerBlendMode::Normal, gpui::LayerBlendMode::Multiply] {
+                let mut scene = Scene::default();
+                rect(&mut scene, 0., 0., 96., 64., gpui::rgb(0xc0a060).into());
+                let mut c = blur_capture(16., 1., 1.);
+                let fields = Arc::get_mut(&mut c).unwrap();
+                fields.bounds = viewport().bounds;
+                fields.clip =
+                    Some(Bounds::new(point(px(24.), px(24.)), size(px(48.), px(16.))).scale(1.));
+                fields.blur_quality = quality;
+                fields.blend_mode = mode;
+                scene.begin_layer_capture(c.clone(), viewport());
+                rect(&mut scene, 0., 0., 96., 64., gpui::rgb(0x204060).into());
+                scene.end_layer_capture(c, viewport());
+                scene.finish();
+                let image = renderer
+                    .render_scene_to_image(&scene, size(DevicePixels(96), DevicePixels(64)))
+                    .unwrap();
+                for y in 0..64 {
+                    for x in 0..96 {
+                        let inside = (24..72).contains(&x) && (24..40).contains(&y);
+                        let expected = if !inside {
+                            [192, 160, 96, 255]
+                        } else if mode == gpui::LayerBlendMode::Multiply {
+                            [24, 40, 36, 255]
+                        } else {
+                            [32, 64, 96, 255]
+                        };
+                        pixel(&image, x, y, expected);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "wgpu")]
+#[test]
+fn painted_subtree_blur_halo_samples_beyond_ancestor_clip() {
+    use gpui::*;
+    struct View;
+    impl Render for View {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().bg(rgb(0xc0a060)).child(
+                div()
+                    .relative()
+                    .ml(px(24.))
+                    .mt(px(24.))
+                    .w(px(48.))
+                    .h(px(24.))
+                    .overflow_hidden()
+                    .child(
+                        crate::painted()
+                            .absolute()
+                            .left(px(-16.))
+                            .top(px(-16.))
+                            .w(px(80.))
+                            .h(px(56.))
+                            .bg(rgb(0x204060))
+                            .layer_effect(
+                                LayerEffect::blur(px(8.))
+                                    .unwrap()
+                                    .with_blend_mode(crate::BlendMode::Multiply),
+                            )
+                            .child(
+                                canvas(
+                                    |bounds, window, _| {
+                                        let hitbox =
+                                            window.insert_hitbox(bounds, HitboxBehavior::Normal);
+                                        assert_eq!(
+                                            hitbox.content_mask.bounds,
+                                            Bounds::new(
+                                                point(px(24.), px(24.)),
+                                                size(px(48.), px(24.))
+                                            )
+                                        );
+                                    },
+                                    |_, _, _, _| {},
+                                )
+                                .size_full(),
+                            ),
+                    ),
+            )
+        }
+    }
+    let mut cx =
+        HeadlessAppContext::with_platform(Arc::new(NoopTextSystem::new()), Arc::new(()), || {
+            Ok(Some(Box::new(gpui_wgpu::WgpuHeadlessRenderer::new()?)))
+        });
+    let window = cx
+        .open_window(size(px(96.), px(80.)), |_, cx| cx.new(|_| View))
+        .unwrap();
+    cx.update_window(window.into(), |_, window, cx| window.draw(cx).clear(cx))
+        .unwrap();
+    let scale = cx
+        .update_window(window.into(), |_, window, _| window.scale_factor())
+        .unwrap();
+    let image = cx.capture_screenshot(window.into()).unwrap();
+    for (x, y) in [(24, 24), (71, 24), (24, 47), (71, 47), (48, 36)] {
+        pixel(
+            &image,
+            (x as f32 * scale) as u32,
+            (y as f32 * scale) as u32,
+            [24, 40, 36, 255],
+        );
+    }
+    for (x, y) in [(23, 24), (72, 24), (24, 23), (24, 48)] {
+        pixel(
+            &image,
+            (x as f32 * scale) as u32,
+            (y as f32 * scale) as u32,
+            [192, 160, 96, 255],
+        );
     }
 }

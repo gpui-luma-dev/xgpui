@@ -2742,6 +2742,15 @@ impl WgpuHeadlessRenderer {
         Ok(())
     }
 
+    /// Bytes in retained subtree textures, excluding driver/in-flight references.
+    pub fn layer_texture_bytes(&self) -> u64 {
+        self.core
+            .backdrops
+            .as_ref()
+            .map(|effects| effects.groups.texture_bytes())
+            .unwrap_or(0)
+    }
+
     /// Number of retained effect textures; excludes driver and in-flight references.
     pub fn effect_texture_count(&self) -> usize {
         self.core

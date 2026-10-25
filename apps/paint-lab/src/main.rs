@@ -223,6 +223,8 @@ struct Lab {
     layer_filter_step: u8,
     layer_blend_step: usize,
     layer_blur_step: usize,
+    layer_blur_full_resolution: bool,
+    direct_paths: bool,
     #[cfg(feature = "portable-shaders")]
     freeform_step: u8,
     #[cfg(feature = "portable-shaders")]
@@ -958,6 +960,8 @@ fn main() -> Result<()> {
                     layer_filter_step: 0,
                     layer_blend_step: 0,
                     layer_blur_step: 0,
+                    layer_blur_full_resolution: false,
+                    direct_paths: true,
                     #[cfg(feature = "portable-shaders")]
                     freeform_step: 2,
                     #[cfg(feature = "portable-shaders")]
