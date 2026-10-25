@@ -21,6 +21,26 @@ thread_local! {
     static APPLICATION: RefCell<Option<ApplicationHandle>> = const { RefCell::new(None) };
 }
 
+/// Identifies the compiled module independently of its HTML loader.
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn demo_build_id() -> String {
+    option_env!("XGPUI_WEB_BUILD_ID")
+        .unwrap_or("unversioned")
+        .into()
+}
+
+/// Keep the visible behavior label tied to the running module.
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn demo_behavior(demo: &str) -> String {
+    match demo {
+        "svg" => "SVG: independent views • sharp / texture zoom • no worker",
+        "parley" => "Parley: editable paragraphs • selection and BiDi",
+        "shader" => "Shader: gradients, paths and animation",
+        _ => "Unknown demo",
+    }
+    .into()
+}
+
 fn main() {
     console_error_panic_hook::set_once();
     gpui_web::init_logging();

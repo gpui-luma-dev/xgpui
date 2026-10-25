@@ -100,5 +100,16 @@ entries are labeled and do not link to nonexistent hosted routes.
 The gallery and the extension crate guides link to the demo source on GitHub.
 The Pages workflow builds `apps/extensions-web` in release mode with the pinned
 wasm-bindgen CLI and copies its generated assets into `docs/examples/extensions/`
-before uploading the site. These artifacts are ignored by Git. For local testing,
-use the build and server commands in [extensions-web](../apps/extensions-web/README.md).
+before uploading the site. These artifacts are ignored by Git. The same build
+script refreshes both `apps/extensions-web/dist/` and `docs/examples/extensions/`,
+so a local docs server serves the current Wasm app too:
+
+```sh
+bash apps/extensions-web/build.sh --release
+python3 -m http.server 8000 --directory docs
+```
+
+Open `http://localhost:8000/examples/extensions/?demo=svg`. Rebuild after changing
+branches or demo code, then reload the browser; an older copied HTML file may
+reject new demo names. The standalone demo server is also available; see
+[extensions-web](../apps/extensions-web/README.md).
