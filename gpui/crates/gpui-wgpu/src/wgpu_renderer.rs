@@ -213,6 +213,7 @@ impl WgpuResources {
 struct WgpuRendererCore {
     resources: WgpuResources,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
+    shaders: ShaderRenderer,
     atlas: Arc<WgpuAtlas>,
     path_globals_offset: u64,
     gamma_offset: u64,
@@ -1334,6 +1335,7 @@ impl WgpuRendererCore {
 
         Self {
             custom_compositor: None,
+            shaders: ShaderRenderer::default(),
             resources: WgpuResources {
                 device,
                 queue,
@@ -1544,6 +1546,11 @@ impl WgpuRendererCore {
         );
 
         let custom_draws = self.prepare_custom_draws(scene, size)?;
+        if !scene.shader_draws.is_empty() && self.shaders.premultiplied != premultiplied_alpha {
+            self.shaders.pipelines.clear();
+            self.shaders.premultiplied = premultiplied_alpha;
+        }
+
         self.atlas.before_frame();
         self.ensure_intermediate_textures(size);
 
@@ -1609,6 +1616,13 @@ impl WgpuRendererCore {
                 )
             })?;
         self.prepare_texture_bind_groups(scene);
+        self.shaders.prepare(
+            &self.resources.device,
+            &self.resources.queue,
+            &self.resources.bind_group_layouts.globals,
+            self.target_format,
+            scene,
+        )?;
 
         let mut encoder =
             self.resources()
@@ -1635,6 +1649,21 @@ impl WgpuRendererCore {
 
             for batch in scene.batches() {
                 match batch {
+                    PrimitiveBatch::Shaders { program_id, range } => {
+                        pass.set_pipeline(&self.shaders.pipelines[&program_id]);
+                        pass.set_bind_group(0, &self.resources.globals_bind_group, &[]);
+                        // Bind the slice at zero instance index: WebGL2 has no base-instance draw.
+                        let stride = std::mem::size_of::<[[f32; 4]; 11]>() as u64;
+                        pass.set_vertex_buffer(
+                            0,
+                            self.shaders
+                                .buffer
+                                .as_ref()
+                                .unwrap()
+                                .slice(range.start as u64 * stride..range.end as u64 * stride),
+                        );
+                        pass.draw(0..6, 0..range.len() as u32);
+                    }
                     PrimitiveBatch::Quads(range) => self.draw_instances(
                         &instance_bindings.quads,
                         &self.resources().pipelines.quads,
@@ -3048,5 +3077,115 @@ mod tests {
                 33.0_f32.to_bits(),
             ]
         );
+    }
+}
+
+#[derive(Default)]
+struct ShaderRenderer {
+    pipelines: FxHashMap<u64, wgpu::RenderPipeline>,
+    buffer: Option<wgpu::Buffer>,
+    capacity: u64,
+    premultiplied: bool,
+}
+impl ShaderRenderer {
+    fn prepare(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        globals: &wgpu::BindGroupLayout,
+        format: wgpu::TextureFormat,
+        scene: &Scene,
+    ) -> Result<()> {
+        // Native-only coverage subpasses must not evict the main scene's pipelines.
+        if scene.shader_draws.is_empty() {
+            return Ok(());
+        }
+        self.pipelines
+            .retain(|id, _| scene.shader_draws.iter().any(|d| d.program.id() == *id));
+        let bytes = scene
+            .shader_draws
+            .len()
+            .checked_mul(176)
+            .context("shader instance size overflow")? as u64;
+        anyhow::ensure!(
+            bytes <= device.limits().max_buffer_size.min(64 * 1024 * 1024),
+            "shader instances exceed 64 MiB/device buffer limit"
+        );
+        if bytes > self.capacity {
+            self.capacity = bytes
+                .next_power_of_two()
+                .min(device.limits().max_buffer_size)
+                .min(64 * 1024 * 1024);
+            self.buffer = Some(device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("fragment shader instances"),
+                size: self.capacity,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+        }
+        let records: Vec<_> = scene
+            .shader_draws
+            .iter()
+            .map(|d| d.instance_data())
+            .collect();
+        queue.write_buffer(
+            self.buffer.as_ref().unwrap(),
+            0,
+            bytemuck::cast_slice(&records),
+        );
+        let attributes: Vec<_> = (0..11)
+            .map(|index| wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x4,
+                offset: index * 16,
+                shader_location: index as u32,
+            })
+            .collect();
+        for draw in &scene.shader_draws {
+            self.pipelines.entry(draw.program.id()).or_insert_with(|| {
+                let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("instanced fragment shader"),
+                    source: wgpu::ShaderSource::Wgsl(draw.program.wgsl().into()),
+                });
+                let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("instanced fragment shader"),
+                    bind_group_layouts: &[Some(globals)],
+                    immediate_size: 0,
+                });
+                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("instanced fragment shader"),
+                    layout: Some(&layout),
+                    vertex: wgpu::VertexState {
+                        module: &module,
+                        entry_point: Some("shader_vertex"),
+                        buffers: &[Some(wgpu::VertexBufferLayout {
+                            array_stride: 176,
+                            step_mode: wgpu::VertexStepMode::Instance,
+                            attributes: &attributes,
+                        })],
+                        compilation_options: Default::default(),
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &module,
+                        entry_point: Some("shader_fragment"),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format,
+                            blend: Some(if self.premultiplied {
+                                wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING
+                            } else {
+                                wgpu::BlendState::ALPHA_BLENDING
+                            }),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                        compilation_options: Default::default(),
+                    }),
+                    primitive: wgpu::PrimitiveState::default(),
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    multiview_mask: None,
+                    cache: None,
+                })
+            });
+        }
+        Ok(())
     }
 }

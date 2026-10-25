@@ -113,3 +113,29 @@ Open `http://localhost:8000/examples/extensions/?demo=svg`. Rebuild after changi
 branches or demo code, then reload the browser; an older copied HTML file may
 reject new demo names. The standalone demo server is also available; see
 [extensions-web](../apps/extensions-web/README.md).
+
+## Instanced WGSL v2
+
+The maintained guide is `extensions/instanced-wgsl-v2.md`, embedded in `data.js`
+under `#instanced-wgsl-v2`. The main navigation, Extensions overview and shader
+crate guide link to it. It records implementation status, limits, validation and
+remaining acceptance rather than treating the RFC as fully complete.
+
+Native launch is primary: `just --justfile apps/shader-examples/justfile ui`.
+The companion uses the same Rust example views and WGSL sources, including the
+cyan clipping boundary, Clipping ON/OFF toggle and draw-order legend. Browser
+startup is separate; rebuilding the native app alone does not refresh WASM.
+
+The Pages workflow builds `apps/shader-examples` in release mode. Its build script
+copies generated assets to both the app's `dist/` and ignored
+`docs/examples/shaders/`. To preview the current companion with the site:
+
+```sh
+bash apps/shader-examples/build.sh --release
+python3 -m http.server 8000 --directory docs
+```
+
+Open `http://localhost:8000/#instanced-wgsl-v2` or
+`http://localhost:8000/examples/shaders/`. These are separate from the older
+`examples/extensions/` gallery. Deploying updated sources still requires the
+normal Pages workflow; local regeneration alone does not update the public site.

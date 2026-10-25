@@ -743,6 +743,7 @@ fn generate(root: &Path) -> Result<()> {
             "docs/extensions/native-dx11-paints.md",
         ),
         ("portable-wgsl-v1", "docs/extensions/portable-wgsl-v1.md"),
+        ("instanced-wgsl-v2", "docs/extensions/instanced-wgsl-v2.md"),
     ];
     let mut extension_documents = BTreeMap::new();
     for (route, file) in document_sources {

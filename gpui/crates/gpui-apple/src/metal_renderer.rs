@@ -114,6 +114,7 @@ pub struct MetalRenderer {
     #[cfg(target_os = "macos")]
     wide_sdr: Option<wide_sdr::Compositor>,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
+    shader_pipelines: std::collections::HashMap<u64, metal::RenderPipelineState>,
     device: metal::Device,
     layer: Option<metal::MetalLayer>,
     is_apple_gpu: bool,
@@ -448,6 +449,7 @@ impl MetalRenderer {
             #[cfg(target_os = "macos")]
             wide_sdr: None,
             custom_compositor: None,
+            shader_pipelines: Default::default(),
             device,
             layer,
             presents_with_transaction: false,
@@ -721,6 +723,19 @@ impl MetalRenderer {
             )?;
             outputs
         };
+        // Coverage scenes contain no shaders and must not evict main-scene pipelines.
+        if !scene.shader_draws.is_empty() {
+            self.shader_pipelines
+                .retain(|id, _| scene.shader_draws.iter().any(|d| d.program.id() == *id));
+        }
+        for draw in &scene.shader_draws {
+            if !self.shader_pipelines.contains_key(&draw.program.id()) {
+                self.shader_pipelines.insert(
+                    draw.program.id(),
+                    create_shader_pipeline(&self.device, &draw.program)?,
+                );
+            }
+        }
         let mut writer = InstanceBufferWriter::new(
             &self.device,
             &self.instance_buffer_pool,
@@ -972,6 +987,13 @@ impl MetalRenderer {
 
         for batch in scene.batches() {
             match batch {
+                PrimitiveBatch::Shaders { program_id, range } => self.draw_shaders(
+                    program_id,
+                    range,
+                    instance_bindings,
+                    viewport_size,
+                    command_encoder,
+                ),
                 PrimitiveBatch::Custom(range) => {
                     for index in range {
                         self.custom_compositor.as_ref().unwrap().draw(
@@ -1164,6 +1186,31 @@ impl MetalRenderer {
             6,
             shadows.len() as u64,
             shadows.start as u64,
+        );
+    }
+
+    fn draw_shaders(
+        &self,
+        program_id: u64,
+        range: Range<usize>,
+        bindings: &InstanceBindings,
+        viewport: Size<DevicePixels>,
+        encoder: &metal::RenderCommandEncoderRef,
+    ) {
+        encoder.set_render_pipeline_state(&self.shader_pipelines[&program_id]);
+        encoder.set_vertex_buffer(
+            0,
+            Some(&bindings.shaders.buffer),
+            (bindings.shaders.offset + range.start * 176) as u64,
+        );
+        let globals = [viewport.width.0 as f32, viewport.height.0 as f32, 0., 0.];
+        encoder.set_vertex_bytes(1, 16, globals.as_ptr().cast());
+        encoder.set_fragment_bytes(1, 16, globals.as_ptr().cast());
+        encoder.draw_primitives_instanced(
+            metal::MTLPrimitiveType::Triangle,
+            0,
+            6,
+            range.len() as u64,
         );
     }
 
@@ -1706,6 +1753,7 @@ struct InstanceBinding {
 }
 
 struct InstanceBindings {
+    shaders: InstanceBinding,
     quads: InstanceBinding,
     shadows: InstanceBinding,
     underlines: InstanceBinding,
@@ -1716,6 +1764,7 @@ struct InstanceBindings {
 
 fn write_instances(scene: &Scene, writer: &mut InstanceBufferWriter) -> Result<InstanceBindings> {
     Ok(InstanceBindings {
+        shaders: writer.write_iter(scene.shader_draws.iter().map(|d| d.instance_data()))?,
         quads: writer.write(&scene.quads)?,
         shadows: writer.write(&scene.shadows)?,
         underlines: writer.write(&scene.underlines)?,
@@ -2028,4 +2077,45 @@ mod tests {
             assert_eq!(*alpha, 255);
         }
     }
+}
+
+fn create_shader_pipeline(
+    device: &metal::DeviceRef,
+    program: &gpui::SceneShaderProgram,
+) -> Result<metal::RenderPipelineState> {
+    use metal::*;
+    let library = device
+        .new_library_with_source(&program.metal().0, &CompileOptions::new())
+        .map_err(anyhow::Error::msg)?;
+    let descriptor = RenderPipelineDescriptor::new();
+    let vertex = library
+        .get_function(&program.metal().1, None)
+        .map_err(anyhow::Error::msg)?;
+    let fragment = library
+        .get_function(&program.metal().2, None)
+        .map_err(anyhow::Error::msg)?;
+    descriptor.set_vertex_function(Some(&vertex));
+    descriptor.set_fragment_function(Some(&fragment));
+    let layout = VertexDescriptor::new();
+    for index in 0..11 {
+        let attribute = layout.attributes().object_at(index).unwrap();
+        attribute.set_format(MTLVertexFormat::Float4);
+        attribute.set_offset(index * 16);
+        attribute.set_buffer_index(0);
+    }
+    let buffer = layout.layouts().object_at(0).unwrap();
+    buffer.set_stride(176);
+    buffer.set_step_function(MTLVertexStepFunction::PerInstance);
+    buffer.set_step_rate(1);
+    descriptor.set_vertex_descriptor(Some(&layout));
+    let color = descriptor.color_attachments().object_at(0).unwrap();
+    color.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+    color.set_blending_enabled(true);
+    color.set_source_rgb_blend_factor(MTLBlendFactor::SourceAlpha);
+    color.set_destination_rgb_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
+    color.set_source_alpha_blend_factor(MTLBlendFactor::One);
+    color.set_destination_alpha_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
+    device
+        .new_render_pipeline_state(&descriptor)
+        .map_err(anyhow::Error::msg)
 }

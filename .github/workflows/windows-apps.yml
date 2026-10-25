@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [gamut-lab, paint-lab]
+        app: [gamut-lab, paint-lab, shader-examples]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

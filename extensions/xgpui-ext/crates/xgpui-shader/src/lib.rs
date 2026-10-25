@@ -36,3 +36,9 @@ mod hlsl;
 
 #[cfg(target_os = "macos")]
 mod metal_cache;
+
+/// Experimental typed shaders drawn directly in the host render pass.
+#[cfg(feature = "portable-shaders")]
+pub mod instanced;
+#[cfg(feature = "portable-shaders")]
+pub use instanced::WindowShaderExt;

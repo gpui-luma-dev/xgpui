@@ -5171,6 +5171,31 @@ impl Window {
         Ok(())
     }
 
+    /// Record an instanced fragment shader in the current scene order.
+    /// Bounds include the entire effect; the host applies clipping and opacity.
+    pub fn paint_shader(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        program: std::sync::Arc<crate::SceneShaderProgram>,
+        data: [[f32; 4]; crate::SHADER_DATA_SLOTS],
+    ) {
+        self.invalidator.debug_assert_paint();
+        if bounds.is_empty() || self.element_opacity() <= 0.0 {
+            return;
+        }
+        self.next_frame
+            .scene
+            .insert_primitive(crate::Primitive::Shader(crate::ShaderDraw {
+                order: 0,
+                bounds: bounds.scale(self.scale_factor()),
+                content_mask: self.snapped_content_mask(),
+                opacity: self.element_opacity(),
+                scale_factor: self.scale_factor(),
+                program,
+                data,
+            }));
+    }
+
     /// Record independent GPU content using native geometry at the current scene order.
     /// Producers span the full unclipped shape; GPUI applies clip, coverage and opacity.
     pub fn paint_custom(

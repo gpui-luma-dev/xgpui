@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Instanced WGSL · xgpui</title>
+<style>
+html,body { margin:0; height:100%; background:#0b1020; color:#e5edff; font:16px system-ui }
+main { max-width:850px; margin:auto; padding:48px 24px } a { color:#9bc6ff } article { padding:20px; margin:16px 0; border:1px solid #344260; border-radius:12px }
+nav { display:flex; gap:20px } canvas { display:block; width:100%; height:100%; outline:none } #error { position:fixed; inset:20px; background:#0b1020; white-space:pre-wrap; z-index:5 } [hidden] { display:none !important }
+</style>
+<main id="index"><h1>Instanced WGSL examples</h1><p>Six standalone examples of custom fragment shaders composed directly by GPUI. Each link starts a fresh WASM app.</p>
+<article><h2>01 / Minimal shader</h2><p>A typed Rust instance and a small antialiased rounded-box fragment.</p><nav><a href="?example=minimal&backend=webgpu">WebGPU</a><a href="?example=minimal&backend=webgl">WebGL2</a></nav></article>
+<article><h2>02 / Glowing badges</h2><p>One hundred independently animated glow instances sharing one program.</p><nav><a href="?example=glow&backend=webgpu">WebGPU</a><a href="?example=glow&backend=webgl">WebGL2</a></nav></article>
+<article><h2>03 / Particle field</h2><p>Adjust 100–10,000 soft particles. Pause animation and change inherited opacity.</p><nav><a href="?example=particles&backend=webgpu">WebGPU</a><a href="?example=particles&backend=webgl">WebGL2</a></nav></article>
+<article><h2>04 / Composition</h2><p>Overlapping transparent instances, a native quad between draws, content clipping and inherited opacity.</p><nav><a href="?example=composition&backend=webgpu">WebGPU</a><a href="?example=composition&backend=webgl">WebGL2</a></nav></article>
+<article><h2>05 / Shadow falloff and color</h2><p>Compare native shadows with four-stop color gradients, custom falloff, blur, spread, offset and inset/outset controls.</p><nav><a href="?example=shadows&backend=webgpu">WebGPU</a><a href="?example=shadows&backend=webgl">WebGL2</a></nav></article>
+<article><h2>06 / Soft animated borders</h2><p>Blurred blue and orange highlights orbit an interactive Generate button on a light background. Pause and resume the animation.</p><nav><a href="?example=borders&backend=webgpu">WebGPU</a><a href="?example=borders&backend=webgl">WebGL2</a></nav></article>
+<p>Serve on localhost or HTTPS. WebGPU requires a supporting browser and adapter; WebGL2 is a separate explicit option. Failures appear here and in the console.</p></main>
+<div id="error" hidden></div>
+<script type="module">
+const error = document.querySelector('#error');
+function fail(message) { error.hidden=false; error.textContent='Shader example failed: '+message+'\nCheck browser GPU support and the console. Reload with backend=webgl to try WebGL2.'; }
+window.addEventListener('error', e => fail(e.message));
+window.addEventListener('unhandledrejection', e => fail(String(e.reason)));
+if (new URLSearchParams(location.search).has('example')) {
+ document.querySelector('#index').hidden=true;
+ try { const {default:init} = await import('./shader_examples.js'); await init(); } catch(e) { fail(String(e)); }
+}
+</script>

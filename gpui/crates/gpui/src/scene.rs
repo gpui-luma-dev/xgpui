@@ -51,6 +51,8 @@ pub struct Scene {
     pub polychrome_sprites: Vec<PolychromeSprite>,
     pub surfaces: Vec<PaintSurface>,
     pub custom_draws: Vec<CustomDraw>,
+    /// Ordered, directly rendered fragment shader instances.
+    pub shader_draws: Vec<ShaderDraw>,
 }
 
 #[expect(missing_docs)]
@@ -68,6 +70,7 @@ impl Scene {
         self.polychrome_sprites.clear();
         self.surfaces.clear();
         self.custom_draws.clear();
+        self.shader_draws.clear();
     }
 
     pub fn len(&self) -> usize {
@@ -131,6 +134,10 @@ impl Scene {
                 sprite.order = order;
                 self.polychrome_sprites.push(*sprite);
             }
+            Primitive::Shader(draw) => {
+                draw.order = order;
+                self.shader_draws.push(draw.clone());
+            }
             Primitive::Custom(draw) => {
                 draw.order = order;
                 self.custom_draws.push(draw.clone());
@@ -167,6 +174,7 @@ impl Scene {
             .sort_by_key(|sprite| (sprite.order, sprite.tile.tile_id));
         self.surfaces.sort_by_key(|surface| surface.order);
         self.custom_draws.sort_by_key(|draw| draw.order);
+        self.shader_draws.sort_by_key(|draw| draw.order);
     }
 
     #[cfg_attr(
@@ -192,6 +200,8 @@ impl Scene {
             subpixel_sprites_iter: self.subpixel_sprites.iter().peekable(),
             polychrome_sprites_start: 0,
             polychrome_sprites_iter: self.polychrome_sprites.iter().peekable(),
+            shader_start: 0,
+            shader_iter: self.shader_draws.iter().peekable(),
             custom_start: 0,
             custom_iter: self.custom_draws.iter().peekable(),
             surfaces_start: 0,
@@ -219,6 +229,7 @@ pub(crate) enum PrimitiveKind {
     PolychromeSprite,
     Surface,
     Custom,
+    Shader,
 }
 
 pub(crate) enum PaintOperation {
@@ -239,6 +250,7 @@ pub enum Primitive {
     PolychromeSprite(PolychromeSprite),
     Surface(PaintSurface),
     Custom(CustomDraw),
+    Shader(ShaderDraw),
 }
 
 #[expect(missing_docs)]
@@ -254,6 +266,7 @@ impl Primitive {
             Primitive::PolychromeSprite(sprite) => &sprite.bounds,
             Primitive::Surface(surface) => &surface.bounds,
             Primitive::Custom(draw) => &draw.bounds,
+            Primitive::Shader(draw) => &draw.bounds,
         }
     }
 
@@ -268,6 +281,7 @@ impl Primitive {
             Primitive::PolychromeSprite(sprite) => &sprite.content_mask,
             Primitive::Surface(surface) => &surface.content_mask,
             Primitive::Custom(draw) => &draw.content_mask,
+            Primitive::Shader(draw) => &draw.content_mask,
         }
     }
 }
@@ -280,6 +294,8 @@ impl Primitive {
     allow(dead_code)
 )]
 struct BatchIterator<'a> {
+    shader_start: usize,
+    shader_iter: Peekable<slice::Iter<'a, ShaderDraw>>,
     custom_start: usize,
     custom_iter: Peekable<slice::Iter<'a, CustomDraw>>,
     shadows_start: usize,
@@ -305,6 +321,10 @@ impl<'a> Iterator for BatchIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut orders_and_kinds = [
+            (
+                self.shader_iter.peek().map(|d| d.order),
+                PrimitiveKind::Shader,
+            ),
             (
                 self.custom_iter.peek().map(|d| d.order),
                 PrimitiveKind::Custom,
@@ -347,6 +367,25 @@ impl<'a> Iterator for BatchIterator<'a> {
         };
 
         match batch_kind {
+            PrimitiveKind::Shader => {
+                let start = self.shader_start;
+                let program_id = self.shader_iter.next().unwrap().program.id();
+                self.shader_start += 1;
+                while self
+                    .shader_iter
+                    .next_if(|draw| {
+                        draw.program.id() == program_id
+                            && (draw.order, batch_kind) < max_order_and_kind
+                    })
+                    .is_some()
+                {
+                    self.shader_start += 1;
+                }
+                Some(PrimitiveBatch::Shaders {
+                    program_id,
+                    range: start..self.shader_start,
+                })
+            }
             PrimitiveKind::Custom => {
                 let start = self.custom_start;
                 self.custom_iter.next();
@@ -526,12 +565,18 @@ pub enum PrimitiveBatch {
     },
     Surfaces(Range<usize>),
     Custom(Range<usize>),
+    /// A compatible run of fragment shader instances, in scene order.
+    Shaders {
+        program_id: u64,
+        range: Range<usize>,
+    },
 }
 
 impl PrimitiveBatch {
     #[expect(missing_docs)]
     pub fn label(&self) -> String {
         match self {
+            Self::Shaders { range, .. } => format!("shaders ({})", range.len()),
             Self::Shadows(range) => format!("shadows ({})", range.len()),
             Self::Quads(range) => format!("quads ({})", range.len()),
             Self::Paths(range) => format!("paths ({})", range.len()),
@@ -1156,5 +1201,94 @@ pub struct CustomDraw {
 impl From<CustomDraw> for Primitive {
     fn from(draw: CustomDraw) -> Self {
         Self::Custom(draw)
+    }
+}
+
+/// Maximum portable payload: eight float4 slots (128 bytes) per instance.
+pub const SHADER_DATA_SLOTS: usize = 8;
+
+/// Backend-independent compiled fragment program. Created by shader extensions;
+/// backend pipeline caches belong to the host renderer and its device.
+#[derive(Debug)]
+pub struct SceneShaderProgram {
+    id: u64,
+    /// Validated WGSL with host vertex/fragment entry points.
+    wgsl: String,
+    /// Translated Metal source and actual generated entry point names.
+    metal: (String, String, String),
+    /// Translated shader-model-5 HLSL and actual generated entry point names.
+    hlsl: (String, String, String),
+}
+impl SceneShaderProgram {
+    /// Allocate a unique identity for validated backend sources.
+    pub fn new(
+        wgsl: String,
+        metal: (String, String, String),
+        hlsl: (String, String, String),
+    ) -> Self {
+        static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        Self {
+            id: NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            wgsl,
+            metal,
+            hlsl,
+        }
+    }
+    /// Immutable validated WGSL source.
+    pub fn wgsl(&self) -> &str {
+        &self.wgsl
+    }
+    /// Metal source, vertex entry and fragment entry.
+    pub fn metal(&self) -> &(String, String, String) {
+        &self.metal
+    }
+    /// HLSL source, vertex entry and fragment entry.
+    pub fn hlsl(&self) -> &(String, String, String) {
+        &self.hlsl
+    }
+    /// Stable across clones of an immutable program handle.
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+}
+
+/// Immutable instance recorded into a scene and retained through paint replay.
+#[derive(Clone, Debug)]
+pub struct ShaderDraw {
+    /// Host draw order, assigned on insertion.
+    pub order: DrawOrder,
+    /// Full source bounds in device pixels, including any effect outset.
+    pub bounds: Bounds<ScaledPixels>,
+    /// Host clipping in device pixels.
+    pub content_mask: ContentMask<ScaledPixels>,
+    /// Inherited element opacity, applied exactly once by the generated wrapper.
+    pub opacity: f32,
+    /// Logical-to-device scale used for shader coordinates.
+    pub scale_factor: f32,
+    /// Immutable program handle.
+    pub program: std::sync::Arc<SceneShaderProgram>,
+    /// Reflected and packed payload. Unused slots are zero.
+    pub data: [[f32; 4]; SHADER_DATA_SLOTS],
+}
+impl ShaderDraw {
+    /// Transport layout: bounds, clip, opacity/scale, then payload; 176 bytes.
+    pub fn instance_data(&self) -> [[f32; 4]; 3 + SHADER_DATA_SLOTS] {
+        let mut result = [[0.; 4]; 3 + SHADER_DATA_SLOTS];
+        result[0] = [
+            self.bounds.origin.x.0,
+            self.bounds.origin.y.0,
+            self.bounds.size.width.0,
+            self.bounds.size.height.0,
+        ];
+        let clip = self.content_mask.bounds;
+        result[1] = [
+            clip.origin.x.0,
+            clip.origin.y.0,
+            clip.origin.x.0 + clip.size.width.0,
+            clip.origin.y.0 + clip.size.height.0,
+        ];
+        result[2] = [self.opacity, self.scale_factor, 0., 0.];
+        result[3..].copy_from_slice(&self.data);
+        result
     }
 }

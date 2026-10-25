@@ -1,6 +1,6 @@
 'use strict';
 
-const shaderGuideRoutes = ['extension-paints', 'shader-producers', 'paint-contract-hardening', 'portable-wgsl-v1', 'portable-paints', 'native-dx11-paints'];
+const shaderGuideRoutes = ['extension-paints', 'shader-producers', 'paint-contract-hardening', 'portable-wgsl-v1', 'instanced-wgsl-v2', 'portable-paints', 'native-dx11-paints'];
 
 function isExtensionRoute(route) {
   return route === 'extensions' || Object.hasOwn(data.extension_documents, route);
@@ -10,6 +10,12 @@ function extensionTitle(route) {
 }
 function browserDemoLinks(demo) {
   return '<p><a href="examples/extensions/?demo=' + demo + '">Run browser demo →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>';
+}
+function instancedDemoLinks() {
+  return '<h2>Instanced WGSL v2 · native app first</h2>' +
+    '<p>Typed fragment instances, ordered batching, configurable gradient shadows, soft animated borders and direct main-pass rendering. Experimental SDR subset; Windows runtime acceptance remains outstanding.</p>' +
+    extensionCode('sh', 'just --justfile apps/shader-examples/justfile ui\njust --justfile apps/shader-examples/justfile composition') +
+    '<p><a href="#instanced-wgsl-v2">API, examples and implementation status →</a> · <a href="examples/shaders/">WASM companion →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/shader-examples">Demo source</a></p>';
 }
 function extensionCode(language, source) {
   return '<pre><code class="language-' + language + '">' + escapeHtml(source) + '</code></pre>';
@@ -34,7 +40,7 @@ function extensionPage(route) {
       : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; output retains sRGB semantics.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
-    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'svg-rendering' ? browserDemoLinks('svg') : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
+    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
   return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation, text and SVG extensions.') + banner +
     '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>' +
@@ -44,9 +50,10 @@ use std::sync::Arc;
 
 painted().bg_paint(Arc::new(SolidColor::new([1.0, 0.2, 0.0, 1.0])?));`) +
     '<p><code>xgpui-shader</code>: gradients, meshes and portable WGSL. Metal, wgpu and native D3D11 adapters; sRGB output. No wide-gamut window required.</p>' +
-    '<div class="cards">' + extensionCard('extension-paints', 'Start here: dependencies, containers, borders, paths and interaction.') + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('paint-contract-hardening', 'Preparation, recording and failure behavior.') + extensionCard('portable-wgsl-v1', 'Rust parameters + portable WGSL source.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'Native D3D11 adapter and Windows acceptance.') + '</div>' +
+    '<div class="cards">' + extensionCard('extension-paints', 'Start here: dependencies, containers, borders, paths and interaction.') + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('paint-contract-hardening', 'Preparation, recording and failure behavior.') + extensionCard('portable-wgsl-v1', 'Rust parameters + portable WGSL source.') + extensionCard('instanced-wgsl-v2', 'Typed main-pass instances, ordered batching, native app and WASM companion.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'Native D3D11 adapter and Windows acceptance.') + '</div>' +
     extensionCode('sh', `just --justfile apps/paint-lab/justfile radial
 just --justfile apps/paint-lab/justfile --list`) +
+    instancedDemoLinks() +
     '<h2>2. Wide-gamut presentation</h2>' +
     extensionCode('rust', `use gpui::WindowColorMode;
 
@@ -114,11 +121,12 @@ function publicApiSourceLinks() {
 }
 
 function shaderCrateGuide() {
-  return browserDemoLinks('shader') + '<article class="extension-document">' +
+  return instancedDemoLinks() + browserDemoLinks('shader') + '<article class="extension-document">' +
     data.extension_documents['extension-paints'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') +
     '</article><h2>Producer and backend references</h2><div class="cards">' +
     extensionCard('shader-producers', 'Mesh, gradient parameters and caches.') +
     extensionCard('portable-wgsl-v1', 'Write a portable WGSL producer.') +
+    extensionCard('instanced-wgsl-v2', 'Typed direct main-pass shaders and native-first examples.') +
     extensionCard('paint-contract-hardening', 'Preparation and recording transactions.') +
     extensionCard('portable-paints', 'wgpu backend.') +
     extensionCard('native-dx11-paints', 'Native Windows D3D11 backend.') + '</div>';

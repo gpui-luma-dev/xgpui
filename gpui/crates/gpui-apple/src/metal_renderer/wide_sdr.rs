@@ -264,6 +264,9 @@ impl Compositor {
                 )
             });
             match batch {
+                PrimitiveBatch::Shaders { program_id, range } => {
+                    renderer.draw_shaders(program_id, range, bindings, viewport, e)
+                }
                 PrimitiveBatch::Quads(r) => renderer.draw_quads(r, bindings, viewport, e),
                 PrimitiveBatch::Shadows(r) => renderer.draw_shadows(r, bindings, viewport, e),
                 PrimitiveBatch::Underlines(r) => renderer.draw_underlines(r, bindings, viewport, e),

@@ -47,6 +47,7 @@ pub(crate) struct DirectXRenderer {
     globals: DirectXGlobalElements,
     pipelines: DirectXRenderPipelines,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
+    shaders: Option<crate::custom_draw::ShaderRenderer>,
     wide_sdr: Option<wide_sdr::Compositor>,
     color_mode: WindowColorMode,
     color_display: color_presentation::DisplayState,
@@ -202,6 +203,7 @@ impl DirectXRenderer {
             globals,
             pipelines,
             custom_compositor: None,
+            shaders: None,
             wide_sdr: None,
             color_mode: WindowColorMode::Default,
             color_display: Default::default(),
@@ -287,6 +289,7 @@ impl DirectXRenderer {
         let requested_color = self.color_mode;
         self.wide_sdr = None;
         self.custom_compositor = None;
+        self.shaders = None;
 
         unsafe {
             #[cfg(debug_assertions)]
@@ -412,6 +415,17 @@ impl DirectXRenderer {
                 ),
             )?;
         }
+        if !scene.shader_draws.is_empty() || self.shaders.is_some() {
+            let devices = self.devices.as_ref().context("devices missing")?;
+            if self.shaders.is_none() {
+                self.shaders = Some(crate::custom_draw::ShaderRenderer::new(&devices.device)?);
+            }
+            self.shaders.as_mut().unwrap().prepare(
+                &devices.device,
+                &devices.device_context,
+                scene,
+            )?;
+        }
         let custom_outputs = self.prepare_custom_draws(scene)?;
         self.pre_draw(&match background_appearance {
             WindowBackgroundAppearance::Opaque => [1.0f32; 4],
@@ -445,6 +459,26 @@ impl DirectXRenderer {
             .as_ref()
             .map(|a| Annotation::new(a, HSTRING::from(batch.label())));
         match batch {
+            PrimitiveBatch::Shaders { program_id, range } => {
+                let devices = self.devices.as_ref().context("devices missing")?;
+                let resources = self.resources.as_ref().context("resources missing")?;
+                self.shaders
+                    .as_ref()
+                    .context("shader renderer missing")?
+                    .draw(
+                        &devices.device_context,
+                        resources
+                            .render_target_view
+                            .as_ref()
+                            .context("render target missing")?,
+                        size(
+                            DevicePixels(resources.viewport.Width as i32),
+                            DevicePixels(resources.viewport.Height as i32),
+                        ),
+                        program_id,
+                        range,
+                    )
+            }
             PrimitiveBatch::Shadows(range) => self.draw_shadows(range.start, range.len()),
             PrimitiveBatch::Quads(range) => self.draw_quads(range.start, range.len()),
             PrimitiveBatch::Paths(range) => {
@@ -2391,6 +2425,7 @@ impl Dx11HeadlessRenderer {
             globals,
             pipelines,
             custom_compositor: None,
+            shaders: None,
             wide_sdr: None,
             color_mode: WindowColorMode::Default,
             color_display: Default::default(),
