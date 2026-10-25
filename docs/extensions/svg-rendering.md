@@ -155,9 +155,6 @@ right view between crisp CPU rerasterization and GPU texture zoom of a cached
 100% raster. With it off, zoom/pan leaves the right raster count unchanged;
 artwork selection or resize can still rebuild the base raster. The notice
 explains the speed/detail tradeoff and that the left bounded view still refines.
-Independent **Bounded view: ON/OFF** and **Comparison view: ON/OFF** controls
-unmount either renderer and release its raster while retaining the shared camera.
-Unmount the gallery too when isolating a single view's cost.
 Its diagnostics report element raster latency and accounted bytes, not total
 browser memory. The current non-atomic Wasm platform runs raster jobs on the
 browser thread: progressive rendering and admission limits apply, but a costly

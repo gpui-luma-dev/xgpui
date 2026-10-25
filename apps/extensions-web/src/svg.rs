@@ -62,8 +62,6 @@ pub struct SvgDemo {
     sharp_image: Option<Arc<RenderImage>>,
     sharp_ms: f64,
     sharp_enabled: bool,
-    bounded_visible: bool,
-    comparison_visible: bool,
     sharp_rasters: usize,
     sharp_error: Option<String>,
     drag: Option<Point<Pixels>>,
@@ -96,8 +94,6 @@ impl SvgDemo {
             sharp_image: None,
             sharp_ms: 0.,
             sharp_enabled: true,
-            bounded_visible: true,
-            comparison_visible: true,
             sharp_rasters: 0,
             sharp_error: None,
             drag: None,
@@ -219,44 +215,6 @@ impl Render for SvgDemo {
         zooms = zooms
             .child(
                 button(
-                    "bounded-visible",
-                    if self.bounded_visible {
-                        "Bounded view: ON"
-                    } else {
-                        "Bounded view: OFF"
-                    },
-                    self.bounded_visible,
-                )
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.bounded_visible = !this.bounded_visible;
-                    this.status = None;
-                    cx.notify();
-                })),
-            )
-            .child(
-                button(
-                    "comparison-visible",
-                    if self.comparison_visible {
-                        "Comparison view: ON"
-                    } else {
-                        "Comparison view: OFF"
-                    },
-                    self.comparison_visible,
-                )
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.comparison_visible = !this.comparison_visible;
-                    if !this.comparison_visible {
-                        this.sharp_key = None;
-                        this.sharp_error = None;
-                        if let Some(image) = this.sharp_image.take() {
-                            cx.defer(move |cx| cx.drop_image(image, None));
-                        }
-                    }
-                    cx.notify();
-                })),
-            )
-            .child(
-                button(
                     "sharp-zoom",
                     if self.sharp_enabled {
                         "Sharp SVG zoom: ON"
@@ -325,38 +283,6 @@ impl Render for SvgDemo {
         let backdrop = rgb(if self.light { 0xf8fafc } else { 0x172238 });
         let mut comparison = div().flex().gap_3().flex_shrink_0();
         for mode in 0..2 {
-            let visible = if mode == 0 {
-                self.bounded_visible
-            } else {
-                self.comparison_visible
-            };
-            if !visible {
-                comparison = comparison.child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .child(if mode == 0 {
-                            "Bounded view · OFF"
-                        } else {
-                            "Comparison view · OFF"
-                        })
-                        .child(
-                            div()
-                                .w_full()
-                                .h(px(300.))
-                                .flex_shrink_0()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .bg(rgb(0x1f2937))
-                                .child("View off · no raster work"),
-                        ),
-                );
-                continue;
-            }
             let entity = cx.entity().downgrade();
             let mut viewport = div()
                 .id(("svg-viewport", mode))
@@ -484,9 +410,7 @@ impl Render for SvgDemo {
         } else {
             "Texture zoom"
         };
-        let sharp_progress = if !self.comparison_visible {
-            "Comparison view OFF • raster released".into()
-        } else if let Some(error) = &self.sharp_error {
+        let sharp_progress = if let Some(error) = &self.sharp_error {
             format!("{right_mode}: {error}")
         } else if let Some(image) = &self.sharp_image {
             let pixels = image.size(0);
@@ -517,13 +441,7 @@ impl Render for SvgDemo {
                     s.error.as_deref().unwrap_or("")
                 )
             })
-            .unwrap_or_else(|| {
-                if self.bounded_visible {
-                    "Waiting for layout".into()
-                } else {
-                    "Bounded view OFF".into()
-                }
-            });
+            .unwrap_or_else(|| "Waiting for layout".into());
         let stats = self.scheduler.stats();
         let mut content = div()
             .id("svg-demo")
@@ -551,14 +469,11 @@ impl Render for SvgDemo {
             .child("Single-threaded Wasm: scheduled raster jobs run on the browser thread and cannot be interrupted. The sharp comparison rerasterizes visible pixels outside the pool; pool accounting is not total browser memory.")
             .child(samples)
             .child(zooms)
-            .child(div().p_3().rounded_md().bg(rgb(0x273449)).child(if !self.comparison_visible {
-                "Comparison view OFF: its raster is released and it performs no zoom/pan rendering. Enable it to compare sharp rerasterization with cached texture zoom."
-            } else if self.sharp_enabled {
+            .child(div().p_3().rounded_md().bg(rgb(0x273449)).child(if self.sharp_enabled {
                 "Sharp SVG zoom ON: the right view rerasterizes on zoom/pan for crisp detail. On Wasm this blocks the browser thread; deep zoom and shadows can take seconds. Turn it OFF to compare texture-only zoom speed."
             } else {
                 "Sharp SVG zoom OFF: the right view scales a cached raster with the GPU (texture zoom), so zoom/pan adds no SVG raster work. Detail softens as you zoom. Changing artwork or resizing rebuilds the base raster once. The bounded left view may still refine."
             }))
-            .child("Toggle each view independently to isolate its cost. For single-view comparisons, also unmount the gallery. Turning a view off releases its raster; zoom and pan remain shared when it returns.")
             .child(comparison)
             .child(sharp_progress)
             .child(format!("Zoom {:.0}% • {progress}", self.zoom * 100.))
