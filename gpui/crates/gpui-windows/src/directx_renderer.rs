@@ -409,6 +409,12 @@ impl DirectXRenderer {
         scene: &Scene,
         background_appearance: WindowBackgroundAppearance,
     ) -> Result<()> {
+        if scene.backdrops.is_empty() && scene.layer_boundaries.is_empty() {
+            if let Some(effects) = &mut self.backdrops {
+                effects.clear();
+            }
+        }
+
         anyhow::ensure!(self.wide_sdr.is_some() || scene.shader_draws.iter().all(|d|
             d.program.output_encoding() == gpui::ShaderOutputEncoding::EncodedSrgb),
             "linear P3 shaders require WideGamutSdr");
@@ -779,7 +785,9 @@ impl DirectXRenderer {
             viewport: crate::custom_draw::viewport(extent),
         });
         let wide = self.wide_sdr.take();
+        let effects = self.backdrops.take();
         let result = self.render(scene, WindowBackgroundAppearance::Transparent);
+        self.backdrops = effects;
         self.wide_sdr = wide;
         unsafe {
             devices
@@ -2515,6 +2523,15 @@ mod dxgi {
 pub struct Dx11HeadlessRenderer(DirectXRenderer);
 #[cfg(any(test, feature = "test-support"))]
 impl Dx11HeadlessRenderer {
+    /// Number of retained effect textures; excludes driver and in-flight references.
+    pub fn effect_texture_count(&self) -> usize {
+        self.0
+            .backdrops
+            .as_ref()
+            .map(|effects| effects.texture_count())
+            .unwrap_or(0)
+    }
+
     /// Cumulative backdrop filter cache statistics.
     pub fn backdrop_cache_stats(&self) -> gpui::BackdropCacheStats {
         self.0

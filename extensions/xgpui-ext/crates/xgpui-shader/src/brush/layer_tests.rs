@@ -150,11 +150,19 @@ fn layer_validation_replay_revisions_and_limits() {
 }
 trait TestRenderer: PlatformHeadlessRenderer {
     fn stats(&self) -> LayerCacheStats;
+    fn effect_texture_count(&self) -> usize;
+    fn backdrop_stats(&self) -> gpui::BackdropCacheStats;
 }
 #[cfg(feature = "wgpu")]
 impl TestRenderer for gpui_wgpu::WgpuHeadlessRenderer {
     fn stats(&self) -> LayerCacheStats {
         self.layer_cache_stats()
+    }
+    fn effect_texture_count(&self) -> usize {
+        self.effect_texture_count()
+    }
+    fn backdrop_stats(&self) -> gpui::BackdropCacheStats {
+        self.backdrop_cache_stats()
     }
 }
 #[cfg(target_os = "macos")]
@@ -162,11 +170,23 @@ impl TestRenderer for gpui_apple::metal_renderer::MetalHeadlessRenderer {
     fn stats(&self) -> LayerCacheStats {
         self.layer_cache_stats()
     }
+    fn effect_texture_count(&self) -> usize {
+        self.effect_texture_count()
+    }
+    fn backdrop_stats(&self) -> gpui::BackdropCacheStats {
+        self.backdrop_cache_stats()
+    }
 }
 #[cfg(target_os = "windows")]
 impl TestRenderer for gpui_windows::Dx11HeadlessRenderer {
     fn stats(&self) -> LayerCacheStats {
         self.layer_cache_stats()
+    }
+    fn effect_texture_count(&self) -> usize {
+        self.effect_texture_count()
+    }
+    fn backdrop_stats(&self) -> gpui::BackdropCacheStats {
+        self.backdrop_cache_stats()
     }
 }
 #[cfg(feature = "wgpu")]
@@ -679,3 +699,6 @@ mod blend_tests;
 
 #[path = "layer_blur_tests.rs"]
 mod blur_tests;
+
+#[path = "effect_cleanup_tests.rs"]
+mod effect_cleanup_tests;

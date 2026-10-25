@@ -613,6 +613,12 @@ impl MetalRenderer {
         texture: &metal::TextureRef,
         viewport_size: Size<DevicePixels>,
     ) -> Result<metal::CommandBuffer> {
+        if scene.backdrops.is_empty() && scene.layer_boundaries.is_empty() {
+            if let Some(effects) = &mut self.backdrops {
+                effects.clear();
+            }
+        }
+
         #[cfg(target_os = "macos")]
         if let Some(lab) = &mut self.wide_sdr {
             wide_sdr::validate_viewport(viewport_size)?;
@@ -952,7 +958,9 @@ impl MetalRenderer {
         self.update_path_intermediate_textures(extent);
         #[cfg(target_os = "macos")]
         let lab = self.wide_sdr.take();
+        let effects = self.backdrops.take();
         let result = self.render_frame(scene, target, extent);
+        self.backdrops = effects;
         #[cfg(target_os = "macos")]
         {
             self.wide_sdr = lab;
@@ -2122,6 +2130,15 @@ pub struct MetalHeadlessRenderer {
 
 #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
 impl MetalHeadlessRenderer {
+    /// Number of retained effect textures; excludes driver and in-flight references.
+    pub fn effect_texture_count(&self) -> usize {
+        self.renderer
+            .backdrops
+            .as_ref()
+            .map(|effects| effects.texture_count())
+            .unwrap_or(0)
+    }
+
     /// Cumulative backdrop filter cache statistics.
     pub fn backdrop_cache_stats(&self) -> gpui::BackdropCacheStats {
         self.renderer

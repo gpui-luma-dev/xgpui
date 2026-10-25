@@ -1431,6 +1431,8 @@ impl WgpuRendererCore {
             .custom_compositor
             .take()
             .unwrap_or_else(|| CustomCompositor::new(&device, self.target_format));
+        // Native coverage subframes must not release the main frame's effect cache.
+        let effects = self.backdrops.take();
         let result = (|| {
             compositor.begin_uniforms(&device, scene.custom_draws.len())?;
             let mut prepared = Vec::with_capacity(scene.custom_draws.len());
@@ -1525,6 +1527,7 @@ impl WgpuRendererCore {
             compositor.upload_uniforms(&queue);
             Ok(prepared)
         })();
+        self.backdrops = effects;
         self.custom_compositor = Some(compositor);
         result
     }
@@ -1537,6 +1540,12 @@ impl WgpuRendererCore {
         premultiplied_alpha: bool,
         clear_color: wgpu::Color,
     ) -> Result<wgpu::SubmissionIndex> {
+        if scene.backdrops.is_empty() && scene.layer_boundaries.is_empty() {
+            if let Some(effects) = &mut self.backdrops {
+                effects.clear();
+            }
+        }
+
         anyhow::ensure!(
             size.width.0 > 0 && size.height.0 > 0,
             "invalid render target size: {size:?}"
@@ -2731,6 +2740,15 @@ impl WgpuHeadlessRenderer {
             anyhow::bail!("GPU error during headless rendering: {error}");
         }
         Ok(())
+    }
+
+    /// Number of retained effect textures; excludes driver and in-flight references.
+    pub fn effect_texture_count(&self) -> usize {
+        self.core
+            .backdrops
+            .as_ref()
+            .map(|effects| effects.texture_count())
+            .unwrap_or(0)
     }
 
     /// Cumulative backdrop filter cache statistics.

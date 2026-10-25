@@ -14,6 +14,14 @@ pub(crate) struct Groups {
     pub stats: LayerCacheStats,
 }
 impl Groups {
+    pub fn clear(&mut self) {
+        self.slots.clear();
+        self.plans.clear();
+        self.hits.clear();
+    }
+    pub fn texture_count(&self) -> usize {
+        self.slots.iter().map(|slot| slot.textures.len()).sum()
+    }
     pub fn prepare(
         &mut self,
         device: &ID3D11Device,

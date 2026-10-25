@@ -592,6 +592,10 @@ current/retained command identities. Including four backdrop slots, retained
 working texture storage is at most 50 MiB without subtree blur or 82 MiB with
 all groups blurred. Replacing a group slot can transiently retain the old slot;
 driver allocations and in-flight GPU references are excluded.
+A frame with no layer or backdrop boundaries releases all retained effect
+textures and cache identities, while preserving compiled pipelines and cumulative
+statistics. Restoring an effect recaptures its pixels. Internal native coverage
+subframes preserve the owning frame's effect cache.
 Captures require SDR unorm presentation and framebuffer copy support. These
 limits also apply at zero opacity.
 

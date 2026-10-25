@@ -118,6 +118,16 @@ impl Backdrops {
             cache: Default::default(),
         }
     }
+    /// Release frame-owned captures while preserving pipelines and lifetime statistics.
+    pub fn clear(&mut self) {
+        self.slots.clear();
+        self.plans.clear();
+        self.groups.clear();
+        self.cache.prepare(Vec::new(), &[]);
+    }
+    pub fn texture_count(&self) -> usize {
+        self.slots.len() * 3 + self.groups.texture_count()
+    }
     pub fn prepare(
         &mut self,
         device: &Device,
