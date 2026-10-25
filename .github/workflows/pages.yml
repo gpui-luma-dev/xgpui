@@ -22,7 +22,6 @@ jobs:
         run: |
           cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
           node docs/verify.mjs
-          node --test apps/extensions-web/test-svg-worker.mjs
       # Detect stale path-dependency lockfiles before compiling the packaging CLI.
       - name: Verify browser dependency lockfile
         run: >-

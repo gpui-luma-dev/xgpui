@@ -52,12 +52,6 @@ struct ViewportKey {
     pixels: Size<DevicePixels>,
     logical: Size<Pixels>,
 }
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ZoomMode {
-    Hybrid,
-    Sharp,
-    Texture,
-}
 pub struct SvgDemo {
     docs: Vec<SvgDocument>,
     selected: usize,
@@ -66,14 +60,8 @@ pub struct SvgDemo {
     bounds: [Bounds<Pixels>; 2],
     sharp_key: Option<ViewportKey>,
     sharp_image: Option<Arc<RenderImage>>,
-    hybrid_base: Option<(ViewportKey, Arc<RenderImage>)>,
     sharp_ms: f64,
-    zoom_mode: ZoomMode,
-    hybrid_task: Option<Task<()>>,
-    hybrid_pending: Option<ViewportKey>,
-    hybrid_failed: Option<ViewportKey>,
-    hybrid_generation: u64,
-    hybrid_state: &'static str,
+    sharp_enabled: bool,
     sharp_rasters: usize,
     sharp_error: Option<String>,
     drag: Option<Point<Pixels>>,
@@ -91,15 +79,6 @@ impl SvgDemo {
             .map(|(_, bytes)| SvgDocument::parse(&renderer, bytes))
             .collect::<anyhow::Result<Vec<_>>>()?;
         cx.on_release(|this, cx| {
-            crate::svg_worker::dispose();
-            if let Some((_, base)) = this.hybrid_base.take()
-                && this
-                    .sharp_image
-                    .as_ref()
-                    .is_none_or(|current| !Arc::ptr_eq(current, &base))
-            {
-                cx.drop_image(base, None);
-            }
             if let Some(image) = this.sharp_image.take() {
                 cx.drop_image(image, None);
             }
@@ -113,14 +92,8 @@ impl SvgDemo {
             bounds: [Bounds::default(); 2],
             sharp_key: None,
             sharp_image: None,
-            hybrid_base: None,
             sharp_ms: 0.,
-            zoom_mode: ZoomMode::Hybrid,
-            hybrid_task: None,
-            hybrid_pending: None,
-            hybrid_failed: None,
-            hybrid_generation: 0,
-            hybrid_state: "Starting worker",
+            sharp_enabled: true,
             sharp_rasters: 0,
             sharp_error: None,
             drag: None,
@@ -145,61 +118,33 @@ impl SvgDemo {
         );
         let key = ViewportKey {
             selected: self.selected,
-            zoom: if self.zoom_mode == ZoomMode::Texture {
-                1.
-            } else {
-                self.zoom
-            },
-            pan: if self.zoom_mode == ZoomMode::Texture {
-                point(px(0.), px(0.))
-            } else {
+            zoom: if self.sharp_enabled { self.zoom } else { 1. },
+            pan: if self.sharp_enabled {
                 self.pan
+            } else {
+                point(px(0.), px(0.))
             },
             pixels,
             logical: bounds.size,
         };
-        if self.zoom_mode == ZoomMode::Hybrid {
-            if self
-                .hybrid_base
-                .as_ref()
-                .is_some_and(|(base, _)| base.selected != key.selected)
-            {
-                let (_, base) = self.hybrid_base.take().unwrap();
-                if self
-                    .sharp_image
-                    .as_ref()
-                    .is_none_or(|current| !Arc::ptr_eq(current, &base))
-                {
-                    cx.defer(move |cx| cx.drop_image(base, None));
-                }
-            }
-            let render_key = if self.hybrid_base.is_none() {
-                ViewportKey {
-                    zoom: 1.,
-                    pan: point(px(0.), px(0.)),
-                    ..key
-                }
-            } else {
-                key
-            };
-            if self.sharp_image.is_some()
-                && self.sharp_key == Some(key)
-                && self.hybrid_base.is_some()
-            {
-                if self.hybrid_pending.is_some() {
-                    self.camera_changed();
-                }
-                self.hybrid_state = "Sharp worker result ready";
-            } else if self.hybrid_pending != Some(render_key)
-                && self.hybrid_failed != Some(render_key)
-            {
-                self.schedule_hybrid(render_key, cx);
-            }
-            return self.sharp_image.clone();
-        }
         if self.sharp_key != Some(key) {
             self.sharp_key = Some(key);
-            let view_box = self.region(key);
+            let intrinsic = self.docs[self.selected].size();
+            let factor = (f32::from(bounds.size.width) / intrinsic.width)
+                .min(f32::from(bounds.size.height) / intrinsic.height)
+                * key.zoom;
+            let view_box = Bounds::new(
+                point(
+                    intrinsic.width / 2.
+                        - (f32::from(bounds.size.width) / 2. + f32::from(key.pan.x)) / factor,
+                    intrinsic.height / 2.
+                        - (f32::from(bounds.size.height) / 2. + f32::from(key.pan.y)) / factor,
+                ),
+                size(
+                    f32::from(bounds.size.width) / factor,
+                    f32::from(bounds.size.height) / factor,
+                ),
+            );
             let start = Instant::now();
             let result = cx.svg_renderer().render_parsed(
                 &self.docs[self.selected],
@@ -230,164 +175,12 @@ impl SvgDemo {
         }
         self.sharp_image.clone()
     }
-    fn region(&self, key: ViewportKey) -> Bounds<f32> {
-        let intrinsic = self.docs[key.selected].size();
-        let factor = (f32::from(key.logical.width) / intrinsic.width)
-            .min(f32::from(key.logical.height) / intrinsic.height)
-            * key.zoom;
-        Bounds::new(
-            point(
-                intrinsic.width / 2.
-                    - (f32::from(key.logical.width) / 2. + f32::from(key.pan.x)) / factor,
-                intrinsic.height / 2.
-                    - (f32::from(key.logical.height) / 2. + f32::from(key.pan.y)) / factor,
-            ),
-            size(
-                f32::from(key.logical.width) / factor,
-                f32::from(key.logical.height) / factor,
-            ),
-        )
-    }
-    fn camera_changed(&mut self) {
-        self.hybrid_generation += 1;
-        self.hybrid_pending = None;
-        self.hybrid_failed = None;
-        self.hybrid_task.take();
-        crate::svg_worker::invalidate();
-        self.hybrid_state = "Texture preview • moving";
-    }
-    fn schedule_hybrid(&mut self, key: ViewportKey, cx: &mut Context<Self>) {
-        self.camera_changed();
-        self.hybrid_pending = Some(key);
-        self.hybrid_state = "Texture preview • settling for 160 ms";
-        let generation = self.hybrid_generation;
-        let region = self.region(key);
-        let delay = if self.sharp_image.is_none() { 0 } else { 160 };
-        let timer = cx.background_executor().timer(Duration::from_millis(delay));
-        self.hybrid_task = Some(cx.spawn(async move |this, cx| {
-            timer.await;
-            let dispatch = this
-                .update(cx, |state, cx| {
-                    if state.hybrid_generation != generation || state.zoom_mode != ZoomMode::Hybrid
-                    {
-                        return false;
-                    }
-                    if state.drag.is_some() {
-                        state.hybrid_state = "Texture preview • dragging";
-                        return false;
-                    }
-                    state.hybrid_state = "Texture preview • worker rendering";
-                    state.sharp_error = None;
-                    cx.notify();
-                    true
-                })
-                .unwrap_or(false);
-            if !dispatch {
-                return;
-            }
-            let result = match crate::svg_worker::request(
-                SAMPLES[key.selected].1,
-                i32::from(key.pixels.width) as u32,
-                i32::from(key.pixels.height) as u32,
-                region.origin.x,
-                region.origin.y,
-                region.size.width,
-                region.size.height,
-            ) {
-                Ok(promise) => wasm_bindgen_futures::JsFuture::from(promise).await,
-                Err(error) => Err(error),
-            };
-            let _ = this.update(cx, |state, cx| {
-                if state.hybrid_generation != generation || state.zoom_mode != ZoomMode::Hybrid {
-                    return;
-                }
-                state.hybrid_pending = None;
-                let result = result
-                    .map_err(|e| format!("{e:?}"))
-                    .and_then(|reply| decode_worker_reply(key, reply));
-                match result {
-                    Ok((image, ms)) => {
-                        let mut retired = Vec::new();
-                        if key.zoom == 1.
-                            && key.pan == point(px(0.), px(0.))
-                            && let Some((_, previous)) =
-                                state.hybrid_base.replace((key, image.clone()))
-                        {
-                            retired.push(previous);
-                        }
-                        if let Some(previous) = state.sharp_image.replace(image)
-                            && !retired.iter().any(|old| Arc::ptr_eq(old, &previous))
-                        {
-                            retired.push(previous);
-                        }
-                        for previous in retired {
-                            let retained = state
-                                .hybrid_base
-                                .as_ref()
-                                .is_some_and(|(_, base)| Arc::ptr_eq(base, &previous))
-                                || state
-                                    .sharp_image
-                                    .as_ref()
-                                    .is_some_and(|current| Arc::ptr_eq(current, &previous));
-                            if !retained {
-                                cx.defer(move |cx| cx.drop_image(previous, None));
-                            }
-                        }
-                        state.sharp_key = Some(key);
-                        state.sharp_ms = ms;
-                        state.sharp_rasters += 1;
-                        state.sharp_error = None;
-                        state.hybrid_state = "Sharp worker result ready";
-                    }
-                    Err(error) => {
-                        state.sharp_error = Some(error);
-                        state.hybrid_failed = Some(key);
-                        state.hybrid_state = "Worker failed • texture preview retained";
-                    }
-                }
-                cx.notify();
-            });
-        }));
-    }
-    /// Transform the last viewport raster to the current camera while the worker
-    /// prepares a replacement. Its key tracks the camera that actually produced it.
-    fn displayed_raster(
-        &self,
-        bounds: Bounds<Pixels>,
-    ) -> Option<(Arc<RenderImage>, Bounds<Pixels>)> {
-        let (key, image) = if self.zoom_mode == ZoomMode::Hybrid
-            && (self.hybrid_pending.is_some() || self.hybrid_failed.is_some())
-        {
-            self.hybrid_base
-                .as_ref()
-                .map(|(key, image)| (*key, image.clone()))
-                .or_else(|| Some((self.sharp_key?, self.sharp_image.clone()?)))?
-        } else {
-            (self.sharp_key?, self.sharp_image.clone()?)
-        };
-        if key.selected != self.selected {
-            return None;
-        }
-        let intrinsic = self.docs[self.selected].size();
-        let fit = |logical: Size<Pixels>| {
-            (f32::from(logical.width) / intrinsic.width)
-                .min(f32::from(logical.height) / intrinsic.height)
-        };
-        let ratio = fit(bounds.size) * self.zoom / (fit(key.logical) * key.zoom);
-        let image_size = size(key.logical.width * ratio, key.logical.height * ratio);
-        let origin = bounds.center() + self.pan
-            - key.pan * ratio
-            - point(image_size.width / 2., image_size.height / 2.);
-        Some((image, Bounds::new(origin, image_size)))
-    }
     fn reset(&mut self) {
-        self.camera_changed();
         self.zoom = 1.;
         self.pan = point(px(0.), px(0.));
         self.drag = None;
     }
     fn zoom_at(&mut self, anchor: Point<Pixels>, factor: f32) {
-        self.camera_changed();
         let zoom = (self.zoom * factor).clamp(0.25, 16.);
         self.pan = anchor - (anchor - self.pan) * (zoom / self.zoom);
         self.zoom = zoom;
@@ -419,29 +212,22 @@ impl Render for SvgDemo {
                 })),
             );
         }
-        for (mode, label) in [
-            (ZoomMode::Hybrid, "Hybrid · worker"),
-            (ZoomMode::Sharp, "Sharp · UI thread"),
-            (ZoomMode::Texture, "Texture only"),
-        ] {
-            zooms = zooms.child(button(label, label, self.zoom_mode == mode).on_click(
-                cx.listener(move |this, _, _, cx| {
-                    this.camera_changed();
-                    crate::svg_worker::dispose();
-                    if let Some((_, base)) = this.hybrid_base.take()
-                        && this
-                            .sharp_image
-                            .as_ref()
-                            .is_none_or(|current| !Arc::ptr_eq(current, &base))
-                    {
-                        cx.defer(move |cx| cx.drop_image(base, None));
-                    }
-                    this.zoom_mode = mode;
-                    cx.notify();
-                }),
-            ));
-        }
         zooms = zooms
+            .child(
+                button(
+                    "sharp-zoom",
+                    if self.sharp_enabled {
+                        "Sharp SVG zoom: ON"
+                    } else {
+                        "Sharp SVG zoom: OFF"
+                    },
+                    self.sharp_enabled,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.sharp_enabled = !this.sharp_enabled;
+                    cx.notify();
+                })),
+            )
             .child(
                 button("reset", "Reset", false).on_click(cx.listener(|this, _, _, cx| {
                     this.reset();
@@ -550,21 +336,39 @@ impl Render for SvgDemo {
                             })),
                     );
             } else {
+                let sharp_enabled = self.sharp_enabled;
+                let zoom = self.zoom;
+                let pan = self.pan;
                 viewport = viewport.child(
                     canvas(
                         move |bounds, window, cx| {
                             entity
                                 .update(cx, |this, cx| {
                                     this.bounds[mode] = bounds;
-                                    this.sharp_view(bounds, window.scale_factor(), cx);
-                                    this.displayed_raster(bounds)
+                                    this.sharp_view(bounds, window.scale_factor(), cx)
                                 })
                                 .ok()
                                 .flatten()
                         },
                         move |bounds, image, window, _| {
-                            if let Some((image, image_bounds)) = image {
+                            if let Some(image) = image {
                                 window.with_content_mask(Some(ContentMask { bounds }), |window| {
+                                    let image_bounds = if sharp_enabled {
+                                        bounds
+                                    } else {
+                                        let image_size = size(
+                                            bounds.size.width * zoom,
+                                            bounds.size.height * zoom,
+                                        );
+                                        Bounds::new(
+                                            bounds.center() + pan
+                                                - point(
+                                                    image_size.width / 2.,
+                                                    image_size.height / 2.,
+                                                ),
+                                            image_size,
+                                        )
+                                    };
                                     if let Err(error) = window.paint_image(
                                         image_bounds,
                                         image_bounds,
@@ -593,20 +397,18 @@ impl Render for SvgDemo {
                     .gap_2()
                     .child(if mode == 0 {
                         "Bounded · 2 MiB output cap"
+                    } else if self.sharp_enabled {
+                        "Rerasterized · viewport pixels"
                     } else {
-                        match self.zoom_mode {
-                            ZoomMode::Hybrid => "Hybrid · texture preview + worker detail",
-                            ZoomMode::Sharp => "Rerasterized · UI thread",
-                            ZoomMode::Texture => "Texture zoom · cached SVG raster",
-                        }
+                        "Texture zoom · cached SVG raster"
                     })
                     .child(viewport),
             );
         }
-        let right_mode = match self.zoom_mode {
-            ZoomMode::Hybrid => self.hybrid_state,
-            ZoomMode::Sharp => "Sharp (UI thread)",
-            ZoomMode::Texture => "Texture only",
+        let right_mode = if self.sharp_enabled {
+            "Rerasterized"
+        } else {
+            "Texture zoom"
         };
         let sharp_progress = if let Some(error) = &self.sharp_error {
             format!("{right_mode}: {error}")
@@ -622,7 +424,7 @@ impl Render for SvgDemo {
                 self.sharp_ms
             )
         } else {
-            format!("{right_mode}: no completed raster yet")
+            format!("{right_mode}: waiting for layout")
         };
         let progress = self
             .status
@@ -657,23 +459,20 @@ impl Render for SvgDemo {
                     this.drag = None;
                 } else if let Some(previous) = this.drag {
                     this.drag = Some(e.position);
-                    this.camera_changed();
                     this.pan += e.position - previous;
                     cx.notify();
                 }
             }))
-            .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
-                if this.drag.take().is_some() { this.camera_changed(); cx.notify(); }
-            }))
+            .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.drag = None))
             .child(div().text_xl().child("Progressive SVG · WebAssembly"))
             .child("Shared camera: wheel over either view to zoom; drag to pan both. Scroll outside the artwork to explore the gallery.")
-            .child("Hybrid uses an isolated Web Worker for sharp renders. The bounded left view and gallery still use the browser thread. Comparison output is outside the pool; pool accounting is not total browser memory.")
+            .child("Single-threaded Wasm: scheduled raster jobs run on the browser thread and cannot be interrupted. The sharp comparison rerasterizes visible pixels outside the pool; pool accounting is not total browser memory.")
             .child(samples)
             .child(zooms)
-            .child(div().p_3().rounded_md().bg(rgb(0x273449)).child(match self.zoom_mode {
-                ZoomMode::Hybrid => "Hybrid: GPU texture zoom/pan while moving; after 160 ms idle a Web Worker renders sharp visible pixels. Old results cannot replace a newer camera. A cached full-artwork base avoids holes while moving. The bounded left view can still refine on the UI thread.",
-                ZoomMode::Sharp => "Sharp: the right view rerasterizes synchronously on zoom/pan. Deep zoom and shadows can freeze the UI for seconds. Compare with Hybrid to move that work to a worker.",
-                ZoomMode::Texture => "Texture only: the right view scales a cached base raster with the GPU. Zoom/pan does not rerasterize it; detail softens. Artwork changes or resizing rebuild the base raster. The bounded left view may still refine.",
+            .child(div().p_3().rounded_md().bg(rgb(0x273449)).child(if self.sharp_enabled {
+                "Sharp SVG zoom ON: the right view rerasterizes on zoom/pan for crisp detail. On Wasm this blocks the browser thread; deep zoom and shadows can take seconds. Turn it OFF to compare texture-only zoom speed."
+            } else {
+                "Sharp SVG zoom OFF: the right view scales a cached raster with the GPU (texture zoom), so zoom/pan adds no SVG raster work. Detail softens as you zoom. Changing artwork or resizing rebuilds the base raster once. The bounded left view may still refine."
             }))
             .child(comparison)
             .child(sharp_progress)
@@ -708,33 +507,4 @@ impl Render for SvgDemo {
         }
         content
     }
-}
-
-fn decode_worker_reply(
-    key: ViewportKey,
-    reply: wasm_bindgen::JsValue,
-) -> Result<(Arc<RenderImage>, f64), String> {
-    use wasm_bindgen::{JsCast, JsValue};
-    let field =
-        |name| js_sys::Reflect::get(&reply, &JsValue::from_str(name)).map_err(|e| format!("{e:?}"));
-    let data = field("bytes")?;
-    if !data.is_instance_of::<js_sys::Uint8Array>() {
-        return Err("Worker returned invalid pixel data".into());
-    }
-    let bytes = js_sys::Uint8Array::new(&data).to_vec();
-    let width = i32::from(key.pixels.width) as u32;
-    let height = i32::from(key.pixels.height) as u32;
-    let expected = width as usize * height as usize * 4;
-    if bytes.len() != expected || bytes.len() > 32 * MIB {
-        return Err("Worker pixel dimensions do not match the request".into());
-    }
-    let buffer = image::RgbaImage::from_raw(width, height, bytes).ok_or("Invalid worker image")?;
-    let ms = field("ms")?
-        .as_f64()
-        .filter(|ms| ms.is_finite() && *ms >= 0.)
-        .ok_or("Invalid worker timing")?;
-    Ok((
-        Arc::new(RenderImage::new(vec![image::Frame::new(buffer)])),
-        ms,
-    ))
 }
