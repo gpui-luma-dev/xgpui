@@ -28,6 +28,8 @@ fn draw(painter: &WidePainter, parameters: Parameters) -> ShaderDraw {
         size(ScaledPixels(16.), ScaledPixels(8.)),
     );
     ShaderDraw {
+        path_mask: None,
+        glyph_mask: None,
         order: 0,
         bounds,
         content_mask: ContentMask { bounds },

@@ -9,6 +9,8 @@ fn program() -> ShaderProgram<EffectInstance> {
 }
 fn draw(program: &ShaderProgram<EffectInstance>, x: f32, color: [f32; 4]) -> ShaderDraw {
     ShaderDraw {
+        path_mask: None,
+        glyph_mask: None,
         order: 0,
         bounds: Bounds::new(
             point(ScaledPixels(x), ScaledPixels(4.)),

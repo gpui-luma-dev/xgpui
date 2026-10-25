@@ -51,6 +51,9 @@ gh workflow run paints-windows-native.yml --ref YOUR_BRANCH -f scope=color-gamut
 gh workflow run paints-linux-vulkan.yml --ref YOUR_BRANCH -f scope=producer-cache
 ```
 
+All backends additionally run the main-pass brush library tests in full/parity scope.
+The native Windows job enables D3D11/WARP brush parity alongside wgpu.
+
 `.github/paints/commands.json` is the single acceptance command inventory;
 `.github/paints/run.py` selects scopes and runs it. Before each test, it executes
 the same Cargo command with `--no-run` to measure compilation separately. Capture

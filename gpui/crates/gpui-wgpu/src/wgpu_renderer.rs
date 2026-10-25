@@ -214,6 +214,7 @@ struct WgpuRendererCore {
     resources: WgpuResources,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
     shaders: ShaderRenderer,
+    backdrops: Option<crate::backdrop::Backdrops>,
     atlas: Arc<WgpuAtlas>,
     path_globals_offset: u64,
     gamma_offset: u64,
@@ -453,7 +454,8 @@ impl WgpuRenderer {
         }
 
         let surface_config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | (surface_caps.usages & wgpu::TextureUsages::COPY_SRC),
             format: surface_format,
             color_space: wgpu::SurfaceColorSpace::Auto,
             width: clamped_width.max(1),
@@ -1336,6 +1338,7 @@ impl WgpuRendererCore {
         Self {
             custom_compositor: None,
             shaders: ShaderRenderer::default(),
+            backdrops: None,
             resources: WgpuResources {
                 device,
                 queue,
@@ -1558,6 +1561,59 @@ impl WgpuRendererCore {
             self.shaders.premultiplied = premultiplied_alpha;
         }
 
+        if let Some(program) = scene
+            .backdrops
+            .first()
+            .map(|d| &d.program)
+            .or_else(|| scene.layer_boundaries.first().map(|b| &b.capture.program))
+        {
+            anyhow::ensure!(
+                matches!(
+                    self.target_format,
+                    wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Rgba8Unorm
+                ),
+                "backdrops require an SDR unorm target"
+            );
+            anyhow::ensure!(
+                target_view
+                    .texture()
+                    .usage()
+                    .contains(wgpu::TextureUsages::COPY_SRC),
+                "target does not support backdrop copies"
+            );
+            if self
+                .backdrops
+                .as_ref()
+                .is_none_or(|b| b.format != self.target_format)
+            {
+                self.backdrops = Some(crate::backdrop::Backdrops::new(
+                    &self.resources.device,
+                    self.target_format,
+                    program,
+                ));
+            }
+            self.backdrops.as_mut().unwrap().prepare(
+                &self.resources.device,
+                &self.resources.queue,
+                scene,
+                size,
+                &[
+                    clear_color.r.to_bits(),
+                    clear_color.g.to_bits(),
+                    clear_color.b.to_bits(),
+                    clear_color.a.to_bits(),
+                    premultiplied_alpha as u64,
+                    self.is_bgr as u64,
+                    self.rendering_params.gamma_ratios[0].to_bits() as u64,
+                    self.rendering_params.gamma_ratios[1].to_bits() as u64,
+                    self.rendering_params.gamma_ratios[2].to_bits() as u64,
+                    self.rendering_params.gamma_ratios[3].to_bits() as u64,
+                    self.rendering_params.grayscale_enhanced_contrast.to_bits() as u64,
+                    self.rendering_params.subpixel_enhanced_contrast.to_bits() as u64,
+                ],
+            )?;
+        }
+
         self.atlas.before_frame();
         self.ensure_intermediate_textures(size);
 
@@ -1607,6 +1663,9 @@ impl WgpuRendererCore {
         clear_color: wgpu::Color,
         custom_draws: &[crate::custom_draw::PreparedDraw],
     ) -> Result<wgpu::SubmissionIndex> {
+        let mut executed_backdrops = Vec::new();
+        let mut executed_groups = Vec::new();
+        let mut skip_group_end = None;
         let mut instance_offset = 0;
         let instance_bindings = self
             .write_instances(scene, &mut instance_offset)
@@ -1627,6 +1686,7 @@ impl WgpuRendererCore {
             &self.resources.device,
             &self.resources.queue,
             &self.resources.bind_group_layouts.globals,
+            &self.resources.bind_group_layouts.texture,
             self.target_format,
             scene,
         )?;
@@ -1655,8 +1715,89 @@ impl WgpuRendererCore {
             });
 
             for batch in scene.batches() {
+                if let Some(end) = skip_group_end {
+                    if !matches!(&batch,PrimitiveBatch::LayerBoundary(index) if *index==end) {
+                        continue;
+                    }
+                    skip_group_end = None;
+                }
                 match batch {
+                    PrimitiveBatch::LayerBoundary(index) => {
+                        drop(pass);
+                        let effects = self.backdrops.as_mut().unwrap();
+                        let (slot, begin) = effects.groups.boundary(index);
+                        if begin {
+                            effects.groups.start(slot);
+                        }
+                        let hit = effects.groups.hit(slot);
+                        if begin {
+                            executed_groups.push(slot);
+                        }
+                        if begin || !hit {
+                            effects
+                                .groups
+                                .copy(&mut encoder, &frame_view.texture(), slot, begin);
+                        }
+                        pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("captured group boundary"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: frame_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                                depth_slice: None,
+                            })],
+                            ..Default::default()
+                        });
+                        if begin && hit {
+                            skip_group_end = Some(effects.groups.end(slot));
+                        } else {
+                            effects.group_draw(&mut pass, slot, begin);
+                        }
+                    }
+
                     PrimitiveBatch::Shaders { program_id, range } => {
+                        if let Some(path) = &scene.shader_draws[range.start].path_mask {
+                            drop(pass);
+                            let rasterized = self.draw_paths_to_intermediate(
+                                &mut encoder,
+                                std::slice::from_ref(path.as_ref()),
+                                &mut instance_offset,
+                            )?;
+                            pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                label: Some("main after path brush coverage"),
+                                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                    view: frame_view,
+                                    resolve_target: None,
+                                    ops: wgpu::Operations {
+                                        load: wgpu::LoadOp::Load,
+                                        store: wgpu::StoreOp::Store,
+                                    },
+                                    depth_slice: None,
+                                })],
+                                ..Default::default()
+                            });
+                            if !rasterized {
+                                continue;
+                            }
+                            let texture = self.create_texture_bind_group(
+                                "path brush coverage",
+                                self.resources.path_intermediate_view.as_ref().unwrap(),
+                            );
+                            pass.set_bind_group(1, &texture, &[]);
+                        }
+                        if let Some(tile) = scene.shader_draws[range.start].glyph_mask {
+                            let Some(texture) = self
+                                .resources
+                                .atlas_texture_bind_groups
+                                .get(&tile.texture_id)
+                            else {
+                                continue;
+                            };
+                            pass.set_bind_group(1, &texture.bind_group, &[]);
+                        }
                         pass.set_pipeline(&self.shaders.pipelines[&program_id]);
                         pass.set_bind_group(0, &self.resources.globals_bind_group, &[]);
                         // Bind the slice at zero instance index: WebGL2 has no base-instance draw.
@@ -1670,6 +1811,26 @@ impl WgpuRendererCore {
                                 .slice(range.start as u64 * stride..range.end as u64 * stride),
                         );
                         pass.draw(0..6, 0..range.len() as u32);
+                    }
+                    PrimitiveBatch::Backdrop(index) => {
+                        drop(pass);
+                        let backdrops = self.backdrops.as_mut().unwrap();
+                        executed_backdrops.push(index);
+                        backdrops.filter(&mut encoder, &frame_view.texture(), index);
+                        pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("main after backdrop"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: frame_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                                depth_slice: None,
+                            })],
+                            ..Default::default()
+                        });
+                        backdrops.composite(&mut pass, index);
                     }
                     PrimitiveBatch::Quads(range) => self.draw_instances(
                         &instance_bindings.quads,
@@ -1779,6 +1940,10 @@ impl WgpuRendererCore {
             .resources()
             .queue
             .submit(std::iter::once(encoder.finish()));
+        if let Some(effects) = &mut self.backdrops {
+            effects.groups.commit(&executed_groups);
+            effects.cache.commit(&executed_backdrops);
+        }
         Ok(submission)
     }
 
@@ -1852,6 +2017,12 @@ impl WgpuRendererCore {
                 PrimitiveBatch::MonochromeSprites { texture_id, .. }
                 | PrimitiveBatch::SubpixelSprites { texture_id, .. }
                 | PrimitiveBatch::PolychromeSprites { texture_id, .. } => texture_id,
+                PrimitiveBatch::Shaders { range, .. } => {
+                    let Some(tile) = scene.shader_draws[range.start].glyph_mask else {
+                        continue;
+                    };
+                    tile.texture_id
+                }
                 _ => continue,
             };
             if !texture_ids.contains(&texture_id) {
@@ -2555,6 +2726,24 @@ impl WgpuHeadlessRenderer {
         Ok(())
     }
 
+    /// Cumulative backdrop filter cache statistics.
+    pub fn backdrop_cache_stats(&self) -> gpui::BackdropCacheStats {
+        self.core
+            .backdrops
+            .as_ref()
+            .map(|e| e.cache.stats)
+            .unwrap_or_default()
+    }
+
+    /// Cumulative captured-subtree cache statistics.
+    pub fn layer_cache_stats(&self) -> gpui::LayerCacheStats {
+        self.core
+            .backdrops
+            .as_ref()
+            .map(|e| e.groups.stats)
+            .unwrap_or_default()
+    }
+
     fn render(&mut self, scene: &Scene, size: Size<DevicePixels>) -> anyhow::Result<()> {
         self.check_gpu_errors()?;
         self.ensure_render_target(size)?;
@@ -3100,6 +3289,7 @@ impl ShaderRenderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         globals: &wgpu::BindGroupLayout,
+        atlas: &wgpu::BindGroupLayout,
         format: wgpu::TextureFormat,
         scene: &Scene,
     ) -> Result<()> {
@@ -3148,6 +3338,7 @@ impl ShaderRenderer {
             })
             .collect();
         for draw in &scene.shader_draws {
+            draw.validate_masks()?;
             self.pipelines.entry(draw.program.id()).or_insert_with(|| {
                 let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: Some("instanced fragment shader"),
@@ -3155,7 +3346,13 @@ impl ShaderRenderer {
                 });
                 let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("instanced fragment shader"),
-                    bind_group_layouts: &[Some(globals)],
+                    bind_group_layouts: &if draw.program.uses_glyph_mask()
+                        || draw.program.uses_path_mask()
+                    {
+                        vec![Some(globals), Some(atlas)]
+                    } else {
+                        vec![Some(globals)]
+                    },
                     immediate_size: 0,
                 });
                 device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

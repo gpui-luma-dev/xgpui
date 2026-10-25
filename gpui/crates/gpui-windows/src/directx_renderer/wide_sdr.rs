@@ -434,6 +434,9 @@ impl Compositor {
                                 self.extent,
                                 program_id,
                                 range.clone(),
+                                scene.shader_draws[range.start].glyph_mask.and_then(|tile| {
+                                    renderer.atlas.get_texture_view(tile.texture_id)
+                                }),
                             )?;
                         renderer.pre_draw(&[0.; 4])?;
                         dirty = false;

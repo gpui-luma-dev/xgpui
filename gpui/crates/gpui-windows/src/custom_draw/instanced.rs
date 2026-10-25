@@ -101,6 +101,7 @@ impl ShaderRenderer {
             return Ok(());
         }
         for draw in &scene.shader_draws {
+            draw.validate_masks()?;
             if !self.pipelines.contains_key(&draw.program.id()) {
                 self.pipelines
                     .insert(draw.program.id(), Pipeline::new(device, &draw.program)?);
@@ -140,6 +141,7 @@ impl ShaderRenderer {
         extent: Size<DevicePixels>,
         program: u64,
         range: Range<usize>,
+        glyph_texture: Option<[Option<ID3D11ShaderResourceView>; 1]>,
     ) -> Result<()> {
         let pipeline = &self.pipelines[&program];
         let dc = &self.deferred;
@@ -182,7 +184,17 @@ impl ShaderRenderer {
             );
             dc.VSSetConstantBuffers(0, Some(&[Some(self.globals.clone())]));
             dc.PSSetConstantBuffers(0, Some(&[Some(self.globals.clone())]));
+            dc.PSSetShaderResources(
+                0,
+                Some(
+                    glyph_texture
+                        .as_ref()
+                        .map(|texture| texture.as_slice())
+                        .unwrap_or(&[None]),
+                ),
+            );
             dc.DrawInstanced(6, range.len() as u32, 0, 0);
+            dc.PSSetShaderResources(0, Some(&[None]));
             let mut commands = None;
             dc.FinishCommandList(false, Some(&mut commands))?;
             context.ExecuteCommandList(commands.as_ref().context("shader command list")?, true);

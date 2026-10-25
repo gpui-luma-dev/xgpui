@@ -1,3 +1,4 @@
+mod backdrop;
 mod cosmic_text_system;
 pub mod custom_draw;
 mod wgpu_atlas;

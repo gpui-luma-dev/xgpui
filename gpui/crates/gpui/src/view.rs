@@ -323,6 +323,8 @@ struct ViewElementCacheKey {
     bounds: Bounds<Pixels>,
     content_mask: ContentMask<Pixels>,
     text_style: TextStyle,
+    glyph_brush: Option<crate::window::GlyphBrushCacheKey>,
+    layer_captured: bool,
 }
 
 impl<V: View> Element for ViewElement<V> {
@@ -526,11 +528,15 @@ fn prepaint_view(
             |element_state, window| {
                 let content_mask = window.content_mask();
                 let text_style = window.text_style();
+                let glyph_brush = window.glyph_brush_cache_key();
+                let layer_captured = window.is_layer_captured();
 
                 if let Some(mut element_state) = element_state
                     && element_state.cache_key.bounds == bounds
                     && element_state.cache_key.content_mask == content_mask
                     && element_state.cache_key.text_style == text_style
+                    && element_state.cache_key.glyph_brush == glyph_brush
+                    && element_state.cache_key.layer_captured == layer_captured
                     && !window.dirty_views.contains(&entity_id)
                     && !window.refreshing
                 {
@@ -566,6 +572,8 @@ fn prepaint_view(
                             bounds,
                             content_mask,
                             text_style,
+                            glyph_brush,
+                            layer_captured,
                         },
                     },
                 )

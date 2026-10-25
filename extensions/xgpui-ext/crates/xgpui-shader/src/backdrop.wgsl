@@ -1,0 +1,72 @@
+struct Params {
+ viewport: vec4<f32>, bounds: vec4<f32>, uv: vec4<f32>,
+ clip: vec4<f32>, metrics: vec4<f32>, radii: vec4<f32>,
+}
+@group(0) @binding(0) var<uniform> p: Params;
+@group(0) @binding(1) var image: texture_2d<f32>;
+@group(0) @binding(3) var original: texture_2d<f32>;
+// Explicit bilinear fetches also translate to shader-model 5 without sampler heaps.
+fn sample_image(tex: texture_2d<f32>, uv: vec2<f32>) -> vec4<f32> {
+ let maximum = vec2<i32>(textureDimensions(tex)) - vec2(1);
+ let position = uv * vec2<f32>(textureDimensions(tex)) - vec2(0.5);
+ let lower = vec2<i32>(floor(position)); let f = fract(position);
+ let a = textureLoad(tex,clamp(lower,vec2(0),maximum),0);
+ let b = textureLoad(tex,clamp(lower+vec2(1,0),vec2(0),maximum),0);
+ let c = textureLoad(tex,clamp(lower+vec2(0,1),vec2(0),maximum),0);
+ let d = textureLoad(tex,clamp(lower+vec2(1,1),vec2(0),maximum),0);
+ return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);
+}
+struct Varying { @builtin(position) screen: vec4<f32>, @location(0) uv: vec2<f32> }
+@vertex fn backdrop_vertex(@builtin(vertex_index) index: u32) -> Varying {
+ let vertices = array<vec2<f32>,6>(vec2(0.,0.),vec2(1.,0.),vec2(0.,1.),vec2(0.,1.),vec2(1.,0.),vec2(1.,1.));
+ let uv = vertices[index];
+ let position = p.bounds.xy + uv * p.bounds.zw;
+ var out: Varying;
+ out.screen = vec4(position / p.viewport.xy * vec2(2.,-2.) + vec2(-1.,1.),0.,1.);
+ out.uv = p.uv.xy + uv * p.uv.zw;
+ return out;
+}
+@fragment fn backdrop_fragment(v: Varying) -> @location(0) vec4<f32> {
+ // Clear the isolated crop without blending. Composition later restores the
+ // saved background and applies opacity once to the completed group.
+ if p.viewport.z == 3. { return vec4(0.); }
+ if p.viewport.z == 4. {
+  let captured = sample_image(image,v.uv);
+  // The matrix is linear on associated RGB. Clamping to [0,alpha] is
+  // equivalent to filtering/clamping straight RGB, without dividing tiny alpha.
+  let gray = dot(captured.rgb,vec3(0.2126,0.7152,0.0722));
+  let filtered = clamp(vec3(gray) + (captured.rgb - vec3(gray)) * p.metrics.w,
+      vec3(0.),vec3(captured.a));
+  let brightened = clamp(filtered * p.radii.x,vec3(0.),vec3(captured.a));
+  let pivot = vec3(0.5 * captured.a);
+  let contrasted = clamp((brightened - pivot) * p.radii.y + pivot,
+      vec3(0.),vec3(captured.a));
+  // Complement associated RGB around alpha to preserve transparent pixels.
+  let inverted = mix(contrasted,vec3(captured.a)-contrasted,p.radii.z);
+  let group = vec4(inverted,captured.a) * p.metrics.z;
+  let destination = sample_image(original,v.uv);
+  return group + destination * (1. - group.a);
+ }
+ if p.viewport.z < 2. {
+  let step = p.metrics.xy / vec2<f32>(textureDimensions(image));
+  var color = vec4(0.); var total = 0.;
+  for(var i: i32 = -4; i <= 4; i += 1) {
+   let f = f32(i); let weight = exp(-0.5 * f * f * 0.5625);
+   color += sample_image(image,v.uv + step * f) * weight;
+   total += weight;
+  }
+  return color / total;
+ }
+ if any(v.screen.xy < p.clip.xy) || any(v.screen.xy >= p.clip.zw) { discard; }
+ let local = v.screen.xy - p.bounds.xy; let half_size = p.bounds.zw * 0.5;
+ let centered = local - half_size;
+ let left_radius = select(p.radii.w,p.radii.x,centered.y < 0.);
+ let right_radius = select(p.radii.z,p.radii.y,centered.y < 0.);
+ let radius = select(right_radius,left_radius,centered.x < 0.);
+ let q = abs(centered) - half_size + vec2(radius);
+ let distance = length(max(q,vec2(0.))) + min(max(q.x,q.y),0.) - radius;
+ let coverage = clamp(0.5 - distance,0.,1.) * p.metrics.z;
+ let color = sample_image(image,v.uv);
+ let previous = sample_image(original,v.uv);
+ return mix(previous,color,coverage);
+}

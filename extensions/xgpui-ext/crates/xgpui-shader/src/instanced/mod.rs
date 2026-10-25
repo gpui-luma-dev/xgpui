@@ -29,12 +29,14 @@ pub trait ShaderInstance: bytemuck::Pod {
 /// Validated portable program; clones share identity and backend pipelines.
 pub struct ShaderProgram<T> {
     program: Arc<SceneShaderProgram>,
+    pub(crate) source: Arc<str>,
     _instance: PhantomData<fn(T)>,
 }
 impl<T> Clone for ShaderProgram<T> {
     fn clone(&self) -> Self {
         Self {
             program: self.program.clone(),
+            source: self.source.clone(),
             _instance: PhantomData,
         }
     }
@@ -55,6 +57,21 @@ impl<T: ShaderInstance> ShaderProgram<T> {
     fn with_encoding(source: &str, encoding: ShaderOutputEncoding) -> Result<Self> {
         Ok(Self {
             program: Arc::new(compiler::compile::<T>(source, encoding)?),
+            source: Arc::from(source),
+            _instance: PhantomData,
+        })
+    }
+    pub(crate) fn glyph_program(source: &str) -> Result<Self> {
+        Ok(Self {
+            program: Arc::new(compiler::compile_glyph::<T>(source)?),
+            source: Arc::from(source),
+            _instance: PhantomData,
+        })
+    }
+    pub(crate) fn path_program(source: &str) -> Result<Self> {
+        Ok(Self {
+            program: Arc::new(compiler::compile_path::<T>(source)?),
+            source: Arc::from(source),
             _instance: PhantomData,
         })
     }
@@ -67,7 +84,7 @@ impl<T: ShaderInstance> ShaderProgram<T> {
     pub fn id(&self) -> u64 {
         self.program.id()
     }
-    fn pack(&self, instance: &T) -> Result<[[f32; 4]; gpui::SHADER_DATA_SLOTS]> {
+    pub(crate) fn pack(&self, instance: &T) -> Result<[[f32; 4]; gpui::SHADER_DATA_SLOTS]> {
         let mut slots = [[0.; 4]; gpui::SHADER_DATA_SLOTS];
         for (index, bytes) in bytemuck::bytes_of(instance).chunks_exact(4).enumerate() {
             let value = f32::from_ne_bytes(bytes.try_into().unwrap());

@@ -53,6 +53,10 @@ pub struct Scene {
     pub custom_draws: Vec<CustomDraw>,
     /// Ordered, directly rendered fragment shader instances.
     pub shader_draws: Vec<ShaderDraw>,
+    /// Explicit backdrop sampling boundaries.
+    pub backdrops: Vec<crate::BackdropDraw>,
+    /// Ordered begin/end markers for captured subtrees.
+    pub layer_boundaries: Vec<crate::LayerBoundary>,
 }
 
 #[expect(missing_docs)]
@@ -71,6 +75,8 @@ impl Scene {
         self.surfaces.clear();
         self.custom_draws.clear();
         self.shader_draws.clear();
+        self.backdrops.clear();
+        self.layer_boundaries.clear();
     }
 
     pub fn len(&self) -> usize {
@@ -90,7 +96,14 @@ impl Scene {
     }
 
     pub fn insert_primitive(&mut self, primitive: impl Into<Primitive>) {
-        let mut primitive = primitive.into();
+        static NEXT_COMMAND: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        self.insert_retained_primitive(
+            primitive.into(),
+            NEXT_COMMAND.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        );
+    }
+
+    fn insert_retained_primitive(&mut self, mut primitive: Primitive, identity: u64) {
         let clipped_bounds = primitive
             .bounds()
             .intersect(&primitive.content_mask().bounds);
@@ -99,12 +112,32 @@ impl Scene {
             return;
         }
 
-        let order = self
-            .layer_stack
-            .last()
-            .copied()
-            .unwrap_or_else(|| self.primitive_bounds.insert(clipped_bounds));
+        // A backdrop is a global pass barrier, including inside a native layer
+        // whose children would otherwise share a draw order.
+        let order = if matches!(
+            primitive,
+            Primitive::Backdrop(_) | Primitive::LayerBoundary(_)
+        ) {
+            let fence = primitive.content_mask().bounds;
+            let order = self.primitive_bounds.insert(fence);
+            let after = self.primitive_bounds.insert(fence);
+            self.layer_stack.fill(after);
+            order
+        } else {
+            self.layer_stack
+                .last()
+                .copied()
+                .unwrap_or_else(|| self.primitive_bounds.insert(clipped_bounds))
+        };
         match &mut primitive {
+            Primitive::LayerBoundary(draw) => {
+                draw.order = order;
+                self.layer_boundaries.push(draw.clone());
+            }
+            Primitive::Backdrop(draw) => {
+                draw.order = order;
+                self.backdrops.push(draw.clone());
+            }
             Primitive::Shadow(shadow) => {
                 shadow.order = order;
                 self.shadows.push(*shadow);
@@ -148,17 +181,223 @@ impl Scene {
             }
         }
         self.paint_operations
-            .push(PaintOperation::Primitive(primitive));
+            .push(PaintOperation::Primitive(primitive, identity));
     }
 
     pub fn replay(&mut self, range: Range<usize>, prev_scene: &Scene) {
         for operation in &prev_scene.paint_operations[range] {
             match operation {
-                PaintOperation::Primitive(primitive) => self.insert_primitive(primitive.clone()),
+                PaintOperation::Primitive(primitive, identity) => {
+                    self.insert_retained_primitive(primitive.clone(), *identity)
+                }
                 PaintOperation::StartLayer(bounds) => self.push_layer(*bounds),
                 PaintOperation::EndLayer => self.pop_layer(),
             }
         }
+    }
+
+    /// Begin an explicit captured subtree. End with the returned description.
+    pub fn begin_layer_capture(
+        &mut self,
+        capture: std::sync::Arc<crate::LayerCapture>,
+        viewport: ContentMask<ScaledPixels>,
+    ) {
+        self.insert_primitive(Primitive::LayerBoundary(crate::LayerBoundary {
+            order: 0,
+            bounds: viewport.bounds,
+            content_mask: viewport,
+            capture,
+            begin: true,
+        }));
+    }
+    /// End the matching captured subtree.
+    pub fn end_layer_capture(
+        &mut self,
+        capture: std::sync::Arc<crate::LayerCapture>,
+        viewport: ContentMask<ScaledPixels>,
+    ) {
+        self.insert_primitive(Primitive::LayerBoundary(crate::LayerBoundary {
+            order: 0,
+            bounds: viewport.bounds,
+            content_mask: viewport,
+            capture,
+            begin: false,
+        }));
+    }
+    /// Validate nesting, bounds and command revisions before any group GPU work.
+    pub fn layer_plans(
+        &self,
+        viewport: Size<crate::DevicePixels>,
+    ) -> anyhow::Result<Vec<crate::LayerPlan>> {
+        use anyhow::ensure;
+        use std::sync::Arc;
+        if self.layer_boundaries.is_empty() {
+            return Ok(Vec::new());
+        }
+        ensure!(
+            self.layer_boundaries.len() <= crate::MAX_LAYER_GROUPS * 2,
+            "at most four captured groups per frame"
+        );
+        let mut plans: Vec<crate::LayerPlan> = Vec::new();
+        let mut revisions: Vec<Vec<u64>> = Vec::new();
+        let mut stack: Vec<(Arc<crate::LayerCapture>, usize)> = Vec::new();
+        for operation in &self.paint_operations {
+            let PaintOperation::Primitive(primitive, identity) = operation else {
+                continue;
+            };
+            let closing = matches!(primitive,Primitive::LayerBoundary(boundary) if !boundary.begin);
+            for (depth, (_, slot)) in stack.iter().enumerate() {
+                // The group's own opacity/boundary can change without repainting
+                // its retained descendants. Nested boundaries remain part of the
+                // parent's revision because they affect its captured pixels.
+                if closing && depth + 1 == stack.len() {
+                    continue;
+                }
+                revisions[*slot].push(*identity);
+                ensure!(
+                    revisions[*slot].len() <= crate::MAX_LAYER_COMMANDS,
+                    "captured group exceeds 65536 commands"
+                );
+            }
+            if let Primitive::LayerBoundary(boundary) = primitive {
+                let index = self
+                    .layer_boundaries
+                    .iter()
+                    .position(|b| {
+                        b.order == boundary.order
+                            && b.begin == boundary.begin
+                            && Arc::ptr_eq(&b.capture, &boundary.capture)
+                    })
+                    .ok_or_else(|| anyhow::anyhow!("missing layer boundary"))?;
+                if boundary.begin {
+                    ensure!(
+                        plans.len() < crate::MAX_LAYER_GROUPS,
+                        "at most four captured groups per frame"
+                    );
+                    let plan = crate::LayerPlan::new(&boundary.capture, viewport, index)?;
+                    if let Some((_, parent)) = stack.last() {
+                        let p = &plans[*parent];
+                        ensure!(
+                            plan.origin[0] >= p.origin[0]
+                                && plan.origin[1] >= p.origin[1]
+                                && plan.origin[0] + plan.size[0] <= p.origin[0] + p.size[0]
+                                && plan.origin[1] + plan.size[1] <= p.origin[1] + p.size[1],
+                            "nested layer escapes its parent capture"
+                        );
+                    }
+                    let slot = plans.len();
+                    plans.push(plan);
+                    revisions.push(Vec::new());
+                    stack.push((boundary.capture.clone(), slot));
+                } else {
+                    let (capture, slot) = stack
+                        .pop()
+                        .ok_or_else(|| anyhow::anyhow!("unmatched layer end"))?;
+                    ensure!(
+                        Arc::ptr_eq(&capture, &boundary.capture),
+                        "crossed layer boundaries"
+                    );
+                    plans[slot].end_index = index;
+                    plans[slot].revision = std::mem::take(&mut revisions[slot]).into();
+                }
+                continue;
+            }
+            if !stack.is_empty() {
+                ensure!(
+                    !matches!(primitive, Primitive::Backdrop(_)),
+                    "backdrop sampling inside captured groups is not supported"
+                );
+                ensure!(
+                    !matches!(primitive, Primitive::SubpixelSprite(_)),
+                    "captured text requires grayscale glyph coverage"
+                );
+            }
+            for (_, slot) in &stack {
+                let plan = &mut plans[*slot];
+                if matches!(primitive, Primitive::Custom(_) | Primitive::Surface(_)) {
+                    plan.reusable = false;
+                }
+                let clipped = primitive
+                    .bounds()
+                    .intersect(&primitive.content_mask().bounds);
+                ensure!(
+                    clipped.is_empty()
+                        || (clipped.left().0 >= plan.origin[0] as f32
+                            && clipped.top().0 >= plan.origin[1] as f32
+                            && clipped.right().0 <= (plan.origin[0] + plan.size[0]) as f32
+                            && clipped.bottom().0 <= (plan.origin[1] + plan.size[1]) as f32),
+                    "paint escapes its layer capture; apply the capture content mask"
+                );
+            }
+        }
+        ensure!(stack.is_empty(), "unclosed layer capture");
+        Ok(plans)
+    }
+
+    /// Conservative whole-prefix dependencies for backdrop capture reuse.
+    /// Retained replay preserves identities; newly painted commands invalidate.
+    pub fn backdrop_cache_keys(
+        &self,
+        viewport: Size<crate::DevicePixels>,
+    ) -> anyhow::Result<Vec<crate::BackdropCacheKey>> {
+        if self.backdrops.is_empty() {
+            return Ok(Vec::new());
+        }
+        anyhow::ensure!(
+            self.backdrops.len() <= crate::MAX_BACKDROPS,
+            "at most four backdrop boundaries per frame"
+        );
+        let mut keys = Vec::new();
+        let mut revision = Vec::new();
+        let mut reusable = true;
+        for operation in &self.paint_operations {
+            let PaintOperation::Primitive(primitive, identity) = operation else {
+                continue;
+            };
+            if let Primitive::Backdrop(draw) = primitive {
+                let plan = draw.plan(viewport)?;
+                keys.push((
+                    draw.order,
+                    crate::BackdropCacheKey {
+                        viewport,
+                        origin: plan.origin,
+                        size: plan.size,
+                        filter: [plan.parameters[0], plan.parameters[1]],
+                        revision: revision.clone().into(),
+                        reusable,
+                    },
+                ));
+            }
+            // These producers can mutate pixels without new retained commands.
+            if matches!(primitive, Primitive::Custom(_) | Primitive::Surface(_)) {
+                reusable = false;
+            }
+            if revision.len() < crate::MAX_LAYER_COMMANDS {
+                let order = match primitive {
+                    Primitive::Shadow(p) => p.order,
+                    Primitive::Quad(p) => p.order,
+                    Primitive::Path(p) => p.order,
+                    Primitive::Underline(p) => p.order,
+                    Primitive::MonochromeSprite(p) => p.order,
+                    Primitive::SubpixelSprite(p) => p.order,
+                    Primitive::PolychromeSprite(p) => p.order,
+                    Primitive::Surface(p) => p.order,
+                    Primitive::Custom(p) => p.order,
+                    Primitive::Shader(p) => p.order,
+                    Primitive::Backdrop(p) => p.order,
+                    Primitive::LayerBoundary(p) => p.order,
+                };
+                revision.push((*identity, order));
+            } else {
+                reusable = false;
+            }
+        }
+        anyhow::ensure!(
+            keys.len() == self.backdrops.len(),
+            "backdrops require scene insertion/replay"
+        );
+        keys.sort_by_key(|(order, _)| *order);
+        Ok(keys.into_iter().map(|(_, key)| key).collect())
     }
 
     pub fn finish(&mut self) {
@@ -175,6 +414,8 @@ impl Scene {
         self.surfaces.sort_by_key(|surface| surface.order);
         self.custom_draws.sort_by_key(|draw| draw.order);
         self.shader_draws.sort_by_key(|draw| draw.order);
+        self.backdrops.sort_by_key(|draw| draw.order);
+        self.layer_boundaries.sort_by_key(|draw| draw.order);
     }
 
     #[cfg_attr(
@@ -200,6 +441,10 @@ impl Scene {
             subpixel_sprites_iter: self.subpixel_sprites.iter().peekable(),
             polychrome_sprites_start: 0,
             polychrome_sprites_iter: self.polychrome_sprites.iter().peekable(),
+            layer_boundary_start: 0,
+            layer_boundary_iter: self.layer_boundaries.iter().peekable(),
+            backdrop_start: 0,
+            backdrop_iter: self.backdrops.iter().peekable(),
             shader_start: 0,
             shader_iter: self.shader_draws.iter().peekable(),
             custom_start: 0,
@@ -230,10 +475,12 @@ pub(crate) enum PrimitiveKind {
     Surface,
     Custom,
     Shader,
+    Backdrop,
+    LayerBoundary,
 }
 
 pub(crate) enum PaintOperation {
-    Primitive(Primitive),
+    Primitive(Primitive, u64),
     StartLayer(Bounds<ScaledPixels>),
     EndLayer,
 }
@@ -251,6 +498,8 @@ pub enum Primitive {
     Surface(PaintSurface),
     Custom(CustomDraw),
     Shader(ShaderDraw),
+    Backdrop(crate::BackdropDraw),
+    LayerBoundary(crate::LayerBoundary),
 }
 
 #[expect(missing_docs)]
@@ -267,6 +516,8 @@ impl Primitive {
             Primitive::Surface(surface) => &surface.bounds,
             Primitive::Custom(draw) => &draw.bounds,
             Primitive::Shader(draw) => &draw.bounds,
+            Primitive::Backdrop(draw) => &draw.bounds,
+            Primitive::LayerBoundary(draw) => &draw.bounds,
         }
     }
 
@@ -282,6 +533,8 @@ impl Primitive {
             Primitive::Surface(surface) => &surface.content_mask,
             Primitive::Custom(draw) => &draw.content_mask,
             Primitive::Shader(draw) => &draw.content_mask,
+            Primitive::Backdrop(draw) => &draw.content_mask,
+            Primitive::LayerBoundary(draw) => &draw.content_mask,
         }
     }
 }
@@ -294,6 +547,10 @@ impl Primitive {
     allow(dead_code)
 )]
 struct BatchIterator<'a> {
+    layer_boundary_start: usize,
+    layer_boundary_iter: Peekable<slice::Iter<'a, crate::LayerBoundary>>,
+    backdrop_start: usize,
+    backdrop_iter: Peekable<slice::Iter<'a, crate::BackdropDraw>>,
     shader_start: usize,
     shader_iter: Peekable<slice::Iter<'a, ShaderDraw>>,
     custom_start: usize,
@@ -321,6 +578,14 @@ impl<'a> Iterator for BatchIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut orders_and_kinds = [
+            (
+                self.layer_boundary_iter.peek().map(|d| d.order),
+                PrimitiveKind::LayerBoundary,
+            ),
+            (
+                self.backdrop_iter.peek().map(|d| d.order),
+                PrimitiveKind::Backdrop,
+            ),
             (
                 self.shader_iter.peek().map(|d| d.order),
                 PrimitiveKind::Shader,
@@ -367,14 +632,31 @@ impl<'a> Iterator for BatchIterator<'a> {
         };
 
         match batch_kind {
+            PrimitiveKind::LayerBoundary => {
+                let index = self.layer_boundary_start;
+                self.layer_boundary_iter.next();
+                self.layer_boundary_start += 1;
+                Some(PrimitiveBatch::LayerBoundary(index))
+            }
+            PrimitiveKind::Backdrop => {
+                let index = self.backdrop_start;
+                self.backdrop_iter.next();
+                self.backdrop_start += 1;
+                Some(PrimitiveBatch::Backdrop(index))
+            }
             PrimitiveKind::Shader => {
                 let start = self.shader_start;
-                let program_id = self.shader_iter.next().unwrap().program.id();
+                let first = self.shader_iter.next().unwrap();
+                let program_id = first.program.id();
+                let texture_id = first.glyph_mask.map(|tile| tile.texture_id);
                 self.shader_start += 1;
                 while self
                     .shader_iter
                     .next_if(|draw| {
-                        draw.program.id() == program_id
+                        first.path_mask.is_none()
+                            && draw.path_mask.is_none()
+                            && draw.program.id() == program_id
+                            && draw.glyph_mask.map(|tile| tile.texture_id) == texture_id
                             && (draw.order, batch_kind) < max_order_and_kind
                     })
                     .is_some()
@@ -546,6 +828,10 @@ impl<'a> Iterator for BatchIterator<'a> {
 )]
 #[allow(missing_docs)]
 pub enum PrimitiveBatch {
+    /// End the current pass, sample the existing framebuffer, then resume it.
+    Backdrop(usize),
+    /// Capture entry/exit pass barrier.
+    LayerBoundary(usize),
     Shadows(Range<usize>),
     Quads(Range<usize>),
     Paths(Range<usize>),
@@ -576,6 +862,8 @@ impl PrimitiveBatch {
     #[expect(missing_docs)]
     pub fn label(&self) -> String {
         match self {
+            Self::LayerBoundary(index) => format!("layer boundary ({index})"),
+            Self::Backdrop(index) => format!("backdrop ({index})"),
             Self::Shaders { range, .. } => format!("shaders ({})", range.len()),
             Self::Shadows(range) => format!("shadows ({})", range.len()),
             Self::Quads(range) => format!("quads ({})", range.len()),
@@ -1225,6 +1513,8 @@ pub enum ShaderOutputEncoding {
 pub struct SceneShaderProgram {
     id: u64,
     output_encoding: ShaderOutputEncoding,
+    glyph_mask: bool,
+    path_mask: bool,
     /// Validated WGSL with host vertex/fragment entry points.
     wgsl: String,
     /// Translated Metal source and actual generated entry point names.
@@ -1253,10 +1543,33 @@ impl SceneShaderProgram {
         Self {
             id: NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             output_encoding,
+            glyph_mask: false,
+            path_mask: false,
             wgsl,
             metal,
             hlsl,
         }
+    }
+    /// Declare that the validated program reads a grayscale glyph atlas at
+    /// texture binding group 1/binding 0. Call before sharing the program.
+    pub fn with_glyph_mask(mut self) -> Self {
+        self.glyph_mask = true;
+        self.path_mask = false;
+        self
+    }
+    /// Declare a host-provided native path coverage texture at group 1/binding 0.
+    pub fn with_path_mask(mut self) -> Self {
+        self.path_mask = true;
+        self.glyph_mask = false;
+        self
+    }
+    /// Whether the host must rasterize retained path coverage before this draw.
+    pub fn uses_path_mask(&self) -> bool {
+        self.path_mask
+    }
+    /// Whether each instance requires a retained monochrome atlas tile.
+    pub fn uses_glyph_mask(&self) -> bool {
+        self.glyph_mask
     }
     /// Immutable output meaning; part of this program's unique cache identity.
     pub fn output_encoding(&self) -> ShaderOutputEncoding {
@@ -1295,10 +1608,43 @@ pub struct ShaderDraw {
     pub scale_factor: f32,
     /// Immutable program handle.
     pub program: std::sync::Arc<SceneShaderProgram>,
+    /// Optional retained grayscale atlas tile. Masked programs batch by texture.
+    pub glyph_mask: Option<AtlasTile>,
+    /// Native opaque-white coverage, rasterized into the existing path target.
+    /// Each masked path is an independent coverage/composition batch.
+    pub path_mask: Option<std::sync::Arc<Path<ScaledPixels>>>,
     /// Reflected and packed payload. Unused slots are zero.
     pub data: [[f32; 4]; SHADER_DATA_SLOTS],
 }
 impl ShaderDraw {
+    /// Check mask ownership before preparing backend resources.
+    pub fn validate_masks(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.program.uses_glyph_mask() == self.glyph_mask.is_some(),
+            "shader glyph mask/program mismatch"
+        );
+        anyhow::ensure!(
+            self.program.uses_path_mask() == self.path_mask.is_some(),
+            "shader path mask/program mismatch"
+        );
+        anyhow::ensure!(
+            self.glyph_mask.is_none() || self.path_mask.is_none(),
+            "shader cannot combine glyph and path masks"
+        );
+        if let Some(path) = &self.path_mask {
+            anyhow::ensure!(
+                !path.vertices.is_empty()
+                    && path.vertices.len() <= 65_536
+                    && path.vertices.len() % 3 == 0,
+                "path brush requires 1..65536 triangle vertices"
+            );
+            anyhow::ensure!(
+                path.color.as_solid().is_some_and(|c| c.a == 1.),
+                "path brush coverage must be opaque"
+            );
+        }
+        Ok(())
+    }
     /// Transport layout: bounds, clip, opacity/scale, then payload; 176 bytes.
     pub fn instance_data(&self) -> [[f32; 4]; 3 + SHADER_DATA_SLOTS] {
         let mut result = [[0.; 4]; 3 + SHADER_DATA_SLOTS];
@@ -1319,4 +1665,21 @@ impl ShaderDraw {
         result[3..].copy_from_slice(&self.data);
         result
     }
+}
+
+/// Extension hook for drawing monochrome glyph coverage in the main pass.
+/// Emoji bypass this hook. Implementations must retain the atlas tile in their
+/// recorded primitive and use the supplied inherited opacity exactly once.
+pub trait GlyphBrush: std::fmt::Debug + Send + Sync + 'static {
+    /// Retained identity of this immutable paint snapshot. Return the same token
+    /// for identical clones and a new token whenever paint parameters change.
+    fn cache_key(&self) -> std::sync::Arc<()>;
+    /// Record this glyph using full brush coordinates and inherited opacity.
+    fn paint_glyph(
+        &self,
+        window: &mut crate::Window,
+        glyph: MonochromeSprite,
+        brush_bounds: Bounds<Pixels>,
+        opacity: f32,
+    ) -> anyhow::Result<()>;
 }

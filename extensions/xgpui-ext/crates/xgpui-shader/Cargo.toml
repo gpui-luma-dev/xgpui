@@ -36,4 +36,7 @@ bytemuck = "1"
 windows = { version = "0.62", features = ["Win32_Graphics_Direct3D11", "Win32_Graphics_Direct3D_Fxc", "Win32_Graphics_Dxgi_Common"] }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
-gpui-apple = { path = "../../../../gpui/crates/gpui-apple", features = ["test-support"] }
+gpui-apple = { path = "../../../../gpui/crates/gpui-apple", features = ["test-support", "font-kit"] }
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+gpui-windows = { path = "../../../../gpui/crates/gpui-windows", features = ["test-support"] }

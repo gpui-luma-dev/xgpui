@@ -24,7 +24,8 @@ class RunnerTests(unittest.TestCase):
         }
         for backend, markers in expected.items():
             steps = runner.PLANS[backend]
-            self.assertEqual(len(steps), len(markers))
+            self.assertEqual(len(steps), len(markers) + 1)
+            self.assertIn('brush::tests', steps[-1]['command'])
             for step, marker in zip(steps, markers):
                 self.assertIn(marker, step['command'])
                 self.assertIn('--locked', shlex.split(step['command']))

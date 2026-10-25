@@ -42,3 +42,19 @@ mod metal_cache;
 pub mod instanced;
 #[cfg(feature = "portable-shaders")]
 pub use instanced::WindowShaderExt;
+
+/// Main-pass solid, gradient and procedurally modulated brushes for extension surfaces.
+#[cfg(feature = "portable-shaders")]
+pub mod brush;
+#[cfg(feature = "portable-shaders")]
+pub use brush::{BlendMode, Brush, BrushPoint, BrushStop, Noise, NoiseKind};
+
+#[cfg(feature = "portable-shaders")]
+mod backdrop;
+#[cfg(feature = "portable-shaders")]
+pub use backdrop::BackdropBlur;
+
+#[cfg(feature = "portable-shaders")]
+mod layer_effect;
+#[cfg(feature = "portable-shaders")]
+pub use layer_effect::LayerEffect;

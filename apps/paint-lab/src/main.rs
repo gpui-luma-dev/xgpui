@@ -4,6 +4,8 @@ use gpui::{prelude::*, *};
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use xgpui_shader::{Gradient, GradientKind, GradientStop, MeshGradient, SolidColor};
 use xgpui_shader::{Paint, WindowPaintExt, painted};
+#[cfg(feature = "portable-shaders")]
+mod brushes;
 mod checks;
 mod editor;
 #[cfg(feature = "portable-shaders")]
@@ -130,11 +132,17 @@ enum Control {
     RadiusY,
     MeshX,
     MeshY,
+    MeshUAngle,
+    MeshULength,
+    MeshVAngle,
+    MeshVLength,
 }
 impl Control {
     fn range(self) -> (f32, f32, f32) {
         match self {
             Self::Angle => (0., 360., 1.),
+            Self::MeshUAngle | Self::MeshVAngle => (0., 360., 5.),
+            Self::MeshULength | Self::MeshVLength => (0., 2., 0.05),
             Self::RadiusX | Self::RadiusY => (0.01, 2., 0.01),
             Self::Red | Self::Green | Self::Blue => (0., 1., 1. / 255.),
             _ => (0., 1., 0.01),
@@ -154,6 +162,10 @@ impl Control {
             Self::RadiusY => "Radius Y",
             Self::MeshX => "Point X",
             Self::MeshY => "Point Y",
+            Self::MeshUAngle => "U angle",
+            Self::MeshULength => "U length",
+            Self::MeshVAngle => "V angle",
+            Self::MeshVLength => "V length",
         }
     }
 }
@@ -162,6 +174,7 @@ struct Lab {
     analytic: Arc<Gradient>,
     mesh_points: Vec<xgpui_shader::ControlPoint>,
     mesh_selected: usize,
+    mesh_tangents: Vec<[editor::MeshTangent; 2]>,
     editors: Vec<Settings>,
     slider_bounds: HashMap<Control, Bounds<Pixels>>,
     dragging: Option<Control>,
@@ -169,6 +182,17 @@ struct Lab {
     native: bool,
     faded: bool,
     clipped: bool,
+    light_background: bool,
+    #[cfg(feature = "portable-shaders")]
+    backdrop_changed: bool,
+    #[cfg(feature = "portable-shaders")]
+    backdrop_moved: bool,
+    #[cfg(feature = "portable-shaders")]
+    backdrop_disabled: bool,
+    #[cfg(feature = "portable-shaders")]
+    layer_filter_step: u8,
+    #[cfg(feature = "portable-shaders")]
+    freeform_step: u8,
     playing: bool,
     time: f32,
     updated: Instant,
@@ -180,6 +204,7 @@ fn button(id: impl Into<ElementId>, text: impl Into<SharedString>) -> Stateful<D
         .py_2()
         .rounded_md()
         .bg(rgb(0x343a45))
+        .text_color(white())
         .cursor_pointer()
         .child(text.into())
 }
@@ -257,6 +282,10 @@ impl Lab {
             },
             Control::MeshX => self.displayed_mesh()[self.mesh_selected].position[0],
             Control::MeshY => self.displayed_mesh()[self.mesh_selected].position[1],
+            Control::MeshUAngle => self.mesh_tangents[self.mesh_selected][0].angle,
+            Control::MeshULength => self.mesh_tangents[self.mesh_selected][0].length,
+            Control::MeshVAngle => self.mesh_tangents[self.mesh_selected][1].angle,
+            Control::MeshVLength => self.mesh_tangents[self.mesh_selected][1].length,
         }
     }
     fn set_value(&mut self, control: Control, value: f32) {
@@ -289,6 +318,27 @@ impl Lab {
             Control::RadiusY => self.settings_mut().radius[1] = value,
             Control::MeshX => self.mesh_points[self.mesh_selected].position[0] = value,
             Control::MeshY => self.mesh_points[self.mesh_selected].position[1] = value,
+            Control::MeshUAngle
+            | Control::MeshULength
+            | Control::MeshVAngle
+            | Control::MeshVLength => {
+                let axis = usize::from(matches!(
+                    control,
+                    Control::MeshVAngle | Control::MeshVLength
+                ));
+                let tangent = &mut self.mesh_tangents[self.mesh_selected][axis];
+                if matches!(control, Control::MeshUAngle | Control::MeshVAngle) {
+                    tangent.angle = value;
+                } else {
+                    tangent.length = value;
+                }
+                let point = &mut self.mesh_points[self.mesh_selected];
+                if axis == 0 {
+                    point.u_tangent = tangent.vector();
+                } else {
+                    point.v_tangent = tangent.vector();
+                }
+            }
         }
     }
     fn scrub(&mut self, control: Control, x: Pixels) {
@@ -307,7 +357,7 @@ impl Lab {
         let value = self.value(control);
         let fraction = ((value - min) / (max - min)).clamp(0., 1.);
         let display = match control {
-            Control::Angle => format!("{value:.1}°"),
+            Control::Angle | Control::MeshUAngle | Control::MeshVAngle => format!("{value:.1}°"),
             Control::Red | Control::Green | Control::Blue => format!("{:.0}", value * 255.),
             Control::Alpha | Control::Offset => format!("{:.0}%", value * 100.),
             _ => format!("{value:.2}"),
@@ -425,6 +475,7 @@ impl Lab {
             .gap_2()
             .p_3()
             .bg(rgb(0x202633))
+            .text_color(white())
             .rounded_lg();
         panel = panel.child(
             div()
@@ -449,6 +500,7 @@ impl Lab {
                             if effect == Effect::Mesh {
                                 this.mesh_points = grid(0.).unwrap().points().to_vec();
                                 this.mesh_selected = 0;
+                                this.mesh_tangents = editor::mesh_tangents(&this.mesh_points);
                             }
                             cx.notify();
                         })),
@@ -582,7 +634,14 @@ impl Lab {
         }
         panel = panel.child(div().mt_2().child("Geometry"));
         let controls: &[Control] = match self.effect {
-            Effect::Mesh => &[Control::MeshX, Control::MeshY],
+            Effect::Mesh => &[
+                Control::MeshX,
+                Control::MeshY,
+                Control::MeshUAngle,
+                Control::MeshULength,
+                Control::MeshVAngle,
+                Control::MeshVLength,
+            ],
             Effect::Linear => &[Control::Angle],
             Effect::Radial => &[
                 Control::CenterX,
@@ -602,7 +661,26 @@ impl Lab {
         for control in controls {
             panel = panel.child(self.slider(*control, cx));
         }
-        panel.child(div().text_xs().text_color(rgb(0xaab4c5)).child(if mesh {"Mesh colors are opaque RGB. Point positions use 0–1 coordinates."}else{"Center: 0–1 of bounds. Radius: 0.01–2 × full size. Duplicate a stop for a hard edge. Edits pause animation."}))
+        if mesh {
+            panel = panel.child(
+                button("reset-tangents", "Reset selected tangents")
+                    .text_sm()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.freeze();
+                        this.native = false;
+                        let defaults = grid(0.).unwrap();
+                        let point = &mut this.mesh_points[this.mesh_selected];
+                        point.u_tangent = defaults.points()[this.mesh_selected].u_tangent;
+                        point.v_tangent = defaults.points()[this.mesh_selected].v_tangent;
+                        this.mesh_tangents[this.mesh_selected] = [
+                            editor::MeshTangent::from_vector(point.u_tangent),
+                            editor::MeshTangent::from_vector(point.v_tangent),
+                        ];
+                        cx.notify();
+                    })),
+            );
+        }
+        panel.child(div().text_xs().text_color(rgb(0xaab4c5)).child(if mesh {"Select point 1–9 to edit its U/V tangents. Angles: clockwise from right (0°); down is 90°. Length: 0–2 of the mesh size; default 0.5. Edits pause animation."}else{"Center: 0–1 of bounds. Radius: 0.01–2 × full size. Duplicate a stop for a hard edge. Edits pause animation."}))
     }
 }
 impl Render for Lab {
@@ -691,6 +769,10 @@ impl Render for Lab {
             clip = clip.child(tile);
             cards = cards.child(div().flex().flex_col().gap_3().child(label).child(clip));
         }
+        #[cfg(feature = "portable-shaders")]
+        {
+            cards = cards.child(brushes::gallery(self, cx));
+        }
         let mut choices = div().flex().gap_3();
         for (i, effect) in [
             Effect::Mesh,
@@ -717,7 +799,7 @@ impl Render for Lab {
                     })),
             );
         }
-        div().id("paint-lab").size_full().flex().flex_col().gap_4().p_6().bg(rgb(0x151922)).text_color(white())
+        div().id("paint-lab").size_full().flex().flex_col().gap_4().p_6().bg(rgb(if self.light_background {0xf4f5f7}else{0x151922})).text_color(rgb(if self.light_background {0x202633}else{0xffffff}))
             .on_mouse_move(cx.listener(|this,event:&MouseMoveEvent,_,cx|{if event.pressed_button!=Some(MouseButton::Left) {this.dragging=None;}else if let Some(control)=this.dragging {this.scrub(control,event.position.x);cx.notify();}}))
             .on_mouse_up(MouseButton::Left,cx.listener(|this,_,_,_|this.dragging=None))
             .on_mouse_up_out(MouseButton::Left,cx.listener(|this,_,_,_|this.dragging=None))
@@ -725,6 +807,7 @@ impl Render for Lab {
             .child(div().flex().flex_wrap().gap_4().items_center().child(choices)
                 .child(button("play",if self.playing {"Pause"}else{"Animate"}).on_click(cx.listener(|this,_,_,cx|{if this.playing {this.freeze();}else{this.updated=Instant::now();this.playing=true;}cx.notify();})))
                 .child(button("native",if self.native {"Native white"}else{"Gradient paint"}).on_click(cx.listener(|this,_,_,cx|{this.native = !this.native;cx.notify();})))
+                .child(button("background",if self.light_background {"Background: light"}else{"Background: dark"}).on_click(cx.listener(|this,_,_,cx|{this.light_background = !this.light_background;cx.notify();})))
                 .child(button("opacity",if self.faded {"Opacity 50%"}else{"Opacity 100%"}).on_click(cx.listener(|this,_,_,cx|{this.faded = !this.faded;cx.notify();})))
                 .child(button("clip",if self.clipped {"Clip on"}else{"Clip off"}).on_click(cx.listener(|this,_,_,cx|{this.clipped = !this.clipped;cx.notify();}))))
             .child(div().flex().gap_5().flex_1().min_h_0()
@@ -732,7 +815,7 @@ impl Render for Lab {
                 .child(div().id("preview-scroll").flex_1().min_w_0().overflow_y_scroll().flex().flex_col().gap_4()
                     .child(format!("{} · edits update all three previews",self.effect.label()))
                     .child(div().opacity(if self.faded {0.5}else{1.}).child(cards))
-                    .child(div().text_sm().text_color(rgb(0xaab4c5)).child("Clipping reveals the same paint field. Each type keeps its own colors and geometry."))))
+                    .child(div().text_sm().text_color(rgb(if self.light_background {0x596273}else{0xaab4c5})).child("Clipping reveals the same paint field. Each type keeps its own colors and geometry."))))
     }
 }
 fn main() -> Result<()> {
@@ -773,6 +856,7 @@ fn main() -> Result<()> {
                     ),
                     mesh_points: grid(0.).unwrap().points().to_vec(),
                     mesh_selected: 0,
+                    mesh_tangents: editor::mesh_tangents(grid(0.).unwrap().points()),
                     editors: [
                         Effect::Mesh,
                         Effect::Linear,
@@ -789,6 +873,17 @@ fn main() -> Result<()> {
                     native: false,
                     faded: false,
                     clipped: false,
+                    light_background: false,
+                    #[cfg(feature = "portable-shaders")]
+                    backdrop_changed: false,
+                    #[cfg(feature = "portable-shaders")]
+                    backdrop_moved: false,
+                    #[cfg(feature = "portable-shaders")]
+                    backdrop_disabled: false,
+                    #[cfg(feature = "portable-shaders")]
+                    layer_filter_step: 0,
+                    #[cfg(feature = "portable-shaders")]
+                    freeform_step: 2,
                     playing: false,
                     time: 0.,
                     updated: Instant::now(),
