@@ -87,6 +87,7 @@ for (const route of ['#extensions', ...Object.keys(data.extension_documents).map
 const index = await readFile(new URL('index.html', site), 'utf8');
 assert.ok(!index.includes('#method'));
 assert.ok(index.includes('href="examples/extensions/"'));
+assert.ok(index.includes('href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>'));
 for (const demo of ['shader', 'parley', 'svg']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
@@ -104,7 +105,8 @@ assert.ok(!index.includes('http-equiv="refresh"'), 'Pages root must serve the we
 // Relative URLs must retain the repository prefix on project Pages sites.
 const pagesRoot = new URL('https://example.github.io/xgpui/');
 for (const match of index.matchAll(/(?:src|href)="([^"#][^"]*)"/g)) {
-  assert.ok(new URL(match[1], pagesRoot).pathname.startsWith('/xgpui/'));
+  const url = new URL(match[1], pagesRoot);
+  if (url.origin === pagesRoot.origin) assert.ok(url.pathname.startsWith('/xgpui/'));
 }
 
 for (const [fn, title, sections] of [["architecturePage", "The architecture of GPUI", 8]]) {
