@@ -129,7 +129,15 @@ The offline native gallery uses committed, attributed SVGs:
 just --justfile apps/svg-lab/justfile gallery
 ```
 
-The sample is a native GPUI app; there is no SVG browser demo in this iteration.
+The browser extension gallery also includes `?demo=svg`: five attributed samples,
+wheel zoom and drag pan, a ten-tile gallery, and switchable 8/32 MiB shared pools.
+Its diagnostics report element raster latency and accounted bytes, not total
+browser memory. The current non-atomic Wasm platform runs raster jobs on the
+browser thread: progressive rendering and admission limits apply, but a costly
+filter can still block input. Native worker responsiveness measurements above
+do not establish browser responsiveness. The browser demo caps concurrency at
+one and per-element output at 2 MiB. Use the gallery's artwork credits link for
+creator, source, license and unchanged SVG downloads.
 
 ## Limits and follow-ups
 

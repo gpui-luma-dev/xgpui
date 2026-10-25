@@ -24,7 +24,7 @@ function extensionPage(route) {
   }
 
   const banner = route === 'svg-rendering'
-    ? '<p class="guide-intro"><strong>Experimental SVG extension.</strong> Native progressive rasterization, shared admission and accounted image budgets.</p>'
+    ? '<p class="guide-intro"><strong>Experimental SVG extension.</strong> Progressive rasterization, shared admission and accounted image budgets.</p>'
     : route === 'parley-text'
     ? '<p class="guide-intro"><strong>Text backend extension.</strong> Parley shaping and geometry; GPUI caches, atlas and native input.</p>'
     : route === 'high-gamut-windows'
@@ -34,7 +34,7 @@ function extensionPage(route) {
       : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; output retains sRGB semantics.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
-    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
+    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'svg-rendering' ? browserDemoLinks('svg') : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
   return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation, text and SVG extensions.') + banner +
     '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>' +
@@ -135,6 +135,6 @@ function parleyCrateGuide() {
 }
 
 function svgCrateGuide() {
-  return '<article class="extension-document">' +
+  return browserDemoLinks('svg') + '<article class="extension-document">' +
     data.extension_documents['svg-rendering'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
 }

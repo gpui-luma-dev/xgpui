@@ -9,6 +9,7 @@ license = "Apache-2.0"
 
 [dependencies]
 anyhow = "1"
+web-time = "1"
 gpui = { path = "../../../../gpui/crates/gpui" }
 
 [dev-dependencies]

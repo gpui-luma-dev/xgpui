@@ -87,7 +87,7 @@ for (const route of ['#extensions', ...Object.keys(data.extension_documents).map
 const index = await readFile(new URL('index.html', site), 'utf8');
 assert.ok(!index.includes('#method'));
 assert.ok(index.includes('href="examples/extensions/"'));
-for (const demo of ['shader', 'parley']) {
+for (const demo of ['shader', 'parley', 'svg']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web'));
@@ -208,7 +208,7 @@ assert.match(run('extensionPage("svg-rendering")'), /Experimental SVG extension/
 assert.match(run('cratePage(crates.find(c => c.package === "xgpui-svg"), "overview")'), /SvgScheduler/);
 const svgDoc = data.extension_documents['svg-rendering'].html;
 for (const term of ['svg_image', 'SchedulerLimits', 'Queued', '3 × output RGBA', '2 × RGBA', 'process/GPU-memory ceiling', 'samples', 'attributed']) assert.ok(svgDoc.includes(term), term);
-assert.doesNotMatch(run('cratePage(crates.find(c => c.package === "xgpui-svg"), "overview")'), /Run browser demo/);
+assert.match(run('cratePage(crates.find(c => c.package === "xgpui-svg"), "overview")'), /Run browser demo/);
 const svgCrate = data.crates.find(c => c.package === 'xgpui-svg');
 for (const name of ['SvgImage', 'SvgDocument', 'SvgScheduler', 'SchedulerStats', 'RasterPolicy']) assert.ok(svgCrate.declarations.some(d => d.name === name), name);
 assert.ok(svgCrate.dependencies.some(d => d.package === 'gpui'));

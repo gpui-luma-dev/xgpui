@@ -11,6 +11,7 @@ use std::{borrow::Cow, cell::RefCell, rc::Rc, sync::Arc};
 #[path = "../../text-lab/src/paragraph.rs"]
 mod paragraph;
 mod shader;
+mod svg;
 
 const PLEX: &[u8] = include_bytes!(
     "../../../gpui/crates/gpui-web/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
@@ -44,6 +45,7 @@ fn launch() -> anyhow::Result<()> {
         WebBackendPreference::Auto
     };
     let parley = parameters.contains(&"demo=parley");
+    let svg = parameters.contains(&"demo=svg");
     // These demos need no worker pool or shared Wasm memory.
     let platform = Rc::new(WebPlatform::new_with_backend(false, backend));
     let http = Arc::new(platform.fetch_http_client());
@@ -76,6 +78,11 @@ fn launch() -> anyhow::Result<()> {
                 view
             })
             .expect("open Parley demo");
+        } else if svg {
+            cx.open_window(options, |_, cx| {
+                cx.new(|cx| svg::SvgDemo::new(cx).expect("bundled SVG samples"))
+            })
+            .expect("open SVG demo");
         } else {
             cx.open_window(options, |_, cx| cx.new(|_| shader::ShaderDemo::new()))
                 .expect("open shader demo");

@@ -17,6 +17,7 @@ anyhow = "1"
 gpui = { path = "../../gpui/crates/gpui" }
 gpui-web = { path = "../../gpui/crates/gpui-web", default-features = false }
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
+xgpui-svg = { path = "../../extensions/xgpui-ext/crates/xgpui-svg" }
 xgpui-parley = { path = "../../extensions/xgpui-ext/crates/xgpui-parley" }
 xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader", features = ["wgpu", "portable-shaders"] }
 unicode-segmentation = "1"

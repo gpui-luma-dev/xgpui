@@ -81,7 +81,9 @@ source locations, internal links and section targets as well as the existing sit
 tabs. Its maintained contract is `docs/extensions/svg-rendering.md`; the crate
 README points to that source to avoid a second copy. The guide covers native
 samples and attribution, shared scheduling/accounting, measurements and deferred
-work. It does not imply SVG support in the browser extension demos.
+work. The browser gallery includes `?demo=svg`, with attributed source downloads,
+zoom/pan, shared budget controls and a ten-tile gallery. Wasm rasterization is
+currently on the browser thread; native responsiveness results do not transfer.
 
 ## GitHub Pages
 
@@ -91,7 +93,7 @@ Select **Settings → Pages → Source: GitHub Actions**. The Pages workflow bui
 ## Browser extension demos
 
 The sidebar's **Browser extension demos** link opens `examples/extensions/`.
-The gallery and both extension crate guides link to the demo source on GitHub.
+The gallery and the extension crate guides link to the demo source on GitHub.
 The Pages workflow builds `apps/extensions-web` in release mode with the pinned
 wasm-bindgen CLI and copies its generated assets into `docs/examples/extensions/`
 before uploading the site. These artifacts are ignored by Git. For local testing,

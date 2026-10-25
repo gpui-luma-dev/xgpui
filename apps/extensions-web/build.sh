@@ -23,4 +23,9 @@ mkdir -p "$app/dist"
 wasm-bindgen --target web --out-dir "$app/dist" --out-name extensions_web \
     "$app/target/wasm32-unknown-unknown/$profile/extensions-web.wasm"
 cp "$app/index.html" "$app/dist/index.html"
+cp "$app/svg-attribution.html" "$app/dist/svg-attribution.html"
+cp apps/svg-lab/samples/ATTRIBUTION.md "$app/dist/svg-ATTRIBUTION.md"
+for sample in ribbon-leaf.svg AJ_Digital_Camera.svg rg1024_green_grapes.svg rg1024_metal_effect.svg dragon.svg; do
+    cp "apps/svg-lab/samples/$sample" "$app/dist/$sample"
+done
 echo "Built $app/dist. Run: python3 apps/extensions-web/serve.py"

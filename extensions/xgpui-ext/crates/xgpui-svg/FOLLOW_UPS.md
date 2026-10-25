@@ -5,6 +5,9 @@ limits, progressive background rendering, shared admission/accounting, attribute
 offline samples, tests and reproducible measurements. The following are deferred,
 not blockers or claims of existing support:
 
+- **Browser workers:** move synchronous raster jobs off the browser thread. The
+  non-atomic Wasm demo currently shares the browser event loop; output limits
+  do not guarantee input responsiveness. Validate browser performance separately.
 - **Viewport tiling/cropped rasterization:** preserve sharp deep zoom within
   small budgets instead of rasterizing the entire artwork at reduced resolution.
 - **Hard filter/process limits:** evaluate isolated rendering or filter-aware

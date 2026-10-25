@@ -2,10 +2,8 @@ use crate::scheduler::{Client, Reservation};
 use crate::{Job, SvgScheduler};
 use crate::{RasterImage, RasterPolicy, RasterQueue, Resolution, Stage, SvgDocument, image_bytes};
 use gpui::{prelude::*, *};
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Duration};
+use web_time::Instant;
 
 /// Progress for one mounted element. Output budget excludes filter/GPU memory.
 #[derive(Clone, Debug, PartialEq)]

@@ -1,6 +1,6 @@
 # Extension browser examples
 
-A standalone Wasm app for `xgpui-shader` and `xgpui-parley`. Both use the existing
+A standalone Wasm app for `xgpui-shader`, `xgpui-parley`, and `xgpui-svg`. All use the existing
 GPUI web platform and wgpu renderer. The gallery offers automatic selection
 (WebGPU with WebGL2 fallback), forced WebGPU, and forced WebGL2. A forced backend
 fails explicitly if unavailable; check the browser console for adapter details.
@@ -44,3 +44,28 @@ The demos exercise SDR output. `xgpui-gamut` currently has Metal and native D3D1
 presentation adapters; a browser wide-gamut presentation path is separate work.
 Compile/link checks do not establish browser GPU, clipboard, or IME correctness;
 the checklist above is intended for local interactive acceptance.
+
+## SVG demo
+
+Open `?demo=svg` (or force `&backend=webgpu` / `&backend=webgl`). Select one of
+five samples, wheel to zoom around the pointer, drag to pan, or use preset zooms.
+Toggle the backdrop, mount ten gallery tiles, and switch the shared 8/32 MiB
+pool. The gallery shares zoom and the scheduler; pan applies to the large viewer.
+Check clipping, gradients, shadows and curve detail as the preview settles.
+
+Diagnostics expose raster latency, phase and accounted pool reservations, not
+total browser/GPU memory. Each element caps output at 2 MiB, with one admitted
+job in the pool. This non-atomic Wasm platform runs raster work on the browser
+thread; complex filters can still block interaction. Worker-based rendering is
+a follow-up. Native latency/memory benchmarks do not establish browser results.
+
+The artwork is embedded unchanged from `apps/svg-lab/samples`. The build copies
+the original SVGs, notices and `svg-attribution.html` beside the app, preserving
+AJ Ashton, rg1024 and Ebaychatter0 credits and each artwork's separate license.
+Dragon remains CC BY-SA 3.0; original lab artwork is Apache-2.0.
+
+Validated on 2026-10-24 in the in-app Chromium browser on Apple M4 Max:
+automatic, forced WebGPU and forced WebGL2 rendered; wheel zoom, drag pan,
+reset, sample selection, gallery mounting and scrolling worked without console
+errors. The 8 MiB pool with 11 mounted elements displayed a 7.98 MiB accounted
+peak. This is an interactive smoke check, not a browser memory benchmark.

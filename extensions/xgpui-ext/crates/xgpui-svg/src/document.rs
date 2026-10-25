@@ -1,7 +1,8 @@
 use crate::{MIB, image_bytes};
 use anyhow::{Result, ensure};
 use gpui::{DevicePixels, ParsedSvg, RenderImage, Size, SvgRenderer, SvgSize, size};
-use std::{ops::Deref, sync::Arc, time::Instant};
+use std::{ops::Deref, sync::Arc};
+use web_time::Instant;
 
 /// A parsed, immutable static SVG. Clone shares the tree; no hidden image cache.
 #[derive(Clone)]
