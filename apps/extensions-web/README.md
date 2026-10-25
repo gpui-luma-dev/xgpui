@@ -5,6 +5,19 @@ GPUI web platform and wgpu renderer. The gallery offers automatic selection
 (WebGPU with WebGL2 fallback), forced WebGPU, and forced WebGL2. A forced backend
 fails explicitly if unavailable; check the browser console for adapter details.
 
+## Extension demos
+
+| Crate | URL query | What it demonstrates |
+| --- | --- | --- |
+| `xgpui-color` | `?demo=color` | Display P3 endpoints, encoded sRGB / linear RGB / OkLab / OkLCh interpolation, gamut mapping and alpha. Runtime diagnostics distinguish the sRGB canvas from P3 display capability. |
+| `xgpui-shader` | `?demo=shader` | Gradients, meshes and portable WGSL paints. |
+| `xgpui-parley` | `?demo=parley` | Paragraph shaping, bidirectional text and editing. |
+| `xgpui-svg` | `?demo=svg` | Progressive SVG rendering and viewport rasterization. |
+
+The Color / Gamut demo uses the standalone `xgpui-color` math crate directly.
+Its browser output is mapped to sRGB. For actual native Display P3 comparison,
+see the [color-lab desktop companion](../gamut-lab/README.md#native-color-comparison).
+
 The landing page also lists all seven interactive examples from the older
 `gpui-web/examples/hello_web` gallery and its three browser-test Wasm modules.
 These entries link to source and are explicitly not hosted. The captured gallery
@@ -34,6 +47,11 @@ host Rust flags so native linker options cannot leak into the Wasm link. Serve o
 clipboard access. The supplied server also sends cross-origin isolation headers.
 
 ## Local checks
+
+- Color / Gamut: open `?demo=color` with each forced backend. Cycle endpoint
+  presets, mapping policy and ending alpha. Check all four interpolation rows
+  and the amber out-of-sRGB indicators. Confirm the runtime panel reports the
+  canvas color space separately from browser-reported P3 display support.
 
 - Shader: run both forced backends. All eleven cards should show the same paint
   in a rounded background, border and diamond path.
