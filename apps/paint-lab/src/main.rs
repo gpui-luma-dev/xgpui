@@ -221,6 +221,8 @@ struct Lab {
     backdrop_disabled: bool,
     #[cfg(feature = "portable-shaders")]
     layer_filter_step: u8,
+    layer_blend_step: usize,
+    layer_blur_step: usize,
     #[cfg(feature = "portable-shaders")]
     freeform_step: u8,
     #[cfg(feature = "portable-shaders")]
@@ -954,6 +956,8 @@ fn main() -> Result<()> {
                     backdrop_disabled: false,
                     #[cfg(feature = "portable-shaders")]
                     layer_filter_step: 0,
+                    layer_blend_step: 0,
+                    layer_blur_step: 0,
                     #[cfg(feature = "portable-shaders")]
                     freeform_step: 2,
                     #[cfg(feature = "portable-shaders")]

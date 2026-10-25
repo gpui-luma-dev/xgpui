@@ -1053,6 +1053,9 @@ impl MetalRenderer {
                     if begin || !hit {
                         effects.groups.copy(command_buffer, texture, slot, begin);
                     }
+                    if !begin {
+                        effects.group_filter(command_buffer, slot);
+                    }
                     command_encoder = new_command_encoder_for_texture(
                         command_buffer,
                         texture,

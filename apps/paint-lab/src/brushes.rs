@@ -407,6 +407,18 @@ fn group_opacity_demo() -> impl IntoElement {
 }
 
 fn group_filter_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoElement {
+    let modes = [
+        ("Normal", BlendMode::Normal),
+        ("Multiply", BlendMode::Multiply),
+        ("Screen", BlendMode::Screen),
+        ("Overlay", BlendMode::Overlay),
+        ("Color dodge", BlendMode::ColorDodge),
+        ("Soft light", BlendMode::SoftLight),
+        ("Linear burn", BlendMode::LinearBurn),
+    ];
+    let (blend_label, blend_mode) = modes[lab.layer_blend_step];
+    let blur_radius = [0., 4., 8., 16.][lab.layer_blur_step];
+
     let (label, effect) = match lab.layer_filter_step {
         0 => (
             "Invert 100% · click to cycle",
@@ -516,18 +528,51 @@ fn group_filter_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl Int
                         .flex()
                         .flex_col()
                         .gap_2()
-                        .child("Brightness 0.55 · contrast 1.6")
                         .child(
-                            painted()
+                            super::button("layer-blend-cycle", format!("Blend: {blend_label}"))
+                                .on_click(cx.listener(|lab, _, _, cx| {
+                                    lab.layer_blend_step = (lab.layer_blend_step + 1) % 7;
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            super::button(
+                                "layer-blur-cycle",
+                                format!("Subtree blur: {blur_radius}px"),
+                            )
+                            .on_click(cx.listener(|lab, _, _, cx| {
+                                lab.layer_blur_step = (lab.layer_blur_step + 1) % 4;
+                                cx.notify();
+                            })),
+                        )
+                        .child(
+                            div()
+                                .relative()
                                 .w(px(176.))
                                 .h(px(112.))
-                                .layer_effect(
-                                    LayerEffect::brightness(0.55)
-                                        .unwrap()
-                                        .with_contrast(1.6)
-                                        .unwrap(),
+                                .bg(rgb(0xf4cc68))
+                                .child(
+                                    div()
+                                        .absolute()
+                                        .left(px(88.))
+                                        .top_0()
+                                        .w(px(88.))
+                                        .h_full()
+                                        .bg(rgb(0x349dba)),
                                 )
-                                .child(sample()),
+                                .child(
+                                    painted()
+                                        .relative()
+                                        .w(px(176.))
+                                        .h(px(112.))
+                                        .layer_effect(
+                                            LayerEffect::blend(blend_mode)
+                                                .unwrap()
+                                                .with_blur(px(blur_radius))
+                                                .unwrap(),
+                                        )
+                                        .child(sample()),
+                                ),
                         ),
                 ),
         )

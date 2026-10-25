@@ -5343,7 +5343,7 @@ impl Window {
         )
     }
 
-    /// Capture a subtree and apply saturation, brightness, contrast, inversion and opacity.
+    /// Capture a subtree and apply color filtering, group opacity and destination blending.
     /// Color operations reuse retained raw child pixels when commands match.
     pub fn with_layer_color_filter<R>(
         &mut self,
@@ -5364,6 +5364,8 @@ impl Window {
         }
         let scale = self.scale_factor();
         let capture = Arc::new(crate::LayerCapture {
+            blur_radius: crate::ScaledPixels(f32::from(color_filter.blur_radius) * scale),
+            blend_mode: color_filter.blend_mode,
             bounds: clipped.scale(scale),
             opacity: effective,
             saturation: color_filter.saturation,

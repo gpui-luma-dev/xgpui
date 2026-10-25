@@ -29,7 +29,7 @@ impl Backdrops {
             .next_power_of_two();
         let uniforms = device.create_buffer(&BufferDescriptor {
             label: Some("backdrop uniforms"),
-            size: stride * 20,
+            size: stride * 28,
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -230,6 +230,9 @@ impl Backdrops {
             size,
         )?;
         Ok(())
+    }
+    pub fn group_filter(&self, encoder: &mut CommandEncoder, slot: usize) {
+        self.groups.filter(encoder, &self.filter, self.stride, slot);
     }
     pub fn group_draw(&self, pass: &mut RenderPass<'_>, slot: usize, begin: bool) {
         self.groups

@@ -585,10 +585,13 @@ to the external backdrop needs a separate sampling contract.
 Limits are **four groups total per frame**, including nested groups; a maximum
 **1024×1024 device-pixel rectangle per group** after clipping; and at most
 65,536 retained descendant command identities per group. Each group retains two
-full-resolution RGBA8 textures, at most 8 MiB. Four groups retain at most 32 MiB
-plus at most 4 MiB of current/retained command identities. Together with four
-backdrop slots, retained working texture storage is at most 50 MiB. Replacing a group slot may transiently
-add 8 MiB; driver allocations and in-flight GPU references are excluded.
+full-resolution RGBA8 textures, at most 8 MiB, plus two optional blur textures
+only while its radius is positive. Four groups retain at most 32 MiB without
+subtree blur, or 64 MiB when all four use blur, plus at most 4 MiB of
+current/retained command identities. Including four backdrop slots, retained
+working texture storage is at most 50 MiB without subtree blur or 82 MiB with
+all groups blurred. Replacing a group slot can transiently retain the old slot;
+driver allocations and in-flight GPU references are excluded.
 Captures require SDR unorm presentation and framebuffer copy support. These
 limits also apply at zero opacity.
 
@@ -818,11 +821,119 @@ cargo test --locked --config .cargo/validation.toml \
   --features wgpu,portable-shaders --lib brush::tests::path_tests
 ```
 
+## Destination blend modes
+
+```rust,ignore
+use xgpui_shader::{BlendMode, LayerEffect, painted};
+
+painted()
+    .layer_effect(LayerEffect::blend(BlendMode::Multiply)?)
+    .child(content);
+let filtered_blend = LayerEffect::opacity(0.7)?
+    .with_invert(0.3)?
+    .with_blend_mode(BlendMode::Screen);
+```
+
+`LayerEffect::blend` and `with_blend_mode` apply Normal, Multiply, Screen,
+Overlay, ColorDodge, SoftLight or LinearBurn to the completed isolated subtree
+and its current saved destination. Brush noise uses the same mode names for
+material-local modulation; `LayerEffect` reads actual destination pixels.
+Filters run first, followed by group opacity, blending, and source-over alpha
+composition. Operations use encoded sRGB. Overlay branches on destination color;
+ColorDodge and SoftLight follow the separable functions in
+[W3C Compositing and Blending](https://www.w3.org/TR/compositing-1/#blending).
+LinearBurn uses `max(0, source + destination - 1)` on straight channels.
+
+For associated source `s`, destination `d`, straight-color blend function `B`,
+and alpha values `as`, `ad`, composition is:
+
+```text
+rgb = (1-ad)*s.rgb + (1-as)*d.rgb + as*ad*B(d.rgb/ad, s.rgb/as)
+alpha = as + ad*(1-as)
+```
+
+Zero-alpha terms are handled without division. Transparent destination pixels
+retain source color, transparent source pixels retain destination color, and
+blending preserves the normal source-over alpha result.
+
+This reuses the existing saved destination and raw source textures, six-float4
+uniform block and composition pass on Metal, wgpu and D3D11. Blending shares the final composition pass; group blur working textures are
+described below. Mode edits reuse retained raw child pixels, and destination
+pixels are captured afresh even on cache hits. Nested mode edits invalidate the
+containing group's captured pixels. Existing SDR, four-group, 1024-device-pixel
+side and ancestor-clip limits still apply. A nested blend sees its containing
+isolated group's pixels, rather than content outside that group.
+
+Paint-lab's captured-color section has a **Blend** button that cycles all seven
+modes against a yellow/cyan destination. It replaces one existing captured card
+to stay within the four-group limit. Reference tests cover opaque, partial and
+zero alpha, opacity, singular color-dodge inputs, nested isolation, cache reuse,
+changed destinations, filter order, inherited opacity and ancestor clipping.
+
+```sh
+cargo test --locked --config .cargo/validation.toml \
+  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --features wgpu,portable-shaders --lib destination_blend
+```
+
+## Subtree blur
+
+```rust,ignore
+let softened = LayerEffect::blur(px(8.))?;
+let combined = LayerEffect::opacity(0.7)?
+    .with_blur(px(8.))?
+    .with_saturation(0.5)?
+    .with_blend_mode(BlendMode::Screen);
+```
+
+`LayerEffect::blur` and `with_blur` accept a finite Gaussian support radius in
+`[0,16]` logical pixels, bounded to 64 device pixels after scaling. Zero disables
+blur. The standard deviation is `radius / 3`, floored at 0.1 device pixels for
+very small radii; each axis samples the integer offsets through `ceil(radius)`.
+Two full-resolution passes filter premultiplied encoded-sRGB RGBA, with an
+8-bit intermediate and normalized Gaussian weights. Pixels outside the capture
+are transparent, so edge coverage fades instead of repeating edge colors.
+
+The layer's own bounds and ancestor clip define the crop. This first version
+does not expand layout or add an outward blur halo, and does not include content
+outside the crop. Use padding inside the captured layer if a child needs room
+for its blur. Order is completed subtree → blur → saturation → brightness →
+contrast → inversion → group opacity → destination blend/source-over.
+
+Group slots retain the saved destination and raw subtree. A positive radius
+allocates two additional bounded textures for horizontal scratch and the blurred
+subtree; returning to zero releases those textures and their bindings while
+preserving the raw capture. Re-enabling blur recreates the working textures and
+reruns filtering. With four 1024×1024 BGRA8 groups, this is at most 32 MiB without
+blur or 64 MiB with blur on all groups. Zero radius skips filter passes. A positive
+radius adds two passes when raw source pixels or radius change; unchanged raw
+pixels and radius reuse the blurred result even when opacity, color filters,
+blend mode or destination change. Radius-only edits reuse raw source pixels and
+rerun the filters; nested radius edits invalidate their containing raw capture.
+Existing live-producer and capture limits still apply.
+
+In paint-lab, leave **Blend: Normal** selected and click **Subtree blur** to cycle
+0 → 4 → 8 → 16 → 0 pixels. Both colored shapes and text soften, while the
+underlying yellow/cyan destination and neighboring cards remain sharp. Returning
+to zero restores the original appearance. Blend and blur controls can be combined.
+
+Tests compare both GPU backends against an independent Gaussian reference at
+1×, 1.5× and 2×, including translucent overlap, cropped edges, opacity, filter
+and destination composition, nested cache invalidation and live radius edits.
+
+```sh
+cargo test --locked --config .cargo/validation.toml \
+  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --features wgpu,portable-shaders --lib subtree_blur
+```
+
 ## Later milestones
 
-Batched/direct single-pass brushed paths, point sets above 16 or dynamically
+Direct single-pass brushed paths, point sets above 16 or dynamically
 transported larger point sets,
-biharmonic diffusion, more general distortion and grids larger than 3x3, additional
-subtree post-processing filters, destination blend modes remain follow-up work. Group opacity, saturation, grayscale, brightness, contrast and inversion use the isolated
+biharmonic diffusion, more general distortion and grids larger than 3x3,
+backdrop sampling inside groups and further subtree filters remain follow-up work.
+Group opacity, subtree blur, color filters
+and destination blending use the isolated
 subtree boundary and its retained raw-result cache; further filters remain
 separate additions.

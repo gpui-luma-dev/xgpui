@@ -2,7 +2,8 @@ use super::*;
 use gpui::{LayerCacheStats, LayerPlan};
 struct Slot {
     size: [u32; 2],
-    textures: [TextureBundle; 2],
+    // Saved destination, raw subtree, horizontal scratch, filtered subtree.
+    textures: Vec<TextureBundle>,
     retained: Option<LayerPlan>,
 }
 #[derive(Default)]
@@ -23,21 +24,9 @@ impl Groups {
         self.hits.clear();
         for (i, p) in self.plans.iter().enumerate() {
             if self.slots.get(i).is_none_or(|s| s.size != p.size) {
-                let make = || {
-                    allocate_texture_limited(
-                        device,
-                        gpui::size(
-                            DevicePixels(p.size[0] as i32),
-                            DevicePixels(p.size[1] as i32),
-                        ),
-                        DXGI_FORMAT_B8G8R8A8_UNORM,
-                        4,
-                        4 * 1024 * 1024,
-                    )
-                };
                 let slot = Slot {
                     size: p.size,
-                    textures: [make()?, make()?],
+                    textures: Vec::new(),
                     retained: None,
                 };
                 if i == self.slots.len() {
@@ -45,6 +34,27 @@ impl Groups {
                 } else {
                     self.slots[i] = slot
                 }
+            }
+            let slot = &mut self.slots[i];
+            let count = if p.blur_radius > 0. { 4 } else { 2 };
+            if slot.textures.len() != count {
+                // Keep raw pixels; recreated blur targets need fresh filtering.
+                if let Some(old) = &mut slot.retained {
+                    old.blur_radius = 0.;
+                }
+            }
+            slot.textures.truncate(count);
+            while slot.textures.len() < count {
+                slot.textures.push(allocate_texture_limited(
+                    device,
+                    gpui::size(
+                        DevicePixels(p.size[0] as i32),
+                        DevicePixels(p.size[1] as i32),
+                    ),
+                    DXGI_FORMAT_B8G8R8A8_UNORM,
+                    4,
+                    4 * 1024 * 1024,
+                )?);
             }
             self.hits.push(
                 self.slots[i]
@@ -119,6 +129,33 @@ impl Groups {
                     }),
                 );
             }
+            if !begin && p.needs_blur(self.slots[slot].retained.as_ref()) {
+                for axis in 0..2 {
+                    let params = &p.parameters[axis + 2];
+                    let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+                    dc.Map(uniform, 0, D3D11_MAP_WRITE_DISCARD, 0, Some(&mut mapped))?;
+                    std::ptr::copy_nonoverlapping(
+                        params.as_ptr().cast::<u8>(),
+                        mapped.pData.cast(),
+                        96,
+                    );
+                    dc.Unmap(uniform, 0);
+                    dc.VSSetConstantBuffers(0, Some(&[Some(uniform.clone())]));
+                    dc.PSSetConstantBuffers(0, Some(&[Some(uniform.clone())]));
+                    dc.OMSetRenderTargets(Some(&[Some(textures[axis + 2].rtv.clone())]), None);
+                    dc.RSSetViewports(Some(&[viewport(textures[axis + 2].extent)]));
+                    dc.PSSetShaderResources(
+                        0,
+                        Some(&[
+                            Some(textures[axis + 1].srv.clone()),
+                            Some(textures[0].srv.clone()),
+                        ]),
+                    );
+                    dc.Draw(6, 0);
+                    dc.PSSetShaderResources(0, Some(&[None, None]));
+                    dc.OMSetRenderTargets(None, None);
+                }
+            }
             if !begin || !hit {
                 let params = &p.parameters[usize::from(!begin)];
                 let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
@@ -135,7 +172,10 @@ impl Groups {
                 dc.RSSetViewports(Some(&[viewport(size)]));
                 dc.PSSetShaderResources(
                     0,
-                    Some(&[Some(textures[1].srv.clone()), Some(textures[0].srv.clone())]),
+                    Some(&[
+                        Some(textures[if p.blur_radius > 0. { 3 } else { 1 }].srv.clone()),
+                        Some(textures[0].srv.clone()),
+                    ]),
                 );
                 dc.Draw(6, 0);
                 dc.PSSetShaderResources(0, Some(&[None, None]));
@@ -154,8 +194,8 @@ impl Groups {
                 self.stats.hits += 1;
             } else {
                 self.stats.captures += 1;
-                self.slots[slot].retained = Some(self.plans[slot].clone());
             }
+            self.slots[slot].retained = Some(self.plans[slot].clone());
         }
     }
 }

@@ -11,6 +11,8 @@ fn viewport() -> ContentMask<ScaledPixels> {
 }
 fn capture(opacity: f32) -> Arc<LayerCapture> {
     Arc::new(LayerCapture {
+        blur_radius: ScaledPixels(0.),
+        blend_mode: gpui::LayerBlendMode::Normal,
         bounds: Bounds::new(point(px(8.), px(8.)), size(px(80.), px(48.))).scale(1.),
         opacity,
         saturation: 1.,
@@ -126,6 +128,8 @@ fn layer_validation_replay_revisions_and_limits() {
         bounds: Bounds::new(point(px(0.), px(0.)), size(px(2048.), px(2048.))).scale(1.),
     };
     let large = Arc::new(LayerCapture {
+        blur_radius: ScaledPixels(0.),
+        blend_mode: gpui::LayerBlendMode::Normal,
         bounds: full.bounds,
         opacity: 1.,
         saturation: 1.,
@@ -669,3 +673,9 @@ fn cached_child_view_reuses_capture_until_notified_and_handles_zero_opacity() {
 
 #[path = "layer_filter_tests.rs"]
 mod filter_tests;
+
+#[path = "layer_blend_tests.rs"]
+mod blend_tests;
+
+#[path = "layer_blur_tests.rs"]
+mod blur_tests;

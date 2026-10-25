@@ -26,7 +26,63 @@ struct Varying { @builtin(position) screen: vec4<f32>, @location(0) uv: vec2<f32
  out.uv = p.uv.xy + uv * p.uv.zw;
  return out;
 }
+// Separable blend functions take straight RGB: destination first, source second.
+fn blend_channel(b: f32, s: f32, mode: u32) -> f32 {
+ switch mode {
+  case 1u: { return b * s; }
+  case 2u: { return b + s - b * s; }
+  case 3u: {
+   if b <= 0.5 { return 2. * b * s; }
+   return 1. - 2. * (1. - b) * (1. - s);
+  }
+  case 4u: {
+   if b == 0. { return 0.; }
+   if s >= 1. { return 1.; }
+   return min(1., b / (1. - s));
+  }
+  case 5u: {
+   if s <= 0.5 { return b - (1. - 2. * s) * b * (1. - b); }
+   var d = sqrt(b);
+   if b <= 0.25 { d = ((16. * b - 12.) * b + 4.) * b; }
+   return b + (2. * s - 1.) * (d - b);
+  }
+  case 6u: { return max(0., b + s - 1.); }
+  default: { return s; }
+ }
+}
+fn blend_group(source: vec4<f32>, destination: vec4<f32>, mode: u32) -> vec4<f32> {
+ if mode == 0u { return source + destination * (1. - source.a); }
+ // Transparent colors never participate in the blend term; avoid tiny-alpha
+ // divisions while preserving source-only and destination-only contributions.
+ if source.a <= 0. { return destination; }
+ if destination.a <= 0. { return source; }
+ let s = clamp(source.rgb / source.a, vec3(0.), vec3(1.));
+ let b = clamp(destination.rgb / destination.a, vec3(0.), vec3(1.));
+ let blended = vec3(blend_channel(b.r,s.r,mode), blend_channel(b.g,s.g,mode), blend_channel(b.b,s.b,mode));
+ return vec4(source.rgb * (1. - destination.a) + destination.rgb * (1. - source.a)
+     + source.a * destination.a * blended, source.a + destination.a * (1. - source.a));
+}
 @fragment fn backdrop_fragment(v: Varying) -> @location(0) vec4<f32> {
+ // Full-resolution separable Gaussian on associated RGBA. Outside the crop
+ // is transparent; normalize against the complete kernel to avoid edge smearing.
+ if p.viewport.z == 5. {
+  let radius = p.metrics.z;
+  let support = i32(ceil(radius));
+  let sigma = max(radius / 3., 0.1);
+  let center = vec2<i32>(v.screen.xy);
+  let direction = vec2<i32>(p.metrics.xy);
+  let dimensions = vec2<i32>(textureDimensions(image));
+  var color = vec4(0.); var total = 0.;
+  for (var i = -support; i <= support; i += 1) {
+   let weight = exp(-0.5 * f32(i * i) / (sigma * sigma));
+   let texel = center + direction * i;
+   if all(texel >= vec2(0)) && all(texel < dimensions) {
+    color += textureLoad(image,texel,0) * weight;
+   }
+   total += weight;
+  }
+  return color / total;
+ }
  // Clear the isolated crop without blending. Composition later restores the
  // saved background and applies opacity once to the completed group.
  if p.viewport.z == 3. { return vec4(0.); }
@@ -45,7 +101,7 @@ struct Varying { @builtin(position) screen: vec4<f32>, @location(0) uv: vec2<f32
   let inverted = mix(contrasted,vec3(captured.a)-contrasted,p.radii.z);
   let group = vec4(inverted,captured.a) * p.metrics.z;
   let destination = sample_image(original,v.uv);
-  return group + destination * (1. - group.a);
+  return blend_group(group, destination, u32(p.radii.w));
  }
  if p.viewport.z < 2. {
   let step = p.metrics.xy / vec2<f32>(textureDimensions(image));

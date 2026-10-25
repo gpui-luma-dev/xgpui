@@ -10,9 +10,35 @@ pub const MAX_LAYER_SIDE: u32 = 1024;
 /// Maximum retained command identities per group.
 pub const MAX_LAYER_COMMANDS: usize = 65_536;
 
-/// Encoded-sRGB color operations, applied in saturation/brightness/contrast/inversion order.
+/// Blend a completed isolated subtree with its saved destination in encoded sRGB.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum LayerBlendMode {
+    /// Ordinary source-over composition.
+    #[default]
+    Normal = 0,
+    /// Multiply straight source and destination RGB.
+    Multiply = 1,
+    /// Complementary multiply.
+    Screen = 2,
+    /// Multiply/screen selected by destination RGB.
+    Overlay = 3,
+    /// Brighten destination by dividing by complementary source RGB.
+    ColorDodge = 4,
+    /// Smooth source-controlled darkening or lightening.
+    SoftLight = 5,
+    /// Clamp source plus destination minus one.
+    LinearBurn = 6,
+}
+
+/// Encoded-sRGB color operations in saturation/brightness/contrast/inversion order,
+/// followed by group opacity and destination blending.
 #[derive(Clone, Copy, Debug)]
 pub struct LayerColorFilter {
+    /// Gaussian support radius in logical pixels; zero disables blur.
+    pub blur_radius: Pixels,
+    /// Destination blend, applied after filtering and group opacity.
+    pub blend_mode: LayerBlendMode,
     /// Saturation in [0,2], with 1 unchanged.
     pub saturation: f32,
     /// Brightness multiplier in [0,2], with 1 unchanged.
@@ -25,6 +51,8 @@ pub struct LayerColorFilter {
 impl Default for LayerColorFilter {
     fn default() -> Self {
         Self {
+            blur_radius: px(0.),
+            blend_mode: LayerBlendMode::Normal,
             saturation: 1.,
             brightness: 1.,
             contrast: 1.,
@@ -36,6 +64,10 @@ impl Default for LayerColorFilter {
 /// Immutable capture description shared by its paired scene boundaries.
 #[derive(Debug)]
 pub struct LayerCapture {
+    /// Gaussian support radius in device pixels, in [0,64].
+    pub blur_radius: ScaledPixels,
+    /// Destination blend for the completed group.
+    pub blend_mode: LayerBlendMode,
     /// Physical capture bounds, already intersected with ancestor masks.
     pub bounds: Bounds<ScaledPixels>,
     /// Opacity of the completed group, including inherited opacity exactly once.
@@ -76,8 +108,10 @@ pub struct LayerPlan {
     pub origin: [u32; 2],
     /// Physical texture extent.
     pub size: [u32; 2],
-    /// Clear and group-composition uniform blocks (six float4 values each).
-    pub parameters: [[[f32; 4]; 6]; 2],
+    /// Clear, composition, horizontal and vertical blur blocks (six float4 each).
+    pub parameters: [[[f32; 4]; 6]; 4],
+    /// Device-pixel Gaussian support radius; zero skips filter passes.
+    pub blur_radius: f32,
     /// Exact immutable command identities; preserved by Scene::replay.
     pub revision: Arc<[u64]>,
     /// Live external content cannot use retained filtered results.
@@ -114,7 +148,8 @@ impl LayerPlan {
                 capture.saturation,
                 capture.brightness,
                 capture.contrast,
-                capture.invert
+                capture.invert,
+                capture.blur_radius.0
             ]
             .iter()
             .all(|v| v.is_finite()),
@@ -162,7 +197,11 @@ impl LayerPlan {
             size.iter().all(|v| *v > 0 && *v <= MAX_LAYER_SIDE),
             "layer capture must fit within 1024x1024 device pixels"
         );
-        let mut parameters = [[[0.; 4]; 6]; 2];
+        ensure!(
+            (0. ..=64.).contains(&capture.blur_radius.0),
+            "layer blur radius must be in [0,64] device pixels"
+        );
+        let mut parameters = [[[0.; 4]; 6]; 4];
         for pass in 0..2 {
             parameters[pass][0] = [
                 viewport.width.0 as f32,
@@ -185,9 +224,26 @@ impl LayerPlan {
             ];
             parameters[pass][4][2] = capture.opacity;
             parameters[pass][4][3] = capture.saturation;
-            parameters[pass][5] = [capture.brightness, capture.contrast, capture.invert, 0.];
+            parameters[pass][5] = [
+                capture.brightness,
+                capture.contrast,
+                capture.invert,
+                capture.blend_mode as u8 as f32,
+            ];
+        }
+        for pass in 0..2 {
+            parameters[pass + 2][0] = [size[0] as f32, size[1] as f32, 5., 0.];
+            parameters[pass + 2][1] = [0., 0., size[0] as f32, size[1] as f32];
+            parameters[pass + 2][2] = [0., 0., 1., 1.];
+            parameters[pass + 2][4] = [
+                if pass == 0 { 1. } else { 0. },
+                if pass == 1 { 1. } else { 0. },
+                capture.blur_radius.0,
+                0.,
+            ];
         }
         Ok(Self {
+            blur_radius: capture.blur_radius.0,
             begin_index,
             end_index: 0,
             origin,
@@ -196,6 +252,12 @@ impl LayerPlan {
             revision: Arc::from([]),
             reusable: true,
         })
+    }
+    /// Whether the two Gaussian passes must run for this frame. Raw child pixels
+    /// can survive radius edits, but filtered pixels must match the current radius.
+    pub fn needs_blur(&self, previous: Option<&Self>) -> bool {
+        self.blur_radius > 0.
+            && previous.is_none_or(|old| !self.matches(old) || old.blur_radius != self.blur_radius)
     }
     /// Whether a previous raw capture is safe to reuse. Own opacity/color filters
     /// are evaluated at composition and do not invalidate the raw child pixels.

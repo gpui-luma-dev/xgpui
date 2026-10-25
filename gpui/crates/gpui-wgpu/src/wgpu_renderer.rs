@@ -1738,6 +1738,9 @@ impl WgpuRendererCore {
                                 .groups
                                 .copy(&mut encoder, &frame_view.texture(), slot, begin);
                         }
+                        if !begin {
+                            effects.group_filter(&mut encoder, slot);
+                        }
                         pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("captured group boundary"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {

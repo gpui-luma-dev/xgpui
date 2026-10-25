@@ -108,6 +108,9 @@ impl Backdrops {
         self.groups.prepare(device, scene, size)?;
         Ok(())
     }
+    pub fn group_filter(&self, cb: &CommandBufferRef, slot: usize) {
+        self.groups.filter(cb, &self.filter, slot);
+    }
     pub fn group_draw(&self, e: &RenderCommandEncoderRef, slot: usize, begin: bool) {
         self.groups.draw(e, &self.filter, slot, begin)
     }

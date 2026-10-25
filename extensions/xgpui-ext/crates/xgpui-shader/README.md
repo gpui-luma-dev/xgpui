@@ -63,9 +63,16 @@ color after saturation. Combine setters with `with_brightness` and `with_contras
 all color operations preserve alpha and reuse retained raw child pixels.
 `LayerEffect::invert(1.)` complements completed subtree RGB after contrast;
 `with_invert(0.5)` produces mid-gray while preserving coverage.
+`LayerEffect::blend(BlendMode::Multiply)?` blends the completed subtree against
+saved destination pixels. `with_blend_mode` combines all seven modes with group
+filters and opacity, reusing capture textures and retained raw pixels.
+`LayerEffect::blur(px(8.))?` or `with_blur(px(8.))?` softens the completed subtree
+before color filters. Radius is bounded to 16 logical / 64 physical pixels and
+blur stays inside the layer crop. Unchanged source/radius reuse filtered pixels;
+radius edits reuse raw source pixels and rerun two separable Gaussian passes.
 `brush.paint_path(window, path)?` colors native tessellated fills and strokes,
 including curves and holes. It reuses the native path coverage target and pass,
-with one coverage batch per brushed path; the brush evaluates in the main target.
+with compatible disjoint paths sharing coverage batches; the brush evaluates in the main target.
 Freeform brushes accept up to 16 points; sets above three specialize a full-precision
 program and should be retained rather than rebuilt for per-frame animation.
 `Brush::hermite_patch(points)` and `Brush::hermite_mesh(width, height, points)`

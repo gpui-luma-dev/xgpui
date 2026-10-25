@@ -13,8 +13,9 @@ pub enum NoiseKind {
     /// Toroidal 16x16 blue-noise tile at physical pixel resolution; one octave.
     Dither,
 }
-/// Blend the procedural grayscale signal with the brush's own RGB. These modes
-/// never read or blend against the destination framebuffer; brush alpha is retained.
+/// Separable RGB blend operation. `Brush::with_noise` blends a procedural signal
+/// within the brush and preserves alpha. `LayerEffect::blend` instead blends the
+/// completed subtree with saved destination pixels using source-over alpha.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BlendMode {
     Normal,

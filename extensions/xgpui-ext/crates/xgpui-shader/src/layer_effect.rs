@@ -90,6 +90,40 @@ impl LayerEffect {
         self.color_filter.invert = amount;
         Ok(self)
     }
+    /// Blur the completed subtree within its clipped bounds.
+    /// Radius is the Gaussian kernel support in logical pixels, in [0,16].
+    pub fn blur(radius: Pixels) -> Result<Self> {
+        Self::opacity(1.)?.with_blur(radius)
+    }
+    /// Set blur before color filtering, opacity and destination blending.
+    /// The physical support radius must fit within 64 device pixels.
+    pub fn with_blur(mut self, radius: Pixels) -> Result<Self> {
+        let value = f32::from(radius);
+        ensure!(
+            value.is_finite() && (0. ..=16.).contains(&value),
+            "layer blur radius must be in [0,16] logical pixels"
+        );
+        self.color_filter.blur_radius = radius;
+        Ok(self)
+    }
+    /// Blend the completed subtree with destination pixels, in encoded sRGB.
+    /// Filtering and group opacity are applied before source-over blending.
+    pub fn blend(mode: crate::BlendMode) -> Result<Self> {
+        Ok(Self::opacity(1.)?.with_blend_mode(mode))
+    }
+    /// Set the destination blend without invalidating retained raw child pixels.
+    pub fn with_blend_mode(mut self, mode: crate::BlendMode) -> Self {
+        self.color_filter.blend_mode = match mode {
+            crate::BlendMode::Normal => LayerBlendMode::Normal,
+            crate::BlendMode::Multiply => LayerBlendMode::Multiply,
+            crate::BlendMode::Screen => LayerBlendMode::Screen,
+            crate::BlendMode::Overlay => LayerBlendMode::Overlay,
+            crate::BlendMode::ColorDodge => LayerBlendMode::ColorDodge,
+            crate::BlendMode::SoftLight => LayerBlendMode::SoftLight,
+            crate::BlendMode::LinearBurn => LayerBlendMode::LinearBurn,
+        };
+        self
+    }
     pub(crate) fn paint<R>(
         &self,
         window: &mut Window,
