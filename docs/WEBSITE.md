@@ -149,3 +149,17 @@ normal Pages workflow; local regeneration alone does not update the public site.
 
 - [x] Update the web docs crate list with `xgpui-color`, including its standalone
   color-math role and dependency relationships; regenerate and verify the site.
+
+
+## Color runtime diagnostics and desktop comparison
+
+The Color / Gamut browser demo is linked from the Extensions overview and color
+crate Use guide. It reports P3 source endpoints, sRGB mapping, renderer canvas
+color space (or unknown), and `(color-gamut: p3)` display capability. Native P3
+output is demonstrated by `color-lab`, with paired sRGB/P3 reference swatches and
+window negotiation status. Launch instructions and interpretation are maintained
+in `extensions/color-math.md`, `extensions/high-gamut-windows.md` and the native
+app README, with a link from the instanced WGSL guide. These are demo additions;
+no new GPUI API or crate dependencies between extension libraries are introduced.
+Rebuild the Wasm assets for runtime changes and regenerate the site for guide
+changes before previewing or publishing. The sidebar wordmark has no boxed icon.

@@ -241,6 +241,29 @@ impl Window {
 milestone. Default trait methods preserve platforms without overrides. Additive
 method names can still collide with downstream extension methods.
 
+## Compare sRGB and native Display P3
+
+The desktop color companion uses `WidePainter` to display native P3 swatches
+beside ordinary mapped sRGB swatches. Both use the same 32 CPU reference samples
+as the browser Color / Gamut demo: encoded sRGB, linear RGB, OkLab and shorter-hue
+OkLCh. Change endpoint presets, gamut mapping and end alpha interactively.
+
+```sh
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --bin color-lab
+```
+
+Move the window to your P3 monitor and check `Effective: WideGamutSdr` and
+`Display wide gamut: Some(true)`. `None` means display capability is unknown.
+macOS Metal runtime presentation was checked; Windows cross-compilation passes,
+while Windows native execution and physical display acceptance remain separate.
+The status reports negotiation and capability, not calibrated color accuracy.
+
+The [browser comparison and runtime diagnostics](color-math.md#browser-color--gamut-lab)
+remain an sRGB preview. A P3-capable display alone does not change its output:
+WebGL reads `drawingBufferColorSpace`, and WebGPU queries its canvas configuration
+where supported. Unavailable queries report unknown. Screenshots cannot prove
+physical P3 output.
+
 ## Run gamut-lab
 
 ```sh

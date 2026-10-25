@@ -18,7 +18,8 @@ Compared with pre-feature main `9b64657`. **Opt-in usage does not mean zero SDK 
 
 Paint recording is shared infrastructure; window color negotiation is specific
 to wide-gamut presentation. Parley uses the existing glyph atlas, not custom-draw
-or wide-gamut APIs. Extensions do not depend on each other.
+or wide-gamut APIs. The color math crate is standalone. Gamut depends on color and optionally uses
+shader for instanced drawing; shader does not depend on gamut or color.
 
 ## ADDED text backend and paragraph seams
 

@@ -219,7 +219,7 @@
     "short": "xgpui-gamut",
     "group": "Extensions",
     "role": "Explicit linear-P3 SDR content producers; normal GPUI controls retain sRGB semantics.",
-    "surface": "WideColor::linear_p3 supports CustomContent; optional instanced WidePainter/WideGradient use explicit P3 shaders. Shared color math lives in xgpui-color; GPUI backends own presentation.",
+    "surface": "WideColor::linear_p3 supports CustomContent; optional instanced WidePainter/WideGradient use explicit P3 shaders. Shared color math lives in xgpui-color; GPUI backends own presentation. Native color-lab compares P3 and mapped sRGB reference swatches with effective window/display status.",
     "review": "Keep profile decoding and future content producers separate from host presentation. Windows native swap-chain/display validation remains outstanding; Linux is deferred.",
     "entry": "src/lib.rs"
   },
@@ -243,7 +243,7 @@
     "short": "xgpui-color",
     "group": "Extensions",
     "role": "Standalone CPU color science and reusable WGSL math, with zero runtime dependencies.",
-    "surface": "EncodedRgb, LinearRgb, RgbSpace, XyzD65, Oklab, Oklch, GamutMapping, LinearRgba, LinearGradient and WGSL_COLOR_MATH. No GPUI or GPU context required.",
+    "surface": "EncodedRgb, LinearRgb, RgbSpace, XyzD65, Oklab, Oklch, GamutMapping, LinearRgba, LinearGradient and WGSL_COLOR_MATH. No GPUI or GPU context required. Browser color demo reports its sRGB canvas separately from P3 display capability; a native companion displays paired sRGB/P3 samples.",
     "review": "Keep conversion separate from gamut mapping and rendering. Preserve finite extended values, explicit alpha/hue rules and CPU/GPU reference tolerances.",
     "entry": "src/lib.rs"
   }

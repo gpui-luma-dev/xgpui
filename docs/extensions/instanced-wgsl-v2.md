@@ -389,3 +389,13 @@ of the next buffer can block before submission is reached. See
 The instanced path records no per-producer buffers and avoids this cycle.
 Changing legacy preparation/submission semantics is deferred; no timing is
 inferred for the stalled case.
+
+
+### Native P3 comparison companion
+
+Use [color-lab](high-gamut-windows.md#compare-srgb-and-native-display-p3) to compare
+`WidePainter` P3 swatches with ordinary sRGB UI colors using the same CPU reference
+samples as the browser Color / Gamut demo. The native header reports effective
+window mode and display capability. The browser version maps to sRGB and reports
+its actual canvas color space separately from advertised display gamut; see
+[runtime diagnostics](color-math.md#runtime-output-diagnostics-and-native-comparison).

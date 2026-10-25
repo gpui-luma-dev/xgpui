@@ -11,6 +11,13 @@ function extensionTitle(route) {
 function browserDemoLinks(demo) {
   return '<p><a href="examples/extensions/?demo=' + demo + '">Run browser demo →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>';
 }
+function colorDemoLinks() {
+  return '<h2>Color comparison · browser and native desktop</h2>' +
+    browserDemoLinks('color') +
+    '<p>The browser compares interpolation and gamut mapping as an sRGB preview. Its runtime panel reports source space, mapping, actual canvas color space (or unknown) and browser-reported P3 display capability.</p>' +
+    extensionCode('sh', 'cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --bin color-lab') +
+    '<p>The native companion pairs mapped sRGB and Display P3 swatches using the same 32 reference samples per row. Check effective <code>WideGamutSdr</code> and display support, then compare on your P3 monitor. Display capability does not verify calibration.</p>';
+}
 function instancedDemoLinks() {
   return '<h2>Instanced WGSL v2 · native app first</h2>' +
     '<p>Typed fragment instances, ordered batching, configurable gradient shadows, soft animated borders and direct main-pass rendering. Experimental SDR subset; Windows runtime acceptance remains outstanding.</p>' +
@@ -42,7 +49,7 @@ function extensionPage(route) {
       : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
-    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'color-math' ? browserDemoLinks('color') : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
+    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
   return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation, text and SVG extensions.') + banner +
     '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>' +
@@ -69,12 +76,13 @@ MetalWideSdrOutput::from_linear_p3_premultiplied(context, texture, commands)?;`)
     '<div class="cards">' + extensionCard('high-gamut-windows', 'Start here: window setup, complete Metal producer, color contract, composition and validation.') + '</div>' +
     extensionCode('sh', `just --justfile apps/gamut-lab/justfile ui
 just --justfile apps/gamut-lab/justfile test`) +
+    colorDemoLinks() +
     '<h2>3. Parley text</h2><p>Shared text backend with flat-LTR compatibility, BiDi paragraph layout and editing/IME geometry. Existing GPUI caches and glyph atlas; Windows/Linux runtime validation remains outstanding.</p>' +
     '<div class="cards">' + extensionCard('parley-text', 'Construction, paragraph/input seams, cache and face identity, supported subset and validation.') + '</div>' +
     '<h2>4. Progressive SVG</h2><p>Experimental full-color static SVG elements with preview/detail refinement, shared FIFO admission and aggregate image accounting. Native lab and attributed offline samples; smaller budgets reduce deep-zoom detail.</p>' +
     '<div class="cards">' + extensionCard('svg-rendering', 'Use SvgImage and SvgScheduler, understand accounting limits, and run the native sample.') + '</div>' +
     '<h2>5. Standalone color math</h2><p><code>xgpui-color</code> provides color conversions, gamut mapping, OkLab/OkLCh interpolation and reusable WGSL helpers with zero runtime dependencies. Use it without GPUI or a GPU context.</p>' +
-    '<div class="cards">' + extensionCard('color-math', 'CPU types, usage, dependency boundaries and validation.') + '</div>' +
+    '<div class="cards">' + extensionCard('color-math', 'CPU types, browser runtime diagnostics, native P3 comparison, dependency boundaries and validation.') + '</div>' +
     '<h2>Shared GPUI integration</h2><div class="cards">' + extensionCard('gpui-public-api', 'Public additions and altered upstream types, separated by capability.') + '</div>';
 
 }
