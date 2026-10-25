@@ -47,7 +47,7 @@ pub use instanced::WindowShaderExt;
 #[cfg(feature = "portable-shaders")]
 pub mod brush;
 #[cfg(feature = "portable-shaders")]
-pub use brush::{BlendMode, Brush, BrushPoint, BrushStop, Noise, NoiseKind};
+pub use brush::{BlendMode, Brush, BrushMeshPoint, BrushPoint, BrushStop, Noise, NoiseKind};
 
 #[cfg(feature = "portable-shaders")]
 mod backdrop;

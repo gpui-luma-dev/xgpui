@@ -94,26 +94,43 @@ impl Brush {
         brush.parameters.options[0] = -4.;
         Ok(brush)
     }
-    /// Convert a regular 2x2 legacy grid without changing its opaque color field.
-    /// Unsupported geometry returns an error instead of silently flattening it.
+    /// Convert a 2x2 through 3x3 legacy grid without changing its opaque color field.
+    /// A regular 2x2 grid shares the inline mesh program. Other accepted grids use
+    /// the certified Hermite inverse; unsupported geometry returns an error.
     #[cfg(any(target_os = "macos", target_os = "windows", feature = "wgpu"))]
     pub fn from_mesh_grid(grid: &crate::MeshGrid) -> Result<Self> {
         ensure!(
-            grid.width() == 2 && grid.height() == 2,
-            "main-pass mesh brushes require a regular 2x2 grid; use MeshGradient for larger grids"
+            (2..=3).contains(&grid.width()) && (2..=3).contains(&grid.height()),
+            "direct mesh brushes require 2..=3 rows and columns; use MeshGradient for larger grids"
         );
-        for (index, point) in grid.points().iter().enumerate() {
-            ensure!(
-                point.position == [(index % 2) as f32, (index / 2) as f32]
-                    && point.u_tangent == [1., 0.]
-                    && point.v_tangent == [0., 1.],
-                "main-pass mesh brushes require regular geometry; use MeshGradient for distorted grids"
-            );
+        let regular = grid.width() == 2
+            && grid.height() == 2
+            && grid.points().iter().enumerate().all(|(index, p)| {
+                p.position == [(index % 2) as f32, (index / 2) as f32]
+                    && p.u_tangent == [1., 0.]
+                    && p.v_tangent == [0., 1.]
+            });
+        if regular {
+            return Self::mesh(std::array::from_fn(|i| {
+                let c = grid.points()[i].color;
+                [c[0], c[1], c[2], 1.]
+            }));
         }
-        Self::mesh(std::array::from_fn(|index| {
-            let color = grid.points()[index].color;
-            [color[0], color[1], color[2], 1.]
-        }))
+        Self::hermite_mesh(
+            grid.width(),
+            grid.height(),
+            grid.points()
+                .iter()
+                .map(|p| {
+                    BrushMeshPoint::new(
+                        p.position,
+                        p.u_tangent,
+                        p.v_tangent,
+                        [p.color[0], p.color[1], p.color[2], 1.],
+                    )
+                })
+                .collect(),
+        )
     }
 }
 

@@ -90,6 +90,8 @@ fn path_brush_fields_match_rect_fields_times_native_coverage() {
         renderers.push(Box::new(gpui_windows::Dx11HeadlessRenderer::new().unwrap()));
     }
     let brushes = [
+        Brush::hermite_mesh(3, 3, super::hermite_tests::grid_points(3, 3, true)).unwrap(),
+        Brush::hermite_patch(super::hermite_tests::points(1)).unwrap(),
         Brush::freeform(super::spatial_tests::expanded_points(16)).unwrap(),
         Brush::solid([0.8, 0.3, 0.1, 0.6]).unwrap(),
         Brush::linear(60., stops()).unwrap(),
@@ -343,5 +345,53 @@ fn path_masks_do_not_bleed_between_draws_and_native_siblings() {
                 assert!(a.0[channel].abs_diff(b.0[channel]) <= 2, "{a:?} != {b:?}");
             }
         }
+    }
+}
+
+#[cfg(feature = "wgpu")]
+#[test]
+fn disjoint_path_batches_preserve_pixels() {
+    let brush = Brush::linear(75., stops()).unwrap();
+    let full = Bounds::new(point(px(0.), px(0.)), size(px(360.), px(90.)));
+    let mask = ContentMask { bounds: full };
+    let mut batched = Scene::default();
+    let mut isolated = Scene::default();
+    for index in 0..3 {
+        let mut path = shape(index);
+        let offset = point(px(index as f32 * 120.), px(0.));
+        path.bounds.origin += offset;
+        for vertex in &mut path.vertices {
+            vertex.xy_position += offset;
+        }
+        let draw = brush.path_draw(path, mask, 0.7, 1.).unwrap();
+        batched.insert_primitive(Primitive::Shader(draw.clone()));
+        // A distinct program per path forces separate coverage passes while
+        // preserving the same gradient material and geometry.
+        let mut draw = draw;
+        draw.program = std::sync::Arc::new(
+            gpui::SceneShaderProgram::new(
+                draw.program.wgsl().to_owned(),
+                draw.program.metal().clone(),
+                draw.program.hlsl().clone(),
+            )
+            .with_path_mask(),
+        );
+        isolated.insert_primitive(Primitive::Shader(draw));
+    }
+    batched.finish();
+    isolated.finish();
+    assert_eq!(batched.batches().count(), 1);
+    assert_eq!(isolated.batches().count(), 3);
+    let mut renderers: Vec<Box<dyn PlatformHeadlessRenderer>> =
+        vec![Box::new(gpui_wgpu::WgpuHeadlessRenderer::new().unwrap())];
+    #[cfg(target_os = "macos")]
+    renderers.push(Box::new(
+        gpui_apple::metal_renderer::MetalHeadlessRenderer::new(),
+    ));
+    for renderer in &mut renderers {
+        let extent = size(DevicePixels(360), DevicePixels(90));
+        let actual = renderer.render_scene_to_image(&batched, extent).unwrap();
+        let expected = renderer.render_scene_to_image(&isolated, extent).unwrap();
+        assert_eq!(actual.as_raw(), expected.as_raw());
     }
 }

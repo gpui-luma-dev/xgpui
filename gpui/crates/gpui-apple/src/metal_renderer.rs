@@ -1067,10 +1067,14 @@ impl MetalRenderer {
                 }
 
                 PrimitiveBatch::Shaders { program_id, range } => {
-                    if let Some(path) = &scene.shader_draws[range.start].path_mask {
+                    if scene.shader_draws[range.start].path_mask.is_some() {
+                        let paths: Vec<_> = scene.shader_draws[range.clone()]
+                            .iter()
+                            .map(|draw| draw.path_mask.as_ref().unwrap().as_ref().clone())
+                            .collect();
                         command_encoder.end_encoding();
                         let did_draw = self.draw_paths_to_intermediate(
-                            std::slice::from_ref(path.as_ref()),
+                            &paths,
                             writer,
                             viewport_size,
                             command_buffer,

@@ -30,8 +30,8 @@ fn freeform_color(uv: vec2<f32>, p: Parameters) -> vec4<f32> {
     if (p.options.x == -3.) { wc = nearest/distances.z; }
     return straight((associated(p.first)*wa + associated(p.second)*wb + associated(p.third)*wc)/(wa+wb+wc));
 }
-fn mesh_color(uv: vec2<f32>, p: Parameters) -> vec4<f32> {
-    let t = clamp(uv,vec2(0.),vec2(1.));
+fn mesh_color(input: ShaderInput, p: Parameters) -> vec4<f32> {
+    let t = clamp(input.uv,vec2(0.),vec2(1.));
     // Hermite endpoint weights (the color derivatives are zero), shared with
     // the existing mesh evaluator. A regular position patch maps u,v to x,y.
     let h = t*t*(3.-2.*t);
@@ -40,7 +40,7 @@ fn mesh_color(uv: vec2<f32>, p: Parameters) -> vec4<f32> {
     return straight(mix(top,bottom,h.y));
 }
 fn base_color(input: ShaderInput, p: Parameters) -> vec4<f32> {
-    if (p.options.x == -4.) { return mesh_color(input.uv,p); }
+    if (p.options.x == -4.) { return mesh_color(input,p); }
     if (p.options.x < 0.) { return freeform_color(input.uv,p); }
     if (p.stops.w == 0.) { return p.first; }
     var t = 0.;

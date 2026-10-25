@@ -1759,11 +1759,15 @@ impl WgpuRendererCore {
                     }
 
                     PrimitiveBatch::Shaders { program_id, range } => {
-                        if let Some(path) = &scene.shader_draws[range.start].path_mask {
+                        if scene.shader_draws[range.start].path_mask.is_some() {
+                            let paths: Vec<_> = scene.shader_draws[range.clone()]
+                                .iter()
+                                .map(|draw| draw.path_mask.as_ref().unwrap().as_ref().clone())
+                                .collect();
                             drop(pass);
                             let rasterized = self.draw_paths_to_intermediate(
                                 &mut encoder,
-                                std::slice::from_ref(path.as_ref()),
+                                &paths,
                                 &mut instance_offset,
                             )?;
                             pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

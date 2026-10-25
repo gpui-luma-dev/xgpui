@@ -88,9 +88,11 @@ pub fn gallery(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoEleme
         .flex_col()
         .gap_3()
         .child(backdrop_demo(lab, cx))
+        .child(hermite_demo(lab, cx))
         .child(worley_demo())
         .child(blue_noise_demo())
         .child(path_brush_demo())
+        .child(path_batch_demo())
         .child(group_filter_demo(lab, cx))
         .child(group_opacity_demo())
         .child("Main-pass brushes · solid, linear, radial")
@@ -719,4 +721,198 @@ fn expanded_demo_points(count: usize) -> Vec<BrushPoint> {
             BrushPoint::new(position, colors[i % 8])
         })
         .collect()
+}
+
+fn hermite_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoElement {
+    use super::Control;
+    let editor = &lab.hermite;
+    let label = [
+        "Regular",
+        "Bend U tangents",
+        "Bend V tangents",
+        "Inset patch",
+        "Move center point",
+    ][editor.preset as usize];
+    let mut chips = div().flex().flex_wrap().gap_2();
+    for index in 0..editor.points.len() {
+        let name = format!(
+            "{} · row {}, col {}",
+            index + 1,
+            index / editor.side as usize + 1,
+            index % editor.side as usize + 1
+        );
+        chips = chips.child(
+            super::button(("hermite-point", index), name)
+                .bg(rgb(if index == editor.selected {
+                    0x2766b0
+                } else {
+                    0x343a45
+                }))
+                .on_click(cx.listener(move |lab, _, _, cx| {
+                    lab.hermite.selected = index;
+                    if lab.hermite.side == 3 {
+                        lab.mesh_selected = index;
+                    }
+                    cx.notify();
+                })),
+        );
+    }
+    let mut controls = div().flex().flex_wrap().gap_4();
+    for group in [
+        [Control::HermiteX, Control::HermiteY],
+        [Control::HermiteUAngle, Control::HermiteULength],
+        [Control::HermiteVAngle, Control::HermiteVLength],
+    ] {
+        let mut column = div().w(px(320.)).flex().flex_col().gap_2();
+        for control in group {
+            column = column.child(lab.slider(control, cx));
+        }
+        controls = controls.child(column);
+    }
+    let direct = match &editor.brush {
+        Ok(brush) => div()
+            .bg(rgb(0x45454f))
+            .child(painted().w(px(288.)).h(px(176.)).bg_brush(brush.clone())),
+        Err(_) => div()
+            .w(px(288.))
+            .h(px(176.))
+            .p_4()
+            .bg(rgb(0x45454f))
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_color(white())
+            .child("Direct brush unavailable for this edit. Adjust controls or reset."),
+    };
+    let mut demo = div().flex().flex_col().gap_2()
+        .child("Hermite mesh · live 2×2 / 3×3 editor")
+        .child(div().flex().flex_wrap().gap_2()
+            .child(super::button("hermite-size",format!("Grid: {}×{} · switch",editor.side,editor.side))
+                .on_click(cx.listener(|lab,_,_,cx| {
+                    lab.freeze();
+                    let side=if lab.hermite.side==2 {3} else {2};
+                    lab.hermite.set_side(side);
+                    if side==3 {
+                        lab.effect=super::Effect::Mesh;
+                        lab.native=false;
+                        lab.hermite.selected=lab.mesh_selected;
+                    }
+                    cx.notify();
+                })))
+            .child(super::button("hermite-preset",format!("{label}{} · next preset",if editor.edited { " (edited)" } else { "" }))
+                .on_click(cx.listener(|lab,_,_,cx| {
+                    lab.freeze();
+                    lab.hermite.load_preset((lab.hermite.preset+1)%lab.hermite.preset_count());
+                    lab.publish_hermite_edit();
+                    cx.notify();
+                })))
+            .child(super::button("hermite-reset-point","Reset selected point")
+                .on_click(cx.listener(|lab,_,_,cx| {
+                    lab.freeze(); lab.hermite.reset_selected(); lab.publish_hermite_edit(); cx.notify();
+                })))
+            .child(super::button("hermite-reset-all","Reset all points")
+                .on_click(cx.listener(|lab,_,_,cx| {
+                    lab.freeze(); lab.hermite.load_preset(lab.hermite.preset); lab.publish_hermite_edit(); cx.notify();
+                }))))
+        .child(chips)
+        .child(controls)
+        .child("Angles are clockwise from right; lengths use normalized mesh space. 3×3 mode shares points and selection with the main Mesh editor.");
+    if let Err(error) = &editor.brush {
+        demo = demo.child(div().max_w(px(900.)).p_3().bg(rgb(0x6c2630)).text_color(white())
+            .child(format!("Outside the direct brush limit: {error}. The legacy preview continues to show this edit.")));
+    }
+    demo = demo.child(
+        div()
+            .flex()
+            .flex_wrap()
+            .gap_4()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child("Existing mesh · offscreen tessellation")
+                    .child(
+                        div().bg(rgb(0x45454f)).child(
+                            painted()
+                                .w(px(288.))
+                                .h(px(176.))
+                                .bg_paint(editor.legacy.clone()),
+                        ),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child("Direct brush · current edit")
+                    .child(direct),
+            ),
+    );
+    if let Ok(brush) = &editor.brush {
+        demo = demo
+            .child(
+                painted()
+                    .w(px(592.))
+                    .h(px(72.))
+                    .border_8()
+                    .border_brush(brush.clone())
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child("Same patch field on a border"),
+            )
+            .child(
+                painted()
+                    .w(px(592.))
+                    .text_size(px(36.))
+                    .font_weight(FontWeight::BOLD)
+                    .text_brush(brush.clone())
+                    .child("Hermite patch across glyphs"),
+            );
+    }
+    demo
+}
+
+fn path_batch_demo() -> impl IntoElement {
+    let brush = Brush::linear(
+        45.,
+        vec![
+            BrushStop::new(0., [0., 0.8, 1., 0.8]),
+            BrushStop::new(1., [1., 0.1, 0.6, 0.8]),
+        ],
+    )
+    .unwrap();
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child("Path batching · 24 separate curved shapes")
+        .child("Planned: 24 paths → 1 coverage batch; overlapping bounds split batches")
+        .child(
+            canvas(
+                |_, _, _| (),
+                move |bounds, (), window, _| {
+                    for index in 0..24 {
+                        let mut path = PathBuilder::fill();
+                        path.move_to(point(px(4.), px(4.)));
+                        path.cubic_bezier_to(
+                            point(px(40.), px(36.)),
+                            point(px(48.), px(0.)),
+                            point(px(0.), px(44.)),
+                        );
+                        path.line_to(point(px(4.), px(36.)));
+                        path.close();
+                        path.translate(
+                            bounds.origin
+                                + point(px((index % 8) as f32 * 56.), px((index / 8) as f32 * 48.)),
+                        );
+                        brush.paint_path(window, path.build().unwrap()).unwrap();
+                    }
+                },
+            )
+            .w(px(448.))
+            .h(px(144.)),
+        )
 }

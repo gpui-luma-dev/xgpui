@@ -68,4 +68,7 @@ including curves and holes. It reuses the native path coverage target and pass,
 with one coverage batch per brushed path; the brush evaluates in the main target.
 Freeform brushes accept up to 16 points; sets above three specialize a full-precision
 program and should be retained rather than rebuilt for per-frame animation.
+`Brush::hermite_patch(points)` and `Brush::hermite_mesh(width, height, points)`
+accept bounded distorted grids up to 3x3, with positions and U/V tangents. A
+certified global inverse evaluates connected patches without fading their joins.
 See [brush contracts and examples](../../../../docs/extensions/brushes.md).

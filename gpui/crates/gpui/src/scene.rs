@@ -650,14 +650,35 @@ impl<'a> Iterator for BatchIterator<'a> {
                 let program_id = first.program.id();
                 let texture_id = first.glyph_mask.map(|tile| tile.texture_id);
                 self.shader_start += 1;
+                let mut coverage_bounds = Vec::new();
+                if first.path_mask.is_some() {
+                    coverage_bounds.push(first.bounds.dilate(ScaledPixels(1.)));
+                }
                 while self
                     .shader_iter
                     .next_if(|draw| {
-                        first.path_mask.is_none()
-                            && draw.path_mask.is_none()
-                            && draw.program.id() == program_id
+                        let compatible = draw.program.id() == program_id
                             && draw.glyph_mask.map(|tile| tile.texture_id) == texture_id
-                            && (draw.order, batch_kind) < max_order_and_kind
+                            && (draw.order, batch_kind) < max_order_and_kind;
+                        if !compatible || first.path_mask.is_some() != draw.path_mask.is_some() {
+                            return false;
+                        }
+                        if first.path_mask.is_some() {
+                            if coverage_bounds.len() >= 64 {
+                                return false;
+                            }
+                            // Keep each composite rectangle clear of every other mask,
+                            // including a device-pixel gutter for antialiasing/filtering.
+                            let bounds = draw.bounds.dilate(ScaledPixels(1.));
+                            if coverage_bounds
+                                .iter()
+                                .any(|previous| previous.intersects(&bounds))
+                            {
+                                return false;
+                            }
+                            coverage_bounds.push(bounds);
+                        }
+                        true
                     })
                     .is_some()
                 {
@@ -1611,7 +1632,7 @@ pub struct ShaderDraw {
     /// Optional retained grayscale atlas tile. Masked programs batch by texture.
     pub glyph_mask: Option<AtlasTile>,
     /// Native opaque-white coverage, rasterized into the existing path target.
-    /// Each masked path is an independent coverage/composition batch.
+    /// Disjoint composite bounds can share a coverage/composition batch.
     pub path_mask: Option<std::sync::Arc<Path<ScaledPixels>>>,
     /// Reflected and packed payload. Unused slots are zero.
     pub data: [[f32; 4]; SHADER_DATA_SLOTS],

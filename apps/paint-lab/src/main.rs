@@ -9,6 +9,8 @@ mod brushes;
 mod checks;
 mod editor;
 #[cfg(feature = "portable-shaders")]
+mod hermite_editor;
+#[cfg(feature = "portable-shaders")]
 mod portable;
 use editor::Settings;
 
@@ -136,10 +138,26 @@ enum Control {
     MeshULength,
     MeshVAngle,
     MeshVLength,
+    #[cfg(feature = "portable-shaders")]
+    HermiteX,
+    #[cfg(feature = "portable-shaders")]
+    HermiteY,
+    #[cfg(feature = "portable-shaders")]
+    HermiteUAngle,
+    #[cfg(feature = "portable-shaders")]
+    HermiteULength,
+    #[cfg(feature = "portable-shaders")]
+    HermiteVAngle,
+    #[cfg(feature = "portable-shaders")]
+    HermiteVLength,
 }
 impl Control {
     fn range(self) -> (f32, f32, f32) {
         match self {
+            #[cfg(feature = "portable-shaders")]
+            Self::HermiteUAngle | Self::HermiteVAngle => (0., 360., 1.),
+            #[cfg(feature = "portable-shaders")]
+            Self::HermiteULength | Self::HermiteVLength => (0., 2., 0.01),
             Self::Angle => (0., 360., 1.),
             Self::MeshUAngle | Self::MeshVAngle => (0., 360., 5.),
             Self::MeshULength | Self::MeshVLength => (0., 2., 0.05),
@@ -166,6 +184,18 @@ impl Control {
             Self::MeshULength => "U length",
             Self::MeshVAngle => "V angle",
             Self::MeshVLength => "V length",
+            #[cfg(feature = "portable-shaders")]
+            Self::HermiteX => "Point X",
+            #[cfg(feature = "portable-shaders")]
+            Self::HermiteY => "Point Y",
+            #[cfg(feature = "portable-shaders")]
+            Self::HermiteUAngle => "U angle",
+            #[cfg(feature = "portable-shaders")]
+            Self::HermiteULength => "U length",
+            #[cfg(feature = "portable-shaders")]
+            Self::HermiteVAngle => "V angle",
+            #[cfg(feature = "portable-shaders")]
+            Self::HermiteVLength => "V length",
         }
     }
 }
@@ -193,6 +223,8 @@ struct Lab {
     layer_filter_step: u8,
     #[cfg(feature = "portable-shaders")]
     freeform_step: u8,
+    #[cfg(feature = "portable-shaders")]
+    hermite: hermite_editor::HermiteEditor,
     playing: bool,
     time: f32,
     updated: Instant,
@@ -251,6 +283,13 @@ impl Lab {
     fn value(&self, control: Control) -> f32 {
         let s = self.settings();
         match control {
+            #[cfg(feature = "portable-shaders")]
+            Control::HermiteX
+            | Control::HermiteY
+            | Control::HermiteUAngle
+            | Control::HermiteULength
+            | Control::HermiteVAngle
+            | Control::HermiteVLength => self.hermite.value(control),
             Control::Offset => s.stops[s.selected].offset,
             Control::Red => self.color()[0],
             Control::Green => self.color()[1],
@@ -294,6 +333,16 @@ impl Lab {
         let (min, max, _) = control.range();
         let value = value.clamp(min, max);
         match control {
+            #[cfg(feature = "portable-shaders")]
+            Control::HermiteX
+            | Control::HermiteY
+            | Control::HermiteUAngle
+            | Control::HermiteULength
+            | Control::HermiteVAngle
+            | Control::HermiteVLength => {
+                self.hermite.set(control, value);
+                self.publish_hermite_edit();
+            }
             Control::Offset => self.settings_mut().move_stop(value),
             Control::Red | Control::Green | Control::Blue | Control::Alpha => {
                 let channel = match control {
@@ -341,6 +390,14 @@ impl Lab {
             }
         }
     }
+    #[cfg(feature = "portable-shaders")]
+    fn publish_hermite_edit(&mut self) {
+        if self.hermite.side == 3 {
+            self.mesh_points = self.hermite.legacy_points();
+            self.mesh_tangents = self.hermite.tangents.clone();
+            self.mesh_selected = self.hermite.selected;
+        }
+    }
     fn scrub(&mut self, control: Control, x: Pixels) {
         if let Some(bounds) = self.slider_bounds.get(&control)
             && bounds.size.width > px(0.)
@@ -357,6 +414,8 @@ impl Lab {
         let value = self.value(control);
         let fraction = ((value - min) / (max - min)).clamp(0., 1.);
         let display = match control {
+            #[cfg(feature = "portable-shaders")]
+            Control::HermiteUAngle | Control::HermiteVAngle => format!("{value:.1}°"),
             Control::Angle | Control::MeshUAngle | Control::MeshVAngle => format!("{value:.1}°"),
             Control::Red | Control::Green | Control::Blue => format!("{:.0}", value * 255.),
             Control::Alpha | Control::Offset => format!("{:.0}%", value * 100.),
@@ -691,6 +750,19 @@ impl Render for Lab {
             window.request_animation_frame();
         }
         self.updated = now;
+        #[cfg(feature = "portable-shaders")]
+        {
+            if self.hermite.side == 3 {
+                let points = if self.effect == Effect::Mesh {
+                    self.displayed_mesh()
+                } else {
+                    self.mesh_points.clone()
+                };
+                self.hermite.import_legacy(&points, &self.mesh_tangents);
+                self.hermite.selected = self.mesh_selected;
+            }
+            self.hermite.refresh();
+        }
         if self.analytic.stops() != self.settings().stops {
             self.analytic = Arc::new(
                 self.analytic
@@ -884,6 +956,8 @@ fn main() -> Result<()> {
                     layer_filter_step: 0,
                     #[cfg(feature = "portable-shaders")]
                     freeform_step: 2,
+                    #[cfg(feature = "portable-shaders")]
+                    hermite: hermite_editor::HermiteEditor::new(1),
                     playing: false,
                     time: 0.,
                     updated: Instant::now(),

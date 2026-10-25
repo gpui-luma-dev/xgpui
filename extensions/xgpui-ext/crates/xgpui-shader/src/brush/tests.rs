@@ -462,3 +462,6 @@ mod layer_tests;
 
 #[path = "path_tests.rs"]
 mod path_tests;
+
+#[path = "hermite_tests.rs"]
+mod hermite_tests;

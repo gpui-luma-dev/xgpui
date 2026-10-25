@@ -5,18 +5,50 @@ use crate::{BlendMode, BrushPoint, Noise};
 enum Field {
     Freeform(Vec<BrushPoint>),
     Mesh([[f32; 4]; 4]),
+    HermiteInset([[f32; 4]; 4]),
+    HermiteGrid(Vec<crate::BrushMeshPoint>),
 }
 impl Field {
     fn brush(&self) -> Brush {
         match self {
             Self::Freeform(points) => Brush::freeform(points.clone()),
             Self::Mesh(colors) => Brush::mesh(*colors),
+            Self::HermiteGrid(points) => Brush::hermite_mesh(3, 3, points.clone()),
+            Self::HermiteInset(colors) => {
+                let mut points = super::hermite_tests::points(2);
+                for (point, color) in points.iter_mut().zip(colors) {
+                    point.color = *color;
+                }
+                Brush::hermite_patch(points)
+            }
         }
         .unwrap()
     }
     // Independent double-precision reference in associated encoded sRGB.
     fn associated(&self, uv: [f64; 2]) -> [f64; 4] {
         let (colors, weights): (Vec<[f32; 4]>, Vec<f64>) = match self {
+            Self::HermiteGrid(points) => {
+                if uv.iter().any(|v| !(0. ..=1.).contains(v)) {
+                    return [0.; 4];
+                }
+                let x = (uv[0] * 2.).floor().min(1.) as usize;
+                let y = (uv[1] * 2.).floor().min(1.) as usize;
+                let i = y * 3 + x;
+                return Self::Mesh([
+                    points[i].color,
+                    points[i + 1].color,
+                    points[i + 3].color,
+                    points[i + 4].color,
+                ])
+                .associated([uv[0] * 2. - x as f64, uv[1] * 2. - y as f64]);
+            }
+            Self::HermiteInset(colors) => {
+                let mapped = uv.map(|v| (v - 0.1_f32 as f64) / 0.8_f32 as f64);
+                if mapped.iter().any(|v| !(0. ..=1.).contains(v)) {
+                    return [0.; 4];
+                }
+                return Self::Mesh(*colors).associated(mapped);
+            }
             Self::Freeform(points) => {
                 let distances: Vec<_> = points
                     .iter()
@@ -85,7 +117,7 @@ pub(super) fn expanded_points(count: usize) -> Vec<BrushPoint> {
         .collect()
 }
 
-fn fields() -> [Field; 6] {
+fn fields() -> [Field; 8] {
     [
         Field::Freeform(vec![BrushPoint::new([0.5, 0.5], [0.2, 0.4, 0.8, 0.6])]),
         Field::Freeform(vec![
@@ -99,6 +131,19 @@ fn fields() -> [Field; 6] {
         ]),
         Field::Freeform(expanded_points(4)),
         Field::Freeform(expanded_points(16)),
+        Field::HermiteGrid({
+            let mut p = super::hermite_tests::grid_points(3, 3, false);
+            for (i, p) in p.iter_mut().enumerate() {
+                p.color[3] = if i == 0 { 0. } else { 0.2 + i as f32 * 0.08 };
+            }
+            p
+        }),
+        Field::HermiteInset([
+            [1., 0., 0., 0.],
+            [0., 0.2, 1., 0.4],
+            [0., 1., 0.3, 0.8],
+            [1., 0.6, 0., 1.],
+        ]),
         Field::Mesh([
             [1., 0., 0., 0.6],
             [0., 0.3, 1., 0.9],
@@ -138,11 +183,11 @@ fn spatial_validation_rejects_unrepresentable_inputs() {
         let grid = crate::MeshGrid::regular(2, 2, vec![[0.1, 0.4, 0.8]; 4]).unwrap();
         assert!(Brush::from_mesh_grid(&grid).is_ok());
         assert!(
-            Brush::from_mesh_grid(&crate::MeshGrid::regular(3, 2, vec![[1.; 3]; 6]).unwrap())
+            Brush::from_mesh_grid(&crate::MeshGrid::regular(4, 2, vec![[1.; 3]; 8]).unwrap())
                 .is_err()
         );
         let mut points = grid.points().to_vec();
-        points[0].u_tangent = [0.8, 0.];
+        points[0].u_tangent = [-1., 0.];
         assert!(Brush::from_mesh_grid(&crate::MeshGrid::new(2, 2, points).unwrap()).is_err());
     }
 }

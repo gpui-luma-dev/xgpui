@@ -301,12 +301,11 @@ corners. Its position patch is the unit rectangle; the endpoint basis is
 its offscreen target or tessellation. Alpha uses associated interpolation, and
 coordinates outside the unit square clamp to edge colors.
 
-`Brush::from_mesh_grid(&grid)` accepts a regular opaque 2x2 `MeshGrid` with unit
-u/v tangents. Distorted geometry, folds, non-unit tangents and larger grids return
-an error instead of being silently flattened. Continue using `MeshGradient`
-through the existing paint API for those cases. A general instanced distorted
-mesh needs a separate control-data transport and geometry/coverage design; the
-regular four-corner field does not complete that broader RFC item.
+`Brush::from_mesh_grid(&grid)` accepts opaque grids with two or three rows and
+columns. A regular 2x2 grid with unit u/v tangents uses the inline color-only
+mesh; other accepted grids use the certified Hermite inverse described below.
+Grids above 3x3 and unsupported distortion return an error; `MeshGradient`
+remains available for those cases.
 
 To explore the existing distorted Hermite mesh renderer, select **Mesh** in
 Paint Lab's top effect selector. The editor's nine point chips select a control
@@ -331,6 +330,109 @@ on enabled GPU backends, including translucent controls, noise, borders, clippin
 fractional DPI and existing text-atlas coverage. Regular opaque mesh samples are
 also compared against the original 64-sample Hermite producer. Pixel tests do
 not establish a throughput guarantee for many overlapping spatial materials.
+
+## A distorted Hermite patch in the main pass
+
+```rust
+use xgpui_shader::{Brush, BrushMeshPoint};
+
+let patch = Brush::hermite_patch([
+    BrushMeshPoint::new([0., 0.], [1., 0.2], [0., 1.], [1., 0., 0., 1.]),
+    BrushMeshPoint::new([1., 0.], [1., -0.2], [0., 1.], [0., 0.2, 1., 1.]),
+    BrushMeshPoint::new([0., 1.], [1., 0.], [0., 1.], [0., 1., 0.3, 1.]),
+    BrushMeshPoint::new([1., 1.], [1., 0.], [0., 1.], [1., 0.6, 0., 1.]),
+])?;
+```
+
+Each row-major control supplies a position, U derivative, V derivative and
+straight encoded-sRGB RGBA. Geometry uses the same bicubic Hermite basis and
+zero mixed derivatives as the existing mesh producer. Color derivatives are
+zero; RGBA interpolates in associated encoded sRGB. The receiver is normalized
+mesh space, and regions outside the curved patch are transparent. This field
+works with backgrounds, borders, glyphs, native paths and noise modulation.
+
+The first direct geometry implementation deliberately requires a conservative
+certificate. Positions must be finite in `[0,1]`, tangent components in `[-2,2]`,
+and RGBA in `[0,1]`. The constructor converts the geometry to a bicubic Bezier
+net and bounds all Jacobian components by its Bernstein derivative control
+hulls. Both row sums of `abs(I-J)` must stay at or below 0.5 over the entire
+patch. This bounds its inverse and excludes folds and singularities. Some valid
+strongly distorted patches fail this sufficient condition; they return an error
+rather than rendering an ambiguous inverse. Use the tessellated `MeshGradient`
+for those and for grids larger than 3x3.
+
+The fragment shader uses six projected inverse iterations, then six bounded
+Newton steps, with determinant and residual checks. It derives patch-edge
+coverage from the inverse Jacobian in physical pixels; no screen derivatives
+or intermediate color/coverage textures are required. Normal brush shape,
+clip, glyph/path coverage and inherited opacity still apply. Inverse evaluation
+costs more ALU than the regular color-only mesh, and the curved-edge antialiasing
+can differ from the legacy tessellated edge.
+
+Full-precision geometry/color coefficients specialize the program, preserving
+the 128-byte instance payload. Identical immutable patches share a program;
+different patches split ordered batches. A 16-entry LRU retains patch programs;
+the existing bounded noise/glyph/path caches handle derived programs. Retain
+these brushes rather than recompiling edited control sets every frame.
+
+The app section **Hermite mesh · live 2×2 / 3×3 editor** compares the offscreen
+and direct renderers. The **Grid** button switches between four and nine points.
+Select a point, then adjust **Point X/Y**, **U angle/length**, and **V angle/length**.
+Angles are clockwise from right in normalized mesh space; length zero retains
+the chosen angle. Input events coalesce into one material rebuild per rendered
+frame; editing geometry recompiles the point-specialized brush.
+
+In 3x3 mode the comparison shares geometry, colors, tangents, and selection with
+the main nine-point **Mesh** editor. Editing either control set updates the same
+points. Switching into this mode selects Mesh and pauses animation. Preset and
+reset actions also update the main mesh. Animation uses the same current-frame
+positions in both previews; larger motion may exceed the certificate.
+
+Preset cycling provides **Regular**, **Bend U tangents**, **Bend V tangents**,
+**Inset patch**, and (in 3x3 mode) **Move center point**. Reset selected restores
+one point from the active preset; reset all restores the entire preset. An
+unsupported edit keeps the legacy preview current and replaces the direct
+preview with an explicit placeholder and reason. Border/glyph examples return
+when the edit is valid again. Gray shows the region outside the mesh.
+
+Tests compare dense interior pixels with the legacy 64-subdivision renderer,
+check translucent patch-edge coverage against a CPU reference, and extend the
+spatial glyph/noise/clip/DPI and native-path mask checks to distorted patches.
+
+```sh
+cargo test --offline --locked --config .cargo/validation.toml \
+  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --features wgpu,portable-shaders --lib hermite_tests
+```
+
+### Multiple connected patches
+
+```rust
+let mesh = Brush::hermite_mesh(3, 3, points)?; // nine row-major BrushMeshPoints
+```
+
+`hermite_mesh(width, height, points)` accepts each dimension in `2..=3`, for
+one, two, or four connected patches. Tangents are **patch-local** derivatives,
+as in `MeshGrid`; regular 3x3 points use U `[0.5,0]` and V `[0,0.5]`. An API
+call takes one shared point array, so neighbors use identical positions,
+geometry tangents, and colors along each common edge.
+
+Each patch's Bezier derivative hull is scaled to the global normalized domain
+before checking `||I-J||_infinity <= 0.5`. Together with shared boundaries, this
+certifies one continuous, injective global map, rather than allowing independent
+patches to fold or overlap. The inverse solver selects the current patch at
+each iteration and rescales its derivatives to global coordinates. Color uses
+the corresponding patch's Hermite basis. Only the **outer grid boundary**
+affects mesh coverage: internal edges never receive a fade or another blend.
+The fragment still performs one bounded inverse, rather than one per patch.
+
+The same 128-byte instance transport, full-precision specialization, 16-entry
+Hermite program cache, and bounded derived-program caches apply. Different
+geometry/color grids need different programs; this is not a dynamic large-grid
+control-data buffer. Tests cover all supported dimensions, a moved shared center,
+dense comparison to legacy tessellation, translucent seam pixels, and the
+border/noise/glyph/path integrations. Grids above 3x3 and stronger distortion
+remain outside this milestone.
 
 ## Bounded SDR backdrop blur
 
@@ -687,10 +789,12 @@ intermediate before final composition. This implementation reuses that target
 and its native coverage pass, paints opaque-white coverage there, then evaluates
 the material in the main-target shader while multiplying by the resolved alpha.
 It adds no brush color texture or separate custom-producer coverage texture.
-**It is not a new zero-pass-break path rasterizer.** Each brushed path currently
-uses its own coverage/composition batch; merging coverage for overlapping bounds
-would let one path's mask leak into another path's brush rectangle. Several
-ordinary paths may batch more efficiently than several brushed paths today.
+**It is not a new zero-pass-break path rasterizer.** Compatible adjacent brushed paths share one coverage/composition batch when
+all composite bounds are disjoint, including a one-device-pixel gutter on each
+rectangle. Overlapping bounds split batches to prevent coverage leakage. Batches
+are limited to 64 paths to bound pairwise overlap checks. The paint-lab path
+batching panel shows 24 separate shapes sharing one planned coverage batch;
+this is a scene batching count, not a GPU timing measurement.
 
 Path programs reuse the 128-byte brush payload and 176-byte host transport.
 Programs share by material variant; retained scene records own their path
@@ -718,7 +822,7 @@ cargo test --locked --config .cargo/validation.toml \
 
 Batched/direct single-pass brushed paths, point sets above 16 or dynamically
 transported larger point sets,
-biharmonic diffusion, general distorted/multi-patch instanced meshes, additional
+biharmonic diffusion, more general distortion and grids larger than 3x3, additional
 subtree post-processing filters, destination blend modes remain follow-up work. Group opacity, saturation, grayscale, brightness, contrast and inversion use the isolated
 subtree boundary and its retained raw-result cache; further filters remain
 separate additions.

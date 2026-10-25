@@ -12,6 +12,8 @@ use std::sync::OnceLock;
 pub const MAX_BRUSH_STOPS: usize = 3;
 mod cache;
 use cache::ProgramCache;
+mod hermite;
+pub use hermite::BrushMeshPoint;
 mod noise;
 mod path;
 mod spatial;
@@ -50,8 +52,8 @@ impl BrushStop {
 /// different colors and gradient kinds in a single batch.
 /// Gradients accept 2..=3 sorted stops; duplicate offsets form hard edges, with
 /// the last stop winning at the exact offset. Endpoint colors clamp outside stops.
-/// Freeform fields support up to 16 points; mesh fields support four regular
-/// Hermite corners. Up to three freeform points share the common program;
+/// Freeform fields support up to 16 points; mesh fields support regular color
+/// corners or a certified Hermite grid with up to four patches. Up to three freeform points share the common program;
 /// larger immutable point sets specialize a program without reducing precision.
 #[derive(Clone)]
 pub struct Brush {

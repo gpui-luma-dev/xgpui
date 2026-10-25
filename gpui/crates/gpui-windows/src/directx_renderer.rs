@@ -534,8 +534,12 @@ impl DirectXRenderer {
             .map(|a| Annotation::new(a, HSTRING::from(batch.label())));
         match batch {
             PrimitiveBatch::Shaders { program_id, range } => {
-                if let Some(path) = &scene.shader_draws[range.start].path_mask {
-                    self.draw_paths_to_intermediate(std::slice::from_ref(path.as_ref()))?;
+                if scene.shader_draws[range.start].path_mask.is_some() {
+                    let paths: Vec<_> = scene.shader_draws[range.clone()]
+                        .iter()
+                        .map(|draw| draw.path_mask.as_ref().unwrap().as_ref().clone())
+                        .collect();
+                    self.draw_paths_to_intermediate(&paths)?;
                 }
                 let devices = self.devices.as_ref().context("devices missing")?;
                 let resources = self.resources.as_ref().context("resources missing")?;
