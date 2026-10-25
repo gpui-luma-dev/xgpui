@@ -17,7 +17,9 @@ python3 apps/extensions-web/serve.py
 
 Open <http://localhost:8081/>. Add `--release` to the build command for an optimized
 build. The server accepts `--port 8082` if needed. Stop it with Ctrl-C; rebuild and
-reload after changes. No Trunk, nightly toolchain, worker pool, or shared Wasm
+reload after changes. The build also refreshes `docs/examples/extensions/` for
+local documentation previews, so `/examples/extensions/?demo=svg` uses the same
+HTML, JavaScript and Wasm as this server. No Trunk, nightly toolchain, worker pool, or shared Wasm
 memory configuration is required. The app opts into wgpu's
 `fragile-send-sync-non-atomic-wasm` compatibility feature because GPUI paint
 producers require `Send + Sync`; GPU handles stay on the browser thread. A

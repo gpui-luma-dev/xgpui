@@ -28,4 +28,8 @@ cp apps/svg-lab/samples/ATTRIBUTION.md "$app/dist/svg-ATTRIBUTION.md"
 for sample in ribbon-leaf.svg AJ_Digital_Camera.svg rg1024_green_grapes.svg rg1024_metal_effect.svg dragon.svg; do
     cp "apps/svg-lab/samples/$sample" "$app/dist/$sample"
 done
-echo "Built $app/dist. Run: python3 apps/extensions-web/serve.py"
+# Keep the documentation preview in sync with the standalone demo server.
+# Both directories are generated/ignored; serve docs/ to test Pages-style URLs.
+mkdir -p docs/examples/extensions
+cp "$app/dist/"* docs/examples/extensions/
+echo "Built $app/dist and docs/examples/extensions. Run: python3 apps/extensions-web/serve.py"
