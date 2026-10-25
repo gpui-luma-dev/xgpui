@@ -190,7 +190,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 9);
+assert.equal(Object.keys(data.extension_documents).length, 10);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/xgpui-ext/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -200,6 +200,18 @@ assert.match(extensionOverview, /href="#extension-paints"/);
 assert.match(extensionOverview, /href="#high-gamut-windows"/);
 assert.match(extensionOverview, /href="#parley-text"/);
 assert.match(run('cratePage(crates.find(c => c.package === "xgpui-parley"), "overview")'), /layout_paragraph/);
+assert.equal(data.extension_packages['xgpui-svg'], 'extensions/xgpui-ext/crates/xgpui-svg');
+assert.ok(!data.provenance.packages['xgpui-svg']);
+assert.match(extensionOverview, /4\. Progressive SVG/);
+assert.match(extensionOverview, /href="#svg-rendering"/);
+assert.match(run('extensionPage("svg-rendering")'), /Experimental SVG extension/);
+assert.match(run('cratePage(crates.find(c => c.package === "xgpui-svg"), "overview")'), /SvgScheduler/);
+const svgDoc = data.extension_documents['svg-rendering'].html;
+for (const term of ['svg_image', 'SchedulerLimits', 'Queued', '3 × output RGBA', '2 × RGBA', 'process/GPU-memory ceiling', 'samples', 'attributed']) assert.ok(svgDoc.includes(term), term);
+assert.doesNotMatch(run('cratePage(crates.find(c => c.package === "xgpui-svg"), "overview")'), /Run browser demo/);
+const svgCrate = data.crates.find(c => c.package === 'xgpui-svg');
+for (const name of ['SvgImage', 'SvgDocument', 'SvgScheduler', 'SchedulerStats', 'RasterPolicy']) assert.ok(svgCrate.declarations.some(d => d.name === name), name);
+assert.ok(svgCrate.dependencies.some(d => d.package === 'gpui'));
 assert.match(run('extensionPage("parley-text")'), /Text backend extension/);
 assert.match(data.extension_documents['high-gamut-windows'].html, /WideColor::linear_p3/);
 assert.match(data.extension_documents['high-gamut-windows'].html, /xgpui-gamut/);
@@ -228,6 +240,7 @@ for (const file of [
   'apps/paint-lab/README.md',
   'apps/gamut-lab/README.md',
   'extensions/xgpui-ext/crates/xgpui-gamut/README.md',
+  'extensions/xgpui-ext/crates/xgpui-svg/README.md',
 ]) {
   const url = new URL('../' + file, import.meta.url);
   const markdown = await readFile(url, 'utf8');
@@ -258,6 +271,16 @@ context.location.hash = '#crate=xgpui-gamut&tab=overview';
 run('render()');
 assert.match(element('content').innerHTML, /WideColor::linear_p3/);
 assert.match(element('content').innerHTML, /API inventory/);
+context.location.hash = '#svg-rendering';
+run('render()');
+assert.match(element('crate-list').innerHTML, /aria-current="page" href="#crate=xgpui-svg/);
+assert.match(element('content').innerHTML, /SvgScheduler/);
+run('sidebar("aggregate image")');
+assert.match(element('crate-list').innerHTML, />Extensions<.*xgpui-svg/s);
+context.location.hash = '#crate=xgpui-svg&tab=overview';
+run('render()');
+assert.match(element('content').innerHTML, /Native sample and validation/);
+assert.match(element('content').innerHTML, /API inventory/);
 const gamutCrate = data.crates.find(c => c.package === 'xgpui-gamut');
 const shaderCrate = data.crates.find(c => c.package === 'xgpui-shader');
 assert.ok(!gamutCrate.dependencies.some(d => d.package === 'xgpui-shader'));
@@ -265,7 +288,7 @@ assert.ok(!shaderCrate.dependencies.some(d => d.package === 'xgpui-gamut'));
 console.log('Verified extension crate navigation, individual code-first guides, filtering and source links.');
 
 const apiChanges = data.extension_documents['gpui-public-api'].html;
-for (const term of ['Scene', 'custom_draws', 'PrimitiveBatch', 'CustomContent', 'PreparationRequest', 'CustomGeometry', 'CustomCoverage', 'CustomDraw', 'paint_custom', 'MetalCustomContext', 'WgpuCustomContext', 'Dx11CustomContext', 'source compatibility risks', 'WindowColorMode', 'WindowColorStatus', 'MetalWideSdrOutput', 'Dx11WideSdrOutput', 'set_color_mode']) assert.ok(apiChanges.includes(term), term);
+for (const term of ['Scene', 'custom_draws', 'PrimitiveBatch', 'CustomContent', 'PreparationRequest', 'CustomGeometry', 'CustomCoverage', 'CustomDraw', 'paint_custom', 'MetalCustomContext', 'WgpuCustomContext', 'Dx11CustomContext', 'source compatibility risks', 'WindowColorMode', 'WindowColorStatus', 'MetalWideSdrOutput', 'Dx11WideSdrOutput', 'set_color_mode', 'ParsedSvg::size()', 'xgpui-svg']) assert.ok(apiChanges.includes(term), term);
 assert.match(index, /href="#gpui-public-api"/);
 assert.match(run('extensionPage("extensions")'), /href="#gpui-public-api"/);
 console.log('Verified public API delta documentation and prominent navigation.');

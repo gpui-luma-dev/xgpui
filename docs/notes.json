@@ -230,5 +230,13 @@
     "surface": "ParleyTextSystem, retained face/variation identity and optional GPUI paragraph shaping/geometry. GPUI owns frame caches and the glyph atlas.",
     "review": "Preserve descriptor/resolved-face identity and immutable layouts. Explicit direction/language and Unicode conformance remain follow-ups; Windows/Linux runtime and paragraph conversion IMEs need validation.",
     "entry": "src/lib.rs"
+  },
+  "xgpui-svg": {
+    "short": "xgpui-svg",
+    "group": "Extensions",
+    "role": "Experimental full-color progressive SVG elements with optional shared raster scheduling and aggregate image accounting.",
+    "surface": "SvgDocument, SvgImage/svg_image, RasterPolicy and SvgScheduler. Stable IDs retain progressive jobs; shared pools cap admitted jobs and accounted image costs.",
+    "review": "Preserve stale-result rejection, atlas cleanup and reservation lifetimes. Accounting is not a hard process/GPU memory limit; viewport tiling and broader hardware validation remain follow-ups.",
+    "entry": "src/lib.rs"
   }
 }

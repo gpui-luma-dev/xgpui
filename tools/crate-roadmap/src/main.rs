@@ -615,6 +615,7 @@ fn generate(root: &Path) -> Result<()> {
         ("xgpui-shader", "extensions/xgpui-ext/crates/xgpui-shader"),
         ("xgpui-gamut", "extensions/xgpui-ext/crates/xgpui-gamut"),
         ("xgpui-parley", "extensions/xgpui-ext/crates/xgpui-parley"),
+        ("xgpui-svg", "extensions/xgpui-ext/crates/xgpui-svg"),
     ]);
     let mut packages = provenance["packages"]
         .as_object()
@@ -723,6 +724,7 @@ fn generate(root: &Path) -> Result<()> {
     // All published extension guides live in the web documentation source tree.
     // Embed them so navigation works offline without fetch.
     let document_sources = [
+        ("svg-rendering", "docs/extensions/svg-rendering.md"),
         ("parley-text", "docs/extensions/parley-text.md"),
         (
             "high-gamut-windows",

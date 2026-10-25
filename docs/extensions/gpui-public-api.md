@@ -6,6 +6,7 @@ Compared with pre-feature main `9b64657`. **Opt-in usage does not mean zero SDK 
 
 | GPUI change | Required by | Role |
 | --- | --- | --- |
+| `ParsedSvg::size()` | [xgpui-svg](svg-rendering.md) | Read the resolved SVG viewport size without reparsing |
 | Backend construction override; optional paragraph traits, geometry types, cache and paint entry points | [xgpui-parley](parley-text.md) | Install the text backend; retain shaping/reflow and paint BiDi runs |
 | `Scene::custom_draws`, `Primitive::Custom`, `PrimitiveBatch::Custom`, `Window::paint_custom` | [xgpui-shader](extension-paints.md); reused by xgpui-gamut | Record ordered custom content in the native scene |
 | `CustomContent`, `PreparationRequest`, `CustomGeometry`, `CustomCoverage`, `CustomDraw` | xgpui-shader; reused by xgpui-gamut | Producer preparation, retained geometry and host coverage |
@@ -308,3 +309,15 @@ git diff 9b64657 -- gpui/crates/gpui/src/styled.rs gpui/crates/gpui-macros/src/s
 
 [Application examples](extension-paints.md) ·
 [Preparation and failure contracts](paint-contract-hardening.md)
+
+
+## ADDED SVG viewport size
+
+**Required by:** [xgpui-svg](svg-rendering.md).
+
+`ParsedSvg::size() -> Size<f32>` returns the resolved document viewport in SVG
+user units. The extension uses it for aspect-preserving sizing without parsing
+the document a second time. Existing parsing/rasterization signatures remain
+unchanged. `SvgImage`, policy, scheduler, atlas lifetime handling and aggregate
+image accounting live in the extension and depend on existing GPUI element,
+executor, state and image APIs.

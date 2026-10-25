@@ -23,18 +23,20 @@ function extensionPage(route) {
       '<article class="extension-document">' + doc.html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
   }
 
-  const banner = route === 'parley-text'
+  const banner = route === 'svg-rendering'
+    ? '<p class="guide-intro"><strong>Experimental SVG extension.</strong> Native progressive rasterization, shared admission and accounted image budgets.</p>'
+    : route === 'parley-text'
     ? '<p class="guide-intro"><strong>Text backend extension.</strong> Parley shaping and geometry; GPUI caches, atlas and native input.</p>'
     : route === 'high-gamut-windows'
     ? '<p class="guide-intro"><strong>Wide-gamut presentation extension.</strong> Native xgpui-gamut producers; per-window Metal presentation.</p>'
     : route === 'extensions' || route === 'gpui-public-api'
-      ? '<p class="guide-intro"><strong>Downstream extensions to GPUI.</strong> Paints, window color presentation and text backends are independent opt-in capabilities.</p>'
+      ? '<p class="guide-intro"><strong>Downstream extensions to GPUI.</strong> Paints, window color presentation, text backends and SVG rendering are independent opt-in capabilities.</p>'
       : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; output retains sRGB semantics.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
     return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
-  return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation and text extensions.') + banner +
+  return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation, text and SVG extensions.') + banner +
     '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>' +
     '<h2>1. Paints and shaders</h2>' +
     extensionCode('rust', `use xgpui_shader::{painted, SolidColor};
@@ -60,6 +62,8 @@ MetalWideSdrOutput::from_linear_p3_premultiplied(context, texture, commands)?;`)
 just --justfile apps/gamut-lab/justfile test`) +
     '<h2>3. Parley text</h2><p>Shared text backend with flat-LTR compatibility, BiDi paragraph layout and editing/IME geometry. Existing GPUI caches and glyph atlas; Windows/Linux runtime validation remains outstanding.</p>' +
     '<div class="cards">' + extensionCard('parley-text', 'Construction, paragraph/input seams, cache and face identity, supported subset and validation.') + '</div>' +
+    '<h2>4. Progressive SVG</h2><p>Experimental full-color static SVG elements with preview/detail refinement, shared FIFO admission and aggregate image accounting. Native lab and attributed offline samples; smaller budgets reduce deep-zoom detail.</p>' +
+    '<div class="cards">' + extensionCard('svg-rendering', 'Use SvgImage and SvgScheduler, understand accounting limits, and run the native sample.') + '</div>' +
     '<h2>Shared GPUI integration</h2><div class="cards">' + extensionCard('gpui-public-api', 'Public additions and altered upstream types, separated by capability.') + '</div>';
 
 }
@@ -77,6 +81,7 @@ function publicApiSourceLinks() {
     ['gpui', 'ParagraphRequest', 'text_system/paragraph.rs'],
     ['gpui', 'ParagraphPosition', 'text_system/paragraph.rs'],
     ['gpui', 'paint_paragraph', 'text_system/paragraph.rs'],
+    ['gpui', 'ParsedSvg::size', 'svg_renderer.rs'],
     ['gpui', 'Scene', 'scene.rs'],
     ['gpui', 'Primitive', 'scene.rs'],
     ['gpui', 'PrimitiveBatch', 'scene.rs'],
@@ -127,4 +132,9 @@ function gamutCrateGuide() {
 function parleyCrateGuide() {
   return browserDemoLinks('parley') + '<article class="extension-document">' +
     data.extension_documents['parley-text'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
+}
+
+function svgCrateGuide() {
+  return '<article class="extension-document">' +
+    data.extension_documents['svg-rendering'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
 }

@@ -25,7 +25,7 @@ function sidebar(query='') {
   const matches = crates.filter(c => !q || (c.package+' '+notes[c.package].role+' '+c.declarations.map(d=>d.name).join(' ')).toLowerCase().includes(q));
   document.getElementById('crate-list').innerHTML = groups.map(g => {
     const list=matches.filter(c=>notes[c.package].group===g);
-    const entries = list.map(c=>'<a class="crate-link" '+(route.pkg===c.package || (c.package === 'xgpui-shader' && shaderGuideRoutes.includes(route.global)) || (c.package === 'xgpui-gamut' && route.global === 'high-gamut-windows') || (c.package === 'xgpui-parley' && route.global === 'parley-text') ? 'aria-current="page" ' : '')+'href="'+crateUrl(c.package)+'">'+escapeHtml(short(c.package))+'</a>').join('');
+    const entries = list.map(c=>'<a class="crate-link" '+(route.pkg===c.package || (c.package === 'xgpui-shader' && shaderGuideRoutes.includes(route.global)) || (c.package === 'xgpui-gamut' && route.global === 'high-gamut-windows') || (c.package === 'xgpui-parley' && route.global === 'parley-text') || (c.package === 'xgpui-svg' && route.global === 'svg-rendering') ? 'aria-current="page" ' : '')+'href="'+crateUrl(c.package)+'">'+escapeHtml(short(c.package))+'</a>').join('');
     return entries ? '<p class="group-label">'+escapeHtml(g)+'</p>'+entries : '';
   }).join('') || '<p>No crates match.</p>';
 
@@ -33,7 +33,7 @@ function sidebar(query='') {
 function header(eyebrow,title,lead) {return '<div class="eyebrow">'+escapeHtml(eyebrow)+'</div><h1>'+escapeHtml(title)+'</h1><p class="lead">'+escapeHtml(lead)+'</p>';}
 function overview() {
   return header('Captured source / '+data.provenance.ref,'GPUI architecture and extensions','A source map of GPUI: responsibilities, runtime boundaries and downstream extensions.')+
-    '<nav class="overview-guides" aria-label="Start reading"><h2>Start here</h2><dl><dt><a href="#architecture">Architecture →</a></dt><dd>Ownership, element lifecycle and renderer contracts.</dd><dt><a href="#pipeline">Rendering pipeline →</a></dt><dd>Explore clipping, layers, primitive ordering and batches.</dd><dt><a href="#extensions">Extensions to GPUI →</a></dt><dd>Shader, wide-gamut and Parley APIs, integration and backend ownership.</dd></dl></nav>'+
+    '<nav class="overview-guides" aria-label="Start reading"><h2>Start here</h2><dl><dt><a href="#architecture">Architecture →</a></dt><dd>Ownership, element lifecycle and renderer contracts.</dd><dt><a href="#pipeline">Rendering pipeline →</a></dt><dd>Explore clipping, layers, primitive ordering and batches.</dd><dt><a href="#extensions">Extensions to GPUI →</a></dt><dd>Shader, wide-gamut, Parley and SVG APIs, integration and backend ownership.</dd></dl></nav>'+
     '<section class="overview-reading"><h2>Rendering changes</h2><p>'+crateLink('gpui')+' → '+crateLink('gpui-platform')+' → platform implementation → '+crateLink('gpui-apple')+' / '+crateLink('gpui-wgpu')+'</p><p>Trace scene and window contracts, then surface formats, shaders and color handling in the selected renderer.</p></section>'+
     '<div class="crate-directory">'+groups.map(g=>'<section><h2>'+escapeHtml(g)+'</h2><dl>'+crates.filter(c=>notes[c.package].group===g).map(c=>'<dt>'+crateLink(c.package)+'</dt><dd>'+escapeHtml(notes[c.package].role)+'</dd>').join('')+'</dl></section>').join('')+'</div>';
 }
@@ -56,7 +56,7 @@ function cratePage(c,tab) {
   } else if(tab==='review') {
     body='<h2>Boundary to investigate</h2><div class="notice">Review hypothesis. No visibility changes or removal decisions have been made.</div><p class="lead">'+escapeHtml(n.review)+'</p><p>Follow '+sourceLink(c.entry,1,'the entrypoint')+' and inspect incoming dependencies. Then check expanded macros, re-exports and actual downstream consumers before narrowing the API.</p><p><a href="#review">Read the overall review sequence →</a></p>';
   } else if(notes[c.package].group === 'Extensions' && tab === 'overview') {
-    body=c.package === 'xgpui-shader' ? shaderCrateGuide() : c.package === 'xgpui-parley' ? parleyCrateGuide() : gamutCrateGuide();
+    body=c.package === 'xgpui-shader' ? shaderCrateGuide() : c.package === 'xgpui-parley' ? parleyCrateGuide() : c.package === 'xgpui-svg' ? svgCrateGuide() : gamutCrateGuide();
   } else {
     body='<h2>Public surface at a glance</h2><p>'+escapeHtml(n.surface)+'</p><p>'+sourceLink(c.entry,1,'Open library entrypoint →')+'</p><div class="stats"><div class="stat"><strong>'+c.declarations.length+'</strong><span>Declaration / impl candidates</span></div><div class="stat"><strong>'+c.declarations.filter(d=>d.root_export).length+'</strong><span>Root declarations / exports</span></div><div class="stat"><strong>'+c.files.length+'</strong><span>Source files</span></div></div><h2>Source map</h2><div class="source-list">'+c.files.map(file=>sourceLink(file,1,file.replace(c.entry.slice(0,c.entry.indexOf('/src/')+1),''))).join('')+'</div>';
   }

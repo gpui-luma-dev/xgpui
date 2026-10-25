@@ -77,6 +77,12 @@ runtime is needed in the browser. Edit the maintained sources, then regenerate;
 do not edit generated `data.js` or `source/` output. The verifier checks extension routes,
 source locations, internal links and section targets as well as the existing site.
 
+`xgpui-svg` is indexed as an experimental extension with Use/source/API/dependency
+tabs. Its maintained contract is `docs/extensions/svg-rendering.md`; the crate
+README points to that source to avoid a second copy. The guide covers native
+samples and attribution, shared scheduling/accounting, measurements and deferred
+work. It does not imply SVG support in the browser extension demos.
+
 ## GitHub Pages
 
 Select **Settings → Pages → Source: GitHub Actions**. The Pages workflow builds and verifies the website, then publishes `docs/` on pushes to `main` or manual dispatch. Relative asset and source links support the repository URL prefix.
