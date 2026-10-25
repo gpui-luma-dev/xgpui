@@ -87,3 +87,6 @@ transaction tests. SPIR-V/HLSL generation passes; Vulkan/DX12 runtime acceptance
 remains outstanding. Software/readback timing is not hardware GPU timing.
 
 [Native D3D11](native-dx11-paints.md) · [WGSL](portable-wgsl-v1.md)
+
+Backend workflows, focused diagnostics, caching, and cold/warm measurement are
+documented in [Paint GPU validation](paint-validation.md).

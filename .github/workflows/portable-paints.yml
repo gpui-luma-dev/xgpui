@@ -1,87 +1,33 @@
-name: Portable paint GPU checks
+name: Portable paint GPU checks (all backends)
 
-# Explicit native D3D11 and portable backend correctness checks.
 on:
   workflow_dispatch:
+    inputs:
+      cache:
+        description: Cache mode for every backend
+        type: choice
+        options: [warm, cold]
+        default: warm
 
 permissions:
   contents: read
 
 jobs:
-  vulkan:
-    runs-on: ubuntu-latest
-    env:
-      WGPU_BACKEND: vulkan
-      XDG_RUNTIME_DIR: /tmp/xgpui-runtime
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install native dependencies and Mesa Vulkan
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev mesa-vulkan-drivers
-          mkdir -p "$XDG_RUNTIME_DIR"
-          chmod 700 "$XDG_RUNTIME_DIR"
-      - name: Test exact coverage lookups and allocation counts
-        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-wgpu/Cargo.toml --features test-support --lib coverage_cache
-      - name: Test Vulkan preparation transactions
-        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-wgpu/Cargo.toml --features test-support --lib wgpu_custom -- --nocapture
-      - name: Run Vulkan paint reference tests
-        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_extension_paints -- --nocapture
-      - name: Test compositor uniform growth and recovery
-        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_compositor_uniform_frames -- --nocapture
-      - name: Check low-alpha saturated edges
-        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_low_alpha_saturated_edges -- --nocapture
-
-  windows-wgpu:
-    runs-on: windows-latest
-    env:
-      WGPU_BACKEND: dx12
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Test exact coverage lookups and allocation counts
-        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-wgpu/Cargo.toml --features test-support --lib coverage_cache
-      - name: Test DirectX 12 preparation transactions
-        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-wgpu/Cargo.toml --features test-support --lib wgpu_custom -- --nocapture
-      - name: Run DirectX 12 wgpu paint reference tests
-        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_extension_paints -- --nocapture
-      - name: Test compositor uniform growth and recovery
-        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_compositor_uniform_frames -- --nocapture
-      - name: Check low-alpha saturated edges
-        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_low_alpha_saturated_edges -- --nocapture
-
   windows-native:
-    runs-on: windows-latest
-    env:
-      WGPU_BACKEND: dx12
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Check native applications
-        run: |
-          cargo check --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders
-      - name: Test exact coverage lookups and allocation counts
-        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib coverage_cache
-      - name: Test native preparation on WARP
-        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib dx11_custom -- --nocapture
-      - name: Test typed wide SDR recording transactions
-        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib custom_draw::wide_output -- --nocapture
-      - name: Test ordered wide SDR composition on WARP
-        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib directx_renderer::wide_sdr -- --nocapture
-      - name: Test presentation policy and transition isolation
-        run: cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib directx_renderer::color_presentation -- --nocapture
-      - name: Test standalone color math and shader translation
-        run: cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-color/Cargo.toml
-      - name: Test independent gamut producers
-        run: cargo test --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-gamut/Cargo.toml
-      - name: Test optional wide fill and gradient adapters
-        run: cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-gamut/Cargo.toml --features instanced
-      - name: Test native paints and mesh parity against wgpu
-        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders -- --nocapture
-      - name: Render native mesh sample
-        run: cargo run --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders -- --headless --effect mesh --frames 3 --png native-dx11-mesh.png
-      - uses: actions/upload-artifact@v4
-        with:
-          name: native-dx11-mesh
-          path: native-dx11-mesh.png
+    uses: ./.github/workflows/paints-backend.yml
+    with:
+      backend: windows-native
+      scope: full
+      cache: ${{ inputs.cache }}
+  windows-wgpu:
+    uses: ./.github/workflows/paints-backend.yml
+    with:
+      backend: windows-wgpu
+      scope: full
+      cache: ${{ inputs.cache }}
+  linux-vulkan:
+    uses: ./.github/workflows/paints-backend.yml
+    with:
+      backend: linux-vulkan
+      scope: full
+      cache: ${{ inputs.cache }}

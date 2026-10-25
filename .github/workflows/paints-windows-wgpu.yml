@@ -1,0 +1,37 @@
+name: Paints windows-wgpu
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: Full acceptance or focused diagnostic
+        type: choice
+        options: [full, producer-cache, paint-parity]
+        default: full
+      cache:
+        description: Use cold then warm on the same SHA to compare timings
+        type: choice
+        options: [warm, cold]
+        default: warm
+  pull_request:
+    paths:
+      - '.github/workflows/paints-*.yml'
+      - '.github/workflows/portable-paints.yml'
+      - '.github/paints/**'
+      - '.cargo/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'gpui/crates/**'
+      - 'extensions/xgpui-ext/crates/**'
+      - 'apps/paint-lab/**'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    uses: ./.github/workflows/paints-backend.yml
+    with:
+      backend: windows-wgpu
+      scope: ${{ inputs.scope || 'full' }}
+      cache: ${{ inputs.cache || 'warm' }}

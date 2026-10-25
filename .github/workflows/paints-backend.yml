@@ -1,0 +1,112 @@
+name: Paint GPU backend implementation
+
+on:
+  workflow_call:
+    inputs:
+      backend:
+        type: string
+        required: true
+      scope:
+        type: string
+        default: full
+      cache:
+        type: string
+        default: warm
+
+permissions:
+  contents: read
+
+# PRs use their own ref; dispatches use their selected branch. Different backends
+# and diagnostic scopes remain independent, including calls from the full entry.
+concurrency:
+  group: paints-${{ github.event.pull_request.number || github.ref }}-${{ inputs.backend }}-${{ inputs.scope }}-${{ inputs.cache }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: ${{ inputs.backend }} / ${{ inputs.scope }} / ${{ github.sha }}
+    runs-on: ${{ inputs.backend == 'linux-vulkan' && 'ubuntu-24.04' || 'windows-2025' }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/paint-validation
+      CARGO_INCREMENTAL: '0'
+      WGPU_BACKEND: ${{ inputs.backend == 'linux-vulkan' && 'vulkan' || 'dx12' }}
+      XDG_RUNTIME_DIR: /tmp/xgpui-runtime
+      CACHE_MODE: ${{ inputs.cache }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start setup timing
+        run: echo "SETUP_STARTED=$(python -c 'import time; print(time.time())')" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - name: Install native dependencies and Mesa Vulkan
+        if: inputs.backend == 'linux-vulkan'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev mesa-vulkan-drivers
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+      - name: Compute cache identity
+        id: identity
+        env:
+          CONFIG_HASH: ${{ hashFiles('.cargo/**', '.github/paints/**', '.github/workflows/paints-backend.yml') }}
+          MANIFEST_HASH: ${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+        run: |
+          compiler=$(rustc -Vv | python -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:16])')
+          prefix="paints-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.backend }}-$compiler-$CONFIG_HASH"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "key=$prefix-$MANIFEST_HASH-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+      - name: Restore compatible Cargo cache
+        if: inputs.cache != 'cold'
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            ~/.cargo/git/checkouts
+            target/paint-validation
+          key: ${{ steps.identity.outputs.key }}
+          restore-keys: |
+            ${{ steps.identity.outputs.prefix }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}-
+            ${{ steps.identity.outputs.prefix }}-
+      - name: Check validation orchestration
+        run: python -m unittest discover -s .github/paints -p 'test_*.py'
+      - name: Run selected validation and record build/test timings
+        env:
+          PAINT_BACKEND: ${{ inputs.backend }}
+          PAINT_SCOPE: ${{ inputs.scope }}
+          CACHE_MATCH: ${{ steps.cache.outputs.cache-matched-key }}
+        run: python .github/paints/run.py --backend "$PAINT_BACKEND" --scope "$PAINT_SCOPE"
+      # Failed tests can leave useful completed compilation. Cancelled runs never
+      # save; Cargo fingerprints still validate every restored build output.
+      - name: Save completed compilation even after test failure
+        if: ${{ !cancelled() && steps.identity.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            ~/.cargo/git/checkouts
+            target/paint-validation
+          key: ${{ steps.identity.outputs.key }}
+      - name: Upload logs and timing evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: paints-${{ inputs.backend }}-${{ inputs.scope }}-${{ github.sha }}
+          path: paint-results/
+          if-no-files-found: warn
+      - name: Upload native capture
+        if: ${{ !cancelled() && inputs.backend == 'windows-native' && (inputs.scope == 'full' || inputs.scope == 'paint-parity') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-dx11-mesh
+          path: native-dx11-mesh.png
+          if-no-files-found: error
