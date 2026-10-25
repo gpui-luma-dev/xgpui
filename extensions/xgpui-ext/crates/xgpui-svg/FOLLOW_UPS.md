@@ -10,6 +10,8 @@ not blockers or claims of existing support:
   do not guarantee input responsiveness. Validate browser performance separately.
 - **Viewport tiling/cropped rasterization:** preserve sharp deep zoom within
   small budgets instead of rasterizing the entire artwork at reduced resolution.
+  The browser demo now compares a separate `SvgSize::Viewport` raster, but this
+  mode is not integrated into `SvgImage` scheduling/accounting or a tile cache.
 - **Hard filter/process limits:** evaluate isolated rendering or filter-aware
   allocation controls. Current reservations cannot cap arbitrary resvg filter
   intermediates, parser allocations or whole-process footprint.

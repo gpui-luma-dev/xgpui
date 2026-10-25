@@ -11,3 +11,8 @@ shared pools, lifecycle, diagnostics, low-level APIs and validation commands.
 [Native lab and attributed samples](../../../../apps/svg-lab/README.md) ·
 [Performance evidence](../../../../apps/svg-lab/bench/README.md) ·
 [Deferred follow-ups](FOLLOW_UPS.md)
+
+## GPUI public API changes: additions and compatibility
+
+[GPUI public API changes: additions and compatibility](../../../../docs/extensions/gpui-public-api.md#added-svg-viewport-size).
+See the [crate guide](../../../../docs/extensions/svg-rendering.md#gpui-public-api-changes-additions-and-compatibility) for required additions and downstream compatibility impact.

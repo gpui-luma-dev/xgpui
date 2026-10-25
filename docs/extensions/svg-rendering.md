@@ -5,6 +5,21 @@ timers, atlas cleanup and redraws. `SvgScheduler` optionally shares admission an
 estimated image-memory limits across views/windows. This is an opt-in, unpublished
 extension; its API may change. The GPUI integration adds [`ParsedSvg::size()`](gpui-public-api.md#added-svg-viewport-size).
 
+## GPUI public API changes: additions and compatibility
+
+The reusable element requires `ParsedSvg::size()` to read the resolved viewport
+without reparsing. That accessor is additive; existing parsing/rasterization
+signatures and whole-document sizing behavior remain unchanged. The document,
+policy, queue, scheduler and element APIs live in `xgpui-svg`.
+
+The browser's sharp comparison separately adds `SvgSize::Viewport { size, view_box }`.
+Downstream exhaustive `SvgSize` matches must handle the new variant even when
+not using the comparison. This does not add cropped scheduling to `SvgImage`.
+Viewport output limits do not cap filter intermediates or total process memory.
+
+**[GPUI public API changes: additions and compatibility](gpui-public-api.md#added-svg-viewport-size).**
+See also [viewport rasterization and enum compatibility](gpui-public-api.md#added-svg-viewport-rasterization).
+
 ## Use
 
 Add a path dependency on this crate. Parse once (on a worker for complex artwork),
@@ -130,13 +145,20 @@ just --justfile apps/svg-lab/justfile gallery
 ```
 
 The browser extension gallery also includes `?demo=svg`: five attributed samples,
-wheel zoom and drag pan, a ten-tile gallery, and switchable 8/32 MiB shared pools.
+synchronized bounded and viewport-rerasterized views, wheel zoom and drag pan,
+a ten-tile gallery, and switchable 8/32 MiB shared pools. The rerasterized view
+uses `SvgSize::Viewport` to render only visible pixels at display density, keeping
+curves sharp at deep zoom. It is a demo comparison outside the bounded scheduler,
+with separate output-size and timing diagnostics. Camera/viewport changes rebuild
+its raster; ordinary redraws reuse it.
 Its diagnostics report element raster latency and accounted bytes, not total
 browser memory. The current non-atomic Wasm platform runs raster jobs on the
 browser thread: progressive rendering and admission limits apply, but a costly
 filter can still block input. Native worker responsiveness measurements above
 do not establish browser responsiveness. The browser demo caps concurrency at
-one and per-element output at 2 MiB. Use the gallery's artwork credits link for
+one and bounded-element output at 2 MiB. The viewport comparison rejects
+output edges above 8192 device pixels. Complex filter intermediates can still
+be costly; a 1600% leaf render took about 2.5 seconds in one browser check. Use the gallery's artwork credits link for
 creator, source, license and unchanged SVG downloads.
 
 ## Limits and follow-ups

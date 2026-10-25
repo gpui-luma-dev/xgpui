@@ -1,5 +1,5 @@
 use crate::{
-    AssetSource, DevicePixels, IsZero, RenderImage, Result, SharedString, Size,
+    AssetSource, Bounds, DevicePixels, IsZero, RenderImage, Result, SharedString, Size,
     swap_rgba_pa_to_bgra,
 };
 use image::Frame;
@@ -117,6 +117,15 @@ pub enum SvgSize {
     Size(Size<DevicePixels>),
     /// An exact width and height in device pixels.
     ExactSize(Size<DevicePixels>),
+    /// Rasterize a rectangle in resolved document coordinates into an exact output.
+    /// Unlike whole-document sizing, zoom does not enlarge the output allocation.
+    /// Filter intermediates are still controlled by resvg, not this output size.
+    Viewport {
+        /// Exact output dimensions; each edge must be 1..=8192 device pixels.
+        size: Size<DevicePixels>,
+        /// Visible rectangle in resolved SVG document coordinates.
+        view_box: Bounds<f32>,
+    },
     /// A logical scaling factor to apply to the size provided by the SVG.
     ScaleFactor(f32),
 }
@@ -208,6 +217,7 @@ impl SvgRenderer {
         let (size, image_scale_factor) = match size.into() {
             SvgSize::Size(size) => (SvgSize::Size(size), 1.0),
             SvgSize::ExactSize(size) => (SvgSize::ExactSize(size), 1.0),
+            viewport @ SvgSize::Viewport { .. } => (viewport, 1.0),
             SvgSize::ScaleFactor(scale_factor) => (
                 SvgSize::ScaleFactor(scale_factor * SMOOTH_SVG_SCALE_FACTOR),
                 SMOOTH_SVG_SCALE_FACTOR,
@@ -280,6 +290,45 @@ fn rasterize_tree(tree: &usvg::Tree, size: SvgSize) -> Result<Pixmap, usvg::Erro
     // Related issue: #56466
     const MAX_SIZE: f32 = 8192.0;
 
+    if let SvgSize::Viewport { size, view_box } = size {
+        let width = i32::from(size.width);
+        let height = i32::from(size.height);
+        if !(1..=8192).contains(&width)
+            || !(1..=8192).contains(&height)
+            || ![
+                view_box.origin.x,
+                view_box.origin.y,
+                view_box.size.width,
+                view_box.size.height,
+            ]
+            .iter()
+            .all(|v| v.is_finite())
+            || view_box.size.width <= 0.
+            || view_box.size.height <= 0.
+        {
+            return Err(usvg::Error::InvalidSize);
+        }
+        let sx = width as f32 / view_box.size.width;
+        let sy = height as f32 / view_box.size.height;
+        let transform = resvg::tiny_skia::Transform::from_row(
+            sx,
+            0.,
+            0.,
+            sy,
+            -view_box.origin.x * sx,
+            -view_box.origin.y * sy,
+        );
+        if ![sx, sy, transform.tx, transform.ty]
+            .iter()
+            .all(|v| v.is_finite())
+        {
+            return Err(usvg::Error::InvalidSize);
+        }
+        let mut pixmap =
+            Pixmap::new(width as u32, height as u32).ok_or(usvg::Error::InvalidSize)?;
+        resvg::render(tree, transform, &mut pixmap.as_mut());
+        return Ok(pixmap);
+    }
     let svg_size = tree.size();
     let (mut width, mut height) = match size {
         SvgSize::Size(size) => {
@@ -288,6 +337,7 @@ fn rasterize_tree(tree: &usvg::Tree, size: SvgSize) -> Result<Pixmap, usvg::Erro
         }
         SvgSize::ExactSize(size) => (i32::from(size.width) as f32, i32::from(size.height) as f32),
         SvgSize::ScaleFactor(scale) => (svg_size.width() * scale, svg_size.height() * scale),
+        SvgSize::Viewport { .. } => unreachable!("viewport handled above"),
     };
 
     if width > MAX_SIZE {

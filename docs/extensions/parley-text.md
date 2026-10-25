@@ -4,6 +4,20 @@ Opt-in Parley 0.12/HarfRust text backend: flat-LTR compatibility, BiDi paragraph
 resolved-face metrics and grayscale rasterization. GPUI retains platform input,
 frame caches and glyph atlas ownership.
 
+## GPUI public API changes: additions and compatibility
+
+This crate adds `Application::with_platform_and_text_system` to select the
+backend before GPUI caches are built, optional `PlatformTextSystem::shape_paragraph`,
+paragraph layout/cache geometry, and `paint_paragraph`. The optional trait method
+defaults to Unsupported, so existing text backends need no required override.
+Existing application construction and native initialization retain their behavior.
+Additive method names can still collide with downstream extension methods.
+
+Parley uses GPUI's existing glyph atlas; it does not require custom-draw scene
+variants or wide-gamut presentation. Its flat-line supported subset and fallback
+behavior are documented below; those are extension behavior, not required
+changes to existing GPUI callers.
+
 **[GPUI public API changes: additions and compatibility](gpui-public-api.md#added-text-backend-and-paragraph-seams).**
 
 ## Construction
