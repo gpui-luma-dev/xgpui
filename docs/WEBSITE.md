@@ -93,7 +93,10 @@ Select **Settings → Pages → Source: GitHub Actions**. The Pages workflow bui
 
 ## Browser extension demos
 
-The sidebar's **Browser extension demos** link opens `examples/extensions/`.
+The sidebar's **Browser extension demos** link opens `examples/extensions/`, the
+WebAssembly demo index. It lists the three hosted extension demos, seven older
+interactive source-gallery examples, and three developer Wasm harnesses. Source-only
+entries are labeled and do not link to nonexistent hosted routes.
 The gallery and the extension crate guides link to the demo source on GitHub.
 The Pages workflow builds `apps/extensions-web` in release mode with the pinned
 wasm-bindgen CLI and copies its generated assets into `docs/examples/extensions/`

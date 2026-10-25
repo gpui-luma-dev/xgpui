@@ -1,9 +1,15 @@
-# Extension browser examples
+# WebAssembly demo index and extension examples
 
 A standalone Wasm app for `xgpui-shader`, `xgpui-parley`, and `xgpui-svg`. All use the existing
 GPUI web platform and wgpu renderer. The gallery offers automatic selection
 (WebGPU with WebGL2 fallback), forced WebGPU, and forced WebGL2. A forced backend
 fails explicitly if unavailable; check the browser console for adapter details.
+
+The landing page also lists all seven interactive examples from the older
+`gpui-web/examples/hello_web` gallery and its three browser-test Wasm modules.
+These entries link to source and are explicitly not hosted. The captured gallery
+still uses pre-normalization crate paths; porting/building it for publication is
+separate from maintaining this index. Native-only labs are not listed as Wasm.
 
 From the repository root:
 

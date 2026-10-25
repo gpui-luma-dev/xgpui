@@ -24,6 +24,7 @@ done
 mkdir -p "$app/dist"
 wasm-bindgen --target web --out-dir "$app/dist" --out-name extensions_web \
     "$app/target/wasm32-unknown-unknown/$profile/extensions-web.wasm"
+cp docs/favicon.svg docs/favicon.ico "$app/dist/"
 python3 - "$app/index.html" "$app/dist/index.html" "$XGPUI_WEB_BUILD_ID" <<'PYTHON'
 import pathlib
 import sys
