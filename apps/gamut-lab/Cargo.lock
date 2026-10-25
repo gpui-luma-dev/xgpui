@@ -1849,6 +1849,7 @@ dependencies = [
  "clap",
  "gpui",
  "gpui-platform",
+ "xgpui-color",
  "xgpui-gamut",
  "xgpui-shader",
 ]

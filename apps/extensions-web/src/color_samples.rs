@@ -12,6 +12,16 @@ pub fn rows(
     policy: GamutMapping,
     translucent: bool,
 ) -> Result<Vec<SampleRow>, ColorError> {
+    rows_in_space(preset, policy, translucent, RgbSpace::Srgb)
+}
+
+/// Same reference samples, encoded for the selected presentation space.
+pub fn rows_in_space(
+    preset: usize,
+    policy: GamutMapping,
+    translucent: bool,
+    destination: RgbSpace,
+) -> Result<Vec<SampleRow>, ColorError> {
     let (a, b) = match preset % 3 {
         0 => ([0., 0., 1.], [1., 1., 0.]),
         1 => ([1., 0., 0.], [0., 1., 0.]),
@@ -59,7 +69,7 @@ pub fn rows(
                     .iter()
                     .any(|v| *v < -1e-7 || *v > 1. + 1e-7),
             );
-            let mapped = color.map_gamut(RgbSpace::Srgb, policy)?;
+            let mapped = color.map_gamut(destination, policy)?;
             let [r, g, b] = mapped.rgb().encode()?.components();
             row.rgba
                 .push([r as f32, g as f32, b as f32, mapped.alpha() as f32]);
@@ -101,6 +111,22 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+    #[test]
+    fn p3_output_preserves_p3_red_and_srgb_diagnostics() {
+        let srgb = rows(1, GamutMapping::Clip, false).unwrap();
+        let p3 = rows_in_space(1, GamutMapping::Clip, false, RgbSpace::DisplayP3).unwrap();
+        for (a, b) in srgb.iter().zip(&p3) {
+            assert_eq!(a.outside, b.outside);
+            assert!(
+                b.rgba
+                    .iter()
+                    .flatten()
+                    .all(|v| v.is_finite() && (0.0..=1.0).contains(v))
+            );
+            assert!((b.rgba[0][0] - 1.).abs() < 1e-5);
+            assert!(b.rgba[0][1].abs() < 1e-5 && b.rgba[0][2].abs() < 1e-5);
         }
     }
     #[test]

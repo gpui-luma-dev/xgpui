@@ -73,6 +73,7 @@
   <span id="versions">HTML: __BUILD_ID__ · Wasm: not loaded</span>
   <a id="refresh" href="?">Refresh build</a>
 </aside>
+<p id="color-runtime" role="status" hidden style="position:fixed;right:1rem;bottom:7rem;background:#111827f5;padding:.75rem;z-index:2;font-size:12px;white-space:pre-line;max-width:calc(100% - 3.5rem)"></p>
 <p id="status" role="status" hidden></p>
 <script type="module">
   const demo = new URLSearchParams(location.search).get("demo");
@@ -102,6 +103,33 @@
       const wasmUrl = new URL("./extensions_web_bg.wasm", location.href);
       jsUrl.searchParams.set("rev", pageRevision);
       wasmUrl.searchParams.set("rev", pageRevision);
+      // Observe contexts created by the renderer; never create a probe context on its canvas.
+      if (demo === "color") {
+        const contexts = new Map();
+        const original = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (...args) {
+          const context = Reflect.apply(original, this, args);
+          if (context && ["webgpu", "webgl2", "webgl"].includes(args[0])) contexts.set(this, {kind: args[0], context});
+          return context;
+        };
+        const display = matchMedia("(color-gamut: p3)");
+        const panel = document.getElementById("color-runtime");
+        panel.hidden = false;
+        const update = () => {
+          const active = [...contexts].find(([canvas]) => canvas.isConnected)?.[1];
+          let space = "waiting for renderer";
+          if (active) {
+            if (active.kind === "webgpu") {
+              const config = active.context.getConfiguration?.();
+              space = config ? (config.colorSpace ?? "srgb (default)") : "unknown (configuration query unavailable)";
+            } else space = active.context.drawingBufferColorSpace ?? "unknown (query unavailable)";
+          }
+          panel.textContent = `Source: Display P3 endpoints\nPreview mapping: sRGB\nCanvas: ${space}${active ? ` · ${active.kind}` : ""}\nDisplay reports P3: ${display.matches ? "yes" : "no"}\nDisplay capability does not prove calibrated output.`;
+        };
+        display.addEventListener("change", update);
+        setInterval(update, 1000);
+        update();
+      }
       const bindings = await import(jsUrl.href);
       await bindings.default({ module_or_path: wasmUrl });
       const wasmRevision = bindings.demo_build_id?.() ?? "legacy / unknown";

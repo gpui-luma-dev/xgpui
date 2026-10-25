@@ -129,3 +129,8 @@ through ordinary shader paints. This does not establish physical P3 presentation
 Run `bash apps/extensions-web/check-color.sh` for the CPU preview-sampler tests.
 The script compiles the dependency-free color core and sampler directly with
 rustc, avoiding the browser platform dependencies for native test execution.
+
+The runtime panel distinguishes P3 source endpoints, sRGB preview mapping, actual
+canvas color space (or unknown when unavailable), and browser-reported P3 display
+capability. For native P3 versus sRGB comparison, run the
+[color-lab desktop companion](../gamut-lab/README.md#native-color-comparison).

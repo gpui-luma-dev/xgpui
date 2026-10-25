@@ -92,3 +92,23 @@ python3 apps/extensions-web/serve.py
 
 Then open `http://localhost:8081/?demo=color`. Backend links on the gallery select
 `&backend=webgpu` or `&backend=webgl` for comparison.
+
+### Runtime output diagnostics and native comparison
+
+The browser demo reports source space, preview mapping, the active renderer's
+canvas color space, and `(color-gamut: p3)` display capability. WebGL reads
+`drawingBufferColorSpace`; WebGPU reads `getConfiguration().colorSpace` when
+available and otherwise reports unknown. These diagnostics observe the renderer's
+own context without creating or reconfiguring a context. Display capability does
+not turn the mapped sRGB demo into P3 output or verify physical calibration.
+
+For actual native Display P3 output on macOS/Metal or Windows/D3D11:
+
+```sh
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --bin color-lab
+```
+
+This companion displays paired sRGB and P3 rows using the browser's same 32 CPU
+reference samples, drawn as discrete swatches. Check the header for effective
+`WideGamutSdr` and display wide-gamut support, then move the window to your P3
+monitor. Colors, mapping policy, and end alpha can be changed interactively.
