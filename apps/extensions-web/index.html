@@ -13,6 +13,10 @@
   nav { display: flex; flex-wrap: wrap; gap: 1rem; }
   #back { position: fixed; right: 1rem; bottom: 1rem; padding: .5rem; background: #111827ee; z-index: 2; }
   #status { position: fixed; inset: 1rem 1rem auto; white-space: pre-wrap; background: #111827; padding: 1rem; z-index: 3; }
+  #revision { position: fixed; left: 1rem; bottom: 3.8rem; max-width: calc(100% - 2rem); padding: .5rem .75rem; border: 1px solid #64748b; border-radius: 6px; background: #111827f5; z-index: 2; font-size: 12px; }
+  #revision strong { display: block; margin-bottom: .2rem; }
+  #revision[data-mismatch] { border-color: #fb7185; color: #fda4af; }
+  #refresh { color: #a5c8ff; margin-left: .75rem; }
   canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; user-select: none; -webkit-user-select: none; }
 </style>
 <main id="gallery">
@@ -37,10 +41,21 @@
   <p>Gamut is deferred: the extension currently requires native Metal or D3D11 wide-gamut presentation.</p>
 </main>
 <nav id="back" hidden><a href="svg-attribution.html">Artwork credits</a><a href="?">All examples</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></nav>
+<aside id="revision" aria-label="Loaded build">
+  <strong id="behavior">Demo gallery</strong>
+  <span id="versions">HTML: __BUILD_ID__ · Wasm: not loaded</span>
+  <a id="refresh" href="?">Refresh build</a>
+</aside>
 <p id="status" role="status" hidden></p>
 <script type="module">
   const demo = new URLSearchParams(location.search).get("demo");
+  const pageRevision = "__BUILD_ID__";
+  const versions = document.getElementById("versions");
+  const refreshUrl = new URL(location.href);
+  refreshUrl.searchParams.set("reload", Date.now());
+  document.getElementById("refresh").href = refreshUrl.href;
   if (demo) {
+    document.getElementById("behavior").textContent = `${demo.toUpperCase()} · loading behavior and revision…`;
     document.getElementById("gallery").hidden = true;
     document.getElementById("back").hidden = false;
     const status = document.getElementById("status");
@@ -56,8 +71,19 @@
     status.textContent = "Loading extension demo…";
     try {
       if (!["shader", "parley", "svg"].includes(demo)) throw new Error(`Unknown demo: ${demo}`);
-      const bindings = await import("./extensions_web.js");
-      await bindings.default();
+      const jsUrl = new URL("./extensions_web.js", location.href);
+      const wasmUrl = new URL("./extensions_web_bg.wasm", location.href);
+      jsUrl.searchParams.set("rev", pageRevision);
+      wasmUrl.searchParams.set("rev", pageRevision);
+      const bindings = await import(jsUrl.href);
+      await bindings.default({ module_or_path: wasmUrl });
+      const wasmRevision = bindings.demo_build_id?.() ?? "legacy / unknown";
+      versions.textContent = `HTML: ${pageRevision} · Wasm: ${wasmRevision}`;
+      document.getElementById("behavior").textContent = bindings.demo_behavior?.(demo) ?? `${demo.toUpperCase()} · legacy build`;
+      if (wasmRevision !== pageRevision) {
+        document.getElementById("revision").setAttribute("data-mismatch", "");
+        throw new Error("Cached assets: HTML and Wasm revisions differ. Click Refresh build.");
+      }
       window.wasmBindings = bindings;
       status.hidden = true;
       document.title = `${demo === "shader" ? "Shader paints" : demo === "svg" ? "Progressive SVG" : "Parley paragraphs"} · xgpui`;
