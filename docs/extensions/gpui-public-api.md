@@ -337,3 +337,13 @@ enum variant requires downstream exhaustive `SvgSize` matches to handle it.
 This output bounds the destination buffer, not resvg filter intermediates or
 whole-process memory. It does not add cropped scheduling to `SvgImage` or make
 browser rasterization run on a worker.
+
+## Experimental instanced shader additions
+
+`Scene::shader_draws`, `Primitive::Shader`, `PrimitiveBatch::Shaders`,
+`SceneShaderProgram`, `ShaderDraw` and `Window::paint_shader` support the
+[instanced WGSL v2 extension](instanced-wgsl-v2.md). Exhaustive scene literals
+and enum matches must accommodate these additions. Ordinary styled elements
+retain their existing call sites. Programs and backend pipeline ownership are
+separate: the extension validates/translates sources, and each host renderer
+creates pipelines on its own device.

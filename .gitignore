@@ -3,3 +3,7 @@
 .DS_Store
 
 /docs/examples/extensions/
+
+/apps/shader-examples/dist/
+
+/docs/examples/shaders/

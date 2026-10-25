@@ -29,6 +29,12 @@ jobs:
           --config .cargo/validation.toml
           --manifest-path apps/extensions-web/Cargo.toml
           --filter-platform wasm32-unknown-unknown > /dev/null
+      - name: Verify shader companion dependency lockfile
+        run: >-
+          cargo metadata --locked --format-version 1
+          --config .cargo/validation.toml
+          --manifest-path apps/shader-examples/Cargo.toml
+          --filter-platform wasm32-unknown-unknown > /dev/null
       - name: Install Wasm target and packaging tool
         run: |
           rustup target add wasm32-unknown-unknown
@@ -38,6 +44,8 @@ jobs:
           bash apps/extensions-web/build.sh --release
           mkdir -p docs/examples/extensions
           cp apps/extensions-web/dist/* docs/examples/extensions/
+      - name: Build instanced shader WASM companion
+        run: bash apps/shader-examples/build.sh --release
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs

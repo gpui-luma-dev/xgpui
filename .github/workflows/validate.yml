@@ -27,3 +27,22 @@ jobs:
         run: |
           cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
           node docs/verify.mjs
+
+  shader-wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install WASM packaging tool
+        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+      - name: Build all six browser shader examples
+        run: bash apps/shader-examples/build.sh --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shader-examples-wasm
+          path: docs/examples/shaders/
+          if-no-files-found: error
+          retention-days: 14

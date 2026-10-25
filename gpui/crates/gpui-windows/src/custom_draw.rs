@@ -1,5 +1,7 @@
 //! DirectX 11 preparation for retained custom paints. Only the host executes work.
 mod coverage_cache;
+mod instanced;
+pub(crate) use instanced::ShaderRenderer;
 mod wide_output;
 use anyhow::{Context as _, Result, ensure};
 pub(crate) use coverage_cache::{CoverageCache, CoverageKey};

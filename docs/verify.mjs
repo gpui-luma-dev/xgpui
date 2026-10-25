@@ -212,7 +212,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 10);
+assert.equal(Object.keys(data.extension_documents).length, 11);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/xgpui-ext/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -339,3 +339,22 @@ for (const match of run('publicApiSourceLinks()').matchAll(/href="source\/([^"#]
   assert.ok(pages.get(file).includes('id="L' + match[2] + '"'), file + ':' + match[2]);
 }
 console.log('Verified API-change source links against regenerated declaration anchors.');
+
+// Instanced shaders must be discoverable, rendered offline, and packaged for Pages.
+assert.ok(data.extension_documents['instanced-wgsl-v2']);
+assert.ok(index.includes('href="#instanced-wgsl-v2"'));
+assert.ok(index.includes('href="examples/shaders/"'));
+assert.match(run('shaderCrateGuide()'), /just --justfile apps\/shader-examples\/justfile ui/);
+assert.match(run('extensionPage("instanced-wgsl-v2")'), /Clipping ON\/OFF/);
+assert.match(run('instancedDemoLinks()'), /href="examples\/shaders\/"/);
+const shaderIndex = await readFile(new URL('../apps/shader-examples/index.html', import.meta.url), 'utf8');
+for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
+  for (const backend of ['webgpu', 'webgl']) {
+    assert.ok(shaderIndex.includes(`href="?example=${example}&backend=${backend}"`));
+  }
+}
+const pagesWorkflow = await readFile(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
+assert.ok(pagesWorkflow.includes('bash apps/shader-examples/build.sh --release'));
+const shaderBuild = await readFile(new URL('../apps/shader-examples/build.sh', import.meta.url), 'utf8');
+assert.ok(shaderBuild.includes('docs/examples/shaders/'));
+console.log('Verified instanced WGSL guide, native-first launch, companion links and Pages packaging.');
