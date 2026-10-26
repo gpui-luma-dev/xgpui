@@ -66,7 +66,7 @@ impl Render for ColorDemo {
             .child(div().flex().flex_wrap().gap_3()
                 .child(button("color-preset",format!("Colors: {}",PRESETS[self.preset])).on_click(cx.listener(|this,_,_,cx| {this.preset=(this.preset+1)%PRESETS.len();this.rebuild();cx.notify();})))
                 .child(button("color-mapping",format!("Mapping: {}",if self.policy==GamutMapping::Clip {"Clip"} else {"Reduce chroma"})).on_click(cx.listener(|this,_,_,cx| {this.policy=if this.policy==GamutMapping::Clip {GamutMapping::ReduceChroma} else {GamutMapping::Clip};this.rebuild();cx.notify();})))
-                .child(button("color-alpha",if self.translucent {"End alpha: 25%"} else {"End alpha: 100%"}).on_click(cx.listener(|this,_,_,cx| {this.translucent=!this.translucent;this.rebuild();cx.notify();}))))
+                .child(button("color-alpha",if self.translucent {"End alpha: 25%"} else {"End alpha: 100%"}).on_click(cx.listener(|this,_,_,cx| {this.translucent = !this.translucent;this.rebuild();cx.notify();}))))
             .children(self.rows.iter().map(|row| {
                 let outside=row.outside.iter().filter(|v|**v).count();
                 div().flex().flex_col().gap_2().p_3().rounded_lg().bg(rgb(0x1e293b))

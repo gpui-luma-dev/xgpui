@@ -3,6 +3,9 @@ cbuffer Params : register(b0) {
     float4 mask;
     float4 radii;
     float4 viewport;
+    float4 color_r;
+    float4 color_g;
+    float4 color_b;
 }
 Texture2D<float4> image : register(t0);
 Texture2D<float4> shape_mask : register(t1);
@@ -48,5 +51,7 @@ float4 custom_fragment(Vertex input) : SV_Target {
     }
     // The legacy native background adapter produces premultiplied pixels.
     if ((uint(viewport.w) & 2) != 0 && color.a > 0) color.rgb /= color.a;
+    float4 rgb1 = float4(color.rgb, 1);
+    color.rgb = float3(dot(color_r,rgb1), dot(color_g,rgb1), dot(color_b,rgb1));
     return float4(color.rgb, color.a * coverage * viewport.z);
 }

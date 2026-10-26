@@ -1,0 +1,32 @@
+[package]
+name = "xgpui-media"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+default = []
+wgpu = ["dep:gpui-wgpu", "gpui-wgpu/dma-buf"]
+
+[dependencies]
+anyhow = "1"
+refineable = { path = "../../../../gpui/crates/refineable" }
+gpui = { path = "../../../../gpui/crates/gpui" }
+gpui-wgpu = { path = "../../../../gpui/crates/gpui-wgpu", optional = true }
+image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "webp"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui-apple = { path = "../../../../gpui/crates/gpui-apple" }
+objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFBase"] }
+objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVPixelBuffer", "CVBuffer"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gpui-windows = { path = "../../../../gpui/crates/gpui-windows" }
+
+[dev-dependencies]
+gpui-wgpu = { path = "../../../../gpui/crates/gpui-wgpu", features = ["test-support"] }
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+gpui-apple = { path = "../../../../gpui/crates/gpui-apple", features = ["test-support"] }

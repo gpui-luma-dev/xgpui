@@ -876,6 +876,8 @@ dependencies = [
  "console_error_panic_hook",
  "gpui",
  "gpui-web",
+ "gpui-wgpu",
+ "image",
  "parley",
  "unicode-segmentation",
  "wasm-bindgen",
@@ -883,6 +885,7 @@ dependencies = [
  "web-time",
  "wgpu",
  "xgpui-color",
+ "xgpui-media",
  "xgpui-parley",
  "xgpui-shader",
  "xgpui-svg",
@@ -1391,6 +1394,7 @@ name = "gpui-wgpu"
 version = "1.25.3"
 dependencies = [
  "anyhow",
+ "ash",
  "bytemuck",
  "collections",
  "cosmic-text",
@@ -4793,6 +4797,21 @@ dependencies = [
 [[package]]
 name = "xgpui-color"
 version = "0.1.0"
+
+[[package]]
+name = "xgpui-media"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gpui",
+ "gpui-apple",
+ "gpui-wgpu",
+ "gpui-windows",
+ "image",
+ "objc2-core-foundation",
+ "objc2-core-video",
+ "refineable",
+]
 
 [[package]]
 name = "xgpui-parley"

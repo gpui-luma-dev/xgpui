@@ -1,4 +1,5 @@
 //! DirectX 11 preparation for retained custom paints. Only the host executes work.
+pub mod dxgi;
 mod backdrop;
 pub(crate) use backdrop::Backdrops;
 mod coverage_cache;
@@ -167,6 +168,47 @@ impl Dx11CustomContext {
         );
         Ok(Dx11CustomOutput {
             bundle: allocate_texture(&self.device, extent)?,
+            source_sized: false,
+            owner: self.owner.clone(),
+            recording: self.recording.clone(),
+        })
+    }
+    /// Worker-safe device handles for source-sized image staging.
+    pub fn image_upload_context(&self) -> Dx11ImageUploadContext {
+        Dx11ImageUploadContext {
+            device: self.device.clone(),
+            owner: self.owner.clone(),
+        }
+    }
+    /// Synchronous convenience route; media workers stage outside preparation.
+    pub fn create_image_output(&self, data: &gpui::ImageTextureData) -> Result<Dx11CustomOutput> {
+        ensure!(
+            self.recording.state.load(Ordering::Acquire) == PENDING,
+            "image preparation is no longer writable"
+        );
+        let staged = self.image_upload_context().stage(data)?;
+        self.adopt_image_upload(&staged)
+    }
+    /// Record one copy of worker-filled staging resources. No pixel copy or
+    /// destination allocation occurs on this preparation path.
+    pub fn adopt_image_upload(&self, staged: &Dx11StagedImage) -> Result<Dx11CustomOutput> {
+        ensure!(
+            self.owner.as_raw() == staged.owner.as_raw(),
+            "foreign staged image context"
+        );
+        ensure!(
+            self.device.as_raw() == staged.device.as_raw(),
+            "foreign staged image device"
+        );
+        self.record(|context| {
+            unsafe {
+                context.CopyResource(&staged.bundle.texture, &staged.staging);
+            }
+            Ok(())
+        })?;
+        Ok(Dx11CustomOutput {
+            bundle: staged.bundle.clone(),
+            source_sized: true,
             owner: self.owner.clone(),
             recording: self.recording.clone(),
         })
@@ -261,14 +303,79 @@ impl Drop for Dx11CustomContext {
     }
 }
 
+/// Device-only staging API; no immediate-context calls are made by workers.
+#[derive(Clone)]
+pub struct Dx11ImageUploadContext {
+    device: ID3D11Device,
+    owner: ID3D11DeviceContext,
+}
+/// Immutable CPU staging texture and matching GPU destination, bound to a host.
+pub struct Dx11StagedImage {
+    device: ID3D11Device,
+    owner: ID3D11DeviceContext,
+    staging: ID3D11Texture2D,
+    bundle: TextureBundle,
+}
+impl Dx11ImageUploadContext {
+    /// Allocate and initialize mip staging on the calling worker. Only the host
+    /// later records/executes the copy to the sampleable destination texture.
+    pub fn stage(&self, data: &gpui::ImageTextureData) -> Result<Dx11StagedImage> {
+        let bundle = allocate_texture_mips(
+            &self.device,
+            size(
+                DevicePixels(data.width() as i32),
+                DevicePixels(data.height() as i32),
+            ),
+            DXGI_FORMAT_R8G8B8A8_UNORM,
+            4,
+            gpui::ImageTextureData::MAX_BYTES as u64,
+            data.levels().len() as u32,
+        )?;
+        let mut desc = D3D11_TEXTURE2D_DESC::default();
+        unsafe {
+            bundle.texture.GetDesc(&mut desc);
+        }
+        desc.Usage = D3D11_USAGE_STAGING;
+        desc.BindFlags = 0;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE.0 as u32;
+        let levels: Vec<_> = data
+            .levels()
+            .iter()
+            .enumerate()
+            .map(|(level, bytes)| D3D11_SUBRESOURCE_DATA {
+                pSysMem: bytes.as_ptr().cast(),
+                SysMemPitch: (data.width() >> level).max(1) * 4,
+                SysMemSlicePitch: 0,
+            })
+            .collect();
+        let mut staging = None;
+        unsafe {
+            self.device
+                .CreateTexture2D(&desc, Some(levels.as_ptr()), Some(&mut staging))?;
+        }
+        Ok(Dx11StagedImage {
+            device: self.device.clone(),
+            owner: self.owner.clone(),
+            staging: staging.context("missing image staging texture")?,
+            bundle,
+        })
+    }
+}
+
 /// Cacheable producer output; construction binds device, context and format.
 #[derive(Clone, Debug)]
 pub struct Dx11CustomOutput {
     bundle: TextureBundle,
+    source_sized: bool,
     owner: ID3D11DeviceContext,
     recording: Arc<Recording>,
 }
 impl Dx11CustomOutput {
+    /// Host execution has accepted this recording; GPU completion is separate.
+    pub fn is_submitted(&self) -> bool {
+        self.recording.state.load(Ordering::Acquire) == SUBMITTED
+    }
+
     /// Immutable sampleable texture after host submission.
     pub fn texture(&self) -> &ID3D11Texture2D {
         &self.bundle.texture
@@ -283,7 +390,7 @@ impl Dx11CustomOutput {
             "foreign or abandoned DirectX output"
         );
         ensure!(
-            self.bundle.extent == extent,
+            self.source_sized || self.bundle.extent == extent,
             "invalid DirectX output extent"
         );
         ensure!(
@@ -296,6 +403,8 @@ impl Dx11CustomOutput {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TextureBundle {
+    // Keep shared-surface ownership through command-list submission/discard.
+    _dxgi_lease: Option<Arc<dxgi::KeyedLease>>,
     pub texture: ID3D11Texture2D,
     pub srv: ID3D11ShaderResourceView,
     pub rtv: ID3D11RenderTargetView,
@@ -335,6 +444,16 @@ fn allocate_texture_limited(
     bytes_per_pixel: u64,
     limit: u64,
 ) -> Result<TextureBundle> {
+    allocate_texture_mips(device, extent, format, bytes_per_pixel, limit, 1)
+}
+fn allocate_texture_mips(
+    device: &ID3D11Device,
+    extent: Size<DevicePixels>,
+    format: DXGI_FORMAT,
+    bytes_per_pixel: u64,
+    limit: u64,
+    mip_levels: u32,
+) -> Result<TextureBundle> {
     ensure!(
         extent.width.0 > 0
             && extent.height.0 > 0
@@ -346,7 +465,7 @@ fn allocate_texture_limited(
     let desc = D3D11_TEXTURE2D_DESC {
         Width: extent.width.0 as u32,
         Height: extent.height.0 as u32,
-        MipLevels: 1,
+        MipLevels: mip_levels,
         ArraySize: 1,
         Format: format,
         SampleDesc: DXGI_SAMPLE_DESC {
@@ -365,6 +484,7 @@ fn allocate_texture_limited(
         device.CreateRenderTargetView(texture, None, Some(&mut rtv))?;
     }
     Ok(TextureBundle {
+        _dxgi_lease: None,
         texture: texture.unwrap(),
         srv: srv.unwrap(),
         rtv: rtv.unwrap(),
@@ -493,7 +613,7 @@ pub(crate) fn compile(source: &str, entry: &str, target: &str) -> Result<Vec<u8>
 }
 fn dynamic_uniform_buffer(device: &ID3D11Device) -> Result<ID3D11Buffer> {
     let desc = D3D11_BUFFER_DESC {
-        ByteWidth: 64,
+        ByteWidth: 112,
         Usage: D3D11_USAGE_DYNAMIC,
         BindFlags: D3D11_BIND_CONSTANT_BUFFER.0 as u32,
         CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0 as u32,
@@ -598,7 +718,8 @@ impl CustomCompositor {
         }
         let mut wide_blending = false;
         for (draw, output) in draws.iter().zip(outputs) {
-            let params: [[f32; 4]; 4] = [
+            let transform = draw.content.image_color_transform();
+        let params: [[f32; 4]; 7] = [
                 [
                     draw.bounds.origin.x.0,
                     draw.bounds.origin.y.0,
@@ -625,7 +746,10 @@ impl CustomCompositor {
                         + if output.native { 2. } else { 0. }
                         + if output.wide { 4. } else { 0. },
                 ],
-            ];
+                transform[0],
+            transform[1],
+            transform[2],
+        ];
             // Fixed-size stack packing; WRITE_DISCARD preserves earlier draw
             // snapshots through driver renaming, including deferred command lists.
             let bytes = params.map(|row| row.map(f32::to_le_bytes));
@@ -638,7 +762,7 @@ impl CustomCompositor {
                     0,
                     Some(&mut mapped),
                 )?;
-                std::ptr::copy_nonoverlapping(bytes.as_ptr().cast::<u8>(), mapped.pData.cast(), 64);
+                std::ptr::copy_nonoverlapping(bytes.as_ptr().cast::<u8>(), mapped.pData.cast(), 112);
                 deferred.Unmap(&self.uniform, 0);
             }
             let mask = output.coverage.as_ref().unwrap_or(&output.source);

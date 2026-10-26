@@ -1,4 +1,6 @@
 //! Backend-owned preparation and composition of independent custom paint sources.
+#[cfg(all(unix, feature = "dma-buf"))]
+pub mod dma_buf;
 mod coverage_cache;
 use anyhow::{Result, ensure};
 pub(crate) use coverage_cache::{CoverageCache, CoverageKey};
@@ -15,14 +17,15 @@ const SUBMITTED: u8 = 1;
 const ABANDONED: u8 = 2;
 const STAGED: u8 = 3;
 
-#[derive(Debug)]
 struct Recording {
+    guards: Mutex<Vec<Arc<dyn Send + Sync>>>,
     state: AtomicU8,
     batch: Option<Arc<()>>,
 }
 impl Recording {
     fn new(batch: Option<Arc<()>>) -> Self {
         Self {
+            guards: Mutex::new(Vec::new()),
             state: AtomicU8::new(PENDING),
             batch,
         }
@@ -40,9 +43,27 @@ impl Recording {
         }
     }
     fn abandon(&self, from: u8) {
-        let _ = self
+        if self
             .state
-            .compare_exchange(from, ABANDONED, Ordering::AcqRel, Ordering::Acquire);
+            .compare_exchange(from, ABANDONED, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+        {
+            self.guards.lock().unwrap().clear();
+        }
+    }
+}
+
+impl std::fmt::Debug for Recording {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Recording")
+            .field("state", &self.state)
+            .finish()
+    }
+}
+fn release_after_completion(queue: &wgpu::Queue, recording: &Recording) {
+    let guards = std::mem::take(&mut *recording.guards.lock().unwrap());
+    if !guards.is_empty() {
+        queue.on_submitted_work_done(move || drop(guards));
     }
 }
 
@@ -92,6 +113,7 @@ impl PreparationBatch {
         }
         for (_, recording) in &self.pending {
             recording.state.store(SUBMITTED, Ordering::Release);
+            release_after_completion(&self.queue, recording);
         }
         Ok(())
     }
@@ -149,6 +171,89 @@ impl WgpuCustomContext {
         let texture = new_texture(&self.device, extent, wgpu::TextureFormat::Rgba8Unorm)?;
         Ok(WgpuCustomOutput {
             texture,
+            source_sized: false,
+            key: self.key,
+            _queue: self.queue.clone(),
+            recording: self.recording.clone(),
+        })
+    }
+    /// Owned worker-safe handles for allocating and filling image staging data.
+    /// The worker cannot submit work on the renderer queue.
+    pub fn image_upload_context(&self) -> WgpuImageUploadContext {
+        WgpuImageUploadContext {
+            device: self.device.clone(),
+            queue: self.queue.clone(),
+        }
+    }
+    /// Synchronous convenience route. Media workers normally stage first and
+    /// call `adopt_image_upload` during host preparation instead.
+    pub fn create_image_output(&self, data: &gpui::ImageTextureData) -> Result<WgpuCustomOutput> {
+        ensure!(
+            self.recording.state.load(Ordering::Acquire) == PENDING,
+            "image preparation is no longer writable"
+        );
+        let staged = self.image_upload_context().stage(data)?;
+        self.adopt_image_upload(&staged)
+    }
+    /// Record copies of already-filled buffers. No texture allocation or pixel
+    /// copying occurs here. A staged image may be adopted again after abandonment.
+    pub fn adopt_image_upload(&self, staged: &WgpuStagedImage) -> Result<WgpuCustomOutput> {
+        self.adopt_image_upload_with_guard(staged, None)
+    }
+    /// Retain an admission lease until GPU completion, or release it when this
+    /// recording is abandoned. Staging resources have their own completion guard.
+    pub fn adopt_image_upload_with_guard(
+        &self,
+        staged: &WgpuStagedImage,
+        guard: Option<Arc<dyn Send + Sync>>,
+    ) -> Result<WgpuCustomOutput> {
+        ensure!(
+            Arc::ptr_eq(&staged.queue, &self.queue),
+            "foreign staged image queue"
+        );
+        ensure!(
+            Arc::ptr_eq(&staged.device, &self.device),
+            "foreign staged image device"
+        );
+        self.record(|encoder| {
+            for (level, mip) in staged.mips.iter().enumerate() {
+                encoder.copy_buffer_to_texture(
+                    wgpu::TexelCopyBufferInfo {
+                        buffer: staged.allocation.resource(),
+                        layout: wgpu::TexelCopyBufferLayout {
+                            offset: mip.offset,
+                            bytes_per_row: Some(mip.row),
+                            rows_per_image: None,
+                        },
+                    },
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &staged.texture,
+                        mip_level: level as u32,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::Extent3d {
+                        width: mip.width,
+                        height: mip.height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+            }
+            Ok(())
+        })?;
+        // Struct fields drop in declaration order: return the source buffer
+        // before releasing admission, so the next admitted worker can check it out.
+        self.recording
+            .guards
+            .lock()
+            .unwrap()
+            .push(Arc::new(ImageCopyCompletion {
+                _staging: staged.allocation.clone(),
+                _admission: guard,
+            }));
+        Ok(WgpuCustomOutput {
+            texture: staged.texture.clone(),
+            source_sized: true,
             key: self.key,
             _queue: self.queue.clone(),
             recording: self.recording.clone(),
@@ -204,6 +309,7 @@ impl WgpuCustomContext {
             self.queue.submit([command]);
         }
         self.recording.state.store(SUBMITTED, Ordering::Release);
+        release_after_completion(&self.queue, &self.recording);
         Ok(())
     }
 }
@@ -214,15 +320,174 @@ impl Drop for WgpuCustomContext {
     }
 }
 
+/// Worker-owned image allocation context; it exposes no queue submission API.
+#[derive(Clone)]
+pub struct WgpuImageUploadContext {
+    device: Arc<wgpu::Device>,
+    queue: Arc<wgpu::Queue>,
+}
+struct ImageCopyCompletion {
+    _staging: Arc<gpui::ImageStagingLease<wgpu::Buffer>>,
+    _admission: Option<Arc<dyn Send + Sync>>,
+}
+struct StagedMip {
+    offset: u64,
+    row: u32,
+    width: u32,
+    height: u32,
+}
+/// Device-bound cache of exclusive staging buffers. Completion guards prevent
+/// a buffer from returning to the cache while GPU commands still reference it.
+#[derive(Clone)]
+pub struct WgpuImageStagingPool {
+    device: Arc<wgpu::Device>,
+    queue: Arc<wgpu::Queue>,
+    buffers: Arc<gpui::ImageStagingPool<wgpu::Buffer>>,
+}
+impl WgpuImageStagingPool {
+    pub fn stats(&self) -> gpui::ImageStagingPoolStats {
+        self.buffers.stats()
+    }
+}
+/// Immutable worker-filled staging plus a sampleable destination texture.
+pub struct WgpuStagedImage {
+    device: Arc<wgpu::Device>,
+    queue: Arc<wgpu::Queue>,
+    texture: wgpu::Texture,
+    allocation: Arc<gpui::ImageStagingLease<wgpu::Buffer>>,
+    mips: Vec<StagedMip>,
+}
+impl WgpuImageUploadContext {
+    pub fn staging_pool(&self, capacity: usize) -> WgpuImageStagingPool {
+        WgpuImageStagingPool {
+            device: self.device.clone(),
+            queue: self.queue.clone(),
+            buffers: gpui::ImageStagingPool::new(capacity),
+        }
+    }
+    /// Unpooled convenience path; full media images use `stage_with_pool`.
+    pub fn stage(&self, data: &gpui::ImageTextureData) -> Result<WgpuStagedImage> {
+        self.stage_with_pool(data, &self.staging_pool(data.staging_byte_len()))
+    }
+    /// Worker-only pooled staging. Mapping a reused buffer can wait on this
+    /// worker for driver progress; this method must not run on the UI thread.
+    pub fn stage_with_pool(
+        &self,
+        data: &gpui::ImageTextureData,
+        pool: &WgpuImageStagingPool,
+    ) -> Result<WgpuStagedImage> {
+        ensure!(
+            Arc::ptr_eq(&self.device, &pool.device) && Arc::ptr_eq(&self.queue, &pool.queue),
+            "foreign staging pool"
+        );
+        ensure!(
+            data.width().max(data.height()) <= self.device.limits().max_texture_dimension_2d,
+            "image exceeds device texture limits"
+        );
+        let bytes = data.staging_byte_len();
+        ensure!(
+            bytes as u64 <= self.device.limits().max_buffer_size,
+            "image staging exceeds device buffer limit"
+        );
+        let allocation = pool.buffers.checkout(bytes as u64, bytes, || {
+            Ok(self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("media_staging_pool"),
+                size: bytes as u64,
+                usage: wgpu::BufferUsages::MAP_WRITE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: true,
+            }))
+        })?;
+        let fill = (|| -> Result<Vec<StagedMip>> {
+            let buffer = allocation.resource();
+            if allocation.was_reused() {
+                let (sender, receiver) = std::sync::mpsc::channel();
+                buffer
+                    .slice(..)
+                    .map_async(wgpu::MapMode::Write, move |result| {
+                        let _ = sender.send(result);
+                    });
+                self.device.poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: Some(std::time::Duration::from_secs(5)),
+                })?;
+                receiver.recv_timeout(std::time::Duration::from_secs(5))??;
+            }
+            let mut mapped = buffer.slice(..).get_mapped_range_mut()?;
+            let mut mips = Vec::new();
+            let mut offset = 0usize;
+            for (level, pixels) in data.levels().iter().enumerate() {
+                let width = (data.width() >> level).max(1);
+                let height = (data.height() >> level).max(1);
+                let row = (width * 4).div_ceil(256) * 256;
+                for y in 0..height as usize {
+                    mapped
+                        .slice(
+                            offset + y * row as usize
+                                ..offset + y * row as usize + width as usize * 4,
+                        )
+                        .copy_from_slice(
+                            &pixels[y * width as usize * 4..(y + 1) * width as usize * 4],
+                        );
+                }
+                mips.push(StagedMip {
+                    offset: offset as u64,
+                    row,
+                    width,
+                    height,
+                });
+                offset += row as usize * height as usize;
+            }
+            drop(mapped);
+            buffer.unmap();
+            Ok(mips)
+        })();
+        let mips = match fill {
+            Ok(mips) => mips,
+            Err(error) => {
+                allocation.resource().unmap();
+                allocation.discard();
+                return Err(error);
+            }
+        };
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("media_image"),
+            size: wgpu::Extent3d {
+                width: data.width(),
+                height: data.height(),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: data.levels().len() as u32,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        Ok(WgpuStagedImage {
+            device: self.device.clone(),
+            queue: self.queue.clone(),
+            texture,
+            allocation: Arc::new(allocation),
+            mips,
+        })
+    }
+}
+
 /// Cacheable immutable producer output. Construct through the host context.
 #[derive(Clone, Debug)]
 pub struct WgpuCustomOutput {
     texture: wgpu::Texture,
+    source_sized: bool,
     key: usize,
     _queue: Arc<wgpu::Queue>,
     recording: Arc<Recording>,
 }
 impl WgpuCustomOutput {
+    /// Host submission has accepted this recording (GPU completion is separate).
+    pub fn is_submitted(&self) -> bool {
+        self.recording.state.load(Ordering::Acquire) == SUBMITTED
+    }
+
     /// Texture to render into during preparation; immutable after host submission.
     pub fn texture(&self) -> &wgpu::Texture {
         &self.texture
@@ -237,8 +502,9 @@ impl WgpuCustomOutput {
             "custom output belongs to another queue or abandoned recording"
         );
         ensure!(
-            self.texture.width() == extent.width.0 as u32
-                && self.texture.height() == extent.height.0 as u32,
+            self.source_sized
+                || (self.texture.width() == extent.width.0 as u32
+                    && self.texture.height() == extent.height.0 as u32),
             "invalid custom texture extent"
         );
         Ok(self)
@@ -316,7 +582,7 @@ pub(crate) struct PreparedDraw {
     pub uniform_offset: u32,
 }
 
-const UNIFORM_BYTES: u64 = 64;
+const UNIFORM_BYTES: u64 = 112;
 /// Renderer-private arena. Reuse only after previous render commands are submitted;
 /// queue-ordered uploads then preserve reads by still-running previous frames.
 struct UniformArena {
@@ -371,7 +637,7 @@ impl UniformArena {
         self.cursor = 0;
         Ok(())
     }
-    fn write(&mut self, params: &[[f32; 4]; 4]) -> u32 {
+    fn write(&mut self, params: &[[f32; 4]; 7]) -> u32 {
         let offset = self.cursor * self.stride as usize;
         self.cursor += 1;
         self.bytes[offset..offset + UNIFORM_BYTES as usize]
@@ -475,6 +741,7 @@ impl CustomCompositor {
             label: Some("custom_paint"),
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         });
         Self {
@@ -501,7 +768,8 @@ impl CustomCompositor {
         native: bool,
         viewport: Size<DevicePixels>,
     ) -> PreparedDraw {
-        let params: [[f32; 4]; 4] = [
+        let transform = draw.content.image_color_transform();
+        let params: [[f32; 4]; 7] = [
             [
                 draw.bounds.origin.x.0,
                 draw.bounds.origin.y.0,
@@ -526,6 +794,9 @@ impl CustomCompositor {
                 draw.opacity,
                 u32::from(mask.is_some()) as f32 + if native { 2. } else { 0. },
             ],
+            transform[0],
+            transform[1],
+            transform[2],
         ];
         let uniform_offset = self.uniforms.write(&params);
         let uniform = self.uniforms.buffer.as_ref().expect("uniform arena");

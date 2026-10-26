@@ -4259,7 +4259,8 @@ impl Window {
         result
     }
 
-    pub(crate) fn with_element_opacity<R>(
+    /// Multiply inherited opacity while painting or prepainting a custom element.
+    pub fn with_element_opacity<R>(
         &mut self,
         opacity: Option<f32>,
         f: impl FnOnce(&mut Self) -> R,
@@ -4349,10 +4350,10 @@ impl Window {
             .unwrap_or_default()
     }
 
-    /// Obtain the current element opacity. This method should only be called during the
-    /// prepaint phase of element drawing.
+    /// Obtain the current inherited element opacity during element drawing.
+    /// Asynchronous producers can avoid requesting frames for fully hidden content.
     #[inline]
-    pub(crate) fn element_opacity(&self) -> f32 {
+    pub fn element_opacity(&self) -> f32 {
         self.invalidator.debug_assert_paint_or_prepaint();
         self.element_opacity
     }

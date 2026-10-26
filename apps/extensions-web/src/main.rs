@@ -12,6 +12,7 @@ mod brushes;
 mod color;
 mod color_samples;
 mod hermite;
+mod media;
 #[path = "../../text-lab/src/paragraph.rs"]
 mod paragraph;
 mod shader;
@@ -39,7 +40,14 @@ pub fn demo_build_id() -> String {
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn demo_behavior(demo: &str) -> String {
     match demo {
-        "typography" => "Typography: gradient, glow and shadow • kinetic glyphs with an unchanged source",
+        "media-filters" => {
+            "Media filters: shared source texture • fragment RGB transforms • alpha preserved"
+        }
+        "mipmaps" => "Mipmapping: native atlas versus dedicated trilinear source texture",
+        "path-effects" => "Path effects: contour trim and dash before native tessellation",
+        "typography" => {
+            "Typography: gradient, glow and shadow • kinetic glyphs with an unchanged source"
+        }
         "svg" => "SVG: independent views • sharp / texture zoom • no worker",
         "parley" => "Parley: editable paragraphs • selection and BiDi",
         "brushes" => "Brushes: universal fills, noise, glyphs and paths",
@@ -82,6 +90,15 @@ fn launch() -> anyhow::Result<()> {
     let brushes = parameters.contains(&"demo=brushes");
     let layers = parameters.contains(&"demo=layers");
     let hermite = parameters.contains(&"demo=hermite");
+    let media_mode = if parameters.contains(&"demo=media-filters") {
+        Some(media::Mode::Filters)
+    } else if parameters.contains(&"demo=mipmaps") {
+        Some(media::Mode::Mipmaps)
+    } else if parameters.contains(&"demo=path-effects") {
+        Some(media::Mode::Paths)
+    } else {
+        None
+    };
     // These demos need no worker pool or shared Wasm memory.
     let platform = Rc::new(WebPlatform::new_with_backend(false, backend));
     let http = Arc::new(platform.fetch_http_client());
@@ -103,7 +120,14 @@ fn launch() -> anyhow::Result<()> {
     }
     .with_http_client(http);
 
-    let reduced_motion = web_sys::window().and_then(|window| window.match_media("(prefers-reduced-motion: reduce)").ok().flatten()).is_some_and(|query| query.matches());
+    let reduced_motion = web_sys::window()
+        .and_then(|window| {
+            window
+                .match_media("(prefers-reduced-motion: reduce)")
+                .ok()
+                .flatten()
+        })
+        .is_some_and(|query| query.matches());
     let handle = app.run_embedded(move |cx| {
         cx.set_reduce_motion(reduced_motion);
         let options = WindowOptions::default();
@@ -116,6 +140,11 @@ fn launch() -> anyhow::Result<()> {
                 view
             })
             .expect("open Parley demo");
+        } else if let Some(mode) = media_mode {
+            cx.open_window(options, |_, cx| {
+                cx.new(|_| media::MediaDemo::new(mode).expect("generated media fixture"))
+            })
+            .expect("open media demo");
         } else if typography {
             cx.open_window(options, |_, cx| cx.new(typography::TypographyDemo::new))
                 .expect("open typography demo");

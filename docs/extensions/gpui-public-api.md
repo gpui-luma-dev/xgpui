@@ -6,6 +6,7 @@ Compared with pre-feature main `9b64657`. **Opt-in usage does not mean zero SDK 
 
 | GPUI change | Required by | Role |
 | --- | --- | --- |
+| `ImageTextureData`; backend `create_image_output`; `MetalImageOutput` | [xgpui-media](media-images.md) | Validated full mip chains and opt-in source-sized textures; existing output extent contracts remain strict |
 | `SvgSize::Viewport { size, view_box }` | Browser SVG comparison | Rerasterize a visible document rectangle at exact device-pixel dimensions |
 | `ParsedSvg::size()` | [xgpui-svg](svg-rendering.md) | Read the resolved SVG viewport size without reparsing |
 | Backend construction override; optional paragraph traits, geometry types, cache and paint entry points | [xgpui-parley](parley-text.md) | Install the text backend; retain shaping/reflow and paint BiDi runs |
@@ -362,3 +363,138 @@ contract; metadata alone does not transform arbitrary user shader source.
 `Dx11HeadlessRenderer::set_color_mode` are additive test-support APIs for native
 offscreen validation. Window APIs and existing scene/primitive layouts are
 unchanged by this addition.
+
+## ADDED source-sized media textures
+
+`ImageTextureData` validates an immutable complete RGBA8 mip chain within 64 MiB
+and bounded dimensions. Backend `create_image_output` methods record uploads
+without submitting or waiting. Metal uses a distinct `MetalImageOutput` type;
+wgpu/D3D11 outputs carry a private source-sized tag set only by these constructors.
+Their old `create_output` methods still validate exact raster extents.
+
+The shared custom compositor uses trilinear image sampling; single-level producer
+textures retain their previous filtering behavior. No existing public method
+signature or public scene-record layout changes in this addition. Decoding,
+mip generation, admission policy and image elements belong to `xgpui-media`.
+See its [resource and color contracts](media-images.md).
+
+### Worker staging handoff
+
+The media extension now stages full images on bounded native workers. Metal's
+`stage_image_upload` owns a worker autorelease pool. wgpu/D3D11 contexts expose
+owned `image_upload_context` handles with `stage`; their opaque staged-image types
+are bound to the original host queue/context and accepted by `adopt_image_upload`.
+Adoption records copy commands without allocating or copying the source pixels.
+Output `is_submitted` distinguishes host acceptance from pending/abandoned work;
+GPU completion remains a separate concern. Existing context layouts, recording
+transactions and synchronous image constructors remain compatible.
+
+`Window::element_opacity()` is now a public read-only getter (previously
+crate-visible). Media painting combines it with bounds/content-mask checks to
+avoid requesting loading frames for empty, fully clipped or zero-opacity content.
+Its calculation and element-drawing-only contract are unchanged.
+`Window::with_element_opacity` is also public so external custom elements can
+multiply their own style opacity into that inherited value while painting or
+prepainting. The media viewport uses it to apply its opacity style exactly once.
+
+### Completion-safe staging pools and scene-frame admission
+
+`ImageStagingPool`, `ImageStagingLease` and their counters provide bounded resource
+reuse for backend SPI. Metal/wgpu opaque staging pools retain exclusive leases
+through GPU completion; wgpu recording transactions drop unsubmitted guards when
+abandoned. The D3D11 staging path remains unpooled pending native validation.
+
+`PreparationFrame` shares loader-keyed count/byte counters for one scene
+preparation. `CustomContent::prepare_in_frame` is an optional trait method whose
+default calls `prepare_with_request`; old producers need no changes. Window
+preparation adapters forward the frame alongside original logical geometry.
+Media's policy and defaults live in `xgpui-media`, not in GPUI's renderer types.
+
+### Custom-content image color transforms
+
+`CustomContent::image_color_transform()` is a defaulted method returning three
+encoded-sRGB affine RGB rows. Identity is the default, preserving existing
+implementations and outputs. The logical-geometry adapter forwards it. Compositors
+apply it after sampling/unassociation and before coverage and opacity, preserving
+alpha. Native wide-color background adapters retain their separate color contract.
+`xgpui-media::ImageFilter`, `FilteredImage`, `MediaImage::filtered`,
+`MediaImage::paint_filtered` and `MediaImageView::filter` expose ordered SDR color
+adjustments while sharing source texture uploads. Private compositor parameter
+blocks grow from four to seven float4 rows; backend context/output layouts and
+public scene record fields are unchanged.
+
+### Contour path effects
+
+`xgpui-svg::path_effects` adds `Contour`, `Segment`, `MeasuredPath` and `PathEffect`.
+The measurement cache retains Bézier curves and supports total-length trim plus
+per-contour dash phase before native stroke tessellation. This adds no core GPUI
+API or scene-layout changes; existing `PathBuilder` and SVG raster APIs retain
+their behavior. Measurement and effect fragmentation have explicit work limits.
+
+### Native video snapshots and bounded presentation
+
+`xgpui-media` adds `VideoFrame`, `VideoStream`, `VideoSender`, `VideoStats`,
+`VideoView`, `video` and `video_frame`. These are additive APIs; existing image
+loaders and scene records are unchanged. The macOS re-export `CoreVideoFrame`
+provides a checked BGRA/IOSurface import with an unsafe external synchronization
+and immutability contract. Source-sized Metal outputs now accept BGRA8 as well as
+RGBA8. The Metal compositor retains custom-content producers through sampling
+completion, allowing immutable external frames to outlive their source scenes.
+
+Legacy Metal `PaintSurface` rendering accepts BGRA plus the existing full-range
+NV12 format. Unsupported formats propagate errors and close active encoders;
+CoreVideo views/pixel buffers remain alive until GPU completion. This does not
+change public `PaintSurface` fields or `Window::paint_surface` signatures.
+This macOS slice supplies no decoder. Windows DXGI and Linux DMA-BUF adapters
+are described separately below; system playback remains separate issue #40.
+
+### Windows native BGRA snapshots
+
+`gpui_windows::custom_draw::dxgi::DxgiFrame` imports dedicated immutable same-device
+BGRA8 D3D11 render targets for source-sized sampling; `xgpui-media` re-exports it
+and adds `VideoFrame::dxgi`. Construction is unsafe: callers synchronize producer
+writes and preserve immutability through the native resource lifetime. The adapter
+direct constructor rejects keyed mutexes and foreign devices. The separate unsafe
+`try_from_shared_bgra` constructor opens an NT handle on the host device and
+nonblockingly acquires a keyed read lease; clones/prepared outputs retain it until
+submission/discard, with the last reference handing ownership back to the producer.
+Timeout returns no frame; abandonment requires resource recreation. No decoder or playback API is added. Windows
+compilation is checked; native runtime verification is outstanding.
+
+### Linux Vulkan DMA-BUF snapshots
+
+The opt-in `gpui-wgpu/dma-buf` module adds `DmaBufLayout` and `DmaBufFrame`;
+`xgpui-media/wgpu` re-exports them and adds `VideoFrame::dma_buf`. The initial
+unsafe adapter owns an FD for a dedicated immutable linear BGRA snapshot with
+producer synchronization already complete and EXTERNAL/GENERAL Vulkan ownership.
+Preparation imports the native allocation, records host queue acquisition and
+caches a source-sized output. Device capability is enabled only when advertised.
+No decoder, sync-file import, pool-recycle signal or foreign-family GBM/EGL import
+is provided. Linux compilation and host layout tests pass; native GPU validation
+is pending. See the media guide for exact layout and lifetime requirements.
+
+### macOS NV12 snapshots
+
+`CoreVideoFrame::from_nv12(buffer, Nv12Matrix)` adds opaque 8-bit two-plane
+CoreVideo NV12 import to the existing styled video element. `xgpui-media`
+re-exports `Nv12Matrix::{Bt601, Bt709}`. Range is selected from the buffer's 420f /
+420v format. Construction remains unsafe: producer synchronization, immutable
+pixels/attachments, matching SDR matrix and centered chroma are required.
+
+Metal imports R8/RG8 plane views and samples/converts them in the existing custom
+compositor pass. Internal prepared output/uniform handling changes; public
+`MetalCustomOutput` fields and existing generic output contracts remain unchanged.
+Legacy `PaintSurface` behavior is preserved. No decoder, playback clock, transfer
+conversion or HDR support is added. All four range/matrix combinations have native
+release pixel/lifetime coverage and an interactive generated-source lab mode.
+
+
+### Synchronous mip-chain preparation
+
+`xgpui_media::mipmapped_rgba8(width, height, rgba)` is an additive extension helper
+returning validated `gpui::ImageTextureData`. It uses the native loader's same
+alpha-aware linear-light area filtering, dimension and complete-payload bounds.
+It performs synchronous CPU work without loader reservations or worker scheduling;
+use it for small already-decoded fixtures or with a host-managed executor. The
+browser media examples use it with the existing wgpu image-output SPI; the native
+loader's threading contract is unchanged. Existing GPUI call sites are unaffected.

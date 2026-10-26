@@ -84,7 +84,7 @@ impl HermiteDemo {
     fn scrub(&mut self, control: Control, x: Pixels) {
         if let Some(track) = self.tracks.get(&control) {
             let (min, max, _) = control.range();
-            let fraction = f32::from((x - track.origin.x) / track.size.width).clamp(0., 1.);
+            let fraction = ((x - track.origin.x) / track.size.width).clamp(0., 1.);
             self.mesh.set(control, min + (max - min) * fraction);
         }
     }
@@ -284,7 +284,7 @@ impl Render for HermiteDemo {
                 .child(button("preset",format!("{} · next preset",names[self.mesh.preset as usize])).on_click(cx.listener(|s,_,_,cx| {s.mesh.load_preset((s.mesh.preset+1)%s.mesh.preset_count());cx.notify();})))
                 .child(button("reset-point","Reset selected point").on_click(cx.listener(|s,_,_,cx| {s.mesh.reset_selected();cx.notify();})))
                 .child(button("reset-all","Reset all points").on_click(cx.listener(|s,_,_,cx| {s.mesh.load_preset(s.mesh.preset);cx.notify();})))
-                .child(button("background","Swap light / dark").on_click(cx.listener(|s,_,_,cx| {s.light=!s.light;cx.notify();}))))
+                .child(button("background","Swap light / dark").on_click(cx.listener(|s,_,_,cx| {s.light = !s.light;cx.notify();}))))
             .child(points).child(controls)
             .child("Angles are clockwise from right; lengths use normalized mesh coordinates. White marker = selected point; gold/cyan lines = U/V tangents at ¼ length. Both previews use the same edited points.")
             .child(div().flex().flex_wrap().gap_4()

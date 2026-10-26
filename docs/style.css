@@ -13,3 +13,14 @@
 .gamut-thumb{background:linear-gradient(0deg,#ffffff44 0 47%,transparent 47% 53%,#00000015 53%),linear-gradient(90deg,#ef5047 0 20%,#f5b84b 20% 40%,#52bb75 40% 60%,#5595df 60% 80%,#b96bcf 80%)}.gamut-preview-thumb{background:linear-gradient(110deg,#ed7876,#eabd88,#99c7ac,#91b3df,#c79dd7)}.gamut-native pre{margin:0 16px 16px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.gamut-native>span code{font-size:11px}
 
 .rail-repository{display:block;margin-top:5px;color:#c4c4c4;font-size:12px;text-decoration:none}
+
+/* Rust syntax colors shared with the Luma documentation. */
+:root{--syntax-comment:#686868;--syntax-keyword:#a626a4;--syntax-string:#287a36;--syntax-number:#986801;--syntax-function:#075db8;--syntax-type:#9a4713}
+pre .token.comment{color:var(--syntax-comment)}
+pre .token.keyword,pre .token.boolean{color:var(--syntax-keyword)}
+pre .token.string,pre .token.char{color:var(--syntax-string)}
+pre .token.number{color:var(--syntax-number)}
+pre .token.function,pre .token.macro{color:var(--syntax-function)}
+pre .token.class-name,pre .token.type-definition,pre .token.property,pre .token.table{color:var(--syntax-type)}
+pre .token.punctuation,pre .token.operator{color:var(--ink)}
+pre .token.attribute,pre .token.annotation{color:var(--syntax-type)}

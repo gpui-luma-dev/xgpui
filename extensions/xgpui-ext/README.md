@@ -8,6 +8,7 @@ never depends on extension crates. Keep renderer integration and API changes sma
 - [`xgpui-shader`](crates/xgpui-shader/README.md): mesh, gradients and portable shaders.
 - [Paint integration](../../docs/extensions/extension-paints.md) · [GPUI API changes](../../docs/extensions/gpui-public-api.md)
 - [Producer reference](../../docs/extensions/shader-producers.md) · [preparation and recording](../../docs/extensions/paint-contract-hardening.md)
+- [`xgpui-media`](crates/xgpui-media/README.md): bounded native image loading and dedicated mipmapped SDR textures.
 - [`xgpui-svg`](crates/xgpui-svg/README.md): a reusable full-color SVG element, immutable documents, bounded progressive rendering, and shared job/image-memory scheduling.
 - SVG scaling and native path comparison: [svg-lab](../../apps/svg-lab/README.md).
 - Local test/performance apps: [paint-lab](../../apps/paint-lab/README.md)
@@ -19,3 +20,6 @@ never depends on extension crates. Keep renderer integration and API changes sma
 [#8: high-gamut windows](https://github.com/gpui-luma-dev/xgpui/issues/8) are separate capabilities.
 
 Browser demos for shader paints and Parley paragraphs: [extensions-web](../../apps/extensions-web/README.md).
+
+For interactive image comparisons and upload diagnostics, see
+[Media lab](../../apps/media-lab/README.md).

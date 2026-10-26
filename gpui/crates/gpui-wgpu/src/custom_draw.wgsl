@@ -1,4 +1,4 @@
-struct Params { bounds: vec4<f32>, mask: vec4<f32>, radii: vec4<f32>, viewport: vec4<f32> }
+struct Params { bounds: vec4<f32>, mask: vec4<f32>, radii: vec4<f32>, viewport: vec4<f32>, color_r: vec4<f32>, color_g: vec4<f32>, color_b: vec4<f32> }
 @group(0) @binding(0) var<uniform> p: Params;
 @group(0) @binding(1) var paint_sampler: sampler;
 @group(0) @binding(2) var image: texture_2d<f32>;
@@ -22,5 +22,7 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
     if (u32(p.viewport.w) & 1u) != 0u { coverage = textureSample(shape_mask,paint_sampler,in.uv).r; }
     var color = textureSample(image,paint_sampler,in.uv);
     if p.viewport.w > 1.5 && color.a > 0. { color = vec4(color.rgb / color.a, color.a); }
+    let rgb1 = vec4(color.rgb, 1.);
+    color = vec4(dot(p.color_r,rgb1), dot(p.color_g,rgb1), dot(p.color_b,rgb1), color.a);
     return vec4(color.rgb, color.a * coverage * p.viewport.z);
 }

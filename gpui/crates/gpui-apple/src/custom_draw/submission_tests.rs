@@ -177,3 +177,29 @@ fn submission_rejects_foreign_device_when_available() {
         assert!(validate_commands(&context, &[command]).is_err());
     });
 }
+
+#[test]
+fn metal_staging_pool_returns_buffer_after_gpu_completion() {
+    with_context(|context| {
+        let pool = context.image_staging_pool(768);
+        let data = gpui::ImageTextureData::new(2, 2, vec![vec![255; 16], vec![255; 4]]).unwrap();
+        let staged = context
+            .stage_image_upload_with_pool(&data, &pool, None)
+            .unwrap();
+        assert_eq!(pool.stats().cached_bytes, 0);
+        assert!(
+            context
+                .stage_image_upload_with_pool(&data, &pool, None)
+                .is_err()
+        );
+        let output = CustomCompositor::validate(&context, &draw(), Box::new(staged)).unwrap();
+        submit_custom_commands(&context, [&output]).unwrap();
+        output.commands[0].wait_until_completed();
+        assert_eq!(pool.stats().cached_bytes, 768);
+        let _next = context
+            .stage_image_upload_with_pool(&data, &pool, None)
+            .unwrap();
+        assert_eq!(pool.stats().allocations, 1);
+        assert_eq!(pool.stats().reuses, 1);
+    });
+}

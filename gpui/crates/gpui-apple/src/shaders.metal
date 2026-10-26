@@ -899,6 +899,13 @@ fragment float4 surface_fragment(SurfaceFragmentInput input [[stage_in]],
   return ycbcrToRGBTransform * ycbcr;
 }
 
+// Opaque or straight-alpha BGRA8 snapshots; channel order is decoded by the view.
+fragment float4 surface_bgra_fragment(SurfaceFragmentInput input [[stage_in]],
+    texture2d<float> image [[texture(SurfaceInputIndex_YTexture)]]) {
+  constexpr sampler texture_sampler(mag_filter::linear, min_filter::linear);
+  return image.sample(texture_sampler, input.texture_position);
+}
+
 float4 hsla_to_rgba(Hsla hsla) {
   float h = hsla.h * 6.0; // Now, it's an angle but scaled in [0, 6) range
   float s = hsla.s;

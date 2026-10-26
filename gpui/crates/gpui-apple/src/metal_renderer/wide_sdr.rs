@@ -190,7 +190,7 @@ impl Compositor {
         destination: &metal::TextureRef,
         viewport: Size<DevicePixels>,
         outputs: &[(
-            crate::custom_draw::MetalCustomOutput,
+            crate::custom_draw::PreparedMetalOutput,
             Option<metal::Texture>,
             bool,
         )],
@@ -310,13 +310,19 @@ impl Compositor {
                 PrimitiveBatch::PolychromeSprites { texture_id, range } => {
                     renderer.draw_polychrome_sprites(texture_id, range, bindings, viewport, e)
                 }
-                PrimitiveBatch::Surfaces(r) => renderer.draw_surfaces(
-                    &scene.surfaces[r.clone()],
-                    r.start,
-                    bindings,
-                    viewport,
-                    e,
-                ),
+                PrimitiveBatch::Surfaces(r) => {
+                    if let Err(error) = renderer.draw_surfaces(
+                        &scene.surfaces[r.clone()],
+                        r.start,
+                        bindings,
+                        viewport,
+                        e,
+                        command,
+                    ) {
+                        e.end_encoding();
+                        return Err(error);
+                    }
+                }
                 PrimitiveBatch::Paths(r) => {
                     e.end_encoding();
                     let paths = &scene.paths[r];
