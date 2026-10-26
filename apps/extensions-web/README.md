@@ -199,7 +199,7 @@ rather than copying a wildcard listening address from a server's output.
 
 ## Unified All demos page
 
-The index lists all 12 hosted WASM examples from this app and `shader-examples`,
+The index lists all 13 hosted WASM examples from this app and `shader-examples`,
 grouped into Brushes & paints, Layer effects, Shaders & motion, Text, and SVG &
 color. Native labs are a separate section with repository-root launch commands,
 including pastel waves and the full paint-lab/Hermite editor. The shader gallery
@@ -207,3 +207,12 @@ remains a focused subset; its All demos link opens this complete index.
 
 For cross-gallery navigation, use the documentation preview at
 `http://localhost:8000/examples/extensions/` after building both browser apps.
+
+### Live Hermite editor
+
+Open `?demo=hermite` (Automatic), `?demo=hermite&backend=webgpu` or
+`?demo=hermite&backend=webgl`. Select a mesh point, drag the position/tangent
+sliders or use their −/+ controls, switch 2×2/3×3 grids and presets, or reset.
+Legacy and direct previews share paint-lab's `hermite_editor.rs` editing model.
+Rejected direct geometry displays its reason while legacy rendering stays current.
+The same field is also shown on borders and text.
