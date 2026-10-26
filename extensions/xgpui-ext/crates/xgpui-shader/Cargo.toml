@@ -12,6 +12,8 @@ wgpu = ["dep:gpui-wgpu", "dep:bytemuck"]
 portable-shaders = ["dep:naga", "dep:bytemuck"]
 
 [dependencies]
+unicode-segmentation = "1"
+unicode-bidi = "0.3"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 naga = { version = "30.0.1", optional = true, features = ["wgsl-in", "msl-out", "spv-out", "hlsl-out"] }

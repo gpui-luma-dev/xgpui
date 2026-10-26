@@ -7,6 +7,7 @@ use xgpui_shader::{
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
+    Typography,
     Minimal,
     Glow,
     Particles,
@@ -16,7 +17,9 @@ pub enum Mode {
 }
 impl Mode {
     pub fn parse(query: &str) -> Self {
-        if query.contains("borders") {
+        if query.contains("typography") {
+            Self::Typography
+        } else if query.contains("borders") {
             Self::Borders
         } else if query.contains("shadows") {
             Self::Shadows
@@ -32,6 +35,7 @@ impl Mode {
     }
     fn label(self) -> &'static str {
         match self {
+            Self::Typography => "Typography",
             Self::Minimal => "Minimal",
             Self::Glow => "Glow",
             Self::Particles => "Particles",
@@ -42,6 +46,7 @@ impl Mode {
     }
     fn title(self) -> &'static str {
         match self {
+            Self::Typography => "Selectable typography",
             Self::Minimal => "01 / A custom fragment shader",
             Self::Glow => "02 / One hundred glowing badges",
             Self::Particles => "03 / Instanced particle field",
@@ -116,7 +121,7 @@ impl Render for Examples {
         let mode = self.mode;
         let clip_composition = self.clip_composition;
         let program = match mode {
-            Mode::Minimal => self.minimal.clone(),
+            Mode::Minimal | Mode::Typography => self.minimal.clone(),
             Mode::Composition | Mode::Shadows | Mode::Borders => self.rounded.clone(),
             Mode::Glow => self.glow.clone(),
             Mode::Particles => self.particles.clone(),
@@ -126,7 +131,7 @@ impl Render for Examples {
             Mode::Glow => 100,
             Mode::Particles => self.count,
             Mode::Composition => 3,
-            Mode::Shadows | Mode::Borders => 1,
+            Mode::Shadows | Mode::Borders | Mode::Typography => 1,
         };
         let opacity = if self.translucent { 0.45 } else { 1. };
         div().size_full().bg(rgb(0x0b1020)).text_color(rgb(0xe5edff)).font_family("IBM Plex Sans")
@@ -206,7 +211,7 @@ impl Render for Examples {
                             Mode::Particles => { let x = ((random(i as u32) + t * 0.025) % 1.) * width;
                                 let y = ((random((i as u32).wrapping_add(123456)) - t * 0.06).rem_euclid(1.)) * height;
                                 (x - 6., y - 6., 12., 12., [0.4 + 0.4 * (fi * 0.7).sin(),0.65,1.,0.8]) },
-                            Mode::Composition | Mode::Shadows | Mode::Borders => unreachable!(),
+                            Mode::Composition | Mode::Shadows | Mode::Borders | Mode::Typography => unreachable!(),
                         };
                         let rect = Bounds::new(bounds.origin + point(px(x), px(y)), size(px(w), px(h)));
                         window.paint_custom_shader(rect, &program, effect(tint, 12., t * 2. + fi * 0.1)).expect("finite typed shader instance");

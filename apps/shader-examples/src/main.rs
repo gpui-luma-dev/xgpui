@@ -2,6 +2,7 @@
 compile_error!("shader examples keep browser GPU handles on a single non-atomic WASM thread");
 mod examples;
 mod shadows;
+mod typography;
 use gpui::{prelude::*, *};
 use std::borrow::Cow;
 const FONT: &[u8] = include_bytes!(
@@ -58,6 +59,14 @@ fn open(mode: examples::Mode, cx: &mut App) {
         ))),
         ..Default::default()
     };
+    if mode == examples::Mode::Typography {
+        cx.open_window(options, |window, cx| {
+            window.set_window_title("Selectable Typography · xgpui-shader");
+            cx.new(typography::TypographyDemo::new)
+        }).expect("open typography demo");
+        cx.activate(true);
+        return;
+    }
     cx.open_window(options, |window, cx| {
         window.set_window_title("Instanced WGSL · Shader Examples");
         cx.new(|_| examples::Examples::new(mode))

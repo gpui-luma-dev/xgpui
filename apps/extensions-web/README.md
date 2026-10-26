@@ -10,6 +10,7 @@ fails explicitly if unavailable; check the browser console for adapter details.
 | Crate | URL query | What it demonstrates |
 | --- | --- | --- |
 | `xgpui-color` | `?demo=color` | Display P3 endpoints, encoded sRGB / linear RGB / OkLab / OkLCh interpolation, gamut mapping and alpha. Runtime diagnostics distinguish the sRGB canvas from P3 display capability. |
+| `xgpui-shader` | `?demo=typography` | Gradient/glow/drop-shadow styling plus typewriter, wave and scramble effects; source inspection and reduced-motion preview. |
 | `xgpui-shader` | `?demo=shader` | Existing gradients, meshes and portable WGSL paints. |
 | `xgpui-shader` | `?demo=brushes` | Universal solid/linear/radial fills and borders, 16-point freeform, regular and tangent-controlled Hermite mesh, Simplex/Worley/dither modulation, glyph masks and direct/native paths. |
 | `xgpui-shader` | `?demo=layers` | Subtree opacity, grayscale/saturation/brightness/contrast/inversion, adaptive/full-resolution blur, seven destination blends and backdrop blur. |
@@ -216,3 +217,12 @@ sliders or use their −/+ controls, switch 2×2/3×3 grids and presets, or rese
 Legacy and direct previews share paint-lab's `hermite_editor.rs` editing model.
 Rejected direct geometry displays its reason while legacy rendering stays current.
 The same field is also shown on borders and text.
+
+## Typography acceptance
+
+Open `?demo=typography` with each backend. Drag and Shift-select; double-click words,
+triple-click lines; use Home/End and Cmd/Ctrl+A/C. Check combining accents, joined
+emoji and flags, selection persistence through size/theme changes, and the narrow
+overflow sample. Paste copied text into another app. The current web platform has no canvas accessibility bridge. Inspect the read-only
+text field and selection with the native demo; full screen reader certification
+remains manual. See [scope and API](../../docs/extensions/typography.md).
