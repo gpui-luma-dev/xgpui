@@ -23,12 +23,17 @@ which captures GPUI and its supporting crates from
 From the repository root:
 
 ```sh
-cargo build --locked
+just         # List sample apps and development commands.
+just build   # Build optimized native libraries.
+just shaders # Launch the shader examples.
 ```
 
-This builds the libraries supported by the selected target; it does not launch
-an application. See [build instructions](docs/BUILDING.md) for prerequisites
-and options.
+Recipes use Bash (on Windows, Git for Windows Bash must be on PATH).
+Without just, use `cargo build --release --locked`.
+
+`just build` builds the libraries supported by the selected target; it does not
+launch an application. See [Local Development](docs/LOCAL_DEVELOPMENT.md) for Windows,
+Linux and macOS build/run commands, or [build harness details](docs/BUILDING.md).
 
 ## Documentation website
 

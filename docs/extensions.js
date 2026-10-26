@@ -51,6 +51,11 @@ function extensionCode(language, source) {
   return '<pre><code class="language-' + language + '">' + escapeHtml(source) + '</code></pre>';
 }
 function extensionPage(route) {
+  if (route === 'local-development') {
+    const doc = data.extension_documents[route];
+    return '<p><a href="#overview">← Overview</a></p><article class="extension-document">' + doc.html + '</article>';
+  }
+
   if (route === 'high-gamut-windows') {
     const doc = data.extension_documents[route];
     return header('Extensions', 'xgpui-gamut', 'Explicit wide SDR content alongside normal sRGB controls.') +

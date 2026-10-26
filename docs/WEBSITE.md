@@ -43,7 +43,13 @@ without opening a GUI. It does not perform visual browser validation.
 
 Website source: `index.html`, `style.css`, `app.js`, `guides.js`, `extensions.js`, `notes.json`.
 The architecture reference lives in `guides.js`; review its source references after syncing.
-Native build prerequisites and commands remain in [BUILDING.md](BUILDING.md).
+The sidebar links to **Local Development** (`#local-development`), embedded from
+[LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md). It covers native builds and app
+launches on Windows, Linux and macOS, plus website/Wasm previews.
+The root `justfile` lists every native app (including the two benchmark apps),
+uses release mode by default and provides `docs`, `docs-check`, `docs-serve` and
+`web-build` recipes. The guide retains direct Cargo commands as a fallback.
+Build harness details remain in [BUILDING.md](BUILDING.md).
 Generator source: `tools/crate-roadmap` (independent Cargo workspace).
 
 The rendering explorer lives in `pipeline.js`. It uses SVG and a deliberately

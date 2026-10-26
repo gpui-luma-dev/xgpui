@@ -1,5 +1,9 @@
 # Build xgpui
 
+See [Local Development](LOCAL_DEVELOPMENT.md) for Windows, Linux and macOS
+commands, native app launches and website previews. This page covers the build
+harness and capture layout.
+
 Run these commands from the repository root:
 
 ```sh
