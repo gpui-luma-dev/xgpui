@@ -11,6 +11,8 @@ env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS cargo build --locked --config .cargo
 profile=debug
 for arg in "$@"; do if [[ "$arg" == --release ]]; then profile=release; fi; done
 mkdir -p "$app/dist"
+cp apps/web-support/graphics.mjs "$app/dist/graphics.mjs"
+cp apps/web-support/gallery.css "$app/dist/gallery.css"
 wasm-bindgen --target web --out-dir "$app/dist" --out-name shader_examples "target/wasm32-unknown-unknown/$profile/shader-examples.wasm"
 cp "$app/index.html" "$app/dist/index.html"
 mkdir -p docs/examples/shaders

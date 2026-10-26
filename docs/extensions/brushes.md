@@ -1009,6 +1009,56 @@ cargo test --locked --config .cargo/validation.toml \
   --features wgpu,portable-shaders --lib subtree_blur
 ```
 
+## WASM brush and layer galleries
+
+The browser companion in `apps/extensions-web` has separate `?demo=brushes` and
+`?demo=layers` entry points, with automatic, forced WebGPU and forced WebGL2
+selection. Build and serve locally:
+
+```sh
+bash apps/extensions-web/build.sh --release
+python3 apps/extensions-web/serve.py
+```
+
+Open `http://localhost:8081/?demo=brushes` or `http://localhost:8081/?demo=layers`.
+The brush gallery includes fills/borders, 16-point freeform, regular and tangent
+Hermite mesh, all noise families, seven modulation blends, gradient glyphs and
+polygon direct/native coverage beside a curved native path. The layer gallery
+combines filter, destination blend, blur radius/quality and effect-removal
+controls, with a separate backdrop stripe comparison. Foreground labels remain
+sharp over backdrop blur; subtree text blurs with its group. These galleries use
+the same Rust APIs as the native examples. When the browser's presentation
+surface lacks framebuffer-copy usage, frames containing layer/backdrop effects
+render into a reusable full-window SDR texture and present through a final
+unblended draw. This adds one pass and four bytes per device pixel of retained
+frame storage; it resizes with the window and is released on effect-free frames.
+Surfaces that support copies continue to render directly. Pastel waves remains native-only.
+
+## Pastel waves composition
+
+The standalone native example combines nine translucent mesh-gradient ribbons
+with fixed pastel background color fields. Separate variable-width contours and
+soft inward bleed gradients create the rounded-fold illusion. The shading
+follows the ribbon geometry rather than blurring its silhouette.
+
+```sh
+cargo run --release --locked --config .cargo/validation.toml \
+  --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders -- --pastel-waves
+```
+
+Use **Animate / Pause**, **Reverse**, **Grain**, and **Reset**. Motion travels
+forward and backward with eased endpoint turns. The bottom-right label shows
+render frame count, measured render FPS and direction; it does not measure GPU
+presentation cadence. The background fields stay fixed.
+
+This is a visual reference implementation, not an optimized animation pipeline.
+Each foreground ribbon's bleed uses 24 overlapping translucent shapes with
+native path coverage. Frame timing is smoothed and capped, so animation can slow
+under load. [Issue #35](https://github.com/gpui-luma-dev/xgpui/issues/35) tracks
+release profiling, cached-background experiments and directly shaded ribbon
+strips, with in-app comparisons and resource measurements. No performance gain
+or target frame rate is claimed yet. Source: `apps/paint-lab/src/pastel_waves.rs`.
+
 ## Issue #22 completion review
 
 All five roadmap phases have bounded implementations in the existing

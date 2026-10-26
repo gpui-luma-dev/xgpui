@@ -56,6 +56,10 @@ impl DeviceErrorState {
     }
 
     fn record(&self, error: String) {
+        // Browser validation arrives asynchronously; preserve the original cause
+        // in the console before subsequent invalid-command errors replace it.
+        #[cfg(target_family = "wasm")]
+        log::error!("wgpu validation: {error}");
         let mut last_error = self.last_error.lock();
         last_error.0 = last_error.0.wrapping_add(1);
         last_error.1 = Some(error);

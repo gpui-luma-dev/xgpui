@@ -111,7 +111,7 @@ so a local docs server serves the current Wasm app too:
 
 ```sh
 bash apps/extensions-web/build.sh --release
-python3 -m http.server 8000 --directory docs
+python3 -m http.server 8000 --bind 127.0.0.1 --directory docs
 ```
 
 Open `http://localhost:8000/examples/extensions/?demo=svg`. Rebuild after changing
@@ -137,7 +137,7 @@ copies generated assets to both the app's `dist/` and ignored
 
 ```sh
 bash apps/shader-examples/build.sh --release
-python3 -m http.server 8000 --directory docs
+python3 -m http.server 8000 --bind 127.0.0.1 --directory docs
 ```
 
 Open `http://localhost:8000/#instanced-wgsl-v2` or
@@ -163,3 +163,12 @@ app README, with a link from the instanced WGSL guide. These are demo additions;
 no new GPUI API or crate dependencies between extension libraries are introduced.
 Rebuild the Wasm assets for runtime changes and regenerate the site for guide
 changes before previewing or publishing. The sidebar wordmark has no boxed icon.
+
+### Local WebGPU origin
+
+Use `http://localhost:8000/` when opening the documentation preview. Python's
+server may display `[::]` as its listening address; `http://[::]:8000/` is a
+wildcard bind address, not a trustworthy browser loopback origin. At that URL,
+WebGPU is hidden even when the same browser supports it at localhost. The demo
+loaders correct HTTP `[::]` and `0.0.0.0` URLs to localhost while preserving the
+port, example and forced backend. They do not rewrite LAN or remote addresses.

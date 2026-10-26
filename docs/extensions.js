@@ -1,6 +1,6 @@
 'use strict';
 
-const shaderGuideRoutes = ['extension-paints', 'shader-producers', 'paint-contract-hardening', 'portable-wgsl-v1', 'instanced-wgsl-v2', 'portable-paints', 'native-dx11-paints'];
+const shaderGuideRoutes = ['brushes', 'paint-validation', 'extension-paints', 'shader-producers', 'paint-contract-hardening', 'portable-wgsl-v1', 'instanced-wgsl-v2', 'portable-paints', 'native-dx11-paints'];
 
 function isExtensionRoute(route) {
   return route === 'extensions' || Object.hasOwn(data.extension_documents, route);
@@ -8,8 +8,30 @@ function isExtensionRoute(route) {
 function extensionTitle(route) {
   return route === 'extensions' ? 'Extensions to GPUI' : data.extension_documents[route].title;
 }
+const browserDemoNames = {
+  brushes: 'Brush gallery', layers: 'Layer effects', shader: 'Gradient paints',
+  color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs',
+};
 function browserDemoLinks(demo) {
-  return '<p><a href="examples/extensions/?demo=' + demo + '">Run browser demo →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>';
+  return '<p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=' + demo + '">Open ' + browserDemoNames[demo] + ' ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>';
+}
+function brushDemoLinks() {
+  return '<section class="demo-entry" aria-label="Brush and layer live demos"><div class="demo-entry-heading"><span>TRY IT LIVE</span><a href="examples/extensions/">All browser demos →</a></div><div class="demo-launch-grid">' +
+    '<a class="demo-launch" href="examples/extensions/?demo=brushes"><div class="demo-thumb brush-thumb"></div><strong>Open brush gallery ↗</strong><span>Gradients, freeform &amp; Hermite meshes, noise, text and paths.</span></a>' +
+    '<a class="demo-launch" href="examples/extensions/?demo=layers"><div class="demo-thumb layer-thumb"></div><strong>Open layer effects ↗</strong><span>Subtree filters, blur, destination blending and backdrops.</span></a></div></section>';
+}
+function liveDemoOverview() {
+  return '<section class="demo-entry" aria-label="Live browser demos"><div class="demo-entry-heading"><span>LIVE BROWSER DEMOS</span><a href="examples/extensions/">Browse all demos →</a></div><div class="demo-launch-grid">' +
+    '<a class="demo-launch" href="examples/extensions/?demo=brushes"><div class="demo-thumb brush-thumb"></div><strong>Brushes &amp; gradients ↗</strong><span>Color fields, mesh, noise, glyphs and paths.</span></a>' +
+    '<a class="demo-launch" href="examples/extensions/?demo=layers"><div class="demo-thumb layer-thumb"></div><strong>Layer effects ↗</strong><span>Blur, filters and destination blending.</span></a>' +
+    '<a class="demo-launch" href="examples/shaders/"><div class="demo-thumb shader-thumb"></div><strong>Shader playground ↗</strong><span>Particles, composition, shadows and animated borders.</span></a></div></section>';
+}
+function gamutDemoPanel() {
+  return '<section class="demo-entry" aria-label="Wide-gamut demos"><div class="demo-entry-heading"><span>EXPLORE COLOR &amp; P3</span><a href="examples/extensions/">All demos →</a></div><div class="demo-launch-grid">' +
+    '<article class="demo-launch gamut-native"><div class="demo-thumb gamut-thumb" aria-hidden="true"></div><strong>Native Display P3 lab</strong><span>Compare wide SDR content with ordinary sRGB controls on macOS or Windows. Run from the repository root:</span>' +
+    extensionCode('sh', 'cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml') +
+    '<span>Move the window to a P3 display. Check <code>Effective: WideGamutSdr</code> and <code>Display wide gamut: Some(true)</code>. These report negotiated support, not display calibration.</span></article>' +
+    '<a class="demo-launch" href="examples/extensions/?demo=color"><div class="demo-thumb gamut-preview-thumb" aria-hidden="true"></div><strong>Open color comparison ↗</strong><span>Interactive browser preview of interpolation and gamut mapping. Rendered as sRGB; use the native lab to compare actual Display P3 output.</span></a></div></section>';
 }
 function colorDemoLinks() {
   return '<h2>Color comparison · browser and native desktop</h2>' +
@@ -33,7 +55,7 @@ function extensionPage(route) {
     return header('Extensions', 'xgpui-gamut', 'Explicit wide SDR content alongside normal sRGB controls.') +
       '<p class="muted">' + crateLink('xgpui-gamut') + ' · Backend owners: ' + crateLink('gpui-apple') + ' / ' + crateLink('gpui-windows') + '.</p>' +
       '<nav class="tabs" aria-label="Wide-gamut sections"><a href="#high-gamut-windows" aria-current="page">Use &amp; contract</a><a href="#high-gamut-windows&section=typed-windows-output">Windows output</a><a href="#gpui-public-api">GPUI API changes</a></nav>' +
-      '<article class="extension-document">' + doc.html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
+      gamutDemoPanel() + '<article class="extension-document">' + doc.html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
   }
 
   const banner = route === 'color-math'
@@ -49,17 +71,17 @@ function extensionPage(route) {
       : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
-    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
+    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'brushes' ? brushDemoLinks() : route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
   return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation, text and SVG extensions.') + banner +
     '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>' +
-    '<h2>1. Paints and shaders</h2>' +
+    liveDemoOverview() + '<h2>1. Paints and shaders</h2>' +
     extensionCode('rust', `use xgpui_shader::{painted, SolidColor};
 use std::sync::Arc;
 
 painted().bg_paint(Arc::new(SolidColor::new([1.0, 0.2, 0.0, 1.0])?));`) +
     '<p><code>xgpui-shader</code>: gradients, meshes and portable WGSL. Metal, wgpu and native D3D11 adapters; ordinary programs use sRGB. Explicit linear-P3 programs require a native wide-gamut window.</p>' +
-    '<div class="cards">' + extensionCard('extension-paints', 'Start here: dependencies, containers, borders, paths and interaction.') + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('paint-contract-hardening', 'Preparation, recording and failure behavior.') + extensionCard('portable-wgsl-v1', 'Rust parameters + portable WGSL source.') + extensionCard('instanced-wgsl-v2', 'Typed main-pass instances, ordered batching, native app and WASM companion.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'Native D3D11 adapter and Windows acceptance.') + '</div>' +
+    '<div class="cards">' + extensionCard('extension-paints', 'Start here: dependencies, containers, borders, paths and interaction.') + extensionCard('brushes', 'Universal brushes, glyphs, paths, mesh gradients and cached layer effects; pastel waves demo.') + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('paint-contract-hardening', 'Preparation, recording and failure behavior.') + extensionCard('portable-wgsl-v1', 'Rust parameters + portable WGSL source.') + extensionCard('instanced-wgsl-v2', 'Typed main-pass instances, ordered batching, native app and WASM companion.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'Native D3D11 adapter and Windows acceptance.') + '</div>' +
     extensionCode('sh', `just --justfile apps/paint-lab/justfile radial
 just --justfile apps/paint-lab/justfile --list`) +
     instancedDemoLinks() +
@@ -133,10 +155,10 @@ function publicApiSourceLinks() {
 }
 
 function shaderCrateGuide() {
-  return instancedDemoLinks() + browserDemoLinks('shader') + '<article class="extension-document">' +
+  return brushDemoLinks() + instancedDemoLinks() + browserDemoLinks('shader') + '<article class="extension-document">' +
     data.extension_documents['extension-paints'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') +
     '</article><h2>Producer and backend references</h2><div class="cards">' +
-    extensionCard('shader-producers', 'Mesh, gradient parameters and caches.') +
+    extensionCard('brushes', 'Universal brushes, glyphs, paths, mesh gradients and cached layer effects; pastel waves demo.') + extensionCard('shader-producers', 'Mesh, gradient parameters and caches.') +
     extensionCard('portable-wgsl-v1', 'Write a portable WGSL producer.') +
     extensionCard('instanced-wgsl-v2', 'Typed direct main-pass shaders and native-first examples.') +
     extensionCard('paint-contract-hardening', 'Preparation and recording transactions.') +
@@ -145,7 +167,7 @@ function shaderCrateGuide() {
 }
 
 function gamutCrateGuide() {
-  return '<article class="extension-document">' +
+  return gamutDemoPanel() + '<article class="extension-document">' +
     data.extension_documents['high-gamut-windows'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
 }
 

@@ -11,6 +11,8 @@ mod editor;
 #[cfg(feature = "portable-shaders")]
 mod hermite_editor;
 #[cfg(feature = "portable-shaders")]
+mod pastel_waves;
+#[cfg(feature = "portable-shaders")]
 mod portable;
 use editor::Settings;
 
@@ -68,6 +70,9 @@ fn gradient_stops() -> Vec<GradientStop> {
 struct Options {
     #[arg(long)]
     headless: bool,
+    /// Open the standalone pastel ribbon composition (requires portable-shaders).
+    #[arg(long, conflicts_with = "headless")]
+    pastel_waves: bool,
     /// Use the portable wgpu renderer for headless checks (requires feature wgpu).
     #[arg(long, requires = "headless")]
     wgpu: bool,
@@ -908,6 +913,29 @@ fn main() -> Result<()> {
             options.wgpu,
             options.portable_shader,
         );
+    }
+    if options.pastel_waves {
+        #[cfg(feature = "portable-shaders")]
+        {
+            gpui_platform::application().run(|cx: &mut App| {
+                let bounds = Bounds::centered(None, size(px(1280.), px(780.)), cx);
+                cx.open_window(
+                    WindowOptions {
+                        window_bounds: Some(WindowBounds::Windowed(bounds)),
+                        ..Default::default()
+                    },
+                    |window, cx| {
+                        window.set_window_title("Pastel Waves · XGPUI");
+                        cx.new(|_| pastel_waves::PastelWaves::default())
+                    },
+                )
+                .expect("open pastel waves");
+                cx.activate(true);
+            });
+            return Ok(());
+        }
+        #[cfg(not(feature = "portable-shaders"))]
+        anyhow::bail!("--pastel-waves requires --features portable-shaders");
     }
     gpui_platform::application().run(move |cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1500.), px(940.)), cx);

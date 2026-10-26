@@ -1,5 +1,5 @@
 fn cell_hash(cell: vec2<i32>) -> u32 {
-    var h = bitcast<u32>(cell.x) * 0x9e3779b9u ^ bitcast<u32>(cell.y) * 0x85ebca6bu;
+    var h = (bitcast<u32>(cell.x) * 0x9e3779b9u) ^ (bitcast<u32>(cell.y) * 0x85ebca6bu);
     h = (h ^ (h >> 16u)) * 0x7feb352du;
     h = (h ^ (h >> 15u)) * 0x846ca68bu;
     return h ^ (h >> 16u);

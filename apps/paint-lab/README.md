@@ -109,3 +109,30 @@ into the three paint sites. The app authoring example in `src/portable.rs` conta
 no OS/backend branches or binding declarations. The interactive editor continues
 to edit built-in gradients; the user WGSL experiment is headless only.
 See [the experimental v1 contract](../../docs/extensions/portable-wgsl-v1.md).
+
+## Pastel waves
+
+Open the standalone pastel ribbon composition:
+
+```sh
+cargo run --locked --config .cargo/validation.toml \
+  --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders -- --pastel-waves
+```
+
+The composition uses a pale freeform background and nine overlapping translucent
+mesh-gradient ribbons, with fine highlights and optional grain. **Animate** starts
+gentle forward/reverse motion with eased turns, **Pause** freezes it,
+**Reverse** changes direction, **Grain** toggles dithering and fine threads,
+and **Reset** restores the initial still composition. A small bottom-right label
+shows the render frame count, measured render FPS, and direction. FPS is not a
+GPU presentation measurement. Resize the window to check
+that the artwork follows its bounds. Ribbon geometry uses native path coverage
+to reuse shader programs while animating. The demo lives in `src/pastel_waves.rs`.
+
+### Visual reference attribution
+
+The pastel waves demo was visually inspired by
+[Abstract pastel wave background — pink, blue and purple gradient](https://pngtree.com/freebackground/abstract-pastel-wave-background-pink-blue-purple-gradient_15809178.html)
+on PNGTree. Credit for the reference artwork belongs to its original creator.
+The demo recreates the visual style with procedural Rust geometry and shaders;
+the reference image is not bundled or used as a texture.

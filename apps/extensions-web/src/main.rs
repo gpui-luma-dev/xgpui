@@ -8,6 +8,7 @@ use gpui_web::{WebBackendPreference, WebPlatform};
 use std::{borrow::Cow, cell::RefCell, rc::Rc, sync::Arc};
 
 // Share the native lab's editor, including its UTF-16/IME bridge and BiDi geometry.
+mod brushes;
 mod color;
 mod color_samples;
 #[path = "../../text-lab/src/paragraph.rs"]
@@ -37,6 +38,8 @@ pub fn demo_behavior(demo: &str) -> String {
     match demo {
         "svg" => "SVG: independent views • sharp / texture zoom • no worker",
         "parley" => "Parley: editable paragraphs • selection and BiDi",
+        "brushes" => "Brushes: universal fills, noise, glyphs and paths",
+        "layers" => "Layers: subtree filters, blending and blur",
         "shader" => "Shader: gradients, paths and animation",
         "color" => "Color / Gamut: interpolation and mapping • sRGB preview",
         _ => "Unknown demo",
@@ -70,6 +73,8 @@ fn launch() -> anyhow::Result<()> {
     let parley = parameters.contains(&"demo=parley");
     let svg = parameters.contains(&"demo=svg");
     let color = parameters.contains(&"demo=color");
+    let brushes = parameters.contains(&"demo=brushes");
+    let layers = parameters.contains(&"demo=layers");
     // These demos need no worker pool or shared Wasm memory.
     let platform = Rc::new(WebPlatform::new_with_backend(false, backend));
     let http = Arc::new(platform.fetch_http_client());
@@ -102,6 +107,9 @@ fn launch() -> anyhow::Result<()> {
                 view
             })
             .expect("open Parley demo");
+        } else if brushes || layers {
+            cx.open_window(options, |_, cx| cx.new(|_| brushes::BrushDemo::new(layers)))
+                .expect("open brush gallery");
         } else if color {
             cx.open_window(options, |_, cx| cx.new(|_| color::ColorDemo::new()))
                 .expect("open color demo");

@@ -22,6 +22,8 @@ for arg in "$@"; do
     if [[ "$arg" == --release ]]; then profile=release; fi
 done
 mkdir -p "$app/dist"
+cp apps/web-support/graphics.mjs "$app/dist/graphics.mjs"
+cp apps/web-support/gallery.css "$app/dist/gallery.css"
 wasm-bindgen --target web --out-dir "$app/dist" --out-name extensions_web \
     "$app/target/wasm32-unknown-unknown/$profile/extensions-web.wasm"
 cp docs/favicon.svg docs/favicon.ico "$app/dist/"

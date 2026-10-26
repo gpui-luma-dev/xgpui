@@ -1,3 +1,5 @@
+#[path = "surface_frame.rs"]
+mod surface_frame;
 use crate::{CompositorGpuHint, DeviceErrorState, WgpuAtlas, WgpuContext};
 use anyhow::{Context as _, Result};
 use bytemuck::{Pod, Zeroable};
@@ -215,6 +217,7 @@ struct WgpuRendererCore {
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
     shaders: ShaderRenderer,
     backdrops: Option<crate::backdrop::Backdrops>,
+    surface_frame: Option<surface_frame::SurfaceFrame>,
     atlas: Arc<WgpuAtlas>,
     path_globals_offset: u64,
     gamma_offset: u64,
@@ -1194,13 +1197,8 @@ impl WgpuRenderer {
             .create_view(&wgpu::TextureViewDescriptor::default());
         let premultiplied_alpha =
             self.surface_config.alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied;
-        if let Err(error) = core.render_frame(
-            scene,
-            &frame_view,
-            size,
-            premultiplied_alpha,
-            wgpu::Color::TRANSPARENT,
-        ) {
+        if let Err(error) = core.render_surface_frame(scene, &frame_view, size, premultiplied_alpha)
+        {
             log::error!("{error:#}");
             return false;
         }
@@ -1339,6 +1337,7 @@ impl WgpuRendererCore {
             custom_compositor: None,
             shaders: ShaderRenderer::default(),
             backdrops: None,
+            surface_frame: None,
             resources: WgpuResources {
                 device,
                 queue,
