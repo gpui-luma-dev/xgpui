@@ -7,7 +7,7 @@ cbuffer Params : register(b0) {
     float4 color_g;
     float4 color_b;
     float4 vignette;
-    float4 linear;
+    float4 color_flags;
 }
 Texture2D<float4> image : register(t0);
 Texture2D<float4> shape_mask : register(t1);
@@ -52,9 +52,9 @@ float4 custom_fragment(Vertex input) : SV_Target {
 
     float4 color = image.Sample(paint_sampler, input.uv);
     if ((uint(viewport.w) & 4) != 0) {
-        if (linear.y > 1.5 && linear.x > .5) {
+        if (color_flags.y > 1.5 && color_flags.x > .5) {
             float3 rgb = color.a > 0 ? color.rgb / color.a : float3(0,0,0);
-            if (linear.z < .5) rgb = p3_to_srgb(rgb);
+            if (color_flags.z < .5) rgb = p3_to_srgb(rgb);
             float4 v = float4(rgb,1);
             rgb = float3(dot(color_r,v),dot(color_g,v),dot(color_b,v));
             uint width,height; image.GetDimensions(width,height);
@@ -62,7 +62,7 @@ float4 custom_fragment(Vertex input) : SV_Target {
             float d=lerp(length(q),length(q*dims/min(dims.x,dims.y)),vignette.w);
             float t=clamp((d-vignette.y)/vignette.z,0.,1.);
             rgb*=1.-vignette.x*t*t*(3.-2.*t);
-            if (linear.z < .5) rgb=srgb_to_p3(rgb);
+            if (color_flags.z < .5) rgb=srgb_to_p3(rgb);
             color.rgb=clamp(rgb,0.,1.)*color.a;
         }
         // Associated linear P3 -> scRGB. Preserve extended channels.
@@ -74,14 +74,14 @@ float4 custom_fragment(Vertex input) : SV_Target {
     }
     // The legacy native background adapter produces premultiplied pixels.
     if ((uint(viewport.w) & 2) != 0 && color.a > 0) color.rgb /= color.a;
-    bool processing = linear.x > 0.5 || linear.y > 0.5;
-    if (linear.y > 0.5) {
+    bool processing = color_flags.x > 0.5 || color_flags.y > 0.5;
+    if (color_flags.y > 0.5) {
         color.rgb = color.a > 0.0 ? color.rgb / color.a : float3(0.0, 0.0, 0.0);
-        if (linear.z < 0.5) color.rgb = p3_to_srgb(color.rgb);
+        if (color_flags.z < 0.5) color.rgb = p3_to_srgb(color.rgb);
     } else if (processing) {
         float3 c = clamp(color.rgb, 0.0, 1.0);
         color.rgb = float3(decode_srgb(c.r), decode_srgb(c.g), decode_srgb(c.b));
-        if (linear.z > 0.5) color.rgb = srgb_to_p3(color.rgb);
+        if (color_flags.z > 0.5) color.rgb = srgb_to_p3(color.rgb);
     }
     float4 rgb1 = float4(color.rgb, 1.0);
     color.rgb = float3(dot(color_r,rgb1), dot(color_g,rgb1), dot(color_b,rgb1));
@@ -95,7 +95,7 @@ float4 custom_fragment(Vertex input) : SV_Target {
         float t = clamp((d - vignette.y) / vignette.z, 0.0, 1.0);
         float factor = 1.0 - vignette.x * t*t*(3.0 - 2.0*t);
         float3 rgb = color.rgb * factor;
-        if (linear.z > 0.5) rgb = p3_to_srgb(rgb);
+        if (color_flags.z > 0.5) rgb = p3_to_srgb(rgb);
         float3 c = clamp(rgb, 0.0, 1.0);
         color.rgb = float3(encode_srgb(c.r), encode_srgb(c.g), encode_srgb(c.b));
         if (color.a == 0.0) color.rgb = float3(0.0, 0.0, 0.0);

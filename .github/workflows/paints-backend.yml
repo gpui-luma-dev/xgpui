@@ -41,6 +41,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Start setup timing
         run: echo "SETUP_STARTED=$(python -c 'import time; print(time.time())')" >> "$GITHUB_ENV"
+      - name: Compile native HLSL before Cargo builds
+        if: inputs.backend == 'windows-native'
+        shell: pwsh
+        run: ./.github/paints/check-hlsl.ps1
       - uses: dtolnay/rust-toolchain@1.99.0
       - name: Install native dependencies and Mesa Vulkan
         if: inputs.backend == 'linux-vulkan'

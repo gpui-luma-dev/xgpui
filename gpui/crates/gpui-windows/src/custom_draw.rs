@@ -728,7 +728,7 @@ impl CustomCompositor {
             let vignette = adjustments
                 .map(|v| v.vignette())
                 .unwrap_or([0., 0., 1., 1.]);
-            let linear = [
+            let color_flags = [
                 if adjustments.is_some() { 1. } else { 0. },
                 draw.content.image_color_mode().shader_value(),
                 if adjustments.is_some_and(|v| v.is_p3()) {
@@ -769,7 +769,7 @@ impl CustomCompositor {
                 transform[1],
                 transform[2],
                 vignette,
-                linear,
+                color_flags,
             ];
             // Fixed-size stack packing; WRITE_DISCARD preserves earlier draw
             // snapshots through driver renaming, including deferred command lists.
