@@ -215,7 +215,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 16);
+assert.equal(Object.keys(data.extension_documents).length, 17);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/xgpui-ext/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -244,13 +244,13 @@ assert.match(data.extension_documents['high-gamut-windows'].html, /xgpui-gamut/)
 assert.match(run('extensionPage("extensions")'), /Downstream extensions to GPUI/);
 assert.ok(!index.includes('<a href="#extensions">Extensions to GPUI</a>'), 'extensions belong in the crate group');
 for (const [route, doc] of Object.entries(data.extension_documents)) {
-  assert.equal(doc.source, 'docs/extensions/' + route + '.md');
+  assert.equal(doc.source, route === 'local-development' ? 'docs/LOCAL_DEVELOPMENT.md' : 'docs/extensions/' + route + '.md');
   await readFile(new URL('../' + doc.source, import.meta.url));
   context.location.hash = '#' + route;
   run('render()');
   assert.ok(element('content').innerHTML.includes(route === 'high-gamut-windows' ? doc.html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') : doc.html));
   assert.ok(context.document.title.includes(doc.title));
-  assert.ok(!doc.html.includes('.md"'), 'unconverted Markdown link: ' + route);
+  assert.ok(!/href="(?!https?:)[^"]*\.md"/.test(doc.html), 'unconverted Markdown link: ' + route);
   for (const match of doc.html.matchAll(/href="#([^"&]+)(?:&amp;section=([^"&]+))?"/g)) {
     const target = data.extension_documents[match[1]];
     assert.ok(target, 'missing extension route: ' + match[1]);

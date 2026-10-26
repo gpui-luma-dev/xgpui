@@ -723,9 +723,10 @@ fn generate(root: &Path) -> Result<()> {
             bail!("Missing notes for {}", krate.package);
         }
     }
-    // All published extension guides live in the web documentation source tree.
+    // Published guides live in the web documentation source tree.
     // Embed them so navigation works offline without fetch.
     let document_sources = [
+        ("local-development", "docs/LOCAL_DEVELOPMENT.md"),
         ("color-math", "docs/extensions/color-math.md"),
         ("media-images", "docs/extensions/media-images.md"),
         ("svg-rendering", "docs/extensions/svg-rendering.md"),
