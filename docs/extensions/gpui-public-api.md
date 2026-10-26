@@ -18,7 +18,7 @@ Compared with pre-feature main `9b64657`. **Opt-in usage does not mean zero SDK 
 | macOS variable-font selection/identity correction | Native comparison baseline for the Parley lab | Behavior only; no public API addition |
 
 Paint recording is shared infrastructure; window color negotiation is specific
-to wide-gamut presentation. Parley uses the existing glyph atlas, not custom-draw
+to wide-gamut presentation. Parley uses the existing [glyph atlas ↗](https://en.wikipedia.org/wiki/Texture_atlas), not custom-draw
 or wide-gamut APIs. The color math crate is standalone. Gamut depends on color and optionally uses
 shader for instanced drawing; shader does not depend on gamut or color.
 
@@ -259,7 +259,7 @@ pub struct Dx11WideSdrOutput { /* private fields; Clone */ }
 [Typed Windows output and recording example](high-gamut-windows.md#typed-windows-output).
 The Windows renderer accepts this output only while `WideGamutSdr` is active.
 Its existing `PlatformWindow` overrides implement negotiation/status; no extra
-GPUI core API is added. Existing producer signatures and sRGB outputs are unchanged.
+GPUI core API is added. Existing producer signatures and [sRGB ↗](https://en.wikipedia.org/wiki/SRGB) outputs are unchanged.
 
 Backend APIs are target/feature dependent. App code normally uses portable
 `xgpui-shader` producers rather than these low-level recording contracts.
@@ -366,13 +366,13 @@ unchanged by this addition.
 
 ## ADDED source-sized media textures
 
-`ImageTextureData` validates an immutable complete RGBA8 mip chain within 64 MiB
+`ImageTextureData` validates an immutable complete [RGBA8 ↗](https://en.wikipedia.org/wiki/RGBA_color_model) [mip chain ↗](https://en.wikipedia.org/wiki/Mipmap) within 64 MiB
 and bounded dimensions. Backend `create_image_output` methods record uploads
 without submitting or waiting. Metal uses a distinct `MetalImageOutput` type;
 wgpu/D3D11 outputs carry a private source-sized tag set only by these constructors.
 Their old `create_output` methods still validate exact raster extents.
 
-The shared custom compositor uses trilinear image sampling; single-level producer
+The shared custom compositor uses [trilinear image sampling ↗](https://en.wikipedia.org/wiki/Trilinear_filtering); single-level producer
 textures retain their previous filtering behavior. No existing public method
 signature or public scene-record layout changes in this addition. Decoding,
 mip generation, admission policy and image elements belong to `xgpui-media`.
@@ -418,7 +418,7 @@ implementations and outputs. The logical-geometry adapter forwards it. Composito
 apply it after sampling/unassociation and before coverage and opacity, preserving
 alpha. Native wide-color background adapters retain their separate color contract.
 `xgpui-media::ImageFilter`, `FilteredImage`, `MediaImage::filtered`,
-`MediaImage::paint_filtered` and `MediaImageView::filter` expose ordered SDR color
+`MediaImage::paint_filtered` and `MediaImageView::filter` expose ordered [SDR ↗](https://en.wikipedia.org/wiki/Standard-dynamic-range_video) color
 adjustments while sharing source texture uploads. Private compositor parameter
 blocks grow from four to seven float4 rows; backend context/output layouts and
 public scene record fields are unchanged.
@@ -437,12 +437,12 @@ their behavior. Measurement and effect fragmentation have explicit work limits.
 `VideoView`, `video` and `video_frame`. These are additive APIs; existing image
 loaders and scene records are unchanged. The macOS re-export `CoreVideoFrame`
 provides a checked BGRA/IOSurface import with an unsafe external synchronization
-and immutability contract. Source-sized Metal outputs now accept BGRA8 as well as
+and immutability contract. Source-sized Metal outputs now accept [BGRA8 ↗](https://en.wikipedia.org/wiki/RGBA_color_model) as well as
 RGBA8. The Metal compositor retains custom-content producers through sampling
 completion, allowing immutable external frames to outlive their source scenes.
 
 Legacy Metal `PaintSurface` rendering accepts BGRA plus the existing full-range
-NV12 format. Unsupported formats propagate errors and close active encoders;
+[NV12 ↗](https://en.wikipedia.org/wiki/YCbCr) format. Unsupported formats propagate errors and close active encoders;
 CoreVideo views/pixel buffers remain alive until GPU completion. This does not
 change public `PaintSurface` fields or `Window::paint_surface` signatures.
 This macOS slice supplies no decoder. Windows DXGI and Linux DMA-BUF adapters
@@ -485,7 +485,7 @@ Metal imports R8/RG8 plane views and samples/converts them in the existing custo
 compositor pass. Internal prepared output/uniform handling changes; public
 `MetalCustomOutput` fields and existing generic output contracts remain unchanged.
 Legacy `PaintSurface` behavior is preserved. No decoder, playback clock, transfer
-conversion or HDR support is added. All four range/matrix combinations have native
+conversion or [HDR ↗](https://en.wikipedia.org/wiki/High_dynamic_range) support is added. All four range/matrix combinations have native
 release pixel/lifetime coverage and an interactive generated-source lab mode.
 
 
@@ -498,3 +498,75 @@ It performs synchronous CPU work without loader reservations or worker schedulin
 use it for small already-decoded fixtures or with a host-managed executor. The
 browser media examples use it with the existing wgpu image-output SPI; the native
 loader's threading contract is unchanged. Existing GPUI call sites are unaffected.
+
+## Media pipeline CPU contracts (issue #26 Phase 1)
+
+`xgpui_media::pipeline` adds explicit SDR source/working color metadata, an
+alpha-preserving linear `ColorMatrix` and `Vignette` reference, progressive
+publication states with stale-result protection, tile identities/accounting and
+future scheduler budgets. These are extension APIs; this phase adds no GPUI
+renderer SPI or new GPU path. `ImageFilter` retains its encoded-sRGB contract.
+
+`PipelineCapabilities::current()` reports the new GPU features as unsupported
+until their respective phases land. See [media pipeline contracts](media-pipeline.md)
+for the public types, examples, validation and remaining implementation work.
+
+### Linear image sampling parameters (issue #26 Phase 2)
+
+`CustomContent::image_linear_adjustments` is a default-None hook that forwards
+through preparation geometry wrappers. `LinearImagePaint` validates finite f32
+matrix/vignette parameters for encoded-sRGB source images. Metal, wgpu and D3D11
+carry those per-placement parameters separately from retained source resources;
+the existing `image_color_transform` method keeps its encoded-sRGB behavior.
+The linear hook replaces it when present. The private compositor uniform ABI
+expands consistently in Rust, MSL, WGSL and HLSL.
+
+The extension exposes `pipeline::ImageAdjustments`, `AdjustedImage`,
+`MediaImage::adjusted`/`paint_adjusted` and `MediaImageView::adjustments`.
+The last filter/adjustments setter selects the interpretation explicitly. P3
+working matrices and unsafe f32 conversions are rejected by the rendered path.
+
+
+### Phase 3 source texture color support
+
+`ImageTextureData::new_linear_p3_rgba16f` validates full [premultiplied ↗](https://en.wikipedia.org/wiki/Alpha_compositing),
+bounded linear-P3 [binary16 ↗](https://en.wikipedia.org/wiki/Half-precision_floating-point_format) mip chains. `format()` and `bytes_per_pixel()`
+drive upload size/format on Metal, wgpu and D3D11; staging accounting includes
+the 8-byte pixel size. `CustomContent::image_color_mode` defaults to the old
+encoded-sRGB interpretation; float preview/wide modes are explicit.
+`LinearImagePaint::with_p3` declares P3 working primaries.
+
+The native wide placement uses the existing wide-SDR compositor and requires
+window opt-in. wgpu rejects wide placement; it offers an explicit sRGB preview.
+Core source metadata must match the GPU texture format. Existing producers keep
+their default hooks. See [media pipeline](media-pipeline.md) for examples and limits.
+
+
+### Phase 4 tiled preparation and lifetime support
+
+`ImageTextureData::page` validates a single immutable mip page. Existing
+constructors still require complete whole-image mip chains.
+`CustomContent::image_source_size` declares source-sized preparation independently
+of a large virtual destination; geometry remains finite and clipped normally.
+`image_sample_opacity` separates preparation from sampling visibility, allowing a
+page to warm up before replacing its progressive fallback. Defaults preserve
+existing producers.
+
+wgpu retains source snapshots until queue completion; D3D11 event queries retire
+them after sampling. Metal already retains them through command completion.
+Media payload guards also follow upload completion. These lifetimes let tile
+budget leases count evicted but still-used resources. Per-frame image transfer
+accounting now charges aligned staging bytes instead of only unpadded payload.
+See [progressive tiled canvas](media-pipeline.md) for examples and QA limits.
+
+### Phase 5 effect reuse
+
+`xgpui_shader::LayerEffect::paint` is public for bounded paint closures.
+`xgpui_media::pipeline::ImageBlur` validates the existing layer capture/support
+limits and reuses that compositor rather than adding another blur engine.
+Assembled tiled previews share one kernel across page edges. This path filters
+premultiplied encoded sRGB and does not provide wide-SDR or source-space blur.
+`VideoFrame::adjusted` and `VideoView::adjustments` forward immutable native
+preparation/ownership with linear placement uniforms; `VideoView::blur` uses
+the same bounded preview path. See the media pipeline guide for errors, fallbacks,
+separate effect memory and runtime QA limits. No core ABI change was needed.

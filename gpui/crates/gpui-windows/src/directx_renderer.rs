@@ -47,6 +47,7 @@ pub(crate) struct DirectXRenderer {
     globals: DirectXGlobalElements,
     pipelines: DirectXRenderPipelines,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
+    custom_retirement: Vec<(ID3D11Query, Vec<Arc<dyn gpui::CustomContent>>)>,
     shaders: Option<crate::custom_draw::ShaderRenderer>,
     backdrops: Option<crate::custom_draw::Backdrops>,
     wide_sdr: Option<wide_sdr::Compositor>,
@@ -204,6 +205,7 @@ impl DirectXRenderer {
             globals,
             pipelines,
             custom_compositor: None,
+            custom_retirement: Vec::new(),
             backdrops: None,
             shaders: None,
             wide_sdr: None,
@@ -318,6 +320,9 @@ impl DirectXRenderer {
                 devices.device_context.Flush();
             }
             self.devices.take();
+            // Device removal terminates old queue work; foreign queries cannot
+            // be polled on the replacement context.
+            self.custom_retirement.clear();
         }
 
         let devices = DirectXRendererDevices::new(directx_devices, disable_direct_composition)
@@ -404,7 +409,57 @@ impl DirectXRenderer {
     /// [`draw`](Self::draw) (which then presents) and
     /// [`render_to_image`](Self::render_to_image) (which reads the target back
     /// instead), so the two cannot drift.
-    fn render(
+    fn render(&mut self, scene: &Scene, background: WindowBackgroundAppearance) -> Result<()> {
+        if let Some(devices) = &self.devices {
+            self.custom_retirement.retain(|(query, _)| {
+                let mut complete = 0u32;
+                let result = unsafe {
+                    devices.device_context.GetData(
+                        query,
+                        Some((&mut complete as *mut u32).cast()),
+                        4,
+                        D3D11_ASYNC_GETDATA_DONOTFLUSH.0 as u32,
+                    )
+                };
+                result.is_err() || complete == 0
+            });
+        }
+        // Create the retirement fence before issuing any sampling work.
+        let fence = if !scene.custom_draws.is_empty() {
+            let devices = self.devices.as_ref().context("devices missing")?;
+            let mut query = None;
+            unsafe {
+                devices.device.CreateQuery(
+                    &D3D11_QUERY_DESC {
+                        Query: D3D11_QUERY_EVENT,
+                        MiscFlags: 0,
+                    },
+                    Some(&mut query),
+                )?;
+            }
+            Some((
+                query.context("custom retirement query missing")?,
+                scene
+                    .custom_draws
+                    .iter()
+                    .map(|d| d.content.clone())
+                    .collect::<Vec<_>>(),
+            ))
+        } else {
+            None
+        };
+        let result = self.render_inner(scene, background);
+        if let Some((query, content)) = fence {
+            if let Some(devices) = &self.devices {
+                unsafe {
+                    devices.device_context.End(&query);
+                }
+                self.custom_retirement.push((query, content));
+            }
+        }
+        result
+    }
+    fn render_inner(
         &mut self,
         scene: &Scene,
         background_appearance: WindowBackgroundAppearance,
@@ -686,8 +741,14 @@ impl DirectXRenderer {
                         draw.content
                             .prepare_in_frame(context, &request, &preparation_frame)?;
                     let native = output.is::<Background>();
-                    let wide = output.is::<Dx11WideSdrOutput>();
-                    let source = if wide {
+                    let typed_wide = output.is::<Dx11WideSdrOutput>();
+                    let wide = typed_wide
+                        || draw.content.image_color_mode() == gpui::ImageColorMode::LinearP3Wide;
+                    anyhow::ensure!(
+                        !wide || self.wide_sdr.is_some(),
+                        "wide image requires WideGamutSdr presentation"
+                    );
+                    let source = if typed_wide {
                         anyhow::ensure!(
                             self.wide_sdr.is_some(),
                             "wide output requires WideGamutSdr presentation"
@@ -720,6 +781,16 @@ impl DirectXRenderer {
                             .map_err(|_| anyhow::anyhow!("producer returned a non-DirectX output"))?
                             .validate(context, extent)?
                     };
+                    if draw.content.image_color_mode() != gpui::ImageColorMode::EncodedSrgb {
+                        let mut description = D3D11_TEXTURE2D_DESC::default();
+                        unsafe {
+                            source.texture.GetDesc(&mut description);
+                        }
+                        anyhow::ensure!(
+                            description.Format == DXGI_FORMAT_R16G16B16A16_FLOAT,
+                            "linear P3 image metadata requires RGBA16F texture"
+                        );
+                    }
                     let coverage = if draw.coverage.is_some() {
                         let key = CoverageKey::new(draw)?;
                         if let Some(mask) = compositor.masks.get(&key) {
@@ -2608,6 +2679,7 @@ impl Dx11HeadlessRenderer {
             globals,
             pipelines,
             custom_compositor: None,
+            custom_retirement: Vec::new(),
             backdrops: None,
             shaders: None,
             wide_sdr: None,

@@ -4,10 +4,19 @@ Images and GPU-backed video frames for GPUI. Use it when your app needs large
 photos, image adjustments, or a view of frames produced by another part of your
 application. The API is experimental.
 
-Images keep a set of smaller versions called **mipmaps**. The GPU picks a suitable
+Images keep a set of smaller versions called **[mipmaps ↗](https://en.wikipedia.org/wiki/Mipmap)**. The GPU picks a suitable
 level when drawing a small preview, which helps fine detail stay steady as you
 zoom or scroll. The native loader prepares images in the background and limits
 how much work can enter the renderer at once.
+
+## Linear adjustments and next pipeline contracts
+
+[Media pipeline contracts](media-pipeline.md) documents Phases 1–5 of issue #26:
+explicit linear color/alpha semantics, CPU matrix/vignette references, progressive
+publication states and bounded tile planning. The new `ImageAdjustments` placement API renders matrix/vignette effects in
+linear [sRGB ↗](https://en.wikipedia.org/wiki/SRGB) on retained [RGBA8 ↗](https://en.wikipedia.org/wiki/RGBA_color_model) images, without changing `ImageFilter`. Run
+`just media --adjustments` or use the browser Image filters demo. RGBA16F uploads, progressive/tiled rendering, bounded preview blur and native
+video adjustments are available; the pipeline guide describes their limits. Existing image and native surface instructions below still apply.
 
 ## Where this helps in a real app
 
@@ -115,8 +124,8 @@ image_view(image.clone())
 
 The GPU applies these adjustments while drawing. Changing a filter reuses the
 loaded source; it does not decode or upload the image again. Filters compose in
-call order and preserve alpha. They work on SDR sRGB colors. Blur, LUT grading,
-embedded color profiles, EXIF orientation and HDR handling are not implemented.
+call order and preserve alpha. They work on [SDR ↗](https://en.wikipedia.org/wiki/Standard-dynamic-range_video) sRGB colors. Blur, LUT grading,
+embedded color profiles, EXIF orientation and [HDR ↗](https://en.wikipedia.org/wiki/High_dynamic_range) handling are not implemented.
 
 ## Set a loading budget for a scrolling gallery
 
@@ -193,7 +202,7 @@ once, then change the effect as progress updates. See the
 - [Image filters](../examples/extensions/?demo=media-filters): compare the original
   with brightness, contrast, saturation, hue and tint adjustments.
 - [Mipmapping](../examples/extensions/?demo=mipmaps): shrink the same image through
-  an ordinary atlas and a dedicated mipmapped texture.
+  an ordinary [atlas ↗](https://en.wikipedia.org/wiki/Texture_atlas) and a dedicated mipmapped texture.
 - [Trim / dash](../examples/extensions/?demo=path-effects): change trim, dash pattern,
   phase and stroke width on open and closed curves.
 
@@ -216,7 +225,7 @@ Both commands use release mode and generate their own sample content.
 | --- | --- |
 | Images and color filters | Metal/wgpu tests pass on macOS; D3D11 cross-compiles. |
 | Browser sampling, filters and contour effects | Checked on WebGPU and WebGL2 in Chromium on macOS. |
-| macOS native frames | BGRA and 8-bit NV12 with explicit BT.601/709 selection are tested. |
+| macOS native frames | [BGRA ↗](https://en.wikipedia.org/wiki/RGBA_color_model) and 8-bit [NV12 ↗](https://en.wikipedia.org/wiki/YCbCr) with explicit [BT.601 ↗](https://en.wikipedia.org/wiki/Rec._601)/[BT.709 ↗](https://en.wikipedia.org/wiki/Rec._709) selection are tested. |
 | Windows DXGI and Linux DMA-BUF frames | Implemented and cross-compiled; native runtime checks are pending. |
 
 **60 Hz is the performance baseline.** Three sustained-scroll runs on an M4 Max
@@ -237,7 +246,7 @@ validation records for integration and review.
 
 - PNG, JPEG and WebP first-frame decoding and CPU mip generation run on bounded
   native workers. Mips use area integration in linear sRGB with associated alpha,
-  then return to the existing straight-alpha encoded-sRGB compositor contract.
+  then return to the existing [straight-alpha ↗](https://en.wikipedia.org/wiki/Alpha_compositing) encoded-sRGB compositor contract.
   Odd dimensions and single-row/column sources retain their edge contributions.
 - `MediaLimits` bounds active jobs, encoded input bytes, per-image mip payload,
   and aggregate admitted payload. Admission rejects excess work immediately;
@@ -353,10 +362,10 @@ per-frame time limits, priority/FIFO fairness and GPU timestamp measurement rema
 follow-ups. The release benchmark below measures CPU work and staging reuse. Pooling is a bounded cache, not a fixed two-buffer ring. There is no
 zero-stutter or frame-rate guarantee.
 
-SDR sRGB input only. Embedded ICC, EXIF orientation and HDR interpretation are not
+SDR sRGB input only. Embedded [ICC ↗](https://en.wikipedia.org/wiki/ICC_profile), EXIF orientation and HDR interpretation are not
 implemented. Mip generation is alpha-aware; the existing compositor still samples
 straight encoded channels between texels/mip levels. This is not a fully linear,
-premultiplied image-compositing pipeline.
+[premultiplied ↗](https://en.wikipedia.org/wiki/Alpha_compositing) image-compositing pipeline.
 
 ## Upload status example
 
@@ -508,7 +517,7 @@ format selects range; `Nv12Matrix::Bt601` or `Bt709` explicitly selects coeffici
 No matrix inference from attachments is performed. Use the matrix matching the
 producer and centered chroma. Other chroma locations, 10-bit/P010, BT.2020 and HDR
 are outside this API. Matrix conversion preserves the source encoded RGB transfer;
-it does not perform transfer-function, gamut, primaries or HDR color management.
+it does not perform [transfer-function ↗](https://en.wikipedia.org/wiki/Transfer_functions_in_imaging), [gamut ↗](https://en.wikipedia.org/wiki/Gamut), primaries or HDR color management.
 
 CoreVideo imports R8 luma and RG8 chroma texture views. The same compositor
 fragment samples both planes and converts YCbCr to encoded SDR RGB before the
@@ -863,8 +872,8 @@ The WASM gallery includes three GPUI/wgpu demos:
   saturation (including grayscale), hue and tint; reset, vary opacity/corners,
   zoom and animate. The preparation counter stays at one on ordinary redraws.
 - [Mipmapping](../examples/extensions/?demo=mipmaps): compare the ordinary single-level
-  image atlas with a source-sized 11-level trilinear texture. Cycle zoom through
-  90%, 50%, 25% and 12.5%, or animate it to inspect aliasing. Both panels use the
+  image atlas with a source-sized 11-level [trilinear texture ↗](https://en.wikipedia.org/wiki/Trilinear_filtering). Cycle zoom through
+  90%, 50%, 25% and 12.5%, or animate it to inspect [aliasing ↗](https://en.wikipedia.org/wiki/Aliasing). Both panels use the
   same generated RGBA fixture, geometry, opacity and clipping.
 - [Trim / dash](../examples/extensions/?demo=path-effects): compare original,
   trimmed and trimmed/dashed open curves, a closed heart and multiple contours.
@@ -1124,3 +1133,46 @@ observed scroll bounds and sampled staging evidence. Screenshot inspection
 confirmed rendered cards and completed replacements in the native scroll view.
 
 </details>
+
+
+## Higher precision supplied pixels
+
+Phase 3 adds explicitly described RGBA16F sources and native wide-SDR placement.
+Use `MediaLoader::load_rgba16f` for background conversion, and
+`image_view(image).wide_gamut()?` only with an accepted wide-SDR native window.
+The default remains an explicit sRGB preview. This helps with scientific rasters,
+design previews and output from existing image providers without adding codecs.
+See [color contracts and small examples](media-pipeline.md).
+
+Run `just media --float-images`, or try the
+[RGBA16F browser preview](../examples/extensions/?demo=media-float),
+[WebGPU](../examples/extensions/?demo=media-float&backend=webgpu) or
+[WebGL2](../examples/extensions/?demo=media-float&backend=webgl).
+Browser output is clipped sRGB; Windows/Linux native runtime QA remains pending.
+
+
+## Large raster canvases
+
+Phase 4 adds `TileCanvas`: a retained preview plus viewport-selected immutable
+pages, bounded caches, cancellation and eviction. It suits document scans, maps
+and scientific rasters that exceed the whole-image limit. Start
+`just media --tiled` for a generated 72 MP native sample; no external image needed.
+
+Try the [browser canvas](../examples/extensions/?demo=media-tiles),
+[WebGPU](../examples/extensions/?demo=media-tiles&backend=webgpu), or
+[WebGL2](../examples/extensions/?demo=media-tiles&backend=webgl).
+The [pipeline guide](media-pipeline.md) includes small Rust examples, provider
+contracts, budget meanings and backend limits. Browser generation is currently
+one small synchronous page per frame; no new decoder is included.
+
+### Bounded media blur (issue #26 Phase 5)
+
+The tiled demo now includes 0/4/8/16 px [Gaussian blur ↗](https://en.wikipedia.org/wiki/Gaussian_blur) and adaptive/full-resolution
+quality. It blurs assembled pages once, avoiding internal tile seams. Nonzero
+blur uses a smaller preview to fit the existing 1,024-device-pixel capture limit,
+including halo. Filtering is premultiplied encoded sRGB; capture/filter textures
+are additional to page budgets. Media uploads/imports and target allocations are
+reused, but custom media captures refresh each paint. Native `just media --video`
+also offers [exposure ↗](https://en.wikipedia.org/wiki/Exposure_value), saturation, [vignette ↗](https://en.wikipedia.org/wiki/Vignetting) and blur on generated BGRA/NV12
+surfaces. Native imports are not available in Wasm; test portable blur via
+`?demo=media-tiles&backend=webgpu` and `?demo=media-tiles&backend=webgl`.

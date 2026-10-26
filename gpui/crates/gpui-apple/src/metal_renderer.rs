@@ -725,7 +725,16 @@ impl MetalRenderer {
                 } else if raw.is::<crate::custom_draw::MetalNv12Output>() {
                     crate::custom_draw::CustomCompositor::validate_nv12(&context, raw)?
                 } else {
-                    crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?.into()
+                    let output =
+                        crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?;
+                    if draw.content.image_color_mode() == gpui::ImageColorMode::LinearP3Wide {
+                        anyhow::ensure!(
+                            self.wide_sdr.is_some(),
+                            "wide image requires WideGamutSdr presentation"
+                        );
+                        self.wide_sdr.as_mut().unwrap().wide.insert(outputs.len());
+                    }
+                    output.into()
                 };
                 let coverage = if draw.coverage.is_some() {
                     let key = crate::custom_draw::CoverageKey::new(draw)?;

@@ -6508,6 +6508,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
 
 [[package]]
+name = "xgpui-color"
+version = "0.1.0"
+
+[[package]]
 name = "xgpui-media"
 version = "0.1.0"
 dependencies = [
@@ -6516,10 +6520,31 @@ dependencies = [
  "gpui-apple",
  "gpui-wgpu",
  "gpui-windows",
+ "half",
  "image",
  "objc2-core-foundation",
  "objc2-core-video",
  "refineable",
+ "xgpui-color",
+ "xgpui-shader",
+]
+
+[[package]]
+name = "xgpui-shader"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "gpui",
+ "gpui-apple",
+ "gpui-windows",
+ "metal",
+ "naga",
+ "refineable",
+ "serde",
+ "unicode-bidi",
+ "unicode-segmentation",
+ "windows 0.62.2",
 ]
 
 [[package]]

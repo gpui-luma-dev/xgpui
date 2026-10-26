@@ -25,10 +25,10 @@ configuration and the shared `target/` directory.
 
 | Command | Opens |
 | --- | --- |
-| `just media` | Image mipmapping, filters, GPU surfaces and path effects |
+| `just media` | Image [mipmapping ↗](https://en.wikipedia.org/wiki/Mipmap), filters, GPU surfaces and path effects |
 | `just shaders` | Shader examples and typography |
 | `just paints` | Paints, gradients, brushes and layer effects |
-| `just gamut` | Native wide-SDR gamut comparison |
+| `just gamut` | Native wide-SDR [gamut ↗](https://en.wikipedia.org/wiki/Gamut) comparison |
 | `just color` | Color conversion and sRGB/P3 reference swatches |
 | `just text` | Native/Parley text, paragraphs and scrolling |
 | `just svg` | SVG rendering, zoom and scheduling |
@@ -40,6 +40,9 @@ Arguments after the recipe name go to the app. For example:
 ```sh
 just shaders composition
 just media --paths
+just media --tiled # Generated 72 MP canvas; pan/zoom/cache pressure, blur/quality
+just media --float-images # Supplied RGBA16F pixels; generated sample, native wide/sRGB comparison
+just media --adjustments
 just media --image "photos/my image.png"
 just text --help
 ```
@@ -142,7 +145,9 @@ The lab generates its own image samples; no photo or video file is needed.
 just media
 ```
 
-Compare atlas and mipmapped images, change filters, zoom and pan. Open the path
+Compare [atlas ↗](https://en.wikipedia.org/wiki/Texture_atlas) and mipmapped images, change filters, zoom and pan. Run
+`just media --adjustments` for linear [exposure ↗](https://en.wikipedia.org/wiki/Exposure_value) and [vignette ↗](https://en.wikipedia.org/wiki/Vignetting) with a shared-source
+original/adjusted comparison. Open the path
 effects view with:
 
 ```sh
@@ -210,3 +215,9 @@ demo code, then reload the page. Use `localhost` for browser WebGPU access.
 
 Build harness details are maintained in
 [BUILDING.md](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/BUILDING.md).
+
+The tiled lab's blur controls use a bounded [sRGB ↗](https://en.wikipedia.org/wiki/SRGB) preview so the capture and halo
+fit the compositor's 1,024-device-pixel limit. `just media --video` also offers
+linear adjustments, vignette and blur on generated native macOS Metal frames;
+no video file is needed. See the [media pipeline guide](#media-pipeline) for
+resource reuse, output color and backend limits.

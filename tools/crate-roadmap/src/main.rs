@@ -729,6 +729,7 @@ fn generate(root: &Path) -> Result<()> {
         ("local-development", "docs/LOCAL_DEVELOPMENT.md"),
         ("color-math", "docs/extensions/color-math.md"),
         ("media-images", "docs/extensions/media-images.md"),
+        ("media-pipeline", "docs/extensions/media-pipeline.md"),
         ("svg-rendering", "docs/extensions/svg-rendering.md"),
         ("parley-text", "docs/extensions/parley-text.md"),
         (
@@ -835,6 +836,12 @@ fn generate(root: &Path) -> Result<()> {
         });
         let mut html = String::new();
         pulldown_cmark::html::push_html(&mut html, parser);
+        // Glossary references leave the guide open. Arrows live in Markdown so
+        // they also appear when reading source documentation on GitHub.
+        html = html.replace(
+            "<a href=\"https://en.wikipedia.org/wiki/",
+            "<a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://en.wikipedia.org/wiki/",
+        );
         extension_documents.insert(
             route,
             serde_json::json!({"title": title, "source": file, "html": html}),

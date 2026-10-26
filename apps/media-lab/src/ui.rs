@@ -131,12 +131,20 @@ impl Lab {
                 MouseButton::Left,
                 cx.listener(|this, _, _, _| this.drag = None),
             );
-        if media {
+        if media || self.linear_mode {
             if let Some(image) = &self.primary.image {
+                let view = image_view(image.clone());
+                let view = if self.linear_mode {
+                    if media {
+                        view.adjustments(self.image_adjustments())
+                    } else {
+                        view
+                    }
+                } else {
+                    view.filter(self.image_filter())
+                };
                 viewport = viewport.child(
-                    image_view(image.clone())
-                        .filter(self.image_filter())
-                        .absolute()
+                    view.absolute()
                         .left(px(x))
                         .top(px(y))
                         .w(px(art_w))
@@ -175,7 +183,7 @@ impl Lab {
                     .opacity(self.opacity),
             );
         }
-        let status = if media {
+        let status = if media || self.linear_mode {
             self.primary
                 .image
                 .as_ref()
@@ -210,17 +218,23 @@ impl Lab {
                                     .text_sm()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(if media { MINT } else { TEXT }))
-                                    .child(if media {
+                                    .child(if self.linear_mode && media {
+                                        "02  /  LINEAR ADJUSTMENTS"
+                                    } else if self.linear_mode {
+                                        "01  /  ORIGINAL (SHARED SOURCE)"
+                                    } else if media {
                                         "02  /  MIPMAPPED"
                                     } else {
                                         "01  /  ATLAS"
                                     }),
                             )
-                            .child(div().text_xs().text_color(rgb(MUTED)).child(if media {
-                                "Full mip chain · background staging"
-                            } else {
-                                "Single texture level · native baseline"
-                            })),
+                            .child(div().text_xs().text_color(rgb(MUTED)).child(
+                                if media || self.linear_mode {
+                                    "Full mip chain · background staging"
+                                } else {
+                                    "Single texture level · native baseline"
+                                },
+                            )),
                     )
                     .child(
                         div()
@@ -242,12 +256,12 @@ impl Lab {
                     .py_3()
                     .text_xs()
                     .text_color(rgb(MUTED))
-                    .child(if media {
+                    .child(if media || self.linear_mode {
                         "Dedicated source texture"
                     } else {
                         "SpriteAtlas texture"
                     })
-                    .child(if media {
+                    .child(if media || self.linear_mode {
                         self.primary
                             .image
                             .as_ref()
@@ -399,9 +413,15 @@ impl Render for Lab {
         {
             self.ui_perf = Some(run);
         }
+        if cx.reduce_motion() {
+            self.adjustment_animate = false;
+        }
         let pending = self.poll();
         let sweep = self.sweep && !cx.reduce_motion();
-        self.continuous_redraw = pending || sweep || self.ui_perf.is_some();
+        self.continuous_redraw = pending
+            || sweep
+            || self.ui_perf.is_some()
+            || (self.linear_mode && self.adjustment_animate && !cx.reduce_motion());
         if self.continuous_redraw {
             window.request_animation_frame();
         }
@@ -667,8 +687,89 @@ impl Render for Lab {
                     cx.notify();
                 }),
             ));
+        let mut linear_controls = div().flex().flex_wrap().items_center().gap_2();
+        for (index, (label, count)) in [
+            (
+                format!("Exposure {:+.0} EV", [0., -1., 1., 2.][self.adjustments[0]]),
+                4,
+            ),
+            (
+                format!(
+                    "Linear contrast ×{:.1}",
+                    [1., 0.6, 1.5][self.adjustments[1]]
+                ),
+                3,
+            ),
+            (
+                format!(
+                    "Linear saturation ×{:.1}",
+                    [1., 0., 1.8][self.adjustments[2]]
+                ),
+                3,
+            ),
+            (format!("Vignette {}%", [0, 40, 80][self.adjustments[3]]), 3),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            linear_controls = linear_controls.child(
+                button(
+                    format!("adjustment-{index}"),
+                    label,
+                    self.adjustments[index] != 0,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.adjustments[index] = (this.adjustments[index] + 1) % count;
+                    cx.notify();
+                })),
+            );
+        }
+        linear_controls = linear_controls
+            .child(
+                button(
+                    "animate-adjustments",
+                    if self.adjustment_animate {
+                        "Stop adjustments"
+                    } else {
+                        "Animate exposure"
+                    },
+                    self.adjustment_animate,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.adjustment_animate = !this.adjustment_animate;
+                    cx.notify();
+                })),
+            )
+            .child(
+                button("reset-adjustments", "Reset adjustments", false).on_click(cx.listener(
+                    |this, _, _, cx| {
+                        this.adjustments = [0; 4];
+                        this.adjustment_animate = false;
+                        cx.notify();
+                    },
+                )),
+            );
+        let mode_control = button(
+            "linear-mode",
+            if self.linear_mode {
+                "Linear adjustments ON"
+            } else {
+                "Linear adjustments OFF"
+            },
+            self.linear_mode,
+        )
+        .self_start()
+        .on_click(cx.listener(|this, _, _, cx| {
+            this.linear_mode = !this.linear_mode;
+            cx.notify();
+        }));
+        let active_controls = if self.linear_mode {
+            linear_controls
+        } else {
+            filter_controls
+        };
         let mut root=div().id("media-lab").size_full().overflow_y_scroll().bg(rgb(BG)).text_color(rgb(TEXT)).font_family(if cfg!(target_os="windows") {"Segoe UI"}else{"Helvetica"})
-            .p_6().flex().flex_col().gap_4().child(header).child(div().flex().gap_2().child(button("open-paths", "Path effects →", false).on_click(cx.listener(|this,_,_,cx| { this.path_mode=true; cx.notify(); }))).child(button("open-video", "Video surfaces →", false).on_click(cx.listener(|this,_,_,cx| { this.video_mode=true; cx.notify(); })))).child(toolbar).child(controls).child(filter_controls)
+            .p_6().flex().flex_col().gap_4().child(header).child(div().flex().gap_2().child(button("open-paths", "Path effects →", false).on_click(cx.listener(|this,_,_,cx| { this.path_mode=true; cx.notify(); }))).child(button("open-video", "Video surfaces →", false).on_click(cx.listener(|this,_,_,cx| { this.video_mode=true; cx.notify(); })))).child(toolbar).child(controls).child(mode_control).child(active_controls)
             .child(div().text_sm().text_color(rgb(MUTED)).child(source.description))
             .child(div().flex().gap_5().child(self.comparison(false,width,height,zoom,cx)).child(self.comparison(true,width,height,zoom,cx)))
             .child(div().flex().justify_between().text_xs().text_color(rgb(MUTED))

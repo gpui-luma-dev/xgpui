@@ -10,6 +10,48 @@ use std::{
     time::Duration,
 };
 
+#[derive(Debug)]
+struct AdjustedFrame {
+    source: Arc<dyn CustomContent>,
+    adjustments: crate::pipeline::ImageAdjustments,
+}
+impl CustomContent for AdjustedFrame {
+    fn image_color_mode(&self) -> gpui::ImageColorMode {
+        self.source.image_color_mode()
+    }
+    fn image_source_size(&self) -> Option<Size<DevicePixels>> {
+        self.source.image_source_size()
+    }
+    fn image_sample_opacity(&self) -> f32 {
+        self.source.image_sample_opacity()
+    }
+    fn image_linear_adjustments(&self) -> Option<gpui::LinearImagePaint> {
+        Some(self.adjustments.paint())
+    }
+    fn prepare(
+        &self,
+        backend: &dyn std::any::Any,
+        size: Size<DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        self.source.prepare(backend, size)
+    }
+    fn prepare_with_request(
+        &self,
+        backend: &dyn std::any::Any,
+        request: &gpui::PreparationRequest,
+    ) -> Result<Box<dyn std::any::Any>> {
+        self.source.prepare_with_request(backend, request)
+    }
+    fn prepare_in_frame(
+        &self,
+        backend: &dyn std::any::Any,
+        request: &gpui::PreparationRequest,
+        frame: &gpui::PreparationFrame,
+    ) -> Result<Box<dyn std::any::Any>> {
+        self.source.prepare_in_frame(backend, request, frame)
+    }
+}
+
 /// Immutable producer content. Native producers must return a source-sized
 /// backend output and keep external allocations stable through their lifetime.
 #[derive(Clone, Debug)]
@@ -67,6 +109,19 @@ impl VideoFrame {
             size: frame.size(),
             content: Arc::new(frame),
             timestamp,
+        }
+    }
+    /// Replace placement adjustments without changing pixels, timestamp or source ownership.
+    /// Native BGRA/NV12 adapters supply encoded sRGB after their existing range/matrix conversion.
+    /// Application adapters must declare the same SDR contract. No decoder/pool synchronization is added.
+    pub fn adjusted(&self, adjustments: crate::pipeline::ImageAdjustments) -> Self {
+        Self {
+            content: Arc::new(AdjustedFrame {
+                source: self.content.clone(),
+                adjustments,
+            }),
+            size: self.size,
+            timestamp: self.timestamp,
         }
     }
     pub fn size(&self) -> Size<DevicePixels> {
@@ -202,6 +257,8 @@ pub fn video(stream: VideoStream) -> VideoView {
         stream: Some(stream),
         frame: None,
         style: StyleRefinement::default(),
+        adjustments: None,
+        blur: None,
     }
 }
 /// Paint one immutable snapshot without requesting live presentation frames.
@@ -211,12 +268,30 @@ pub fn video_frame(frame: VideoFrame) -> VideoView {
         stream: None,
         frame: Some(frame),
         style: StyleRefinement::default(),
+        adjustments: None,
+        blur: None,
     }
 }
 pub struct VideoView {
+    adjustments: Option<crate::pipeline::ImageAdjustments>,
+    blur: Option<crate::pipeline::ImageBlur>,
     stream: Option<VideoStream>,
     frame: Option<VideoFrame>,
     style: StyleRefinement,
+}
+impl VideoView {
+    /// Apply linear working-color adjustments after native format conversion.
+    pub fn adjustments(mut self, adjustments: crate::pipeline::ImageAdjustments) -> Self {
+        self.adjustments = Some(adjustments);
+        self
+    }
+    /// Blur the completed sRGB preview using shared retained layer resources.
+    /// Oversized captures fall back to the adjusted frame. Use ImageBlur::paint
+    /// directly to receive an explicit bounds error instead.
+    pub fn blur(mut self, blur: crate::pipeline::ImageBlur) -> Self {
+        self.blur = Some(blur);
+        self
+    }
 }
 impl Styled for VideoView {
     fn style(&mut self) -> &mut StyleRefinement {
@@ -287,7 +362,20 @@ impl Element for VideoView {
                     .clone()
                     .or_else(|| self.stream.as_ref().and_then(VideoStream::snapshot))
                 {
-                    frame.paint(window, bounds, radii);
+                    let frame = self
+                        .adjustments
+                        .map_or_else(|| frame.clone(), |a| frame.adjusted(a));
+                    if let Some(blur) = &self.blur {
+                        // Fall back to the adjusted unblurred frame for oversized styled views.
+                        if blur
+                            .paint(bounds, window, |window| frame.paint(window, bounds, radii))
+                            .is_err()
+                        {
+                            frame.paint(window, bounds, radii);
+                        }
+                    } else {
+                        frame.paint(window, bounds, radii);
+                    }
                 }
                 if self.stream.as_ref().is_some_and(VideoStream::live) {
                     window.request_animation_frame();

@@ -200,7 +200,7 @@ rather than copying a wildcard listening address from a server's output.
 
 ## Unified All demos page
 
-The index lists all 17 hosted WASM examples from this app and `shader-examples`,
+The index lists all 19 hosted WASM examples from this app and `shader-examples`,
 grouped into Brushes & paints, Layer effects, Shaders & motion, Text, Media & paths, and SVG &
 color. Native labs are a separate section with repository-root launch commands,
 including pastel waves and the full paint-lab/Hermite editor. The shader gallery
@@ -255,3 +255,55 @@ M4 Max, with forced WebGPU and WebGL2: controls, transparent edges, minification
 source reuse and path-effect endpoints/animation rendered without console errors.
 WebGL2 emitted capability and resize-poll warnings while rendering successfully.
 This is visual/functional acceptance, not a browser performance benchmark.
+
+The Image filters demo now starts with linear-sRGB EV exposure, contrast,
+saturation and vignette on a rectangular generated RGBA fixture. Switch to
+encoded filters to compare the earlier API. Animate, opacity/corners and reset
+reuse one texture preparation on both WebGPU and WebGL2. See the
+[media pipeline guide](../../docs/extensions/media-pipeline.md).
+
+
+### RGBA16F supplied pixels (Phase 3)
+
+Run `just media --float-images` from the repository root for the release native
+comparison, or open `?demo=media-float&backend=webgpu` /
+`?demo=media-float&backend=webgl` in the rebuilt extensions web app.
+Generated P3 colors, a near-black gradient and alpha edges need no external asset
+or decoder. Native output compares explicit sRGB preview with accepted wide-SDR;
+both browser panels are sRGB previews. Exposure/saturation, vignette, opacity,
+reset and mode/zoom controls reuse one source upload.
+
+See [media pipeline guide](../../docs/extensions/media-pipeline.md) for the
+`load_rgba16f` API, input metadata, byte limits and backend validation status.
+Windows/Linux native runtime QA remains pending; 60 Hz stays the baseline.
+
+
+### Progressive tiled canvas (Phase 4)
+
+`just media --tiled` opens the release native app. Rebuild the web app and open
+`?demo=media-tiles&backend=webgpu` or `?demo=media-tiles&backend=webgl`.
+The shared view displays a generated 12,000 × 6,000 source without allocating it
+in full. Fit/1:1, drag, wheel zoom and arrow controls change visible pages; source
+replacement, Cancel/Restart and a 2 MiB cache mode exercise the scheduler.
+
+Watch ready/visible tiles, mip, CPU/GPU reservations, upload staging, native
+staging-pool allocations, eviction and cancellation. Preview timing is CPU
+availability; view timing ends at reusable upload submission. Browser generation
+is one small page per frame on the host thread. These are functional diagnostics,
+not disk/decoder or sustained frame-time benchmarks. Keep 60 Hz as the baseline.
+
+The [pipeline guide](../../docs/extensions/media-pipeline.md) documents
+`TileProvider`, `TileCanvas`, code examples, budget scope and pending native
+Windows/Linux QA. No new decoder, blur pass or playback engine is added.
+
+### Bounded media blur (issue #26 Phase 5)
+
+The tiled demo now includes 0/4/8/16 px Gaussian blur and adaptive/full-resolution
+quality. It blurs assembled pages once, avoiding internal tile seams. Nonzero
+blur uses a smaller preview to fit the existing 1,024-device-pixel capture limit,
+including halo. Filtering is premultiplied encoded sRGB; capture/filter textures
+are additional to page budgets. Media uploads/imports and target allocations are
+reused, but custom media captures refresh each paint. Native `just media --video`
+also offers exposure, saturation, vignette and blur on generated BGRA/NV12
+surfaces. Native imports are not available in Wasm; test portable blur via
+`?demo=media-tiles&backend=webgpu` and `?demo=media-tiles&backend=webgl`.

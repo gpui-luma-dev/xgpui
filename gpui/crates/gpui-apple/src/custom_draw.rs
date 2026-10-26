@@ -149,7 +149,10 @@ impl MetalCustomContext {
         desc.set_width(data.width() as u64);
         desc.set_height(data.height() as u64);
         desc.set_mipmap_level_count(data.levels().len() as u64);
-        desc.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
+        desc.set_pixel_format(match data.format() {
+            gpui::ImageTextureFormat::Rgba8Srgb => MTLPixelFormat::RGBA8Unorm,
+            gpui::ImageTextureFormat::LinearP3Rgba16Float => MTLPixelFormat::RGBA16Float,
+        });
         desc.set_storage_mode(MTLStorageMode::Private);
         desc.set_usage(MTLTextureUsage::ShaderRead);
         let texture = self.device.new_texture(&desc);
@@ -164,10 +167,13 @@ impl MetalCustomContext {
         for (level, pixels) in data.levels().iter().enumerate() {
             let width = (data.width() >> level).max(1) as u64;
             let height = (data.height() >> level).max(1) as u64;
-            let row = (width * 4).div_ceil(256) * 256;
+            let bpp = data.bytes_per_pixel();
+            let row = (width * bpp as u64).div_ceil(256) * 256;
             for y in 0..height as usize {
-                mapped[offset + y * row as usize..offset + y * row as usize + width as usize * 4]
-                    .copy_from_slice(&pixels[y * width as usize * 4..(y + 1) * width as usize * 4]);
+                mapped[offset + y * row as usize..offset + y * row as usize + width as usize * bpp]
+                    .copy_from_slice(
+                        &pixels[y * width as usize * bpp..(y + 1) * width as usize * bpp],
+                    );
             }
             encoder.copy_from_buffer_to_texture(
                 buffer,
@@ -412,6 +418,21 @@ impl CustomCompositor {
             .all(|v| v.is_finite()),
             "non-finite custom geometry"
         );
+        if let Some(source) = draw.content.image_source_size() {
+            ensure!(
+                draw.coverage.is_none()
+                    && draw.bounds.size.width.0.is_finite()
+                    && draw.bounds.size.height.0.is_finite()
+                    && draw.bounds.size.width.0 > 0.
+                    && draw.bounds.size.height.0 > 0.
+                    && source.width.0 > 0
+                    && source.height.0 > 0
+                    && source.width.0 <= 16384
+                    && source.height.0 <= 16384,
+                "invalid source-sized image preparation"
+            );
+            return Ok(source);
+        }
         let width = draw.bounds.size.width.0.ceil();
         let height = draw.bounds.size.height.0.ceil();
         ensure!(
@@ -464,11 +485,20 @@ impl CustomCompositor {
             output.texture.device().registry_id() == context.device.registry_id(),
             "custom texture belongs to another device"
         );
+        if source_sized {
+            ensure!(
+                (output.texture.pixel_format() == MTLPixelFormat::RGBA16Float)
+                    == (draw.content.image_color_mode() != gpui::ImageColorMode::EncodedSrgb),
+                "image texture format does not match source color metadata"
+            );
+        }
         ensure!(
             (if source_sized {
                 matches!(
                     output.texture.pixel_format(),
-                    MTLPixelFormat::RGBA8Unorm | MTLPixelFormat::BGRA8Unorm
+                    MTLPixelFormat::RGBA8Unorm
+                        | MTLPixelFormat::BGRA8Unorm
+                        | MTLPixelFormat::RGBA16Float
                 )
             } else {
                 output.texture.pixel_format() == format
@@ -528,10 +558,26 @@ impl CustomCompositor {
         encoder: &RenderCommandEncoderRef,
     ) {
         // All fields are float4 to make the Rust/MSL layout unambiguous.
-        let transform = draw.content.image_color_transform();
+        let adjustments = draw.content.image_linear_adjustments();
+        let transform = adjustments
+            .map(|v| v.rows())
+            .unwrap_or_else(|| draw.content.image_color_transform());
+        let vignette = adjustments
+            .map(|v| v.vignette())
+            .unwrap_or([0., 0., 1., 1.]);
+        let linear = [
+            if adjustments.is_some() { 1. } else { 0. },
+            draw.content.image_color_mode().shader_value(),
+            if adjustments.is_some_and(|v| v.is_p3()) {
+                1.
+            } else {
+                0.
+            },
+            0.,
+        ];
         let planes = output.nv12_planes();
         let yuv = planes.map(|p| p.rows).unwrap_or([[0.; 4]; 3]);
-        let params: [[f32; 4]; 10] = [
+        let params: [[f32; 4]; 12] = [
             [
                 draw.bounds.origin.x.0,
                 draw.bounds.origin.y.0,
@@ -553,7 +599,7 @@ impl CustomCompositor {
             [
                 viewport.width.0 as f32,
                 viewport.height.0 as f32,
-                draw.opacity,
+                draw.opacity * draw.content.image_sample_opacity().clamp(0., 1.),
                 (if coverage.is_some() { 1. } else { 0. })
                     + (if native_source { 2. } else { 0. })
                     + (if planes.is_some() { 4. } else { 0. }),
@@ -564,6 +610,8 @@ impl CustomCompositor {
             yuv[0],
             yuv[1],
             yuv[2],
+            vignette,
+            linear,
         ];
         encoder.set_render_pipeline_state(&self.pipeline);
         encoder.set_vertex_bytes(

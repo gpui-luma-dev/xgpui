@@ -119,11 +119,26 @@ impl crate::MediaImage {
         }
     }
 }
+impl FilteredImage {
+    pub(crate) fn validate(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.image.format() == gpui::ImageTextureFormat::Rgba8Srgb
+                || self.filter == ImageFilter::new(),
+            "encoded ImageFilter requires RGBA8; use ImageAdjustments for RGBA16F"
+        );
+        Ok(())
+    }
+}
 impl CustomContent for FilteredImage {
+    fn image_color_mode(&self) -> gpui::ImageColorMode {
+        self.image.image_color_mode()
+    }
+
     fn image_color_transform(&self) -> [[f32; 4]; 3] {
         self.filter.rows()
     }
     fn prepare(&self, backend: &dyn Any, size: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
+        self.validate()?;
         self.image.prepare(backend, size)
     }
     fn prepare_in_frame(
@@ -132,6 +147,7 @@ impl CustomContent for FilteredImage {
         request: &PreparationRequest,
         frame: &PreparationFrame,
     ) -> anyhow::Result<Box<dyn Any>> {
+        self.validate()?;
         self.image.prepare_in_frame(backend, request, frame)
     }
     fn prepare_with_request(
@@ -139,6 +155,7 @@ impl CustomContent for FilteredImage {
         backend: &dyn Any,
         request: &PreparationRequest,
     ) -> anyhow::Result<Box<dyn Any>> {
+        self.validate()?;
         self.image.prepare_with_request(backend, request)
     }
 }

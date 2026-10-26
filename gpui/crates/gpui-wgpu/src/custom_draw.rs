@@ -1,7 +1,7 @@
 //! Backend-owned preparation and composition of independent custom paint sources.
+mod coverage_cache;
 #[cfg(all(unix, feature = "dma-buf"))]
 pub mod dma_buf;
-mod coverage_cache;
 use anyhow::{Result, ensure};
 pub(crate) use coverage_cache::{CoverageCache, CoverageKey};
 use gpui::{CustomDraw, DevicePixels, Size, size};
@@ -418,15 +418,16 @@ impl WgpuImageUploadContext {
             for (level, pixels) in data.levels().iter().enumerate() {
                 let width = (data.width() >> level).max(1);
                 let height = (data.height() >> level).max(1);
-                let row = (width * 4).div_ceil(256) * 256;
+                let bpp = data.bytes_per_pixel();
+                let row = (width * bpp as u32).div_ceil(256) * 256;
                 for y in 0..height as usize {
                     mapped
                         .slice(
                             offset + y * row as usize
-                                ..offset + y * row as usize + width as usize * 4,
+                                ..offset + y * row as usize + width as usize * bpp,
                         )
                         .copy_from_slice(
-                            &pixels[y * width as usize * 4..(y + 1) * width as usize * 4],
+                            &pixels[y * width as usize * bpp..(y + 1) * width as usize * bpp],
                         );
                 }
                 mips.push(StagedMip {
@@ -459,7 +460,10 @@ impl WgpuImageUploadContext {
             mip_level_count: data.levels().len() as u32,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: match data.format() {
+                gpui::ImageTextureFormat::Rgba8Srgb => wgpu::TextureFormat::Rgba8Unorm,
+                gpui::ImageTextureFormat::LinearP3Rgba16Float => wgpu::TextureFormat::Rgba16Float,
+            },
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -564,6 +568,21 @@ pub(crate) fn extent(draw: &CustomDraw) -> Result<Size<DevicePixels>> {
         .all(|v| v.is_finite()),
         "non-finite custom geometry"
     );
+    if let Some(source) = draw.content.image_source_size() {
+        ensure!(
+            draw.coverage.is_none()
+                && draw.bounds.size.width.0.is_finite()
+                && draw.bounds.size.height.0.is_finite()
+                && draw.bounds.size.width.0 > 0.
+                && draw.bounds.size.height.0 > 0.
+                && source.width.0 > 0
+                && source.height.0 > 0
+                && source.width.0 <= 16384
+                && source.height.0 <= 16384,
+            "invalid source-sized image preparation"
+        );
+        return Ok(source);
+    }
     ensure!(
         draw.bounds.size.width.0 > 0.
             && draw.bounds.size.height.0 > 0.
@@ -582,7 +601,7 @@ pub(crate) struct PreparedDraw {
     pub uniform_offset: u32,
 }
 
-const UNIFORM_BYTES: u64 = 112;
+const UNIFORM_BYTES: u64 = 144;
 /// Renderer-private arena. Reuse only after previous render commands are submitted;
 /// queue-ordered uploads then preserve reads by still-running previous frames.
 struct UniformArena {
@@ -637,7 +656,7 @@ impl UniformArena {
         self.cursor = 0;
         Ok(())
     }
-    fn write(&mut self, params: &[[f32; 4]; 7]) -> u32 {
+    fn write(&mut self, params: &[[f32; 4]; 9]) -> u32 {
         let offset = self.cursor * self.stride as usize;
         self.cursor += 1;
         self.bytes[offset..offset + UNIFORM_BYTES as usize]
@@ -768,8 +787,24 @@ impl CustomCompositor {
         native: bool,
         viewport: Size<DevicePixels>,
     ) -> PreparedDraw {
-        let transform = draw.content.image_color_transform();
-        let params: [[f32; 4]; 7] = [
+        let adjustments = draw.content.image_linear_adjustments();
+        let transform = adjustments
+            .map(|v| v.rows())
+            .unwrap_or_else(|| draw.content.image_color_transform());
+        let vignette = adjustments
+            .map(|v| v.vignette())
+            .unwrap_or([0., 0., 1., 1.]);
+        let linear = [
+            if adjustments.is_some() { 1. } else { 0. },
+            draw.content.image_color_mode().shader_value(),
+            if adjustments.is_some_and(|v| v.is_p3()) {
+                1.
+            } else {
+                0.
+            },
+            0.,
+        ];
+        let params: [[f32; 4]; 9] = [
             [
                 draw.bounds.origin.x.0,
                 draw.bounds.origin.y.0,
@@ -791,12 +826,14 @@ impl CustomCompositor {
             [
                 viewport.width.0 as f32,
                 viewport.height.0 as f32,
-                draw.opacity,
+                draw.opacity * draw.content.image_sample_opacity().clamp(0., 1.),
                 u32::from(mask.is_some()) as f32 + if native { 2. } else { 0. },
             ],
             transform[0],
             transform[1],
             transform[2],
+            vignette,
+            linear,
         ];
         let uniform_offset = self.uniforms.write(&params);
         let uniform = self.uniforms.buffer.as_ref().expect("uniform arena");

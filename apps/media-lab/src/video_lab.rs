@@ -151,8 +151,12 @@ mod native {
             .as_ref()
             .map(|f| f.timestamp().as_secs_f64())
             .unwrap_or(0.);
-        let width = (f32::from(window.viewport_size().width) - 440.).max(640.);
+        let width = (1020. / window.scale_factor()
+            - 2. * (16. + 8. / window.scale_factor()) * MAX_LAYER_GROUPS as f32)
+            .clamp(80., 640.)
+            .min(((f32::from(window.viewport_size().width) - 68.) / 2.).max(80.));
         let viewport = div()
+            .flex_shrink_0()
             .relative()
             .w(px(width))
             .h(px(width * 9. / 16.))
@@ -161,51 +165,106 @@ mod native {
             .child(crate::ui::checker())
             .children(snapshot.clone().map(|frame| {
                 video_frame(frame)
+                    .adjustments(lab.image_adjustments())
+                    .blur(lab.video_blurs[lab.video_blur].clone())
                     .size_full()
                     .rounded(px(lab.radius))
                     .opacity(lab.opacity)
             }));
+        let reference = div()
+            .relative()
+            .w(px(width))
+            .h(px(width * 9. / 16.))
+            .flex_shrink_0()
+            .overflow_hidden()
+            .rounded(px(lab.radius))
+            .child(crate::ui::checker())
+            .children(snapshot.clone().map(|frame| {
+                video_frame(frame)
+                    .size_full()
+                    .rounded(px(lab.radius))
+                    .opacity(lab.opacity)
+            }));
+        let panel = |title: &'static str, caption: &'static str, preview: Div| {
+            div()
+                .w(px(width))
+                .flex_shrink_0()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(title),
+                )
+                .child(preview)
+                .child(div().text_sm().text_color(rgb(0x94a19f)).child(caption))
+        };
+        let previews = div()
+            .flex()
+            .flex_wrap()
+            .items_start()
+            .gap_5()
+            .child(panel(
+                "Adjusted preview",
+                "Linear adjustments, vignette and bounded preview blur",
+                viewport,
+            ))
+            .child(panel(
+                "Original reference",
+                "Same immutable source snapshot without effects",
+                reference,
+            ));
         let diagnostic = div()
-            .w(px(320.))
+            .w_full()
+            .p_4()
+            .rounded_md()
+            .bg(rgb(0x191f23))
             .flex()
             .flex_col()
-            .gap_3()
+            .gap_2()
             .text_sm()
-            .child("LATEST-FRAME CHANNEL")
-            .child(format!("Published: {}", s.published))
-            .child(format!("Replaced before display: {}", s.replaced))
-            .child(format!("Observed snapshots: {}", s.displayed))
-            .child(format!("Pending: {} / 1", usize::from(s.pending)))
-            .child(if s.closed {
-                "Source closed · last frame retained"
-            } else {
-                "Source live"
-            })
-            .child(format!("Source timestamp: {stamp:.3}s"))
-            .child(format!(
-                "320 × 180 · IOSurface {}",
-                lab.video_format.label()
-            ))
-            .child("Native texture view · no media staging upload")
             .child(
                 div()
-                    .relative()
-                    .w(px(320.))
-                    .h(px(180.))
-                    .overflow_hidden()
-                    .rounded(px(16.))
-                    .child(crate::ui::checker())
-                    .child(
-                        video_frame(snapshot.clone().expect("initial synthetic frame"))
-                            .size_full()
-                            .rounded(px(16.))
-                            .opacity(lab.opacity),
-                    ),
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("Frame tracking · shared by both previews"),
             )
-            .child("Both views share the same immutable source snapshot.");
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap_5()
+                    .child(format!("Published: {}", s.published))
+                    .child(format!("Replaced before display: {}", s.replaced))
+                    .child(format!("Observed snapshots: {}", s.displayed))
+                    .child(format!("Pending: {} / 1", usize::from(s.pending))),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap_5()
+                    .child(if s.closed {
+                        "Source closed · last frame retained"
+                    } else {
+                        "Source live"
+                    })
+                    .child(format!("Source timestamp: {stamp:.3}s"))
+                    .child(format!(
+                        "320 × 180 · IOSurface {}",
+                        lab.video_format.label()
+                    )),
+            )
+            .child(
+                div()
+                    .text_color(rgb(0x94a19f))
+                    .child("Native texture views · no media staging upload"),
+            );
         let controls = div()
             .flex()
             .items_center()
+            .flex_wrap()
             .gap_2()
             .child(
                 button("video-back", "← Images", false).on_click(cx.listener(|this, _, _, cx| {
@@ -290,9 +349,73 @@ mod native {
                     },
                 )),
             );
+        let controls =
+            div()
+                .w_full()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(controls)
+                .child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .gap_2()
+                        .child(
+                            button(
+                                "video-ev",
+                                format!("Exposure: {} EV", [0, -1, 1, 2][lab.adjustments[0]]),
+                                false,
+                            )
+                            .on_click(cx.listener(|s, _, _, cx| {
+                                s.adjustments[0] = (s.adjustments[0] + 1) % 4;
+                                cx.notify();
+                            })),
+                        )
+                        .child(
+                            button(
+                                "video-saturation",
+                                format!("Saturation: {}", [1., 0., 1.8][lab.adjustments[2]]),
+                                false,
+                            )
+                            .on_click(cx.listener(|s, _, _, cx| {
+                                s.adjustments[2] = (s.adjustments[2] + 1) % 3;
+                                cx.notify();
+                            })),
+                        )
+                        .child(
+                            button(
+                                "video-vignette",
+                                format!("Vignette: {}", lab.adjustments[3]),
+                                false,
+                            )
+                            .on_click(cx.listener(|s, _, _, cx| {
+                                s.adjustments[3] = (s.adjustments[3] + 1) % 3;
+                                cx.notify();
+                            })),
+                        )
+                        .child(
+                            button(
+                                "video-blur",
+                                format!("Blur: {} px", [0, 4, 8, 16][lab.video_blur]),
+                                false,
+                            )
+                            .on_click(cx.listener(|s, _, _, cx| {
+                                s.video_blur = (s.video_blur + 1) % 4;
+                                cx.notify();
+                            })),
+                        )
+                        .child(button("video-reset", "Reset effects", false).on_click(
+                            cx.listener(|s, _, _, cx| {
+                                s.adjustments = [0; 4];
+                                s.video_blur = 0;
+                                cx.notify();
+                            }),
+                        )),
+                );
         root.child(div().text_size(px(28.)).font_weight(FontWeight::SEMIBOLD).child("Video surfaces"))
             .child("Synthetic 30 fps source · native Metal · bounded latest-frame presentation")
-            .child(controls).child(div().flex().gap_5().child(viewport).child(diagnostic))
+            .child(controls).child(previews).child(diagnostic)
             .children(demo.error.lock().unwrap().clone().map(|e|div().text_color(rgb(0xffaa99)).child(e)))
             .child(div().text_sm().text_color(rgb(0x94a19f)).child("Pause holds the displayed snapshot while the producer continues replacing pending frames. Resume shows the newest frame. Source timestamps are diagnostic metadata; this is not a decoder or A/V clock."))
             .child(div().text_sm().text_color(rgb(0x94a19f)).child("The synthetic source writes fresh CPU pixels into IOSurfaces. Presentation imports them without a texture upload. In-flight GPU frames have separate lifetimes; channel capacity is not a total memory limit."))

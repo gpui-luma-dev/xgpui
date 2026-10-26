@@ -120,7 +120,8 @@ impl ScrollPerf {
             UploadLimits::default(),
             FrameUploadLimits {
                 max_uploads: 1,
-                max_bytes: 32 * MIB,
+                // Full-chain staging includes 256-byte row padding.
+                max_bytes: 33 * MIB,
             },
         )?;
         let now = Instant::now();
@@ -150,7 +151,7 @@ impl ScrollPerf {
                 source_size: [3072, 2048],
                 source_payload_bytes: 0,
                 frame_upload_limit: 1,
-                frame_byte_limit: 32 * MIB,
+                frame_byte_limit: 33 * MIB,
                 baseline: Cadence::default(),
                 loading: Cadence::default(),
                 cached: Cadence::default(),

@@ -4807,10 +4807,13 @@ dependencies = [
  "gpui-apple",
  "gpui-wgpu",
  "gpui-windows",
+ "half",
  "image",
  "objc2-core-foundation",
  "objc2-core-video",
  "refineable",
+ "xgpui-color",
+ "xgpui-shader",
 ]
 
 [[package]]

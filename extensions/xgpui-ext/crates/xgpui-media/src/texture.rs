@@ -33,6 +33,7 @@ pub enum UploadStatus {
 pub struct MediaImage(Arc<Inner>);
 struct Inner {
     data: ImageTextureData,
+    source_color: crate::pipeline::ImageColor,
     uploads: AtomicUsize,
     reservation: Arc<Reservation>,
     state: Mutex<State>,
@@ -126,7 +127,7 @@ enum Worker {
     Dx11(gpui_windows::custom_draw::Dx11ImageUploadContext),
 }
 impl Worker {
-    fn stage(self, data: &ImageTextureData, guard: Arc<StagingPermit>) -> Result<Staged> {
+    fn stage(self, data: &ImageTextureData, guard: Arc<dyn Send + Sync>) -> Result<Staged> {
         let _ = &guard;
         match self {
             #[cfg(target_os = "macos")]
@@ -225,7 +226,7 @@ impl Host<'_> {
             _ => Ok(None),
         }
     }
-    fn adopt(&self, staged: &Staged, guard: Arc<StagingPermit>) -> Result<Output> {
+    fn adopt(&self, staged: &Staged, guard: Arc<dyn Send + Sync>) -> Result<Output> {
         let _ = &guard;
         match (self, staged) {
             #[cfg(target_os = "macos")]
@@ -244,8 +245,13 @@ impl Host<'_> {
             _ => bail!("staged image backend changed"),
         }
     }
-    fn placeholder(&self) -> Result<Output> {
-        let data = ImageTextureData::new(1, 1, vec![vec![0; 4]])?;
+    fn placeholder(&self, format: gpui::ImageTextureFormat) -> Result<Output> {
+        let data = match format {
+            gpui::ImageTextureFormat::Rgba8Srgb => ImageTextureData::new(1, 1, vec![vec![0; 4]])?,
+            gpui::ImageTextureFormat::LinearP3Rgba16Float => {
+                ImageTextureData::new_linear_p3_rgba16f(1, 1, vec![vec![0; 8]])?
+            }
+        };
         match self {
             #[cfg(target_os = "macos")]
             Self::Metal(context) => Ok(Output::Metal(context.create_image_output(&data)?)),
@@ -267,13 +273,25 @@ impl std::fmt::Debug for MediaImage {
     }
 }
 impl MediaImage {
-    pub(crate) fn new(data: ImageTextureData, reservation: Arc<Reservation>) -> Self {
+    pub(crate) fn new_with_color(
+        data: ImageTextureData,
+        reservation: Arc<Reservation>,
+        source_color: crate::pipeline::ImageColor,
+    ) -> Self {
         Self(Arc::new(Inner {
             data,
+            source_color,
             uploads: AtomicUsize::new(0),
             reservation,
             state: Mutex::new(State::new()),
         }))
+    }
+    /// Original supplied pixel interpretation, before canonical upload conversion.
+    pub fn source_color(&self) -> crate::pipeline::ImageColor {
+        self.0.source_color
+    }
+    pub fn format(&self) -> gpui::ImageTextureFormat {
+        self.0.data.format()
     }
     pub fn width(&self) -> u32 {
         self.0.data.width()
@@ -319,13 +337,13 @@ impl MediaImage {
         std::thread::Builder::new()
             .name("xgpui-media-upload".into())
             .spawn(move || {
-                let _reservation = reservation;
+                let _reservation = reservation.clone();
                 // Catch a backend panic so it cannot leave the image spinning forever.
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     if weak.strong_count() == 0 {
                         bail!("upload cancelled");
                     }
-                    worker.stage(&data, staging.clone())
+                    worker.stage(&data, Arc::new((staging.clone(), reservation)))
                 }))
                 .unwrap_or_else(|_| Err(anyhow::anyhow!("image staging worker panicked")));
                 drop(active);
@@ -369,9 +387,15 @@ impl MediaImage {
                 .0
                 .reservation
                 .uploads()
-                .admit_frame(frame, self.payload_bytes())
+                .admit_frame(frame, self.staging_bytes())
         {
-            let output = host.adopt(staged, state.permit.as_ref().unwrap().clone())?;
+            let output = host.adopt(
+                staged,
+                Arc::new((
+                    state.permit.as_ref().unwrap().clone(),
+                    self.0.reservation.clone(),
+                )),
+            )?;
             state.output = Some(output);
             state.status = UploadStatus::Uploading;
             return Ok(host
@@ -382,7 +406,7 @@ impl MediaImage {
         if matches!(state.status, UploadStatus::Idle | UploadStatus::Queued)
             && let Err(error) = (|| -> Result<()> {
                 let scheduler = self.0.reservation.uploads();
-                scheduler.validate_frame_size(self.payload_bytes())?;
+                scheduler.validate_frame_size(self.staging_bytes())?;
                 self.start(&mut state, host.worker(&scheduler))
             })()
         {
@@ -393,7 +417,7 @@ impl MediaImage {
         {
             return Ok(output.into_any());
         }
-        state.placeholder = Some(host.placeholder()?);
+        state.placeholder = Some(host.placeholder(self.0.data.format())?);
         Ok(host
             .reuse(state.placeholder.as_ref().unwrap())?
             .unwrap()
@@ -401,6 +425,13 @@ impl MediaImage {
     }
 }
 impl CustomContent for MediaImage {
+    fn image_color_mode(&self) -> gpui::ImageColorMode {
+        match self.format() {
+            gpui::ImageTextureFormat::Rgba8Srgb => gpui::ImageColorMode::EncodedSrgb,
+            gpui::ImageTextureFormat::LinearP3Rgba16Float => gpui::ImageColorMode::LinearP3Preview,
+        }
+    }
+
     fn prepare(&self, backend: &dyn Any, extent: Size<DevicePixels>) -> Result<Box<dyn Any>> {
         let request =
             gpui::PreparationRequest::new(extent.map(|v| gpui::px(v.0 as f32)), extent, 1.)?;

@@ -130,7 +130,8 @@ impl LayerEffect {
         };
         self
     }
-    pub(crate) fn paint<R>(
+    /// Paint a bounded subtree using the shared retained layer compositor.
+    pub fn paint<R>(
         &self,
         window: &mut Window,
         bounds: Bounds<Pixels>,
