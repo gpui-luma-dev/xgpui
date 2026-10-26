@@ -4,6 +4,20 @@ use gpui::*;
 use refineable::Refineable;
 use std::{cell::Cell, rc::Rc, sync::Arc};
 
+enum SurfacePaint {
+    Paint(Paint),
+    #[cfg(feature = "portable-shaders")]
+    Brush(crate::Brush),
+}
+impl SurfacePaint {
+    fn visible(&self) -> bool {
+        match self {
+            Self::Paint(Paint::Native(color)) => !color.is_transparent(),
+            _ => true,
+        }
+    }
+}
+
 /// A normal layout container with extension-owned background/border materials.
 /// Explicit materials override native background/border colors on this container.
 /// Material changes are supplied by rebuilding it; native hover refinements do not
@@ -11,12 +25,18 @@ use std::{cell::Cell, rc::Rc, sync::Arc};
 pub struct Painted {
     root: Div,
     children: Vec<AnyElement>,
-    background: Option<Paint>,
-    border: Option<Paint>,
+    background: Option<SurfacePaint>,
+    border: Option<SurfacePaint>,
     #[cfg(feature = "portable-shaders")]
     shadows: Vec<crate::instanced::ShadowLayer>,
     #[cfg(feature = "portable-shaders")]
     animated_border: Option<crate::instanced::AnimatedBorderLayer>,
+    #[cfg(feature = "portable-shaders")]
+    text_brush: Option<Arc<dyn GlyphBrush>>,
+    #[cfg(feature = "portable-shaders")]
+    backdrop: Option<crate::BackdropBlur>,
+    #[cfg(feature = "portable-shaders")]
+    layer_effect: Option<crate::LayerEffect>,
 }
 /// Create an opt-in extension paint container.
 pub fn painted() -> Painted {
@@ -29,6 +49,12 @@ pub fn painted() -> Painted {
         shadows: Vec::new(),
         #[cfg(feature = "portable-shaders")]
         animated_border: None,
+        #[cfg(feature = "portable-shaders")]
+        text_brush: None,
+        #[cfg(feature = "portable-shaders")]
+        backdrop: None,
+        #[cfg(feature = "portable-shaders")]
+        layer_effect: None,
     }
 }
 /// Compatibility name for the original shader element.
@@ -38,6 +64,20 @@ pub fn shader(content: Arc<dyn CustomContent>) -> Shader {
     painted().bg_paint(content)
 }
 impl Painted {
+    /// Isolate this bounded surface and its children, then apply a group effect.
+    /// Overflow is clipped; deferred overlays paint outside the capture.
+    #[cfg(feature = "portable-shaders")]
+    pub fn layer_effect(mut self, effect: crate::LayerEffect) -> Self {
+        self.layer_effect = Some(effect);
+        self
+    }
+
+    /// Explicit bounded backdrop pass, before this surface and its children.
+    #[cfg(feature = "portable-shaders")]
+    pub fn backdrop_blur(mut self, effect: crate::BackdropBlur) -> Self {
+        self.backdrop = Some(effect);
+        self
+    }
     /// Add an immutable programmable shadow layer. Requires uniform corner radii.
     /// Outsets paint before the background; insets before children. Append layers
     /// in back-to-front order within each group. Base geometry/opacity are used;
@@ -55,12 +95,33 @@ impl Painted {
         self.animated_border = Some(layer);
         self
     }
+    /// Color descendant monochrome glyphs with a continuous field over this
+    /// container's full bounds. Emoji retain their native color; nested text
+    /// brush containers override this scope. Uses grayscale atlas coverage.
+    #[cfg(feature = "portable-shaders")]
+    pub fn text_brush(mut self, brush: crate::Brush) -> Self {
+        self.text_brush = Some(brush.text_brush().expect("validated text brush"));
+        self
+    }
+    /// Main-pass brush over the full background. Overrides earlier bg_paint/bg_brush.
+    #[cfg(feature = "portable-shaders")]
+    pub fn bg_brush(mut self, brush: crate::Brush) -> Self {
+        self.background = Some(SurfacePaint::Brush(brush));
+        self
+    }
+    /// Main-pass solid-style border brush. Uses layout border widths; dashed
+    /// borders require border_paint. Overrides earlier border_paint/border_brush.
+    #[cfg(feature = "portable-shaders")]
+    pub fn border_brush(mut self, brush: crate::Brush) -> Self {
+        self.border = Some(SurfacePaint::Brush(brush));
+        self
+    }
     pub fn bg_paint(mut self, paint: impl Into<Paint>) -> Self {
-        self.background = Some(paint.into());
+        self.background = Some(SurfacePaint::Paint(paint.into()));
         self
     }
     pub fn border_paint(mut self, paint: impl Into<Paint>) -> Self {
-        self.border = Some(paint.into());
+        self.border = Some(SurfacePaint::Paint(paint.into()));
         self
     }
 }
@@ -91,6 +152,12 @@ pub struct PaintedElement {
     geometry: Rc<Geometry>,
     #[cfg(feature = "portable-shaders")]
     shadows: Vec<crate::instanced::ShadowLayer>,
+    #[cfg(feature = "portable-shaders")]
+    text_brush: Option<Arc<dyn GlyphBrush>>,
+    #[cfg(feature = "portable-shaders")]
+    backdrop: Option<crate::BackdropBlur>,
+    #[cfg(feature = "portable-shaders")]
+    layer_effect: Option<crate::LayerEffect>,
 }
 impl IntoElement for PaintedElement {
     type Element = Self;
@@ -113,16 +180,26 @@ impl IntoElement for Painted {
                 "shader borders and shadows require uniform corner radii; use rounded(...) on the container"
             );
         }
-        let custom_background = matches!(self.background, Some(Paint::Custom(_)));
+        let custom_background = self
+            .background
+            .as_ref()
+            .is_some_and(|paint| !matches!(paint, SurfacePaint::Paint(Paint::Native(_))));
         let overlay_border = self.border.is_some() || custom_background;
-        let border = self.border.or_else(|| style.border_color.map(Paint::from));
+        let border = self.border.or_else(|| {
+            style
+                .border_color
+                .map(|color| SurfacePaint::Paint(Paint::from(color)))
+        });
+        #[cfg(feature = "portable-shaders")]
+        if matches!(border, Some(SurfacePaint::Brush(_))) {
+            assert!(
+                style.border_style == BorderStyle::Solid,
+                "main-pass brushes require solid borders; use border_paint for dashed borders"
+            );
+        }
         let mut clip_style = style.clone();
         if overlay_border {
-            let visible = match &border {
-                Some(Paint::Native(color)) => !color.is_transparent(),
-                Some(Paint::Custom(_)) => true,
-                None => false,
-            };
+            let visible = border.as_ref().is_some_and(SurfacePaint::visible);
             clip_style.border_color = Some(if visible {
                 white()
             } else {
@@ -137,8 +214,10 @@ impl IntoElement for Painted {
             clip_style,
         });
         match self.background {
-            Some(Paint::Native(color)) => self.root.style().background = Some(Fill::Color(color)),
-            Some(Paint::Custom(content)) => {
+            Some(SurfacePaint::Paint(Paint::Native(color))) => {
+                self.root.style().background = Some(Fill::Color(color))
+            }
+            Some(background) => {
                 self.root.style().background = None;
                 let inset: Vec<_> = style
                     .box_shadow
@@ -164,13 +243,20 @@ impl IntoElement for Painted {
                             let radii = radii
                                 .to_pixels(window.rem_size())
                                 .clamp_radii_for_quad_size(bounds.size);
-                            window.paint_custom(
-                                CustomGeometry::RoundedRect {
-                                    bounds,
-                                    corner_radii: radii,
-                                },
-                                content,
-                            );
+                            match background {
+                                SurfacePaint::Paint(Paint::Custom(content)) => window.paint_custom(
+                                    CustomGeometry::RoundedRect {
+                                        bounds,
+                                        corner_radii: radii,
+                                    },
+                                    content,
+                                ),
+                                #[cfg(feature = "portable-shaders")]
+                                SurfacePaint::Brush(brush) => brush
+                                    .paint_background(window, bounds, radii)
+                                    .expect("validated background brush"),
+                                SurfacePaint::Paint(Paint::Native(_)) => unreachable!(),
+                            }
                             window.paint_inset_shadows(bounds, radii, &inset);
                         },
                     )
@@ -251,18 +337,23 @@ impl IntoElement for Painted {
                     |_, _, _| (),
                     move |_, (), window, _| {
                         let bounds = geometry.bounds.get();
-                        window.paint_quad_with_paints(
-                            quad(
-                                bounds,
-                                radii.to_pixels(window.rem_size()),
-                                transparent_black(),
-                                widths.to_pixels(window.rem_size()),
-                                transparent_black(),
-                                border_style,
-                            ),
+                        let quad = quad(
+                            bounds,
+                            radii.to_pixels(window.rem_size()),
                             transparent_black(),
-                            border,
+                            widths.to_pixels(window.rem_size()),
+                            transparent_black(),
+                            border_style,
                         );
+                        match border {
+                            SurfacePaint::Paint(paint) => {
+                                window.paint_quad_with_paints(quad, transparent_black(), paint)
+                            }
+                            #[cfg(feature = "portable-shaders")]
+                            SurfacePaint::Brush(brush) => brush
+                                .paint_border(window, &quad)
+                                .expect("validated border brush"),
+                        }
                     },
                 )
                 .absolute()
@@ -274,6 +365,12 @@ impl IntoElement for Painted {
             geometry,
             #[cfg(feature = "portable-shaders")]
             shadows: self.shadows,
+            #[cfg(feature = "portable-shaders")]
+            text_brush: self.text_brush,
+            #[cfg(feature = "portable-shaders")]
+            backdrop: self.backdrop,
+            #[cfg(feature = "portable-shaders")]
+            layer_effect: self.layer_effect,
         }
     }
 }
@@ -304,9 +401,25 @@ impl Element for PaintedElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        self.geometry.bounds.set(bounds);
-        Element::prepaint(&mut self.root, id, inspector, bounds, state, window, cx)
+        #[cfg(feature = "portable-shaders")]
+        let captured = self.layer_effect.is_some();
+        let mut prepaint = |window: &mut Window| {
+            self.geometry.bounds.set(bounds);
+            #[cfg(feature = "portable-shaders")]
+            if let Some(brush) = self.text_brush.clone() {
+                return window.with_glyph_brush(brush, bounds, |window| {
+                    Element::prepaint(&mut self.root, id, inspector, bounds, state, window, cx)
+                });
+            }
+            Element::prepaint(&mut self.root, id, inspector, bounds, state, window, cx)
+        };
+        #[cfg(feature = "portable-shaders")]
+        if captured {
+            return window.with_layer_effect_scope(bounds, prepaint);
+        }
+        prepaint(window)
     }
+
     fn paint(
         &mut self,
         id: Option<&GlobalElementId>,
@@ -318,37 +431,77 @@ impl Element for PaintedElement {
         cx: &mut App,
     ) {
         #[cfg(feature = "portable-shaders")]
-        {
-            let style = &self.geometry.clip_style;
-            if style.visibility != Visibility::Hidden
-                && style.display != Display::None
+        let effect = self.layer_effect.clone().filter(|_| {
+            self.geometry.clip_style.visibility != Visibility::Hidden
+                && self.geometry.clip_style.display != Display::None
                 && !bounds.is_empty()
+        });
+        let mut paint = |window: &mut Window| {
+            #[cfg(feature = "portable-shaders")]
             {
-                let radius = style
-                    .corner_radii
-                    .to_pixels(window.rem_size())
-                    .clamp_radii_for_quad_size(bounds.size)
-                    .top_left;
-                // Before Div paints, only ancestor opacity/masks are active. Fold this
-                // container's base opacity into the shadow once, without changing GPUI.
-                let opacity = style.opacity.unwrap_or(1.).clamp(0., 1.);
-                for layer in self.shadows.iter().filter(|s| !s.is_inset()) {
-                    layer
-                        .paint(window, bounds, radius, opacity)
-                        .expect("validated outset shadow layer");
+                let style = &self.geometry.clip_style;
+                if style.visibility != Visibility::Hidden
+                    && style.display != Display::None
+                    && !bounds.is_empty()
+                {
+                    let radius = style
+                        .corner_radii
+                        .to_pixels(window.rem_size())
+                        .clamp_radii_for_quad_size(bounds.size)
+                        .top_left;
+                    // Before Div paints, only ancestor opacity/masks are active. Fold this
+                    // container's base opacity into the shadow once, without changing GPUI.
+                    let opacity = style.opacity.unwrap_or(1.).clamp(0., 1.);
+                    if let Some(effect) = &self.backdrop {
+                        effect.paint(
+                            window,
+                            bounds,
+                            style
+                                .corner_radii
+                                .to_pixels(window.rem_size())
+                                .clamp_radii_for_quad_size(bounds.size),
+                            opacity,
+                        );
+                    }
+                    for layer in self.shadows.iter().filter(|s| !s.is_inset()) {
+                        layer
+                            .paint(window, bounds, radius, opacity)
+                            .expect("validated outset shadow layer");
+                    }
                 }
             }
+            #[cfg(feature = "portable-shaders")]
+            if let Some(brush) = self.text_brush.clone() {
+                window.with_glyph_brush(brush, bounds, |window| {
+                    Element::paint(
+                        &mut self.root,
+                        id,
+                        inspector,
+                        bounds,
+                        layout,
+                        prepaint,
+                        window,
+                        cx,
+                    )
+                });
+                return;
+            }
+            Element::paint(
+                &mut self.root,
+                id,
+                inspector,
+                bounds,
+                layout,
+                prepaint,
+                window,
+                cx,
+            );
+        };
+        #[cfg(feature = "portable-shaders")]
+        if let Some(effect) = effect {
+            return effect.paint(window, bounds, paint);
         }
-        Element::paint(
-            &mut self.root,
-            id,
-            inspector,
-            bounds,
-            layout,
-            prepaint,
-            window,
-            cx,
-        );
+        paint(window)
     }
 }
 // Delegate layout directly, so wrapping does not insert an extra Taffy node or
@@ -413,3 +566,28 @@ impl Element for ClippedChild {
 #[cfg(test)]
 #[path = "surface_shadow_tests.rs"]
 mod tests;
+
+#[cfg(all(test, feature = "portable-shaders"))]
+mod brush_setter_tests {
+    use super::*;
+    #[::core::prelude::v1::test]
+    fn explicit_material_setters_use_the_last_value() {
+        let brush = crate::Brush::solid([1.; 4]).unwrap();
+        let surface = painted()
+            .bg_brush(brush.clone())
+            .bg_paint(white())
+            .border_brush(brush.clone())
+            .border_paint(white());
+        assert!(matches!(
+            surface.background,
+            Some(SurfacePaint::Paint(Paint::Native(_)))
+        ));
+        assert!(matches!(
+            surface.border,
+            Some(SurfacePaint::Paint(Paint::Native(_)))
+        ));
+        let surface = surface.bg_brush(brush.clone()).border_brush(brush);
+        assert!(matches!(surface.background, Some(SurfacePaint::Brush(_))));
+        assert!(matches!(surface.border, Some(SurfacePaint::Brush(_))));
+    }
+}

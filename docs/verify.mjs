@@ -88,7 +88,7 @@ const index = await readFile(new URL('index.html', site), 'utf8');
 assert.ok(!index.includes('#method'));
 assert.ok(index.includes('href="examples/extensions/"'));
 assert.ok(index.includes('href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>'));
-for (const demo of ['shader', 'parley', 'svg', 'color']) {
+for (const demo of ['shader', 'brushes', 'layers', 'parley', 'svg', 'color']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web'));
@@ -107,7 +107,7 @@ const listedModules = [...wasmIndex.matchAll(/data-wasm-module="([^"]+)"/g)].map
 const legacyModules = [...legacyManifest.matchAll(/\[\[bin\]\]\s+name = "([^"]+)"/g)].map(m => m[1]);
 assert.deepEqual(listedModules.slice().sort(), legacyModules.sort(), 'every legacy Wasm binary needs an index entry');
 for (const [, module] of legacyGallery.matchAll(/data-module="([^"]+)"/g)) assert.ok(listedModules.includes(module), module);
-for (const demo of ['shader', 'parley', 'svg', 'color']) {
+for (const demo of ['shader', 'brushes', 'layers', 'parley', 'svg', 'color']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="?demo=' + demo + suffix + '"'), demo + suffix);
   }
@@ -212,7 +212,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 12);
+assert.equal(Object.keys(data.extension_documents).length, 14);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/xgpui-ext/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -230,7 +230,7 @@ assert.match(run('extensionPage("svg-rendering")'), /Experimental SVG extension/
 assert.match(run('cratePage(crates.find(c => c.package === "xgpui-svg"), "overview")'), /SvgScheduler/);
 const svgDoc = data.extension_documents['svg-rendering'].html;
 for (const term of ['svg_image', 'SchedulerLimits', 'Queued', '3 × output RGBA', '2 × RGBA', 'process/GPU-memory ceiling', 'samples', 'attributed', 'SvgSize::Viewport']) assert.ok(svgDoc.includes(term), term);
-assert.match(run('cratePage(crates.find(c => c.package === "xgpui-svg"), "overview")'), /Run browser demo/);
+assert.match(run('cratePage(crates.find(c => c.package === "xgpui-svg"), "overview")'), /Open Progressive SVG/);
 const svgCrate = data.crates.find(c => c.package === 'xgpui-svg');
 for (const name of ['SvgImage', 'SvgDocument', 'SvgScheduler', 'SchedulerStats', 'RasterPolicy']) assert.ok(svgCrate.declarations.some(d => d.name === name), name);
 assert.ok(svgCrate.dependencies.some(d => d.package === 'gpui'));
@@ -254,6 +254,11 @@ for (const [route, doc] of Object.entries(data.extension_documents)) {
     if (match[2]) assert.ok(target.html.includes('id="' + match[2] + '"'), 'missing section: ' + match[2]);
   }
 }
+assert.ok(data.extension_documents.brushes, 'universal brushes must be published');
+assert.match(run('extensionPage("extensions")'), /href="#brushes"/);
+assert.match(run('shaderCrateGuide()'), /href="#brushes"/);
+assert.match(data.extension_documents.brushes.html, /--pastel-waves/);
+assert.match(data.extension_documents.brushes.html, /issues\/35/);
 assert.equal(run('parseRoute("#paint-contract-hardening&section=implemented-discardable-recording-transactions").global'), 'paint-contract-hardening');
 assert.equal(run('parseRoute("#paint-contract-hardening&section=implemented-discardable-recording-transactions").section'), 'implemented-discardable-recording-transactions');
 for (const file of [
@@ -294,6 +299,15 @@ context.location.hash = '#crate=xgpui-gamut&tab=overview';
 run('render()');
 assert.match(element('content').innerHTML, /WideColor::linear_p3/);
 assert.match(element('content').innerHTML, /API inventory/);
+for (const route of ['#high-gamut-windows', '#crate=xgpui-gamut&tab=overview']) {
+  context.location.hash = route;
+  run('render()');
+  const gamutPage = element('content').innerHTML;
+  assert.match(gamutPage, /aria-label="Wide-gamut demos"/);
+  assert.match(gamutPage, /cargo run --locked --config \.cargo\/validation\.toml --manifest-path apps\/gamut-lab\/Cargo\.toml/);
+  assert.match(gamutPage, /href="examples\/extensions\/\?demo=color"/);
+  assert.match(gamutPage, /Rendered as sRGB/);
+}
 context.location.hash = '#svg-rendering';
 run('render()');
 assert.match(element('crate-list').innerHTML, /aria-current="page" href="#crate=xgpui-svg/);
@@ -352,6 +366,7 @@ assert.match(run('extensionPage("instanced-wgsl-v2")'), /Clipping ON\/OFF/);
 assert.match(run('instancedDemoLinks()'), /href="examples\/shaders\/"/);
 const shaderIndex = await readFile(new URL('../apps/shader-examples/index.html', import.meta.url), 'utf8');
 for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
+  assert.ok(shaderIndex.includes(`href="?example=${example}"`), 'automatic backend link: ' + example);
   for (const backend of ['webgpu', 'webgl']) {
     assert.ok(shaderIndex.includes(`href="?example=${example}&backend=${backend}"`));
   }
@@ -383,3 +398,46 @@ console.log('Verified standalone color crate navigation, guide and dependency bo
 
 assert.match(run('cratePage(crates.find(c => c.package === "xgpui-color"), "overview")'), /examples\/extensions\/\?demo=color/);
 assert.match(wasmIndex, /Color \/ Gamut/);
+
+for (const app of ['extensions-web', 'shader-examples']) {
+  const html = await readFile(new URL('../apps/' + app + '/index.html', import.meta.url), 'utf8');
+  const build = await readFile(new URL('../apps/' + app + '/build.sh', import.meta.url), 'utf8');
+  assert.ok(html.includes("from './graphics.mjs'"), app + ': shared startup diagnostics');
+  assert.ok(html.includes('canonicalLocalDemoUrl(location.href)'), app + ': correct wildcard origins');
+  assert.ok(html.includes('location.replace(canonical)'), app + ': preserve the explicit backend on localhost');
+  assert.ok(build.includes('cp apps/web-support/graphics.mjs'), app + ': diagnostics packaged');
+  assert.ok(build.includes('cp apps/web-support/gallery.css'), app + ': gallery styling packaged');
+}
+console.log('Verified automatic backend links and packaged browser graphics recovery.');
+
+const brushLaunch = run('brushDemoLinks()');
+assert.match(brushLaunch, /Open brush gallery/);
+assert.match(brushLaunch, /Open layer effects/);
+assert.equal((brushLaunch.match(/href="examples\/extensions\/\?demo=/g) || []).length, 2);
+assert.ok(!brushLaunch.includes('Run browser demo'));
+assert.match(run('overview()'), /LIVE BROWSER DEMOS/);
+assert.ok(index.includes('>Live demos ↗</a>'));
+for (const app of ['extensions-web', 'shader-examples']) {
+  const html = await readFile(new URL('../apps/' + app + '/index.html', import.meta.url), 'utf8');
+  assert.ok(html.includes('gallery.css'));
+  assert.ok(html.includes('gallery-grid'));
+  assert.ok(html.includes('demo-preview'));
+  assert.ok(html.includes('../extensions/'));
+}
+console.log('Verified demo discovery, distinct brush/layer launch labels and visual gallery entry points.');
+
+// "All demos" includes both hosted apps, without duplicating launch cards.
+const allLaunches = [...wasmIndex.matchAll(/<a href="([^"]+)">Open demo ↗<\/a>/g)].map(m => m[1]);
+assert.equal(allLaunches.length, 12);
+assert.equal(new Set(allLaunches).size, 12);
+for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
+  for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
+    assert.ok(wasmIndex.includes('href="../shaders/?example=' + example + suffix + '"'));
+  }
+}
+for (const id of ['brushes-paints','layer-effects','shaders-motion','typography','svg-color','native-labs']) {
+  assert.ok(wasmIndex.includes('id="' + id + '"'));
+}
+assert.ok(wasmIndex.includes('--pastel-waves'));
+assert.ok(wasmIndex.includes('Show launch command'));
+console.log('Verified unified index covers all 12 hosted demos and separates native launch commands.');

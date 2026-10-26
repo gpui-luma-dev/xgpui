@@ -7,6 +7,20 @@ pub(super) fn compile<T: ShaderInstance>(
     user: &str,
     encoding: ShaderOutputEncoding,
 ) -> Result<SceneShaderProgram> {
+    compile_impl::<T>(user, encoding, false, false)
+}
+pub(super) fn compile_glyph<T: ShaderInstance>(user: &str) -> Result<SceneShaderProgram> {
+    compile_impl::<T>(user, ShaderOutputEncoding::EncodedSrgb, true, false)
+}
+pub(super) fn compile_path<T: ShaderInstance>(user: &str) -> Result<SceneShaderProgram> {
+    compile_impl::<T>(user, ShaderOutputEncoding::EncodedSrgb, false, true)
+}
+fn compile_impl<T: ShaderInstance>(
+    user: &str,
+    encoding: ShaderOutputEncoding,
+    glyph: bool,
+    path: bool,
+) -> Result<SceneShaderProgram> {
     ensure!(user.len() <= 64 * 1024, "shader source exceeds 64 KiB");
     let user_source = format!("{PRELUDE}\n{user}");
     let parsed = naga::front::wgsl::parse_str(&user_source).map_err(|e| {
@@ -112,12 +126,32 @@ pub(super) fn compile<T: ShaderInstance>(
     } else {
         "return vec4(select(color.rgb, color.rgb * alpha, host.premultiplied != 0u), alpha);"
     };
+    let glyph_resource = if glyph || path {
+        "@group(1) @binding(0) var glyph_atlas: texture_2d<f32>;"
+    } else {
+        ""
+    };
+    let glyph_sample = if path {
+        "let path_sample = textureLoad(glyph_atlas,vec2<i32>(input.screen.xy),0).a;"
+    } else if glyph {
+        "let glyph_sample = textureLoad(glyph_atlas, vec2<i32>(glyph_texel(ShaderInput(input.local, input.local * input.extent, input.extent, input.misc.y), parameters)), 0);"
+    } else {
+        ""
+    };
+    let glyph_coverage = if path {
+        "path_sample"
+    } else if glyph {
+        "select(glyph_sample.r, glyph_sample.a, host.pad == 2u)"
+    } else {
+        "1."
+    };
     let source = format!(
         r#"
 {PRELUDE}
 {user}
 struct HostGlobals {{ viewport: vec2<f32>, premultiplied: u32, pad: u32, }}
 @group(0) @binding(0) var<uniform> host: HostGlobals;
+{glyph_resource}
 struct HostInstance {{ @location(0) bounds: vec4<f32>, @location(1) clip: vec4<f32>, @location(2) misc: vec4<f32>, {attributes} }}
 struct HostVarying {{
     @builtin(position) screen: vec4<f32>,
@@ -142,7 +176,8 @@ struct HostVarying {{
     if (any(input.screen.xy < input.clip.xy) || any(input.screen.xy >= input.clip.zw)) {{ discard; }}
     let parameters = Parameters({parameters});
     let color = clamp(shade(ShaderInput(input.local, input.local * input.extent, input.extent, input.misc.y), parameters), vec4(0.), vec4(1.));
-    let alpha = color.a * input.misc.x;
+    {glyph_sample}
+    let alpha = color.a * input.misc.x * {glyph_coverage};
     {output}
 }}
 "#,
@@ -173,6 +208,18 @@ struct HostVarying {{
                 ..Default::default()
             },
         );
+        if glyph || path {
+            resources.resources.insert(
+                naga::ResourceBinding {
+                    group: 1,
+                    binding: 0,
+                },
+                naga::back::msl::BindTarget {
+                    texture: Some(0),
+                    ..Default::default()
+                },
+            );
+        }
         msl.per_entry_point_map
             .insert(entry.name.clone(), resources);
     }
@@ -199,6 +246,18 @@ struct HostVarying {{
             ..Default::default()
         },
     );
+    if glyph || path {
+        options.binding_map.insert(
+            naga::ResourceBinding {
+                group: 1,
+                binding: 0,
+            },
+            naga::back::hlsl::BindTarget {
+                register: 0,
+                ..Default::default()
+            },
+        );
+    }
     let mut hlsl = String::new();
     let reflection = naga::back::hlsl::Writer::new(&mut hlsl, &options, &Default::default())
         .write(&module, &info, None)
@@ -220,10 +279,17 @@ struct HostVarying {{
         )
         .context("SPIR-V translation")?;
     }
-    Ok(SceneShaderProgram::new_with_output_encoding(
+    let program = SceneShaderProgram::new_with_output_encoding(
         source,
         (metal, names[0].clone(), names[1].clone()),
         (hlsl, hlsl_names[0].clone(), hlsl_names[1].clone()),
         encoding,
-    ))
+    );
+    Ok(if glyph {
+        program.with_glyph_mask()
+    } else if path {
+        program.with_path_mask()
+    } else {
+        program
+    })
 }

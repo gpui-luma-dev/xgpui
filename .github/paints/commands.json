@@ -24,6 +24,11 @@
       "name": "Check low-alpha saturated edges",
       "scope": "paint-parity",
       "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_low_alpha_saturated_edges -- --nocapture"
+    },
+    {
+      "name": "Test main-pass brushes and native coverage parity",
+      "scope": "paint-parity",
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib brush::tests -- --nocapture"
     }
   ],
   "windows-wgpu": [
@@ -51,6 +56,11 @@
       "name": "Check low-alpha saturated edges",
       "scope": "paint-parity",
       "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_low_alpha_saturated_edges -- --nocapture"
+    },
+    {
+      "name": "Test main-pass brushes and native coverage parity",
+      "scope": "paint-parity",
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib brush::tests -- --nocapture"
     }
   ],
   "windows-native": [
@@ -108,6 +118,11 @@
       "name": "Render native mesh sample",
       "scope": "paint-parity",
       "command": "cargo run --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders -- --headless --effect mesh --frames 3 --png native-dx11-mesh.png"
+    },
+    {
+      "name": "Test main-pass brushes and native coverage parity",
+      "scope": "paint-parity",
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib brush::tests -- --nocapture"
     }
   ]
 }

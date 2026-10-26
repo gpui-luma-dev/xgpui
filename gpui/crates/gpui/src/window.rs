@@ -1020,12 +1020,24 @@ impl std::ops::Deref for ElementIdStack {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct GlyphBrushCacheKey {
+    identity: Arc<()>,
+    bounds: Bounds<Pixels>,
+}
+impl PartialEq for GlyphBrushCacheKey {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.identity, &other.identity) && self.bounds == other.bounds
+    }
+}
+
 pub(crate) struct DeferredDraw {
     current_view: EntityId,
     priority: usize,
     parent_node: DispatchNodeId,
     element_id_stack: ElementIdStack,
     text_style_stack: Vec<TextStyleRefinement>,
+    glyph_brush_stack: Vec<(Arc<dyn crate::GlyphBrush>, Bounds<Pixels>)>,
     content_mask: Option<ContentMask<Pixels>>,
     rem_size: Pixels,
     element: Option<AnyElement>,
@@ -1236,9 +1248,13 @@ pub struct Window {
     pub(crate) root: Option<AnyView>,
     pub(crate) element_id_stack: ElementIdStack,
     pub(crate) text_style_stack: Vec<TextStyleRefinement>,
+    glyph_brush_stack: Vec<(Arc<dyn crate::GlyphBrush>, Bounds<Pixels>)>,
     pub(crate) rendered_entity_stack: Vec<EntityId>,
     pub(crate) element_offset_stack: Vec<Point<Pixels>>,
     pub(crate) element_opacity: f32,
+    layer_capture_depth: usize,
+    layer_capture_sources: Vec<Bounds<Pixels>>,
+    layer_capture_clips: Vec<Bounds<Pixels>>,
     pub(crate) content_mask_stack: Vec<ContentMask<Pixels>>,
     pub(crate) requested_autoscroll: Option<Bounds<Pixels>>,
     /// The [`TextInputConfiguration`] most recently forwarded to the platform
@@ -2140,10 +2156,14 @@ impl Window {
             root: None,
             element_id_stack: ElementIdStack::default(),
             text_style_stack: Vec::new(),
+            glyph_brush_stack: Vec::new(),
             rendered_entity_stack: Vec::new(),
             element_offset_stack: Vec::new(),
             content_mask_stack: Vec::new(),
             element_opacity: 1.0,
+            layer_capture_depth: 0,
+            layer_capture_sources: Vec::new(),
+            layer_capture_clips: Vec::new(),
             requested_autoscroll: None,
             last_text_input_configuration: None,
             focused_text_input_active: false,
@@ -3924,6 +3944,8 @@ impl Window {
                         .clone_from(&deferred_draw.element_id_stack);
                     self.text_style_stack
                         .clone_from(&deferred_draw.text_style_stack);
+                    self.glyph_brush_stack
+                        .clone_from(&deferred_draw.glyph_brush_stack);
                     (
                         deferred_draw.element.take(),
                         deferred_draw.parent_node,
@@ -3955,6 +3977,7 @@ impl Window {
 
             self.element_id_stack.clear();
             self.text_style_stack.clear();
+            self.glyph_brush_stack.clear();
             round_start = round_end;
         }
     }
@@ -3974,6 +3997,8 @@ impl Window {
             let mut deferred_draw = &mut deferred_draws[deferred_draw_ix];
             self.element_id_stack
                 .clone_from(&deferred_draw.element_id_stack);
+            self.glyph_brush_stack
+                .clone_from(&deferred_draw.glyph_brush_stack);
             self.next_frame
                 .dispatch_tree
                 .set_active_node(deferred_draw.parent_node);
@@ -3996,6 +4021,7 @@ impl Window {
         }
         self.next_frame.deferred_draws = deferred_draws;
         self.element_id_stack.clear();
+        self.glyph_brush_stack.clear();
     }
 
     fn deferred_draw_traversal_order(&mut self) -> SmallVec<[usize; 8]> {
@@ -4056,6 +4082,7 @@ impl Window {
                     parent_node: reused_subtree.refresh_node_id(deferred_draw.parent_node),
                     element_id_stack: deferred_draw.element_id_stack.clone(),
                     text_style_stack: deferred_draw.text_style_stack.clone(),
+                    glyph_brush_stack: deferred_draw.glyph_brush_stack.clone(),
                     content_mask: deferred_draw.content_mask,
                     rem_size: deferred_draw.rem_size,
                     priority: deferred_draw.priority,
@@ -4538,6 +4565,7 @@ impl Window {
             parent_node,
             element_id_stack: self.element_id_stack.clone(),
             text_style_stack: self.text_style_stack.clone(),
+            glyph_brush_stack: self.glyph_brush_stack.clone(),
             content_mask,
             rem_size: self.rem_size(),
             priority,
@@ -4789,6 +4817,23 @@ impl Window {
             .insert_primitive(path.scale(scale_factor));
     }
 
+    /// Record a validated path brush. The host applies inherited opacity once.
+    /// Programs may evaluate direct coverage or use retained native geometry.
+    pub fn paint_brushed_path(&mut self, mut draw: crate::ShaderDraw) {
+        self.invalidator.debug_assert_paint();
+        draw.opacity *= self.element_opacity();
+        draw.content_mask.bounds = draw
+            .content_mask
+            .bounds
+            .intersect(&self.content_mask().scale(self.scale_factor()).bounds);
+        if draw.opacity <= 0. || draw.bounds.intersect(&draw.content_mask.bounds).is_empty() {
+            return;
+        }
+        self.next_frame
+            .scene
+            .insert_primitive(crate::Primitive::Shader(draw));
+    }
+
     /// Paint an underline into the scene for the next frame at the current z-index.
     ///
     /// This method should only be called as part of the paint phase of element drawing.
@@ -4866,8 +4911,19 @@ impl Window {
             (quantized_origin.y.fract() * SUBPIXEL_VARIANTS_Y as f32) as u8,
         );
         let integer_origin = quantized_origin.map(|c| ScaledPixels(c.trunc()));
-        let subpixel_rendering = self.should_use_subpixel_rendering(font_id, font_size);
-        let dilation = self.text_system().glyph_dilation_for_color(color);
+        let glyph_brush = self.glyph_brush_stack.last().cloned();
+        // Colored materials use grayscale coverage; ordinary text keeps its
+        // platform-selected grayscale/subpixel pipeline and color dilation.
+        let subpixel_rendering = glyph_brush.is_none()
+            && self.layer_capture_depth == 0
+            && self.should_use_subpixel_rendering(font_id, font_size);
+        let dilation = self
+            .text_system()
+            .glyph_dilation_for_color(if glyph_brush.is_some() {
+                crate::white()
+            } else {
+                color
+            });
         let params = RenderGlyphParams {
             font_id,
             glyph_id,
@@ -4894,7 +4950,22 @@ impl Window {
             };
             let content_mask = self.snapped_content_mask();
 
-            if subpixel_rendering {
+            if let Some((brush, brush_bounds)) = glyph_brush {
+                brush.paint_glyph(
+                    self,
+                    MonochromeSprite {
+                        order: 0,
+                        pad: 0,
+                        bounds,
+                        content_mask,
+                        color: crate::white(),
+                        tile,
+                        transformation: TransformationMatrix::unit(),
+                    },
+                    brush_bounds,
+                    element_opacity,
+                )?;
+            } else if subpixel_rendering {
                 self.next_frame.scene.insert_primitive(SubpixelSprite {
                     order: 0,
                     pad: 0,
@@ -5171,6 +5242,253 @@ impl Window {
         Ok(())
     }
 
+    pub(crate) fn glyph_brush_cache_key(&self) -> Option<GlyphBrushCacheKey> {
+        self.glyph_brush_stack
+            .last()
+            .map(|(brush, bounds)| GlyphBrushCacheKey {
+                identity: brush.cache_key(),
+                bounds: *bounds,
+            })
+    }
+    /// Scope a glyph brush across descendants. Establish the same scope in
+    /// prepaint so deferred children retain their brush and original coordinates.
+    pub fn with_glyph_brush<R>(
+        &mut self,
+        brush: Arc<dyn crate::GlyphBrush>,
+        bounds: Bounds<Pixels>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.glyph_brush_stack.push((brush, bounds));
+        let result = f(self);
+        self.glyph_brush_stack.pop();
+        result
+    }
+    /// Record an atlas-masked shader with the same clipping/opacity rules as a
+    /// monochrome glyph. Payload interpretation belongs to the extension.
+    pub fn paint_glyph_shader(
+        &mut self,
+        glyph: MonochromeSprite,
+        program: Arc<crate::SceneShaderProgram>,
+        data: [[f32; 4]; crate::SHADER_DATA_SLOTS],
+        opacity: f32,
+    ) {
+        self.invalidator.debug_assert_paint();
+        assert!(
+            program.uses_glyph_mask(),
+            "glyph drawing requires an atlas-masked program"
+        );
+        self.next_frame
+            .scene
+            .insert_primitive(crate::Primitive::Shader(crate::ShaderDraw {
+                order: 0,
+                bounds: glyph.bounds,
+                content_mask: glyph.content_mask,
+                opacity,
+                scale_factor: self.scale_factor(),
+                program,
+                data,
+                path_mask: None,
+                glyph_mask: Some(glyph.tile),
+            }));
+    }
+    /// Whether descendant text must use coverage suitable for isolated composition.
+    pub fn is_layer_captured(&self) -> bool {
+        self.layer_capture_depth > 0
+    }
+
+    /// Prepaint/paint scope shared by explicit captured containers. Descendants
+    /// use local opacity and cannot paint outside the bounded capture rectangle.
+    pub fn with_layer_capture_scope<R>(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let source = bounds.intersect(&self.content_mask().bounds);
+        self.with_layer_capture_masks(source, source, f)
+    }
+
+    /// Prepaint a captured subtree with a sampling halo and a separate visible clip.
+    /// Reserve the supported remaining nesting budget so later radius edits and
+    /// nested filters can reuse raw source pixels without painting past the crop.
+    pub fn with_layer_effect_scope<R>(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let (source, clip) = self.layer_capture_regions(bounds);
+        self.with_layer_capture_masks(source, clip, f)
+    }
+    fn layer_capture_regions(&self, bounds: Bounds<Pixels>) -> (Bounds<Pixels>, Bounds<Pixels>) {
+        let viewport = Bounds::new(Point::default(), self.viewport_size);
+        let clip = bounds
+            .intersect(&self.content_mask().bounds)
+            .intersect(&viewport);
+        if clip.is_empty() {
+            return (clip, clip);
+        }
+        let levels = crate::MAX_LAYER_GROUPS
+            .saturating_sub(self.layer_capture_depth)
+            .max(1) as f32;
+        // 16 logical pixels per Gaussian plus eight device pixels for area
+        // downsampling, reconstruction and integer crop rounding per level.
+        let halo = px((16. + 8. / self.scale_factor()) * levels);
+        let mut source = clip.dilate(halo).intersect(&viewport);
+        if let Some(parent) = self.layer_capture_sources.last() {
+            source = source.intersect(parent);
+        }
+        (source, clip)
+    }
+    pub(crate) fn layer_capture_visible_bounds(&self) -> Option<Bounds<Pixels>> {
+        self.layer_capture_clips.last().copied()
+    }
+    fn with_layer_capture_masks<R>(
+        &mut self,
+        source: Bounds<Pixels>,
+        clip: Bounds<Pixels>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.invalidator.debug_assert_paint_or_prepaint();
+        let previous = self.element_opacity;
+        self.element_opacity = 1.;
+        self.layer_capture_depth += 1;
+        self.layer_capture_sources.push(source);
+        let visible = self
+            .layer_capture_clips
+            .last()
+            .map_or(clip, |parent| clip.intersect(parent));
+        self.layer_capture_clips.push(visible);
+        // Bypass ancestor paint clips for source sampling; descendant clips still
+        // intersect this mask. Interaction keeps the original final visible clip.
+        self.content_mask_stack.push(ContentMask { bounds: source });
+        let result = f(self);
+        self.content_mask_stack.pop();
+        self.layer_capture_clips.pop();
+        self.layer_capture_sources.pop();
+        self.layer_capture_depth -= 1;
+        self.element_opacity = previous;
+        result
+    }
+
+    /// Capture a subtree and apply opacity once to its completed RGBA result.
+    /// Deferred overlays remain outside this paint-time boundary.
+    pub fn with_layer_opacity<R>(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        opacity: f32,
+        program: Arc<crate::SceneShaderProgram>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.with_layer_effect(bounds, opacity, 1., program, f)
+    }
+
+    /// Capture a subtree, filter saturation, then apply opacity to the group.
+    /// Saturation changes reuse raw retained child pixels when commands match.
+    pub fn with_layer_effect<R>(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        opacity: f32,
+        saturation: f32,
+        program: Arc<crate::SceneShaderProgram>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.with_layer_color_filter(
+            bounds,
+            opacity,
+            crate::LayerColorFilter {
+                saturation,
+                ..Default::default()
+            },
+            program,
+            f,
+        )
+    }
+
+    /// Capture a subtree and apply color filtering, group opacity and destination blending.
+    /// Color operations reuse retained raw child pixels when commands match.
+    pub fn with_layer_color_filter<R>(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        opacity: f32,
+        color_filter: crate::LayerColorFilter,
+        program: Arc<crate::SceneShaderProgram>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.invalidator.debug_assert_paint();
+        let viewport = Bounds::new(Point::default(), self.viewport_size);
+        let (source, clipped) = self.layer_capture_regions(bounds);
+        let effective = opacity * self.element_opacity();
+        if clipped.is_empty() {
+            return self.with_layer_capture_scope(clipped, f);
+        }
+        let scale = self.scale_factor();
+        let capture = Arc::new(crate::LayerCapture {
+            blur_quality: color_filter.blur_quality,
+            blur_radius: crate::ScaledPixels(f32::from(color_filter.blur_radius) * scale),
+            blend_mode: color_filter.blend_mode,
+            bounds: source.scale(scale),
+            clip: Some(clipped.scale(scale)),
+            opacity: effective,
+            saturation: color_filter.saturation,
+            brightness: color_filter.brightness,
+            contrast: color_filter.contrast,
+            invert: color_filter.invert,
+            program,
+        });
+        let fence = ContentMask {
+            bounds: viewport.scale(scale),
+        };
+        self.next_frame
+            .scene
+            .begin_layer_capture(capture.clone(), fence);
+        let result = self.with_layer_capture_masks(source, clipped, f);
+        self.next_frame.scene.end_layer_capture(capture, fence);
+        result
+    }
+
+    /// Record an explicit backdrop filter before painting the receiving surface.
+    /// Unlike paint_layer, this boundary may interrupt the host render pass.
+    pub fn paint_backdrop_blur(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        radii: Corners<Pixels>,
+        radius: Pixels,
+        opacity: f32,
+        program: Arc<crate::SceneShaderProgram>,
+    ) {
+        self.invalidator.debug_assert_paint();
+        let viewport = Bounds::new(Point::default(), self.viewport_size);
+        let clip = self.content_mask();
+        if radius <= px(0.)
+            || bounds
+                .intersect(&clip.bounds)
+                .intersect(&viewport)
+                .is_empty()
+            || opacity <= 0.
+        {
+            return;
+        }
+        let scale = self.scale_factor();
+        let halo = radius + px(crate::BACKDROP_DOWNSAMPLE as f32 / scale);
+        let footprint = Bounds::new(
+            bounds.origin - point(halo, halo),
+            bounds.size + size(halo * 2., halo * 2.),
+        );
+        self.next_frame
+            .scene
+            .insert_primitive(crate::Primitive::Backdrop(crate::BackdropDraw {
+                order: 0,
+                bounds: footprint.scale(scale),
+                content_mask: ContentMask {
+                    bounds: viewport.scale(scale),
+                },
+                surface_bounds: bounds.scale(scale),
+                clip: clip.scale(scale),
+                corner_radii: radii.scale(scale),
+                radius: f32::from(radius) * scale,
+                opacity: opacity * self.element_opacity(),
+                program,
+            }));
+    }
     /// Record an instanced fragment shader in the current scene order.
     /// Bounds include the entire effect; the host applies clipping and opacity.
     pub fn paint_shader(
@@ -5186,6 +5504,8 @@ impl Window {
         self.next_frame
             .scene
             .insert_primitive(crate::Primitive::Shader(crate::ShaderDraw {
+                path_mask: None,
+                glyph_mask: None,
                 order: 0,
                 bounds: bounds.scale(self.scale_factor()),
                 content_mask: self.snapped_content_mask(),
@@ -5410,7 +5730,10 @@ impl Window {
     pub fn insert_hitbox(&mut self, bounds: Bounds<Pixels>, behavior: HitboxBehavior) -> Hitbox {
         self.invalidator.debug_assert_prepaint();
 
-        let content_mask = self.content_mask();
+        let mut content_mask = self.content_mask();
+        if let Some(clip) = self.layer_capture_visible_bounds() {
+            content_mask.bounds = content_mask.bounds.intersect(&clip);
+        }
         let mut id = self.next_hitbox_id;
         self.next_hitbox_id = self.next_hitbox_id.next();
         let hitbox = Hitbox {

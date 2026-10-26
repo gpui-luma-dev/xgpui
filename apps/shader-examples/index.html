@@ -1,27 +1,28 @@
 <!doctype html>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Instanced WGSL · xgpui</title>
-<style>
-html,body { margin:0; height:100%; background:#0b1020; color:#e5edff; font:16px system-ui }
-main { max-width:850px; margin:auto; padding:48px 24px } a { color:#9bc6ff } article { padding:20px; margin:16px 0; border:1px solid #344260; border-radius:12px }
-nav { display:flex; gap:20px } canvas { display:block; width:100%; height:100%; outline:none } #error { position:fixed; inset:20px; background:#0b1020; white-space:pre-wrap; z-index:5 } [hidden] { display:none !important }
-</style>
-<main id="index"><h1>Instanced WGSL examples</h1><p>Six standalone examples of custom fragment shaders composed directly by GPUI. Each link starts a fresh WASM app.</p>
-<article><h2>01 / Minimal shader</h2><p>A typed Rust instance and a small antialiased rounded-box fragment.</p><nav><a href="?example=minimal&backend=webgpu">WebGPU</a><a href="?example=minimal&backend=webgl">WebGL2</a></nav></article>
-<article><h2>02 / Glowing badges</h2><p>One hundred independently animated glow instances sharing one program.</p><nav><a href="?example=glow&backend=webgpu">WebGPU</a><a href="?example=glow&backend=webgl">WebGL2</a></nav></article>
-<article><h2>03 / Particle field</h2><p>Adjust 100–10,000 soft particles. Pause animation and change inherited opacity.</p><nav><a href="?example=particles&backend=webgpu">WebGPU</a><a href="?example=particles&backend=webgl">WebGL2</a></nav></article>
-<article><h2>04 / Composition</h2><p>Overlapping transparent instances, a native quad between draws, content clipping and inherited opacity.</p><nav><a href="?example=composition&backend=webgpu">WebGPU</a><a href="?example=composition&backend=webgl">WebGL2</a></nav></article>
-<article><h2>05 / Shadow falloff and color</h2><p>Compare native shadows with four-stop color gradients, custom falloff, blur, spread, offset and inset/outset controls.</p><nav><a href="?example=shadows&backend=webgpu">WebGPU</a><a href="?example=shadows&backend=webgl">WebGL2</a></nav></article>
-<article><h2>06 / Soft animated borders</h2><p>Blurred blue and orange highlights orbit an interactive Generate button on a light background. Pause and resume the animation.</p><nav><a href="?example=borders&backend=webgpu">WebGPU</a><a href="?example=borders&backend=webgl">WebGL2</a></nav></article>
-<p>Serve on localhost or HTTPS. WebGPU requires a supporting browser and adapter; WebGL2 is a separate explicit option. Failures appear here and in the console.</p></main>
-<div id="error" hidden></div>
+<link rel="stylesheet" href="gallery.css">
+<main id="index" class="gallery-shell"><header class="gallery-topbar"><a class="gallery-brand" href="../extensions/">xgpui<span> / interactive examples</span></a><nav aria-label="Demo navigation"><a href="../extensions/">All demos</a><a href="../shaders/" aria-current="page">Shader demos</a><a href="../../#brushes">Brush guide</a><a href="../../">Documentation ↗</a></nav></header><section class="gallery-hero"><div class="gallery-kicker">Live in your browser · 6 experiments</div><h1>Small shaders.<br>Real app surfaces.</h1><p>Explore light, motion and composition through interactive GPUI examples. Pick a demo, then change the controls inside.</p></section><section class="gallery-grid" aria-label="Shader demos"><article class="demo-card"><div class="demo-preview preview-minimal" role="img" aria-label="Illustration of a custom fragment shader"></div><div class="demo-card-body"><small>Instanced shaders</small><h2>A custom fragment shader</h2><p>Start small: a typed Rust instance, a rounded shape and a fragment shader.</p><nav aria-label="Launch A custom fragment shader"><a href="?example=minimal">Open demo ↗</a><a href="?example=minimal&backend=webgpu">WebGPU</a><a href="?example=minimal&backend=webgl">WebGL2</a></nav></div></article><article class="demo-card"><div class="demo-preview preview-glow" role="img" aria-label="Illustration of glowing badges"></div><div class="demo-card-body"><small>Instanced shaders</small><h2>Glowing badges</h2><p>One hundred individual badges, sharing a shader program and one animated glow.</p><nav aria-label="Launch Glowing badges"><a href="?example=glow">Open demo ↗</a><a href="?example=glow&backend=webgpu">WebGPU</a><a href="?example=glow&backend=webgl">WebGL2</a></nav></div></article><article class="demo-card"><div class="demo-preview preview-particles" role="img" aria-label="Illustration of particle field"></div><div class="demo-card-body"><small>Instanced shaders</small><h2>Particle field</h2><p>Explore 100 to 10,000 particles. Adjust opacity and pause the motion.</p><nav aria-label="Launch Particle field"><a href="?example=particles">Open demo ↗</a><a href="?example=particles&backend=webgpu">WebGPU</a><a href="?example=particles&backend=webgl">WebGL2</a></nav></div></article><article class="demo-card"><div class="demo-preview preview-composition" role="img" aria-label="Illustration of order, clipping & opacity"></div><div class="demo-card-body"><small>Instanced shaders</small><h2>Order, clipping & opacity</h2><p>See how shader shapes interleave with native quads and respect a shared clip.</p><nav aria-label="Launch Order, clipping & opacity"><a href="?example=composition">Open demo ↗</a><a href="?example=composition&backend=webgpu">WebGPU</a><a href="?example=composition&backend=webgl">WebGL2</a></nav></div></article><article class="demo-card"><div class="demo-preview preview-shadows" role="img" aria-label="Illustration of gradient shadows"></div><div class="demo-card-body"><small>Instanced shaders</small><h2>Gradient shadows</h2><p>Compare native shadows with colored falloff. Adjust spread, offset and softness.</p><nav aria-label="Launch Gradient shadows"><a href="?example=shadows">Open demo ↗</a><a href="?example=shadows&backend=webgpu">WebGPU</a><a href="?example=shadows&backend=webgl">WebGL2</a></nav></div></article><article class="demo-card"><div class="demo-preview preview-borders" role="img" aria-label="Illustration of soft animated borders"></div><div class="demo-card-body"><small>Instanced shaders</small><h2>Soft animated borders</h2><p>Orbiting highlights on an interactive pill, with a soft blue and peach glow.</p><nav aria-label="Launch Soft animated borders"><a href="?example=borders">Open demo ↗</a><a href="?example=borders&backend=webgpu">WebGPU</a><a href="?example=borders&backend=webgl">WebGL2</a></nav></div></article></section><footer class="gallery-foot">Open demo chooses WebGPU with WebGL2 fallback. Backend links force your selection. <a href="../extensions/">Browse all 12 hosted demos →</a> · <a href="../extensions/#native-labs">Native labs &amp; launch commands</a></footer></main>
+<div id="error" class="demo-error" hidden></div>
 <script type="module">
+import { canonicalLocalDemoUrl, monitorGraphics, webgpuPreflight, showGraphicsFailure } from './graphics.mjs';
+const canonical = canonicalLocalDemoUrl(location.href);
+if (canonical) {
+  location.replace(canonical);
+} else {
+const diagnostics = monitorGraphics();
 const error = document.querySelector('#error');
-function fail(message) { error.hidden=false; error.textContent='Shader example failed: '+message+'\nCheck browser GPU support and the console. Reload with backend=webgl to try WebGL2.'; }
+function fail(message) { showGraphicsFailure(error, message, diagnostics); }
 window.addEventListener('error', e => fail(e.message));
 window.addEventListener('unhandledrejection', e => fail(String(e.reason)));
 if (new URLSearchParams(location.search).has('example')) {
  document.querySelector('#index').hidden=true;
- try { const {default:init} = await import('./shader_examples.js'); await init(); } catch(e) { fail(String(e)); }
+ try {
+   if (new URLSearchParams(location.search).get('backend') === 'webgpu') {
+     const unavailable = webgpuPreflight(window);
+     if (unavailable) throw new Error(unavailable);
+   }
+   const {default:init} = await import('./shader_examples.js'); await init(); } catch(e) { fail(String(e)); }
+}
 }
 </script>

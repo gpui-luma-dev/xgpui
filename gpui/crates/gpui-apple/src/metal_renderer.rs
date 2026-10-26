@@ -25,6 +25,7 @@ use parking_lot::Mutex;
 
 use std::{cell::Cell, ffi::c_void, mem, mem::MaybeUninit, ops::Range, ptr, slice, sync::Arc};
 
+mod backdrop;
 #[cfg(target_os = "macos")]
 mod wide_sdr;
 
@@ -115,6 +116,7 @@ pub struct MetalRenderer {
     wide_sdr: Option<wide_sdr::Compositor>,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
     shader_pipelines: std::collections::HashMap<u64, metal::RenderPipelineState>,
+    backdrops: Option<backdrop::Backdrops>,
     device: metal::Device,
     layer: Option<metal::MetalLayer>,
     is_apple_gpu: bool,
@@ -450,6 +452,7 @@ impl MetalRenderer {
             wide_sdr: None,
             custom_compositor: None,
             shader_pipelines: Default::default(),
+            backdrops: None,
             device,
             layer,
             presents_with_transaction: false,
@@ -610,6 +613,12 @@ impl MetalRenderer {
         texture: &metal::TextureRef,
         viewport_size: Size<DevicePixels>,
     ) -> Result<metal::CommandBuffer> {
+        if scene.backdrops.is_empty() && scene.layer_boundaries.is_empty() {
+            if let Some(effects) = &mut self.backdrops {
+                effects.clear();
+            }
+        }
+
         #[cfg(target_os = "macos")]
         if let Some(lab) = &mut self.wide_sdr {
             wide_sdr::validate_viewport(viewport_size)?;
@@ -741,6 +750,7 @@ impl MetalRenderer {
                 .retain(|id, _| scene.shader_draws.iter().any(|d| d.program.id() == *id));
         }
         for draw in &scene.shader_draws {
+            draw.validate_masks()?;
             if !self.shader_pipelines.contains_key(&draw.program.id()) {
                 self.shader_pipelines.insert(
                     draw.program.id(),
@@ -948,7 +958,9 @@ impl MetalRenderer {
         self.update_path_intermediate_textures(extent);
         #[cfg(target_os = "macos")]
         let lab = self.wide_sdr.take();
+        let effects = self.backdrops.take();
         let result = self.render_frame(scene, target, extent);
+        self.backdrops = effects;
         #[cfg(target_os = "macos")]
         {
             self.wide_sdr = lab;
@@ -974,6 +986,13 @@ impl MetalRenderer {
     ) -> Result<metal::CommandBuffer> {
         #[cfg(target_os = "macos")]
         if let Some(mut lab) = self.wide_sdr.take() {
+            if !scene.backdrops.is_empty()
+                || !scene.layer_boundaries.is_empty()
+                || scene.shader_draws.iter().any(|d| d.path_mask.is_some())
+            {
+                self.wide_sdr = Some(lab);
+                anyhow::bail!("captured effects require SDR presentation");
+            }
             let result = lab.render(
                 self,
                 scene,
@@ -986,6 +1005,26 @@ impl MetalRenderer {
             self.wide_sdr = Some(lab);
             return result;
         }
+        if let Some(program) = scene
+            .backdrops
+            .first()
+            .map(|d| &d.program)
+            .or_else(|| scene.layer_boundaries.first().map(|b| &b.capture.program))
+        {
+            anyhow::ensure!(
+                texture.pixel_format() == metal::MTLPixelFormat::BGRA8Unorm,
+                "backdrop blur requires BGRA8 SDR"
+            );
+            if self.backdrops.is_none() {
+                self.backdrops = Some(backdrop::Backdrops::new(&self.device, program)?);
+            }
+            self.backdrops.as_mut().unwrap().prepare(
+                &self.device,
+                scene,
+                viewport_size,
+                &[self.opaque as u64],
+            )?;
+        }
         let command_queue = self.command_queue.clone();
         let command_buffer = command_queue.new_command_buffer();
         let alpha = if self.opaque { 1. } else { 0. };
@@ -997,15 +1036,93 @@ impl MetalRenderer {
             Some(metal::MTLClearColor::new(0., 0., 0., alpha)),
         );
 
+        let mut executed_backdrops = Vec::new();
+        let mut executed_groups = Vec::new();
+        let mut skip_group_end = None;
         for batch in scene.batches() {
+            if let Some(end) = skip_group_end {
+                if !matches!(&batch,PrimitiveBatch::LayerBoundary(index) if *index==end) {
+                    continue;
+                }
+                skip_group_end = None;
+            }
             match batch {
-                PrimitiveBatch::Shaders { program_id, range } => self.draw_shaders(
-                    program_id,
-                    range,
-                    instance_bindings,
-                    viewport_size,
-                    command_encoder,
-                ),
+                PrimitiveBatch::LayerBoundary(index) => {
+                    command_encoder.end_encoding();
+                    let effects = self.backdrops.as_mut().unwrap();
+                    let (slot, begin) = effects.groups.boundary(index);
+                    if begin {
+                        effects.groups.start(slot);
+                    }
+                    let hit = effects.groups.hit(slot);
+                    if begin {
+                        executed_groups.push(slot);
+                    }
+                    if begin || !hit {
+                        effects.groups.copy(command_buffer, texture, slot, begin);
+                    }
+                    if !begin {
+                        effects.group_filter(command_buffer, slot);
+                    }
+                    command_encoder = new_command_encoder_for_texture(
+                        command_buffer,
+                        texture,
+                        viewport_size,
+                        None,
+                    );
+                    if begin && hit {
+                        skip_group_end = Some(effects.groups.end(slot));
+                    } else {
+                        effects.group_draw(command_encoder, slot, begin);
+                    }
+                }
+
+                PrimitiveBatch::Shaders { program_id, range } => {
+                    if scene.shader_draws[range.start].path_mask.is_some() {
+                        let paths: Vec<_> = scene.shader_draws[range.clone()]
+                            .iter()
+                            .map(|draw| draw.path_mask.as_ref().unwrap().as_ref().clone())
+                            .collect();
+                        command_encoder.end_encoding();
+                        let did_draw = self.draw_paths_to_intermediate(
+                            &paths,
+                            writer,
+                            viewport_size,
+                            command_buffer,
+                        )?;
+                        command_encoder = new_command_encoder_for_texture(
+                            command_buffer,
+                            texture,
+                            viewport_size,
+                            None,
+                        );
+                        if !did_draw {
+                            continue;
+                        }
+                    }
+                    self.draw_shaders(
+                        program_id,
+                        range.clone(),
+                        instance_bindings,
+                        viewport_size,
+                        scene.shader_draws[range.start].glyph_mask,
+                        scene.shader_draws[range.start].path_mask.is_some(),
+                        command_encoder,
+                    );
+                }
+                PrimitiveBatch::Backdrop(index) => {
+                    command_encoder.end_encoding();
+                    let effect = self.backdrops.as_mut().unwrap();
+                    executed_backdrops.push(index);
+                    effect.filter(command_buffer, texture, index);
+                    command_encoder = new_command_encoder_for_texture(
+                        command_buffer,
+                        texture,
+                        viewport_size,
+                        None,
+                    );
+                    effect.composite(command_encoder, index);
+                }
                 PrimitiveBatch::Custom(range) => {
                     for index in range {
                         self.custom_compositor.as_ref().unwrap().draw(
@@ -1085,6 +1202,10 @@ impl MetalRenderer {
         }
 
         command_encoder.end_encoding();
+        if let Some(effects) = &mut self.backdrops {
+            effects.groups.commit(&executed_groups);
+            effects.cache.commit(&executed_backdrops);
+        }
 
         Ok(command_buffer.to_owned())
     }
@@ -1207,15 +1328,38 @@ impl MetalRenderer {
         range: Range<usize>,
         bindings: &InstanceBindings,
         viewport: Size<DevicePixels>,
+        glyph_mask: Option<gpui::AtlasTile>,
+        path_mask: bool,
         encoder: &metal::RenderCommandEncoderRef,
     ) {
+        if let Some(tile) = glyph_mask {
+            let Some(texture) = self.sprite_atlas.metal_texture(tile.texture_id) else {
+                return;
+            };
+            encoder.set_fragment_texture(0, Some(&texture));
+        } else if path_mask {
+            encoder.set_fragment_texture(0, self.path_intermediate_texture.as_deref());
+        } else {
+            encoder.set_fragment_texture(0, None);
+        }
         encoder.set_render_pipeline_state(&self.shader_pipelines[&program_id]);
         encoder.set_vertex_buffer(
             0,
             Some(&bindings.shaders.buffer),
             (bindings.shaders.offset + range.start * 176) as u64,
         );
-        let globals = [viewport.width.0 as f32, viewport.height.0 as f32, 0., 0.];
+        // Metal glyph atlases are A8Unorm; portable/D3D atlases are R8.
+        // The host wrapper selects alpha when pad=2 without changing the ABI.
+        let globals = [
+            viewport.width.0 as f32,
+            viewport.height.0 as f32,
+            0.,
+            if glyph_mask.is_some() {
+                f32::from_bits(2)
+            } else {
+                0.
+            },
+        ];
         encoder.set_vertex_bytes(1, 16, globals.as_ptr().cast());
         encoder.set_fragment_bytes(1, 16, globals.as_ptr().cast());
         encoder.draw_primitives_instanced(
@@ -1986,6 +2130,42 @@ pub struct MetalHeadlessRenderer {
 
 #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
 impl MetalHeadlessRenderer {
+    /// Bytes in retained subtree textures, excluding driver/in-flight references.
+    pub fn layer_texture_bytes(&self) -> u64 {
+        self.renderer
+            .backdrops
+            .as_ref()
+            .map(|effects| effects.groups.texture_bytes())
+            .unwrap_or(0)
+    }
+
+    /// Number of retained effect textures; excludes driver and in-flight references.
+    pub fn effect_texture_count(&self) -> usize {
+        self.renderer
+            .backdrops
+            .as_ref()
+            .map(|effects| effects.texture_count())
+            .unwrap_or(0)
+    }
+
+    /// Cumulative backdrop filter cache statistics.
+    pub fn backdrop_cache_stats(&self) -> gpui::BackdropCacheStats {
+        self.renderer
+            .backdrops
+            .as_ref()
+            .map(|e| e.cache.stats)
+            .unwrap_or_default()
+    }
+
+    /// Cumulative captured-subtree cache statistics.
+    pub fn layer_cache_stats(&self) -> gpui::LayerCacheStats {
+        self.renderer
+            .backdrops
+            .as_ref()
+            .map(|e| e.groups.stats)
+            .unwrap_or_default()
+    }
+
     /// Configure native wide-SDR composition for offscreen validation.
     #[cfg(target_os = "macos")]
     pub fn set_color_mode(

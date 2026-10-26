@@ -1,4 +1,6 @@
 //! DirectX 11 preparation for retained custom paints. Only the host executes work.
+mod backdrop;
+pub(crate) use backdrop::Backdrops;
 mod coverage_cache;
 mod instanced;
 pub(crate) use instanced::ShaderRenderer;

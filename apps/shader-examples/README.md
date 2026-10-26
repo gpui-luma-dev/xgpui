@@ -97,3 +97,21 @@ Borders category acceptance: the native Metal demo was checked before rebuilding
 WASM. Generate clicks and pause were then checked on forced WebGPU and WebGL2
 (`backend=webgl`); both rendered without console errors. The helper is entirely
 in `xgpui-shader`; no further GPUI core/API changes were made.
+
+## Browser startup failures
+
+Start with **Automatic**; a forced **WebGPU** link intentionally disables WebGL2
+fallback. If initialization fails, use **Try Automatic** or **Try WebGL2** on the
+error panel. Switching reloads the app and creates a fresh canvas.
+
+The panel reports the requested backend, secure-context status, whether
+`navigator.gpu` is exposed, the renderer's actual canvas-context result, and the
+browser version. WebGPU requires a secure context (HTTPS or localhost) and
+browser/adapter support. An exposed API alone does not guarantee canvas or
+adapter creation succeeds. These diagnostics stay in the page/console; they are
+not sent to a telemetry service.
+
+HTTP wildcard bind-address URLs (`http://[::]:PORT/` and `http://0.0.0.0:PORT/`)
+are corrected to `http://localhost:PORT/` before starting WASM. This preserves
+`backend=webgpu`; the correction does not substitute WebGL2. Open localhost
+rather than copying a wildcard listening address from a server's output.

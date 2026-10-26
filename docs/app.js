@@ -32,7 +32,7 @@ function sidebar(query='') {
 }
 function header(eyebrow,title,lead) {return '<div class="eyebrow">'+escapeHtml(eyebrow)+'</div><h1>'+escapeHtml(title)+'</h1><p class="lead">'+escapeHtml(lead)+'</p>';}
 function overview() {
-  return header('Captured source / '+data.provenance.ref,'GPUI architecture and extensions','A source map of GPUI: responsibilities, runtime boundaries and downstream extensions.')+
+  return header('Captured source / '+data.provenance.ref,'GPUI architecture and extensions','A source map of GPUI: responsibilities, runtime boundaries and downstream extensions.')+liveDemoOverview()+
     '<nav class="overview-guides" aria-label="Start reading"><h2>Start here</h2><dl><dt><a href="#architecture">Architecture →</a></dt><dd>Ownership, element lifecycle and renderer contracts.</dd><dt><a href="#pipeline">Rendering pipeline →</a></dt><dd>Explore clipping, layers, primitive ordering and batches.</dd><dt><a href="#extensions">Extensions to GPUI →</a></dt><dd>Shader, wide-gamut, Parley and SVG APIs, integration and backend ownership.</dd></dl></nav>'+
     '<section class="overview-reading"><h2>Rendering changes</h2><p>'+crateLink('gpui')+' → '+crateLink('gpui-platform')+' → platform implementation → '+crateLink('gpui-apple')+' / '+crateLink('gpui-wgpu')+'</p><p>Trace scene and window contracts, then surface formats, shaders and color handling in the selected renderer.</p></section>'+
     '<div class="crate-directory">'+groups.map(g=>'<section><h2>'+escapeHtml(g)+'</h2><dl>'+crates.filter(c=>notes[c.package].group===g).map(c=>'<dt>'+crateLink(c.package)+'</dt><dd>'+escapeHtml(notes[c.package].role)+'</dd>').join('')+'</dl></section>').join('')+'</div>';

@@ -16,6 +16,8 @@ fn draw(program: &ShaderProgram<EffectInstance>, x: f32, color: [f32; 4]) -> Sha
     data[0] = color;
     data[1] = [0., 0., 1., 0.];
     ShaderDraw {
+        path_mask: None,
+        glyph_mask: None,
         order: 0,
         bounds: Bounds::new(
             point(ScaledPixels(x), ScaledPixels(4.)),

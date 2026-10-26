@@ -270,7 +270,15 @@ impl Compositor {
                         viewport,
                         None,
                     );
-                    renderer.draw_shaders(program_id, range.clone(), bindings, viewport, e);
+                    renderer.draw_shaders(
+                        program_id,
+                        range.clone(),
+                        bindings,
+                        viewport,
+                        scene.shader_draws[range.start].glyph_mask,
+                        false,
+                        e,
+                    );
                     e.end_encoding();
                     continue;
                 }
@@ -284,9 +292,15 @@ impl Compositor {
                 )
             });
             match batch {
-                PrimitiveBatch::Shaders { program_id, range } => {
-                    renderer.draw_shaders(program_id, range, bindings, viewport, e)
-                }
+                PrimitiveBatch::Shaders { program_id, range } => renderer.draw_shaders(
+                    program_id,
+                    range.clone(),
+                    bindings,
+                    viewport,
+                    scene.shader_draws[range.start].glyph_mask,
+                    false,
+                    e,
+                ),
                 PrimitiveBatch::Quads(r) => renderer.draw_quads(r, bindings, viewport, e),
                 PrimitiveBatch::Shadows(r) => renderer.draw_shadows(r, bindings, viewport, e),
                 PrimitiveBatch::Underlines(r) => renderer.draw_underlines(r, bindings, viewport, e),
@@ -328,7 +342,9 @@ impl Compositor {
                     e.end_encoding();
                     anyhow::bail!("wide SDR requires grayscale text")
                 }
-                PrimitiveBatch::Custom(_) => unreachable!(),
+                PrimitiveBatch::Custom(_)
+                | PrimitiveBatch::Backdrop(_)
+                | PrimitiveBatch::LayerBoundary(_) => unreachable!(),
             }
         }
         self.flush(command, &mut ui, viewport);

@@ -48,6 +48,7 @@ pub(crate) struct DirectXRenderer {
     pipelines: DirectXRenderPipelines,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
     shaders: Option<crate::custom_draw::ShaderRenderer>,
+    backdrops: Option<crate::custom_draw::Backdrops>,
     wide_sdr: Option<wide_sdr::Compositor>,
     color_mode: WindowColorMode,
     color_display: color_presentation::DisplayState,
@@ -203,6 +204,7 @@ impl DirectXRenderer {
             globals,
             pipelines,
             custom_compositor: None,
+            backdrops: None,
             shaders: None,
             wide_sdr: None,
             color_mode: WindowColorMode::Default,
@@ -290,6 +292,7 @@ impl DirectXRenderer {
         self.wide_sdr = None;
         self.custom_compositor = None;
         self.shaders = None;
+        self.backdrops = None;
 
         unsafe {
             #[cfg(debug_assertions)]
@@ -406,9 +409,54 @@ impl DirectXRenderer {
         scene: &Scene,
         background_appearance: WindowBackgroundAppearance,
     ) -> Result<()> {
+        if scene.backdrops.is_empty() && scene.layer_boundaries.is_empty() {
+            if let Some(effects) = &mut self.backdrops {
+                effects.clear();
+            }
+        }
+
         anyhow::ensure!(self.wide_sdr.is_some() || scene.shader_draws.iter().all(|d|
             d.program.output_encoding() == gpui::ShaderOutputEncoding::EncodedSrgb),
             "linear P3 shaders require WideGamutSdr");
+        anyhow::ensure!(
+            self.wide_sdr.is_none()
+                || (scene.backdrops.is_empty()
+                    && scene.layer_boundaries.is_empty()
+                    && scene.shader_draws.iter().all(|d| d.path_mask.is_none())),
+            "captured effects require SDR presentation"
+        );
+        if let Some(program) = scene
+            .backdrops
+            .first()
+            .map(|d| &d.program)
+            .or_else(|| scene.layer_boundaries.first().map(|b| &b.capture.program))
+        {
+            let devices = self.devices.as_ref().context("devices missing")?;
+            if self.backdrops.is_none() {
+                self.backdrops = Some(crate::custom_draw::Backdrops::new(
+                    &devices.device,
+                    program,
+                )?);
+            }
+            self.backdrops.as_mut().unwrap().prepare(
+                &devices.device,
+                scene,
+                size(
+                    DevicePixels(self.width as i32),
+                    DevicePixels(self.height as i32),
+                ),
+                &[
+                    matches!(background_appearance, WindowBackgroundAppearance::Opaque) as u64,
+                    self.font_info.gamma_ratios[0].to_bits() as u64,
+                    self.font_info.gamma_ratios[1].to_bits() as u64,
+                    self.font_info.gamma_ratios[2].to_bits() as u64,
+                    self.font_info.gamma_ratios[3].to_bits() as u64,
+                    self.font_info.grayscale_enhanced_contrast.to_bits() as u64,
+                    self.font_info.subpixel_enhanced_contrast.to_bits() as u64,
+                    self.font_info.is_bgr as u64,
+                ],
+            )?;
+        }
         if let Some(wide) = self.wide_sdr.as_mut() {
             wide.resize(
                 &self.devices.as_ref().context("devices missing")?.device,
@@ -441,8 +489,37 @@ impl DirectXRenderer {
             self.wide_sdr = Some(wide);
             return result;
         }
+        let mut executed_backdrops = Vec::new();
+        let mut executed_groups = Vec::new();
+        let mut skip_group_end = None;
         for batch in scene.batches() {
+            if let Some(end) = skip_group_end {
+                if !matches!(&batch,PrimitiveBatch::LayerBoundary(index) if *index==end) {
+                    continue;
+                }
+                skip_group_end = None;
+            }
+            if let PrimitiveBatch::LayerBoundary(index) = &batch {
+                let effects = self.backdrops.as_mut().unwrap();
+                let (slot, begin) = effects.groups.boundary(*index);
+                if begin {
+                    effects.groups.start(slot);
+                }
+                if begin {
+                    executed_groups.push(slot);
+                    if effects.groups.hit(slot) {
+                        skip_group_end = Some(effects.groups.end(slot));
+                    }
+                }
+            }
+            if let PrimitiveBatch::Backdrop(index) = &batch {
+                executed_backdrops.push(*index);
+            }
             self.render_batch(scene, &custom_outputs, batch)?;
+        }
+        if let Some(effects) = &mut self.backdrops {
+            effects.groups.commit(&executed_groups);
+            effects.cache.commit(&executed_backdrops);
         }
         Ok(())
     }
@@ -463,6 +540,13 @@ impl DirectXRenderer {
             .map(|a| Annotation::new(a, HSTRING::from(batch.label())));
         match batch {
             PrimitiveBatch::Shaders { program_id, range } => {
+                if scene.shader_draws[range.start].path_mask.is_some() {
+                    let paths: Vec<_> = scene.shader_draws[range.clone()]
+                        .iter()
+                        .map(|draw| draw.path_mask.as_ref().unwrap().as_ref().clone())
+                        .collect();
+                    self.draw_paths_to_intermediate(&paths)?;
+                }
                 let devices = self.devices.as_ref().context("devices missing")?;
                 let resources = self.resources.as_ref().context("resources missing")?;
                 self.shaders
@@ -479,7 +563,57 @@ impl DirectXRenderer {
                             DevicePixels(resources.viewport.Height as i32),
                         ),
                         program_id,
-                        range,
+                        range.clone(),
+                        if scene.shader_draws[range.start].path_mask.is_some() {
+                            Some([resources.path_intermediate_srv.clone()])
+                        } else {
+                            scene.shader_draws[range.start]
+                                .glyph_mask
+                                .and_then(|tile| self.atlas.get_texture_view(tile.texture_id))
+                        },
+                    )
+            }
+            PrimitiveBatch::LayerBoundary(index) => {
+                let devices = self.devices.as_ref().context("devices missing")?;
+                let resources = self.resources.as_ref().context("resources missing")?;
+                self.backdrops
+                    .as_ref()
+                    .context("effects missing")?
+                    .group_boundary(
+                        &devices.device_context,
+                        resources.render_target.as_ref().context("target missing")?,
+                        resources
+                            .render_target_view
+                            .as_ref()
+                            .context("target view missing")?,
+                        size(
+                            DevicePixels(resources.viewport.Width as i32),
+                            DevicePixels(resources.viewport.Height as i32),
+                        ),
+                        index,
+                    )
+            }
+            PrimitiveBatch::Backdrop(index) => {
+                let devices = self.devices.as_ref().context("devices missing")?;
+                let resources = self.resources.as_ref().context("resources missing")?;
+                self.backdrops
+                    .as_mut()
+                    .context("backdrop renderer missing")?
+                    .draw(
+                        &devices.device_context,
+                        resources
+                            .render_target
+                            .as_ref()
+                            .context("backdrop target missing")?,
+                        resources
+                            .render_target_view
+                            .as_ref()
+                            .context("backdrop target view missing")?,
+                        size(
+                            DevicePixels(resources.viewport.Width as i32),
+                            DevicePixels(resources.viewport.Height as i32),
+                        ),
+                        index,
                     )
             }
             PrimitiveBatch::Shadows(range) => self.draw_shadows(range.start, range.len()),
@@ -651,7 +785,9 @@ impl DirectXRenderer {
             viewport: crate::custom_draw::viewport(extent),
         });
         let wide = self.wide_sdr.take();
+        let effects = self.backdrops.take();
         let result = self.render(scene, WindowBackgroundAppearance::Transparent);
+        self.backdrops = effects;
         self.wide_sdr = wide;
         unsafe {
             devices
@@ -2387,6 +2523,42 @@ mod dxgi {
 pub struct Dx11HeadlessRenderer(DirectXRenderer);
 #[cfg(any(test, feature = "test-support"))]
 impl Dx11HeadlessRenderer {
+    /// Bytes in retained subtree textures, excluding driver/in-flight references.
+    pub fn layer_texture_bytes(&self) -> u64 {
+        self.0
+            .backdrops
+            .as_ref()
+            .map(|effects| effects.groups.texture_bytes())
+            .unwrap_or(0)
+    }
+
+    /// Number of retained effect textures; excludes driver and in-flight references.
+    pub fn effect_texture_count(&self) -> usize {
+        self.0
+            .backdrops
+            .as_ref()
+            .map(|effects| effects.texture_count())
+            .unwrap_or(0)
+    }
+
+    /// Cumulative backdrop filter cache statistics.
+    pub fn backdrop_cache_stats(&self) -> gpui::BackdropCacheStats {
+        self.0
+            .backdrops
+            .as_ref()
+            .map(|e| e.cache.stats)
+            .unwrap_or_default()
+    }
+
+    /// Cumulative captured-subtree cache statistics.
+    pub fn layer_cache_stats(&self) -> gpui::LayerCacheStats {
+        self.0
+            .backdrops
+            .as_ref()
+            .map(|e| e.groups.stats)
+            .unwrap_or_default()
+    }
+
     /// Configure native wide-SDR composition for offscreen validation.
     pub fn set_color_mode(&mut self, mode: WindowColorMode) -> Result<gpui::WindowColorStatus> {
         self.0
@@ -2433,6 +2605,7 @@ impl Dx11HeadlessRenderer {
             globals,
             pipelines,
             custom_compositor: None,
+            backdrops: None,
             shaders: None,
             wide_sdr: None,
             color_mode: WindowColorMode::Default,

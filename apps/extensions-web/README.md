@@ -1,4 +1,4 @@
-# WebAssembly demo index and extension examples
+# All demos index and browser extension examples
 
 A standalone Wasm app for `xgpui-shader`, `xgpui-parley`, `xgpui-svg`, and `xgpui-color`. All use the existing
 GPUI web platform and wgpu renderer. The gallery offers automatic selection
@@ -10,7 +10,9 @@ fails explicitly if unavailable; check the browser console for adapter details.
 | Crate | URL query | What it demonstrates |
 | --- | --- | --- |
 | `xgpui-color` | `?demo=color` | Display P3 endpoints, encoded sRGB / linear RGB / OkLab / OkLCh interpolation, gamut mapping and alpha. Runtime diagnostics distinguish the sRGB canvas from P3 display capability. |
-| `xgpui-shader` | `?demo=shader` | Gradients, meshes and portable WGSL paints. |
+| `xgpui-shader` | `?demo=shader` | Existing gradients, meshes and portable WGSL paints. |
+| `xgpui-shader` | `?demo=brushes` | Universal solid/linear/radial fills and borders, 16-point freeform, regular and tangent-controlled Hermite mesh, Simplex/Worley/dither modulation, glyph masks and direct/native paths. |
+| `xgpui-shader` | `?demo=layers` | Subtree opacity, grayscale/saturation/brightness/contrast/inversion, adaptive/full-resolution blur, seven destination blends and backdrop blur. |
 | `xgpui-parley` | `?demo=parley` | Paragraph shaping, bidirectional text and editing. |
 | `xgpui-svg` | `?demo=svg` | Progressive SVG rendering and viewport rasterization. |
 
@@ -152,3 +154,56 @@ The runtime panel distinguishes P3 source endpoints, sRGB preview mapping, actua
 canvas color space (or unknown when unavailable), and browser-reported P3 display
 capability. For native P3 versus sRGB comparison, run the
 [color-lab desktop companion](../gamut-lab/README.md#native-color-comparison).
+
+## Universal brush and layer acceptance
+
+Open `?demo=brushes&backend=webgpu` and `?demo=layers&backend=webgpu`;
+repeat with `backend=webgl`. The in-app tabs switch views without reloading.
+
+- Brushes: toggle the background, cycle all seven brush-local noise blends,
+  toggle Hermite tangent bend, and switch direct/native polygon coverage. The
+  polygon hole must stay open; the curved reference uses native coverage.
+  Gradient typography uses monochrome glyph atlas coverage.
+- Layers: cycle blur 0/4/8/16, Adaptive/Full resolution, each color filter and
+  destination blend. Text and shapes blur together; the output stays clipped.
+  Remove/restore the effect and resize/scroll to check stale pixels and cleanup.
+- Backdrop: swap stripe colors and toggle blur. The foreground label stays sharp.
+  This boundary is separate from the captured subtree; nested backdrops remain
+  unsupported. Both examples stay within the four-group/four-backdrop limits.
+
+These use the real public brush and layer APIs, not HTML/CSS approximations.
+The pastel waves performance experiment remains a native-only follow-up (#35).
+
+Browser presentation surfaces without `COPY_SRC` use one reusable full-window
+SDR effect target and a final unblended presentation draw. The extra texture
+costs four bytes per device pixel, resizes with the window, and is released when
+no layer/backdrop effects remain. Copy-capable surfaces keep direct rendering.
+
+## Browser startup failures
+
+Start with **Automatic**; a forced **WebGPU** link intentionally disables WebGL2
+fallback. If initialization fails, use **Try Automatic** or **Try WebGL2** on the
+error panel. Switching reloads the app and creates a fresh canvas.
+
+The panel reports the requested backend, secure-context status, whether
+`navigator.gpu` is exposed, the renderer's actual canvas-context result, and the
+browser version. WebGPU requires a secure context (HTTPS or localhost) and
+browser/adapter support. An exposed API alone does not guarantee canvas or
+adapter creation succeeds. These diagnostics stay in the page/console; they are
+not sent to a telemetry service.
+
+HTTP wildcard bind-address URLs (`http://[::]:PORT/` and `http://0.0.0.0:PORT/`)
+are corrected to `http://localhost:PORT/` before starting WASM. This preserves
+`backend=webgpu`; the correction does not substitute WebGL2. Open localhost
+rather than copying a wildcard listening address from a server's output.
+
+## Unified All demos page
+
+The index lists all 12 hosted WASM examples from this app and `shader-examples`,
+grouped into Brushes & paints, Layer effects, Shaders & motion, Text, and SVG &
+color. Native labs are a separate section with repository-root launch commands,
+including pastel waves and the full paint-lab/Hermite editor. The shader gallery
+remains a focused subset; its All demos link opens this complete index.
+
+For cross-gallery navigation, use the documentation preview at
+`http://localhost:8000/examples/extensions/` after building both browser apps.

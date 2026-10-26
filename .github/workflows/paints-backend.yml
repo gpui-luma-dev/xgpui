@@ -36,6 +36,7 @@ jobs:
       WGPU_BACKEND: ${{ inputs.backend == 'linux-vulkan' && 'vulkan' || 'dx12' }}
       XDG_RUNTIME_DIR: /tmp/xgpui-runtime
       CACHE_MODE: ${{ inputs.cache }}
+      XGPUI_BRUSH_NATIVE: ${{ inputs.backend == 'windows-native' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - name: Start setup timing

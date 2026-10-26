@@ -357,6 +357,8 @@ mod tests {
                 let (extent, instance) = prepare(bounds, px(0.), &style, 1.).unwrap();
                 let mut scene = Scene::default();
                 scene.insert_primitive(Primitive::Shader(ShaderDraw {
+                    path_mask: None,
+                    glyph_mask: None,
                     order: 0,
                     bounds: extent.scale(1.),
                     content_mask: ContentMask {
