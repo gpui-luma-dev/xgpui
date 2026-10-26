@@ -172,3 +172,12 @@ wildcard bind address, not a trustworthy browser loopback origin. At that URL,
 WebGPU is hidden even when the same browser supports it at localhost. The demo
 loaders correct HTTP `[::]` and `0.0.0.0` URLs to localhost while preserving the
 port, example and forced backend. They do not rewrite LAN or remote addresses.
+
+## Selectable typography milestones
+
+The maintained `typography.md` guide is embedded at `#typography` and linked from
+the shader guide. The Text gallery includes `?demo=typography`, sharing its Rust
+view with the native shader examples. This covers the static, motion and styling milestones of issue #28: selectable
+LTR text, authentic copy, source inspection, native accessibility, cluster-aware
+reveal, deterministic scramble, bounded wave motion, gradient/glow/drop-shadow styling and
+reduced-motion fallback. Wrapping and bidirectional selection remain deferred.

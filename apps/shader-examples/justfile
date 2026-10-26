@@ -60,3 +60,7 @@ wasm *args:
 # Serve an already built WASM companion.
 serve:
     python3 apps/shader-examples/serve.py
+
+# Kinetic typography: typewriter/wave, stable selection, pause/scrub and authentic copy.
+typography *args:
+    cargo run {{options}} -- --example typography "$@"

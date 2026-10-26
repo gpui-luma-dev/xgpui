@@ -88,3 +88,15 @@ program and should be retained rather than rebuilt for per-frame animation.
 accept bounded distorted grids up to 3x3, with positions and U/V tangents. A
 certified global inverse evaluates connected patches without fading their joins.
 See [brush contracts and examples](../../../../docs/extensions/brushes.md).
+
+## Selectable typography
+
+`typography::SelectableText` provides retained, read-only single-line LTR text with typewriter, wave and scramble snapshots,
+mouse/keyboard selection, authentic copy and AccessKit text/selection semantics.
+It inherits text styling and requires no portable-shader feature. See the
+[typography guide](../../../../docs/extensions/typography.md) for the shared demo,
+API, supported Unicode subset, validation and remaining issue #28 milestones.
+
+With `portable-shaders`, `SelectableText::set_fill` accepts an existing `Brush`,
+and `set_shadow` accepts a bounded `TextShadow::glow` or offset `TextShadow::new`.
+Only emitted monochrome glyphs enter the shadow; selection and emoji stay sharp.

@@ -63,3 +63,6 @@ mod layer_effect;
 pub use gpui::LayerBlurQuality;
 #[cfg(feature = "portable-shaders")]
 pub use layer_effect::LayerEffect;
+
+/// Selectable kinetic typography with optional brush fills and glyph-only shadows.
+pub mod typography;

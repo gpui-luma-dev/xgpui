@@ -115,3 +115,11 @@ HTTP wildcard bind-address URLs (`http://[::]:PORT/` and `http://0.0.0.0:PORT/`)
 are corrected to `http://localhost:PORT/` before starting WASM. This preserves
 `backend=webgpu`; the correction does not substitute WebGL2. Open localhost
 rather than copying a wildcard listening address from a server's output.
+
+## Selectable typography (issue #28, static, motion and styling milestones)
+
+Run `just typography` here, or `just --justfile apps/shader-examples/justfile typography`
+from the root. The shared native/browser demo has Editorial, Ligatures, Unicode
+and Overflow samples, a live source inspector, selection/copy controls, type size,
+width and light/dark controls. Gradient/glow/drop-shadow styling, typewriter reveal, deterministic scramble and bounded wave motion preserve the original selectable source.
+Pause, scrub and reduced-motion controls make each effect inspectable. See [the typography guide](../../docs/extensions/typography.md).

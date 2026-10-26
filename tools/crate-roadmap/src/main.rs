@@ -747,6 +747,7 @@ fn generate(root: &Path) -> Result<()> {
         ("portable-wgsl-v1", "docs/extensions/portable-wgsl-v1.md"),
         ("instanced-wgsl-v2", "docs/extensions/instanced-wgsl-v2.md"),
         ("brushes", "docs/extensions/brushes.md"),
+        ("typography", "docs/extensions/typography.md"),
         ("paint-validation", "docs/extensions/paint-validation.md"),
     ];
     let mut extension_documents = BTreeMap::new();

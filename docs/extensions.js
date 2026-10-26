@@ -1,6 +1,6 @@
 'use strict';
 
-const shaderGuideRoutes = ['brushes', 'paint-validation', 'extension-paints', 'shader-producers', 'paint-contract-hardening', 'portable-wgsl-v1', 'instanced-wgsl-v2', 'portable-paints', 'native-dx11-paints'];
+const shaderGuideRoutes = ['typography', 'brushes', 'paint-validation', 'extension-paints', 'shader-producers', 'paint-contract-hardening', 'portable-wgsl-v1', 'instanced-wgsl-v2', 'portable-paints', 'native-dx11-paints'];
 
 function isExtensionRoute(route) {
   return route === 'extensions' || Object.hasOwn(data.extension_documents, route);
@@ -9,7 +9,7 @@ function extensionTitle(route) {
   return route === 'extensions' ? 'Extensions to GPUI' : data.extension_documents[route].title;
 }
 const browserDemoNames = {
-  brushes: 'Brush gallery', layers: 'Layer effects', shader: 'Gradient paints',
+  typography: 'Selectable typography', brushes: 'Brush gallery', layers: 'Layer effects', shader: 'Gradient paints',
   hermite: 'Hermite editor', color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs',
 };
 function browserDemoLinks(demo) {
@@ -72,7 +72,7 @@ function extensionPage(route) {
       : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
-    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'brushes' ? brushDemoLinks() : route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
+    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'typography' ? browserDemoLinks('typography') : route === 'brushes' ? brushDemoLinks() : route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
   return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation, text and SVG extensions.') + banner +
     '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>' +
@@ -82,7 +82,7 @@ use std::sync::Arc;
 
 painted().bg_paint(Arc::new(SolidColor::new([1.0, 0.2, 0.0, 1.0])?));`) +
     '<p><code>xgpui-shader</code>: gradients, meshes and portable WGSL. Metal, wgpu and native D3D11 adapters; ordinary programs use sRGB. Explicit linear-P3 programs require a native wide-gamut window.</p>' +
-    '<div class="cards">' + extensionCard('extension-paints', 'Start here: dependencies, containers, borders, paths and interaction.') + extensionCard('brushes', 'Universal brushes, glyphs, paths, mesh gradients and cached layer effects; pastel waves demo.') + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('paint-contract-hardening', 'Preparation, recording and failure behavior.') + extensionCard('portable-wgsl-v1', 'Rust parameters + portable WGSL source.') + extensionCard('instanced-wgsl-v2', 'Typed main-pass instances, ordered batching, native app and WASM companion.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'Native D3D11 adapter and Windows acceptance.') + '</div>' +
+    '<div class="cards">' + extensionCard('extension-paints', 'Start here: dependencies, containers, borders, paths and interaction.') + extensionCard('typography', 'Gradient fills, glyph glow/shadows, typewriter, wave and scramble with stable selection and native accessibility.') + extensionCard('brushes', 'Universal brushes, glyphs, paths, mesh gradients and cached layer effects; pastel waves demo.') + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('paint-contract-hardening', 'Preparation, recording and failure behavior.') + extensionCard('portable-wgsl-v1', 'Rust parameters + portable WGSL source.') + extensionCard('instanced-wgsl-v2', 'Typed main-pass instances, ordered batching, native app and WASM companion.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'Native D3D11 adapter and Windows acceptance.') + '</div>' +
     extensionCode('sh', `just --justfile apps/paint-lab/justfile radial
 just --justfile apps/paint-lab/justfile --list`) +
     instancedDemoLinks() +
@@ -155,11 +155,17 @@ function publicApiSourceLinks() {
   }).join('') + '</ul>';
 }
 
+function typographyCallout() {
+  return '<section class="demo-entry" aria-label="Selectable kinetic typography"><div class="demo-entry-heading"><span>SELECTABLE KINETIC TYPOGRAPHY</span><a href="#typography">Read the typography guide →</a></div>' +
+    '<h2>Animated glyphs. Authentic text.</h2><p>Typewriter reveal, wave motion and deterministic scramble with gradient fills, glow and drop shadows. Selection and copy preserve the original text; native accessibility exposes the complete source.</p>' +
+    browserDemoLinks('typography') +
+    '<p class="muted">Read-only, single-line left-to-right text. The browser platform has no canvas accessibility bridge yet; use the native demo for accessibility review.</p></section>';
+}
 function shaderCrateGuide() {
-  return brushDemoLinks() + instancedDemoLinks() + browserDemoLinks('shader') + '<article class="extension-document">' +
+  return typographyCallout() + brushDemoLinks() + instancedDemoLinks() + browserDemoLinks('shader') + '<article class="extension-document">' +
     data.extension_documents['extension-paints'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') +
     '</article><h2>Producer and backend references</h2><div class="cards">' +
-    extensionCard('brushes', 'Universal brushes, glyphs, paths, mesh gradients and cached layer effects; pastel waves demo.') + extensionCard('shader-producers', 'Mesh, gradient parameters and caches.') +
+    extensionCard('typography', 'Gradient fills, glyph glow/shadows, typewriter, wave and scramble with stable selection and native accessibility.') + extensionCard('brushes', 'Universal brushes, glyphs, paths, mesh gradients and cached layer effects; pastel waves demo.') + extensionCard('shader-producers', 'Mesh, gradient parameters and caches.') +
     extensionCard('portable-wgsl-v1', 'Write a portable WGSL producer.') +
     extensionCard('instanced-wgsl-v2', 'Typed direct main-pass shaders and native-first examples.') +
     extensionCard('paint-contract-hardening', 'Preparation and recording transactions.') +

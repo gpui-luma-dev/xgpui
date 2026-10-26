@@ -16,6 +16,8 @@ mod hermite;
 mod paragraph;
 mod shader;
 mod svg;
+#[path = "../../shader-examples/src/typography.rs"]
+mod typography;
 
 const PLEX: &[u8] = include_bytes!(
     "../../../gpui/crates/gpui-web/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
@@ -37,6 +39,7 @@ pub fn demo_build_id() -> String {
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn demo_behavior(demo: &str) -> String {
     match demo {
+        "typography" => "Typography: gradient, glow and shadow • kinetic glyphs with an unchanged source",
         "svg" => "SVG: independent views • sharp / texture zoom • no worker",
         "parley" => "Parley: editable paragraphs • selection and BiDi",
         "brushes" => "Brushes: universal fills, noise, glyphs and paths",
@@ -72,6 +75,7 @@ fn launch() -> anyhow::Result<()> {
     } else {
         WebBackendPreference::Auto
     };
+    let typography = parameters.contains(&"demo=typography");
     let parley = parameters.contains(&"demo=parley");
     let svg = parameters.contains(&"demo=svg");
     let color = parameters.contains(&"demo=color");
@@ -99,7 +103,9 @@ fn launch() -> anyhow::Result<()> {
     }
     .with_http_client(http);
 
+    let reduced_motion = web_sys::window().and_then(|window| window.match_media("(prefers-reduced-motion: reduce)").ok().flatten()).is_some_and(|query| query.matches());
     let handle = app.run_embedded(move |cx| {
+        cx.set_reduce_motion(reduced_motion);
         let options = WindowOptions::default();
         if parley {
             let timings = paragraph::measure(cx.text_system().clone(), 5)
@@ -110,6 +116,9 @@ fn launch() -> anyhow::Result<()> {
                 view
             })
             .expect("open Parley demo");
+        } else if typography {
+            cx.open_window(options, |_, cx| cx.new(typography::TypographyDemo::new))
+                .expect("open typography demo");
         } else if hermite {
             cx.open_window(options, |_, cx| cx.new(|_| hermite::HermiteDemo::new()))
                 .expect("open Hermite editor");

@@ -90,7 +90,7 @@ assert.ok(index.includes('href="examples/extensions/"'));
 assert.ok(index.includes('href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>'));
 assert.ok(index.indexOf('GitHub repository ↗') < index.indexOf('<nav aria-label="Documentation">'));
 assert.ok(index.indexOf('>Live demos ↗</a>') < index.indexOf('>Instanced WGSL v2</a>'));
-for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color']) {
+for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web'));
@@ -109,7 +109,7 @@ const listedModules = [...wasmIndex.matchAll(/data-wasm-module="([^"]+)"/g)].map
 const legacyModules = [...legacyManifest.matchAll(/\[\[bin\]\]\s+name = "([^"]+)"/g)].map(m => m[1]);
 assert.deepEqual(listedModules.slice().sort(), legacyModules.sort(), 'every legacy Wasm binary needs an index entry');
 for (const [, module] of legacyGallery.matchAll(/data-module="([^"]+)"/g)) assert.ok(listedModules.includes(module), module);
-for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color']) {
+for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="?demo=' + demo + suffix + '"'), demo + suffix);
   }
@@ -214,7 +214,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 14);
+assert.equal(Object.keys(data.extension_documents).length, 15);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/xgpui-ext/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -431,8 +431,8 @@ console.log('Verified demo discovery, distinct brush/layer launch labels and vis
 
 // "All demos" includes both hosted apps, without duplicating launch cards.
 const allLaunches = [...wasmIndex.matchAll(/<a href="([^"]+)">Open demo ↗<\/a>/g)].map(m => m[1]);
-assert.equal(allLaunches.length, 13);
-assert.equal(new Set(allLaunches).size, 13);
+assert.equal(allLaunches.length, 14);
+assert.equal(new Set(allLaunches).size, 14);
 for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="../shaders/?example=' + example + suffix + '"'));
@@ -443,4 +443,7 @@ for (const id of ['brushes-paints','layer-effects','shaders-motion','typography'
 }
 assert.ok(wasmIndex.includes('--pastel-waves'));
 assert.ok(wasmIndex.includes('Show launch command'));
-console.log('Verified unified index covers all 13 hosted demos and separates native launch commands.');
+console.log('Verified unified index covers all 14 hosted demos and separates native launch commands.');
+
+assert.match(run('extensionPage("typography")'), /Selectable typography/);
+assert.match(run('extensionPage("typography")'), /demo=typography/);

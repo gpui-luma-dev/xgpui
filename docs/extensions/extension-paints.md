@@ -206,8 +206,11 @@ window.paint_custom(CustomGeometry::Path(path), mesh.clone());
 
 Against `9b64657`, native `Fill`, `Style`, `Styled` and generated border setters
 retain their upstream shape. The independent overflow-axis fix remains in core.
-Source/coverage caches are separate; only the host submits. Custom glyph/shadow
-paints, shared cross-shape coordinates and high-gamut presentation are deferred.
+Source/coverage caches are separate; only the host submits. For current glyph
+fills, glow/drop shadows and paint-only motion with canonical selection, see
+[Selectable typography](#typography). The [brush guide](#brushes) covers main-pass
+glyph coverage and layer effects; [wide-gamut presentation](#high-gamut-windows)
+has a separate native contract. Shared cross-shape coordinates remain deferred.
 
 ## Run the examples
 
