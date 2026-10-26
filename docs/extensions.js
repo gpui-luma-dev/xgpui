@@ -155,8 +155,14 @@ function publicApiSourceLinks() {
   }).join('') + '</ul>';
 }
 
+function typographyCallout() {
+  return '<section class="demo-entry" aria-label="Selectable kinetic typography"><div class="demo-entry-heading"><span>SELECTABLE KINETIC TYPOGRAPHY</span><a href="#typography">Read the typography guide →</a></div>' +
+    '<h2>Animated glyphs. Authentic text.</h2><p>Typewriter reveal, wave motion and deterministic scramble with gradient fills, glow and drop shadows. Selection and copy preserve the original text; native accessibility exposes the complete source.</p>' +
+    browserDemoLinks('typography') +
+    '<p class="muted">Read-only, single-line left-to-right text. The browser platform has no canvas accessibility bridge yet; use the native demo for accessibility review.</p></section>';
+}
 function shaderCrateGuide() {
-  return brushDemoLinks() + instancedDemoLinks() + browserDemoLinks('shader') + '<article class="extension-document">' +
+  return typographyCallout() + brushDemoLinks() + instancedDemoLinks() + browserDemoLinks('shader') + '<article class="extension-document">' +
     data.extension_documents['extension-paints'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') +
     '</article><h2>Producer and backend references</h2><div class="cards">' +
     extensionCard('typography', 'Gradient fills, glyph glow/shadows, typewriter, wave and scramble with stable selection and native accessibility.') + extensionCard('brushes', 'Universal brushes, glyphs, paths, mesh gradients and cached layer effects; pastel waves demo.') + extensionCard('shader-producers', 'Mesh, gradient parameters and caches.') +

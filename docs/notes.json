@@ -210,8 +210,8 @@
   "xgpui-shader": {
     "short": "xgpui-shader",
     "group": "Extensions",
-    "role": "Opt-in gradients, mesh paints and portable WGSL through existing GPUI paint sites.",
-    "surface": "painted(), Paint, WindowPaintExt, SolidColor, Gradient, MeshGradient and portable shader producers. Ordinary programs retain sRGB semantics; new_linear_p3 opts into native wide-SDR output.",
+    "role": "Opt-in gradients, mesh paints, portable WGSL and selectable kinetic typography.",
+    "surface": "painted(), Paint, WindowPaintExt, SolidColor, Gradient, MeshGradient, portable shader producers and typography::SelectableText. Ordinary programs retain sRGB semantics; new_linear_p3 opts into native wide-SDR output.",
     "review": "Keep effects and caching in the extension; preserve the small GPUI recording/preparation contract. Wide-gamut presentation is a separate backend capability.",
     "entry": "src/lib.rs"
   },
