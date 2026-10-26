@@ -11,6 +11,7 @@ use std::{borrow::Cow, cell::RefCell, rc::Rc, sync::Arc};
 mod brushes;
 mod color;
 mod color_samples;
+mod hermite;
 #[path = "../../text-lab/src/paragraph.rs"]
 mod paragraph;
 mod shader;
@@ -39,6 +40,7 @@ pub fn demo_behavior(demo: &str) -> String {
         "svg" => "SVG: independent views • sharp / texture zoom • no worker",
         "parley" => "Parley: editable paragraphs • selection and BiDi",
         "brushes" => "Brushes: universal fills, noise, glyphs and paths",
+        "hermite" => "Hermite: live 2×2 / 3×3 mesh editor • points and tangent vectors",
         "layers" => "Layers: subtree filters, blending and blur",
         "shader" => "Shader: gradients, paths and animation",
         "color" => "Color / Gamut: interpolation and mapping • sRGB preview",
@@ -75,6 +77,7 @@ fn launch() -> anyhow::Result<()> {
     let color = parameters.contains(&"demo=color");
     let brushes = parameters.contains(&"demo=brushes");
     let layers = parameters.contains(&"demo=layers");
+    let hermite = parameters.contains(&"demo=hermite");
     // These demos need no worker pool or shared Wasm memory.
     let platform = Rc::new(WebPlatform::new_with_backend(false, backend));
     let http = Arc::new(platform.fetch_http_client());
@@ -107,6 +110,9 @@ fn launch() -> anyhow::Result<()> {
                 view
             })
             .expect("open Parley demo");
+        } else if hermite {
+            cx.open_window(options, |_, cx| cx.new(|_| hermite::HermiteDemo::new()))
+                .expect("open Hermite editor");
         } else if brushes || layers {
             cx.open_window(options, |_, cx| cx.new(|_| brushes::BrushDemo::new(layers)))
                 .expect("open brush gallery");

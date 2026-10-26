@@ -10,7 +10,7 @@ function extensionTitle(route) {
 }
 const browserDemoNames = {
   brushes: 'Brush gallery', layers: 'Layer effects', shader: 'Gradient paints',
-  color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs',
+  hermite: 'Hermite editor', color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs',
 };
 function browserDemoLinks(demo) {
   return '<p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=' + demo + '">Open ' + browserDemoNames[demo] + ' ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>';
@@ -18,6 +18,7 @@ function browserDemoLinks(demo) {
 function brushDemoLinks() {
   return '<section class="demo-entry" aria-label="Brush and layer live demos"><div class="demo-entry-heading"><span>TRY IT LIVE</span><a href="examples/extensions/">All browser demos →</a></div><div class="demo-launch-grid">' +
     '<a class="demo-launch" href="examples/extensions/?demo=brushes"><div class="demo-thumb brush-thumb"></div><strong>Open brush gallery ↗</strong><span>Gradients, freeform &amp; Hermite meshes, noise, text and paths.</span></a>' +
+    '<a class="demo-launch" href="examples/extensions/?demo=hermite"><div class="demo-thumb brush-thumb"></div><strong>Open Hermite editor ↗</strong><span>Live mesh points, U/V tangent angles and lengths, and direct/legacy comparison.</span></a>' +
     '<a class="demo-launch" href="examples/extensions/?demo=layers"><div class="demo-thumb layer-thumb"></div><strong>Open layer effects ↗</strong><span>Subtree filters, blur, destination blending and backdrops.</span></a></div></section>';
 }
 function liveDemoOverview() {

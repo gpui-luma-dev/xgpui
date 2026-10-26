@@ -1021,6 +1021,11 @@ python3 apps/extensions-web/serve.py
 ```
 
 Open `http://localhost:8081/?demo=brushes` or `http://localhost:8081/?demo=layers`.
+For the dedicated [live Hermite editor](examples/extensions/?demo=hermite), open
+`http://localhost:8081/?demo=hermite`. It shares paint-lab's editing model: switch
+2×2/3×3 grids, select points, edit positions and U/V tangent angles/lengths with
+sliders or −/+ controls, cycle presets and reset. Legacy and direct previews
+stay synchronized; rejected direct geometry shows a reason instead of stale pixels.
 The brush gallery includes fills/borders, 16-point freeform, regular and tangent
 Hermite mesh, all noise families, seven modulation blends, gradient glyphs and
 polygon direct/native coverage beside a curved native path. The layer gallery

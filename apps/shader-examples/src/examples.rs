@@ -110,7 +110,7 @@ impl Render for Examples {
         } else {
             self.paused_at
         };
-        if self.animated && self.mode != Mode::Composition {
+        if self.animated && !matches!(self.mode, Mode::Composition | Mode::Shadows) {
             window.request_animation_frame();
         }
         let mode = self.mode;
@@ -146,7 +146,7 @@ impl Render for Examples {
             .child(div().text_2xl().child(mode.title()))
             .child(if mode == Mode::Borders { "Soft blue and orange highlights orbit a neutral pill border. Normal button content stays interactive." } else if mode == Mode::Shadows { "Standard GPUI on the left; the extension helper on the right. Both cards contain normal interactive children." } else if mode == Mode::Composition { "Compare the same overlapping shapes with clipping on and off. The cyan frame marks the clip boundary." } else { "WGSL → typed instances → GPUI's main render pass. No per-instance textures." })
             .child(div().flex().flex_wrap().gap_3()
-                .when(mode != Mode::Composition, |el| el.child(div().id("pause").p_2().bg(rgb(0x263455)).cursor_pointer().child(if self.animated { "Pause" } else { "Resume" })
+                .when(!matches!(mode, Mode::Composition | Mode::Shadows), |el| el.child(div().id("pause").p_2().bg(rgb(0x263455)).cursor_pointer().child(if self.animated { "Pause" } else { "Resume" })
                     .on_click(cx.listener(|this, _, _, cx| { if this.animated { this.paused_at = this.started.elapsed().as_secs_f32(); }
                         else { this.started = Instant::now() - std::time::Duration::from_secs_f32(this.paused_at); }
                         this.animated = !this.animated; cx.notify(); }))))

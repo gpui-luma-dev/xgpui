@@ -88,7 +88,9 @@ const index = await readFile(new URL('index.html', site), 'utf8');
 assert.ok(!index.includes('#method'));
 assert.ok(index.includes('href="examples/extensions/"'));
 assert.ok(index.includes('href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>'));
-for (const demo of ['shader', 'brushes', 'layers', 'parley', 'svg', 'color']) {
+assert.ok(index.indexOf('GitHub repository ↗') < index.indexOf('<nav aria-label="Documentation">'));
+assert.ok(index.indexOf('>Live demos ↗</a>') < index.indexOf('>Instanced WGSL v2</a>'));
+for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web'));
@@ -107,7 +109,7 @@ const listedModules = [...wasmIndex.matchAll(/data-wasm-module="([^"]+)"/g)].map
 const legacyModules = [...legacyManifest.matchAll(/\[\[bin\]\]\s+name = "([^"]+)"/g)].map(m => m[1]);
 assert.deepEqual(listedModules.slice().sort(), legacyModules.sort(), 'every legacy Wasm binary needs an index entry');
 for (const [, module] of legacyGallery.matchAll(/data-module="([^"]+)"/g)) assert.ok(listedModules.includes(module), module);
-for (const demo of ['shader', 'brushes', 'layers', 'parley', 'svg', 'color']) {
+for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="?demo=' + demo + suffix + '"'), demo + suffix);
   }
@@ -360,7 +362,7 @@ console.log('Verified API-change source links against regenerated declaration an
 // Instanced shaders must be discoverable, rendered offline, and packaged for Pages.
 assert.ok(data.extension_documents['instanced-wgsl-v2']);
 assert.ok(index.includes('href="#instanced-wgsl-v2"'));
-assert.ok(index.includes('href="examples/shaders/"'));
+assert.ok(index.includes('href="examples/extensions/"'));
 assert.match(run('shaderCrateGuide()'), /just --justfile apps\/shader-examples\/justfile ui/);
 assert.match(run('extensionPage("instanced-wgsl-v2")'), /Clipping ON\/OFF/);
 assert.match(run('instancedDemoLinks()'), /href="examples\/shaders\/"/);
@@ -413,7 +415,8 @@ console.log('Verified automatic backend links and packaged browser graphics reco
 const brushLaunch = run('brushDemoLinks()');
 assert.match(brushLaunch, /Open brush gallery/);
 assert.match(brushLaunch, /Open layer effects/);
-assert.equal((brushLaunch.match(/href="examples\/extensions\/\?demo=/g) || []).length, 2);
+assert.match(brushLaunch, /Open Hermite editor/);
+assert.equal((brushLaunch.match(/href="examples\/extensions\/\?demo=/g) || []).length, 3);
 assert.ok(!brushLaunch.includes('Run browser demo'));
 assert.match(run('overview()'), /LIVE BROWSER DEMOS/);
 assert.ok(index.includes('>Live demos ↗</a>'));
@@ -428,8 +431,8 @@ console.log('Verified demo discovery, distinct brush/layer launch labels and vis
 
 // "All demos" includes both hosted apps, without duplicating launch cards.
 const allLaunches = [...wasmIndex.matchAll(/<a href="([^"]+)">Open demo ↗<\/a>/g)].map(m => m[1]);
-assert.equal(allLaunches.length, 12);
-assert.equal(new Set(allLaunches).size, 12);
+assert.equal(allLaunches.length, 13);
+assert.equal(new Set(allLaunches).size, 13);
 for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="../shaders/?example=' + example + suffix + '"'));
@@ -440,4 +443,4 @@ for (const id of ['brushes-paints','layer-effects','shaders-motion','typography'
 }
 assert.ok(wasmIndex.includes('--pastel-waves'));
 assert.ok(wasmIndex.includes('Show launch command'));
-console.log('Verified unified index covers all 12 hosted demos and separates native launch commands.');
+console.log('Verified unified index covers all 13 hosted demos and separates native launch commands.');
