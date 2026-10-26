@@ -6532,6 +6532,8 @@ dependencies = [
  "naga",
  "refineable",
  "serde",
+ "unicode-bidi",
+ "unicode-segmentation",
  "windows 0.62.2",
 ]
 
