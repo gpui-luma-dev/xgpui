@@ -80,6 +80,15 @@ fn inversion_matches_completed_translucent_subtree_and_fixed_filter_order() {
                             bounds: viewport().bounds.map(|p| ScaledPixels(p.0 * scale)),
                         };
                         let mut scene = Scene::default();
+                        // Headless clear alpha differs by backend. The reference
+                        // below composites the translucent destination over opaque
+                        // black, so make that background part of the scene.
+                        scene.insert_primitive(Quad {
+                            bounds: full.bounds,
+                            content_mask: full,
+                            background: gpui::black().into(),
+                            ..Default::default()
+                        });
                         scene.insert_primitive(Quad {
                             bounds: full.bounds,
                             content_mask: full,
