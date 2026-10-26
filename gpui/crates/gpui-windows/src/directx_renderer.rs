@@ -676,12 +676,15 @@ impl DirectXRenderer {
         };
         let result = (|| {
             let mut prepared = Vec::with_capacity(scene.custom_draws.len());
+            let preparation_frame = gpui::PreparationFrame::default();
             for draw in &scene.custom_draws {
                 let prepared_draw = batch.prepare(|context| {
                     let extent = extent(draw)?;
                     let request =
                         PreparationRequest::new(draw.bounds.size.map(|v| px(v.0)), extent, 1.)?;
-                    let output = draw.content.prepare_with_request(context, &request)?;
+                    let output =
+                        draw.content
+                            .prepare_in_frame(context, &request, &preparation_frame)?;
                     let native = output.is::<Background>();
                     let wide = output.is::<Dx11WideSdrOutput>();
                     let source = if wide {

@@ -118,3 +118,52 @@ fn preparation_request_rejects_invalid_geometry() {
         PreparationRequest::new(logical, size(DevicePixels(10), DevicePixels(-1)), 1.).is_err()
     );
 }
+
+#[test]
+fn preparation_frame_survives_window_geometry_adapter() {
+    #[derive(Debug)]
+    struct FrameProducer;
+    impl CustomContent for FrameProducer {
+        fn prepare(
+            &self,
+            _: &dyn std::any::Any,
+            _: Size<DevicePixels>,
+        ) -> anyhow::Result<Box<dyn std::any::Any>> {
+            panic!("frame-aware preparation expected")
+        }
+        fn prepare_in_frame(
+            &self,
+            _: &dyn std::any::Any,
+            request: &PreparationRequest,
+            frame: &crate::PreparationFrame,
+        ) -> anyhow::Result<Box<dyn std::any::Any>> {
+            Ok(Box::new((*request, frame.try_reserve_upload(42, 8, 8, 1))))
+        }
+    }
+    let logical = size(px(10.5), px(20.25));
+    let wrapped =
+        content_with_preparation_geometry(std::sync::Arc::new(FrameProducer), logical, 2.);
+    let raster = size(DevicePixels(21), DevicePixels(41));
+    let request = PreparationRequest::new(size(px(21.), px(41.)), raster, 1.).unwrap();
+    let frame = crate::PreparationFrame::default();
+    let first = *wrapped
+        .prepare_in_frame(&(), &request, &frame)
+        .unwrap()
+        .downcast::<(PreparationRequest, bool)>()
+        .unwrap();
+    assert_eq!(first.0.logical_size(), logical);
+    assert_eq!(first.0.scale_factor(), 2.);
+    assert!(first.1);
+    let second = *wrapped
+        .prepare_in_frame(&(), &request, &frame)
+        .unwrap()
+        .downcast::<(PreparationRequest, bool)>()
+        .unwrap();
+    assert!(!second.1, "adapter must preserve the shared frame budget");
+    // An old producer remains compatible with the new frame-aware dispatch.
+    assert!(
+        LegacyProducer
+            .prepare_in_frame(&42_u32, &request, &frame)
+            .is_ok()
+    );
+}

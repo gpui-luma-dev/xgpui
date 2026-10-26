@@ -1,4 +1,5 @@
 //! Metal integration for retained, independently rendered GPU content.
+pub mod core_video;
 mod coverage_cache;
 use anyhow::{Result, ensure};
 pub(crate) use coverage_cache::{CoverageCache, CoverageKey};
@@ -7,6 +8,7 @@ use gpui::{CustomDraw, DevicePixels, Size, size};
 use metal::*;
 
 /// Borrowed by producers during preparation. Handles belong to the host device.
+#[derive(Clone)]
 pub struct MetalCustomContext {
     /// Active host device; create all producer resources on this device.
     pub device: Device,
@@ -33,6 +35,172 @@ pub struct MetalCustomOutput {
     pub texture: Texture,
     /// Pending preparation commands, or empty for already-submitted cached output.
     pub commands: Vec<CommandBuffer>,
+}
+
+/// Source-sized RGBA8 image. The compositor samples its complete mip chain
+/// directly; no display-sized intermediate texture is allocated.
+pub struct MetalImageOutput {
+    output: MetalCustomOutput,
+    queue: CommandQueue,
+}
+impl MetalImageOutput {
+    /// Host submission has accepted all upload commands; no completion wait.
+    pub fn is_submitted(&self) -> bool {
+        self.output.commands.iter().all(|command| {
+            matches!(
+                command.status(),
+                MTLCommandBufferStatus::Committed
+                    | MTLCommandBufferStatus::Scheduled
+                    | MTLCommandBufferStatus::Completed
+            )
+        })
+    }
+
+    /// Reuse only on the original host queue. Pending recordings are resubmitted
+    /// by the host; submitted work remains ordered without a CPU fence wait.
+    pub fn reusable_for(&self, context: &MetalCustomContext) -> Result<Self> {
+        ensure!(
+            self.queue.as_ptr() == context.queue.as_ptr(),
+            "image output belongs to another queue"
+        );
+        ensure!(
+            self.output.texture.device().registry_id() == context.device.registry_id(),
+            "image output belongs to another device"
+        );
+        let mut commands = Vec::new();
+        for command in &self.output.commands {
+            if wide_command_pending(command.status())? {
+                commands.push(command.clone());
+            }
+        }
+        Ok(Self {
+            output: MetalCustomOutput {
+                texture: self.output.texture.clone(),
+                commands,
+            },
+            queue: self.queue.clone(),
+        })
+    }
+}
+
+/// Queue-bound cache of host-shared upload buffers. Borrowed buffers return
+/// only after the upload completion callback releases its exclusive lease.
+#[derive(Clone)]
+pub struct MetalImageStagingPool {
+    queue: CommandQueue,
+    buffers: std::sync::Arc<gpui::ImageStagingPool<Buffer>>,
+}
+impl MetalImageStagingPool {
+    pub fn stats(&self) -> gpui::ImageStagingPoolStats {
+        self.buffers.stats()
+    }
+}
+
+impl MetalCustomContext {
+    pub fn image_staging_pool(&self, capacity: usize) -> MetalImageStagingPool {
+        MetalImageStagingPool {
+            queue: self.queue.clone(),
+            buffers: gpui::ImageStagingPool::new(capacity),
+        }
+    }
+    /// Worker convenience route with an autorelease pool and no retained cache.
+    pub fn stage_image_upload(&self, data: &gpui::ImageTextureData) -> Result<MetalImageOutput> {
+        objc2::rc::autoreleasepool(|_| self.create_image_output(data))
+    }
+    /// Worker-side allocation/refill with completion-safe pool reuse. An optional
+    /// admission guard remains alive through GPU completion, not just submission.
+    pub fn stage_image_upload_with_pool(
+        &self,
+        data: &gpui::ImageTextureData,
+        pool: &MetalImageStagingPool,
+        guard: Option<std::sync::Arc<dyn Send + Sync>>,
+    ) -> Result<MetalImageOutput> {
+        objc2::rc::autoreleasepool(|_| self.create_pooled_image(data, pool, guard))
+    }
+    /// Synchronous convenience route; full media sources use the worker API.
+    pub fn create_image_output(&self, data: &gpui::ImageTextureData) -> Result<MetalImageOutput> {
+        self.create_pooled_image(
+            data,
+            &self.image_staging_pool(data.staging_byte_len()),
+            None,
+        )
+    }
+    fn create_pooled_image(
+        &self,
+        data: &gpui::ImageTextureData,
+        pool: &MetalImageStagingPool,
+        guard: Option<std::sync::Arc<dyn Send + Sync>>,
+    ) -> Result<MetalImageOutput> {
+        ensure!(
+            pool.queue.as_ptr() == self.queue.as_ptr(),
+            "foreign image staging pool"
+        );
+        ensure!(
+            self.queue.device().registry_id() == self.device.registry_id(),
+            "host queue belongs to another device"
+        );
+        let bytes = data.staging_byte_len();
+        let allocation = pool.buffers.checkout(bytes as u64, bytes, || {
+            Ok(self
+                .device
+                .new_buffer(bytes as u64, MTLResourceOptions::StorageModeShared))
+        })?;
+        let desc = TextureDescriptor::new();
+        desc.set_width(data.width() as u64);
+        desc.set_height(data.height() as u64);
+        desc.set_mipmap_level_count(data.levels().len() as u64);
+        desc.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
+        desc.set_storage_mode(MTLStorageMode::Private);
+        desc.set_usage(MTLTextureUsage::ShaderRead);
+        let texture = self.device.new_texture(&desc);
+        let command = self.queue.new_command_buffer().to_owned();
+        let encoder = command.new_blit_command_encoder();
+        let buffer = allocation.resource();
+        // The exclusive lease is never in the cache while a worker or a pending
+        // GPU command owns it. Completion, not queue submission, permits refill.
+        let mapped =
+            unsafe { std::slice::from_raw_parts_mut(buffer.contents().cast::<u8>(), bytes) };
+        let mut offset = 0usize;
+        for (level, pixels) in data.levels().iter().enumerate() {
+            let width = (data.width() >> level).max(1) as u64;
+            let height = (data.height() >> level).max(1) as u64;
+            let row = (width * 4).div_ceil(256) * 256;
+            for y in 0..height as usize {
+                mapped[offset + y * row as usize..offset + y * row as usize + width as usize * 4]
+                    .copy_from_slice(&pixels[y * width as usize * 4..(y + 1) * width as usize * 4]);
+            }
+            encoder.copy_from_buffer_to_texture(
+                buffer,
+                offset as u64,
+                row,
+                row * height,
+                MTLSize::new(width, height, 1),
+                &texture,
+                0,
+                level as u64,
+                MTLOrigin { x: 0, y: 0, z: 0 },
+                MTLBlitOption::empty(),
+            );
+            offset += row as usize * height as usize;
+        }
+        encoder.end_encoding();
+        let completion = std::sync::Mutex::new(Some((allocation, guard)));
+        let block = block2::RcBlock::new(move |_: std::ptr::NonNull<objc2::runtime::AnyObject>| {
+            completion.lock().unwrap().take();
+        });
+        // SAFETY: Both views use the Objective-C block pointer ABI. Metal calls
+        // the completion block only after this upload can no longer use the buffer.
+        unsafe {
+            command.add_completed_handler(&*block2::RcBlock::as_ptr(&block).cast());
+        }
+        Ok(MetalImageOutput {
+            output: MetalCustomOutput {
+                texture,
+                commands: vec![command],
+            },
+            queue: self.queue.clone(),
+        })
+    }
 }
 
 /// Immutable wide-SDR output: RGBA16Float, linear Display P3/D65, premultiplied
@@ -125,6 +293,63 @@ fn wide_command_pending(status: MTLCommandBufferStatus) -> Result<bool> {
         | MTLCommandBufferStatus::Scheduled
         | MTLCommandBufferStatus::Completed => Ok(false),
         _ => anyhow::bail!("wide output command was externally enqueued or failed"),
+    }
+}
+
+// Internal presentation wrapper preserves the public MetalCustomOutput shape.
+pub(crate) struct PreparedMetalOutput {
+    pub output: MetalCustomOutput,
+    nv12: Option<MetalNv12Output>,
+}
+impl From<MetalCustomOutput> for PreparedMetalOutput {
+    fn from(output: MetalCustomOutput) -> Self {
+        Self { output, nv12: None }
+    }
+}
+impl std::ops::Deref for PreparedMetalOutput {
+    type Target = MetalCustomOutput;
+    fn deref(&self) -> &Self::Target {
+        &self.output
+    }
+}
+#[derive(Clone)]
+pub(crate) struct MetalNv12Output {
+    y: Texture,
+    uv: Texture,
+    rows: [[f32; 4]; 3],
+    queue: CommandQueue,
+}
+impl MetalNv12Output {
+    fn reusable_for(&self, context: &MetalCustomContext) -> Result<Self> {
+        ensure!(
+            self.queue.as_ptr() == context.queue.as_ptr(),
+            "NV12 output belongs to another queue"
+        );
+        ensure!(
+            self.y.device().registry_id() == context.device.registry_id()
+                && self.uv.device().registry_id() == context.device.registry_id(),
+            "NV12 planes belong to another device"
+        );
+        Ok(self.clone())
+    }
+}
+pub(crate) trait MetalSampleSource {
+    fn color_texture(&self) -> &TextureRef;
+    fn nv12_planes(&self) -> Option<&MetalNv12Output> {
+        None
+    }
+}
+impl MetalSampleSource for MetalCustomOutput {
+    fn color_texture(&self) -> &TextureRef {
+        &self.texture
+    }
+}
+impl MetalSampleSource for PreparedMetalOutput {
+    fn color_texture(&self) -> &TextureRef {
+        &self.output.texture
+    }
+    fn nv12_planes(&self) -> Option<&MetalNv12Output> {
+        self.nv12.as_ref()
     }
 }
 
@@ -221,6 +446,17 @@ impl CustomCompositor {
         format: MTLPixelFormat,
     ) -> Result<MetalCustomOutput> {
         let extent = Self::extent(draw)?;
+        let source_sized = output.is::<MetalImageOutput>();
+        let output = if source_sized {
+            let image = *output.downcast::<MetalImageOutput>().unwrap();
+            ensure!(
+                image.queue.as_ptr() == context.queue.as_ptr(),
+                "image output belongs to another queue"
+            );
+            Box::new(image.output) as Box<dyn std::any::Any>
+        } else {
+            output
+        };
         let output = *output
             .downcast::<MetalCustomOutput>()
             .map_err(|_| anyhow::anyhow!("producer returned a non-Metal output"))?;
@@ -229,29 +465,73 @@ impl CustomCompositor {
             "custom texture belongs to another device"
         );
         ensure!(
-            output.texture.pixel_format() == format
-                && output.texture.texture_type() == MTLTextureType::D2
+            (if source_sized {
+                matches!(
+                    output.texture.pixel_format(),
+                    MTLPixelFormat::RGBA8Unorm | MTLPixelFormat::BGRA8Unorm
+                )
+            } else {
+                output.texture.pixel_format() == format
+            }) && output.texture.texture_type() == MTLTextureType::D2
                 && output.texture.sample_count() == 1
                 && output.texture.usage().contains(MTLTextureUsage::ShaderRead)
-                && output.texture.width() == extent.width.0 as u64
-                && output.texture.height() == extent.height.0 as u64,
+                && (source_sized
+                    || (output.texture.width() == extent.width.0 as u64
+                        && output.texture.height() == extent.height.0 as u64)),
             "invalid custom texture format, usage, or size"
         );
         validate_commands(context, &output.commands)?;
         Ok(output)
     }
 
+    pub(crate) fn validate_nv12(
+        context: &MetalCustomContext,
+        raw: Box<dyn std::any::Any>,
+    ) -> Result<PreparedMetalOutput> {
+        let planes = *raw
+            .downcast::<MetalNv12Output>()
+            .map_err(|_| anyhow::anyhow!("expected native NV12 output"))?;
+        let planes = planes.reusable_for(context)?;
+        for (texture, format) in [
+            (&planes.y, MTLPixelFormat::R8Unorm),
+            (&planes.uv, MTLPixelFormat::RG8Unorm),
+        ] {
+            ensure!(
+                texture.pixel_format() == format
+                    && texture.texture_type() == MTLTextureType::D2
+                    && texture.sample_count() == 1
+                    && texture.usage().contains(MTLTextureUsage::ShaderRead),
+                "invalid NV12 texture view"
+            );
+        }
+        ensure!(
+            planes.y.width() == planes.uv.width() * 2
+                && planes.y.height() == planes.uv.height() * 2,
+            "NV12 plane extents do not match"
+        );
+        Ok(PreparedMetalOutput {
+            output: MetalCustomOutput {
+                texture: planes.y.clone(),
+                commands: vec![],
+            },
+            nv12: Some(planes),
+        })
+    }
+
     pub fn draw(
         &self,
         draw: &CustomDraw,
-        output: &MetalCustomOutput,
+        output: &impl MetalSampleSource,
         coverage: Option<&TextureRef>,
         native_source: bool,
         viewport: Size<DevicePixels>,
         encoder: &RenderCommandEncoderRef,
     ) {
         // All fields are float4 to make the Rust/MSL layout unambiguous.
-        let params: [[f32; 4]; 4] = [
+        let transform = draw.content.image_color_transform();
+        let planes = output.nv12_planes();
+        let yuv = planes.map(|p| p.rows).unwrap_or([[0.; 4]; 3]);
+        let params: [[f32; 4]; 10] = [
             [
                 draw.bounds.origin.x.0,
                 draw.bounds.origin.y.0,
@@ -274,8 +554,16 @@ impl CustomCompositor {
                 viewport.width.0 as f32,
                 viewport.height.0 as f32,
                 draw.opacity,
-                (if coverage.is_some() { 1. } else { 0. }) + (if native_source { 2. } else { 0. }),
+                (if coverage.is_some() { 1. } else { 0. })
+                    + (if native_source { 2. } else { 0. })
+                    + (if planes.is_some() { 4. } else { 0. }),
             ],
+            transform[0],
+            transform[1],
+            transform[2],
+            yuv[0],
+            yuv[1],
+            yuv[2],
         ];
         encoder.set_render_pipeline_state(&self.pipeline);
         encoder.set_vertex_bytes(
@@ -288,8 +576,16 @@ impl CustomCompositor {
             std::mem::size_of_val(&params) as u64,
             params.as_ptr().cast(),
         );
-        encoder.set_fragment_texture(0, Some(&output.texture));
-        encoder.set_fragment_texture(1, coverage.or(Some(&output.texture)));
+        encoder.set_fragment_texture(0, Some(output.color_texture()));
+        encoder.set_fragment_texture(1, coverage.or(Some(output.color_texture())));
+        encoder.set_fragment_texture(
+            2,
+            Some(
+                planes
+                    .map(|p| p.uv.as_ref())
+                    .unwrap_or(output.color_texture()),
+            ),
+        );
         encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, 6);
     }
 }

@@ -197,3 +197,83 @@ cargo clippy --offline --locked --config .cargo/validation.toml --manifest-path 
 Tests cover actual mounted elements, refinement/timers, sibling identity, pan and
 density changes, stale document/policy results, invalid/zero geometry, atlas
 removal, FIFO/cancellation, accounting, rebalancing and complete pool drainage.
+
+## Contour trim and dash effects
+
+`xgpui_svg::path_effects` adds programmatic retained vector contours alongside the
+static SVG document API. It does not convert imported SVG documents to native
+paths or modify the existing raster pipeline.
+
+```rust,ignore
+use gpui::{point, px};
+use xgpui_svg::path_effects::{Contour, MeasuredPath, PathEffect};
+let contour = Contour::new(point(px(20.), px(100.)))
+    .cubic_to(point(px(60.), px(0.)), point(px(140.), px(180.)), point(px(200.), px(80.)))
+    .quadratic_to(point(px(250.), px(0.)), point(px(300.), px(100.)));
+// Retain this table while animating the effect.
+let measured = MeasuredPath::new(&[contour], px(0.05))?;
+let effect = PathEffect::new()
+    .trim(0.0..0.75)?
+    .dash(&[px(16.), px(8.)], px(5.))?;
+window.paint_path(measured.stroke(&effect, px(4.))?, gpui::rgb(0x9ee3bd));
+```
+
+Contours retain line, quadratic and cubic verbs. Arc-length lookup uses cached
+adaptive subdivisions, including collinear curves with nonlinear parameter speed.
+Trim endpoints use de Casteljau slicing; the resulting segments remain curves
+until the existing GPUI stroke tessellator runs. `MeasuredPath::apply` returns
+contours when callers need geometry rather than a native stroke.
+
+Trim is an ordered, nonwrapping range within 0..1 over the **total concatenated
+length** of all contours. Empty trim is empty geometry. Close edges contribute to
+length. Solid full contours retain closure; partial trims have open ends. Trim is
+applied before dashing, and dash phase restarts at each retained contour's start.
+Positive phase advances into the pattern, negative phase wraps. Odd dash arrays
+repeat; an empty array is solid. Visible pieces spanning a full closed contour's
+seam are joined to avoid introducing caps there.
+
+Lengths, stroke widths, tolerance and dash phase use logical pixels. The table's
+0.001..16 px tolerance bounds each adaptive leaf's control-point deviation from a
+uniformly parameterized chord; it is not a global arc-length error guarantee. Use
+smaller tolerances for more precise animation and retain the measurement cache.
+Native stroke joins/caps use GPUI defaults. Fill effects, SVG arc verbs, automatic
+SVG extraction and Lottie playback are not included.
+
+Inputs are checked before tessellation: finite coordinates within ±1,000,000 px,
+at most 8,192 contours/segments (including implicit closing edges), 65,536 total
+lookup samples, 64 input dash entries and 16,384 emitted curve pieces. Dash lengths
+must be finite and strictly positive; zero entries are rejected. Stroke widths are
+positive and at most 4,096 px. Excessive subdivision, fragmentation or numerically
+unresolvable dash lengths return errors rather than allowing unbounded work.
+
+### Native visual test
+
+```sh
+just --justfile apps/media-lab/justfile paths
+just --justfile apps/media-lab/justfile paths-capture
+just --justfile apps/media-lab/justfile paths-wgpu-capture
+cargo test --offline --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-svg/Cargo.toml --lib path_effects
+```
+
+The lab shows original, trimmed and trimmed-plus-dashed strokes in three columns.
+Rows cover open Béziers, a closed heart, and multiple contours. Cycle trim through
+100%, 75%, 50%, 25% and 0%; change dash pattern/phase and stroke width; animate trim
+and phase. Animation respects reduced motion. Check curve continuity and closed
+seams as phase changes. The Images button returns to media tests.
+
+Headless captures have the same three rows/columns, fixed at 68% trim and a 16/8
+pattern with phase 5. They check visible pixel coverage and decreasing coverage
+from original to trim to dashes. Metal and wgpu capture paths are available;
+native Windows/Linux execution remains outstanding.
+
+
+### Browser contour-effects comparison
+
+Open [Trim / dash](../examples/extensions/?demo=path-effects), or append
+`&backend=webgpu` / `&backend=webgl`. Three columns compare original, trimmed and
+trimmed/dashed strokes for open curves, a closed heart and multiple contours.
+Cycle trim to zero/full, even/odd dash patterns, phase and width; optional animation
+respects reduced motion. This uses the shared contour effects and native GPUI
+stroke tessellation, not SVG rasterization or CSS dashes. Both forced backends
+were checked locally in release on 2026-10-26. The separate progressive SVG demo
+and its artwork/attribution remain unchanged.

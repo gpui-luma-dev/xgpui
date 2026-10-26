@@ -616,6 +616,7 @@ fn generate(root: &Path) -> Result<()> {
         ("xgpui-shader", "extensions/xgpui-ext/crates/xgpui-shader"),
         ("xgpui-gamut", "extensions/xgpui-ext/crates/xgpui-gamut"),
         ("xgpui-parley", "extensions/xgpui-ext/crates/xgpui-parley"),
+        ("xgpui-media", "extensions/xgpui-ext/crates/xgpui-media"),
         ("xgpui-svg", "extensions/xgpui-ext/crates/xgpui-svg"),
     ]);
     let mut packages = provenance["packages"]
@@ -726,6 +727,7 @@ fn generate(root: &Path) -> Result<()> {
     // Embed them so navigation works offline without fetch.
     let document_sources = [
         ("color-math", "docs/extensions/color-math.md"),
+        ("media-images", "docs/extensions/media-images.md"),
         ("svg-rendering", "docs/extensions/svg-rendering.md"),
         ("parley-text", "docs/extensions/parley-text.md"),
         (
@@ -810,7 +812,17 @@ fn generate(root: &Path) -> Result<()> {
                         )
                         .into()
                     })
-                    .unwrap_or(dest_url);
+                    .unwrap_or_else(|| {
+                        // Static report assets are relative to the guide in Markdown,
+                        // but embedded guide HTML is served from the docs root.
+                        if let Some(report) = dest_url.strip_prefix("../benchmarks/") {
+                            format!("benchmarks/{report}").into()
+                        } else if let Some(example) = dest_url.strip_prefix("../examples/") {
+                            format!("examples/{example}").into()
+                        } else {
+                            dest_url
+                        }
+                    });
                 pulldown_cmark::Event::Start(pulldown_cmark::Tag::Link {
                     link_type,
                     dest_url,

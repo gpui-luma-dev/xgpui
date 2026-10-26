@@ -99,7 +99,7 @@ Select **Settings → Pages → Source: GitHub Actions**. The Pages workflow bui
 ## Browser extension demos
 
 The sidebar's **Browser extension demos** link opens `examples/extensions/`, the
-WebAssembly demo index. It lists the three hosted extension demos, seven older
+WebAssembly demo index. It lists 17 built browser demos across both apps, seven older
 interactive source-gallery examples, and three developer Wasm harnesses. Source-only
 entries are labeled and do not link to nonexistent hosted routes.
 The gallery and the extension crate guides link to the demo source on GitHub.
@@ -181,3 +181,77 @@ view with the native shader examples. This covers the static, motion and styling
 LTR text, authentic copy, source inspection, native accessibility, cluster-aware
 reveal, deterministic scramble, bounded wave motion, gradient/glow/drop-shadow styling and
 reduced-motion fallback. Wrapping and bidirectional selection remain deferred.
+
+## Dedicated media images
+
+`xgpui-media` is indexed under Extensions with its Use/source/API/dependency tabs.
+Its maintained guide, `extensions/media-images.md`, is embedded under
+`#media-images` and linked from the Extensions overview. It records delivered
+features, test commands, backend evidence and pending work separately. Update
+that status with each completed media milestone, regenerate the website and run
+`node docs/verify.mjs`. A cross-compile is recorded as compilation evidence;
+backend execution is marked verified only after its runtime tests pass.
+
+The native `apps/media-lab` provides synchronized atlas/mipmap viewports, loading
+stress controls and upload diagnostics. Its launch and Metal/wgpu capture commands
+are maintained in `extensions/media-images.md` and embedded in the media guide.
+
+The media guide also covers ordered SDR color filters and their native lab controls,
+including alpha preservation, encoded-sRGB semantics and source-upload reuse.
+
+The SVG guide now documents retained contour trim/dash effects and the media lab
+path view, with launch commands, geometry limits and native capture checks.
+
+The media guide includes the first native video slice: bounded latest-frame
+presentation, macOS BGRA/IOSurface import, GPU lifetime rules, and video-lab
+controls/capture. The initial Windows adapter accepts dedicated immutable
+same-device BGRA textures and keyed NT-handle snapshots with nonblocking
+acquisition and retained ownership. The initial Linux DMA-BUF adapter covers
+dedicated immutable linear BGRA Vulkan snapshots, with device capability gating
+and host-recorded ownership acquisition. Windows/Linux runtime verification,
+Linux explicit fences/pool reuse and broader formats remain pending. Playback adapters are tracked separately in issue #40.
+
+All media-lab launch/build/capture commands default to release; debug is explicit.
+
+The media guide documents a generated Linux DMA-BUF native validation recipe,
+including Vulkan export/import prerequisites, release execution, pixel capture,
+validation-error counting and native runtime status. Host layout checks and Linux
+cross-compilation remain separate evidence from a successful native GPU run.
+
+The macOS surface lab now cycles BGRA8 and NV12 full/video range with BT.601/709.
+The media guide documents direct two-plane sampling, explicit matrix/range and
+chroma assumptions, retained native lifetime, five release capture modes and
+interactive UI verification. Transfer/gamut/HDR conversion remain outside this slice.
+
+The media guide includes a repeatable release upload CPU benchmark and versioned
+macOS Metal/wgpu JSON observations under `benchmarks/`. Each observation keeps raw
+frame samples and resource-pool evidence. The guide distinguishes CPU measurements
+from GPU timestamps and whole-window frame times; its numbers are not thresholds.
+Benchmark JSON links resolve relative to the documentation root when embedded.
+
+The media guide also includes a visible release-window cadence recipe, three raw
+Metal observations and branch-review status. UI interval diagnostics retain long
+stalls during continuous redraw; idle periods are excluded by request state.
+Render-start cadence remains distinct from GPU and presentation timing.
+
+The media guide now defines 60 Hz as the baseline for sustained large-image
+scrolling. Its release native feed combines 24 cards with repeated 3072×2048
+source replacements, five-second cached phases and 30 seconds of loading. Raw
+reports preserve long intervals and explicit provisional acceptance criteria;
+ProMotion observations remain additional coverage, not the baseline requirement.
+
+
+The WASM gallery now includes image filters (`?demo=media-filters`), mipmapping
+(`?demo=mipmaps`) and contour trim/dash (`?demo=path-effects`), each with automatic,
+forced WebGPU and forced WebGL2 launch links. Release browser checks and the
+synchronous-fixture/native-worker distinction are recorded in the media guide.
+The gallery has 17 demos; the media/vector demos share the actual Rust algorithms
+and renderer paths. Building regenerates local Pages assets without deploying.
+
+## Code examples
+
+Rust examples use the same Prism 1.30.0 core and Rust grammar as Luma, vendored
+locally under `vendor/prism/` with its MIT license. `code-examples.js` applies
+Rust syntax colors after page changes and API inventory updates. Rust fence flags
+(`rust,ignore`, `rust,no_run`) select Rust. There are no language labels, toolbars
+or Copy controls; other languages keep their existing plain-text presentation.

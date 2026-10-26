@@ -1,7 +1,9 @@
-//! Experimental static SVG documents, bounded raster targets and progressive scheduling.
+//! Experimental SVG documents, bounded raster targets, progressive scheduling
+//! and retained contour trim/dash effects before native stroke tessellation.
 //! SvgImage owns GPUI raster tasks and timers; low-level queue APIs remain available.
 mod document;
 mod element;
+pub mod path_effects;
 mod policy;
 mod queue;
 mod scheduler;

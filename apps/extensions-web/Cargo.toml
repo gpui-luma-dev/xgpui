@@ -13,6 +13,9 @@ bench = false
 [workspace]
 
 [dependencies]
+xgpui-media = { path = "../../extensions/xgpui-ext/crates/xgpui-media", features = ["wgpu"] }
+gpui-wgpu = { path = "../../gpui/crates/gpui-wgpu" }
+image = { version = "0.25.1", default-features = false }
 xgpui-color = { path = "../../extensions/xgpui-ext/crates/xgpui-color" }
 anyhow = "1"
 gpui = { path = "../../gpui/crates/gpui" }

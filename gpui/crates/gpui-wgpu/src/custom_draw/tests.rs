@@ -455,3 +455,87 @@ fn wgpu_custom_uniform_arena_preserves_draws_growth_and_queued_frames() -> Resul
     }
     Ok(())
 }
+
+#[test]
+fn wgpu_source_image_readiness_and_size_contract() -> Result<()> {
+    let (host, _) = crate::WgpuContext::new_headless()?;
+    let data = gpui::ImageTextureData::new(2, 2, vec![vec![255; 16], vec![255; 4]])?;
+    let first = WgpuCustomContext::new(host.device.clone(), &host.queue);
+    let output = first.create_image_output(&data)?;
+    assert_eq!(output.texture().mip_level_count(), 2);
+    let second = WgpuCustomContext::new(host.device.clone(), &host.queue);
+    assert!(!second.can_reuse(&output));
+    first.submit()?;
+    assert!(
+        output
+            .validate(&second, size(DevicePixels(8), DevicePixels(4)))
+            .is_ok()
+    );
+    let abandoned = {
+        let context = WgpuCustomContext::new(host.device.clone(), &host.queue);
+        context.create_image_output(&data)?
+    };
+    assert!(!second.can_reuse(&abandoned));
+    Ok(())
+}
+
+#[test]
+fn wgpu_worker_staging_can_be_readopted_after_abandoned_batch() -> Result<()> {
+    let (host, _) = crate::WgpuContext::new_headless()?;
+    let context = WgpuCustomContext::new(host.device.clone(), &host.queue);
+    let worker = context.image_upload_context();
+    let data = gpui::ImageTextureData::new(2, 2, vec![vec![255; 16], vec![255; 4]])?;
+    let staged = std::thread::spawn(move || worker.stage(&data))
+        .join()
+        .unwrap()?;
+    let abandoned = {
+        let context = WgpuCustomContext::new(host.device.clone(), &host.queue);
+        context.adopt_image_upload(&staged)?
+    };
+    assert!(!context.can_reuse(&abandoned));
+    let adopted = context.adopt_image_upload(&staged)?;
+    assert!(!adopted.is_submitted());
+    context.submit()?;
+    assert!(adopted.is_submitted());
+    let other = WgpuCustomContext::new(host.device.clone(), &host.queue);
+    assert!(other.can_reuse(&adopted));
+    // A staged source is queue-bound, including before its first adoption.
+    let mut foreign = staged;
+    foreign.queue = Arc::new((*host.queue).clone());
+    assert!(other.adopt_image_upload(&foreign).is_err());
+    Ok(())
+}
+
+#[test]
+fn wgpu_staging_pool_cannot_recycle_before_upload_completion() -> Result<()> {
+    let (host, _) = crate::WgpuContext::new_headless()?;
+    let context = WgpuCustomContext::new(host.device.clone(), &host.queue);
+    let worker = context.image_upload_context();
+    let pool = worker.staging_pool(768);
+    let data = gpui::ImageTextureData::new(2, 2, vec![vec![255; 16], vec![255; 4]])?;
+    let staged = worker.stage_with_pool(&data, &pool)?;
+    let output = context.adopt_image_upload(&staged)?;
+    drop(staged);
+    assert_eq!(pool.stats().cached_bytes, 0);
+    assert!(worker.stage_with_pool(&data, &pool).is_err());
+    context.submit()?;
+    host.device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: Some(std::time::Duration::from_secs(10)),
+    })?;
+    assert!(output.is_submitted());
+    // Another test thread may be delivering completion callbacks for the shared
+    // device. GPU completion alone does not prove that thread has returned this
+    // lease yet; wait for the observable pool return before asserting reuse.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while pool.stats().cached_bytes == 0 && std::time::Instant::now() < deadline {
+        host.device.poll(wgpu::PollType::Poll)?;
+        std::thread::yield_now();
+    }
+    assert_eq!(pool.stats().cached_bytes, 768);
+    let staged = worker.stage_with_pool(&data, &pool)?;
+    assert_eq!(pool.stats().allocations, 1);
+    assert_eq!(pool.stats().reuses, 1);
+    drop(staged);
+    Ok(())
+}

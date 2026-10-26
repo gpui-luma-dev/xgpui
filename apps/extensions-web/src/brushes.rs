@@ -218,7 +218,7 @@ impl Render for BrushDemo {
                     .child(card("Freeform · 16 points",Brush::freeform(points).unwrap()))
                     .child(card("Regular mesh",Brush::mesh(mesh_colors).unwrap()))
                     .child(card("Hermite · tangent geometry",patch)))
-                .child(button("brush-tangent","Toggle Hermite tangent bend").on_click(cx.listener(|s,_,_,cx|{s.bent=!s.bent;cx.notify();})))
+                .child(button("brush-tangent","Toggle Hermite tangent bend").on_click(cx.listener(|s,_,_,cx|{s.bent = !s.bent;cx.notify();})))
                 .child("Procedural noise · Blend above changes brush-local modulation")
                 .child(div().flex().flex_wrap().gap_3().children([
                     ("Simplex",Noise::simplex(0.04,3,0.65)),
@@ -230,7 +230,7 @@ impl Render for BrushDemo {
                 .child(painted().w(px(440.)).h(px(88.)).flex_shrink_0().text_3xl().text_brush(gradient())
                     .child("Gradient typography\nBrushes on glyphs"))
                 .child(button("brush-path",if self.native {"Polygon: native coverage"} else {"Polygon: direct coverage"})
-                    .on_click(cx.listener(|s,_,_,cx|{s.native=!s.native;cx.notify();})))
+                    .on_click(cx.listener(|s,_,_,cx|{s.native = !s.native;cx.notify();})))
                 .child("Left: polygon with hole (direct/native toggle). Right: curved path (native coverage).")
                 .child({let native=self.native; canvas(|_,_,_|(),move|bounds,(),window,_|{
                     for curved in [false,true] {
@@ -278,9 +278,9 @@ impl Render for BrushDemo {
             root=root.child("Compare the same overlapping shapes and text. Blend reads the destination; filters affect the completed subtree.")
                 .child(div().flex().flex_wrap().gap_2()
                     .child(button("layer-radius",format!("Subtree blur: {radius}px")).on_click(cx.listener(|s,_,_,cx|{s.radius=(s.radius+1)%4;cx.notify();})))
-                    .child(button("layer-quality",if self.full {"Full resolution"} else {"Adaptive"}).on_click(cx.listener(|s,_,_,cx|{s.full=!s.full;cx.notify();})))
+                    .child(button("layer-quality",if self.full {"Full resolution"} else {"Adaptive"}).on_click(cx.listener(|s,_,_,cx|{s.full = !s.full;cx.notify();})))
                     .child(button("layer-filter",format!("Filter: {}",filter_names[self.filter])).on_click(cx.listener(|s,_,_,cx|{s.filter=(s.filter+1)%7;cx.notify();})))
-                    .child(button("layer-enable",if self.effect {"Effect: on"} else {"Effect: removed"}).on_click(cx.listener(|s,_,_,cx|{s.effect=!s.effect;cx.notify();}))))
+                    .child(button("layer-enable",if self.effect {"Effect: on"} else {"Effect: removed"}).on_click(cx.listener(|s,_,_,cx|{s.effect = !s.effect;cx.notify();}))))
                 .child(div().flex().flex_wrap().gap_4()
                     .child(div().flex().flex_col().gap_2().child("Reference · no capture")
                         .child(div().w(px(216.)).h(px(116.)).overflow_hidden().child(sample())))
@@ -292,8 +292,8 @@ impl Render for BrushDemo {
                     .on_click(cx.listener(|s,_,_,cx|{s.clicks+=1;cx.notify();})))
                 .child("Backdrop · source stripes blur, foreground label stays sharp")
                 .child(div().flex().flex_wrap().gap_2()
-                    .child(button("backdrop-toggle",if self.backdrop {"Backdrop: on"} else {"Backdrop: off"}).on_click(cx.listener(|s,_,_,cx|{s.backdrop=!s.backdrop;cx.notify();})))
-                    .child(button("backdrop-source","Swap stripe colors").on_click(cx.listener(|s,_,_,cx|{s.swapped=!s.swapped;cx.notify();}))))
+                    .child(button("backdrop-toggle",if self.backdrop {"Backdrop: on"} else {"Backdrop: off"}).on_click(cx.listener(|s,_,_,cx|{s.backdrop = !s.backdrop;cx.notify();})))
+                    .child(button("backdrop-source","Swap stripe colors").on_click(cx.listener(|s,_,_,cx|{s.swapped = !s.swapped;cx.notify();}))))
                 .child({let swapped=self.swapped;div().relative().w(px(320.)).h(px(132.)).flex_shrink_0()
                     .child(canvas(|_,_,_|(),move|bounds,(),window,_|{
                         for i in 0..40 {

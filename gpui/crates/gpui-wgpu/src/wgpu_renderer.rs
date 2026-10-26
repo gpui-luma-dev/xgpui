@@ -1435,6 +1435,7 @@ impl WgpuRendererCore {
         let result = (|| {
             compositor.begin_uniforms(&device, scene.custom_draws.len())?;
             let mut prepared = Vec::with_capacity(scene.custom_draws.len());
+            let preparation_frame = gpui::PreparationFrame::default();
             for draw in &scene.custom_draws {
                 let prepared_draw = batch.prepare(|context| {
                     let extent = extent(draw)?;
@@ -1443,7 +1444,9 @@ impl WgpuRendererCore {
                         extent,
                         1.,
                     )?;
-                    let output = draw.content.prepare_with_request(context, &request)?;
+                    let output =
+                        draw.content
+                            .prepare_in_frame(context, &request, &preparation_frame)?;
                     let native = output.is::<Background>();
                     let texture = if native {
                         let background = *output.downcast::<Background>().unwrap();

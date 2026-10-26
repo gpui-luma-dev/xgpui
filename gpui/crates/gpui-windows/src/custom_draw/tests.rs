@@ -414,3 +414,214 @@ fn dx11_custom_uniform_buffer_reuses_storage_and_preserves_queued_draw_values() 
     }
     Ok(())
 }
+
+#[test]
+fn dx11_source_image_readiness_and_size_contract() -> Result<()> {
+    let first = warp()?;
+    let data = gpui::ImageTextureData::new(2, 2, vec![vec![255; 16], vec![255; 4]])?;
+    let output = first.create_image_output(&data)?;
+    let second = Dx11CustomContext::new(first.device.clone(), first.owner.clone())?;
+    assert!(!second.can_reuse(&output));
+    first.submit()?;
+    assert!(
+        output
+            .validate(&second, size(DevicePixels(8), DevicePixels(4)))
+            .is_ok()
+    );
+    Ok(())
+}
+
+#[test]
+fn dx11_worker_staging_can_be_readopted_after_abandoned_recording() -> Result<()> {
+    let context = warp()?;
+    let worker = context.image_upload_context();
+    let data = gpui::ImageTextureData::new(2, 2, vec![vec![255; 16], vec![255; 4]])?;
+    let staged = std::thread::spawn(move || worker.stage(&data))
+        .join()
+        .unwrap()?;
+    let abandoned = {
+        let other = Dx11CustomContext::new(context.device.clone(), context.owner.clone())?;
+        other.adopt_image_upload(&staged)?
+    };
+    assert!(!context.can_reuse(&abandoned));
+    let adopted = context.adopt_image_upload(&staged)?;
+    assert!(!adopted.is_submitted());
+    context.submit()?;
+    assert!(adopted.is_submitted());
+    let foreign = warp()?;
+    assert!(foreign.adopt_image_upload(&staged).is_err());
+    Ok(())
+}
+
+#[test]
+fn dxgi_snapshot_import_retains_native_texture_and_checks_device() -> Result<()> {
+    let host = warp()?;
+    let extent = size(DevicePixels(8), DevicePixels(8));
+    let source = host.create_output(extent)?;
+    host.clear(&source, [1., 0., 0., 1.])?;
+    host.submit()?;
+    let texture = source.texture().clone();
+    // SAFETY: dedicated texture, writes submitted on this host context; never mutated again.
+    let frame = unsafe { dxgi::DxgiFrame::from_bgra(texture.clone()) }?;
+    assert_eq!(frame.size(), extent);
+    let mut batch = PreparationBatch::new(host.device.clone(), host.owner.clone());
+    let sampled = batch.prepare(|context| {
+        let output = frame.prepare(context, size(DevicePixels(32), DevicePixels(16)))?;
+        let output = *output.downcast::<Dx11CustomOutput>().unwrap();
+        assert_eq!(
+            output.texture().as_raw(),
+            texture.as_raw(),
+            "import must not copy pixels"
+        );
+        output.validate(context, size(DevicePixels(32), DevicePixels(16)))
+    })?;
+    batch.submit()?;
+    drop(frame);
+    drop(source);
+    drop(texture);
+    assert!(
+        read(&host, &sampled.texture)?
+            .iter()
+            .all(|p| *p == [255, 0, 0, 255])
+    );
+    let foreign = warp()?;
+    // SAFETY: same immutable resource; preparation must reject the foreign device.
+    let frame = unsafe { dxgi::DxgiFrame::from_bgra(sampled.texture.clone()) }?;
+    assert!(frame.prepare(&foreign, extent).is_err());
+    assert!(frame.prepare(&(), extent).is_err());
+    let unsupported = allocate_texture_format(&host.device, extent, DXGI_FORMAT_R8G8B8A8_UNORM, 4)?;
+    // SAFETY: no writes; descriptor rejection is under test.
+    assert!(unsafe { dxgi::DxgiFrame::from_bgra(unsupported.texture) }.is_err());
+    Ok(())
+}
+
+#[test]
+fn dxgi_shared_snapshot_holds_key_until_last_prepared_reference() -> Result<()> {
+    use std::os::windows::io::{AsHandle, FromRawHandle, OwnedHandle};
+    use windows::Win32::Graphics::Dxgi::{
+        DXGI_SHARED_RESOURCE_READ, DXGI_SHARED_RESOURCE_WRITE, IDXGIKeyedMutex, IDXGIResource1,
+    };
+    use windows::core::PCWSTR;
+    let producer = warp()?;
+    let consumer = warp()?;
+    let extent = size(DevicePixels(8), DevicePixels(8));
+    let desc = D3D11_TEXTURE2D_DESC {
+        Width: 8,
+        Height: 8,
+        MipLevels: 1,
+        ArraySize: 1,
+        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+        SampleDesc: DXGI_SAMPLE_DESC {
+            Count: 1,
+            Quality: 0,
+        },
+        Usage: D3D11_USAGE_DEFAULT,
+        BindFlags: (D3D11_BIND_SHADER_RESOURCE.0 | D3D11_BIND_RENDER_TARGET.0) as u32,
+        MiscFlags: (D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0 | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX.0)
+            as u32,
+        ..Default::default()
+    };
+    let mut texture = None;
+    unsafe {
+        producer
+            .device
+            .CreateTexture2D(&desc, None, Some(&mut texture))?
+    };
+    let texture = texture.context("missing shared texture")?;
+    let mutex: IDXGIKeyedMutex = texture.cast()?;
+    let raw_acquire =
+        |key| unsafe { (Interface::vtable(&mutex).AcquireSync)(mutex.as_raw(), key, 0) };
+    assert_eq!(raw_acquire(0).0, 0);
+    let mut rtv = None;
+    unsafe {
+        producer
+            .device
+            .CreateRenderTargetView(&texture, None, Some(&mut rtv))?;
+        producer
+            .owner
+            .ClearRenderTargetView(rtv.as_ref().unwrap(), &[1., 0., 0., 1.]);
+        mutex.ReleaseSync(1)?;
+    }
+    let resource: IDXGIResource1 = texture.cast()?;
+    let raw = unsafe {
+        resource.CreateSharedHandle(
+            None,
+            DXGI_SHARED_RESOURCE_READ.0 | DXGI_SHARED_RESOURCE_WRITE.0,
+            PCWSTR::null(),
+        )?
+    };
+    // SAFETY: CreateSharedHandle transfers a new owned NT handle to the caller.
+    let handle = unsafe { OwnedHandle::from_raw_handle(raw.0) };
+    // SAFETY: both devices use the 1=ready, 0=producer protocol; no unsynchronized aliases write.
+    assert!(
+        unsafe {
+            dxgi::DxgiFrame::try_from_shared_bgra(&consumer.device, handle.as_handle(), 7, 0)
+        }?
+        .is_none()
+    );
+    let frame = unsafe {
+        dxgi::DxgiFrame::try_from_shared_bgra(&consumer.device, handle.as_handle(), 1, 0)
+    }?
+    .unwrap();
+    assert!(
+        unsafe {
+            dxgi::DxgiFrame::try_from_shared_bgra(&consumer.device, handle.as_handle(), 1, 0)
+        }?
+        .is_none()
+    );
+    drop(handle); // Opening retains the native allocation independently of the NT handle.
+    let clone = frame.clone();
+    let mut batch = PreparationBatch::new(consumer.device.clone(), consumer.owner.clone());
+    let source = batch.prepare(|context| {
+        let output = frame.prepare(context, extent)?;
+        output
+            .downcast::<Dx11CustomOutput>()
+            .unwrap()
+            .validate(context, extent)
+    })?;
+    batch.submit()?;
+    drop(frame);
+    drop(clone);
+    assert_eq!(
+        raw_acquire(0).0,
+        windows::Win32::Foundation::WAIT_TIMEOUT.0 as i32,
+        "prepared output must keep producer locked after frame handles drop"
+    );
+    let target = allocate_texture(&consumer.device, extent)?;
+    let bounds = Bounds::new(
+        point(ScaledPixels(0.), ScaledPixels(0.)),
+        size(ScaledPixels(8.), ScaledPixels(8.)),
+    );
+    let draw = CustomDraw {
+        order: 0,
+        bounds,
+        content_mask: ContentMask { bounds },
+        corner_radii: Corners::default(),
+        opacity: 1.,
+        content: Arc::new(Unused),
+        coverage: None,
+    };
+    let compositor = CustomCompositor::new(&consumer.device)?;
+    let prepared = PreparedDraw {
+        source,
+        coverage: None,
+        native: false,
+        wide: false,
+    };
+    compositor.draw(
+        &consumer.owner,
+        &target.rtv,
+        extent,
+        &[draw],
+        std::slice::from_ref(&prepared),
+    )?;
+    drop(prepared); // Ownership handoff follows actual compositor command-list execution.
+    assert_eq!(raw_acquire(0).0, 0, "last output releases the producer key");
+    unsafe { mutex.ReleaseSync(1)? };
+    assert!(
+        read(&consumer, &target.texture)?
+            .iter()
+            .all(|p| *p == [255, 0, 0, 255])
+    );
+    Ok(())
+}

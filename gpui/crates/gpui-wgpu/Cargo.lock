@@ -1510,6 +1510,7 @@ name = "gpui-wgpu"
 version = "1.25.3"
 dependencies = [
  "anyhow",
+ "ash",
  "bytemuck",
  "collections",
  "cosmic-text",

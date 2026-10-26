@@ -219,7 +219,7 @@ impl WgpuContext {
                         wgpu::Backends::empty()
                     }
             }),
-            flags: wgpu::InstanceFlags::default(),
+            flags: wgpu::InstanceFlags::default().with_env(),
             backend_options: wgpu::BackendOptions::default(),
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
             display: None,
@@ -454,6 +454,10 @@ impl WgpuContext {
             );
         }
 
+        #[cfg(all(target_os = "linux", feature = "dma-buf"))]
+        if adapter.features().contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF) {
+            required_features |= wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
+        }
         let color_atlas_texture_format = Self::select_color_texture_format(adapter)?;
         #[cfg(target_family = "wasm")]
         let required_limits = if adapter.get_info().backend == wgpu::Backend::Gl {

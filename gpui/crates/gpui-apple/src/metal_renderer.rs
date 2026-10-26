@@ -1,5 +1,5 @@
 use crate::metal_atlas::MetalAtlas;
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use block2::RcBlock;
 use core_graphics::geometry::CGSize;
 use gpui::{
@@ -19,7 +19,8 @@ use objc2_core_foundation::CFRetained;
 use objc2_core_video::{
     CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBufferGetHeight,
     CVPixelBufferGetHeightOfPlane, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
-    CVPixelBufferGetWidthOfPlane, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
+    CVPixelBufferGetWidthOfPlane, kCVPixelFormatType_32BGRA,
+    kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
 };
 use parking_lot::Mutex;
 
@@ -133,6 +134,7 @@ pub struct MetalRenderer {
     monochrome_sprites_pipeline_state: metal::RenderPipelineState,
     polychrome_sprites_pipeline_state: metal::RenderPipelineState,
     surfaces_pipeline_state: metal::RenderPipelineState,
+    bgra_surfaces_pipeline_state: metal::RenderPipelineState,
     unit_vertices: metal::Buffer,
     #[allow(clippy::arc_with_non_send_sync)]
     instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>,
@@ -424,6 +426,14 @@ impl MetalRenderer {
             MTLPixelFormat::BGRA8Unorm,
         );
 
+        let bgra_surfaces_pipeline_state = build_pipeline_state(
+            &device,
+            &library,
+            "bgra_surfaces",
+            "surface_vertex",
+            "surface_bgra_fragment",
+            MTLPixelFormat::BGRA8Unorm,
+        );
         let command_queue = device.new_command_queue();
         let supports_shared_storage = cfg!(target_os = "ios") || is_apple_gpu;
         let sprite_atlas = Arc::new(MetalAtlas::new(device.clone(), supports_shared_storage));
@@ -468,6 +478,7 @@ impl MetalRenderer {
             monochrome_sprites_pipeline_state,
             polychrome_sprites_pipeline_state,
             surfaces_pipeline_state,
+            bgra_surfaces_pipeline_state,
             unit_vertices,
             instance_buffer_pool,
             sprite_atlas,
@@ -649,6 +660,7 @@ impl MetalRenderer {
                 queue: self.command_queue.clone(),
             };
             let mut outputs = Vec::new();
+            let preparation_frame = gpui::PreparationFrame::default();
             for draw in &scene.custom_draws {
                 let extent = crate::custom_draw::CustomCompositor::extent(draw)?;
                 // Direct scene records use 1x logical geometry. Window records
@@ -658,7 +670,9 @@ impl MetalRenderer {
                     extent,
                     1.,
                 )?;
-                let raw = draw.content.prepare_with_request(&context, &request)?;
+                let raw = draw
+                    .content
+                    .prepare_in_frame(&context, &request, &preparation_frame)?;
                 let native_source = raw.is::<Background>();
                 let raw = if native_source {
                     let background = *raw.downcast::<Background>().unwrap();
@@ -704,12 +718,14 @@ impl MetalRenderer {
                             MTLPixelFormat::RGBA16Float,
                         )?;
                         self.wide_sdr.as_mut().unwrap().wide.insert(outputs.len());
-                        output
+                        output.into()
                     }
                     #[cfg(not(target_os = "macos"))]
                     anyhow::bail!("wide-gamut SDR presentation is unsupported")
+                } else if raw.is::<crate::custom_draw::MetalNv12Output>() {
+                    crate::custom_draw::CustomCompositor::validate_nv12(&context, raw)?
                 } else {
-                    crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?
+                    crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?.into()
                 };
                 let coverage = if draw.coverage.is_some() {
                     let key = crate::custom_draw::CoverageKey::new(draw)?;
@@ -740,7 +756,7 @@ impl MetalRenderer {
             }
             crate::custom_draw::submit_custom_commands(
                 &context,
-                outputs.iter().map(|(output, _, _)| output),
+                outputs.iter().map(|(output, _, _)| &output.output),
             )?;
             outputs
         };
@@ -784,9 +800,27 @@ impl MetalRenderer {
             &custom_outputs,
         )?;
 
+        // External producers may own CoreVideo/IOSurface pool slots. Keep their
+        // complete snapshots (not only Metal views) alive through sampling.
+        let content_lifetimes = Cell::new(Some(
+            scene
+                .custom_draws
+                .iter()
+                .map(|draw| draw.content.clone())
+                .collect::<Vec<_>>(),
+        ));
+        let surface_lifetimes = Cell::new(Some(
+            scene
+                .surfaces
+                .iter()
+                .map(|surface| surface.image_buffer.clone())
+                .collect::<Vec<_>>(),
+        ));
         let instance_buffer_pool = self.instance_buffer_pool.clone();
         let instance_buffer = Cell::new(Some(writer.finish()));
         let block = RcBlock::new(move |_: ptr::NonNull<AnyObject>| {
+            drop(content_lifetimes.take());
+            drop(surface_lifetimes.take());
             if let Some(instance_buffer) = instance_buffer.take() {
                 instance_buffer_pool.lock().release(instance_buffer);
             }
@@ -979,7 +1013,7 @@ impl MetalRenderer {
         texture: &metal::TextureRef,
         viewport_size: Size<DevicePixels>,
         custom_outputs: &[(
-            crate::custom_draw::MetalCustomOutput,
+            crate::custom_draw::PreparedMetalOutput,
             Option<metal::Texture>,
             bool,
         )],
@@ -1190,13 +1224,19 @@ impl MetalRenderer {
                         viewport_size,
                         command_encoder,
                     ),
-                PrimitiveBatch::Surfaces(range) => self.draw_surfaces(
-                    &scene.surfaces[range.clone()],
-                    range.start,
-                    instance_bindings,
-                    viewport_size,
-                    command_encoder,
-                ),
+                PrimitiveBatch::Surfaces(range) => {
+                    if let Err(error) = self.draw_surfaces(
+                        &scene.surfaces[range.clone()],
+                        range.start,
+                        instance_bindings,
+                        viewport_size,
+                        command_encoder,
+                        command_buffer,
+                    ) {
+                        command_encoder.end_encoding();
+                        return Err(error);
+                    }
+                }
                 PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
             }
         }
@@ -1644,9 +1684,10 @@ impl MetalRenderer {
         instance_bindings: &InstanceBindings,
         viewport_size: Size<DevicePixels>,
         command_encoder: &metal::RenderCommandEncoderRef,
-    ) {
+        command_buffer: &metal::CommandBufferRef,
+    ) -> Result<()> {
         if surfaces.is_empty() {
-            return;
+            return Ok(());
         }
 
         command_encoder.set_render_pipeline_state(&self.surfaces_pipeline_state);
@@ -1666,6 +1707,7 @@ impl MetalRenderer {
             &viewport_size as *const Size<DevicePixels> as *const _,
         );
 
+        let mut views = Vec::new();
         for (index, surface) in surfaces.iter().enumerate() {
             let image_buffer = &surface.image_buffer;
             let texture_size = size(
@@ -1673,10 +1715,18 @@ impl MetalRenderer {
                 DevicePixels::from(CVPixelBufferGetHeight(image_buffer) as i32),
             );
 
-            assert_eq!(
-                CVPixelBufferGetPixelFormatType(image_buffer),
-                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+            let format = CVPixelBufferGetPixelFormatType(image_buffer);
+            ensure!(
+                format == kCVPixelFormatType_32BGRA
+                    || format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                "unsupported CoreVideo surface format: {format}"
             );
+            let bgra = format == kCVPixelFormatType_32BGRA;
+            command_encoder.set_render_pipeline_state(if bgra {
+                &self.bgra_surfaces_pipeline_state
+            } else {
+                &self.surfaces_pipeline_state
+            });
 
             let plane_texture = |plane, format| unsafe {
                 let mut texture = ptr::null_mut();
@@ -1686,21 +1736,40 @@ impl MetalRenderer {
                     image_buffer,
                     None,
                     format,
-                    CVPixelBufferGetWidthOfPlane(image_buffer, plane),
-                    CVPixelBufferGetHeightOfPlane(image_buffer, plane),
+                    if bgra {
+                        CVPixelBufferGetWidth(image_buffer)
+                    } else {
+                        CVPixelBufferGetWidthOfPlane(image_buffer, plane)
+                    },
+                    if bgra {
+                        CVPixelBufferGetHeight(image_buffer)
+                    } else {
+                        CVPixelBufferGetHeightOfPlane(image_buffer, plane)
+                    },
                     plane,
                     ptr::NonNull::from(&mut texture),
                 );
-                assert_eq!(
-                    status, kCVReturnSuccess,
-                    "failed to create CoreVideo Metal texture"
+                ensure!(
+                    status == kCVReturnSuccess,
+                    "CoreVideo surface import failed: {status}"
                 );
-                CFRetained::<CVMetalTexture>::from_raw(
-                    ptr::NonNull::new(texture).expect("CoreVideo returned a null texture"),
-                )
+                Ok::<_, anyhow::Error>(CFRetained::<CVMetalTexture>::from_raw(
+                    ptr::NonNull::new(texture).context("CoreVideo returned a null texture")?,
+                ))
             };
-            let y_texture = plane_texture(0, objc2_metal::MTLPixelFormat::R8Unorm);
-            let cb_cr_texture = plane_texture(1, objc2_metal::MTLPixelFormat::RG8Unorm);
+            let y_texture = plane_texture(
+                0,
+                if bgra {
+                    objc2_metal::MTLPixelFormat::BGRA8Unorm
+                } else {
+                    objc2_metal::MTLPixelFormat::R8Unorm
+                },
+            )?;
+            let cb_cr_texture = if bgra {
+                None
+            } else {
+                Some(plane_texture(1, objc2_metal::MTLPixelFormat::RG8Unorm)?)
+            };
 
             command_encoder.set_vertex_bytes(
                 SurfaceInputIndex::TextureSize as u64,
@@ -1709,19 +1778,22 @@ impl MetalRenderer {
             );
             command_encoder.set_fragment_texture(SurfaceInputIndex::YTexture as u64, unsafe {
                 let texture = CVMetalTextureGetTexture(&y_texture)
-                    .expect("CoreVideo returned no Metal texture");
+                    .context("CoreVideo returned no Metal texture")?;
                 Some(metal::TextureRef::from_ptr(
                     objc2::rc::Retained::as_ptr(&texture) as *mut _,
                 ))
             });
             command_encoder.set_fragment_texture(SurfaceInputIndex::CbCrTexture as u64, unsafe {
-                let texture = CVMetalTextureGetTexture(&cb_cr_texture)
-                    .expect("CoreVideo returned no Metal texture");
+                let texture =
+                    CVMetalTextureGetTexture(cb_cr_texture.as_ref().unwrap_or(&y_texture))
+                        .context("CoreVideo returned no Metal texture")?;
                 Some(metal::TextureRef::from_ptr(
                     objc2::rc::Retained::as_ptr(&texture) as *mut _,
                 ))
             });
 
+            views.push(y_texture);
+            views.extend(cb_cr_texture);
             command_encoder.draw_primitives_instanced_base_instance(
                 metal::MTLPrimitiveType::Triangle,
                 0,
@@ -1730,6 +1802,14 @@ impl MetalRenderer {
                 (first_surface + index) as u64,
             );
         }
+        let views = Cell::new(Some(views));
+        let keep_alive = RcBlock::new(move |_: ptr::NonNull<AnyObject>| {
+            drop(views.take());
+        });
+        unsafe {
+            command_buffer.add_completed_handler(&*RcBlock::as_ptr(&keep_alive).cast());
+        }
+        Ok(())
     }
 }
 
@@ -2275,6 +2355,137 @@ mod tests {
             assert!(green.abs_diff(128) <= 2);
             assert!(blue.abs_diff(128) <= 2);
             assert_eq!(*alpha, 255);
+        }
+    }
+    #[test]
+    fn render_bgra_core_video_surface() {
+        let frame = crate::custom_draw::core_video::test_frame(32, 18, 0).unwrap();
+        let bounds = Bounds::new(
+            point(ScaledPixels(0.), ScaledPixels(0.)),
+            size(ScaledPixels(32.), ScaledPixels(18.)),
+        );
+        let mut scene = Scene::default();
+        scene.insert_primitive(PaintSurface {
+            order: 0,
+            bounds,
+            content_mask: ContentMask { bounds },
+            image_buffer: frame.buffer_for_test(),
+        });
+        drop(frame);
+        scene.finish();
+        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+        let image = renderer
+            .render_scene_to_image(&scene, size(DevicePixels(32), DevicePixels(18)))
+            .unwrap();
+        let p = image.get_pixel(3, 2).0;
+        assert!(
+            p[0].abs_diff(224) <= 2 && p[1].abs_diff(64) <= 2 && p[2].abs_diff(32) <= 2,
+            "BGRA order: {p:?}"
+        );
+    }
+
+    #[test]
+    fn unsupported_core_video_surface_returns_error() {
+        let mut buffer = ptr::null_mut();
+        let status = unsafe {
+            CVPixelBufferCreate(
+                None,
+                16,
+                16,
+                objc2_core_video::kCVPixelFormatType_32ARGB,
+                None,
+                ptr::NonNull::from(&mut buffer),
+            )
+        };
+        assert_eq!(status, kCVReturnSuccess);
+        let buffer = unsafe { CFRetained::from_raw(ptr::NonNull::new(buffer).unwrap()) };
+        assert!(
+            unsafe { crate::custom_draw::core_video::CoreVideoFrame::from_bgra(buffer.clone()) }
+                .is_err()
+        );
+        let bounds = Bounds::new(
+            point(ScaledPixels(0.), ScaledPixels(0.)),
+            size(ScaledPixels(16.), ScaledPixels(16.)),
+        );
+        let mut scene = Scene::default();
+        scene.insert_primitive(PaintSurface {
+            order: 0,
+            bounds,
+            content_mask: ContentMask { bounds },
+            image_buffer: buffer,
+        });
+        scene.finish();
+        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+        let error = renderer
+            .render_scene_to_image(&scene, size(DevicePixels(16), DevicePixels(16)))
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported CoreVideo surface format"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn core_video_snapshot_lives_until_sampling_completion() {
+        for variant in 0..5 {
+            objc2::rc::autoreleasepool(|_| {
+                use crate::custom_draw::core_video::{Nv12Matrix, test_frame, test_nv12_frame};
+                let frame = Arc::new(if variant == 0 {
+                    test_frame(32, 18, 0).unwrap()
+                } else {
+                    test_nv12_frame(
+                        32,
+                        18,
+                        0,
+                        if variant <= 2 {
+                            Nv12Matrix::Bt601
+                        } else {
+                            Nv12Matrix::Bt709
+                        },
+                        variant % 2 == 0,
+                    )
+                    .unwrap()
+                });
+                let weak = Arc::downgrade(&frame);
+                let bounds = Bounds::new(
+                    point(ScaledPixels(0.), ScaledPixels(0.)),
+                    size(ScaledPixels(32.), ScaledPixels(18.)),
+                );
+                let mut scene = Scene::default();
+                scene.insert_primitive(gpui::CustomDraw {
+                    order: Default::default(),
+                    bounds,
+                    content_mask: ContentMask { bounds },
+                    corner_radii: Default::default(),
+                    opacity: 1.,
+                    content: frame.clone(),
+                    coverage: None,
+                });
+                scene.finish();
+                let mut renderer =
+                    MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+                let extent = size(DevicePixels(32), DevicePixels(18));
+                let target = crate::custom_draw::texture(&renderer.device, extent).unwrap();
+                let command = renderer.render_frame(&scene, &target, extent).unwrap();
+                drop(scene);
+                drop(frame);
+                assert!(
+                    weak.upgrade().is_some(),
+                    "unsubmitted sampling command owns its snapshot"
+                );
+                command.commit();
+                command.wait_until_completed();
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+                while weak.upgrade().is_some() && std::time::Instant::now() < deadline {
+                    std::thread::yield_now();
+                }
+                assert!(
+                    weak.upgrade().is_none(),
+                    "completion releases producer even while command object remains alive"
+                );
+            });
         }
     }
 }

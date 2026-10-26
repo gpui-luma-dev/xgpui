@@ -90,7 +90,7 @@ assert.ok(index.includes('href="examples/extensions/"'));
 assert.ok(index.includes('href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>'));
 assert.ok(index.indexOf('GitHub repository ↗') < index.indexOf('<nav aria-label="Documentation">'));
 assert.ok(index.indexOf('>Live demos ↗</a>') < index.indexOf('>Instanced WGSL v2</a>'));
-for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography']) {
+for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'mipmaps', 'path-effects']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web'));
@@ -109,7 +109,7 @@ const listedModules = [...wasmIndex.matchAll(/data-wasm-module="([^"]+)"/g)].map
 const legacyModules = [...legacyManifest.matchAll(/\[\[bin\]\]\s+name = "([^"]+)"/g)].map(m => m[1]);
 assert.deepEqual(listedModules.slice().sort(), legacyModules.sort(), 'every legacy Wasm binary needs an index entry');
 for (const [, module] of legacyGallery.matchAll(/data-module="([^"]+)"/g)) assert.ok(listedModules.includes(module), module);
-for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography']) {
+for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'mipmaps', 'path-effects']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="?demo=' + demo + suffix + '"'), demo + suffix);
   }
@@ -124,11 +124,12 @@ console.log('Verified complete Wasm demo index, backend links and source targets
 console.log('Verified ' + data.crates.length + ' crates, ' + pages.size + ' source pages, declaration anchors, routes, filtering and assets.');
 
 assert.ok(!index.includes('http-equiv="refresh"'), 'Pages root must serve the website directly');
-// Relative URLs must retain the repository prefix on project Pages sites.
+// The brand intentionally links to the host root; other local URLs retain the project prefix.
+assert.ok(index.includes('<a class="brand" href="/">xgpui</a>'));
 const pagesRoot = new URL('https://example.github.io/xgpui/');
 for (const match of index.matchAll(/(?:src|href)="([^"#][^"]*)"/g)) {
   const url = new URL(match[1], pagesRoot);
-  if (url.origin === pagesRoot.origin) assert.ok(url.pathname.startsWith('/xgpui/'));
+  if (url.origin === pagesRoot.origin && match[1] !== '/') assert.ok(url.pathname.startsWith('/xgpui/'));
 }
 
 for (const [fn, title, sections] of [["architecturePage", "The architecture of GPUI", 8]]) {
@@ -214,7 +215,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 15);
+assert.equal(Object.keys(data.extension_documents).length, 16);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/xgpui-ext/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -338,6 +339,7 @@ const extensionApiGuides = {
   'xgpui-gamut': ['high-gamut-windows', 'added-opt-in-window-presentation'],
   'xgpui-parley': ['parley-text', 'added-text-backend-and-paragraph-seams'],
   'xgpui-svg': ['svg-rendering', 'added-svg-viewport-size'],
+  'xgpui-media': ['media-images', 'added-source-sized-media-textures'],
 };
 assert.deepEqual(Object.keys(extensionApiGuides).sort(), Object.keys(data.extension_packages).filter(p => p !== 'xgpui-color').sort(), 'every rendering extension needs an API compatibility guide');
 for (const [pkg, [route, section]] of Object.entries(extensionApiGuides)) {
@@ -431,19 +433,113 @@ console.log('Verified demo discovery, distinct brush/layer launch labels and vis
 
 // "All demos" includes both hosted apps, without duplicating launch cards.
 const allLaunches = [...wasmIndex.matchAll(/<a href="([^"]+)">Open demo ↗<\/a>/g)].map(m => m[1]);
-assert.equal(allLaunches.length, 14);
-assert.equal(new Set(allLaunches).size, 14);
+assert.equal(allLaunches.length, 17);
+assert.equal(new Set(allLaunches).size, 17);
 for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="../shaders/?example=' + example + suffix + '"'));
   }
 }
-for (const id of ['brushes-paints','layer-effects','shaders-motion','typography','svg-color','native-labs']) {
+for (const id of ['brushes-paints','layer-effects','shaders-motion','typography','svg-color','media-effects','native-labs']) {
   assert.ok(wasmIndex.includes('id="' + id + '"'));
 }
 assert.ok(wasmIndex.includes('--pastel-waves'));
 assert.ok(wasmIndex.includes('Show launch command'));
-console.log('Verified unified index covers all 14 hosted demos and separates native launch commands.');
+console.log('Verified unified index covers all 17 hosted demos and separates native launch commands.');
 
 assert.match(run('extensionPage("typography")'), /Selectable typography/);
 assert.match(run('extensionPage("typography")'), /demo=typography/);
+
+// Versioned benchmark observations are evidence assets, never speed thresholds.
+for (const file of ['media-upload-metal-m4-max-2026-10-26.json', 'media-upload-wgpu-macos-2026-10-26.json']) {
+  const html = data.extension_documents['media-images'].html;
+  assert.ok(html.includes(`href="benchmarks/${file}"`));
+  const report = JSON.parse(await readFile(new URL(`benchmarks/${file}`, site), 'utf8'));
+  assert.equal(report.schema_version, 1);
+  assert.equal(report.profile, 'release');
+  assert.equal(report.source_count, 6);
+  assert.equal(report.waves.length, 3);
+  assert.equal(report.cached_frames.length, 120);
+}
+console.log('Verified packaged benchmark observations and embedded report links.');
+
+const visibleReportFile = 'media-visible-metal-m4-max-2026-10-26.json';
+assert.ok(data.extension_documents['media-images'].html.includes(`href="benchmarks/${visibleReportFile}"`));
+const visibleReport = JSON.parse(await readFile(new URL(`benchmarks/${visibleReportFile}`, site), 'utf8'));
+assert.equal(visibleReport.observations.length, 3);
+for (const observation of visibleReport.observations) {
+  assert.equal(observation.profile, 'release');
+  assert.equal(observation.completed_sources, 12);
+  assert.deepEqual(observation.errors, []);
+  assert.equal(observation.baseline.raw_ms.length, 180);
+  assert.equal(observation.cached.raw_ms.length, 180);
+  assert.ok(observation.burst.raw_ms.length > 0);
+  for (const phase of ['baseline', 'burst', 'cached']) {
+    assert.ok(observation[phase].raw_ms.every(v => Number.isFinite(v) && v >= 0));
+    assert.equal(observation[phase].max_ms, Math.max(...observation[phase].raw_ms));
+  }
+}
+console.log('Verified visible-window observations and embedded report link.');
+
+const internalReportFile = 'media-visible-internal-m4-max-2026-10-26.json';
+assert.ok(data.extension_documents['media-images'].html.includes(`href="benchmarks/${internalReportFile}"`));
+const internalReport = JSON.parse(await readFile(new URL(`benchmarks/${internalReportFile}`, site), 'utf8'));
+assert.equal(internalReport.observations.length, 3);
+for (const observation of internalReport.observations) {
+  assert.equal(observation.profile, 'release');
+  assert.equal(observation.completed_sources, 12);
+  assert.deepEqual(observation.errors, []);
+  assert.equal(observation.baseline.raw_ms.length, 180);
+  assert.equal(observation.cached.raw_ms.length, 180);
+  for (const phase of ['baseline', 'burst', 'cached']) {
+    assert.ok(observation[phase].raw_ms.length > 0);
+    assert.ok(observation[phase].raw_ms.every(v => Number.isFinite(v) && v >= 0));
+    assert.equal(observation[phase].max_ms, Math.max(...observation[phase].raw_ms));
+  }
+}
+console.log('Verified internal-display observations and embedded report link.');
+
+const scrollReportFile = 'media-scroll-60hz-m4-max-2026-10-26.json';
+assert.ok(data.extension_documents['media-images'].html.includes(`href="benchmarks/${scrollReportFile}"`));
+const scrollReport = JSON.parse(await readFile(new URL(`benchmarks/${scrollReportFile}`, site), 'utf8'));
+assert.equal(scrollReport.observations.length, 3);
+for (const observation of scrollReport.observations) {
+  assert.equal(observation.profile, 'release');
+  assert.equal(observation.target_hz, 60);
+  assert.deepEqual(observation.source_size, [3072, 2048]);
+  assert.equal(observation.source_payload_bytes, 33554428);
+  assert.equal(observation.replacements_completed, 84);
+  assert.deepEqual(observation.errors, []);
+  for (const phase of ['baseline', 'loading', 'cached']) {
+    assert.ok(observation[phase].raw_ms.length > 0);
+    assert.ok(observation[phase].raw_ms.every(v => Number.isFinite(v) && v >= 0));
+    assert.equal(observation[phase].max_ms, Math.max(...observation[phase].raw_ms));
+  }
+}
+console.log('Verified sustained-scroll 60 Hz observation assets and report link.');
+
+
+for (const demo of ['media-filters', 'mipmaps', 'path-effects']) {
+  const html = data.extension_documents['media-images'].html;
+  assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
+  assert.ok(!html.includes(`href="../examples/extensions/?demo=${demo}"`));
+  assert.ok(wasmIndex.includes(`"${demo}"`), 'loader accepts ' + demo);
+}
+assert.ok(data.extension_documents['svg-rendering'].html.includes('href="examples/extensions/?demo=path-effects"'));
+console.log('Verified portable media demo guide links and loader routes.');
+
+// Keep the same locally hosted Prism core/Rust grammar as Luma; verify real tokenization.
+const prismContext = vm.createContext({});
+for (const file of ['prism-core.min.js', 'prism-rust.min.js']) {
+  assert.ok(index.includes(`vendor/prism/${file}`));
+  vm.runInContext(await readFile(new URL(`vendor/prism/${file}`, site), 'utf8'), prismContext);
+}
+const rustHighlight = vm.runInContext('Prism.highlight(\'let title = "Preview"; // note\', Prism.languages.rust, "rust")', prismContext);
+assert.ok(rustHighlight.includes('token keyword'));
+assert.ok(rustHighlight.includes('token string'));
+assert.ok(rustHighlight.includes('token comment'));
+assert.ok((await readFile(new URL('vendor/prism/LICENSE', site), 'utf8')).includes('MIT LICENSE'));
+assert.ok(index.includes('code-examples.js'));
+assert.ok(index.includes('data-manual'));
+console.log('Verified local Prism Rust assets, tokenization and license.');
+await import('./code-examples.test.mjs');

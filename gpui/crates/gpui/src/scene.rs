@@ -1393,12 +1393,29 @@ impl PreparationRequest {
 /// Backend contexts and outputs use checked type erasure; backend crates define
 /// their concrete types. Implementations must not submit or present GPU work.
 pub trait CustomContent: std::fmt::Debug + Send + Sync + 'static {
+    /// Encoded-sRGB RGB affine rows, applied after sampling/unassociation and
+    /// before coverage/opacity. Alpha is preserved. Identity keeps legacy output.
+    fn image_color_transform(&self) -> [[f32; 4]; 3] {
+        [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.]]
+    }
+
     /// Prepare content on the host device. Return an explicit error for unsupported backends.
     fn prepare(
         &self,
         backend: &dyn std::any::Any,
         size: Size<crate::DevicePixels>,
     ) -> anyhow::Result<Box<dyn std::any::Any>>;
+
+    /// Prepare within shared scene-frame admission. Existing producers retain
+    /// their request-aware behavior without a new required implementation.
+    fn prepare_in_frame(
+        &self,
+        backend: &dyn std::any::Any,
+        request: &PreparationRequest,
+        _frame: &crate::PreparationFrame,
+    ) -> anyhow::Result<Box<dyn std::any::Any>> {
+        self.prepare_with_request(backend, request)
+    }
 
     /// Prepare using logical geometry and the renderer's exact raster extent.
     /// Existing producers receive the same physical size through `prepare`.
@@ -1422,6 +1439,10 @@ struct ContentWithPreparationGeometry {
 }
 
 impl CustomContent for ContentWithPreparationGeometry {
+    fn image_color_transform(&self) -> [[f32; 4]; 3] {
+        self.content.image_color_transform()
+    }
+
     fn prepare(
         &self,
         backend: &dyn std::any::Any,
@@ -1429,6 +1450,17 @@ impl CustomContent for ContentWithPreparationGeometry {
     ) -> anyhow::Result<Box<dyn std::any::Any>> {
         let request = PreparationRequest::new(self.logical_size, size, self.scale_factor)?;
         self.content.prepare_with_request(backend, &request)
+    }
+
+    fn prepare_in_frame(
+        &self,
+        backend: &dyn std::any::Any,
+        request: &PreparationRequest,
+        frame: &crate::PreparationFrame,
+    ) -> anyhow::Result<Box<dyn std::any::Any>> {
+        let request =
+            PreparationRequest::new(self.logical_size, request.raster_size(), self.scale_factor)?;
+        self.content.prepare_in_frame(backend, &request, frame)
     }
 
     fn prepare_with_request(

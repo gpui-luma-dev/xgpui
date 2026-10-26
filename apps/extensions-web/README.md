@@ -1,6 +1,6 @@
 # All demos index and browser extension examples
 
-A standalone Wasm app for `xgpui-shader`, `xgpui-parley`, `xgpui-svg`, and `xgpui-color`. All use the existing
+A standalone Wasm app for `xgpui-shader`, `xgpui-parley`, `xgpui-svg`, `xgpui-media`, and `xgpui-color`. All use the existing
 GPUI web platform and wgpu renderer. The gallery offers automatic selection
 (WebGPU with WebGL2 fallback), forced WebGPU, and forced WebGL2. A forced backend
 fails explicitly if unavailable; check the browser console for adapter details.
@@ -200,8 +200,8 @@ rather than copying a wildcard listening address from a server's output.
 
 ## Unified All demos page
 
-The index lists all 13 hosted WASM examples from this app and `shader-examples`,
-grouped into Brushes & paints, Layer effects, Shaders & motion, Text, and SVG &
+The index lists all 17 hosted WASM examples from this app and `shader-examples`,
+grouped into Brushes & paints, Layer effects, Shaders & motion, Text, Media & paths, and SVG &
 color. Native labs are a separate section with repository-root launch commands,
 including pastel waves and the full paint-lab/Hermite editor. The shader gallery
 remains a focused subset; its All demos link opens this complete index.
@@ -226,3 +226,32 @@ emoji and flags, selection persistence through size/theme changes, and the narro
 overflow sample. Paste copied text into another app. The current web platform has no canvas accessibility bridge. Inspect the read-only
 text field and selection with the native demo; full screen reader certification
 remains manual. See [scope and API](../../docs/extensions/typography.md).
+
+
+## Media and contour-effects acceptance
+
+Open `?demo=media-filters`, `?demo=mipmaps` and `?demo=path-effects`; repeat with
+`&backend=webgpu` and `&backend=webgl`. Build with `--release` for testing.
+
+- Filters: cycle all five controls, including grayscale; reset to identity.
+  Compare transparent edges, change opacity/corners and confirm dedicated source
+  preparations remain one. Original and filtered placements share one texture.
+- Mipmaps: compare the ordinary GPUI atlas with the dedicated 11-level texture.
+  Cycle all zooms down to 12.5%, animate and pause, and vary opacity/corners.
+  Fixed-height headers align the comparison even when labels wrap.
+- Paths: compare original/trimmed/dashed open curves, closed heart and multiple
+  contours; zero trim hides only effect columns, full trim restores the contour.
+  Cycle even/odd dash arrays, phase and width; animate/pause.
+
+These use real public media filter math, `mipmapped_rgba8`, the wgpu image-output
+SPI/compositor and shared `xgpui-svg` contour effects. The generated 1024² RGBA
+fixture and first upload run synchronously on the browser thread, once per source.
+Native `MediaLoader` threading, async staging admission and GPU surface imports
+are not exercised. No sample file, decoder or browser worker pool is needed.
+See the media guide for details and native 60 Hz benchmark results.
+
+All three demos were checked in release on 2026-10-26 in in-app Chromium, Apple
+M4 Max, with forced WebGPU and WebGL2: controls, transparent edges, minification,
+source reuse and path-effect endpoints/animation rendered without console errors.
+WebGL2 emitted capability and resize-poll warnings while rendering successfully.
+This is visual/functional acceptance, not a browser performance benchmark.

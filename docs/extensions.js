@@ -63,6 +63,8 @@ function extensionPage(route) {
     ? '<p class="guide-intro"><strong>Standalone color math.</strong> CPU conversions, gamut mapping, gradients and WGSL source without GPUI.</p>'
     : route === 'svg-rendering'
     ? '<p class="guide-intro"><strong>Experimental SVG extension.</strong> Progressive rasterization, shared admission and accounted image budgets.</p>'
+    : route === 'media-images'
+    ? '<p class="guide-intro"><strong>Images and video frames.</strong> Practical examples for loading, adjusting and displaying media in GPUI.</p>'
     : route === 'parley-text'
     ? '<p class="guide-intro"><strong>Text backend extension.</strong> Parley shaping and geometry; GPUI caches, atlas and native input.</p>'
     : route === 'high-gamut-windows'
@@ -106,6 +108,7 @@ just --justfile apps/gamut-lab/justfile test`) +
     '<div class="cards">' + extensionCard('svg-rendering', 'Use SvgImage and SvgScheduler, understand accounting limits, and run the native sample.') + '</div>' +
     '<h2>5. Standalone color math</h2><p><code>xgpui-color</code> provides color conversions, gamut mapping, OkLab/OkLCh interpolation and reusable WGSL helpers with zero runtime dependencies. Use it without GPUI or a GPU context.</p>' +
     '<div class="cards">' + extensionCard('color-math', 'CPU types, browser runtime diagnostics, native P3 comparison, dependency boundaries and validation.') + '</div>' +
+    '<h2>6. Dedicated media images</h2><p>Display large images at several sizes, adjust their colors, or show frames from a native producer. Start with small examples and the browser demos.</p><div class="cards">' + extensionCard('media-images', 'Examples, loading limits, platform support and test results.') + '</div>' +
     '<h2>Shared GPUI integration</h2><div class="cards">' + extensionCard('gpui-public-api', 'Public additions and altered upstream types, separated by capability.') + '</div>';
 
 }
@@ -191,4 +194,9 @@ function svgCrateGuide() {
 function colorCrateGuide() {
   return browserDemoLinks('color') + '<article class="extension-document">' +
     data.extension_documents['color-math'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
+}
+
+function mediaCrateGuide() {
+  return '<article class="extension-document">' +
+    data.extension_documents['media-images'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
 }

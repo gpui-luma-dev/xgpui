@@ -25,7 +25,7 @@ function sidebar(query='') {
   const matches = crates.filter(c => !q || (c.package+' '+notes[c.package].role+' '+c.declarations.map(d=>d.name).join(' ')).toLowerCase().includes(q));
   document.getElementById('crate-list').innerHTML = groups.map(g => {
     const list=matches.filter(c=>notes[c.package].group===g);
-    const entries = list.map(c=>'<a class="crate-link" '+(route.pkg===c.package || (c.package === 'xgpui-shader' && shaderGuideRoutes.includes(route.global)) || (c.package === 'xgpui-color' && route.global === 'color-math') || (c.package === 'xgpui-gamut' && route.global === 'high-gamut-windows') || (c.package === 'xgpui-parley' && route.global === 'parley-text') || (c.package === 'xgpui-svg' && route.global === 'svg-rendering') ? 'aria-current="page" ' : '')+'href="'+crateUrl(c.package)+'">'+escapeHtml(short(c.package))+'</a>').join('');
+    const entries = list.map(c=>'<a class="crate-link" '+(route.pkg===c.package || (c.package === 'xgpui-shader' && shaderGuideRoutes.includes(route.global)) || (c.package === 'xgpui-color' && route.global === 'color-math') || (c.package === 'xgpui-gamut' && route.global === 'high-gamut-windows') || (c.package === 'xgpui-parley' && route.global === 'parley-text') || (c.package === 'xgpui-svg' && route.global === 'svg-rendering') || (c.package === 'xgpui-media' && route.global === 'media-images') ? 'aria-current="page" ' : '')+'href="'+crateUrl(c.package)+'">'+escapeHtml(short(c.package))+'</a>').join('');
     return entries ? '<p class="group-label">'+escapeHtml(g)+'</p>'+entries : '';
   }).join('') || '<p>No crates match.</p>';
 
@@ -57,7 +57,7 @@ function cratePage(c,tab) {
   } else if(tab==='review') {
     body='<h2>Boundary to investigate</h2><div class="notice">Review hypothesis. No visibility changes or removal decisions have been made.</div><p class="lead">'+escapeHtml(n.review)+'</p><p>Follow '+sourceLink(c.entry,1,'the entrypoint')+' and inspect incoming dependencies. Then check expanded macros, re-exports and actual downstream consumers before narrowing the API.</p><p><a href="#review">Read the overall review sequence →</a></p>';
   } else if(notes[c.package].group === 'Extensions' && tab === 'overview') {
-    body=c.package === 'xgpui-color' ? colorCrateGuide() : c.package === 'xgpui-shader' ? shaderCrateGuide() : c.package === 'xgpui-parley' ? parleyCrateGuide() : c.package === 'xgpui-svg' ? svgCrateGuide() : gamutCrateGuide();
+    body=c.package === 'xgpui-color' ? colorCrateGuide() : c.package === 'xgpui-shader' ? shaderCrateGuide() : c.package === 'xgpui-parley' ? parleyCrateGuide() : c.package === 'xgpui-svg' ? svgCrateGuide() : c.package === 'xgpui-media' ? mediaCrateGuide() : gamutCrateGuide();
   } else {
     body='<h2>Public surface at a glance</h2><p>'+escapeHtml(n.surface)+'</p><p>'+sourceLink(c.entry,1,'Open library entrypoint →')+'</p><div class="stats"><div class="stat"><strong>'+c.declarations.length+'</strong><span>Declaration / impl candidates</span></div><div class="stat"><strong>'+c.declarations.filter(d=>d.root_export).length+'</strong><span>Root declarations / exports</span></div><div class="stat"><strong>'+c.files.length+'</strong><span>Source files</span></div></div><h2>Source map</h2><div class="source-list">'+c.files.map(file=>sourceLink(file,1,file.replace(c.entry.slice(0,c.entry.indexOf('/src/')+1),''))).join('')+'</div>';
   }
@@ -68,6 +68,7 @@ function renderInventory(c) {
   const size=60;
   page=Math.min(page,Math.max(0,Math.ceil(results.length/size)-1));
   document.getElementById('api-results').innerHTML='<p class="muted">'+results.length.toLocaleString()+' matching declarations · page '+(page+1)+' of '+Math.max(1,Math.ceil(results.length/size))+'</p>'+results.slice(page*size,(page+1)*size).map(d=>'<article class="declaration"><h3>'+escapeHtml(d.name)+'</h3>'+tag(d.kind)+(d.root_export?tag('root declaration / export'):tag(d.module_public?'public module path':'private module path'))+'<pre>'+escapeHtml(d.signature)+'</pre><small>'+escapeHtml(d.module)+' · '+sourceLink(d.file,d.line,d.file.split('/').slice(-2).join('/')+':'+d.line)+'</small>'+(d.guards.length?'<small>'+escapeHtml(d.guards.join(' · '))+'</small>':'')+'</article>').join('')+(results.length?'':'<p class="empty">No declarations match these filters.</p>')+'<div class="paging"><button id="previous" '+(page===0?'disabled':'')+'>Previous</button><button id="next" '+((page+1)*size>=results.length?'disabled':'')+'>Next</button></div>';
+  window.enhanceCodeExamples?.(document.getElementById('api-results'));
   document.getElementById('previous').onclick=()=>{page--;renderInventory(c);};
   document.getElementById('next').onclick=()=>{page++;renderInventory(c);};
 }
@@ -78,9 +79,16 @@ function render() {
   page=0;
   const content=document.getElementById('content');
   content.innerHTML=c?cratePage(c,route.tab):route.pkg?header('Not found','Unknown crate','Choose a captured crate from the navigation.'):isExtensionRoute(route.global)?extensionPage(route.global):route.global==='pipeline'?pipelinePage():route.global==='architecture'?architecturePage():route.global==='review'?review():overview();
+  window.enhanceCodeExamples?.(content);
   document.title=(c?short(c.package):isExtensionRoute(route.global)?extensionTitle(route.global):route.global==='pipeline'?'Rendering pipeline explorer':route.global==='architecture'?'Architecture overview':route.global==='review'?'API review roadmap':'Code roadmap')+' · xgpui';
   sidebar(document.getElementById('crate-search').value);
-  if(route.section && isExtensionRoute(route.global)) document.getElementById(route.section)?.scrollIntoView?.();
+  if(route.section && isExtensionRoute(route.global)) {
+    const target = document.getElementById(route.section);
+    for(let parent = target?.parentElement; parent; parent = parent.parentElement) {
+      if(parent.tagName === 'DETAILS') parent.open = true;
+    }
+    target?.scrollIntoView?.();
+  }
   if(route.global==='pipeline' && !c && !route.pkg) bindPipeline();
   if(c && route.tab==='surface') {
     for(const id of ['api-search','api-kind','api-root']) document.getElementById(id).addEventListener('input',()=>{page=0;renderInventory(c);});
@@ -88,7 +96,7 @@ function render() {
   }
 }
 if(typeof document!=='undefined') {
-  window.addEventListener('hashchange',()=>{render();window.scrollTo(0,0);});
+  window.addEventListener('hashchange',()=>{render();if(!parseRoute(location.hash).section) window.scrollTo(0,0);});
   document.getElementById('crate-search').addEventListener('input',event=>sidebar(event.target.value));
   render();
 }
