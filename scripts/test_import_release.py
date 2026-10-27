@@ -59,6 +59,19 @@ class ImportTests(unittest.TestCase):
             "license fixture\n",
         )
 
+    def test_staging_is_excluded_but_required_vendored_sources_are_preserved(self):
+        staging = self.source / "crates/transformed-crates/gpui-unofficial"
+        staging.mkdir(parents=True)
+        (staging / "stale.rs").write_text("stale")
+        vendored = self.source / "crates/gpui-unofficial/gpui/src"
+        vendored.mkdir(parents=True)
+        (vendored / "scene.rs").write_text("required build input")
+        self.commit()
+        for _ in range(2):
+            self.capture()
+            self.assertFalse((self.root / "gpui/crates/transformed-crates").exists())
+            self.assertEqual((self.root / "gpui/crates/gpui-unofficial/gpui/src/scene.rs").read_text(), "required build input")
+
     def test_import_is_repeatable_and_records_commit(self):
         self.capture()
         before = (self.root / "upstream.json").read_bytes()

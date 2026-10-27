@@ -96,9 +96,9 @@ jobs:
               elif entry['downstream_overlap']: label += '; MANUAL REVIEW: downstream differs'
               lines.append(f"- `{entry['path']}` — {entry['change']}; {label}")
           lines += ["", f"## Cargo versions and dependencies ({len(cargo)})", "",
-                    "Separate commit: package versions and dependency requirements, including mirrored manifests.", "",
+                    "Separate commit: package versions and dependency requirements, excluding the removed staging mirror.", "",
                     f"## Generated metadata/artifacts ({len(metadata)})", "",
-                    "Separate commit: generated READMEs, provenance and remaining duplicate transformed-crates artifacts.", ""]
+                    "Separate commit: generated READMEs, provenance and other retained capture metadata.", ""]
           for kind in ('CODE', 'CARGO', 'METADATA'):
               commit = os.environ.get(kind + '_COMMIT')
               if commit:

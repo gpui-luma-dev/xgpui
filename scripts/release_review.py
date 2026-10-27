@@ -13,6 +13,8 @@ import tempfile
 from import_release import SOURCE, capture, git
 from release_context import context_inputs
 
+STAGING = "gpui/crates/transformed-crates/"
+
 SCOPES = ("gpui", ".cargo/config.toml", "upstream.json")
 
 
@@ -32,14 +34,14 @@ def imported_files(root):
             result.update(p.relative_to(root).as_posix() for p in path.rglob("*") if p.is_file() or p.is_symlink())
         elif path.is_file() or path.is_symlink():
             result.add(scope)
-    return result
+    return {name for name in result if not name.startswith(STAGING)}
 
 
 def classify(path, packages):
-    # Cargo requirements affect dependency resolution, including mirrored manifests.
+    # Cargo requirements affect dependency resolution.
     if pathlib.PurePosixPath(path).name == "Cargo.toml" or path == ".cargo/config.toml":
         return "cargo"
-    # Other nested transformed-crates files are duplicate generation artifacts.
+    # Non-package files are capture metadata.
     for package in packages:
         if path.startswith(package + "/"):
             relative = path[len(package) + 1:]
@@ -56,6 +58,8 @@ def compare(root, before, incoming, release):
     entries = []
     for name in sorted(tracked | imported_files(incoming)):
         local, old, new = (signature(directory / name) for directory in (root, before, incoming))
+        if name.startswith(STAGING):
+            new = None  # Propose removal of legacy tracked mirrors, never restore them.
         if local == new:
             continue
         kind = classify(name, packages)
@@ -88,7 +92,8 @@ def apply(root, incoming, report, kind):
                 break
             if parent.is_symlink():
                 raise ValueError(f"Symlink parent: {name}")
-        if signature(destination) != entry["local"] or signature(incoming / name) != entry["incoming"]:
+        incoming_signature = None if name.startswith(STAGING) else signature(incoming / name)
+        if signature(destination) != entry["local"] or incoming_signature != entry["incoming"]:
             raise ValueError(f"Tree changed since review plan: {name}")
     for entry in entries:
         destination, source = root / entry["path"], incoming / entry["path"]

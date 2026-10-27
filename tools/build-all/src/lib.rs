@@ -1,4 +1,5 @@
-//! Build harness for the captured GPUI crates supported by the current target.
+//! Build harness for GPUI and the current platform backend.
 //!
-//! This private crate has no runtime behavior. Its dependencies let `cargo build`
-//! compile the captured libraries together without modifying their manifests.
+//! `full-capture` additionally builds all captured libraries supported by the
+//! current target. Neither mode enables every library feature or runs tests.
+//! This private crate has no runtime behavior.

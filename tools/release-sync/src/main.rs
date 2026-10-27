@@ -155,7 +155,12 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
     ensure!(packages.contains_key("gpui"), "Missing core gpui package");
     let mut writes = Vec::new();
     let mut moves = Vec::new();
-    for entry in WalkDir::new(root.join("gpui")).follow_links(false) {
+    let staging = root.join("gpui/crates/transformed-crates");
+    for entry in WalkDir::new(root.join("gpui"))
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| entry.path() != staging)
+    {
         let entry = entry?;
         let path = entry.path();
         ensure!(
@@ -236,10 +241,17 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
     let report = json!({"packages":packages.len(),"renamed_directories":moves.len(),"rewritten_files":writes.len()});
     if check {
         ensure!(
-            writes.is_empty() && moves.is_empty(),
+            writes.is_empty() && moves.is_empty() && !staging.exists(),
             "Normalization is stale: {report}"
         );
         return Ok(report);
+    }
+    if staging.exists() {
+        ensure!(
+            !staging.is_symlink(),
+            "Staging mirror must not be a symlink"
+        );
+        fs::remove_dir_all(&staging)?;
     }
     for (path, text) in writes {
         fs::write(path, text)?;
@@ -304,7 +316,15 @@ fn build_manifests(root: &Path, check: bool) -> Result<()> {
         "{header}[package]\nname = \"xgpui-build\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n[features]\nruntime-shaders = [\n"
     );
     for wanted in ["gpui-platform", "gpui-apple", "gpui-macos"] {
-        harness += &format!("    \"{}/runtime_shaders\",\n", find(wanted)?);
+        let weak = if wanted == "gpui-platform" { "" } else { "?" };
+        harness += &format!("    \"{}{weak}/runtime_shaders\",\n", find(wanted)?);
+    }
+    harness += "]\nfull-capture = [\n";
+    for name in packages
+        .keys()
+        .filter(|n| !matches!(canonical(n), "gpui" | "gpui-platform"))
+    {
+        harness += &format!("    \"dep:{name}\",\n");
     }
     harness += "]\n\n[dependencies]\n";
     let targets = BTreeMap::from([
@@ -320,7 +340,17 @@ fn build_manifests(root: &Path, check: bool) -> Result<()> {
         ("gpui-windows", "target_os = \"windows\""),
         ("gpui-web", "target_family = \"wasm\""),
     ]);
-    let dependency = |name: &str| format!("{name} = {{ path = \"../../{}\" }}\n", packages[name]);
+    let dependency = |name: &str| {
+        let optional = if matches!(canonical(name), "gpui" | "gpui-platform") {
+            ""
+        } else {
+            ", optional = true"
+        };
+        format!(
+            "{name} = {{ path = \"../../{}\"{optional} }}\n",
+            packages[name]
+        )
+    };
     for name in packages
         .keys()
         .filter(|n| !targets.contains_key(canonical(n)))
@@ -531,13 +561,16 @@ mod tests {
         .unwrap();
         fs::create_dir_all(root.join("tools/build-all")).unwrap();
         fs::create_dir_all(root.join("gpui/crates/transformed-crates/extra")).unwrap();
-        // Normalizer validates all manifests; the build generator uses only the authoritative map.
-        normalize(root, &names, false).unwrap();
         fs::write(
             root.join("gpui/crates/transformed-crates/extra/Cargo.toml"),
             "invalid staging manifest",
         )
         .unwrap();
+        // Obsolete mirrors are excluded from validation and removed, not normalized.
+        assert!(normalize(root, &names, true).is_err());
+        normalize(root, &names, false).unwrap();
+        assert!(!root.join("gpui/crates/transformed-crates").exists());
+        normalize(root, &names, true).unwrap();
         build_manifests(root, false).unwrap();
         build_manifests(root, true).unwrap();
         let workspace: toml::Value =
@@ -554,6 +587,14 @@ mod tests {
             toml::from_str(&fs::read_to_string(root.join("tools/build-all/Cargo.toml")).unwrap())
                 .unwrap();
         assert!(harness["dependencies"].get("gpui").is_some());
+        assert!(harness["dependencies"]["gpui"].get("optional").is_none());
+        assert_eq!(
+            harness["dependencies"]["helper"]["optional"].as_bool(),
+            Some(true)
+        );
+        let full = harness["features"]["full-capture"].as_array().unwrap();
+        assert!(full.iter().any(|v| v.as_str() == Some("dep:helper")));
+        assert!(!full.iter().any(|v| v.as_str() == Some("dep:gpui")));
         assert!(harness["dependencies"].get("gpui-linux").is_none());
         assert!(
             harness["target"]["cfg(target_os = \"macos\")"]["dependencies"]
