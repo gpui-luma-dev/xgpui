@@ -230,6 +230,9 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
             serde_json::to_string(path)?
         );
     }
+    if root.join("vendor/block/Cargo.toml").is_file() {
+        config += "block = { path = \"vendor/block\" }\n";
+    }
     for (path, text) in [
         (root.join("upstream.json"), metadata),
         (root.join(".cargo/config.toml"), config),
@@ -295,6 +298,11 @@ fn build_manifests(root: &Path, check: bool) -> Result<()> {
         .as_table()
         .context("Missing compatibility patches")?
     {
+        // Proptest's fork is required by standalone test validation only.
+        // Ordinary library builds do not activate it and Cargo warns on the unused patch.
+        if name == "proptest" {
+            continue;
+        }
         let fields = options
             .as_table()
             .context("Invalid compatibility patch")?
@@ -579,10 +587,7 @@ mod tests {
             workspace["workspace"]["exclude"].as_array().unwrap().len(),
             8
         );
-        assert_eq!(
-            workspace["patch"]["crates-io"]["proptest"]["rev"].as_str(),
-            Some("revision")
-        );
+        assert!(workspace["patch"]["crates-io"].get("proptest").is_none());
         let harness: toml::Value =
             toml::from_str(&fs::read_to_string(root.join("tools/build-all/Cargo.toml")).unwrap())
                 .unwrap();

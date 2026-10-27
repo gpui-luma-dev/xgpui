@@ -55,6 +55,7 @@ impl Backdrops {
         self.groups.clear();
         self.cache.prepare(Vec::new(), &[]);
     }
+    #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
     pub fn texture_count(&self) -> usize {
         self.slots.len() * 3 + self.groups.texture_count()
     }

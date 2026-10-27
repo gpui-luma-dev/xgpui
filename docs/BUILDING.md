@@ -100,12 +100,20 @@ CI checks `xgpui-release build-manifests --check` to detect a stale harness.
 Review its platform classification when upstream adds a backend.
 Keep the root Cargo.lock committed for reproducible native builds.
 
-The generated root manifest restores the compatibility dependencies listed in
-`.cargo/validation.toml`. Besides Zed's Proptest revision, compiling the macOS
+The generated root manifest restores production compatibility dependencies from
+`.cargo/validation.toml`. The Proptest override stays scoped to explicit standalone
+test validation, avoiding an unused-patch warning in root library builds.
+Compiling the macOS
 utility crate requires Zed's async-process fork: its process launcher calls
 `Child::adopt_raw_pid`, which the registry dependency does not provide. The fork
 revision is taken from the original Zed release's workspace patch. These
 overrides repair extraction omissions without editing captured source.
+
+A local MIT-licensed `block` 0.1.6 compatibility copy under `vendor/block` fixes
+an invalid foreign static in the legacy Cocoa/Metal dependency. Its patch notes
+record the source, ABI-preserving changes, and removal criteria. The normal local
+Cargo configuration also applies it to standalone builds; consumer lockfiles
+record the local source. Account for this patch when preparing published packages.
 
 ## Local naming
 

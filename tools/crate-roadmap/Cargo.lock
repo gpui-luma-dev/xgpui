@@ -241,6 +241,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[patch.unused]]
+name = "block"
+version = "0.1.6"
+
+[[patch.unused]]
 name = "collections"
 version = "1.25.3"
 
