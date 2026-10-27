@@ -125,7 +125,7 @@ console.log('Verified ' + data.crates.length + ' crates, ' + pages.size + ' sour
 
 assert.ok(!index.includes('http-equiv="refresh"'), 'Pages root must serve the website directly');
 // The brand intentionally links to the host root; other local URLs retain the project prefix.
-assert.ok(index.includes('<a class="brand" href="/">xgpui</a>'));
+assert.ok(index.includes('<a class="brand" href="#overview">xgpui</a>'));
 const pagesRoot = new URL('https://example.github.io/xgpui/');
 for (const match of index.matchAll(/(?:src|href)="([^"#][^"]*)"/g)) {
   const url = new URL(match[1], pagesRoot);
