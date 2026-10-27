@@ -10,12 +10,16 @@ use std::{
     },
 };
 use web_time::Instant;
-use xgpui_media::ImageFilter;
+use xgpui_media::{
+    ImageFilter,
+    pipeline::{ColorMatrix, ImageAdjustments, ImagePrimaries, Vignette},
+};
 use xgpui_svg::path_effects::{Contour, MeasuredPath, PathEffect};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
     Filters,
+    FloatImages,
     Mipmaps,
     Paths,
 }
@@ -29,8 +33,20 @@ struct Source {
 struct Placement {
     source: Arc<Source>,
     filter: ImageFilter,
+    adjustments: Option<ImageAdjustments>,
 }
 impl CustomContent for Placement {
+    fn image_color_mode(&self) -> ImageColorMode {
+        if self.source.data.format() == ImageTextureFormat::LinearP3Rgba16Float {
+            ImageColorMode::LinearP3Preview
+        } else {
+            ImageColorMode::EncodedSrgb
+        }
+    }
+
+    fn image_linear_adjustments(&self) -> Option<gpui::LinearImagePaint> {
+        self.adjustments.map(|v| v.paint())
+    }
     fn image_color_transform(&self) -> [[f32; 4]; 3] {
         self.filter.rows()
     }
@@ -53,6 +69,8 @@ pub struct MediaDemo {
     source: Arc<Source>,
     atlas: Arc<RenderImage>,
     filters: [usize; 5],
+    linear_mode: bool,
+    adjustments: [usize; 4],
     zoom: usize,
     opacity: usize,
     corners: bool,
@@ -80,9 +98,14 @@ fn button(id: &'static str, label: impl Into<SharedString>) -> Stateful<Div> {
 }
 impl MediaDemo {
     pub fn new(mode: Mode) -> anyhow::Result<Self> {
-        let pixels = image::RgbaImage::from_fn(1024, 1024, |x, y| {
-            let u = x as f32 / 1024.;
-            let v = y as f32 / 1024.;
+        let (width, height) = if matches!(mode, Mode::Filters | Mode::FloatImages) {
+            (1280, 800)
+        } else {
+            (1024, 1024)
+        };
+        let pixels = image::RgbaImage::from_fn(width, height, |x, y| {
+            let u = x as f32 / width as f32;
+            let v = y as f32 / height as f32;
             let a = (((0.48 - ((u - 0.5).powi(2) + (v - 0.5).powi(2)).sqrt()) * 70.).clamp(0., 1.)
                 * 255.) as u8;
             let fine = if (x / 2 + y / 2) % 2 == 0 { 0.3 } else { 1. };
@@ -93,7 +116,31 @@ impl MediaDemo {
                 a,
             ])
         });
-        let data = xgpui_media::mipmapped_rgba8(1024, 1024, pixels.as_raw().clone())?;
+        let data = if mode == Mode::FloatImages {
+            let rgba = (0..width * height)
+                .map(|i| {
+                    let u = (i % width) as f32 / (width - 1) as f32;
+                    let v = (i / width) as f32 / (height - 1) as f32;
+                    let a = ((0.49 - (u - 0.5).abs().max((v - 0.5).abs())) * 60.).clamp(0., 1.);
+                    let c = if v < 0.33 {
+                        [1. - u, u, 0.02]
+                    } else if v < 0.66 {
+                        [u * 0.12; 3]
+                    } else {
+                        [0.05, 1. - u, u]
+                    };
+                    [c[0], c[1], c[2], a]
+                })
+                .collect();
+            xgpui_media::pipeline::rgba16f_data(
+                width,
+                height,
+                rgba,
+                xgpui_media::pipeline::ImageColor::LINEAR_P3,
+            )?
+        } else {
+            xgpui_media::mipmapped_rgba8(width, height, pixels.as_raw().clone())?
+        };
         let mut bgra = pixels;
         for p in bgra.pixels_mut() {
             p.0.swap(0, 2);
@@ -133,6 +180,8 @@ impl MediaDemo {
             }),
             atlas: Arc::new(RenderImage::new(vec![image::Frame::new(bgra)])),
             filters: [0; 5],
+            linear_mode: matches!(mode, Mode::Filters | Mode::FloatImages),
+            adjustments: [0; 4],
             zoom: 0,
             opacity: 0,
             corners: true,
@@ -156,7 +205,14 @@ impl MediaDemo {
             .hue_rotate([0., 90., 180.][self.filters[3]])
             .tint([[0., 0., 0., 0.], [1., 0.4, 0.1, 0.3], [0.1, 0.6, 1., 0.3]][self.filters[4]])
     }
-    fn image_panel(&self, atlas: bool, filter: ImageFilter, zoom: f32, reference: bool) -> Div {
+    fn image_panel(
+        &self,
+        atlas: bool,
+        filter: ImageFilter,
+        zoom: f32,
+        reference: bool,
+        adjustments: Option<ImageAdjustments>,
+    ) -> Div {
         let source = self.source.clone();
         let original = self.atlas.clone();
         let opacity = [1., 0.65, 0.3][self.opacity];
@@ -170,10 +226,20 @@ impl MediaDemo {
             .overflow_hidden()
             .child(div().h(px(48.)).child(if atlas {
                 "Atlas · single level"
+            } else if self.mode == Mode::FloatImages {
+                if reference {
+                    "RGBA16F P3 · sRGB preview"
+                } else {
+                    "Linear P3 adjustments · sRGB preview"
+                }
             } else if self.mode == Mode::Filters && reference {
                 "Original · no filter"
             } else if self.mode == Mode::Filters {
-                "Filtered source"
+                if self.linear_mode {
+                    "Linear-sRGB adjustments"
+                } else {
+                    "Encoded-sRGB filters"
+                }
             } else {
                 "Dedicated source · 11 mip levels"
             }))
@@ -181,10 +247,15 @@ impl MediaDemo {
                 canvas(
                     |_, _, _| (),
                     move |bounds, (), window, _| {
-                        let side = bounds.size.width.min(bounds.size.height) * zoom;
+                        let w = source.data.width() as f32;
+                        let h = source.data.height() as f32;
+                        let fit = (f32::from(bounds.size.width) / w)
+                            .min(f32::from(bounds.size.height) / h)
+                            * zoom;
+                        let extent = size(px(w * fit), px(h * fit));
                         let image_bounds = Bounds::new(
-                            bounds.center() - point(side / 2., side / 2.),
-                            size(side, side),
+                            bounds.center() - point(extent.width / 2., extent.height / 2.),
+                            extent,
                         );
                         window.with_content_mask(Some(ContentMask { bounds }), |window| {
                             window.with_element_opacity(Some(opacity), |window| {
@@ -208,6 +279,7 @@ impl MediaDemo {
                                         Arc::new(Placement {
                                             source: source.clone(),
                                             filter,
+                                            adjustments,
                                         }),
                                     );
                                 }
@@ -271,6 +343,7 @@ impl Render for MediaDemo {
             .font_family("IBM Plex Sans")
             .child(div().text_xl().child(match self.mode {
                 Mode::Filters => "Image filters · WebAssembly",
+                Mode::FloatImages => "RGBA16F / Display P3 · explicit sRGB preview",
                 Mode::Mipmaps => "Mipmapping · WebAssembly",
                 Mode::Paths => "Trim / dash · WebAssembly",
             }));
@@ -307,7 +380,7 @@ impl Render for MediaDemo {
                     1.
                 };
             let mut controls = div().flex().flex_wrap().gap_2();
-            if self.mode == Mode::Filters {
+            if self.mode == Mode::Filters && !self.linear_mode {
                 for (index, (id, label)) in [
                     ("brightness", "Brightness"),
                     ("contrast", "Contrast"),
@@ -344,15 +417,112 @@ impl Render for MediaDemo {
                     },
                 )));
             }
-            root=root.child("1024² generated RGBA fixture · transparent edges · no external assets")
+            let linear_adjustments =
+                if matches!(self.mode, Mode::Filters | Mode::FloatImages) && self.linear_mode {
+                    for (index, (id, label, count)) in [
+                        (
+                            "exposure",
+                            format!("Exposure {:+.0} EV", [0., -1., 1., 2.][self.adjustments[0]]),
+                            4,
+                        ),
+                        (
+                            "linear-contrast",
+                            format!(
+                                "Linear contrast ×{:.1}",
+                                [1., 0.6, 1.5][self.adjustments[1]]
+                            ),
+                            3,
+                        ),
+                        (
+                            "linear-saturation",
+                            format!(
+                                "Linear saturation ×{:.1}",
+                                [1., 0., 1.8][self.adjustments[2]]
+                            ),
+                            3,
+                        ),
+                        (
+                            "vignette",
+                            format!("Vignette {}%", [0, 40, 80][self.adjustments[3]]),
+                            3,
+                        ),
+                    ]
+                    .into_iter()
+                    .enumerate()
+                    {
+                        controls = controls.child(button(id, label).on_click(cx.listener(
+                            move |s, _, _, cx| {
+                                s.adjustments[index] = (s.adjustments[index] + 1) % count;
+                                cx.notify();
+                            },
+                        )));
+                    }
+                    controls =
+                        controls.child(button("reset-adjustments", "Reset adjustments").on_click(
+                            cx.listener(|s, _, _, cx| {
+                                s.adjustments = [0; 4];
+                                s.animate = false;
+                                cx.notify();
+                            }),
+                        ));
+                    let ev = [0., -1., 1., 2.][self.adjustments[0]]
+                        + if animated {
+                            (f64::from(time) * 1.5).sin() * 0.8
+                        } else {
+                            0.
+                        };
+                    let matrix = ColorMatrix::identity(if self.mode == Mode::FloatImages {
+                        ImagePrimaries::DisplayP3
+                    } else {
+                        ImagePrimaries::Srgb
+                    })
+                    .exposure(ev)
+                    .unwrap()
+                    .contrast([1., 0.6, 1.5][self.adjustments[1]], 0.18)
+                    .unwrap()
+                    .saturation([1., 0., 1.8][self.adjustments[2]])
+                    .unwrap();
+                    Some(
+                        ImageAdjustments::new(
+                            matrix,
+                            Some(
+                                Vignette::new([0., 0.4, 0.8][self.adjustments[3]], 0.35, 0.65, 1.)
+                                    .unwrap(),
+                            ),
+                        )
+                        .unwrap(),
+                    )
+                } else {
+                    None
+                };
+            if self.mode == Mode::Filters {
+                controls = controls.child(
+                    button(
+                        "linear-mode",
+                        if self.linear_mode {
+                            "Use encoded filters"
+                        } else {
+                            "Use linear adjustments"
+                        },
+                    )
+                    .on_click(cx.listener(|s, _, _, cx| {
+                        s.linear_mode = !s.linear_mode;
+                        cx.notify();
+                    })),
+                );
+            }
+            if self.mode == Mode::FloatImages {
+                root=root.child("RGBA16F storage · premultiplied linear Display P3 / D65 · both panels clip to sRGB. Browser wide-gamut presentation is not enabled.");
+            }
+            root=root.child(if matches!(self.mode,Mode::Filters | Mode::FloatImages) { "1280 × 800 generated RGBA fixture · transparent edges · no external assets" } else { "1024² generated RGBA fixture · transparent edges · no external assets" })
                 .child(controls)
                 .child(div().flex().flex_wrap().gap_2()
                     .child(button("zoom",format!("Zoom {:.1}%",[90.,50.,25.,12.5][self.zoom])).on_click(cx.listener(|s,_,_,cx|{s.zoom=(s.zoom+1)%4;cx.notify();})))
                     .child(button("opacity",format!("Opacity {}%",[100,65,30][self.opacity])).on_click(cx.listener(|s,_,_,cx|{s.opacity=(s.opacity+1)%3;cx.notify();})))
                     .child(button("corners",if self.corners{"Corners ON"}else{"Corners OFF"}).on_click(cx.listener(|s,_,_,cx|{s.corners = !s.corners;cx.notify();}))))
-                .child(div().flex().gap_3().child(self.image_panel(self.mode==Mode::Mipmaps,ImageFilter::new(),zoom,true)).child(self.image_panel(false,if self.mode==Mode::Filters{self.filter()}else{ImageFilter::new()},zoom,false)))
+                .child(div().flex().gap_3().child(self.image_panel(self.mode==Mode::Mipmaps,ImageFilter::new(),zoom,true,None)).child(self.image_panel(false,if self.mode==Mode::Filters && !self.linear_mode{self.filter()}else{ImageFilter::new()},zoom,false,linear_adjustments)))
                 .child(format!("Dedicated texture preparations: {} · cached across redraws and controls",self.source.preparations.load(Ordering::Relaxed)))
-                .child(if self.mode==Mode::Mipmaps{"Fine patterns reveal aliasing while shrinking. Mips use alpha-aware linear-light area filtering; brightness can differ from atlas sampling."}else{"Brightness / contrast / saturation / hue / tint compose in encoded sRGB, preserve alpha and add no offscreen pass. Click each control to cycle presets."})
+                .child(if self.mode==Mode::Mipmaps{"Fine patterns reveal aliasing while shrinking. Mips use alpha-aware linear-light area filtering; brightness can differ from atlas sampling."}else if self.linear_mode {"Exposure in stops → linear contrast around 0.18 → working-space saturation → aspect-correct vignette → SDR clipping. Alpha is preserved. Animate sweeps exposure and zoom; preparations should stay at one."} else {"Brightness / contrast / saturation / hue / tint compose in encoded sRGB, preserve alpha and add no offscreen pass. Click each control to cycle presets."})
                 .child("Browser fixture generation and first upload are synchronous, once per source. This does not exercise native background decode, staging budgets, or video imports.");
         }
         root.child(

@@ -261,3 +261,35 @@ locally under `vendor/prism/` with its MIT license. `code-examples.js` applies
 Rust syntax colors after page changes and API inventory updates. Rust fence flags
 (`rust,ignore`, `rust,no_run`) select Rust. There are no language labels, toolbars
 or Copy controls; other languages keep their existing plain-text presentation.
+
+## Media pipeline contracts
+
+The `#media-pipeline` guide is embedded from `extensions/media-pipeline.md` and
+linked from the media guide. It records issue #26's CPU color references, progressive publication protocol,
+tile accounting and capability limits. Phase 2 adds retained-source linear-sRGB
+adjustments and native/browser controls, while RGBA16F and tiled drawing remain
+later work. The Image filters browser demo retains an encoded-filter mode.
+
+
+Issue #26 Phase 3 adds the `media-float` hosted demo to the extensions gallery.
+The media pipeline guide documents supplied RGBA16F pixels, explicit P3 metadata,
+native wide-SDR opt-in, browser sRGB preview and backend QA limits. The unified
+gallery now lists 19 hosted demos.
+
+
+Phase 4 adds the `media-tiles` browser route and `just media --tiled` native
+comparison. Both share `apps/web-support/tiled_demo.rs`; scheduling and resource
+ownership live in xgpui-media. The guide distinguishes preview/provider readiness,
+upload submission, GPU retirement and payload/staging budget counters.
+
+### Bounded media blur (issue #26 Phase 5)
+
+The tiled demo now includes 0/4/8/16 px Gaussian blur and adaptive/full-resolution
+quality. It blurs assembled pages once, avoiding internal tile seams. Nonzero
+blur uses a smaller preview to fit the existing 1,024-device-pixel capture limit,
+including halo. Filtering is premultiplied encoded sRGB; capture/filter textures
+are additional to page budgets. Media uploads/imports and target allocations are
+reused, but custom media captures refresh each paint. Native `just media --video`
+also offers exposure, saturation, vignette and blur on generated BGRA/NV12
+surfaces. Native imports are not available in Wasm; test portable blur via
+`?demo=media-tiles&backend=webgpu` and `?demo=media-tiles&backend=webgl`.

@@ -1,7 +1,9 @@
 //! Opt-in source-sized SDR images. Existing GPUI images keep their atlas path.
 mod filter;
 mod loader;
+pub mod pipeline;
 pub use filter::{FilteredImage, ImageFilter};
+use pipeline::ImageAdjustments;
 mod mipmaps;
 mod texture;
 mod upload;
@@ -37,6 +39,26 @@ impl MediaImage {
         radii: Corners<Pixels>,
         filter: ImageFilter,
     ) {
+        self.paint_content(window, bounds, radii, || Arc::new(self.filtered(filter)));
+    }
+    pub fn paint_adjusted(
+        &self,
+        window: &mut Window,
+        bounds: Bounds<Pixels>,
+        radii: Corners<Pixels>,
+        adjustments: ImageAdjustments,
+    ) {
+        self.paint_content(window, bounds, radii, || {
+            Arc::new(self.adjusted(adjustments))
+        });
+    }
+    fn paint_content(
+        &self,
+        window: &mut Window,
+        bounds: Bounds<Pixels>,
+        radii: Corners<Pixels>,
+        content: impl FnOnce() -> Arc<dyn gpui::CustomContent>,
+    ) {
         if bounds.is_empty()
             || bounds.intersect(&window.content_mask().bounds).is_empty()
             || window.element_opacity() <= 0.
@@ -54,7 +76,7 @@ impl MediaImage {
                 bounds,
                 corner_radii: radii,
             },
-            Arc::new(self.filtered(filter)),
+            content(),
         );
     }
 }
@@ -66,6 +88,8 @@ pub fn image_view(image: MediaImage) -> MediaImageView {
     MediaImageView {
         image,
         filter: ImageFilter::new(),
+        adjustments: None,
+        wide: false,
         style: StyleRefinement::default(),
     }
 }
@@ -73,11 +97,34 @@ pub fn image_view(image: MediaImage) -> MediaImageView {
 pub struct MediaImageView {
     image: MediaImage,
     filter: ImageFilter,
+    adjustments: Option<ImageAdjustments>,
+    wide: bool,
     style: StyleRefinement,
 }
 impl MediaImageView {
+    /// Opt into native linear-P3 presentation. The renderer also requires an
+    /// accepted WideGamutSdr window; unsupported hosts return an explicit error.
+    pub fn wide_gamut(mut self) -> anyhow::Result<Self> {
+        self.image.wide(None)?;
+        anyhow::ensure!(
+            self.filter == ImageFilter::new(),
+            "wide images require linear ImageAdjustments"
+        );
+        self.wide = true;
+        Ok(self)
+    }
+
+    /// Opt into linear-sRGB adjustments. Last filter/adjustments setter wins;
+    /// encoded and linear transforms are never implicitly combined.
+    pub fn adjustments(mut self, adjustments: ImageAdjustments) -> Self {
+        self.adjustments = Some(adjustments);
+        self
+    }
+
     pub fn filter(mut self, filter: ImageFilter) -> Self {
         self.filter = filter;
+        self.wide = false;
+        self.adjustments = None;
         self
     }
 }
@@ -139,8 +186,21 @@ impl Element for MediaImageView {
             .clamp_radii_for_quad_size(bounds.size);
         window.with_element_opacity(style.opacity, |window| {
             style.paint(bounds, window, cx, |window, _| {
-                self.image
-                    .paint_filtered(window, bounds, radii, self.filter)
+                if self.wide {
+                    self.image.paint_content(window, bounds, radii, || {
+                        Arc::new(
+                            self.image
+                                .wide(self.adjustments)
+                                .expect("validated wide image"),
+                        )
+                    });
+                } else if let Some(adjustments) = self.adjustments {
+                    self.image
+                        .paint_adjusted(window, bounds, radii, adjustments);
+                } else {
+                    self.image
+                        .paint_filtered(window, bounds, radii, self.filter);
+                }
             });
         });
     }

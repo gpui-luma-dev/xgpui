@@ -53,6 +53,7 @@ impl Default for MediaLoader {
 /// released only when the job and all image snapshots have been dropped.
 pub(crate) struct Reservation {
     pool: Arc<Pool>,
+    _guard: Option<Arc<dyn Send + Sync>>,
 }
 impl Reservation {
     pub(crate) fn uploads(&self) -> Arc<UploadScheduler> {
@@ -153,6 +154,77 @@ impl MediaLoader {
     /// orientation metadata are outside this first API.
     pub fn load(&self, path: impl Into<PathBuf>) -> Result<ImageJob> {
         let path = path.into();
+        self.load_pixels(
+            crate::pipeline::ImageColor::SRGB,
+            move |limits, cancelled| {
+                let mut encoded = Vec::new();
+                std::fs::File::open(path)?
+                    .take(limits.max_encoded_bytes as u64 + 1)
+                    .read_to_end(&mut encoded)?;
+                ensure!(
+                    encoded.len() <= limits.max_encoded_bytes,
+                    "encoded image exceeds limit"
+                );
+                let (width, height) = image::ImageReader::new(Cursor::new(&encoded))
+                    .with_guessed_format()?
+                    .into_dimensions()?;
+                ensure!(
+                    mipmaps::payload_bytes(width, height)? <= limits.max_image_bytes,
+                    "image exceeds payload limit"
+                );
+                ensure!(!cancelled.load(Ordering::Acquire), "image load cancelled");
+                let mut reader =
+                    image::ImageReader::new(Cursor::new(&encoded)).with_guessed_format()?;
+                let mut decode_limits = image::Limits::default();
+                decode_limits.max_image_width = Some(16384);
+                decode_limits.max_image_height = Some(16384);
+                decode_limits.max_alloc = Some(limits.max_image_bytes as u64 * 2);
+                reader.limits(decode_limits);
+                let rgba = reader.decode()?.into_rgba8().into_raw();
+                drop(encoded);
+                let data =
+                    mipmaps::build(width, height, rgba, || cancelled.load(Ordering::Acquire))?;
+                Ok(data)
+            },
+        )
+    }
+    /// Convert supplied bounded SDR pixels on an admitted background worker.
+    /// Source metadata is explicit; no RAW/TIFF engine or system decoder needed.
+    pub fn load_rgba16f(
+        &self,
+        width: u32,
+        height: u32,
+        pixels: Vec<[f32; 4]>,
+        color: crate::pipeline::ImageColor,
+    ) -> Result<ImageJob> {
+        ensure!(
+            crate::pipeline::rgba16f_payload_bytes(width, height)? <= self.0.limits.max_image_bytes,
+            "image exceeds payload limit"
+        );
+        ensure!(
+            pixels.len() == width as usize * height as usize
+                && pixels.len().saturating_mul(16) <= self.0.limits.max_encoded_bytes,
+            "supplied pixels exceed input limit"
+        );
+        self.load_pixels(color, move |_, cancelled| {
+            crate::pipeline::float_image::build(width, height, pixels, color, || {
+                cancelled.load(Ordering::Acquire)
+            })
+        })
+    }
+    fn load_pixels(
+        &self,
+        color: crate::pipeline::ImageColor,
+        build: impl FnOnce(MediaLimits, &AtomicBool) -> Result<gpui::ImageTextureData> + Send + 'static,
+    ) -> Result<ImageJob> {
+        self.load_guarded(color, None, build)
+    }
+    pub(crate) fn load_guarded(
+        &self,
+        color: crate::pipeline::ImageColor,
+        guard: Option<Arc<dyn Send + Sync>>,
+        build: impl FnOnce(MediaLimits, &AtomicBool) -> Result<gpui::ImageTextureData> + Send + 'static,
+    ) -> Result<ImageJob> {
         {
             let mut usage = self.0.usage.lock().unwrap();
             ensure!(usage.jobs < self.0.limits.max_jobs, "media workers busy");
@@ -165,6 +237,7 @@ impl MediaLoader {
         }
         let reservation = Arc::new(Reservation {
             pool: self.0.clone(),
+            _guard: guard,
         });
         let active = ActiveJob(self.0.clone());
         let job = ImageJob {
@@ -180,37 +253,14 @@ impl MediaLoader {
         std::thread::Builder::new()
             .name("xgpui-media".into())
             .spawn(move || {
-                let result = (|| -> Result<MediaImage> {
-                    ensure!(!cancelled.load(Ordering::Acquire), "image load cancelled");
-                    let mut encoded = Vec::new();
-                    std::fs::File::open(path)?
-                        .take(limits.max_encoded_bytes as u64 + 1)
-                        .read_to_end(&mut encoded)?;
-                    ensure!(
-                        encoded.len() <= limits.max_encoded_bytes,
-                        "encoded image exceeds limit"
-                    );
-                    let (width, height) = image::ImageReader::new(Cursor::new(&encoded))
-                        .with_guessed_format()?
-                        .into_dimensions()?;
-                    ensure!(
-                        mipmaps::payload_bytes(width, height)? <= limits.max_image_bytes,
-                        "image exceeds payload limit"
-                    );
-                    ensure!(!cancelled.load(Ordering::Acquire), "image load cancelled");
-                    let mut reader =
-                        image::ImageReader::new(Cursor::new(&encoded)).with_guessed_format()?;
-                    let mut decode_limits = image::Limits::default();
-                    decode_limits.max_image_width = Some(16384);
-                    decode_limits.max_image_height = Some(16384);
-                    decode_limits.max_alloc = Some(limits.max_image_bytes as u64 * 2);
-                    reader.limits(decode_limits);
-                    let rgba = reader.decode()?.into_rgba8().into_raw();
-                    drop(encoded);
-                    let data =
-                        mipmaps::build(width, height, rgba, || cancelled.load(Ordering::Acquire))?;
-                    Ok(MediaImage::new(data, reservation))
-                })();
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                    || -> Result<MediaImage> {
+                        ensure!(!cancelled.load(Ordering::Acquire), "image load cancelled");
+                        let data = build(limits, &cancelled)?;
+                        Ok(MediaImage::new_with_color(data, reservation, color))
+                    },
+                ))
+                .unwrap_or_else(|_| Err(anyhow::anyhow!("image provider panicked")));
                 drop(active);
                 if let Some(state) = state.upgrade() {
                     let mut state = state.lock().unwrap();

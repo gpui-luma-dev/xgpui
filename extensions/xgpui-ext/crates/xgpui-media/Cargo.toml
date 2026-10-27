@@ -12,6 +12,9 @@ wgpu = ["dep:gpui-wgpu", "gpui-wgpu/dma-buf"]
 
 [dependencies]
 anyhow = "1"
+half = "2.7"
+xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"] }
+xgpui-color = { path = "../xgpui-color" }
 refineable = { path = "../../../../gpui/crates/refineable" }
 gpui = { path = "../../../../gpui/crates/gpui" }
 gpui-wgpu = { path = "../../../../gpui/crates/gpui-wgpu", optional = true }

@@ -1,8 +1,8 @@
 # xgpui-gamut
 
-Opt-in **macOS Metal / Windows D3D11** presentation: wide SDR surfaces and normal
-sRGB controls in one window. Windows integration is cross-compiled here; native
-WARP/desktop execution and physical display checks remain required. Linux, HDR
+Opt-in **macOS Metal / Windows D3D11** presentation: wide [SDR ↗](https://en.wikipedia.org/wiki/Standard-dynamic-range_video) surfaces and normal
+[sRGB ↗](https://en.wikipedia.org/wiki/SRGB) controls in one window. Windows integration is cross-compiled here; native
+WARP/desktop execution and physical display checks remain required. Linux, [HDR ↗](https://en.wikipedia.org/wiki/High_dynamic_range)
 content and transparent wide windows remain deferred.
 
 ## GPUI public API changes: additions and compatibility
@@ -98,7 +98,7 @@ presentation    Metal tagged P3 / Windows tagged scRGB; bounded SDR content
 
 The report describes negotiated configuration, not proof of physical monitor
 output. macOS retains the P3-tagged target and delegates display mapping to
-ColorSync, including SDR monitors; it does not report a fictitious framebuffer
+ColorSync, including SDR monitors; it does not report a fictitious [framebuffer ↗](https://en.wikipedia.org/wiki/Framebuffer)
 fallback. Display-profile evidence is sampled at frame boundaries, with screen and
 same-screen profile notifications scheduling refreshes. A window spanning displays
 cannot promise identical physical output everywhere.
@@ -369,13 +369,13 @@ real Scene::batches(), including each custom draw within a batch:
 | --- | --- |
 | Flip swap chain | `R16G16B16A16_FLOAT`, `RGB_FULL_G10_NONE_P709`; DirectComposition and HWND paths |
 | Producer color | Linear Display P3/D65, associated alpha; identical to Metal input |
-| Composition | Linear scRGB; retain negative and above-one RGB for saturated SDR colors |
+| Composition | Linear [scRGB ↗](https://en.wikipedia.org/wiki/ScRGB); retain negative and above-one RGB for saturated SDR colors |
 | UI | Existing colors, themes and legacy paints retain encoded-sRGB meaning |
 | Text | Existing capability hook requests grayscale; cached LCD tiles collapse to scalar coverage |
 | Coverage | Native border/path masks, corners, clipping and inherited opacity applied once |
 | White | HDR desktop: `DISPLAYCONFIG_SDR_WHITE_LEVEL / 1000`; SDR desktop: scale 1 |
 | Capture | Explicit clipped-sRGB preview of the canonical target, without display-white scaling |
-| Allocation | FP16 + BGRA frame targets ≤256 MiB; producer outputs separately ≤64 MiB; excludes paths/atlas/replacement peaks/in-flight resources |
+| Allocation | FP16 + [BGRA ↗](https://en.wikipedia.org/wiki/RGBA_color_model) frame targets ≤256 MiB; producer outputs separately ≤64 MiB; excludes paths/atlas/replacement peaks/in-flight resources |
 
 ```text
 linear P3 → scRGB:
@@ -386,7 +386,7 @@ B = -0.01963755 * r - 0.07863605 * g + 1.09827360 * b
 
 | Lifecycle | Behavior |
 | --- | --- |
-| Enable | Preflight FP16 blend/sample support, pipelines, targets and display white; release back-buffer references; change format and set color space |
+| Enable | Preflight FP16 blend/sample support, pipelines, targets and display white; release back-buffer references; change format and set [color space ↗](https://en.wikipedia.org/wiki/Color_space) |
 | Same mode | Preserve compatible pipelines |
 | Shared device | Serialize mode/resize updates against cross-window drawing; defer re-entrant resize messages to the next frame |
 | Recoverable transition failure | Restore previous configuration; return error |
@@ -479,7 +479,7 @@ if let Some(output) = cached.as_ref().filter(|o| ctx.can_reuse_wide_sdr(o)) {
 | Writes | `record_wide_sdr` accepts only a fresh output from the current recording |
 | Failure | Recording/validation failure or dropped batch abandons escaped outputs and discards unsubmitted work |
 | Host | Existing `PreparationBatch`; exact extent/device/type/texture validation before submission |
-| Legacy | `Dx11CustomOutput` remains straight-alpha BGRA8/sRGB; types are never inferred from format |
+| Legacy | `Dx11CustomOutput` remains [straight-alpha ↗](https://en.wikipedia.org/wiki/Alpha_compositing) BGRA8/sRGB; types are never inferred from format |
 
 Raw D3D handles and pixel values remain a cooperative in-process contract. Typed
 output is available in the backend SDK and accepted by the native Windows renderer

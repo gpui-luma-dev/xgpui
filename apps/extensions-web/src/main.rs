@@ -17,6 +17,8 @@ mod media;
 mod paragraph;
 mod shader;
 mod svg;
+#[path = "../../web-support/tiled_demo.rs"]
+mod tiled_demo;
 #[path = "../../shader-examples/src/typography.rs"]
 mod typography;
 
@@ -40,8 +42,10 @@ pub fn demo_build_id() -> String {
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn demo_behavior(demo: &str) -> String {
     match demo {
+        "media-tiles" => "72 MP tiled canvas: progressive preview • bounded immutable pages • viewport selection",
+        "media-float" => "RGBA16F: supplied linear P3 pixels • explicit clipped sRGB preview",
         "media-filters" => {
-            "Media filters: shared source texture • fragment RGB transforms • alpha preserved"
+            "Media adjustments: linear exposure and vignette • encoded filter comparison • shared source"
         }
         "mipmaps" => "Mipmapping: native atlas versus dedicated trilinear source texture",
         "path-effects" => "Path effects: contour trim and dash before native tessellation",
@@ -89,8 +93,11 @@ fn launch() -> anyhow::Result<()> {
     let color = parameters.contains(&"demo=color");
     let brushes = parameters.contains(&"demo=brushes");
     let layers = parameters.contains(&"demo=layers");
+    let tiled = parameters.contains(&"demo=media-tiles");
     let hermite = parameters.contains(&"demo=hermite");
-    let media_mode = if parameters.contains(&"demo=media-filters") {
+    let media_mode = if parameters.contains(&"demo=media-float") {
+        Some(media::Mode::FloatImages)
+    } else if parameters.contains(&"demo=media-filters") {
         Some(media::Mode::Filters)
     } else if parameters.contains(&"demo=mipmaps") {
         Some(media::Mode::Mipmaps)
@@ -140,6 +147,9 @@ fn launch() -> anyhow::Result<()> {
                 view
             })
             .expect("open Parley demo");
+        } else if tiled {
+            cx.open_window(options, |_, cx| cx.new(|_| tiled_demo::TiledDemo::new()))
+                .expect("open tiled canvas");
         } else if let Some(mode) = media_mode {
             cx.open_window(options, |_, cx| {
                 cx.new(|_| media::MediaDemo::new(mode).expect("generated media fixture"))

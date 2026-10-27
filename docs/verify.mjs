@@ -90,7 +90,7 @@ assert.ok(index.includes('href="examples/extensions/"'));
 assert.ok(index.includes('href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>'));
 assert.ok(index.indexOf('GitHub repository ↗') < index.indexOf('<nav aria-label="Documentation">'));
 assert.ok(index.indexOf('>Live demos ↗</a>') < index.indexOf('>Instanced WGSL v2</a>'));
-for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'mipmaps', 'path-effects']) {
+for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web'));
@@ -109,7 +109,7 @@ const listedModules = [...wasmIndex.matchAll(/data-wasm-module="([^"]+)"/g)].map
 const legacyModules = [...legacyManifest.matchAll(/\[\[bin\]\]\s+name = "([^"]+)"/g)].map(m => m[1]);
 assert.deepEqual(listedModules.slice().sort(), legacyModules.sort(), 'every legacy Wasm binary needs an index entry');
 for (const [, module] of legacyGallery.matchAll(/data-module="([^"]+)"/g)) assert.ok(listedModules.includes(module), module);
-for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'mipmaps', 'path-effects']) {
+for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="?demo=' + demo + suffix + '"'), demo + suffix);
   }
@@ -215,7 +215,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 17);
+assert.equal(Object.keys(data.extension_documents).length, 18);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/xgpui-ext/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -433,8 +433,8 @@ console.log('Verified demo discovery, distinct brush/layer launch labels and vis
 
 // "All demos" includes both hosted apps, without duplicating launch cards.
 const allLaunches = [...wasmIndex.matchAll(/<a href="([^"]+)">Open demo ↗<\/a>/g)].map(m => m[1]);
-assert.equal(allLaunches.length, 17);
-assert.equal(new Set(allLaunches).size, 17);
+assert.equal(allLaunches.length, 19);
+assert.equal(new Set(allLaunches).size, 19);
 for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="../shaders/?example=' + example + suffix + '"'));
@@ -445,7 +445,7 @@ for (const id of ['brushes-paints','layer-effects','shaders-motion','typography'
 }
 assert.ok(wasmIndex.includes('--pastel-waves'));
 assert.ok(wasmIndex.includes('Show launch command'));
-console.log('Verified unified index covers all 17 hosted demos and separates native launch commands.');
+console.log('Verified unified index covers all 19 hosted demos and separates native launch commands.');
 
 assert.match(run('extensionPage("typography")'), /Selectable typography/);
 assert.match(run('extensionPage("typography")'), /demo=typography/);
@@ -519,7 +519,7 @@ for (const observation of scrollReport.observations) {
 console.log('Verified sustained-scroll 60 Hz observation assets and report link.');
 
 
-for (const demo of ['media-filters', 'mipmaps', 'path-effects']) {
+for (const demo of ['media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
   const html = data.extension_documents['media-images'].html;
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(!html.includes(`href="../examples/extensions/?demo=${demo}"`));
@@ -543,3 +543,19 @@ assert.ok(index.includes('code-examples.js'));
 assert.ok(index.includes('data-manual'));
 console.log('Verified local Prism Rust assets, tokenization and license.');
 await import('./code-examples.test.mjs');
+
+// Glossary references must keep the guide open and visibly mark external navigation.
+for (const route of ['media-images', 'media-pipeline', 'gpui-public-api', 'color-math', 'high-gamut-windows', 'local-development']) {
+  const html = data.extension_documents[route].html;
+  const wikiLinks = [...html.matchAll(/<a\b([^>]*href="https:\/\/en\.wikipedia\.org\/wiki\/[^>]+)>([\s\S]*?)<\/a>/g)];
+  assert.ok(wikiLinks.length > 0, route + ': glossary links missing');
+  for (const [, attributes, label] of wikiLinks) {
+    assert.match(attributes, /target="_blank"/);
+    assert.match(attributes, /rel="noopener noreferrer"/);
+    assert.match(label, / ↗$/);
+  }
+  for (const code of html.matchAll(/<pre><code[^>]*>([\s\S]*?)<\/code><\/pre>/g)) {
+    assert.ok(!code[1].includes('wikipedia.org'), route + ': glossary links entered code');
+  }
+}
+console.log('Verified Wikipedia glossary arrows and new-tab attributes across media/color guides.');

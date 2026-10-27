@@ -1439,6 +1439,10 @@ impl WgpuRendererCore {
             for draw in &scene.custom_draws {
                 let prepared_draw = batch.prepare(|context| {
                     let extent = extent(draw)?;
+                    anyhow::ensure!(
+                        draw.content.image_color_mode() != gpui::ImageColorMode::LinearP3Wide,
+                        "wgpu supports explicit sRGB preview, not wide image presentation"
+                    );
                     let request = gpui::PreparationRequest::new(
                         draw.bounds.size.map(|v| gpui::px(v.0)),
                         extent,
@@ -1482,6 +1486,11 @@ impl WgpuRendererCore {
                             .texture()
                             .clone()
                     };
+                    anyhow::ensure!(
+                        draw.content.image_color_mode() == gpui::ImageColorMode::EncodedSrgb
+                            || texture.format() == wgpu::TextureFormat::Rgba16Float,
+                        "linear P3 image metadata requires RGBA16F texture"
+                    );
                     let mask = if draw.coverage.is_some() {
                         let key = CoverageKey::new(draw)?;
                         if let Some(mask) = compositor.masks.get(&key) {
@@ -1958,6 +1967,18 @@ impl WgpuRendererCore {
             .resources()
             .queue
             .submit(std::iter::once(encoder.finish()));
+        // Retain complete immutable source snapshots through GPU sampling, not
+        // merely their texture handles. This also retains canvas budget leases.
+        let content = scene
+            .custom_draws
+            .iter()
+            .map(|d| d.content.clone())
+            .collect::<Vec<_>>();
+        if !content.is_empty() {
+            self.resources()
+                .queue
+                .on_submitted_work_done(move || drop(content));
+        }
         if let Some(effects) = &mut self.backdrops {
             effects.groups.commit(&executed_groups);
             effects.cache.commit(&executed_backdrops);

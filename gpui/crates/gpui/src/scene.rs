@@ -1399,6 +1399,27 @@ pub trait CustomContent: std::fmt::Debug + Send + Sync + 'static {
         [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.]]
     }
 
+    /// Actual dimensions of an immutable source-sized texture. A large virtual
+    /// destination need not allocate a destination-sized preparation target.
+    /// Only valid for retained source-sized outputs, without geometry coverage.
+    fn image_source_size(&self) -> Option<Size<crate::DevicePixels>> {
+        None
+    }
+    /// Sampling visibility independent of preparation. Zero permits warming a
+    /// source without compositing it over a progressive fallback.
+    fn image_sample_opacity(&self) -> f32 {
+        1.
+    }
+    /// Source color interpretation and explicit output policy.
+    fn image_color_mode(&self) -> crate::ImageColorMode {
+        crate::ImageColorMode::EncodedSrgb
+    }
+    /// Linear matrix and vignette in the declared working primaries.
+    /// Replaces encoded image_color_transform; does not change source identity.
+    fn image_linear_adjustments(&self) -> Option<crate::LinearImagePaint> {
+        None
+    }
+
     /// Prepare content on the host device. Return an explicit error for unsupported backends.
     fn prepare(
         &self,
@@ -1439,6 +1460,19 @@ struct ContentWithPreparationGeometry {
 }
 
 impl CustomContent for ContentWithPreparationGeometry {
+    fn image_source_size(&self) -> Option<Size<crate::DevicePixels>> {
+        self.content.image_source_size()
+    }
+    fn image_sample_opacity(&self) -> f32 {
+        self.content.image_sample_opacity()
+    }
+    fn image_color_mode(&self) -> crate::ImageColorMode {
+        self.content.image_color_mode()
+    }
+    fn image_linear_adjustments(&self) -> Option<crate::LinearImagePaint> {
+        self.content.image_linear_adjustments()
+    }
+
     fn image_color_transform(&self) -> [[f32; 4]; 3] {
         self.content.image_color_transform()
     }

@@ -22,7 +22,13 @@ fn quad(scene: &mut Scene, bounds: Bounds<ScaledPixels>, color: u32) {
         ..Default::default()
     });
 }
-pub fn run(fixtures: &Fixtures, png: &Path, wgpu: bool, vivid: bool) -> Result<()> {
+pub fn run(
+    fixtures: &Fixtures,
+    png: &Path,
+    wgpu: bool,
+    vivid: bool,
+    adjustments: bool,
+) -> Result<()> {
     let mut renderer: Box<dyn PlatformHeadlessRenderer> = if wgpu {
         #[cfg(feature = "wgpu")]
         {
@@ -100,7 +106,7 @@ pub fn run(fixtures: &Fixtures, png: &Path, wgpu: bool, vivid: bool) -> Result<(
                 w,
                 h,
             );
-            if column == 0 {
+            if column == 0 && !adjustments {
                 let image = &baseline[index];
                 let params = RenderImageParams {
                     image_id: image.id,
@@ -133,14 +139,28 @@ pub fn run(fixtures: &Fixtures, png: &Path, wgpu: bool, vivid: bool) -> Result<(
                     corner_radii: Corners::all(ScaledPixels(14.)),
                     opacity: 1.,
                     coverage: None,
-                    content: Arc::new(images[index].filtered(if vivid {
-                        xgpui_media::ImageFilter::new()
-                            .brightness(1.4)
-                            .contrast(1.5)
-                            .saturation(1.8)
+                    content: if adjustments {
+                        use xgpui_media::pipeline::{
+                            ColorMatrix, ImageAdjustments, ImagePrimaries, Vignette,
+                        };
+                        let matrix = ColorMatrix::identity(ImagePrimaries::Srgb)
+                            .exposure(if column == 0 { 0. } else { 1. })?;
+                        let vignette = if column == 0 {
+                            None
+                        } else {
+                            Some(Vignette::new(0.6, 0.35, 0.65, 1.)?)
+                        };
+                        Arc::new(images[index].adjusted(ImageAdjustments::new(matrix, vignette)?))
                     } else {
-                        xgpui_media::ImageFilter::new()
-                    })),
+                        Arc::new(images[index].filtered(if vivid {
+                            xgpui_media::ImageFilter::new()
+                                .brightness(1.4)
+                                .contrast(1.5)
+                                .saturation(1.8)
+                        } else {
+                            xgpui_media::ImageFilter::new()
+                        }))
+                    },
                 });
             }
         }
@@ -172,7 +192,7 @@ pub fn run(fixtures: &Fixtures, png: &Path, wgpu: bool, vivid: bool) -> Result<(
     );
     pixels.save(png)?;
     println!(
-        "Saved {} ({}x{}). LEFT: native atlas. RIGHT: mipmapped media.",
+        "Saved {} ({}x{}). LEFT: reference. RIGHT: mipmapped/adjusted media.",
         png.display(),
         extent.width.0,
         extent.height.0

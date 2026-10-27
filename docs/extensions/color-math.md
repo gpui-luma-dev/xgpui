@@ -1,6 +1,6 @@
 # xgpui-color: standalone color math
 
-Use `xgpui-color` for CPU color conversions, gamut mapping, two-stop gradient
+Use `xgpui-color` for CPU color conversions, [gamut mapping ↗](https://en.wikipedia.org/wiki/Gamut), two-stop gradient
 math and reusable WGSL helpers. It has no runtime dependencies and needs no GPUI,
 window, GPU context or shader compiler. Naga and native Metal are test-only dependencies.
 
@@ -22,13 +22,13 @@ let bounded = linear_p3.map_gamut(RgbSpace::DisplayP3, GamutMapping::ReduceChrom
 ## Types and contracts
 
 `EncodedRgb` and `LinearRgb` distinguish transfer-encoded values from linear
-light. `RgbSpace` supplies sRGB, Display P3 and SDR Rec.2020 primaries and
-transfer functions. `XyzD65`, `Oklab` and `Oklch` provide conversion coordinates.
+light. `RgbSpace` supplies [sRGB ↗](https://en.wikipedia.org/wiki/SRGB), [Display P3 ↗](https://en.wikipedia.org/wiki/DCI-P3) and [SDR ↗](https://en.wikipedia.org/wiki/Standard-dynamic-range_video) Rec.2020 primaries and
+[transfer functions ↗](https://en.wikipedia.org/wiki/Transfer_functions_in_imaging). `XyzD65`, `Oklab` and `Oklch` provide conversion coordinates.
 RGB and perceptual conversion retain extended values; gamut mapping is explicit.
 CPU calculations use f64 and reject non-finite inputs/results. All working RGB
-spaces use D65, so these conversions need no white-point adaptation.
+spaces use [D65 ↗](https://en.wikipedia.org/wiki/Standard_illuminant), so these conversions need no white-point adaptation.
 
-`LinearRgba` validates straight alpha. `LinearGradient` provides two fixed stops,
+`LinearRgba` validates [straight alpha ↗](https://en.wikipedia.org/wiki/Alpha_compositing). `LinearGradient` provides two fixed stops,
 linear RGB/OkLab/OkLCh interpolation, alpha-aware components and four hue paths.
 Sampling does not map gamut automatically. Map the interpolated result before
 final output association. These APIs describe color math; they do not draw a
@@ -47,9 +47,9 @@ crate README documents IDs, tolerances, hue handling and bounded search behavior
 - `xgpui-shader`: general rendering infrastructure; no dependency on color or gamut.
 
 Wide shader output uses an explicit [instanced rendering contract](instanced-wgsl-v2.md).
-Window negotiation and Metal P3 / Windows scRGB composition belong to the
-[native presentation backends](high-gamut-windows.md). ICC profiles, calibration
-and HDR are separate work.
+Window negotiation and Metal P3 / Windows [scRGB ↗](https://en.wikipedia.org/wiki/ScRGB) composition belong to the
+[native presentation backends](high-gamut-windows.md). [ICC ↗](https://en.wikipedia.org/wiki/ICC_profile) profiles, calibration
+and [HDR ↗](https://en.wikipedia.org/wiki/High_dynamic_range) are separate work.
 
 ## Validation
 
@@ -96,7 +96,7 @@ Then open `http://localhost:8081/?demo=color`. Backend links on the gallery sele
 ### Runtime output diagnostics and native comparison
 
 The browser demo reports source space, preview mapping, the active renderer's
-canvas color space, and `(color-gamut: p3)` display capability. WebGL reads
+canvas [color space ↗](https://en.wikipedia.org/wiki/Color_space), and `(color-gamut: p3)` display capability. WebGL reads
 `drawingBufferColorSpace`; WebGPU reads `getConfiguration().colorSpace` when
 available and otherwise reports unknown. These diagnostics observe the renderer's
 own context without creating or reconfiguring a context. Display capability does

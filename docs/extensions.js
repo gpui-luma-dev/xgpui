@@ -68,6 +68,8 @@ function extensionPage(route) {
     ? '<p class="guide-intro"><strong>Standalone color math.</strong> CPU conversions, gamut mapping, gradients and WGSL source without GPUI.</p>'
     : route === 'svg-rendering'
     ? '<p class="guide-intro"><strong>Experimental SVG extension.</strong> Progressive rasterization, shared admission and accounted image budgets.</p>'
+    : route === 'media-pipeline'
+    ? '<p class="guide-intro"><strong>Phases 1–5.</strong> Linear adjustments, RGBA16F/P3 sources, progressive tiled canvases, bounded preview blur and native video effects.</p>'
     : route === 'media-images'
     ? '<p class="guide-intro"><strong>Images and video frames.</strong> Practical examples for loading, adjusting and displaying media in GPUI.</p>'
     : route === 'parley-text'

@@ -23,6 +23,7 @@ impl Default for UploadLimits {
 #[derive(Clone, Copy, Debug)]
 pub struct FrameUploadLimits {
     pub max_uploads: usize,
+    /// Aligned source staging bytes, including every mip level.
     pub max_bytes: usize,
 }
 impl Default for FrameUploadLimits {

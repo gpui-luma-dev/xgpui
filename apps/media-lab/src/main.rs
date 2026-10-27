@@ -1,8 +1,12 @@
 mod fixtures;
+mod float_lab;
 mod headless;
 mod model;
 mod paths;
 mod scroll_perf;
+#[path = "../../web-support/tiled_demo.rs"]
+mod tiled_demo;
+mod tiled_lab;
 mod ui;
 mod ui_perf;
 mod upload_bench;
@@ -22,6 +26,15 @@ struct Options {
     /// Start with a vivid color adjustment on the media panel.
     #[arg(long)]
     vivid: bool,
+    /// Open the linear-sRGB exposure/contrast/saturation and vignette comparison.
+    #[arg(long, conflicts_with_all = ["paths", "video", "vivid", "upload_bench", "ui_perf_report", "scroll_perf_report"])]
+    adjustments: bool,
+    /// Supplied RGBA16F pixels: sRGB preview versus native wide SDR.
+    #[arg(long, conflicts_with_all = ["headless","adjustments","paths","video","image","vivid","upload_bench","ui_perf_report","scroll_perf_report"])]
+    float_images: bool,
+    /// Progressive provider-driven 72 MP tiled canvas.
+    #[arg(long, conflicts_with_all = ["headless","float_images","adjustments","paths","video","image","vivid","upload_bench","ui_perf_report","scroll_perf_report"])]
+    tiled: bool,
     /// Open contour trim and dash examples (or capture them headlessly).
     #[arg(long, conflicts_with = "video")]
     paths: bool,
@@ -50,6 +63,12 @@ struct Options {
 }
 fn main() -> Result<()> {
     let options = Options::parse();
+    if options.tiled {
+        return tiled_lab::run();
+    }
+    if options.float_images {
+        return float_lab::run();
+    }
     if let Some(path) = options.scroll_perf_report {
         return scroll_perf::run(path);
     }
@@ -94,12 +113,18 @@ fn main() -> Result<()> {
                 .unwrap_or(std::path::Path::new("/tmp/media-lab.png")),
             options.wgpu,
             options.vivid,
+            options.adjustments,
         );
     }
     let mut lab = model::Lab::new(fixtures)?;
     if let Some(path) = options.ui_perf_report {
         lab.ui_perf = Some(ui_perf::Run::new(path, &lab)?);
         lab.sweep = true;
+    }
+    if options.adjustments {
+        lab.linear_mode = true;
+        lab.adjustments = [2, 0, 0, 1];
+        lab.select(2);
     }
     lab.path_mode = options.paths;
     lab.video_mode = options.video;

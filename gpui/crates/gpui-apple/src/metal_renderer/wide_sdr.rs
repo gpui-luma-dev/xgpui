@@ -103,8 +103,8 @@ impl Compositor {
         viewport: Size<DevicePixels>,
         draw: Option<&gpui::CustomDraw>,
         mode: f32,
-    ) -> [[f32; 4]; 4] {
-        if let Some(d) = draw {
+    ) -> [[f32; 4]; 9] {
+        let base = if let Some(d) = draw {
             [
                 [
                     d.bounds.origin.x.0,
@@ -135,14 +135,40 @@ impl Compositor {
             let w = viewport.width.0 as f32;
             let h = viewport.height.0 as f32;
             [[0., 0., w, h], [0., 0., w, h], [0.; 4], [w, h, 1., mode]]
-        }
+        };
+        let adjustment = draw.and_then(|d| d.content.image_linear_adjustments());
+        let rows = adjustment.map(|a| a.rows()).unwrap_or([
+            [1., 0., 0., 0.],
+            [0., 1., 0., 0.],
+            [0., 0., 1., 0.],
+        ]);
+        [
+            base[0],
+            base[1],
+            base[2],
+            base[3],
+            rows[0],
+            rows[1],
+            rows[2],
+            adjustment.map(|a| a.vignette()).unwrap_or([0., 0., 1., 1.]),
+            [
+                if adjustment.is_some() { 1. } else { 0. },
+                if adjustment.is_some_and(|a| a.is_p3()) {
+                    1.
+                } else {
+                    0.
+                },
+                0.,
+                0.,
+            ],
+        ]
     }
     fn draw(
         &self,
         encoder: &metal::RenderCommandEncoderRef,
         image: &metal::TextureRef,
         mask: Option<&metal::TextureRef>,
-        params: [[f32; 4]; 4],
+        params: [[f32; 4]; 9],
         preview: bool,
     ) {
         encoder.set_render_pipeline_state(if preview {

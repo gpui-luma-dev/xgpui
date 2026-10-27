@@ -2,7 +2,16 @@
 use anyhow::{Result, ensure};
 use std::sync::Arc;
 
-/// Full RGBA8 mip chain with straight alpha and encoded sRGB channels.
+/// Storage and color contract for source-sized image textures.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImageTextureFormat {
+    /// Straight alpha, encoded sRGB.
+    Rgba8Srgb,
+    /// Premultiplied, bounded linear Display P3 / D65, little-endian binary16.
+    LinearP3Rgba16Float,
+}
+
+/// Full mip chain with a validated storage, color and alpha contract.
 /// This is an upload description, not a device resource. Backends retain normal
 /// scene ordering and coverage when sampling it at a different display size.
 #[derive(Clone, Debug)]
@@ -11,6 +20,7 @@ pub struct ImageTextureData {
     height: u32,
     levels: Arc<[Vec<u8>]>,
     byte_len: usize,
+    format: ImageTextureFormat,
 }
 impl ImageTextureData {
     /// Maximum combined mip bytes for one source (64 MiB).
@@ -18,17 +28,65 @@ impl ImageTextureData {
     /// Validate a complete mip chain, including odd and one-dimensional sizes.
     /// Every level halves each dimension, rounding down and clamping to one.
     pub fn new(width: u32, height: u32, levels: Vec<Vec<u8>>) -> Result<Self> {
+        Self::with_format(width, height, levels, ImageTextureFormat::Rgba8Srgb, false)
+    }
+    /// Validate a complete bounded premultiplied linear-P3 RGBA16F mip chain.
+    /// Rejects non-finite, negative, out-of-range and invalid associated pixels.
+    pub fn new_linear_p3_rgba16f(width: u32, height: u32, levels: Vec<Vec<u8>>) -> Result<Self> {
+        Self::with_format(
+            width,
+            height,
+            levels,
+            ImageTextureFormat::LinearP3Rgba16Float,
+            false,
+        )
+    }
+    /// A single immutable mip page; the canvas selects the pyramid level.
+    pub fn page(
+        width: u32,
+        height: u32,
+        bytes: Vec<u8>,
+        format: ImageTextureFormat,
+    ) -> Result<Self> {
+        Self::with_format(width, height, vec![bytes], format, true)
+    }
+    fn with_format(
+        width: u32,
+        height: u32,
+        levels: Vec<Vec<u8>>,
+        format: ImageTextureFormat,
+        page: bool,
+    ) -> Result<Self> {
+        let bpp = if format == ImageTextureFormat::Rgba8Srgb {
+            4
+        } else {
+            8
+        };
         ensure!(
             width > 0 && height > 0 && width <= 16384 && height <= 16384,
             "invalid image texture dimensions"
         );
         let count = (32 - width.max(height).leading_zeros()) as usize;
-        ensure!(levels.len() == count, "image requires a complete mip chain");
+        ensure!(
+            levels.len() == if page { 1 } else { count },
+            "image requires a complete mip chain or an explicit single-level page"
+        );
         let mut byte_len = 0usize;
         for (level, bytes) in levels.iter().enumerate() {
             let w = (width >> level).max(1) as usize;
             let h = (height >> level).max(1) as usize;
-            ensure!(bytes.len() == w * h * 4, "invalid image mip byte count");
+            ensure!(bytes.len() == w * h * bpp, "invalid image mip byte count");
+            if bpp == 8 {
+                for pixel in bytes.chunks_exact(8) {
+                    let c: [u16; 4] = std::array::from_fn(|i| {
+                        u16::from_le_bytes([pixel[i * 2], pixel[i * 2 + 1]])
+                    });
+                    ensure!(
+                        c[3] <= 0x3c00 && c[..3].iter().all(|v| *v <= c[3]),
+                        "RGBA16F requires bounded premultiplied linear P3"
+                    );
+                }
+            }
             byte_len += bytes.len();
             ensure!(byte_len <= Self::MAX_BYTES, "image texture exceeds 64 MiB");
         }
@@ -37,7 +95,20 @@ impl ImageTextureData {
             height,
             levels: levels.into(),
             byte_len,
+            format,
         })
+    }
+    /// Validated source storage/color contract.
+    pub fn format(&self) -> ImageTextureFormat {
+        self.format
+    }
+    /// Unpadded bytes per source pixel.
+    pub fn bytes_per_pixel(&self) -> usize {
+        if self.format == ImageTextureFormat::Rgba8Srgb {
+            4
+        } else {
+            8
+        }
     }
     /// Source width in physical pixels.
     pub fn width(&self) -> u32 {
@@ -55,7 +126,9 @@ impl ImageTextureData {
     pub fn staging_byte_len(&self) -> usize {
         (0..self.levels.len())
             .map(|level| {
-                let row = (((self.width >> level).max(1) as usize) * 4).div_ceil(256) * 256;
+                let row = (((self.width >> level).max(1) as usize) * self.bytes_per_pixel())
+                    .div_ceil(256)
+                    * 256;
                 row * (self.height >> level).max(1) as usize
             })
             .sum()
@@ -299,5 +372,82 @@ mod resource_tests {
         assert!(panic.is_err());
         assert_eq!(pool.stats().allocated_bytes, 0);
         Ok(())
+    }
+}
+
+/// Opt-in linear-sRGB image sampling parameters. Only bounded encoded-sRGB
+/// sources are supported here; this is not a wide/HDR texture descriptor.
+/// RGB rows multiply decoded [R,G,B,1], then vignette darkens, then RGB clips
+/// and encodes to SDR sRGB. Alpha is preserved before native coverage/opacity.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LinearImagePaint {
+    rows: [[f32; 4]; 3],
+    vignette: [f32; 4],
+    p3: bool,
+}
+impl LinearImagePaint {
+    /// Vignette = intensity, inner radius, positive feather, roundness. Radius
+    /// units refer to the shortest source edge; roundness 0 follows its ellipse.
+    /// Reject coefficients too large for finite f32 sampling arithmetic.
+    pub fn new(rows: [[f32; 4]; 3], vignette: [f32; 4]) -> Result<Self> {
+        ensure!(
+            rows.iter().all(|row| row.iter().all(|v| v.is_finite())
+                && row.iter().map(|v| f64::from(v.abs())).sum::<f64>() <= f64::from(f32::MAX) / 4.),
+            "image matrix exceeds f32 sampling range"
+        );
+        let [intensity, radius, feather, roundness] = vignette;
+        ensure!(
+            vignette.iter().all(|v| v.is_finite())
+                && (0.0..=1.0).contains(&intensity)
+                && radius >= 0.
+                && feather >= f32::MIN_POSITIVE
+                && (0.0..=1.0).contains(&roundness),
+            "invalid image vignette"
+        );
+        Ok(Self {
+            rows,
+            vignette,
+            p3: false,
+        })
+    }
+    /// Select linear Display P3 working primaries.
+    pub fn with_p3(mut self, p3: bool) -> Self {
+        self.p3 = p3;
+        self
+    }
+    /// Whether rows operate in linear Display P3.
+    pub fn is_p3(self) -> bool {
+        self.p3
+    }
+    /// Affine rows evaluated in the selected linear working primaries.
+    pub fn rows(self) -> [[f32; 4]; 3] {
+        self.rows
+    }
+    /// Intensity, inner radius, feather and roundness in source-image units.
+    pub fn vignette(self) -> [f32; 4] {
+        self.vignette
+    }
+}
+
+/// Source interpretation and requested presentation. Wide requires an accepted
+/// native wide-SDR window; browser/wgpu hosts must reject it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ImageColorMode {
+    #[default]
+    /// Straight encoded-sRGB input.
+    EncodedSrgb,
+    /// Associated linear-P3 input mapped to clipped sRGB.
+    LinearP3Preview,
+    /// Associated linear-P3 input presented by the native wide-SDR compositor.
+    LinearP3Wide,
+}
+impl ImageColorMode {
+    /// Stable renderer uniform value.
+    pub fn shader_value(self) -> f32 {
+        match self {
+            Self::EncodedSrgb => 0.,
+            Self::LinearP3Preview => 1.,
+            Self::LinearP3Wide => 2.,
+        }
     }
 }

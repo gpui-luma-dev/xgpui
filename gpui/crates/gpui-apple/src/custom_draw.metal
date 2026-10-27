@@ -1,12 +1,20 @@
 #include <metal_stdlib>
 using namespace metal;
-struct Params { float4 bounds; float4 mask; float4 radii; float4 viewport; float4 color_r; float4 color_g; float4 color_b; float4 yuv_r; float4 yuv_g; float4 yuv_b; };
+struct Params { float4 bounds; float4 mask; float4 radii; float4 viewport; float4 color_r; float4 color_g; float4 color_b; float4 yuv_r; float4 yuv_g; float4 yuv_b; float4 vignette; float4 linear; };
 struct Vertex { float4 position [[position]]; float2 uv; };
 vertex Vertex custom_vertex(uint id [[vertex_id]], constant Params &p [[buffer(0)]]) {
     const float2 vertices[] = {{0,0},{1,0},{0,1},{0,1},{1,0},{1,1}};
     float2 uv = vertices[id];
     float2 xy = p.bounds.xy + uv * p.bounds.zw;
     return {float4(xy.x / p.viewport.x * 2 - 1, 1 - xy.y / p.viewport.y * 2, 0, 1), uv};
+}
+float decode_srgb(float c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4); }
+float encode_srgb(float c) { return c <= 0.0031308 ? 12.92 * c : 1.055 * pow(c, 1.0 / 2.4) - 0.055; }
+float3 p3_to_srgb(float3 c) {
+    return float3(dot(c,float3(1.22494018,-0.22494018,0.)),dot(c,float3(-0.04205695,1.04205695,0.)),dot(c,float3(-0.01963755,-0.07863605,1.09827360)));
+}
+float3 srgb_to_p3(float3 c) {
+    return float3(dot(c,float3(0.82246197,0.17753803,0.)),dot(c,float3(0.03319420,0.96680580,0.)),dot(c,float3(0.01708263,0.07239744,0.91051993)));
 }
 fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buffer(0)]], texture2d<float> image [[texture(0)]], texture2d<float> mask [[texture(1)]], texture2d<float> chroma [[texture(2)]]) {
     float2 xy = in.position.xy;
@@ -28,7 +36,30 @@ fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buf
         color = image.sample(s, in.uv);
     }
     if (fmod(floor(p.viewport.w / 2.0), 2.0) > 0.5 && color.a > 0.0) color.rgb /= color.a;
+    bool processing = p.linear.x > 0.5 || p.linear.y > 0.5;
+    if (p.linear.y > 0.5) {
+        color.rgb = color.a > 0.0 ? color.rgb / color.a : float3(0.0, 0.0, 0.0);
+        if (p.linear.z < 0.5) color.rgb = p3_to_srgb(color.rgb);
+    } else if (processing) {
+        float3 c = clamp(color.rgb, 0.0, 1.0);
+        color.rgb = float3(decode_srgb(c.r), decode_srgb(c.g), decode_srgb(c.b));
+        if (p.linear.z > 0.5) color.rgb = srgb_to_p3(color.rgb);
+    }
     float4 rgb1 = float4(color.rgb, 1.0);
     color.rgb = float3(dot(p.color_r, rgb1), dot(p.color_g, rgb1), dot(p.color_b, rgb1));
+    if (processing) {
+        float2 dims = float2(image.get_width(), image.get_height());
+        float2 q = in.uv * 2.0 - 1.0;
+        float ellipse = length(q);
+        float circle = length(q * dims / min(dims.x, dims.y));
+        float d = ellipse + p.vignette.w * (circle - ellipse);
+        float t = clamp((d - p.vignette.y) / p.vignette.z, 0.0, 1.0);
+        float factor = 1.0 - p.vignette.x * t*t*(3.0 - 2.0*t);
+        float3 rgb = color.rgb * factor;
+        if (p.linear.z > 0.5) rgb = p3_to_srgb(rgb);
+        float3 c = clamp(rgb, 0.0, 1.0);
+        color.rgb = float3(encode_srgb(c.r), encode_srgb(c.g), encode_srgb(c.b));
+        if (color.a == 0.0) color.rgb = float3(0.0, 0.0, 0.0);
+    }
     return float4(color.rgb, color.a * coverage * p.viewport.z);
 }

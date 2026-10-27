@@ -76,6 +76,8 @@ pub struct Lab {
     pub ui_perf: Option<crate::ui_perf::Run>,
     pub continuous_redraw: bool,
     pub video_mode: bool,
+    pub video_blur: usize,
+    pub video_blurs: [xgpui_media::pipeline::ImageBlur; 4],
     #[cfg(target_os = "macos")]
     pub video_format: crate::video_lab::SourceFormat,
     #[cfg(target_os = "macos")]
@@ -97,6 +99,9 @@ pub struct Lab {
     pub drag: Option<(Point<Pixels>, Point<Pixels>)>,
     pub opacity: f32,
     pub filters: [usize; 5],
+    pub linear_mode: bool,
+    pub adjustments: [usize; 4],
+    pub adjustment_animate: bool,
     pub radius: f32,
     pub sweep: bool,
     pub started: Instant,
@@ -115,6 +120,9 @@ impl Lab {
             ui_perf: None,
             continuous_redraw: false,
             video_mode: false,
+            video_blur: 0,
+            video_blurs: [0., 4., 8., 16.]
+                .map(|r| xgpui_media::pipeline::ImageBlur::new(px(r)).unwrap()),
             #[cfg(target_os = "macos")]
             video_format: Default::default(),
             #[cfg(target_os = "macos")]
@@ -136,6 +144,9 @@ impl Lab {
             drag: None,
             opacity: 1.,
             filters: [0; 5],
+            linear_mode: false,
+            adjustments: [0; 4],
+            adjustment_animate: false,
             radius: 16.,
             sweep: false,
             started: Instant::now(),
@@ -148,6 +159,27 @@ impl Lab {
         };
         lab.reload();
         Ok(lab)
+    }
+    pub fn image_adjustments(&self) -> xgpui_media::pipeline::ImageAdjustments {
+        use xgpui_media::pipeline::{ColorMatrix, ImageAdjustments, ImagePrimaries, Vignette};
+        let ev = [0., -1., 1., 2.][self.adjustments[0]]
+            + if self.adjustment_animate {
+                (self.started.elapsed().as_secs_f64() * 1.5).sin() * 0.8
+            } else {
+                0.
+            };
+        let matrix = ColorMatrix::identity(ImagePrimaries::Srgb)
+            .exposure(ev)
+            .unwrap()
+            .contrast([1., 0.6, 1.5][self.adjustments[1]], 0.18)
+            .unwrap()
+            .saturation([1., 0., 1.8][self.adjustments[2]])
+            .unwrap();
+        ImageAdjustments::new(
+            matrix,
+            Some(Vignette::new([0., 0.4, 0.8][self.adjustments[3]], 0.35, 0.65, 1.).unwrap()),
+        )
+        .unwrap()
     }
     pub fn image_filter(&self) -> xgpui_media::ImageFilter {
         xgpui_media::ImageFilter::new()

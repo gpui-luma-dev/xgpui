@@ -1,6 +1,6 @@
 #include <metal_stdlib>
 using namespace metal;
-struct Params { float4 bounds; float4 mask; float4 radii; float4 viewport; };
+struct Params { float4 bounds; float4 mask; float4 radii; float4 viewport; float4 color_r; float4 color_g; float4 color_b; float4 vignette; float4 linear; };
 struct Vertex { float4 position [[position]]; float2 uv; };
 vertex Vertex gamut_vertex(uint id [[vertex_id]], constant Params &p [[buffer(0)]]) {
     const float2 v[] = {{0,0},{1,0},{0,1},{0,1},{1,0},{1,1}};
@@ -28,13 +28,26 @@ fragment float4 gamut_fragment(Vertex in [[stage_in]], constant Params &p [[buff
  texture2d<float> image [[texture(0)]], texture2d<float> mask [[texture(1)]]) {
     float2 xy=in.position.xy;
     if(any(xy<p.mask.xy)||any(xy>=p.mask.xy+p.mask.zw)) discard_fragment();
-    constexpr sampler s(coord::normalized,address::clamp_to_edge,filter::linear);
+    constexpr sampler s(coord::normalized,address::clamp_to_edge,filter::linear,mip_filter::linear);
     float4 c;
     if(p.viewport.w > .5) { // Legacy scratch: exact texel read, associated encoded sRGB.
         c=image.read(uint2(xy));
         c.rgb=c.a>0 ? srgb_to_p3(decode_srgb(c.rgb/c.a))*c.a : float3(0);
     } else { // Explicit private wide contract: associated linear P3.
         c=image.sample(s,in.uv);
+        if (p.linear.x > .5) {
+            float3 rgb=c.a>0 ? c.rgb/c.a : float3(0);
+            if (p.linear.y < .5) rgb=p3_to_srgb(rgb);
+            float4 v=float4(rgb,1);
+            rgb=float3(dot(p.color_r,v),dot(p.color_g,v),dot(p.color_b,v));
+            float2 dims=float2(image.get_width(),image.get_height());
+            float2 q=in.uv*2.-1.;
+            float d=mix(length(q),length(q*dims/min(dims.x,dims.y)),p.vignette.w);
+            float t=clamp((d-p.vignette.y)/p.vignette.z,0.,1.);
+            rgb*=1.-p.vignette.x*t*t*(3.-2.*t);
+            if (p.linear.y < .5) rgb=srgb_to_p3(rgb);
+            c.rgb=clamp(rgb,0.,1.)*c.a;
+        }
     }
     float2 local=in.uv*p.bounds.zw;
     bool right=local.x>p.bounds.z*.5, bottom=local.y>p.bounds.w*.5;

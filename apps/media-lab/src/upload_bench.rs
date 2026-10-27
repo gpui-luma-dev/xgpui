@@ -354,7 +354,8 @@ pub fn run(report_path: &Path, png: &Path, portable: bool) -> Result<()> {
         },
         FrameUploadLimits {
             max_uploads: 1,
-            max_bytes: 32 * MIB,
+            // Full-chain staging includes 256-byte row padding.
+            max_bytes: 33 * MIB,
         },
     )?;
     let directory = tempfile::Builder::new()

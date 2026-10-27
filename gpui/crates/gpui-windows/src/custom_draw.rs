@@ -1,6 +1,6 @@
 //! DirectX 11 preparation for retained custom paints. Only the host executes work.
-pub mod dxgi;
 mod backdrop;
+pub mod dxgi;
 pub(crate) use backdrop::Backdrops;
 mod coverage_cache;
 mod instanced;
@@ -326,8 +326,11 @@ impl Dx11ImageUploadContext {
                 DevicePixels(data.width() as i32),
                 DevicePixels(data.height() as i32),
             ),
-            DXGI_FORMAT_R8G8B8A8_UNORM,
-            4,
+            match data.format() {
+                gpui::ImageTextureFormat::Rgba8Srgb => DXGI_FORMAT_R8G8B8A8_UNORM,
+                gpui::ImageTextureFormat::LinearP3Rgba16Float => DXGI_FORMAT_R16G16B16A16_FLOAT,
+            },
+            data.bytes_per_pixel() as u64,
             gpui::ImageTextureData::MAX_BYTES as u64,
             data.levels().len() as u32,
         )?;
@@ -344,7 +347,7 @@ impl Dx11ImageUploadContext {
             .enumerate()
             .map(|(level, bytes)| D3D11_SUBRESOURCE_DATA {
                 pSysMem: bytes.as_ptr().cast(),
-                SysMemPitch: (data.width() >> level).max(1) * 4,
+                SysMemPitch: (data.width() >> level).max(1) * data.bytes_per_pixel() as u32,
                 SysMemSlicePitch: 0,
             })
             .collect();
@@ -613,7 +616,7 @@ pub(crate) fn compile(source: &str, entry: &str, target: &str) -> Result<Vec<u8>
 }
 fn dynamic_uniform_buffer(device: &ID3D11Device) -> Result<ID3D11Buffer> {
     let desc = D3D11_BUFFER_DESC {
-        ByteWidth: 112,
+        ByteWidth: 144,
         Usage: D3D11_USAGE_DYNAMIC,
         BindFlags: D3D11_BIND_CONSTANT_BUFFER.0 as u32,
         CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0 as u32,
@@ -718,8 +721,24 @@ impl CustomCompositor {
         }
         let mut wide_blending = false;
         for (draw, output) in draws.iter().zip(outputs) {
-            let transform = draw.content.image_color_transform();
-        let params: [[f32; 4]; 7] = [
+            let adjustments = draw.content.image_linear_adjustments();
+            let transform = adjustments
+                .map(|v| v.rows())
+                .unwrap_or_else(|| draw.content.image_color_transform());
+            let vignette = adjustments
+                .map(|v| v.vignette())
+                .unwrap_or([0., 0., 1., 1.]);
+            let color_flags = [
+                if adjustments.is_some() { 1. } else { 0. },
+                draw.content.image_color_mode().shader_value(),
+                if adjustments.is_some_and(|v| v.is_p3()) {
+                    1.
+                } else {
+                    0.
+                },
+                0.,
+            ];
+            let params: [[f32; 4]; 9] = [
                 [
                     draw.bounds.origin.x.0,
                     draw.bounds.origin.y.0,
@@ -741,15 +760,17 @@ impl CustomCompositor {
                 [
                     viewport_size.width.0 as f32,
                     viewport_size.height.0 as f32,
-                    draw.opacity,
+                    draw.opacity * draw.content.image_sample_opacity().clamp(0., 1.),
                     u32::from(output.coverage.is_some()) as f32
                         + if output.native { 2. } else { 0. }
                         + if output.wide { 4. } else { 0. },
                 ],
                 transform[0],
-            transform[1],
-            transform[2],
-        ];
+                transform[1],
+                transform[2],
+                vignette,
+                color_flags,
+            ];
             // Fixed-size stack packing; WRITE_DISCARD preserves earlier draw
             // snapshots through driver renaming, including deferred command lists.
             let bytes = params.map(|row| row.map(f32::to_le_bytes));
@@ -762,7 +783,11 @@ impl CustomCompositor {
                     0,
                     Some(&mut mapped),
                 )?;
-                std::ptr::copy_nonoverlapping(bytes.as_ptr().cast::<u8>(), mapped.pData.cast(), 112);
+                std::ptr::copy_nonoverlapping(
+                    bytes.as_ptr().cast::<u8>(),
+                    mapped.pData.cast(),
+                    144,
+                );
                 deferred.Unmap(&self.uniform, 0);
             }
             let mask = output.coverage.as_ref().unwrap_or(&output.source);
@@ -822,6 +847,21 @@ pub(crate) fn extent(draw: &CustomDraw) -> Result<Size<DevicePixels>> {
         .all(|v| v.is_finite()),
         "non-finite custom geometry"
     );
+    if let Some(source) = draw.content.image_source_size() {
+        ensure!(
+            draw.coverage.is_none()
+                && draw.bounds.size.width.0.is_finite()
+                && draw.bounds.size.height.0.is_finite()
+                && draw.bounds.size.width.0 > 0.
+                && draw.bounds.size.height.0 > 0.
+                && source.width.0 > 0
+                && source.height.0 > 0
+                && source.width.0 <= 16384
+                && source.height.0 <= 16384,
+            "invalid source-sized image preparation"
+        );
+        return Ok(source);
+    }
     ensure!(
         draw.bounds.size.width.0 > 0.
             && draw.bounds.size.height.0 > 0.
