@@ -26,3 +26,4 @@
 "zlog" = { path = "gpui/crates/zlog" }
 "ztracing" = { path = "gpui/crates/ztracing" }
 "ztracing-macro" = { path = "gpui/crates/ztracing-macro" }
+block = { path = "vendor/block" }

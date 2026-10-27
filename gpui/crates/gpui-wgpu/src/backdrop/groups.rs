@@ -21,9 +21,17 @@ impl Groups {
         self.plans.clear();
         self.hits.clear();
     }
+    #[cfg(all(
+        not(target_family = "wasm"),
+        any(test, feature = "bench-support", feature = "test-support")
+    ))]
     pub fn texture_count(&self) -> usize {
         self.slots.iter().map(|slot| slot.textures.len()).sum()
     }
+    #[cfg(all(
+        not(target_family = "wasm"),
+        any(test, feature = "bench-support", feature = "test-support")
+    ))]
     pub fn texture_bytes(&self) -> u64 {
         self.slots
             .iter()

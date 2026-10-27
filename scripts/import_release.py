@@ -57,6 +57,13 @@ def capture(root, source, revision, release, expected_sha=None):
         destination = root / "gpui"
         if destination.exists():
             shutil.rmtree(destination)
+        # The nested transformer staging tree duplicates authoritative crates.
+        # Keep required per-crate vendored sources (for example gpui-apple/gpui).
+        staging = snapshot / "crates/transformed-crates"
+        if staging.is_symlink():
+            staging.unlink()
+        elif staging.exists():
+            shutil.rmtree(staging)
         shutil.copytree(snapshot, destination, symlinks=True)
 
         config = root / ".cargo" / "config.toml"

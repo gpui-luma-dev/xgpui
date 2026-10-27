@@ -10,17 +10,27 @@ Run these commands from the repository root:
 cargo build --locked
 ```
 
-The root workspace contains a private build harness that depends on all captured
-libraries supported by the selected target. On macOS, this compiles 23 captured
-crates, including GPUI, the Apple/Metal and macOS backends, the wgpu renderer,
-macros, HTTP clients, and supporting utilities. Metal shaders are compiled at
-build time by default. The harness has no runtime behavior and launches nothing.
+The private root harness builds GPUI and the selected platform backend by
+default. On macOS this resolves 15 captured libraries, Windows 14, and Linux 15
+with the generated native features. Optional integrations and development-only
+support are not direct default build inputs. Metal shaders compile at build time
+by default. The harness launches nothing.
 
-The complete release contains 26 crates. The Linux, Windows, and browser
-backends are selected only for their respective targets, rather than counted
-as native macOS builds. Those targets are not validated by the macOS build.
-Optional features and standalone test, benchmark, example, or binary targets
-are not all enabled by a root library build.
+Use the explicit full-capture mode to compile every captured library supported
+by the selected target:
+
+```sh
+cargo build --locked --features full-capture
+# Equivalent recipe:
+just build-full
+```
+
+On macOS full-capture resolves 23 captured libraries, including HTTP integrations,
+utility/test support and the WGPU renderer. All 26 captured crates remain available
+across targets. Neither mode enables every optional feature or standalone test,
+benchmark, example, or binary target. Cross-target dependency resolution is not
+platform build validation; Windows, Linux and macOS require their own checks.
+Browser checks are secondary.
 
 ## Requirements and options
 
@@ -71,7 +81,8 @@ explicitly excludes each of those directories and builds their libraries as
 path dependencies. The harness does not rewrite their manifests or source.
 A separate downstream spring-animation fix uses the scheduler clock so headless
 tests advance deterministically; the clean upstream branch retains the original.
-The nested `transformed-crates` staging copy is not built a second time.
+The unused nested `transformed-crates` staging mirror is removed during import
+and normalization. Required per-crate vendored shader inputs remain intact.
 
 `Cargo.toml` and `tools/build-all/Cargo.toml` are generated development files;
 they are not overwritten by upstream imports or downstream normalization. After an import adds or removes
@@ -84,16 +95,25 @@ cargo generate-lockfile
 cargo build --locked
 ```
 
-CI checks `python3 scripts/update_build.py --check` to detect a stale harness.
-Review the platform classification in that script when upstream adds a backend.
+CI checks `xgpui-release build-manifests --check` to detect a stale harness.
+`python3 scripts/update_build.py --check` delegates to the same Rust generator.
+Review its platform classification when upstream adds a backend.
 Keep the root Cargo.lock committed for reproducible native builds.
 
-The generated root manifest restores the compatibility dependencies listed in
-`.cargo/validation.toml`. Besides Zed's Proptest revision, compiling the macOS
+The generated root manifest restores production compatibility dependencies from
+`.cargo/validation.toml`. The Proptest override stays scoped to explicit standalone
+test validation, avoiding an unused-patch warning in root library builds.
+Compiling the macOS
 utility crate requires Zed's async-process fork: its process launcher calls
 `Child::adopt_raw_pid`, which the registry dependency does not provide. The fork
 revision is taken from the original Zed release's workspace patch. These
 overrides repair extraction omissions without editing captured source.
+
+A local MIT-licensed `block` 0.1.6 compatibility copy under `vendor/block` fixes
+an invalid foreign static in the legacy Cocoa/Metal dependency. Its patch notes
+record the source, ABI-preserving changes, and removal criteria. The normal local
+Cargo configuration also applies it to standalone builds; consumer lockfiles
+record the local source. Account for this patch when preparing published packages.
 
 ## Local naming
 

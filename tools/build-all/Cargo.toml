@@ -8,46 +8,72 @@ publish = false
 [features]
 runtime-shaders = [
     "gpui-platform/runtime_shaders",
-    "gpui-apple/runtime_shaders",
-    "gpui-macos/runtime_shaders",
+    "gpui-apple?/runtime_shaders",
+    "gpui-macos?/runtime_shaders",
+]
+full-capture = [
+    "dep:collections",
+    "dep:derive-refineable",
+    "dep:gpui-apple",
+    "dep:gpui-linux",
+    "dep:gpui-macos",
+    "dep:gpui-macros",
+    "dep:gpui-shared-string",
+    "dep:gpui-util",
+    "dep:gpui-web",
+    "dep:gpui-wgpu",
+    "dep:gpui-windows",
+    "dep:http-client",
+    "dep:http-client-tls",
+    "dep:path",
+    "dep:perf",
+    "dep:refineable",
+    "dep:reqwest-client",
+    "dep:scheduler",
+    "dep:sum-tree",
+    "dep:util",
+    "dep:util-macros",
+    "dep:zlog",
+    "dep:ztracing",
+    "dep:ztracing-macro",
 ]
 
 [dependencies]
-collections = { path = "../../gpui/crates/collections" }
-derive-refineable = { path = "../../gpui/crates/derive-refineable" }
+collections = { path = "../../gpui/crates/collections", optional = true }
+derive-refineable = { path = "../../gpui/crates/derive-refineable", optional = true }
 gpui = { path = "../../gpui/crates/gpui" }
-gpui-macros = { path = "../../gpui/crates/gpui-macros" }
+gpui-macros = { path = "../../gpui/crates/gpui-macros", optional = true }
 gpui-platform = { path = "../../gpui/crates/gpui-platform" }
-gpui-shared-string = { path = "../../gpui/crates/gpui-shared-string" }
-gpui-util = { path = "../../gpui/crates/gpui-util" }
-gpui-wgpu = { path = "../../gpui/crates/gpui-wgpu" }
-http-client = { path = "../../gpui/crates/http-client" }
-http-client-tls = { path = "../../gpui/crates/http-client-tls" }
-path = { path = "../../gpui/crates/path" }
-perf = { path = "../../gpui/crates/perf" }
-refineable = { path = "../../gpui/crates/refineable" }
-reqwest-client = { path = "../../gpui/crates/reqwest-client" }
-scheduler = { path = "../../gpui/crates/scheduler" }
-sum-tree = { path = "../../gpui/crates/sum-tree" }
-util = { path = "../../gpui/crates/util" }
-util-macros = { path = "../../gpui/crates/util-macros" }
-zlog = { path = "../../gpui/crates/zlog" }
-ztracing = { path = "../../gpui/crates/ztracing" }
-ztracing-macro = { path = "../../gpui/crates/ztracing-macro" }
+gpui-shared-string = { path = "../../gpui/crates/gpui-shared-string", optional = true }
+gpui-util = { path = "../../gpui/crates/gpui-util", optional = true }
+gpui-wgpu = { path = "../../gpui/crates/gpui-wgpu", optional = true }
+http-client = { path = "../../gpui/crates/http-client", optional = true }
+http-client-tls = { path = "../../gpui/crates/http-client-tls", optional = true }
+path = { path = "../../gpui/crates/path", optional = true }
+perf = { path = "../../gpui/crates/perf", optional = true }
+refineable = { path = "../../gpui/crates/refineable", optional = true }
+reqwest-client = { path = "../../gpui/crates/reqwest-client", optional = true }
+scheduler = { path = "../../gpui/crates/scheduler", optional = true }
+sum-tree = { path = "../../gpui/crates/sum-tree", optional = true }
+util = { path = "../../gpui/crates/util", optional = true }
+util-macros = { path = "../../gpui/crates/util-macros", optional = true }
+zlog = { path = "../../gpui/crates/zlog", optional = true }
+ztracing = { path = "../../gpui/crates/ztracing", optional = true }
+ztracing-macro = { path = "../../gpui/crates/ztracing-macro", optional = true }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-gpui-apple = { path = "../../gpui/crates/gpui-apple" }
+gpui-apple = { path = "../../gpui/crates/gpui-apple", optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
-gpui-linux = { path = "../../gpui/crates/gpui-linux" }
+gpui-linux = { path = "../../gpui/crates/gpui-linux", optional = true }
 gpui-platform = { path = "../../gpui/crates/gpui-platform", features = ["wayland", "x11"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-gpui-macos = { path = "../../gpui/crates/gpui-macos" }
+gpui-macos = { path = "../../gpui/crates/gpui-macos", optional = true }
 gpui-platform = { path = "../../gpui/crates/gpui-platform", features = ["font-kit"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-gpui-web = { path = "../../gpui/crates/gpui-web" }
+gpui-web = { path = "../../gpui/crates/gpui-web", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-gpui-windows = { path = "../../gpui/crates/gpui-windows" }
+gpui-windows = { path = "../../gpui/crates/gpui-windows", optional = true }

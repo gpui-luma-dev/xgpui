@@ -47,9 +47,13 @@ quad-bench *args:
 color-field-bench *args:
     cargo run {{ options }} --manifest-path apps/color-field-bench/Cargo.toml -- "$@"
 
-# Build the host-platform GPUI libraries; this does not launch an app.
+# Build the representative core/platform libraries; does not launch an app.
 build *args:
     cargo build --profile {{ profile }} --locked "$@"
+
+# Build every captured library supported by this target (not all feature combinations).
+build-full *args:
+    cargo build --profile {{ profile }} --locked --features full-capture "$@"
 
 # Generate the documentation inventory and embedded guides.
 docs:

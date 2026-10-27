@@ -64,7 +64,22 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual((self.root / manifest.relative_to(self.incoming)).read_text(), "version 1.25.2\n")
         apply(self.root, self.incoming, plan, "cargo")
         self.assertEqual((self.root / manifest.relative_to(self.incoming)).read_text(), "version 1.25.3\n")
-        self.assertTrue((self.root / mirror.relative_to(self.incoming)).exists())
+        self.assertFalse((self.root / mirror.relative_to(self.incoming)).exists())
+        self.assertEqual(self.plan()["entries"], [])
+
+    def test_legacy_staging_is_deleted_even_when_incoming_has_a_copy(self):
+        relative = "gpui/crates/transformed-crates/gpui/code.rs"
+        for tree in (self.root, self.incoming):
+            path = tree / relative
+            path.parent.mkdir(parents=True)
+            path.write_text("legacy mirror")
+        git("add", ".", cwd=self.root)
+        git("commit", "--quiet", "-m", "Legacy staging", cwd=self.root)
+        plan = self.plan()
+        self.assertEqual([(e["path"], e["change"]) for e in plan["entries"]], [(relative, "deleted")])
+        apply(self.root, self.incoming, plan, "code")
+        apply(self.root, self.incoming, plan, "metadata")
+        self.assertFalse((self.root / relative).exists())
         self.assertEqual(self.plan()["entries"], [])
 
     def test_mirrored_cargo_requirements_are_not_labeled_metadata(self):

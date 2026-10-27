@@ -15,9 +15,9 @@ The proposal uses separate commits:
 1. **Code:** changed source, shaders, build scripts, assets and other package
    files, including additions and deletions.
 2. **Cargo versions/dependencies:** package versions and dependency requirements,
-   including mirrored manifests. These affect dependency resolution.
+   which affect dependency resolution.
 3. **Generated metadata/artifacts:** generated package READMEs, provenance and
-   the remaining duplicate `transformed-crates` files.
+   other retained capture metadata.
 
 Release context uses the exact old/new Zed SHAs in snapshot provenance, never
 latest-release or previous-stable guesses. Its path filter is the union of both
@@ -51,8 +51,9 @@ patch, not an upstream fix; it is retained with its regression assertion.
 For example, `gpui-unofficial` becomes `gpui`, and
 `gpui-linux-gpui-unofficial` becomes `gpui-linux`. Rust dependency aliases such as
 `gpui_linux` stay as they were. Cargo package identities, dependency references,
-directory paths and local overrides change together. The nested transformed
-staging copy is normalized too, but is not a second build input.
+directory paths and local overrides change together. The unused nested
+`transformed-crates` staging mirror is excluded from imports and removed by
+normalization. Required per-crate vendored sources are preserved.
 
 `upstream.json` retains the source repository, release and commit, plus Zed's
 reported provenance. `source_packages` retains original names/paths; `packages`
