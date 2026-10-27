@@ -20,9 +20,11 @@ impl Groups {
         self.plans.clear();
         self.hits.clear();
     }
+    #[cfg(any(test, feature = "test-support"))]
     pub fn texture_count(&self) -> usize {
         self.slots.iter().map(|slot| slot.textures.len()).sum()
     }
+    #[cfg(any(test, feature = "test-support"))]
     pub fn texture_bytes(&self) -> u64 {
         self.slots
             .iter()
