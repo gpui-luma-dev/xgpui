@@ -226,9 +226,13 @@ struct Lab {
     backdrop_disabled: bool,
     #[cfg(feature = "portable-shaders")]
     layer_filter_step: u8,
+    #[cfg(feature = "portable-shaders")]
     layer_blend_step: usize,
+    #[cfg(feature = "portable-shaders")]
     layer_blur_step: usize,
+    #[cfg(feature = "portable-shaders")]
     layer_blur_full_resolution: bool,
+    #[cfg(feature = "portable-shaders")]
     direct_paths: bool,
     #[cfg(feature = "portable-shaders")]
     freeform_step: u8,
@@ -986,9 +990,13 @@ fn main() -> Result<()> {
                     backdrop_disabled: false,
                     #[cfg(feature = "portable-shaders")]
                     layer_filter_step: 0,
+                    #[cfg(feature = "portable-shaders")]
                     layer_blend_step: 0,
+                    #[cfg(feature = "portable-shaders")]
                     layer_blur_step: 0,
+                    #[cfg(feature = "portable-shaders")]
                     layer_blur_full_resolution: false,
+                    #[cfg(feature = "portable-shaders")]
                     direct_paths: true,
                     #[cfg(feature = "portable-shaders")]
                     freeform_step: 2,
