@@ -3,7 +3,7 @@
 Standalone CPU color science and reusable WGSL math. No runtime dependencies,
 GPUI, window system, native backend, or shader compiler required.
 
-[Web documentation and dependency boundaries](../../../../docs/extensions/color-math.md).
+[Web documentation and dependency boundaries](../../../docs/extensions/color-math.md).
 
 ## CPU color core
 

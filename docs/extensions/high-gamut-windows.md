@@ -25,8 +25,8 @@ and [backend APIs](gpui-public-api.md#added-backend-crate-public-apis).
 ```toml
 # App under apps/:
 [dependencies]
-xgpui-gamut = { path = "../../extensions/xgpui-ext/crates/xgpui-gamut" }
-xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader" }
+xgpui-gamut = { path = "../../extensions/crates/xgpui-gamut" }
+xgpui-shader = { path = "../../extensions/crates/xgpui-shader" }
 ```
 
 ```rust

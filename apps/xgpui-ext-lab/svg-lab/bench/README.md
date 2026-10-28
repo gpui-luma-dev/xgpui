@@ -1,6 +1,6 @@
 # SVG measurements and reproduction
 
-The current experimental contract lives in the [extension README](../../../../extensions/xgpui-ext/crates/xgpui-svg/README.md).
+The current experimental contract lives in the [extension README](../../../../extensions/crates/xgpui-svg/README.md).
 Reports below preserve the implementation and workload at the time of each run;
 older recommendations are historical, not additional unfinished work.
 
@@ -90,4 +90,4 @@ Lower footprint is purchased partly through lower raster resolution. The 96-tile
 case divides the same budget among more elements and often reuses capped previews;
 it is not a comparison at equal image quality or equal raster work. See the
 [current assessment](results/2026-10-24-scheduler/ASSESSMENT.md) and
-[deferred work](../../../../extensions/xgpui-ext/crates/xgpui-svg/FOLLOW_UPS.md).
+[deferred work](../../../../extensions/crates/xgpui-svg/FOLLOW_UPS.md).

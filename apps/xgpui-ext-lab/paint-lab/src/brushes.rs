@@ -757,7 +757,7 @@ fn blue_noise_demo() -> impl IntoElement {
                             canvas(
                                 |_, _, _| (),
                                 move |bounds, (), window, _| {
-                                    let ranks = include_bytes!("../../../../extensions/xgpui-ext/crates/xgpui-shader/src/brush/blue_noise.bin");
+                                    let ranks = include_bytes!("../../../../extensions/crates/xgpui-shader/src/brush/blue_noise.bin");
                                     for (i, rank) in ranks.iter().enumerate() {
                                         let value = if threshold {
                                             if *rank < 128 { 0 } else { 255 }

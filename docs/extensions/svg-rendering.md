@@ -185,13 +185,13 @@ the host. This is not a sandbox for hostile documents.
 [SVG lab and attributed samples](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/svg-lab/README.md?plain=1) ·
 [measurement index](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/svg-lab/bench/README.md?plain=1) ·
 [shared-pool results](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/svg-lab/bench/results/2026-10-24-scheduler/ASSESSMENT.md?plain=1) ·
-[documented follow-ups](https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/xgpui-ext/crates/xgpui-svg/FOLLOW_UPS.md?plain=1)
+[documented follow-ups](https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-svg/FOLLOW_UPS.md?plain=1)
 
 From the repository root:
 
 ```sh
-cargo test --offline --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-svg/Cargo.toml --target-dir target
-cargo clippy --offline --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-svg/Cargo.toml --target-dir target --all-targets -- -D warnings
+cargo test --offline --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-svg/Cargo.toml --target-dir target
+cargo clippy --offline --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-svg/Cargo.toml --target-dir target --all-targets -- -D warnings
 ```
 
 Tests cover actual mounted elements, refinement/timers, sibling identity, pan and
@@ -252,7 +252,7 @@ unresolvable dash lengths return errors rather than allowing unbounded work.
 just --justfile apps/xgpui-ext-lab/media-lab/justfile paths
 just --justfile apps/xgpui-ext-lab/media-lab/justfile paths-capture
 just --justfile apps/xgpui-ext-lab/media-lab/justfile paths-wgpu-capture
-cargo test --offline --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-svg/Cargo.toml --lib path_effects
+cargo test --offline --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-svg/Cargo.toml --lib path_effects
 ```
 
 The lab shows original, trimmed and trimmed-plus-dashed strokes in three columns.

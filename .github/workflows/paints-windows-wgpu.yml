@@ -22,7 +22,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'gpui/crates/**'
-      - 'extensions/xgpui-ext/crates/**'
+      - 'extensions/crates/**'
       - 'apps/xgpui-ext-lab/paint-lab/**'
       - 'apps/xgpui-ext-lab/Cargo.*'
 

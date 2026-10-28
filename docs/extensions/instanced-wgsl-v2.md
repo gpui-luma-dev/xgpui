@@ -255,7 +255,7 @@ that companion with the website. See the
 
 ```sh
 cargo test --offline --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --target-dir target instanced::
 ```
 
@@ -354,7 +354,7 @@ OkLab gradients. Omit the flags to compare the existing offscreen producer path.
 A manual allocation/timing test is available:
 
 ```sh
-cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-gamut/Cargo.toml --features instanced --lib compare_producer_allocations_and_frame_readback -- --ignored --nocapture --test-threads=1
+cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-gamut/Cargo.toml --features instanced --lib compare_producer_allocations_and_frame_readback -- --ignored --nocapture --test-threads=1
 ```
 
 This test counts actual producer texture allocations, warms the renderer, and

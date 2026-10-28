@@ -8,7 +8,7 @@ rendering behavior and comparing implementations. The workloads share one Cargo
 manifest and lockfile, with separate executable targets.
 
 It lives at `apps/xgpui-ext-lab/`. The reusable extension libraries live separately
-under `extensions/xgpui-ext/crates/` and do not depend on this package.
+under `extensions/crates/` and do not depend on this package.
 
 ## What is in it?
 

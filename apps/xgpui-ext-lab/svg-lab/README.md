@@ -1,6 +1,6 @@
 # SVG lab — experimental extension sample
 
-A native test app for [`xgpui-svg`](../../../extensions/xgpui-ext/crates/xgpui-svg/README.md).
+A native test app for [`xgpui-svg`](../../../extensions/crates/xgpui-svg/README.md).
 It compares a fixed full-color texture, progressive SVG rerasterization and GPUI
 paths, and includes a multi-element gallery for shared scheduling experiments.
 
@@ -81,7 +81,7 @@ and the [measurement/reproduction guide](bench/README.md).
 The progressive panel uses `svg_image` with a retained document, shared camera,
 policy and optional diagnostics callback. It owns no manual queue or timer.
 Applications can use the element without the lab UI; shared scheduling is opt-in.
-See the [extension API](../../../extensions/xgpui-ext/crates/xgpui-svg/README.md).
+See the [extension API](../../../extensions/crates/xgpui-svg/README.md).
 
 Aggregate budgets bound estimated image reservations, not total RSS/physical
 footprint. Lower budgets reduce resolution and admission can temporarily leave
@@ -89,4 +89,4 @@ tiles empty. The native measurements capture host redraw cadence and process
 memory; they do not measure input-to-photon latency or all system GPU memory.
 
 [Results and reproduction](bench/README.md) ·
-[Experimental follow-ups](../../../extensions/xgpui-ext/crates/xgpui-svg/FOLLOW_UPS.md)
+[Experimental follow-ups](../../../extensions/crates/xgpui-svg/FOLLOW_UPS.md)

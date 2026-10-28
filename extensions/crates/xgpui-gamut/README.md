@@ -3,14 +3,14 @@
 Explicit linear-P3 SDR producers, separate from `xgpui-shader`.
 Native composition and window negotiation remain in GPUI backends.
 
-[Usage and backend contract](../../../../docs/extensions/high-gamut-windows.md) ·
-[GPUI API changes](../../../../docs/extensions/gpui-public-api.md) ·
-[gamut-lab](../../../../apps/xgpui-ext-lab/gamut-lab/README.md)
+[Usage and backend contract](../../../docs/extensions/high-gamut-windows.md) ·
+[GPUI API changes](../../../docs/extensions/gpui-public-api.md) ·
+[gamut-lab](../../../apps/xgpui-ext-lab/gamut-lab/README.md)
 
 ## GPUI public API changes: additions and compatibility
 
-[GPUI public API changes: additions and compatibility](../../../../docs/extensions/gpui-public-api.md#added-opt-in-window-presentation).
-See the [crate guide](../../../../docs/extensions/high-gamut-windows.md#gpui-public-api-changes-additions-and-compatibility) for required additions and downstream compatibility impact.
+[GPUI public API changes: additions and compatibility](../../../docs/extensions/gpui-public-api.md#added-opt-in-window-presentation).
+See the [crate guide](../../../docs/extensions/high-gamut-windows.md#gpui-public-api-changes-additions-and-compatibility) for required additions and downstream compatibility impact.
 
 ## Shared color math
 
@@ -52,9 +52,9 @@ and gradients use one 80-byte instance layout and shared program identity;
 compatible consecutive draws can batch. Legacy UI conversion and presentation
 passes remain. Existing `WideColor`/`CustomContent` calls retain their texture path.
 
-See the [instanced guide](../../../../docs/extensions/instanced-wgsl-v2.md) and run:
+See the [instanced guide](../../../docs/extensions/instanced-wgsl-v2.md) and run:
 
 ```sh
-cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-gamut/Cargo.toml --features instanced
+cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-gamut/Cargo.toml --features instanced
 cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab -- --instanced --gradient
 ```

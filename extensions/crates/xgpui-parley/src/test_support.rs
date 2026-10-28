@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 pub(crate) const PLEX: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../../../gpui/crates/gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
+    "/../../../gpui/crates/gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
 ));
 pub(crate) const INTER: &[u8] = include_bytes!("../tests/fonts/InterVariable.ttf");
 

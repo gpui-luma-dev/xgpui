@@ -7,7 +7,7 @@ window, GPU context or shader compiler. Naga and native Metal are test-only depe
 ```toml
 # App under apps/:
 [dependencies]
-xgpui-color = { path = "../../extensions/xgpui-ext/crates/xgpui-color" }
+xgpui-color = { path = "../../extensions/crates/xgpui-color" }
 ```
 
 ```rust
@@ -54,8 +54,8 @@ and [HDR ↗](https://en.wikipedia.org/wiki/High_dynamic_range) are separate wor
 ## Validation
 
 ```sh
-cargo test --locked --manifest-path extensions/xgpui-ext/crates/xgpui-color/Cargo.toml
-cargo check --locked --manifest-path extensions/xgpui-ext/crates/xgpui-color/Cargo.toml --lib --target wasm32-unknown-unknown
+cargo test --locked --manifest-path extensions/crates/xgpui-color/Cargo.toml
+cargo check --locked --manifest-path extensions/crates/xgpui-color/Cargo.toml --lib --target wasm32-unknown-unknown
 ```
 
 Tests cover CPU reference vectors, mapping/interpolation boundaries, shader

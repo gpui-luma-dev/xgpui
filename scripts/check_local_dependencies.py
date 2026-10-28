@@ -13,7 +13,7 @@ published = set(helpers.values())
 distribution = provenance.get("distribution", {})
 identities = distribution.get("packages", {})
 local_paths = {identities.get(name, name): path for name, path in provenance["packages"].items()}
-local_paths.update({name: f"extensions/xgpui-ext/crates/{name}" for name in identities if name.startswith("xgpui-")})
+local_paths.update({name: f"extensions/crates/{name}" for name in identities if name.startswith("xgpui-")})
 failures = []
 for package in metadata["packages"]:
     name = package["name"]

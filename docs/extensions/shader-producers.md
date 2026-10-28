@@ -30,7 +30,7 @@ this sequence without mesh-specific changes in GPUI.
 ## Mesh producer
 
 `MeshGradient` implements the same `CustomContent` protocol as `SolidColor`.
-The Metal implementation lives in `extensions/xgpui-ext/crates/xgpui-shader/src/mesh/`; attribution is in `extensions/xgpui-ext/crates/xgpui-shader/LICENSE-MeshGradient`.
+The Metal implementation lives in `extensions/crates/xgpui-shader/src/mesh/`; attribution is in `extensions/crates/xgpui-shader/LICENSE-MeshGradient`.
 
 ```rust
 use gpui::{prelude::*, px};

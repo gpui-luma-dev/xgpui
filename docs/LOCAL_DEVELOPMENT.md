@@ -22,7 +22,7 @@ lockfiles. Recipes allow dependency downloads; they do not force offline mode.
 XGPUI keeps nine framework and backend crates in `gpui/crates/`: `gpui`,
 `gpui-macros`, `gpui-platform`, `gpui-apple`, `gpui-macos`, `gpui-linux`,
 `gpui-windows`, `gpui-web` and `gpui-wgpu`. The six XGPUI extension crates live
-under `extensions/xgpui-ext/crates/`.
+under `extensions/crates/`.
 
 The downstream release version is **1.0.0**, independent of the captured GPUI
 release. Local directory names and Rust import names stay stable; Cargo package
@@ -251,7 +251,7 @@ For faster compile checks and an example extension test:
 
 ```sh
 cargo check --workspace --locked
-cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-color/Cargo.toml --lib
+cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-color/Cargo.toml --lib
 ```
 
 The first command checks the root harness and its dependencies. The second runs

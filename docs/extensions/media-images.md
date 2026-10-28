@@ -572,7 +572,7 @@ Metal tests cover BGRA and NV12 legacy surfaces, unsupported formats and lifetim
 through GPU completion:
 
 ```sh
-cargo test --release --offline --locked --manifest-path extensions/xgpui-ext/crates/xgpui-media/Cargo.toml --features wgpu --lib
+cargo test --release --offline --locked --manifest-path extensions/crates/xgpui-media/Cargo.toml --features wgpu --lib
 # The backend has no committed lockfile: omit --locked for its standalone tests.
 cargo test --offline --config .cargo/validation.toml --manifest-path gpui/crates/gpui-apple/Cargo.toml --features test-support --lib core_video
 ```
@@ -768,7 +768,7 @@ omit it on a first setup that needs downloads.
 ### Media unit and GPU tests
 
 ```sh
-cargo test --release --offline --locked --manifest-path extensions/xgpui-ext/crates/xgpui-media/Cargo.toml --features wgpu --lib
+cargo test --release --offline --locked --manifest-path extensions/crates/xgpui-media/Cargo.toml --features wgpu --lib
 ```
 
 On macOS this runs sixteen tests, including both native Metal and wgpu pixel checks.
@@ -783,8 +783,8 @@ Expected result: `16 passed; 0 failed`. The suite does not open a window.
 For only CPU loading/mipmap tests, use these filters:
 
 ```sh
-cargo test --release --offline --locked --manifest-path extensions/xgpui-ext/crates/xgpui-media/Cargo.toml --lib mipmaps::tests
-cargo test --release --offline --locked --manifest-path extensions/xgpui-ext/crates/xgpui-media/Cargo.toml --lib tests::loader_
+cargo test --release --offline --locked --manifest-path extensions/crates/xgpui-media/Cargo.toml --lib mipmaps::tests
+cargo test --release --offline --locked --manifest-path extensions/crates/xgpui-media/Cargo.toml --lib tests::loader_
 ```
 
 On macOS the build can still invoke the Metal compiler even when only CPU tests
@@ -809,7 +809,7 @@ readopted after an abandoned recording and rejected by a foreign queue identity.
 From macOS, with the Windows Rust target and Homebrew LLVM installed:
 
 ```sh
-PATH="/opt/homebrew/opt/llvm/bin:$PATH" cargo check --offline --locked --manifest-path extensions/xgpui-ext/crates/xgpui-media/Cargo.toml --target x86_64-pc-windows-msvc
+PATH="/opt/homebrew/opt/llvm/bin:$PATH" cargo check --offline --locked --manifest-path extensions/crates/xgpui-media/Cargo.toml --target x86_64-pc-windows-msvc
 PATH="/opt/homebrew/opt/llvm/bin:$PATH" cargo check --offline --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --tests --target x86_64-pc-windows-msvc
 ```
 

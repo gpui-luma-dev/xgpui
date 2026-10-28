@@ -263,7 +263,7 @@ accessibility tree. Successful builds alone do not certify screen reader behavio
 
 ```sh
 cargo test --offline --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --target-dir target --features portable-shaders,wgpu typography --lib
 bash apps/xgpui-ext-lab/extensions-web/build.sh
 ```

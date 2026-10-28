@@ -17,10 +17,10 @@ use web_time::Instant;
 
 pub const FONTS: [&[u8]; 2] = [
     include_bytes!(
-        "../../../../extensions/xgpui-ext/crates/xgpui-parley/tests/fonts/NotoSansArabic.ttf"
+        "../../../../extensions/crates/xgpui-parley/tests/fonts/NotoSansArabic.ttf"
     ),
     include_bytes!(
-        "../../../../extensions/xgpui-ext/crates/xgpui-parley/tests/fonts/NotoSansHebrew.ttf"
+        "../../../../extensions/crates/xgpui-parley/tests/fonts/NotoSansHebrew.ttf"
     ),
 ];
 const TEXTS: [(&str, &str); 3] = [

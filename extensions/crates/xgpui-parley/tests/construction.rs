@@ -7,7 +7,7 @@ fn main() -> anyhow::Result<()> {
     let mut fonts = parley::FontContext::new();
     let data = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../../../gpui/crates/gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
+        "/../../../gpui/crates/gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
     ));
     fonts
         .collection

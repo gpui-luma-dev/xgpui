@@ -613,12 +613,12 @@ fn generate(root: &Path) -> Result<()> {
     let provenance: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(root.join("upstream.json"))?)?;
     let extension_packages = BTreeMap::from([
-        ("xgpui-color", "extensions/xgpui-ext/crates/xgpui-color"),
-        ("xgpui-shader", "extensions/xgpui-ext/crates/xgpui-shader"),
-        ("xgpui-gamut", "extensions/xgpui-ext/crates/xgpui-gamut"),
-        ("xgpui-parley", "extensions/xgpui-ext/crates/xgpui-parley"),
-        ("xgpui-media", "extensions/xgpui-ext/crates/xgpui-media"),
-        ("xgpui-svg", "extensions/xgpui-ext/crates/xgpui-svg"),
+        ("xgpui-color", "extensions/crates/xgpui-color"),
+        ("xgpui-shader", "extensions/crates/xgpui-shader"),
+        ("xgpui-gamut", "extensions/crates/xgpui-gamut"),
+        ("xgpui-parley", "extensions/crates/xgpui-parley"),
+        ("xgpui-media", "extensions/crates/xgpui-media"),
+        ("xgpui-svg", "extensions/crates/xgpui-svg"),
     ]);
     let mut packages = provenance["packages"]
         .as_object()
