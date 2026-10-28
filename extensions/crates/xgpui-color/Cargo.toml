@@ -3,7 +3,14 @@ name = "xgpui-color"
 version = "0.2.0"
 edition = "2024"
 publish = false
+description = "Color science extension for xgpui with standalone CPU conversions, gamut mapping, gradients, and WGSL math"
+license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#color-math"
+readme = "README.md"
+keywords = ["xgpui", "color", "color-science", "gamut", "gradients"]
+categories = ["graphics", "mathematics"]
 
 [workspace]
 

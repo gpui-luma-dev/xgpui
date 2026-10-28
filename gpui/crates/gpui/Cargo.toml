@@ -3,13 +3,14 @@ name = "xgpui-core"
 version = "1.0.0"
 edition = "2024"
 authors = ["Nathan Sobo <nathan@zed.dev>"]
-description = "Zed's GPU-accelerated UI framework"
+description = "GPU-accelerated application framework with xgpui rendering extensions"
 repository = "https://github.com/gpui-luma-dev/xgpui"
 license = "Apache-2.0"
 homepage = "https://xgpui.dev/"
 readme = "README.md"
-keywords = ["desktop", "gui", "immediate"]
-categories = ["gui"]
+keywords = ["xgpui", "gpui", "gui", "desktop", "graphics"]
+categories = ["gui", "graphics"]
+documentation = "https://xgpui.dev/#crate=gpui"
 
 [features]
 default = ["font-kit", "wayland", "x11", "windows-manifest"]

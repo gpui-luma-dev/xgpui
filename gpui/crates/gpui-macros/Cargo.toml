@@ -3,8 +3,13 @@ name = "xgpui-macros"
 version = "1.0.0"
 edition = "2024"
 license = "Apache-2.0"
-description = "Macros used by gpui"
+description = "Procedural macros for xgpui actions, elements, and tests"
 repository = "https://github.com/gpui-luma-dev/xgpui"
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#crate=gpui-macros"
+readme = "README.md"
+keywords = ["xgpui", "gpui", "gui", "macros"]
+categories = ["development-tools::procedural-macro-helpers"]
 
 [features]
 

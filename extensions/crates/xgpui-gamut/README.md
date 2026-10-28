@@ -1,60 +1,78 @@
 # xgpui-gamut
 
-Explicit linear-P3 SDR producers, separate from `xgpui-shader`.
-Native composition and window negotiation remain in GPUI backends.
+Wide-gamut color extension for **xgpui**. Draw explicit linear Display P3 SDR
+content alongside ordinary sRGB controls, without changing the color meaning
+of existing UI paints.
 
-[Usage and backend contract](../../../docs/extensions/high-gamut-windows.md) ·
-[GPUI API changes](../../../docs/extensions/gpui-public-api.md) ·
-[gamut-lab](../../../apps/xgpui-ext-lab/gamut-lab/README.md)
+## Dependencies
+
+```toml
+[dependencies]
+gpui = { package = "xgpui-core", version = "1.0.0" }
+xgpui-gamut = "0.2.0"
+```
+
+## Enable wide content
+
+Request wide-gamut SDR on the window outside drawing, then use a `WideColor`
+producer. `xgpui-shader` supplies optional `painted()` container ergonomics:
+
+```rust,ignore
+use gpui::{prelude::*, *};
+use std::sync::Arc;
+use xgpui_gamut::WideColor;
+use xgpui_shader::painted;
+
+window.set_color_mode(WindowColorMode::WideGamutSdr)?;
+let red = Arc::new(WideColor::linear_p3([1., 0., 0., 0.5])?);
+
+painted()
+    .w(px(320.)).h(px(240.))
+    .bg_paint(red)
+    .child("Normal sRGB controls")
+```
+
+Add `xgpui-shader = "0.2.0"` for that container example. The default producer can
+also be used without the shader extension. Inspect the window's reported color
+status; requesting wide output is not proof that the display is presenting it.
+
+## Instanced fills and gradients
+
+Enable `instanced` for `instanced::WidePainter` and `WideGradient`. This feature
+adds a dependency on `xgpui-shader` and draws supported solids/gradients directly
+in the host render pass. The default `WideColor` producer retains its texture
+preparation path.
+
+CPU conversions, gamut mapping and gradient sampling come from `xgpui-color`.
+GPU adapters have their own finite-value and geometry limits; CPU color values
+are not automatically valid upload parameters.
+
+## Platform limits
+
+The native integration targets macOS Metal and Windows D3D11. Windows native
+execution and physical-display validation remain separate from cross-compilation.
+Linux wide presentation, HDR content and transparent wide windows are deferred.
+This API does not reinterpret existing shaders or sRGB paints as Display P3.
+
+## Guides and examples
+
+- [Window color requests, status and backend contract](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/high-gamut-windows.md)
+- [Instanced wide fills and gradients](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/instanced-wgsl-v2.md#reusable-wide-fills-and-gradients)
+- [Gamut lab and validation](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/gamut-lab/README.md)
+
+From the repository root, run `just gamut` for the native comparison app.
 
 ## GPUI public API changes: additions and compatibility
 
-[GPUI public API changes: additions and compatibility](../../../docs/extensions/gpui-public-api.md#added-opt-in-window-presentation).
-See the [crate guide](../../../docs/extensions/high-gamut-windows.md#gpui-public-api-changes-additions-and-compatibility) for required additions and downstream compatibility impact.
+Use this crate with xgpui's matching framework packages. Its integration depends
+on [xgpui's GPUI API changes](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md#added-opt-in-window-presentation).
+See the [compatibility guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/high-gamut-windows.md#gpui-public-api-changes-additions-and-compatibility)
+for additions, affected public types and migration requirements.
 
-## Shared color math
+## Project
 
-CPU conversions, gamut mapping, gradient references and WGSL helpers live in
-[`xgpui-color`](../xgpui-color/README.md), a dependency-free runtime crate that
-can be used without GPUI. `xgpui_gamut::color` re-exports it for convenience.
-The existing bounded `WideColor::linear_p3` producer retains its behavior.
+[Repository](https://github.com/gpui-luma-dev/xgpui) · [Release preparation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/PUBLISHING.md) ·
+[Website](https://xgpui.dev/). Licensed under Apache-2.0.
 
-`xgpui-gamut` has no default runtime dependency on `xgpui-shader`. The comparison tests
-in `tests/instanced_output.rs` use shader as a development dependency to validate
-wide-output routing against typed producers. Enable the opt-in `instanced` feature for `WidePainter` and `WideGradient`;
-the existing producer remains usable without it.
-
-
-## Optional instanced fills
-
-```toml
-xgpui-gamut = { path = "../xgpui-gamut", features = ["instanced"] }
-```
-
-`instanced::WidePainter::new()` shares a process-wide immutable shader program.
-Call `paint_color(window, bounds, radius, &wide_color)` or
-`paint_gradient(window, bounds, radius, &gradient)` from a GPUI paint callback.
-Enable `WideGamutSdr` outside painting first. The methods validate finite bounds
-and nonnegative uniform corner radii; inherited clipping/opacity use GPUI's SPI.
-
-`WideGradient::linear(start, end, colors, interpolation, mapping)` accepts two
-`color::LinearRgba` stops, normalized fill coordinates, and explicit policies.
-Stops convert to extended linear P3 on the CPU. The GPU interpolates, maps into
-bounded P3, applies rounded coverage, and lets the host associate alpha and
-convert to native composition primaries. Coordinates outside the axis extend
-endpoint colors; coincident endpoints select the second stop. Gradient upload
-channels and projection coefficients are limited to finite magnitudes <=65504;
-very short or numerically extreme axes return an error instead of uploading
-unstable coefficients. This is an adapter limit, not a limit of CPU color types.
-
-There is no per-instance producer texture or offscreen producer pass. Solids
-and gradients use one 80-byte instance layout and shared program identity;
-compatible consecutive draws can batch. Legacy UI conversion and presentation
-passes remain. Existing `WideColor`/`CustomContent` calls retain their texture path.
-
-See the [instanced guide](../../../docs/extensions/instanced-wgsl-v2.md) and run:
-
-```sh
-cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-gamut/Cargo.toml --features instanced
-cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab -- --instanced --gradient
-```
+This extension uses its own `0.2.0` version, separate from xgpui framework
+`1.0.0` and the upstream GPUI baseline.

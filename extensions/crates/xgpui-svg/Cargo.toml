@@ -5,6 +5,12 @@ edition = "2024"
 publish = false
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
+description = "Experimental SVG extension for xgpui with progressive elements and shared raster scheduling"
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#svg-rendering"
+readme = "README.md"
+keywords = ["xgpui", "gpui", "gui", "svg", "graphics"]
+categories = ["gui", "graphics", "multimedia::images"]
 
 [workspace]
 

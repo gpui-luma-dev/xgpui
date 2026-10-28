@@ -4,7 +4,12 @@ version = "1.0.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
-description = "Unofficial release of Zed's gpui_platform crate"
+description = "Native and browser platform selection for xgpui"
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#crate=gpui-platform"
+readme = "README.md"
+keywords = ["xgpui", "gpui", "gui", "desktop", "wasm"]
+categories = ["gui"]
 
 [lib]
 path = "src/gpui_platform.rs"

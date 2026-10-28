@@ -4,6 +4,13 @@ version = "0.2.0"
 edition = "2024"
 publish = false
 repository = "https://github.com/gpui-luma-dev/xgpui"
+description = "Experimental media extension for xgpui with image loading, mipmapped textures, and rendering"
+license = "Apache-2.0"
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#media-images"
+readme = "README.md"
+keywords = ["xgpui", "gpui", "graphics", "image", "textures"]
+categories = ["gui", "graphics", "multimedia::images"]
 
 [workspace]
 
