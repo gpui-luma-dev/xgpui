@@ -4,7 +4,12 @@ version = "1.0.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
-description = "Unofficial release of Zed's gpui_windows crate"
+description = "Windows windowing, DirectWrite, and DirectX backend for xgpui"
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#crate=gpui-windows"
+readme = "README.md"
+keywords = ["xgpui", "gpui", "gui", "windows", "directx"]
+categories = ["gui", "graphics"]
 
 [lib]
 path = "src/gpui_windows.rs"

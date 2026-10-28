@@ -4,8 +4,13 @@ version = "1.0.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
-description = "Unofficial release of Zed's gpui_apple crate"
+description = "Apple rendering and platform services for xgpui"
 include = ["src/**/*", "build.rs", "gpui/**/*", "Cargo.toml", "LICENSE*"]
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#crate=gpui-apple"
+readme = "README.md"
+keywords = ["xgpui", "gpui", "gui", "metal", "macos"]
+categories = ["gui", "graphics"]
 
 [lib]
 path = "src/gpui_apple.rs"

@@ -4,6 +4,13 @@ version = "0.2.0"
 edition = "2024"
 publish = false
 repository = "https://github.com/gpui-luma-dev/xgpui"
+description = "Wide-gamut color extension for xgpui with opt-in linear Display P3 SDR content producers"
+license = "Apache-2.0"
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#high-gamut-windows"
+readme = "README.md"
+keywords = ["xgpui", "gpui", "graphics", "color", "gamut"]
+categories = ["gui", "graphics"]
 
 [workspace]
 

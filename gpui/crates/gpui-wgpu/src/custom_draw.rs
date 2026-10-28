@@ -18,7 +18,7 @@ const ABANDONED: u8 = 2;
 const STAGED: u8 = 3;
 
 struct Recording {
-    guards: Mutex<Vec<Arc<dyn Send + Sync>>>,
+    guards: Mutex<Vec<ImageCopyCompletion>>,
     state: AtomicU8,
     batch: Option<Arc<()>>,
 }
@@ -63,7 +63,69 @@ impl std::fmt::Debug for Recording {
 fn release_after_completion(queue: &wgpu::Queue, recording: &Recording) {
     let guards = std::mem::take(&mut *recording.guards.lock().unwrap());
     if !guards.is_empty() {
+        #[cfg(not(target_family = "wasm"))]
         queue.on_submitted_work_done(move || drop(guards));
+        #[cfg(target_family = "wasm")]
+        browser_completions::retain(queue, guards);
+    }
+}
+
+// Browser GPU handles are thread-affine, including in atomic WASM builds.
+// The queue callback accepts Send closures, so only a completion signal crosses
+// that boundary. Retained uploads are destroyed on the thread that adopted them.
+#[cfg(any(target_family = "wasm", test))]
+mod browser_completions {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    pub(super) struct Pending<T> {
+        pub(super) done: Arc<AtomicBool>,
+        pub(super) value: T,
+    }
+
+    pub(super) fn take_completed<T>(pending: &mut Vec<Pending<T>>) -> Vec<T> {
+        let mut completed = Vec::new();
+        let mut i = 0;
+        while i < pending.len() {
+            if pending[i].done.load(Ordering::Acquire) {
+                completed.push(pending.swap_remove(i).value);
+            } else {
+                i += 1;
+            }
+        }
+        completed
+    }
+
+    #[cfg(target_family = "wasm")]
+    thread_local! {
+        static PENDING: std::cell::RefCell<Vec<Pending<Vec<super::ImageCopyCompletion>>>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    #[cfg(target_family = "wasm")]
+    pub(super) fn collect() {
+        // Drop outside the RefCell borrow: admission guards may run user code.
+        let completed = PENDING.with(|pending| take_completed(&mut pending.borrow_mut()));
+        drop(completed);
+    }
+
+    #[cfg(target_family = "wasm")]
+    pub(super) fn retain(queue: &wgpu::Queue, guards: Vec<super::ImageCopyCompletion>) {
+        let done = Arc::new(AtomicBool::new(false));
+        PENDING.with(|pending| {
+            pending.borrow_mut().push(Pending {
+                done: done.clone(),
+                value: guards,
+            })
+        });
+        queue.on_submitted_work_done(move || {
+            done.store(true, Ordering::Release);
+            // Browser callbacks normally run on the submitting thread. If a
+            // backend calls elsewhere, the owner's next preparation collects.
+            collect();
+        });
     }
 }
 
@@ -146,6 +208,8 @@ impl WgpuCustomContext {
         queue: &Arc<wgpu::Queue>,
         batch: Option<Arc<()>>,
     ) -> Self {
+        #[cfg(target_family = "wasm")]
+        browser_completions::collect();
         Self {
             device,
             key: Arc::as_ptr(queue) as usize,
@@ -247,10 +311,10 @@ impl WgpuCustomContext {
             .guards
             .lock()
             .unwrap()
-            .push(Arc::new(ImageCopyCompletion {
+            .push(ImageCopyCompletion {
                 _staging: staged.allocation.clone(),
                 _admission: guard,
-            }));
+            });
         Ok(WgpuCustomOutput {
             texture: staged.texture.clone(),
             source_sized: true,
@@ -384,6 +448,8 @@ impl WgpuImageUploadContext {
             data.width().max(data.height()) <= self.device.limits().max_texture_dimension_2d,
             "image exceeds device texture limits"
         );
+        #[cfg(target_family = "wasm")]
+        browser_completions::collect();
         let bytes = data.staging_byte_len();
         ensure!(
             bytes as u64 <= self.device.limits().max_buffer_size,

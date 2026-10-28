@@ -539,3 +539,42 @@ fn wgpu_staging_pool_cannot_recycle_before_upload_completion() -> Result<()> {
     drop(staged);
     Ok(())
 }
+
+#[test]
+fn browser_upload_retention_waits_for_completion_on_owner_thread() {
+    use super::browser_completions::{Pending, take_completed};
+    use std::{cell::Cell, rc::Rc, sync::atomic::AtomicBool};
+
+    struct ThreadBoundGuard(Rc<Cell<usize>>);
+    impl Drop for ThreadBoundGuard {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+    let drops = Rc::new(Cell::new(0));
+    let done = Arc::new(AtomicBool::new(false));
+    let mut pending = vec![Pending {
+        done: done.clone(),
+        value: ThreadBoundGuard(drops.clone()),
+    }];
+    assert!(take_completed(&mut pending).is_empty());
+    assert_eq!(drops.get(), 0);
+    // The callback can signal from another thread without moving the GPU guard.
+    std::thread::spawn(move || done.store(true, Ordering::Release))
+        .join()
+        .unwrap();
+    let completed = take_completed(&mut pending);
+    assert!(pending.is_empty());
+    assert_eq!(drops.get(), 0);
+    drop(completed);
+    assert_eq!(drops.get(), 1);
+    assert!(take_completed(&mut pending).is_empty());
+}
+
+#[test]
+#[cfg(not(target_family = "wasm"))]
+fn native_upload_completion_remains_send_and_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<ImageCopyCompletion>();
+    assert_send_sync::<Recording>();
+}

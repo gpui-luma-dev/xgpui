@@ -4,6 +4,13 @@ version = "0.2.0"
 edition = "2024"
 publish = false
 repository = "https://github.com/gpui-luma-dev/xgpui"
+description = "Experimental text extension for xgpui with Parley and HarfRust shaping and rasterization"
+license = "Apache-2.0"
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#parley-text"
+readme = "README.md"
+keywords = ["xgpui", "gpui", "text", "shaping", "parley"]
+categories = ["gui", "text-processing"]
 
 [workspace]
 

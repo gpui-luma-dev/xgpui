@@ -4,7 +4,12 @@ version = "1.0.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
-description = "Unofficial release of Zed's gpui_macos crate"
+description = "macOS windowing and input backend for xgpui"
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#crate=gpui-macos"
+readme = "README.md"
+keywords = ["xgpui", "gpui", "gui", "macos"]
+categories = ["gui"]
 
 [lib]
 path = "src/gpui_macos.rs"

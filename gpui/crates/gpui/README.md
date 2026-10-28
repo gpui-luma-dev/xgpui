@@ -1,114 +1,81 @@
-<!-- gpui-archipelago:generated -->
-# gpui-unofficial
+# xgpui-core
 
-_Zed's GPU-accelerated UI framework_
+GPU-accelerated application framework for **xgpui**, maintained downstream from
+Zed's GPUI. It provides the application model, entities, windows, elements,
+layout, input, text and scene primitives.
 
-Part of **[gpui-archipelago](https://gpui-archipelago.github.io/)** (aka **GPUI-lago** — "jee pyu ay la go"):
-unofficial, automated builds of [Zed](https://github.com/zed-industries/zed)'s
-GPUI crates, published to crates.io.
-
-This package is the published build of `gpui`, generated from zed
-`v1.25.3` (`8dd255c3eafb5231056fe4e6f601cedd011f1c93`) at version `1.25.3`.
-
-- **Website and project** — <https://gpui-archipelago.github.io/>
-- **Source and release automation** — <https://github.com/gpui-archipelago/gpui-unofficial>
-- **Original crate** — <https://github.com/zed-industries/zed/tree/v1.25.3/crates/gpui>
-
-## Install
-
-```sh
-cargo add gpui-unofficial
-```
-
-The main framework crate. It pulls in the platform facade and the host backend.
-
-## Usage
-
-The package is named `gpui-unofficial`; its library target is `gpui`, so
-source keeps `use gpui::*`. Start an application through the platform facade.
-The platform package is `gpui-platform-gpui-unofficial`; alias it as
-`gpui_platform` so the upstream code shape keeps working:
+## Application setup
 
 ```toml
 [dependencies]
-gpui-unofficial = "1.25.3"
-gpui_platform = { package = "gpui-platform-gpui-unofficial", version = "1.25.3" }
+gpui = { package = "xgpui-core", version = "1.0.0" }
+gpui_platform = { package = "xgpui-platform", version = "1.0.0" }
 ```
 
-```rust,no_run
-use gpui::*;
+The registry package is `xgpui-core`; its Rust library name remains `gpui`.
+`xgpui-platform` selects and constructs the host backend.
+
+A view implements `Render` and returns elements:
+
+```rust,ignore
+use gpui::{prelude::*, *};
 
 struct Hello;
 
 impl Render for Hello {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div().child("Hello, GPUI!")
+        div().p_4().child("Hello, xgpui!")
     }
 }
 
 fn main() {
     gpui_platform::application().run(|cx: &mut App| {
         cx.open_window(WindowOptions::default(), |_, cx| cx.new(|_| Hello))
-            .unwrap();
+            .expect("could not open the application window");
     });
 }
 ```
 
-The host backend is selected through `gpui_platform`; `gpui-unofficial`
-already enables the platform features it needs.
+See the [complete hello-world example](https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/examples/hello_world.rs)
+for font loading, window configuration and browser entry points.
 
-## Versioning
+## Optional extensions
 
-Versions mirror Zed's release tags: zed `v1.25.3` publishes as `1.25.3`.
-Because the version is taken verbatim from Zed's semver, an already-published
-version cannot be replaced; a fix has to wait for the next Zed release.
+| Package | Adds |
+| --- | --- |
+| `xgpui-color` | Standalone CPU color science and WGSL color math. |
+| `xgpui-gamut` | Explicit wide-gamut SDR content producers. |
+| `xgpui-shader` | Brushes, gradients, shader paints and layer effects. |
+| `xgpui-media` | Image loading, media textures and frame presentation. |
+| `xgpui-parley` | Parley/HarfRust text shaping and rasterization. |
+| `xgpui-svg` | Progressive SVG elements and path effects. |
 
-## Release notes and API changes
+Extensions use independent `0.2.0` versions and opt-in APIs. Rendering extensions
+require xgpui's downstream integration changes; do not substitute an unrelated
+GPUI package with the same Rust import name. `xgpui-color` also works independently.
 
-- **Release notes** — <https://github.com/gpui-archipelago/gpui-release-notes/issues/3>
-- **GPUI fork map** — <https://gpui-archipelago.github.io/map/>
-- **API surface changes for `gpui-unofficial`** — <https://gpui-archipelago.github.io/map/#/changes?p=gpui-unofficial>
-- **What this project changes on top of Zed** — <https://github.com/gpui-archipelago/gpui-unofficial/blob/main/docs/upstream-patches.md>
+## Platform support
 
-## The archipelago
+Native backends are separate packages selected through `xgpui-platform`.
+Install the host prerequisites in the local-development guide. WebAssembly uses
+`xgpui-web`, WASM packaging, and WebGPU or WebGL2; individual extension features
+have their own platform limits.
 
-Every fork is an island. There's no mainland and no one's building one, so the
-islands have to find each other. Here they can.
+## Documentation
 
-Ideally, Zed would have published GPUI as a stable, versioned crate, but that
-didn't happen. Various people forked it instead, and each fork ended up solving
-a different part of the problem:
+- [Local development and platform prerequisites](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md)
+- [xgpui API additions and compatibility](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md)
+- [Release preparation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/PUBLISHING.md)
+- [Repository](https://github.com/gpui-luma-dev/xgpui) · [Website](https://xgpui.dev/)
 
-- **gpui-unofficial** — publishes up-to-date crates on crates.io, which covers
-  distribution. Currently needs a maintainer.
-- **gpui-kit** — Longbridge's shadow distribution: republishes upstream Zed
-  crates to crates.io as `gpui-pre` under its own namespace, fronted by a
-  `gpui-kit` facade over `gpui-base`, `gpui-component`, and `gpui-shell` —
-  Jason Lee's answer to 315 days without an official release.
-- **gpui-ce** — a community fork working to accelerate testing of upstream
-  features and maintain a faster-moving community version, publishing crates
-  for standalone desktop apps.
-- **Kael** — forked from GPUI direct; selectively tracks upstream while building
-  out general-purpose features (gradients, webviews, form controls, component
-  library).
-- **WGPUI** — GPUI ported to a single cross-platform backend (wgpu + winit)
-  instead of per-platform code — leaner, and features land across Windows,
-  macOS, Linux, and WebAssembly in one code path. `WgpuSurface` lets you embed
-  raw wgpu render passes (3D, game engines, custom shaders, anything) directly
-  in your UI tree, making WGPUI suitable as a shell for 3D applications and
-  mixed-mode interfaces.
+## Versioning and provenance
 
-## Provenance and licence
+The xgpui framework version is `1.0.0`; it does not mirror Zed's version.
+The accepted baseline is `release/1.25.3` from
+[gpui-unofficial](https://github.com/gpui-archipelago/gpui-unofficial), commit
+`39d276b1500d503ec6d37efcaaa0dc0c00730576`. Its original source is
+[Zed's GPUI](https://github.com/zed-industries/zed/tree/v1.25.3/crates/gpui),
+Zed `v1.25.3` at `8dd255c3eafb5231056fe4e6f601cedd011f1c93`.
+xgpui maintains additional APIs and rendering behavior on top of that capture.
 
-Derived from Zed's GPUI and published as `gpui-unofficial` under `Apache-2.0`.
-This is an unofficial project, not affiliated with or maintained by Zed
-Industries. For issues with the upstream crate, see the
-[Zed repository](https://github.com/zed-industries/zed).
-
-    source:          https://github.com/gpui-archipelago/gpui-unofficial
-    upstream:        https://github.com/zed-industries/zed
-    upstream tag:    v1.25.3
-    upstream commit: 8dd255c3eafb5231056fe4e6f601cedd011f1c93
-    crate:           gpui-unofficial
-    original:        gpui
-    version:         1.25.3
+Licensed under Apache-2.0. xgpui is independent of Zed Industries.
