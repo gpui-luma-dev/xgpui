@@ -4751,7 +4751,7 @@ dependencies = [
  "parking_lot",
  "smallvec",
  "thiserror 2.0.21",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]
@@ -4759,7 +4759,7 @@ name = "xgpui-color"
 version = "0.2.0"
 
 [[package]]
-name = "xgpui-core"
+name = "xgpui"
 version = "1.0.0"
 dependencies = [
  "accesskit",
@@ -4847,7 +4847,7 @@ dependencies = [
  "refineable-gpui-unofficial",
  "xgpui-apple",
  "xgpui-color",
- "xgpui-core",
+ "xgpui",
  "xgpui-shader",
  "xgpui-wgpu",
  "xgpui-windows",
@@ -4867,7 +4867,7 @@ dependencies = [
  "unicode-segmentation",
  "windows 0.62.2",
  "xgpui-apple",
- "xgpui-core",
+ "xgpui",
  "xgpui-windows",
 ]
 
@@ -4894,7 +4894,7 @@ dependencies = [
  "unicode-segmentation",
  "web-sys",
  "wgpu",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]
@@ -4922,7 +4922,7 @@ dependencies = [
  "windows-core 0.62.2",
  "windows-numerics 0.3.1",
  "windows-registry",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]

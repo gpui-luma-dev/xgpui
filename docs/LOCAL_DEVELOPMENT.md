@@ -30,7 +30,7 @@ names use the XGPUI prefix:
 
 | Local directory / import name | Release package |
 | --- | --- |
-| `gpui` | `xgpui-core` |
+| `gpui` | `xgpui` |
 | `gpui-apple` | `xgpui-apple` |
 | `gpui-linux` | `xgpui-linux` |
 | `gpui-macos` | `xgpui-macos` |
@@ -70,7 +70,7 @@ The website's crate inventory and source pages cover local crates only.
 
 When building a separate application against this checkout, override only the
 retained framework/backend packages using their `xgpui-*` package identities.
-For example, `gpui = { package = "xgpui-core", path = "../xgpui/gpui/crates/gpui" }`
+For example, `gpui = { package = "xgpui", path = "../xgpui/gpui/crates/gpui" }`
 keeps the `gpui` import name. Remove old patches pointing at helper
 paths such as `gpui/crates/collections`; those directories no longer exist.
 Run Cargo once without `--locked` to refresh the application's lockfile after

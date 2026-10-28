@@ -8,7 +8,7 @@ GPUI continues to own layout, input and scene composition.
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui-core", version = "1.0.0" }
+gpui = { package = "xgpui", version = "1.0.0" }
 xgpui-shader = { version = "0.2.0", features = ["portable-shaders"] }
 ```
 

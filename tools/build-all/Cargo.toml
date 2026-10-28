@@ -22,7 +22,7 @@ full-capture = [
 ]
 
 [dependencies]
-gpui = { path = "../../gpui/crates/gpui", package = "xgpui-core" }
+gpui = { path = "../../gpui/crates/gpui", package = "xgpui" }
 gpui-macros = { path = "../../gpui/crates/gpui-macros", package = "xgpui-macros", optional = true }
 gpui-platform = { path = "../../gpui/crates/gpui-platform", package = "xgpui-platform" }
 gpui-wgpu = { path = "../../gpui/crates/gpui-wgpu", package = "xgpui-wgpu", optional = true }

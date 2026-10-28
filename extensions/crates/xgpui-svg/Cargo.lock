@@ -3614,7 +3614,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "xgpui-core"
+name = "xgpui"
 version = "1.0.0"
 dependencies = [
  "accesskit",
@@ -3696,7 +3696,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "web-time",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]

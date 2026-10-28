@@ -160,7 +160,7 @@ fn release_packages(root: &Path) -> Result<(String, Names, Names)> {
     let mut unique = BTreeSet::new();
     for name in packages.values() {
         ensure!(
-            name.starts_with("xgpui-")
+            (name == "xgpui" || name.starts_with("xgpui-"))
                 && name
                     .bytes()
                     .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
@@ -821,7 +821,7 @@ mod tests {
         .unwrap();
         fs::write(
             root.join("scripts/release-packages.json"),
-            r#"{"version":"1.0.0","packages":{"gpui":"xgpui-core"}}"#,
+            r#"{"version":"1.0.0","packages":{"gpui":"xgpui"}}"#,
         )
         .unwrap();
         let mut data: Json =
@@ -838,7 +838,7 @@ mod tests {
         let manifest: toml::Value =
             toml::from_str(&fs::read_to_string(root.join("gpui/crates/gpui/Cargo.toml")).unwrap())
                 .unwrap();
-        assert_eq!(manifest["package"]["name"].as_str(), Some("xgpui-core"));
+        assert_eq!(manifest["package"]["name"].as_str(), Some("xgpui"));
         assert_eq!(manifest["package"]["version"].as_str(), Some("1.0.0"));
         assert_eq!(manifest["lib"]["name"].as_str(), Some("gpui"));
         assert_eq!(
@@ -850,7 +850,7 @@ mod tests {
                 .unwrap();
         assert_eq!(
             app["dependencies"]["gpui"]["package"].as_str(),
-            Some("xgpui-core")
+            Some("xgpui")
         );
         assert_eq!(
             app["dependencies"]["gpui"]["path"].as_str(),
@@ -861,7 +861,7 @@ mod tests {
             Some("test-support")
         );
         let config = fs::read_to_string(root.join(".cargo/config.toml")).unwrap();
-        assert!(config.contains("xgpui-core"));
+        assert!(config.contains("xgpui"));
         let data: Json =
             serde_json::from_str(&fs::read_to_string(root.join("upstream.json")).unwrap()).unwrap();
         assert_eq!(data["distribution"]["version"], "1.0.0");
@@ -874,7 +874,7 @@ mod tests {
     #[test]
     fn extension_versions_are_independent_of_framework_dependencies() {
         let release = BTreeMap::from([
-            ("gpui".into(), "xgpui-core".into()),
+            ("gpui".into(), "xgpui".into()),
             ("xgpui-color".into(), "xgpui-color".into()),
             ("xgpui-svg".into(), "xgpui-svg".into()),
         ]);
@@ -882,7 +882,7 @@ mod tests {
             ("xgpui-color".into(), "0.2.0".into()),
             ("xgpui-svg".into(), "0.2.0".into()),
         ]);
-        let mut manifest = "[package]\nname='xgpui-svg'\nversion='1.0.0'\n[dependencies]\ngpui={package='xgpui-core',version='=1.0.0',path='../gpui',features=['test-support']}\nxgpui-color={path='../xgpui-color',version='=1.0.0'}\n".parse::<DocumentMut>().unwrap();
+        let mut manifest = "[package]\nname='xgpui-svg'\nversion='1.0.0'\n[dependencies]\ngpui={package='xgpui',version='=1.0.0',path='../gpui',features=['test-support']}\nxgpui-color={path='../xgpui-color',version='=1.0.0'}\n".parse::<DocumentMut>().unwrap();
         prepare_manifest(
             &mut manifest,
             &Names::new(),

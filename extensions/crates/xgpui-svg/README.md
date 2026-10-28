@@ -8,7 +8,7 @@ effects.
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui-core", version = "1.0.0" }
+gpui = { package = "xgpui", version = "1.0.0" }
 xgpui-svg = "0.2.0"
 ```
 

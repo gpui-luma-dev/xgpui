@@ -1004,14 +1004,14 @@ include!("generated.rs");"##,
 
     #[test]
     fn dependency_edges_preserve_kind_target_and_optionality() {
-        let manifest: toml::Value = toml::from_str("[dependencies]\ncore = { package = 'xgpui-core', version = '1', optional = true }\n[dev-dependencies]\ngpui = '1'").expect("fixture parses");
+        let manifest: toml::Value = toml::from_str("[dependencies]\ncore = { package = 'xgpui', version = '1', optional = true }\n[dev-dependencies]\ngpui = '1'").expect("fixture parses");
         let mut result = vec![];
         dependencies(
             &manifest,
             "cfg(unix)",
             &BTreeMap::from([
                 ("gpui".into(), "gpui".into()),
-                ("xgpui-core".into(), "gpui".into()),
+                ("xgpui".into(), "gpui".into()),
             ]),
             &mut result,
         );

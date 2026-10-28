@@ -404,7 +404,7 @@ name = "xgpui-apple"
 version = "1.0.0"
 
 [[patch.unused]]
-name = "xgpui-core"
+name = "xgpui"
 version = "1.0.0"
 
 [[patch.unused]]

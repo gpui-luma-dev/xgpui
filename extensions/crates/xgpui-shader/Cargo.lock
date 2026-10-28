@@ -4873,12 +4873,12 @@ dependencies = [
  "pathfinder_geometry",
  "smallvec",
  "thiserror 2.0.21",
- "xgpui-core",
+ "xgpui",
  "zed-font-kit",
 ]
 
 [[package]]
-name = "xgpui-core"
+name = "xgpui"
 version = "1.0.0"
 dependencies = [
  "accesskit",
@@ -4969,7 +4969,7 @@ dependencies = [
  "unicode-segmentation",
  "windows 0.62.2",
  "xgpui-apple",
- "xgpui-core",
+ "xgpui",
  "xgpui-wgpu",
  "xgpui-windows",
 ]
@@ -4996,7 +4996,7 @@ dependencies = [
  "unicode-segmentation",
  "web-sys",
  "wgpu",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]
@@ -5024,7 +5024,7 @@ dependencies = [
  "windows-core 0.62.2",
  "windows-numerics 0.3.1",
  "windows-registry",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]

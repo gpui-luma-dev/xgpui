@@ -6285,11 +6285,11 @@ dependencies = [
  "parking_lot",
  "smallvec",
  "thiserror 2.0.21",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]
-name = "xgpui-core"
+name = "xgpui"
 version = "1.0.0"
 dependencies = [
  "accesskit",
@@ -6391,7 +6391,7 @@ dependencies = [
  "wayland-protocols-plasma",
  "wayland-protocols-wlr",
  "x11rb",
- "xgpui-core",
+ "xgpui",
  "xgpui-wgpu",
  "xkbcommon",
  "zed-scap",
@@ -6433,7 +6433,7 @@ dependencies = [
  "strum",
  "uuid",
  "xgpui-apple",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]
@@ -6454,7 +6454,7 @@ dependencies = [
  "parley",
  "skrifa 0.44.0",
  "tiny-skia 0.12.0",
- "xgpui-core",
+ "xgpui",
  "xgpui-platform",
 ]
 
@@ -6464,7 +6464,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
- "xgpui-core",
+ "xgpui",
  "xgpui-linux",
  "xgpui-macos",
  "xgpui-web",
@@ -6495,7 +6495,7 @@ dependencies = [
  "wasm_thread",
  "web-sys",
  "web-time",
- "xgpui-core",
+ "xgpui",
  "xgpui-wgpu",
 ]
 
@@ -6520,7 +6520,7 @@ dependencies = [
  "unicode-segmentation",
  "web-sys",
  "wgpu",
- "xgpui-core",
+ "xgpui",
  "zed-font-kit",
 ]
 
@@ -6549,7 +6549,7 @@ dependencies = [
  "windows-core 0.62.2",
  "windows-numerics 0.3.1",
  "windows-registry",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]

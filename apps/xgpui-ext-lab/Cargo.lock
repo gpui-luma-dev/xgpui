@@ -6418,7 +6418,7 @@ dependencies = [
  "pathfinder_geometry",
  "smallvec",
  "thiserror 2.0.21",
- "xgpui-core",
+ "xgpui",
  "zed-font-kit",
 ]
 
@@ -6427,7 +6427,7 @@ name = "xgpui-color"
 version = "0.2.0"
 
 [[package]]
-name = "xgpui-core"
+name = "xgpui"
 version = "1.0.0"
 dependencies = [
  "accesskit",
@@ -6518,7 +6518,7 @@ dependencies = [
  "wgpu",
  "xgpui-apple",
  "xgpui-color",
- "xgpui-core",
+ "xgpui",
  "xgpui-gamut",
  "xgpui-media",
  "xgpui-parley",
@@ -6538,7 +6538,7 @@ dependencies = [
  "metal",
  "xgpui-apple",
  "xgpui-color",
- "xgpui-core",
+ "xgpui",
  "xgpui-shader",
  "xgpui-windows",
 ]
@@ -6579,7 +6579,7 @@ dependencies = [
  "wayland-protocols-plasma",
  "wayland-protocols-wlr",
  "x11rb",
- "xgpui-core",
+ "xgpui",
  "xgpui-wgpu",
  "xkbcommon",
  "zed-scap",
@@ -6621,7 +6621,7 @@ dependencies = [
  "strum",
  "uuid",
  "xgpui-apple",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]
@@ -6646,7 +6646,7 @@ dependencies = [
  "refineable-gpui-unofficial",
  "xgpui-apple",
  "xgpui-color",
- "xgpui-core",
+ "xgpui",
  "xgpui-shader",
  "xgpui-wgpu",
  "xgpui-windows",
@@ -6660,7 +6660,7 @@ dependencies = [
  "parley",
  "skrifa 0.44.0",
  "tiny-skia 0.12.0",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]
@@ -6669,7 +6669,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
- "xgpui-core",
+ "xgpui",
  "xgpui-linux",
  "xgpui-macos",
  "xgpui-web",
@@ -6691,7 +6691,7 @@ dependencies = [
  "unicode-segmentation",
  "windows 0.62.2",
  "xgpui-apple",
- "xgpui-core",
+ "xgpui",
  "xgpui-wgpu",
  "xgpui-windows",
 ]
@@ -6702,7 +6702,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "web-time",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]
@@ -6729,7 +6729,7 @@ dependencies = [
  "wasm_thread",
  "web-sys",
  "web-time",
- "xgpui-core",
+ "xgpui",
  "xgpui-wgpu",
 ]
 
@@ -6756,7 +6756,7 @@ dependencies = [
  "unicode-segmentation",
  "web-sys",
  "wgpu",
- "xgpui-core",
+ "xgpui",
  "zed-font-kit",
 ]
 
@@ -6785,7 +6785,7 @@ dependencies = [
  "windows-core 0.62.2",
  "windows-numerics 0.3.1",
  "windows-registry",
- "xgpui-core",
+ "xgpui",
 ]
 
 [[package]]

@@ -24,7 +24,7 @@ half = "2.7"
 xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"] , package = "xgpui-shader", version = "=0.2.0" }
 xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "=0.2.0" }
 refineable = { package = "refineable-gpui-unofficial", version = "=1.25.3" }
-gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui-core", version = "=1.0.0" }
+gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=1.0.0" }
 gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", optional = true , package = "xgpui-wgpu", version = "=1.0.0" }
 image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "webp"] }
 

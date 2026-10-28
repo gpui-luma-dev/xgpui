@@ -1,0 +1,28 @@
+name: Prepare registry release (no registry access)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepare-registry-release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test release tooling
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - name: Prepare framework-first release inventory
+        run: python3 scripts/prepare_registry_release.py --out "$RUNNER_TEMP/registry-release"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: registry-release-plan
+          path: ${{ runner.temp }}/registry-release/release-plan.json
+          if-no-files-found: error
+          retention-days: 30

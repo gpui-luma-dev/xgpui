@@ -111,7 +111,7 @@ def inspect_archive(archive, staged, destination, package_id):
 
 
 API = {
-    "xgpui-core": "pub fn size() -> gpui::Size<gpui::Pixels> { gpui::size(gpui::px(320.), gpui::px(240.)) }",
+    "xgpui": "pub fn size() -> gpui::Size<gpui::Pixels> { gpui::size(gpui::px(320.), gpui::px(240.)) }",
     "xgpui-macros": "pub use gpui_macros::Action;",
     "xgpui-apple": "pub use gpui_apple::AppleDispatcher;",
     "xgpui-macos": "pub use gpui_macos::MacPlatform;",
