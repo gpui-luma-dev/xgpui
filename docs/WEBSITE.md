@@ -144,50 +144,77 @@ support the domain root, localhost and the legacy repository URL prefix.
 Local regeneration does not deploy the site.
 
 
-## Custom-domain migration
+## Production custom domain
 
-The intended public documentation URL is **https://xgpui.dev/**. Repository
-preparation is tracked in [issue #61](https://github.com/gpui-luma-dev/xgpui/issues/61).
-The previous URL is https://gpui-luma-dev.github.io/xgpui/.
-Preparing these files does not configure the domain: DNS, Pages settings and the
-production cutover remain pending until the migration is approved.
+The public documentation URL is **https://xgpui.dev/**. The migration tracked in
+[issue #61](https://github.com/gpui-luma-dev/xgpui/issues/61) is complete.
+[PR #64](https://github.com/gpui-luma-dev/xgpui/pull/64) prepared the repository;
+DNS and repository Pages settings now route production traffic to the domain.
+The repository About website URL is also `https://xgpui.dev/`.
 
-Keep the GitHub Actions publishing source and the `docs/` upload artifact.
-Do not add `docs/CNAME`: custom Actions publishing ignores that file; the
-repository Pages custom-domain setting controls the mapping. Keep asset URLs,
-source links, demo navigation and JavaScript/WASM loaders relative so the same
-build works at the domain root and in localhost previews.
+### Final configuration (verified 2026-10-28)
 
-Before cutover, run `just docs-check`, `just web-build` and `just docs-serve`.
-At `http://localhost:8000/`, check search, crate routes, source line links and
-section anchors. Exercise both `examples/extensions/?demo=color` and
-`examples/shaders/?example=minimal`, with `&backend=webgpu` and `&backend=webgl`.
-Inspect console/network requests for failures and obsolete `/xgpui/` prefixes.
-The Node verifier checks links at the domain root, localhost and a project prefix;
-it does not replace running the browser applications.
+- Repository **Settings → Pages → Source** remains **GitHub Actions**
+  (`build_type: workflow`). `.github/workflows/pages.yml` builds the docs and
+  both WASM collections, uploads `docs/`, and deploys to the `github-pages`
+  environment on pushes to `main` or manual dispatch.
+- The repository Pages custom domain is `xgpui.dev`; **Enforce HTTPS** is enabled.
+  GitHub reports verified domain ownership and an approved certificate covering
+  both `xgpui.dev` and `www.xgpui.dev`.
+- Domain ownership is verified for the `gpui-luma-dev` organization using the TXT
+  record at `_github-pages-challenge-gpui-luma-dev.xgpui.dev`. Retain this record.
+  The custom-domain routing setting belongs to this repository; other repositories
+  in the organization can keep their own Pages domains.
+- Apex A records are `185.199.108.153`, `185.199.109.153`, `185.199.110.153` and
+  `185.199.111.153`. The `www` CNAME points to `gpui-luma-dev.github.io` without
+  a scheme or repository path. Preserve unrelated DNS records.
+- No `docs/CNAME` is required: custom Actions publishing ignores that file;
+  the repository Pages setting controls the mapping. Keep asset URLs, source
+  links, demo navigation and JavaScript/WASM loaders relative for localhost
+  previews and domain-root hosting.
 
-After approval, perform the following in order:
+### Deployment and verification evidence
 
-1. Save existing DNS records and the known-good deployment run for rollback.
-2. Verify `xgpui.dev` in **gpui-luma-dev organization Settings → Pages** using
-   GitHub's exact TXT challenge hostname/value. Retain the verification record.
-3. In repository **Settings → Pages**, retain **GitHub Actions** and save custom
-   domain `xgpui.dev` before changing routing DNS.
-4. Replace conflicting parking/forwarding records while preserving unrelated
-   mail/TXT records. Set apex A records to `185.199.108.153`, `185.199.109.153`,
-   `185.199.110.153` and `185.199.111.153`; set `www` CNAME to
-   `gpui-luma-dev.github.io` without a scheme or repository path. Recheck GitHub's
-   current records before applying them; avoid wildcard records.
-5. Wait for DNS checks and certificate provisioning, then enable **Enforce HTTPS**.
-   DNS propagation and HTTPS availability can take up to 24 hours.
-6. Merge the reviewed migration PR only with explicit approval, watch
-   **Publish documentation**, and confirm its environment URL is `https://xgpui.dev/`.
-7. Check HTTP/HTTPS redirects, `www`, the old project URL (including nested demo
-   paths and queries), hash routes, direct nested refreshes and both demo backends.
-   Inspect for 404s, mixed content, WASM failures and incorrect MIME types.
-8. Update the repository About website URL and record deployment, DNS, HTTPS and
-   browser evidence in issue #61. Confirm a later Actions deployment preserves
-   the custom domain.
+The [migration deployment](https://github.com/gpui-luma-dev/xgpui/actions/runs/40732570766)
+passed. A [subsequent deployment](https://github.com/gpui-luma-dev/xgpui/actions/runs/40737138680)
+after PR #65 also passed and preserved the custom domain.
+
+Live HTTP checks on 2026-10-28 confirmed:
+
+- `https://xgpui.dev/` serves the documentation with HTTP 200.
+- `http://xgpui.dev/`, `https://www.xgpui.dev/` and the previous project URL,
+  `https://gpui-luma-dev.github.io/xgpui/`, redirect to the HTTPS apex domain.
+- The legacy nested route
+  `/xgpui/examples/extensions/?demo=color&backend=webgl` redirects to
+  `https://xgpui.dev/examples/extensions/?demo=color&backend=webgl`, retaining
+  the demo path and query parameters.
+- Both `/examples/extensions/` and `/examples/shaders/` serve HTTP 200 with
+  backend-selection queries. Their `extensions_web_bg.wasm` and
+  `shader_examples_bg.wasm` assets serve HTTP 200 with `application/wasm`.
+
+These HTTP checks verify routing and asset delivery, not GPU rendering. When
+changing demos, run the browser checks below as well as the automated verifier.
+
+### Ongoing checks
+
+```sh
+dig A xgpui.dev +short
+dig CNAME www.xgpui.dev +short
+dig TXT _github-pages-challenge-gpui-luma-dev.xgpui.dev +short
+curl -IL http://xgpui.dev/
+curl -IL https://www.xgpui.dev/
+curl -IL 'https://gpui-luma-dev.github.io/xgpui/examples/extensions/?demo=color&backend=webgl'
+```
+
+For website changes, run `just docs-check`. For demo changes, also run
+`just web-build` and `just docs-serve`. At `http://localhost:8000/`, check search,
+crate routes, source line links and section anchors. Exercise
+`examples/extensions/?demo=color` and `examples/shaders/?example=minimal`, with
+`&backend=webgpu` and `&backend=webgl`. Inspect console/network requests for
+failures and obsolete `/xgpui/` prefixes. The Node verifier checks links at the
+domain root, localhost and a project prefix; it does not execute the browser
+applications. After deployment, repeat relevant checks at `https://xgpui.dev/`
+and refresh nested URLs directly to check for stale assets.
 
 For rollback, restore the previous known-good site through the reviewed workflow.
 If removing the domain mapping, remove or restore Pages routing DNS before
