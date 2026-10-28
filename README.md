@@ -1,11 +1,12 @@
 # xgpui
 
-An experimental GPUI repository for documentation, testing and future rendering
-work, including custom shaders and wide-gamut photo editing.
+An extensible GPUI framework with custom shaders, wide-gamut rendering and tools
+for building applications such as photo editors, backed by documentation and tests.
 
-The starting point is [gpui-unofficial](https://github.com/gpui-archipelago/gpui-unofficial),
+XGPUI started from [gpui-unofficial](https://github.com/gpui-archipelago/gpui-unofficial),
 which captures GPUI and its supporting crates from
-[Zed](https://github.com/zed-industries/zed).
+[Zed](https://github.com/zed-industries/zed). We are moving toward using Zed
+directly as our upstream.
 
 **[Read the documentation →](https://gpui-luma-dev.github.io/xgpui/)**
 
@@ -33,7 +34,8 @@ Recipes use Bash (on Windows, Git for Windows Bash must be on PATH).
 Without just, use `cargo build --release --locked`.
 
 `just lab-build` builds the unpublished extension labs and benchmarks from
-`apps/xgpui-ext-lab/`.
+`apps/xgpui-ext-lab/`. See [Labs & benchmarks](docs/extensions/extension-lab.md)
+for targets, launch commands and why the lab package is unpublished.
 
 `just build` builds the libraries supported by the selected target; it does not
 launch an application. See [Local Development](docs/LOCAL_DEVELOPMENT.md) for Windows,
@@ -53,7 +55,12 @@ distinguishes opt-in downstream APIs from upstream GPUI and documents the
 
 See [documentation instructions](docs/WEBSITE.md) for maintenance and checks.
 
+## Contributing
+
+Contributions are welcome, including fully AI-generated code. You are responsible
+for its quality. See [Contributing](CONTRIBUTING.md) for the short guide.
+
 ## License
 
-[Apache License 2.0](LICENSE), matching the captured gpui-unofficial crates.
+[Apache License 2.0](LICENSE), consistent with GPUI from Zed.
 Upstream copyright and license notices are preserved.
