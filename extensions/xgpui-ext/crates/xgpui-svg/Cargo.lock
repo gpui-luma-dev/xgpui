@@ -1000,83 +1000,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 
 [[package]]
-name = "gpui"
-version = "1.25.3"
-dependencies = [
- "accesskit",
- "anyhow",
- "async-channel",
- "async-task",
- "backtrace",
- "bitflags 2.13.2",
- "chrono",
- "collections-gpui-unofficial",
- "ctor",
- "derive_more",
- "embed-resource",
- "etagere",
- "futures",
- "futures-concurrency",
- "getrandom 0.3.4",
- "gpui-macros",
- "gpui-shared-string-gpui-unofficial",
- "gpui-util-gpui-unofficial",
- "heapless",
- "http-client-gpui-unofficial",
- "image",
- "inventory",
- "itertools",
- "libc",
- "log",
- "lyon",
- "num_cpus",
- "objc2-core-foundation",
- "objc2-core-video",
- "parking",
- "parking_lot",
- "pin-project",
- "pollster 0.4.0",
- "postage",
- "profiling",
- "proptest",
- "rand 0.9.5",
- "raw-window-handle",
- "refineable-gpui-unofficial",
- "regex",
- "resvg",
- "scheduler-gpui-unofficial",
- "schemars",
- "seahash",
- "serde",
- "serde_json",
- "slotmap",
- "smallvec",
- "spin 0.10.1",
- "strum",
- "sum-tree-gpui-unofficial",
- "taffy",
- "thiserror 2.0.21",
- "ttf-parser",
- "url",
- "usvg",
- "uuid",
- "waker-fn",
- "web-time",
- "windows 0.62.2",
- "zed-scap",
-]
-
-[[package]]
-name = "gpui-macros"
-version = "1.25.3"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "gpui-shared-string-gpui-unofficial"
 version = "1.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3691,12 +3614,89 @@ dependencies = [
 ]
 
 [[package]]
+name = "xgpui-core"
+version = "1.0.0"
+dependencies = [
+ "accesskit",
+ "anyhow",
+ "async-channel",
+ "async-task",
+ "backtrace",
+ "bitflags 2.13.2",
+ "chrono",
+ "collections-gpui-unofficial",
+ "ctor",
+ "derive_more",
+ "embed-resource",
+ "etagere",
+ "futures",
+ "futures-concurrency",
+ "getrandom 0.3.4",
+ "gpui-shared-string-gpui-unofficial",
+ "gpui-util-gpui-unofficial",
+ "heapless",
+ "http-client-gpui-unofficial",
+ "image",
+ "inventory",
+ "itertools",
+ "libc",
+ "log",
+ "lyon",
+ "num_cpus",
+ "objc2-core-foundation",
+ "objc2-core-video",
+ "parking",
+ "parking_lot",
+ "pin-project",
+ "pollster 0.4.0",
+ "postage",
+ "profiling",
+ "proptest",
+ "rand 0.9.5",
+ "raw-window-handle",
+ "refineable-gpui-unofficial",
+ "regex",
+ "resvg",
+ "scheduler-gpui-unofficial",
+ "schemars",
+ "seahash",
+ "serde",
+ "serde_json",
+ "slotmap",
+ "smallvec",
+ "spin 0.10.1",
+ "strum",
+ "sum-tree-gpui-unofficial",
+ "taffy",
+ "thiserror 2.0.21",
+ "ttf-parser",
+ "url",
+ "usvg",
+ "uuid",
+ "waker-fn",
+ "web-time",
+ "windows 0.62.2",
+ "xgpui-macros",
+ "zed-scap",
+]
+
+[[package]]
+name = "xgpui-macros"
+version = "1.0.0"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "xgpui-svg"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
- "gpui",
  "web-time",
+ "xgpui-core",
 ]
 
 [[package]]
@@ -3888,29 +3888,29 @@ version = "2.5.0"
 source = "git+https://github.com/zed-industries/async-process.git?rev=0b6d6713570af61806e1e5cb40e0f757cb93fd9d#0b6d6713570af61806e1e5cb40e0f757cb93fd9d"
 
 [[patch.unused]]
-name = "gpui-apple"
-version = "1.25.3"
+name = "xgpui-apple"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-linux"
-version = "1.25.3"
+name = "xgpui-linux"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-macos"
-version = "1.25.3"
+name = "xgpui-macos"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-platform"
-version = "1.25.3"
+name = "xgpui-platform"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-web"
-version = "1.25.3"
+name = "xgpui-web"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-wgpu"
-version = "1.25.3"
+name = "xgpui-wgpu"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-windows"
-version = "1.25.3"
+name = "xgpui-windows"
+version = "1.0.0"

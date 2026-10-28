@@ -1,14 +1,15 @@
 [package]
-name = "gpui-windows"
-version = "1.25.3"
+name = "xgpui-windows"
+version = "1.0.0"
 edition = "2024"
 license = "Apache-2.0"
-repository = "https://github.com/gpui-archipelago/gpui-unofficial"
+repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Unofficial release of Zed's gpui_windows crate"
 
 [lib]
 path = "src/gpui_windows.rs"
 doctest = false
+name = "gpui_windows"
 
 [features]
 default = ["gpui/default"]
@@ -16,7 +17,7 @@ test-support = ["gpui/test-support"]
 screen-capture = ["gpui/screen-capture", "scap"]
 
 [dependencies]
-gpui = { package = "gpui", version = "1.25.3" }
+gpui = { package = "xgpui-core", version = "=1.0.0" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 accesskit = { version = "0.24.0", features = ["enumn"] }

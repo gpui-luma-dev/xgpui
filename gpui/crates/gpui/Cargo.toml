@@ -1,10 +1,10 @@
 [package]
-name = "gpui"
-version = "1.25.3"
+name = "xgpui-core"
+version = "1.0.0"
 edition = "2024"
 authors = ["Nathan Sobo <nathan@zed.dev>"]
 description = "Zed's GPU-accelerated UI framework"
-repository = "https://github.com/gpui-archipelago/gpui-unofficial"
+repository = "https://github.com/gpui-luma-dev/xgpui"
 license = "Apache-2.0"
 homepage = "https://gpui.rs"
 readme = "README.md"
@@ -57,7 +57,7 @@ derive_more = { version = "2.1", features = ["deref", "deref_mut", "from_str", "
 etagere = { version = "0.2" }
 futures = { version = "0.3.34" }
 futures-concurrency = { version = "7.7.1", optional = true }
-gpui_macros = { package = "gpui-macros", version = "1.25.3" }
+gpui_macros = { package = "xgpui-macros", version = "=1.0.0" }
 gpui_shared_string = { package = "gpui-shared-string-gpui-unofficial", version = "=1.25.3" }
 http_client = { package = "http-client-gpui-unofficial", version = "=1.25.3" }
 image = { version = "0.25.1", default-features = false, features = [
@@ -161,7 +161,7 @@ env_logger = { version = "0.11" }
 futures-concurrency = { version = "7.7.1" }
 postage = { version = "0.5", default-features = false, features = ["blocking"] }
 web-time = { version = "1.1.0" }
-gpui_platform = { package = "gpui-platform", version = "1.25.3" }
+gpui_platform = { package = "xgpui-platform", version = "=1.0.0" }
 gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.25.3" }
 lyon = { version = "1.0", features = ["extra"] }
 rand = { version = "0.9", default-features = true, features = ["std", "std_rng", "os_rng"] }

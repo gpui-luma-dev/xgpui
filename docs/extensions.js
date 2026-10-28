@@ -13,7 +13,7 @@ const browserDemoNames = {
   hermite: 'Hermite editor', color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs',
 };
 function browserDemoLinks(demo) {
-  return '<p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=' + demo + '">Open ' + browserDemoNames[demo] + ' ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>';
+  return '<p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=' + demo + '">Open ' + browserDemoNames[demo] + ' ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p>';
 }
 function brushDemoLinks() {
   return '<section class="demo-entry" aria-label="Brush and layer live demos"><div class="demo-entry-heading"><span>TRY IT LIVE</span><a href="examples/extensions/">All browser demos →</a></div><div class="demo-launch-grid">' +
@@ -30,7 +30,7 @@ function liveDemoOverview() {
 function gamutDemoPanel() {
   return '<section class="demo-entry" aria-label="Wide-gamut demos"><div class="demo-entry-heading"><span>EXPLORE COLOR &amp; P3</span><a href="examples/extensions/">All demos →</a></div><div class="demo-launch-grid">' +
     '<article class="demo-launch gamut-native"><div class="demo-thumb gamut-thumb" aria-hidden="true"></div><strong>Native Display P3 lab</strong><span>Compare wide SDR content with ordinary sRGB controls on macOS or Windows. Run from the repository root:</span>' +
-    extensionCode('sh', 'cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml') +
+    extensionCode('sh', 'cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab') +
     '<span>Move the window to a P3 display. Check <code>Effective: WideGamutSdr</code> and <code>Display wide gamut: Some(true)</code>. These report negotiated support, not display calibration.</span></article>' +
     '<a class="demo-launch" href="examples/extensions/?demo=color"><div class="demo-thumb gamut-preview-thumb" aria-hidden="true"></div><strong>Open color comparison ↗</strong><span>Interactive browser preview of interpolation and gamut mapping. Rendered as sRGB; use the native lab to compare actual Display P3 output.</span></a></div></section>';
 }
@@ -38,20 +38,20 @@ function colorDemoLinks() {
   return '<h2>Color comparison · browser and native desktop</h2>' +
     browserDemoLinks('color') +
     '<p>The browser compares interpolation and gamut mapping as an sRGB preview. Its runtime panel reports source space, mapping, actual canvas color space (or unknown) and browser-reported P3 display capability.</p>' +
-    extensionCode('sh', 'cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --bin color-lab') +
+    extensionCode('sh', 'cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab') +
     '<p>The native companion pairs mapped sRGB and Display P3 swatches using the same 32 reference samples per row. Check effective <code>WideGamutSdr</code> and display support, then compare on your P3 monitor. Display capability does not verify calibration.</p>';
 }
 function instancedDemoLinks() {
   return '<h2>Instanced WGSL v2 · native app first</h2>' +
     '<p>Typed fragment instances, ordered batching, configurable gradient shadows, soft animated borders and direct main-pass rendering. Experimental SDR subset; Windows runtime acceptance remains outstanding.</p>' +
-    extensionCode('sh', 'just --justfile apps/shader-examples/justfile ui\njust --justfile apps/shader-examples/justfile composition') +
-    '<p><a href="#instanced-wgsl-v2">API, examples and implementation status →</a> · <a href="examples/shaders/">WASM companion →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/shader-examples">Demo source</a></p>';
+    extensionCode('sh', 'just --justfile apps/xgpui-ext-lab/shader-examples/justfile ui\njust --justfile apps/xgpui-ext-lab/shader-examples/justfile composition') +
+    '<p><a href="#instanced-wgsl-v2">API, examples and implementation status →</a> · <a href="examples/shaders/">WASM companion →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/shader-examples">Demo source</a></p>';
 }
 function extensionCode(language, source) {
   return '<pre><code class="language-' + language + '">' + escapeHtml(source) + '</code></pre>';
 }
 function extensionPage(route) {
-  if (route === 'local-development') {
+  if (route === 'local-development' || route === 'extension-lab') {
     const doc = data.extension_documents[route];
     return '<p><a href="#overview">← Overview</a></p><article class="extension-document">' + doc.html + '</article>';
   }
@@ -84,7 +84,7 @@ function extensionPage(route) {
     return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'typography' ? browserDemoLinks('typography') : route === 'brushes' ? brushDemoLinks() : route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
   return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation, text and SVG extensions.') + banner +
-    '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web">Demo source</a></p>' +
+    '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p>' +
     liveDemoOverview() + '<h2>1. Paints and shaders</h2>' +
     extensionCode('rust', `use xgpui_shader::{painted, SolidColor};
 use std::sync::Arc;
@@ -92,8 +92,8 @@ use std::sync::Arc;
 painted().bg_paint(Arc::new(SolidColor::new([1.0, 0.2, 0.0, 1.0])?));`) +
     '<p><code>xgpui-shader</code>: gradients, meshes and portable WGSL. Metal, wgpu and native D3D11 adapters; ordinary programs use sRGB. Explicit linear-P3 programs require a native wide-gamut window.</p>' +
     '<div class="cards">' + extensionCard('extension-paints', 'Start here: dependencies, containers, borders, paths and interaction.') + extensionCard('typography', 'Gradient fills, glyph glow/shadows, typewriter, wave and scramble with stable selection and native accessibility.') + extensionCard('brushes', 'Universal brushes, glyphs, paths, mesh gradients and cached layer effects; pastel waves demo.') + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('paint-contract-hardening', 'Preparation, recording and failure behavior.') + extensionCard('portable-wgsl-v1', 'Rust parameters + portable WGSL source.') + extensionCard('instanced-wgsl-v2', 'Typed main-pass instances, ordered batching, native app and WASM companion.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'Native D3D11 adapter and Windows acceptance.') + '</div>' +
-    extensionCode('sh', `just --justfile apps/paint-lab/justfile radial
-just --justfile apps/paint-lab/justfile --list`) +
+    extensionCode('sh', `just --justfile apps/xgpui-ext-lab/paint-lab/justfile radial
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile --list`) +
     instancedDemoLinks() +
     '<h2>2. Wide-gamut presentation</h2>' +
     extensionCode('rust', `use gpui::WindowColorMode;
@@ -106,8 +106,8 @@ let status = window.color_status();
 MetalWideSdrOutput::from_linear_p3_premultiplied(context, texture, commands)?;`) +
     '<p><code>xgpui-gamut</code> produces bounded linear-P3 SDR surfaces. GPUI backends own window negotiation and composition; Metal and native D3D11 presentation are implemented. Windows native execution/display validation remains outstanding; Linux is deferred.</p>' +
     '<div class="cards">' + extensionCard('high-gamut-windows', 'Start here: window setup, complete Metal producer, color contract, composition and validation.') + '</div>' +
-    extensionCode('sh', `just --justfile apps/gamut-lab/justfile ui
-just --justfile apps/gamut-lab/justfile test`) +
+    extensionCode('sh', `just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile test`) +
     colorDemoLinks() +
     '<h2>3. Parley text</h2><p>Shared text backend with flat-LTR compatibility, BiDi paragraph layout and editing/IME geometry. Existing GPUI caches and glyph atlas; Windows/Linux runtime validation remains outstanding.</p>' +
     '<div class="cards">' + extensionCard('parley-text', 'Construction, paragraph/input seams, cache and face identity, supported subset and validation.') + '</div>' +

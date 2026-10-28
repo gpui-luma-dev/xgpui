@@ -129,11 +129,11 @@ accessibility and broader BiDi/UAX #14 conformance remain follow-ups.
 
 ```sh
 # Repository root; paragraph mode uses Parley, compare uses both backends.
-just --justfile apps/text-lab/justfile ui
-just --justfile apps/text-lab/justfile paragraph
-just --justfile apps/text-lab/justfile paragraph --timings-only
-just --justfile apps/text-lab/justfile scroll --scroll-frames 640 --exit-after-scroll
-just --justfile apps/text-lab/justfile test
+just --justfile apps/xgpui-ext-lab/text-lab/justfile ui
+just --justfile apps/xgpui-ext-lab/text-lab/justfile paragraph
+just --justfile apps/xgpui-ext-lab/text-lab/justfile paragraph --timings-only
+just --justfile apps/xgpui-ext-lab/text-lab/justfile scroll --scroll-frames 640 --exit-after-scroll
+just --justfile apps/xgpui-ext-lab/text-lab/justfile test
 ```
 
 The lab covers bundled fallback/variable fonts, mixed scripts, wrapping, caret,

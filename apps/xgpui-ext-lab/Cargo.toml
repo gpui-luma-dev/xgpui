@@ -1,0 +1,137 @@
+[package]
+name = "xgpui-ext-lab"
+version = "0.2.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Native and browser labs and benchmarks for XGPUI extensions"
+repository = "https://github.com/gpui-luma-dev/xgpui"
+publish = false
+autobins = false
+autotests = false
+autoexamples = false
+autobenches = false
+default-run = "shader-examples"
+
+[workspace]
+
+[features]
+default = ["native"]
+native = []
+web = []
+native-window-tests = ["native"]
+portable-shaders = ["xgpui-shader/portable-shaders"]
+wgpu = ["xgpui-media/wgpu", "xgpui-shader/wgpu"]
+runtime-shaders = ["gpui_platform/runtime_shaders"]
+
+[dependencies]
+anyhow = "1"
+gpui = { package = "xgpui-core", path = "../../gpui/crates/gpui", version = "=1.0.0" }
+xgpui-color = { path = "../../extensions/xgpui-ext/crates/xgpui-color", version = "=0.2.0", package = "xgpui-color" }
+xgpui-gamut = { path = "../../extensions/xgpui-ext/crates/xgpui-gamut", version = "=0.2.0", features = ["instanced"] , package = "xgpui-gamut" }
+xgpui-media = { path = "../../extensions/xgpui-ext/crates/xgpui-media", version = "=0.2.0", package = "xgpui-media" }
+xgpui-svg = { path = "../../extensions/xgpui-ext/crates/xgpui-svg", version = "=0.2.0", package = "xgpui-svg" }
+xgpui-parley = { path = "../../extensions/xgpui-ext/crates/xgpui-parley", version = "=0.2.0", package = "xgpui-parley" }
+xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader", version = "=0.2.0", features = ["portable-shaders", "wgpu"] , package = "xgpui-shader" }
+gpui-wgpu = { package = "xgpui-wgpu", path = "../../gpui/crates/gpui-wgpu", version = "=1.0.0" }
+image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "webp"] }
+parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
+skrifa = "=0.44.0"
+unicode-segmentation = "1"
+web-time = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+clap = { version = "4", features = ["derive"] }
+gpui = { package = "xgpui-core", path = "../../gpui/crates/gpui", version = "=1.0.0", features = ["test-support", "profiler"] }
+gpui_platform = { package = "xgpui-platform", path = "../../gpui/crates/gpui-platform", version = "=1.0.0", default-features = false, features = ["test-support", "font-kit", "wayland", "x11"] }
+gpui-wgpu = { package = "xgpui-wgpu", path = "../../gpui/crates/gpui-wgpu", version = "=1.0.0", features = ["test-support"] }
+xgpui-parley = { path = "../../extensions/xgpui-ext/crates/xgpui-parley", version = "=0.2.0", features = ["system-fonts"] , package = "xgpui-parley" }
+sysinfo = { version = "=0.31.4", default-features = false, features = ["system"] }
+libc = "0.2"
+tempfile = "3"
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+xgpui-media = { path = "../../extensions/xgpui-ext/crates/xgpui-media", version = "=0.2.0", features = ["wgpu"] , package = "xgpui-media" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui-apple = { package = "xgpui-apple", path = "../../gpui/crates/gpui-apple", version = "=1.0.0", features = ["test-support", "font-kit"] }
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+core-foundation = "0.10"
+core-text = "21"
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+gpui-web = { package = "xgpui-web", path = "../../gpui/crates/gpui-web", version = "=1.0.0", default-features = false }
+xgpui-media = { path = "../../extensions/xgpui-ext/crates/xgpui-media", version = "=0.2.0", features = ["wgpu"] , package = "xgpui-media" }
+wasm-bindgen = "=0.2.129"
+web-sys = { version = "0.3", features = ["Window", "Location", "console", "MediaQueryList"] }
+console_error_panic_hook = "0.1"
+wgpu = { version = "30.0.1", features = ["fragile-send-sync-non-atomic-wasm"] }
+
+[[bin]]
+name = "color-field-bench"
+path = "color-field-bench/src/main.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "gamut-lab"
+path = "gamut-lab/src/main.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "media-lab"
+path = "media-lab/src/main.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "paint-lab"
+path = "paint-lab/src/main.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "quad-bench"
+path = "quad-bench/src/main.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "shader-examples"
+path = "shader-examples/src/main.rs"
+
+[[bin]]
+name = "svg-lab"
+path = "svg-lab/src/main.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "text-lab"
+path = "text-lab/src/main.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "extensions-web"
+path = "extensions-web/src/entry.rs"
+required-features = ["web"]
+test = false
+bench = false
+
+[[bin]]
+name = "color-lab"
+path = "gamut-lab/src/color_main.rs"
+required-features = ["native"]
+
+[[test]]
+name = "compatibility"
+path = "gamut-lab/tests/compatibility.rs"
+required-features = ["native"]
+
+[[test]]
+name = "native_windows"
+path = "gamut-lab/tests/native_windows.rs"
+harness = false
+required-features = ["native-window-tests"]
+
+[[example]]
+name = "native_variations"
+path = "text-lab/examples/native_variations.rs"
+required-features = ["native"]

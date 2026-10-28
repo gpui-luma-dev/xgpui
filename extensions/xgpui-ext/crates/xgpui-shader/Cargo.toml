@@ -1,8 +1,9 @@
 [package]
 name = "xgpui-shader"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 publish = false
+repository = "https://github.com/gpui-luma-dev/xgpui"
 
 [workspace]
 
@@ -17,28 +18,28 @@ unicode-bidi = "0.3"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 naga = { version = "30.0.1", optional = true, features = ["wgsl-in", "msl-out", "spv-out", "hlsl-out"] }
-gpui-wgpu = { path = "../../../../gpui/crates/gpui-wgpu", optional = true }
+gpui-wgpu = { path = "../../../../gpui/crates/gpui-wgpu", optional = true , package = "xgpui-wgpu", version = "=1.0.0" }
 bytemuck = { version = "1", optional = true, features = ["derive"] }
-gpui = { path = "../../../../gpui/crates/gpui" }
+gpui = { path = "../../../../gpui/crates/gpui" , package = "xgpui-core", version = "=1.0.0" }
 refineable = { package = "refineable-gpui-unofficial", version = "=1.25.3" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-gpui-apple = { path = "../../../../gpui/crates/gpui-apple" }
+gpui-apple = { path = "../../../../gpui/crates/gpui-apple" , package = "xgpui-apple", version = "=1.0.0" }
 metal = "0.33"
 
 [dev-dependencies]
 image = { version = "0.25.1", default-features = false }
-gpui-wgpu = { path = "../../../../gpui/crates/gpui-wgpu", features = ["test-support"] }
+gpui-wgpu = { path = "../../../../gpui/crates/gpui-wgpu", features = ["test-support"] , package = "xgpui-wgpu", version = "=1.0.0" }
 naga = { version = "30.0.1", features = ["wgsl-in", "spv-out", "hlsl-out"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-gpui-windows = { path = "../../../../gpui/crates/gpui-windows" }
+gpui-windows = { path = "../../../../gpui/crates/gpui-windows" , package = "xgpui-windows", version = "=1.0.0" }
 naga = { version = "30.0.1", features = ["wgsl-in", "hlsl-out"] }
 bytemuck = "1"
 windows = { version = "0.62", features = ["Win32_Graphics_Direct3D11", "Win32_Graphics_Direct3D_Fxc", "Win32_Graphics_Dxgi_Common"] }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
-gpui-apple = { path = "../../../../gpui/crates/gpui-apple", features = ["test-support", "font-kit"] }
+gpui-apple = { path = "../../../../gpui/crates/gpui-apple", features = ["test-support", "font-kit"] , package = "xgpui-apple", version = "=1.0.0" }
 
 [target.'cfg(target_os = "windows")'.dev-dependencies]
-gpui-windows = { path = "../../../../gpui/crates/gpui-windows", features = ["test-support"] }
+gpui-windows = { path = "../../../../gpui/crates/gpui-windows", features = ["test-support"] , package = "xgpui-windows", version = "=1.0.0" }

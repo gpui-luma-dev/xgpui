@@ -18,7 +18,7 @@ let app = Application::with_platform_and_text_system(
 Preload the explicit default family. `.SystemUIFont` maps to it. Family names
 are individual names; ordered fallback uses `FontFallbacks`. Optional
 `system-fonts` discovery is off by default. Windows/Linux share this adapter;
-[host validation](../../../../apps/text-lab/README.md#windows-and-linux-host-testing) remains outstanding.
+[host validation](../../../../apps/xgpui-ext-lab/text-lab/README.md#windows-and-linux-host-testing) remains outstanding.
 
 ## Ownership and identity
 
@@ -82,7 +82,7 @@ types. Native providers default to Unsupported.
 GPUI owns both cache levels, frame retention and font-generation invalidation.
 Painting uses existing glyph bounds/atlas paths; backgrounds and decorations
 remain caller-owned. See [contracts](PARAGRAPH-BIDI.md) and the
-[editing/IME lab](../../../../apps/text-lab/README.md).
+[editing/IME lab](../../../../apps/xgpui-ext-lab/text-lab/README.md).
 
 ## Limits
 

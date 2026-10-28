@@ -64,7 +64,10 @@ repository URLs, Rust source, licenses and READMEs.
 
 Package names change for downstream consumers. Existing dependency aliases can
 stay, but their `package` and path fields must point at the normalized names.
-These local names do not imply ownership of the corresponding crates.io names.
+Local directory names remain stable. `scripts/release-packages.json` maps the
+maintained packages to downstream `xgpui-*` identities at `1.0.0` for the framework and `0.2.0` for extensions;
+`upstream.json` records those separately under `distribution`. Upstream helper
+versions continue to follow the captured release.
 
 ## Integrate and validate
 

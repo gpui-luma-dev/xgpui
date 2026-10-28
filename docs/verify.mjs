@@ -93,7 +93,7 @@ assert.ok(index.indexOf('>Live demos ↗</a>') < index.indexOf('>Instanced WGSL 
 for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
-  assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web'));
+  assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web'));
   assert.equal(new URL(`examples/extensions/?demo=${demo}`, 'https://example.github.io/xgpui/').pathname, '/xgpui/examples/extensions/');
 }
 
@@ -102,7 +102,7 @@ for (const asset of ['favicon.svg', 'favicon.ico', 'style.css', 'extensions.js',
   await readFile(new URL(asset, site));
 }
 // Keep the Wasm landing page complete as either gallery gains new demos.
-const wasmIndex = await readFile(new URL('../apps/extensions-web/index.html', import.meta.url), 'utf8');
+const wasmIndex = await readFile(new URL('../apps/xgpui-ext-lab/extensions-web/index.html', import.meta.url), 'utf8');
 const legacyGallery = await readFile(new URL('../gpui/crates/gpui-web/examples/hello_web/index.html', import.meta.url), 'utf8');
 const legacyManifest = await readFile(new URL('../gpui/crates/gpui-web/examples/hello_web/Cargo.toml', import.meta.url), 'utf8');
 const listedModules = [...wasmIndex.matchAll(/data-wasm-module="([^"]+)"/g)].map(m => m[1]);
@@ -215,7 +215,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 18);
+assert.equal(Object.keys(data.extension_documents).length, 19);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/xgpui-ext/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -267,8 +267,8 @@ assert.equal(run('parseRoute("#paint-contract-hardening&section=implemented-disc
 for (const file of [
   'extensions/xgpui-ext/README.md',
   'extensions/xgpui-ext/crates/xgpui-shader/README.md',
-  'apps/paint-lab/README.md',
-  'apps/gamut-lab/README.md',
+  'apps/xgpui-ext-lab/paint-lab/README.md',
+  'apps/xgpui-ext-lab/gamut-lab/README.md',
   'extensions/xgpui-ext/crates/xgpui-gamut/README.md',
   'extensions/xgpui-ext/crates/xgpui-svg/README.md',
   'extensions/xgpui-ext/crates/xgpui-parley/README.md',
@@ -307,7 +307,7 @@ for (const route of ['#high-gamut-windows', '#crate=xgpui-gamut&tab=overview']) 
   run('render()');
   const gamutPage = element('content').innerHTML;
   assert.match(gamutPage, /aria-label="Wide-gamut demos"/);
-  assert.match(gamutPage, /cargo run --locked --config \.cargo\/validation\.toml --manifest-path apps\/gamut-lab\/Cargo\.toml/);
+  assert.match(gamutPage, /cargo run --locked --config \.cargo\/validation\.toml --manifest-path apps\/xgpui-ext-lab\/Cargo\.toml --bin gamut-lab/);
   assert.match(gamutPage, /href="examples\/extensions\/\?demo=color"/);
   assert.match(gamutPage, /Rendered as sRGB/);
 }
@@ -365,10 +365,10 @@ console.log('Verified API-change source links against regenerated declaration an
 assert.ok(data.extension_documents['instanced-wgsl-v2']);
 assert.ok(index.includes('href="#instanced-wgsl-v2"'));
 assert.ok(index.includes('href="examples/extensions/"'));
-assert.match(run('shaderCrateGuide()'), /just --justfile apps\/shader-examples\/justfile ui/);
+assert.match(run('shaderCrateGuide()'), /just --justfile apps\/xgpui-ext-lab\/shader-examples\/justfile ui/);
 assert.match(run('extensionPage("instanced-wgsl-v2")'), /Clipping ON\/OFF/);
 assert.match(run('instancedDemoLinks()'), /href="examples\/shaders\/"/);
-const shaderIndex = await readFile(new URL('../apps/shader-examples/index.html', import.meta.url), 'utf8');
+const shaderIndex = await readFile(new URL('../apps/xgpui-ext-lab/shader-examples/index.html', import.meta.url), 'utf8');
 for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
   assert.ok(shaderIndex.includes(`href="?example=${example}"`), 'automatic backend link: ' + example);
   for (const backend of ['webgpu', 'webgl']) {
@@ -376,8 +376,8 @@ for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows',
   }
 }
 const pagesWorkflow = await readFile(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
-assert.ok(pagesWorkflow.includes('bash apps/shader-examples/build.sh --release'));
-const shaderBuild = await readFile(new URL('../apps/shader-examples/build.sh', import.meta.url), 'utf8');
+assert.ok(pagesWorkflow.includes('bash apps/xgpui-ext-lab/shader-examples/build.sh --release'));
+const shaderBuild = await readFile(new URL('../apps/xgpui-ext-lab/shader-examples/build.sh', import.meta.url), 'utf8');
 assert.ok(shaderBuild.includes('docs/examples/shaders/'));
 console.log('Verified instanced WGSL guide, native-first launch, companion links and Pages packaging.');
 
@@ -404,8 +404,8 @@ assert.match(run('cratePage(crates.find(c => c.package === "xgpui-color"), "over
 assert.match(wasmIndex, /Color \/ Gamut/);
 
 for (const app of ['extensions-web', 'shader-examples']) {
-  const html = await readFile(new URL('../apps/' + app + '/index.html', import.meta.url), 'utf8');
-  const build = await readFile(new URL('../apps/' + app + '/build.sh', import.meta.url), 'utf8');
+  const html = await readFile(new URL('../apps/xgpui-ext-lab/' + app + '/index.html', import.meta.url), 'utf8');
+  const build = await readFile(new URL('../apps/xgpui-ext-lab/' + app + '/build.sh', import.meta.url), 'utf8');
   assert.ok(html.includes("from './graphics.mjs'"), app + ': shared startup diagnostics');
   assert.ok(html.includes('canonicalLocalDemoUrl(location.href)'), app + ': correct wildcard origins');
   assert.ok(html.includes('location.replace(canonical)'), app + ': preserve the explicit backend on localhost');
@@ -423,7 +423,7 @@ assert.ok(!brushLaunch.includes('Run browser demo'));
 assert.match(run('overview()'), /LIVE BROWSER DEMOS/);
 assert.ok(index.includes('>Live demos ↗</a>'));
 for (const app of ['extensions-web', 'shader-examples']) {
-  const html = await readFile(new URL('../apps/' + app + '/index.html', import.meta.url), 'utf8');
+  const html = await readFile(new URL('../apps/xgpui-ext-lab/' + app + '/index.html', import.meta.url), 'utf8');
   assert.ok(html.includes('gallery.css'));
   assert.ok(html.includes('gallery-grid'));
   assert.ok(html.includes('demo-preview'));

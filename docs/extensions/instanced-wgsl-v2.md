@@ -96,7 +96,7 @@ color stops, a gradient angle, configurable falloff, blur, spread, offset and
 inset/outset mode. Native `BoxShadow` retains its existing behavior. Start with:
 
 ```sh
-just --justfile apps/shader-examples/justfile shadows
+just --justfile apps/xgpui-ext-lab/shader-examples/justfile shadows
 ```
 
 ```rust
@@ -189,7 +189,7 @@ requests animation frames only while active; keep phase constant and stop frame
 requests for pause/reduced motion. A spring or pointer simulation can supply the
 same phase parameter. No GPUI API changes are required.
 
-The separate local Borders demo (`just --justfile apps/shader-examples/justfile borders`)
+The separate local Borders demo (`just --justfile apps/xgpui-ext-lab/shader-examples/justfile borders`)
 includes an interactive Generate pill on a light panel and Pause/Resume;
 the companion uses the same Rust view and WGSL on WebGPU and WebGL2.
 
@@ -217,12 +217,12 @@ the companion uses the same Rust view and WGSL on WebGPU and WebGL2.
 Start with the local native app. From the repository root:
 
 ```sh
-just --justfile apps/shader-examples/justfile ui
-just --justfile apps/shader-examples/justfile composition
-just --justfile apps/shader-examples/justfile --set profile release particles
+just --justfile apps/xgpui-ext-lab/shader-examples/justfile ui
+just --justfile apps/xgpui-ext-lab/shader-examples/justfile composition
+just --justfile apps/xgpui-ext-lab/shader-examples/justfile --set profile release particles
 ```
 
-Inside `apps/shader-examples`, use `just ui`; bare `just` lists recipes. The
+Inside `apps/xgpui-ext-lab/shader-examples`, use `just ui`; bare `just` lists recipes. The
 in-window selector opens all six examples:
 
 1. **Minimal:** a custom WGSL fragment function and typed Rust instance.
@@ -244,14 +244,14 @@ after source changes and reload; native and browser binaries do not update each
 other automatically. The existing extensions-web gallery remains separate.
 
 ```sh
-bash apps/shader-examples/build.sh --release
-python3 apps/shader-examples/serve.py
+bash apps/xgpui-ext-lab/shader-examples/build.sh --release
+python3 apps/xgpui-ext-lab/shader-examples/serve.py
 ```
 
 Open `http://localhost:8083/`. The build also refreshes
 `docs/examples/shaders/` for documentation previews; the Pages workflow packages
 that companion with the website. See the
-[demo source and run guide](https://github.com/gpui-luma-dev/xgpui/tree/main/apps/shader-examples).
+[demo source and run guide](https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/shader-examples).
 
 ```sh
 cargo test --offline --config .cargo/validation.toml \

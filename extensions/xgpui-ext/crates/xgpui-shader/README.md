@@ -5,11 +5,11 @@ WGSL paints. Effects and backend adapters live here; GPUI owns scene composition
 
 - [Use paints and interactive containers](../../../../docs/extensions/extension-paints.md)
 - [Producer reference and caches](../../../../docs/extensions/shader-producers.md)
-- [Instanced WGSL v2](../../../../docs/extensions/instanced-wgsl-v2.md) · [new WASM examples](../../../../apps/shader-examples/README.md)
+- [Instanced WGSL v2](../../../../docs/extensions/instanced-wgsl-v2.md) · [new WASM examples](../../../../apps/xgpui-ext-lab/shader-examples/README.md)
 - [Portable WGSL](../../../../docs/extensions/portable-wgsl-v1.md)
 - [wgpu](../../../../docs/extensions/portable-paints.md) · [native D3D11](../../../../docs/extensions/native-dx11-paints.md)
 - [GPUI API changes](../../../../docs/extensions/gpui-public-api.md) · [preparation and recording](../../../../docs/extensions/paint-contract-hardening.md)
-- Run/test: [paint-lab](../../../../apps/paint-lab/README.md)
+- Run/test: [paint-lab](../../../../apps/xgpui-ext-lab/paint-lab/README.md)
 
 ## GPUI public API changes: additions and compatibility
 
@@ -21,15 +21,15 @@ See the [crate guide](../../../../docs/extensions/extension-paints.md#gpui-publi
 From the repository root:
 
 ```sh
-just --justfile apps/shader-examples/justfile ui
+just --justfile apps/xgpui-ext-lab/shader-examples/justfile ui
 ```
 
-Or run `just ui` inside `apps/shader-examples`. Named recipes include `minimal`,
+Or run `just ui` inside `apps/xgpui-ext-lab/shader-examples`. Named recipes include `minimal`,
 `glow`, `particles` and `composition`. Use `just --set profile release ui` there
 for the optimized native app. WASM is a companion build; see the
-[demo guide](../../../../apps/shader-examples/README.md).
+[demo guide](../../../../apps/xgpui-ext-lab/shader-examples/README.md).
 
-Programmable rounded-box shadows: `just --justfile apps/shader-examples/justfile shadows`.
+Programmable rounded-box shadows: `just --justfile apps/xgpui-ext-lab/shader-examples/justfile shadows`.
 [`painted().shadow_paint(layer)`, `ShadowPainter` and `ShadowStyle`](../../../../docs/extensions/instanced-wgsl-v2.md#richer-shadows)
 provide up to four color stops, adjustable falloff, blur/spread/offset and inset/outset modes.
 

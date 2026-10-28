@@ -4,6 +4,17 @@
 
 /docs/examples/extensions/
 
-/apps/shader-examples/dist/
+/apps/xgpui-ext-lab/shader-examples/dist/
 
 /docs/examples/shaders/
+
+# Retain ignored caches and historical generated outputs at pre-consolidation paths.
+/apps/color-field-bench/
+/apps/extensions-web/
+/apps/gamut-lab/
+/apps/media-lab/
+/apps/paint-lab/
+/apps/quad-bench/
+/apps/shader-examples/
+/apps/svg-lab/
+/apps/text-lab/

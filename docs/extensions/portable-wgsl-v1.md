@@ -139,9 +139,9 @@ API guarantees are outside v1.
 ## Test and capture
 
 ```sh
-just --justfile apps/paint-lab/justfile portable-test
-just --justfile apps/paint-lab/justfile portable-headless --frames 2 --png /tmp/portable-metal.png
-just --justfile apps/paint-lab/justfile portable-wgpu --frames 2 --png /tmp/portable-wgpu.png
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-test
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-headless --frames 2 --png /tmp/portable-metal.png
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-wgpu --frames 2 --png /tmp/portable-wgpu.png
 cargo test --config .cargo/validation.toml \
   --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --target-dir target
@@ -154,5 +154,5 @@ cargo test --config .cargo/validation.toml \
 | Snapshots | Parameter immutability, sharing, unused uniforms |
 | Windows/Vulkan | Runtime acceptance outstanding; translation ≠ driver execution |
 
-App source: `apps/paint-lab/src/portable.rs`, `src/shaders/portable-wash.wgsl`.
+App source: `apps/xgpui-ext-lab/paint-lab/src/portable.rs`, `src/shaders/portable-wash.wgsl`.
 [Native D3D11](native-dx11-paints.md) · [wgpu adapter](portable-paints.md)

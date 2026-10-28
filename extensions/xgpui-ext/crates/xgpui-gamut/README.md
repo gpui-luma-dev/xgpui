@@ -5,7 +5,7 @@ Native composition and window negotiation remain in GPUI backends.
 
 [Usage and backend contract](../../../../docs/extensions/high-gamut-windows.md) ·
 [GPUI API changes](../../../../docs/extensions/gpui-public-api.md) ·
-[gamut-lab](../../../../apps/gamut-lab/README.md)
+[gamut-lab](../../../../apps/xgpui-ext-lab/gamut-lab/README.md)
 
 ## GPUI public API changes: additions and compatibility
 
@@ -56,5 +56,5 @@ See the [instanced guide](../../../../docs/extensions/instanced-wgsl-v2.md) and 
 
 ```sh
 cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-gamut/Cargo.toml --features instanced
-cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml -- --instanced --gradient
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab -- --instanced --gradient
 ```

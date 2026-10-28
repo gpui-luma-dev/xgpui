@@ -130,7 +130,7 @@ snapshots sharing a pipeline cache. `preparations()` counts generated textures;
   immutable output textures; resource pooling remains later work.
 
 Run `just linear`, `just radial`, `just conic`, `just diamond` or `just mesh` in
-`apps/paint-lab/`. Every type can paint the same
+`apps/xgpui-ext-lab/paint-lab/`. Every type can paint the same
 background, border and path examples. `just headless --effect diamond --frames 30`
 runs GPU checks and a deterministic static workload.
 

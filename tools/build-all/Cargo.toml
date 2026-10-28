@@ -22,24 +22,24 @@ full-capture = [
 ]
 
 [dependencies]
-gpui = { path = "../../gpui/crates/gpui" }
-gpui-macros = { path = "../../gpui/crates/gpui-macros", optional = true }
-gpui-platform = { path = "../../gpui/crates/gpui-platform" }
-gpui-wgpu = { path = "../../gpui/crates/gpui-wgpu", optional = true }
+gpui = { path = "../../gpui/crates/gpui", package = "xgpui-core" }
+gpui-macros = { path = "../../gpui/crates/gpui-macros", package = "xgpui-macros", optional = true }
+gpui-platform = { path = "../../gpui/crates/gpui-platform", package = "xgpui-platform" }
+gpui-wgpu = { path = "../../gpui/crates/gpui-wgpu", package = "xgpui-wgpu", optional = true }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-gpui-apple = { path = "../../gpui/crates/gpui-apple", optional = true }
+gpui-apple = { path = "../../gpui/crates/gpui-apple", package = "xgpui-apple", optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
-gpui-linux = { path = "../../gpui/crates/gpui-linux", optional = true }
-gpui-platform = { path = "../../gpui/crates/gpui-platform", features = ["wayland", "x11"] }
+gpui-linux = { path = "../../gpui/crates/gpui-linux", package = "xgpui-linux", optional = true }
+gpui-platform = { path = "../../gpui/crates/gpui-platform", features = ["wayland", "x11"], package = "xgpui-platform" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-gpui-macos = { path = "../../gpui/crates/gpui-macos", optional = true }
-gpui-platform = { path = "../../gpui/crates/gpui-platform", features = ["font-kit"] }
+gpui-macos = { path = "../../gpui/crates/gpui-macos", package = "xgpui-macos", optional = true }
+gpui-platform = { path = "../../gpui/crates/gpui-platform", features = ["font-kit"], package = "xgpui-platform" }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-gpui-web = { path = "../../gpui/crates/gpui-web", optional = true }
+gpui-web = { path = "../../gpui/crates/gpui-web", package = "xgpui-web", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-gpui-windows = { path = "../../gpui/crates/gpui-windows", optional = true }
+gpui-windows = { path = "../../gpui/crates/gpui-windows", package = "xgpui-windows", optional = true }

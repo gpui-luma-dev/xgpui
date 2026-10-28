@@ -136,9 +136,9 @@ for interactive mesh animation and paint editing.
 
 ```sh
 # Independent CPU Hermite reference; topology, immutable snapshots and retry.
-cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml native_mesh_matches_cpu
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab native_mesh_matches_cpu
 # Solid output: alpha, clipping, replay, reuse, resize and aborted preparation.
-cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml native_producer_pixels
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab native_producer_pixels
 ```
 
 ## Reuse one producer across paint sites
@@ -215,10 +215,10 @@ has a separate native contract. Shared cross-shape coordinates remain deferred.
 ## Run the examples
 
 ```sh
-just --justfile apps/paint-lab/justfile radial
-just --justfile apps/paint-lab/justfile mesh
-just --justfile apps/paint-lab/justfile metal-test
-just --justfile apps/paint-lab/justfile portable-test
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile radial
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile mesh
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile metal-test
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-test
 ```
 
 [Producer reference](shader-producers.md) ·

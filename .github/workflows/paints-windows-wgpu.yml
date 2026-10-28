@@ -23,7 +23,8 @@ on:
       - 'Cargo.lock'
       - 'gpui/crates/**'
       - 'extensions/xgpui-ext/crates/**'
-      - 'apps/paint-lab/**'
+      - 'apps/xgpui-ext-lab/paint-lab/**'
+      - 'apps/xgpui-ext-lab/Cargo.*'
 
 permissions:
   contents: read

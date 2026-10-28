@@ -141,7 +141,7 @@ drains. `SvgImage` handles this lifecycle internally.
 The offline native gallery uses committed, attributed SVGs:
 
 ```sh
-just --justfile apps/svg-lab/justfile gallery
+just --justfile apps/xgpui-ext-lab/svg-lab/justfile gallery
 ```
 
 The browser extension gallery also includes `?demo=svg`: five attributed samples,
@@ -182,9 +182,9 @@ iteration. External resources/fonts retain GPUI/resvg behavior; embed assets or
 outline text for portable documents. Parsing and fetching policies remain with
 the host. This is not a sandbox for hostile documents.
 
-[SVG lab and attributed samples](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/svg-lab/README.md?plain=1) ·
-[measurement index](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/svg-lab/bench/README.md?plain=1) ·
-[shared-pool results](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/svg-lab/bench/results/2026-10-24-scheduler/ASSESSMENT.md?plain=1) ·
+[SVG lab and attributed samples](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/svg-lab/README.md?plain=1) ·
+[measurement index](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/svg-lab/bench/README.md?plain=1) ·
+[shared-pool results](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/svg-lab/bench/results/2026-10-24-scheduler/ASSESSMENT.md?plain=1) ·
 [documented follow-ups](https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/xgpui-ext/crates/xgpui-svg/FOLLOW_UPS.md?plain=1)
 
 From the repository root:
@@ -249,9 +249,9 @@ unresolvable dash lengths return errors rather than allowing unbounded work.
 ### Native visual test
 
 ```sh
-just --justfile apps/media-lab/justfile paths
-just --justfile apps/media-lab/justfile paths-capture
-just --justfile apps/media-lab/justfile paths-wgpu-capture
+just --justfile apps/xgpui-ext-lab/media-lab/justfile paths
+just --justfile apps/xgpui-ext-lab/media-lab/justfile paths-capture
+just --justfile apps/xgpui-ext-lab/media-lab/justfile paths-wgpu-capture
 cargo test --offline --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-svg/Cargo.toml --lib path_effects
 ```
 

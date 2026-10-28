@@ -86,8 +86,8 @@ programs or prove physical wide-gamut display output.
 Build and serve from the repository root:
 
 ```sh
-bash apps/extensions-web/build.sh
-python3 apps/extensions-web/serve.py
+bash apps/xgpui-ext-lab/extensions-web/build.sh
+python3 apps/xgpui-ext-lab/extensions-web/serve.py
 ```
 
 Then open `http://localhost:8081/?demo=color`. Backend links on the gallery select
@@ -105,7 +105,7 @@ not turn the mapped sRGB demo into P3 output or verify physical calibration.
 For actual native Display P3 output on macOS/Metal or Windows/D3D11:
 
 ```sh
-cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --bin color-lab
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab
 ```
 
 This companion displays paired sRGB and P3 rows using the browser's same 32 CPU

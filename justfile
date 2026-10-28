@@ -13,39 +13,39 @@ default:
 
 # Image mipmapping, filters, GPU surfaces and path effects (generated samples).
 media *args:
-    cargo run {{ options }} --manifest-path apps/media-lab/Cargo.toml -- "$@"
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin media-lab -- "$@"
 
 # Six shader examples and typography; select an example in the window.
 shaders *args:
-    cargo run {{ options }} --manifest-path apps/shader-examples/Cargo.toml -- "$@"
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shader-examples -- "$@"
 
 # Paints, gradients, brushes and layer effects.
 paints *args:
-    cargo run {{ options }} --manifest-path apps/paint-lab/Cargo.toml -- "$@"
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab -- "$@"
 
 # Native wide-SDR gamut comparison.
 gamut *args:
-    cargo run {{ options }} --manifest-path apps/gamut-lab/Cargo.toml --bin gamut-lab -- "$@"
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab -- "$@"
 
 # Color conversion and sRGB/P3 reference swatches.
 color *args:
-    cargo run {{ options }} --manifest-path apps/gamut-lab/Cargo.toml --bin color-lab -- "$@"
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab -- "$@"
 
 # Native versus Parley text, paragraphs and scrolling.
 text *args:
-    cargo run {{ options }} --manifest-path apps/text-lab/Cargo.toml -- "$@"
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin text-lab -- "$@"
 
 # SVG rendering, zoom and scheduling comparisons.
 svg *args:
-    cargo run {{ options }} --manifest-path apps/svg-lab/Cargo.toml -- "$@"
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin svg-lab -- "$@"
 
 # Quad rendering benchmark (bounded run by default).
 quad-bench *args:
-    cargo run {{ options }} --manifest-path apps/quad-bench/Cargo.toml -- "$@"
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin quad-bench -- "$@"
 
 # Color-field rendering benchmark (bounded run by default).
 color-field-bench *args:
-    cargo run {{ options }} --manifest-path apps/color-field-bench/Cargo.toml -- "$@"
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-field-bench -- "$@"
 
 # Build the representative core/platform libraries; does not launch an app.
 build *args:
@@ -69,5 +69,13 @@ docs-serve port="8000":
 
 # Build both browser demo collections; requires pinned wasm-bindgen and Python 3.
 web-build:
-    bash apps/extensions-web/build.sh --release
-    bash apps/shader-examples/build.sh --release
+    bash apps/xgpui-ext-lab/extensions-web/build.sh --release
+    bash apps/xgpui-ext-lab/shader-examples/build.sh --release
+
+# Build every native extension lab and benchmark without launching a window.
+lab-build *args:
+    cargo build {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bins "$@"
+
+# Run unit and compatibility tests; native window tests remain opt-in.
+lab-test *args:
+    cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bins --test compatibility --target-dir target "$@"

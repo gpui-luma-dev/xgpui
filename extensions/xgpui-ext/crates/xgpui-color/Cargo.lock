@@ -363,7 +363,7 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "xgpui-color"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "metal",
  "naga",
@@ -395,42 +395,42 @@ version = "2.5.0"
 source = "git+https://github.com/zed-industries/async-process.git?rev=0b6d6713570af61806e1e5cb40e0f757cb93fd9d#0b6d6713570af61806e1e5cb40e0f757cb93fd9d"
 
 [[patch.unused]]
-name = "gpui"
-version = "1.25.3"
-
-[[patch.unused]]
-name = "gpui-apple"
-version = "1.25.3"
-
-[[patch.unused]]
-name = "gpui-linux"
-version = "1.25.3"
-
-[[patch.unused]]
-name = "gpui-macos"
-version = "1.25.3"
-
-[[patch.unused]]
-name = "gpui-macros"
-version = "1.25.3"
-
-[[patch.unused]]
-name = "gpui-platform"
-version = "1.25.3"
-
-[[patch.unused]]
-name = "gpui-web"
-version = "1.25.3"
-
-[[patch.unused]]
-name = "gpui-wgpu"
-version = "1.25.3"
-
-[[patch.unused]]
-name = "gpui-windows"
-version = "1.25.3"
-
-[[patch.unused]]
 name = "proptest"
 version = "1.10.0"
 source = "git+https://github.com/proptest-rs/proptest?rev=3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b#3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b"
+
+[[patch.unused]]
+name = "xgpui-apple"
+version = "1.0.0"
+
+[[patch.unused]]
+name = "xgpui-core"
+version = "1.0.0"
+
+[[patch.unused]]
+name = "xgpui-linux"
+version = "1.0.0"
+
+[[patch.unused]]
+name = "xgpui-macos"
+version = "1.0.0"
+
+[[patch.unused]]
+name = "xgpui-macros"
+version = "1.0.0"
+
+[[patch.unused]]
+name = "xgpui-platform"
+version = "1.0.0"
+
+[[patch.unused]]
+name = "xgpui-web"
+version = "1.0.0"
+
+[[patch.unused]]
+name = "xgpui-wgpu"
+version = "1.0.0"
+
+[[patch.unused]]
+name = "xgpui-windows"
+version = "1.0.0"

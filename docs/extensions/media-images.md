@@ -213,8 +213,8 @@ imports. WebGPU and WebGL2 have both been checked locally.
 For the native app, run from the repository root:
 
 ```sh
-just --justfile apps/media-lab/justfile ui
-just --justfile apps/media-lab/justfile video
+just --justfile apps/xgpui-ext-lab/media-lab/justfile ui
+just --justfile apps/xgpui-ext-lab/media-lab/justfile video
 ```
 
 Both commands use release mode and generate their own sample content.
@@ -428,11 +428,11 @@ changing filters: it should stay at one. Append `--vivid` to `ui` or a headless 
 to start with combined brightness, contrast and saturation adjustments:
 
 ```sh
-just --justfile apps/media-lab/justfile ui --vivid
-cargo run --release --offline --locked --config .cargo/validation.toml --manifest-path apps/media-lab/Cargo.toml --target-dir target -- --headless --vivid --png /tmp/media-filter.png
+just --justfile apps/xgpui-ext-lab/media-lab/justfile ui --vivid
+cargo run --release --offline --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin media-lab --target-dir target -- --headless --vivid --png /tmp/media-filter.png
 ```
 
-The lab also has a **Path effects** view; launch it with `just --justfile apps/media-lab/justfile paths`. See the SVG rendering guide for contour semantics and limits.
+The lab also has a **Path effects** view; launch it with `just --justfile apps/xgpui-ext-lab/media-lab/justfile paths`. See the SVG rendering guide for contour semantics and limits.
 
 ## GPUI public API changes: additions and compatibility
 
@@ -552,8 +552,8 @@ BGRA adapter; the interactive synthetic source remains macOS-only.
 ### Native video lab
 
 ```sh
-just --justfile apps/media-lab/justfile video
-just --justfile apps/media-lab/justfile video-capture
+just --justfile apps/xgpui-ext-lab/media-lab/justfile video
+just --justfile apps/xgpui-ext-lab/media-lab/justfile video-capture
 ```
 
 The source generates fresh 320×180 IOSurfaces at about 30 fps on a background
@@ -642,7 +642,7 @@ producer-key handoff and captured color. The tests compile from macOS but have
 not yet been executed on Windows. On a Windows SDK host, run in release mode:
 
 ```sh
-just --justfile apps/media-lab/justfile dxgi-test
+just --justfile apps/xgpui-ext-lab/media-lab/justfile dxgi-test
 ```
 
 See Microsoft's [AcquireSync contract](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgikeyedmutex-acquiresync),
@@ -704,7 +704,7 @@ incomplete. The existing interactive synthetic source is still macOS-only.
 
 ```sh
 # Layout contract checks on the current host (no DMA-BUF/video fixture required):
-just --justfile apps/media-lab/justfile dma-buf-layout-test
+just --justfile apps/xgpui-ext-lab/media-lab/justfile dma-buf-layout-test
 ```
 
 The ownership/FD contract follows the Vulkan [external FD import specification](https://docs.vulkan.org/refpages/latest/refpages/source/VkImportMemoryFdInfoKHR.html)
@@ -715,7 +715,7 @@ and [queue-family synchronization rules](https://docs.vulkan.org/spec/latest/cha
 On a compatible Linux Vulkan host, run:
 
 ```sh
-just --justfile apps/media-lab/justfile dma-buf-native-test
+just --justfile apps/xgpui-ext-lab/media-lab/justfile dma-buf-native-test
 ```
 
 This recipe defaults to release and supplies its own raw GPU test image; there is
@@ -840,10 +840,10 @@ Publishing uses the repository's normal Pages workflow.
 From the repository root:
 
 ```sh
-just --justfile apps/media-lab/justfile ui
-just --justfile apps/media-lab/justfile ui --image /absolute/path/photo.png
-just --justfile apps/media-lab/justfile capture
-just --justfile apps/media-lab/justfile wgpu-capture
+just --justfile apps/xgpui-ext-lab/media-lab/justfile ui
+just --justfile apps/xgpui-ext-lab/media-lab/justfile ui --image /absolute/path/photo.png
+just --justfile apps/xgpui-ext-lab/media-lab/justfile capture
+just --justfile apps/xgpui-ext-lab/media-lab/justfile wgpu-capture
 ```
 
 The app generates frequency, transparent-edge and color-detail samples offline.
@@ -861,7 +861,7 @@ Headless capture writes `/tmp/media-lab.png`: atlas on the left, mipmapped media
 the right, with one row per sample. It checks that each source uploads once and
 fails on upload errors or timeout. The optional `wgpu-capture` recipe uses wgpu
 for headless rendering; the interactive macOS app uses Metal. See
-`apps/media-lab/README.md` for controls and visual checks.
+`apps/xgpui-ext-lab/media-lab/README.md` for controls and visual checks.
 
 ## Browser demos: filters, mipmapping and contour effects
 
@@ -885,14 +885,14 @@ Each link supports `&backend=webgpu` or `&backend=webgl` for forced backend chec
 The automatic entry prefers WebGPU and can fall back to WebGL2. Build in release:
 
 ```sh
-PATH="/path/to/matching/wasm-bindgen/bin:$PATH" bash apps/extensions-web/build.sh --release
-python3 apps/extensions-web/serve.py
+PATH="/path/to/matching/wasm-bindgen/bin:$PATH" bash apps/xgpui-ext-lab/extensions-web/build.sh --release
+python3 apps/xgpui-ext-lab/extensions-web/serve.py
 ```
 
 Use the pinned wasm-bindgen version in the app README. The build refreshes both
 standalone demo output and the generated `docs/examples/extensions/` assets;
 publication still requires the normal site deployment. No deployment is implied
-by a local build. See [demo source](https://github.com/gpui-luma-dev/xgpui/tree/main/apps/extensions-web/src/media.rs).
+by a local build. See [demo source](https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web/src/media.rs).
 
 The small 1024² offline fixture uses the public synchronous
 `xgpui_media::mipmapped_rgba8(width, height, rgba)` helper. It builds the same
@@ -923,8 +923,8 @@ GPU timing, browser-wide compatibility or accessibility certification.
 ## Release upload CPU benchmark
 
 ```sh
-just --justfile apps/media-lab/justfile upload-bench
-just --justfile apps/media-lab/justfile upload-wgpu-bench
+just --justfile apps/xgpui-ext-lab/media-lab/justfile upload-bench
+just --justfile apps/xgpui-ext-lab/media-lab/justfile upload-wgpu-bench
 ```
 
 Both commands generate their own inputs and require no user assets. Each writes
@@ -978,7 +978,7 @@ a result for other machines, Windows or Linux.
 
 ## Visible-window performance and branch review
 
-Run `just --justfile apps/media-lab/justfile ui-perf` for a release native window
+Run `just --justfile apps/xgpui-ext-lab/media-lab/justfile ui-perf` for a release native window
 and `/tmp/media-ui-perf.json`. Keep it foreground and avoid interacting until the
 report is written, normally about seven seconds. After warming the primary image,
 the lab requests continuous frames with a zoom sweep: 180 baseline intervals,
@@ -1062,7 +1062,7 @@ is independent of the connected monitor; use this visible run to compare cadence
 
 The baseline remains **60 Hz**. Higher-refresh testing is additional coverage,
 not a requirement for developers or a substitute for 60 Hz testing.
-Run `just --justfile apps/media-lab/justfile scroll-perf` after selecting fixed
+Run `just --justfile apps/xgpui-ext-lab/media-lab/justfile scroll-perf` after selecting fixed
 **60 Hertz** for the target display in System Settings → Displays. Keep the
 release window visible and foreground without interacting during measurement;
 restore the previous display preference afterward. The app reports the platform's
