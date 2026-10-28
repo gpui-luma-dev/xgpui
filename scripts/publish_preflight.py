@@ -74,9 +74,12 @@ def audit(root):
         deps = list(dependencies(document))
         for dep in deps:
             context = f"{dep['kind']}:{dep['target'] or 'all'}:{dep['alias']}"
+            # Cargo omits path-only development dependencies from the archive.
+            local_dev = (dep['kind'] == 'dev-dependencies' and 'path' in dep
+                         and not any(dep.get(key) for key in ('version', 'git', 'registry')))
             if dep.get("workspace"):
                 problems.append(f"unresolved-workspace-dependency:{context}")
-            if ("path" in dep or "git" in dep) and not dep.get("version"):
+            if ("path" in dep or "git" in dep) and not dep.get("version") and not local_dev:
                 problems.append(f"dependency-without-registry-version:{context}")
             if "git" in dep:
                 problems.append(f"git-source-needs-registry-equivalence-review:{context}")
@@ -84,9 +87,9 @@ def audit(root):
                 development_graph[name].add(dep["package"])
                 if dep["kind"] != "dev-dependencies":
                     graph[name].add(dep["package"])
-                # Current policy pins every internal dependency exactly.
+                # Registry-bound internal edges use exact version pins.
                 wanted = release.get("versions", {}).get(dep["package"], release["version"])
-                if dep.get("version") != "=" + wanted:
+                if not local_dev and dep.get("version") != "=" + wanted:
                     problems.append(f"internal-version-mismatch:{context}")
                 if "path" in dep and (path.parent / dep["path"] / "Cargo.toml").resolve() != manifests[dep["package"]].resolve():
                     problems.append(f"internal-path-mismatch:{context}")

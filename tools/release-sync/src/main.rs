@@ -230,6 +230,18 @@ fn prepare_manifest(
             if local.starts_with("gpui") {
                 document["lib"]["name"] = toml_edit::value(local.replace('-', "_"));
             }
+            // The platform depends on core. Keep core's test/example-only edge
+            // local so Cargo omits it from the registry manifest on first release.
+            if local == "gpui" {
+                if let Some(options) = document
+                    .get_mut("dev-dependencies")
+                    .and_then(|deps| deps.get_mut("gpui_platform"))
+                    .and_then(Item::as_table_like_mut)
+                {
+                    options.insert("path", toml_edit::value("../gpui-platform"));
+                    options.remove("version");
+                }
+            }
         }
     }
     Ok(())
@@ -869,6 +881,32 @@ mod tests {
         normalize(root, &names, true).unwrap();
         normalize(root, &names, false).unwrap();
         normalize(root, &names, true).unwrap();
+    }
+
+    #[test]
+    fn core_platform_development_dependency_stays_local_across_normalization() {
+        let release = BTreeMap::from([
+            ("gpui".into(), "xgpui".into()),
+            ("gpui-platform".into(), "xgpui-platform".into()),
+        ]);
+        let mut document = "[package]\nname='xgpui'\nversion='1.0.0'\n[dev-dependencies]\ngpui_platform={package='xgpui-platform',version='=1.0.0',features=['test-support']}\n"
+            .parse::<DocumentMut>().unwrap();
+        for _ in 0..2 {
+            prepare_manifest(
+                &mut document,
+                &Names::new(),
+                "1.25.3",
+                &release,
+                "1.0.0",
+                &Names::new(),
+            )
+            .unwrap();
+            let dependency = &document["dev-dependencies"]["gpui_platform"];
+            assert_eq!(dependency["package"].as_str(), Some("xgpui-platform"));
+            assert_eq!(dependency["path"].as_str(), Some("../gpui-platform"));
+            assert!(dependency.get("version").is_none());
+            assert_eq!(dependency["features"][0].as_str(), Some("test-support"));
+        }
     }
 
     #[test]

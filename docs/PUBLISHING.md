@@ -19,6 +19,27 @@ as part of this rename. This is a point-in-time lookup,
 not a reservation, a guarantee that a name may be published, or proof of ownership.
 Check again before the first release and settle the publishing account/team.
 
+## Core development dependency and first registry dry run
+
+`xgpui-macros 1.0.0` has been published. The `xgpui` package keeps its
+`xgpui-platform` development dependency as a local path without a registry
+version. The platform itself depends on core, so requiring its registry version
+while packaging core would create a circular first-publication requirement.
+Cargo omits this path-only development dependency from the published manifest;
+repository tests and examples continue to use the local platform crate.
+Normalization preserves this policy, and the preflight audit accepts path-only
+development dependencies while still validating their local paths. The reported
+local development graph can therefore contain cycles that are absent from the
+published dependency graph. Runtime/build dependency version pins are unchanged.
+
+On 2026-10-28, a fresh isolated `cargo publish --dry-run --registry crates-io`
+for `xgpui 1.0.0` passed packaging and compilation without repository patches or
+upload credentials. Archive inspection verified all 178 files, the omission of
+`xgpui-platform` from both the normalized manifest and packaged lockfile, and
+resolution of `xgpui-macros 1.0.0` from crates.io. Full commands and evidence:
+`/private/tmp/xgpui-local-platform-dev-dry-run/report.json`. The core was not
+uploaded. Tests/examples that use the local platform remain checkout workflows.
+
 ## Run the local inventory
 
 Requires Python 3.11 or later, with no third-party dependencies:

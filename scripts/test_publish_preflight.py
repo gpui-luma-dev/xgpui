@@ -65,6 +65,16 @@ remote = { git = "https://example.test/dependency" }
             self.assertTrue(any(issue.startswith("dependency-without-registry-version:") for issue in issues))
             self.assertEqual(len(result["patches_to_review_outside_repository"]), 3)
 
+            # Cargo omits path-only development edges from published manifests,
+            # but the local graph and path validation must retain the edge.
+            manifest = root / "b/Cargo.toml"
+            manifest.write_text(manifest.read_text().replace(
+                'a = "=1.0.0"', 'a = { path = "../a" }'))
+            local_result = audit(root)
+            local_b = next(row for row in local_result["packages"] if row["name"] == "b")
+            self.assertFalse(any('dev-dependencies:all:a' in issue for issue in local_b["issues"]))
+            self.assertEqual(local_result["including_dev_cycle_blocked_packages"], ["a", "b"])
+
 
 if __name__ == "__main__":
     unittest.main()
