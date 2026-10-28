@@ -9,10 +9,10 @@ from publish_preflight import audit, dependencies, dependency_layers
 class PublishPreflightTests(unittest.TestCase):
     def test_target_aliases_and_optional_edges_are_preserved(self):
         document = {"target": {"cfg(windows)": {"dependencies": {
-            "core": {"package": "xgpui-core", "version": "=1.0.0", "optional": True}
+            "core": {"package": "xgpui", "version": "=1.0.0", "optional": True}
         }}}}
         dep, = dependencies(document)
-        self.assertEqual(dep["package"], "xgpui-core")
+        self.assertEqual(dep["package"], "xgpui")
         self.assertEqual(dep["alias"], "core")
         self.assertEqual(dep["target"], "cfg(windows)")
         self.assertTrue(dep["optional"])

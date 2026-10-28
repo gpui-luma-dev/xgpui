@@ -333,11 +333,11 @@ name = "block"
 version = "0.1.6"
 
 [[patch.unused]]
-name = "xgpui-apple"
+name = "xgpui"
 version = "1.0.0"
 
 [[patch.unused]]
-name = "xgpui-core"
+name = "xgpui-apple"
 version = "1.0.0"
 
 [[patch.unused]]

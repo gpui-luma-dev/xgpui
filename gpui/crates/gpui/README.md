@@ -1,4 +1,4 @@
-# xgpui-core
+# xgpui
 
 GPU-accelerated application framework for **xgpui**, maintained downstream from
 Zed's GPUI. It provides the application model, entities, windows, elements,
@@ -8,11 +8,11 @@ layout, input, text and scene primitives.
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui-core", version = "1.0.0" }
+gpui = { package = "xgpui", version = "1.0.0" }
 gpui_platform = { package = "xgpui-platform", version = "1.0.0" }
 ```
 
-The registry package is `xgpui-core`; its Rust library name remains `gpui`.
+The registry package is `xgpui`; its Rust library name remains `gpui`.
 `xgpui-platform` selects and constructs the host backend.
 
 A view implements `Render` and returns elements:

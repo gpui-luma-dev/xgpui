@@ -1,6 +1,6 @@
 {
   "packages": {
-    "gpui": "xgpui-core",
+    "gpui": "xgpui",
     "gpui-apple": "xgpui-apple",
     "gpui-linux": "xgpui-linux",
     "gpui-macos": "xgpui-macos",

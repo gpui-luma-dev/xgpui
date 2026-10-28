@@ -25,7 +25,7 @@ runtime-shaders = ["gpui_platform/runtime_shaders"]
 
 [dependencies]
 anyhow = "1"
-gpui = { package = "xgpui-core", path = "../../gpui/crates/gpui", version = "=1.0.0" }
+gpui = { package = "xgpui", path = "../../gpui/crates/gpui", version = "=1.0.0" }
 xgpui-color = { path = "../../extensions/crates/xgpui-color", version = "=0.2.0", package = "xgpui-color" }
 xgpui-gamut = { path = "../../extensions/crates/xgpui-gamut", version = "=0.2.0", features = ["instanced"] , package = "xgpui-gamut" }
 xgpui-media = { path = "../../extensions/crates/xgpui-media", version = "=0.2.0", package = "xgpui-media" }
@@ -43,7 +43,7 @@ serde_json = "1"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 clap = { version = "4", features = ["derive"] }
-gpui = { package = "xgpui-core", path = "../../gpui/crates/gpui", version = "=1.0.0", features = ["test-support", "profiler"] }
+gpui = { package = "xgpui", path = "../../gpui/crates/gpui", version = "=1.0.0", features = ["test-support", "profiler"] }
 gpui_platform = { package = "xgpui-platform", path = "../../gpui/crates/gpui-platform", version = "=1.0.0", default-features = false, features = ["test-support", "font-kit", "wayland", "x11"] }
 gpui-wgpu = { package = "xgpui-wgpu", path = "../../gpui/crates/gpui-wgpu", version = "=1.0.0", features = ["test-support"] }
 xgpui-parley = { path = "../../extensions/crates/xgpui-parley", version = "=0.2.0", features = ["system-fonts"] , package = "xgpui-parley" }

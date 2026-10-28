@@ -7,13 +7,15 @@ workflow. Actual first publication needs explicit user authorization.
 ## Current package policy
 
 `scripts/release-packages.json` already maps nine framework packages to the
-`xgpui-*` names at `1.0.0` and six extension packages to `0.2.0`. Rust import
+`xgpui`/`xgpui-*` names at `1.0.0` and six extension packages to `0.2.0`. Rust import
 aliases remain separate from registry package names (for example, `gpui` imports
-the `xgpui-core` package). Upstream `release/1.25.3` is provenance, not the xgpui
+the `xgpui` package). Upstream `release/1.25.3` is provenance, not the xgpui
 release version. Keep using this map rather than introducing another version list.
 
 On 2026-10-28, read-only requests to `https://crates.io/api/v1/crates/NAME`
-returned HTTP 404 for all 15 mapped package names. This is a point-in-time lookup,
+returned HTTP 404 for the 15 candidate names then configured, before the core
+package was renamed to `xgpui`. No registry lookup for `xgpui` has been performed
+as part of this rename. This is a point-in-time lookup,
 not a reservation, a guarantee that a name may be published, or proof of ownership.
 Check again before the first release and settle the publishing account/team.
 
@@ -75,7 +77,7 @@ Initial conservative dependency-first layers:
 | Layer | Packages |
 | --- | --- |
 | 1 | xgpui-color, xgpui-macros |
-| 2 | xgpui-core |
+| 2 | xgpui |
 | 3 | xgpui-apple, xgpui-svg, xgpui-wgpu, xgpui-windows |
 | 4 | xgpui-linux, xgpui-macos, xgpui-shader, xgpui-web |
 | 5 | xgpui-gamut, xgpui-media, xgpui-platform |
@@ -172,13 +174,18 @@ registry cache is shared.
 
 ### Results recorded on 2026-10-28
 
+These scratch reports and archives predate the approved core-package rename to
+`xgpui`. They establish the earlier source validation, not validation of newly
+named release artifacts. Rerun packaging with the updated release map before
+publishing. Rust imports remain `gpui`; package versions are unchanged.
+
 All **15 archives passed** content inspection. Added matching GPUI
 `LICENSE-APACHE` notices to the remaining extension packages; the shader's
 existing mesh-gradient notice and Parley's font licenses remain included.
 
 | Candidate | Consumer result |
 | --- | --- |
-| xgpui-core | macOS compile check passed. |
+| xgpui | macOS compile check passed. |
 | xgpui-apple | macOS default and `font-kit` checks passed. |
 | xgpui-macos | macOS compile check passed. |
 | xgpui-macros | Compile check and a derive invocation in the native executable passed. |
@@ -276,6 +283,72 @@ gates. Publication flags are unchanged and no upload was performed.
 4. Only after validation is established, add a separately triggered release
    workflow with registry authentication, ordered/resumable uploads and
    post-publication checks. No publishing workflow is added by this first slice.
+
+## Isolated packaging after the core rename
+
+A fresh, offline run with the `xgpui` identity completed on 2026-10-28:
+
+```sh
+python3 scripts/verify_release_packages.py --offline --nightly-web --out /tmp/xgpui-renamed-release-check
+```
+
+All 15 archives passed inspection, including `xgpui-1.0.0.crate`. All 11
+macOS-applicable per-crate consumer checks passed, and the combined native
+consumer built, linked and ran using the renamed core. Both single-threaded
+browser profiles passed on stable; the default multithreaded profile passed on
+nightly with the standalone example's atomic-WASM flags. Candidate dependencies
+resolved only from extracted validation copies, retaining version requirements
+and the `gpui` Rust alias. No repository patches or registry requests were used.
+
+Full evidence: `/private/tmp/xgpui-renamed-release-validation/report.json`.
+The report retains the known local Linux/Windows cross-toolchain failures and
+the expected stable-toolchain failure for default threaded WASM; its aggregate
+status is therefore `completed-with-blockers`. These are not newly demonstrated
+rename failures. Existing Windows/Linux platform coverage was accepted by the
+project owner. Archive generation still uses `--no-verify --exclude-lockfile`;
+registry-backed package verification and browser runtime execution are not
+claimed by this run.
+
+The offline preparation command's separate archive pass also inspected all 15
+archives successfully. Its report is
+`/private/tmp/xgpui-renamed-preparation-bundle/release-plan.json`.
+
+## Offline release preparation and approval boundary
+
+The core registry package is `xgpui` at `1.0.0`; its Rust library alias remains
+`gpui`. Framework packages come first, with `xgpui-macros` before the core because
+it is a required dependency. Child extensions follow the complete framework in
+dependency order, at their existing `0.2.0` versions.
+
+Generate the review plan without any registry access:
+
+```sh
+python3 scripts/prepare_registry_release.py --out /tmp/xgpui-release-plan
+```
+
+Add `--archives` to generate and inspect all archives using cached dependencies
+and explicit offline Cargo commands. This is archive-content inspection, not
+registry-backed build verification. The output must be a new directory outside
+the repository. Reports record the source commit, dirty status, versions, phase
+order, publication policy, development cycles and compatibility patches. Archive
+runs also record checksums and package logs. Failed runs retain their partial
+report; start a new output directory for another snapshot.
+
+The manual-only **Prepare registry release (no registry access)** workflow runs
+Python tests and uploads the plan. It has read-only repository permissions, no
+registry credentials and no upload mode. It is not a publishing workflow.
+Extension `publish = false` flags remain intact.
+
+Before any crates.io API/index/download access, registry-backed Cargo dry run,
+credential setup, or upload, present the exact scope and commands to the project
+owner and obtain explicit approval. Preparation does not authorize that next
+phase. Name availability and ownership of `xgpui` have not been checked.
+
+The user accepted existing Windows/Linux platform validation; local cross-check
+limitations remain recorded as evidence limitations, rather than a request to
+repeat that platform validation. Registry-equivalent dependency resolution,
+Git fallback/development-cycle handling, resumable upload execution and
+post-publication checks remain to be implemented after the approval boundary.
 
 ## gpui-luma conventions reviewed
 

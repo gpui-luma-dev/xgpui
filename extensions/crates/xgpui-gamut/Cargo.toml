@@ -23,7 +23,7 @@ xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"], opti
 bytemuck = { version = "1", features = ["derive"], optional = true }
 xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "=0.2.0" }
 anyhow = "1"
-gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui-core", version = "=1.0.0" }
+gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=1.0.0" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-apple = { path = "../../../gpui/crates/gpui-apple" , package = "xgpui-apple", version = "=1.0.0" }

@@ -3671,7 +3671,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "xgpui-core"
+name = "xgpui"
 version = "1.0.0"
 dependencies = [
  "accesskit",
@@ -3772,7 +3772,7 @@ dependencies = [
  "windows-core 0.62.2",
  "windows-numerics 0.3.1",
  "windows-registry",
- "xgpui-core",
+ "xgpui",
  "zed-scap",
 ]
 

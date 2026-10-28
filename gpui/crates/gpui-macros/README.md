@@ -4,7 +4,7 @@ Procedural macros for **xgpui** actions, elements, application contexts and test
 
 ## When to use this crate
 
-`xgpui-core` brings in and re-exports the macros used by application code. A
+`xgpui` brings in and re-exports the macros used by application code. A
 direct dependency is normally only needed when working on framework or macro
 integration. This crate contains compile-time support, not a UI runtime.
 
@@ -12,7 +12,7 @@ For application setup, use the matching framework packages:
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui-core", version = "1.0.0" }
+gpui = { package = "xgpui", version = "1.0.0" }
 gpui_platform = { package = "xgpui-platform", version = "1.0.0" }
 ```
 

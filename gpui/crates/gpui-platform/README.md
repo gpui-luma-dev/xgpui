@@ -8,7 +8,7 @@ backend for WebAssembly.
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui-core", version = "1.0.0" }
+gpui = { package = "xgpui", version = "1.0.0" }
 gpui_platform = { package = "xgpui-platform", version = "1.0.0" }
 ```
 

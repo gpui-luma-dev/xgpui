@@ -158,7 +158,7 @@ library names and dependency aliases stable. The helper package version follows
 the captured `release/1.25.3` provenance independently. `upstream.json` records
 both downstream distribution identities and upstream source/helper versions.
 
-For example, the local `gpui` crate is packaged as `xgpui-core`; applications
+For example, the local `gpui` crate is packaged as `xgpui`; applications
 retain `use gpui::*` through a Cargo alias. Internal release-family dependency
 requirements are exact: `=1.0.0` for framework packages and `=0.2.0` for
 extensions. Supporting packages keep their upstream
