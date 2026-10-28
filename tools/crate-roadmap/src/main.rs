@@ -633,6 +633,12 @@ fn generate(root: &Path) -> Result<()> {
     let names: BTreeSet<String> = packages.keys().cloned().collect();
     let output = root.join("docs");
     fs::create_dir_all(&output)?;
+    // This directory contains only generated pages. Rebuild it so removed crates
+    // and modules cannot remain browsable after regenerating an existing site.
+    let source_output = output.join("source");
+    if source_output.exists() {
+        fs::remove_dir_all(&source_output)?;
+    }
     let mut crates = Vec::new();
     for (package, directory) in &packages {
         let directory = root.join(directory.as_str().context("Invalid package path")?);

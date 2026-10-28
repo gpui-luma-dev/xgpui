@@ -8,7 +8,8 @@ cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
 
 Open `docs/index.html` in your browser. The generated site works
 offline, including search, hash navigation and line-linked source pages. No
-server is needed. Generated `data.js` and `source/` pages are ignored by Git.
+server is needed. Generated `data.js` and `source/` pages are ignored by Git. Regeneration rebuilds
+`source/` so removed local crates do not leave stale source pages.
 
 The standalone Rust tool reads the captured package map in `upstream.json`,
 Cargo manifests and library module trees. It excludes the transformed staging
@@ -24,7 +25,13 @@ headers are candidates too. Binary entrypoints, examples and benches are outside
 the library traversal. Use compiler/rustdoc inspection and representative
 consumer builds before changing visibility or removing APIs.
 
-The dependency view covers captured packages and preserves manifest dependency
+The crate inventory covers the nine local framework/backend packages and six
+local extensions. Published supporting packages from `gpui-unofficial` are
+documented in [Local Development](LOCAL_DEVELOPMENT.md#local-crates-and-published-dependencies),
+not indexed as local source. Original upstream package names remain in provenance
+metadata and historical release reviews.
+
+The dependency view covers local packages and preserves manifest dependency
 kinds, optional flags and target conditions. It does not include external
 packages or resolve feature activation. Source pages reflect the local capture,
 including downstream edits, rather than claiming byte identity with upstream.

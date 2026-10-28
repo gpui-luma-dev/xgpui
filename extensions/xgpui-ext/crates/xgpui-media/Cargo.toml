@@ -15,7 +15,7 @@ anyhow = "1"
 half = "2.7"
 xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"] }
 xgpui-color = { path = "../xgpui-color" }
-refineable = { path = "../../../../gpui/crates/refineable" }
+refineable = { package = "refineable-gpui-unofficial", version = "=1.25.3" }
 gpui = { path = "../../../../gpui/crates/gpui" }
 gpui-wgpu = { path = "../../../../gpui/crates/gpui-wgpu", optional = true }
 image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "webp"] }

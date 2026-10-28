@@ -11,9 +11,10 @@ cargo build --locked
 ```
 
 The private root harness builds GPUI and the selected platform backend by
-default. On macOS this resolves 15 captured libraries, Windows 14, and Linux 15
-with the generated native features. Optional integrations and development-only
-support are not direct default build inputs. Metal shaders compile at build time
+default. Nine framework/backend crates remain local. Seventeen supporting crates
+come from the published `gpui-unofficial` release, currently pinned to `=1.25.3`.
+Optional integrations and development-only support are not direct default build
+inputs. Metal shaders compile at build time
 by default. The harness launches nothing.
 
 Use the explicit full-capture mode to compile every captured library supported
@@ -25,12 +26,12 @@ cargo build --locked --features full-capture
 just build-full
 ```
 
-On macOS full-capture resolves 23 captured libraries, including HTTP integrations,
-utility/test support and the WGPU renderer. All 26 captured crates remain available
-across targets. Neither mode enables every optional feature or standalone test,
-benchmark, example, or binary target. Cross-target dependency resolution is not
-platform build validation; Windows, Linux and macOS require their own checks.
-Browser checks are secondary.
+Full-capture adds every retained local library supported by the selected target,
+including the WGPU renderer on macOS. Supporting registry crates are compiled
+when required by those libraries; full-capture no longer directly builds the
+upstream utility and test tools. Neither mode enables every optional feature or
+standalone test, benchmark, example, or binary target. Windows and Linux still
+require their own native checks.
 
 ## Requirements and options
 
@@ -121,3 +122,29 @@ The raw gpui-unofficial release remains on upstream. Development uses a
 normalized capture with names such as gpui and gpui-linux. The Rust tool in
 tools/release-sync applies scripts/crate-names.json and preserves original
 package paths in upstream.json. See [the sync process](SETUP.md).
+
+## Published supporting dependencies
+
+`scripts/registry-crates.json` maps former local helper names to their published
+`*-gpui-unofficial` packages. Normalization preserves Rust dependency aliases,
+features, target conditions, and upstream source provenance. It removes helper
+source directories and local patches, and records registry identities and the
+release version in `upstream.json`. Core, macros, and platform/renderer backends
+remain local. Runtime Rust source is not rewritten by this migration.
+
+After an upstream import, run normalization before generating build manifests.
+Normalization also updates direct helper dependencies in app and extension
+manifests. Refresh their lockfiles when changing the captured release. The
+registry version follows the captured core manifest, not the latest registry
+release. Keep shared types such as `Refineable` on the same registry package
+throughout the graph.
+
+Verify resolved package identities from the repository root:
+
+```sh
+cargo metadata --locked --format-version 1 > /tmp/xgpui-metadata.json
+python3 scripts/check_local_dependencies.py /tmp/xgpui-metadata.json
+```
+
+This checks local framework sources, pinned registry helpers, and accidental
+pulls of the upstream framework alongside the local fork.

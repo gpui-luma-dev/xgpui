@@ -3,32 +3,15 @@
 resolver = "2"
 members = ["tools/build-all"]
 exclude = [
-    "gpui/crates/collections",
-    "gpui/crates/derive-refineable",
     "gpui/crates/gpui",
     "gpui/crates/gpui-apple",
     "gpui/crates/gpui-linux",
     "gpui/crates/gpui-macos",
     "gpui/crates/gpui-macros",
     "gpui/crates/gpui-platform",
-    "gpui/crates/gpui-shared-string",
-    "gpui/crates/gpui-util",
     "gpui/crates/gpui-web",
     "gpui/crates/gpui-wgpu",
     "gpui/crates/gpui-windows",
-    "gpui/crates/http-client",
-    "gpui/crates/http-client-tls",
-    "gpui/crates/path",
-    "gpui/crates/perf",
-    "gpui/crates/refineable",
-    "gpui/crates/reqwest-client",
-    "gpui/crates/scheduler",
-    "gpui/crates/sum-tree",
-    "gpui/crates/util",
-    "gpui/crates/util-macros",
-    "gpui/crates/zlog",
-    "gpui/crates/ztracing",
-    "gpui/crates/ztracing-macro",
 ]
 
 [patch.crates-io]

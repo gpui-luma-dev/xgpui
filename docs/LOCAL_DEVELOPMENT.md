@@ -17,6 +17,41 @@ Use a current stable Rust toolchain with Rust 2024 support. The first build need
 network access to download registry and pinned Git dependencies. Keep the committed
 lockfiles. Recipes allow dependency downloads; they do not force offline mode.
 
+## Local crates and published dependencies
+
+XGPUI keeps nine framework and backend crates in `gpui/crates/`: `gpui`,
+`gpui-macros`, `gpui-platform`, `gpui-apple`, `gpui-macos`, `gpui-linux`,
+`gpui-windows`, `gpui-web` and `gpui-wgpu`. The six XGPUI extension crates live
+under `extensions/xgpui-ext/crates/`.
+
+The supporting crates below are dependencies from the published
+[gpui-unofficial distribution](https://github.com/gpui-archipelago/gpui-unofficial).
+They are no longer copied into this repository. Cargo downloads them from
+crates.io; manifests keep familiar Rust import names using dependency aliases.
+For example, the `collections` dependency uses the package
+`collections-gpui-unofficial`, currently at `=1.25.3` to match the captured release.
+
+| Former local crate names | Published crates.io packages |
+| --- | --- |
+| `collections`, `gpui-util`, `gpui-shared-string` | `collections-gpui-unofficial`, `gpui-util-gpui-unofficial`, `gpui-shared-string-gpui-unofficial` |
+| `scheduler`, `sum-tree` | `scheduler-gpui-unofficial`, `sum-tree-gpui-unofficial` |
+| `refineable`, `derive-refineable` | `refineable-gpui-unofficial`, `derive-refineable-gpui-unofficial` |
+| `http-client`, `http-client-tls`, `reqwest-client` | `http-client-gpui-unofficial`, `http-client-tls-gpui-unofficial`, `reqwest-client-gpui-unofficial` |
+| `util`, `path`, `perf`, `util-macros` | `util-gpui-unofficial`, `path-gpui-unofficial`, `perf-gpui-unofficial`, `util-macros-gpui-unofficial` |
+| `zlog`, `ztracing`, `ztracing-macro` | `zlog-gpui-unofficial`, `ztracing-gpui-unofficial`, `ztracing-macro-gpui-unofficial` |
+
+Cargo builds only the dependencies needed for the selected platform, features
+and targets. Some helpers are used only by optional functionality, examples or
+tests. The mapping is maintained in `scripts/registry-crates.json`, and
+`upstream.json` records the matching release and local source provenance.
+The website's crate inventory and source pages cover local crates only.
+
+When building a separate application against this checkout, override only the
+retained framework/backend packages. Remove old patches pointing at helper
+paths such as `gpui/crates/collections`; those directories no longer exist.
+Run Cargo once without `--locked` to refresh the application's lockfile after
+this dependency change, then resume locked builds.
+
 ## Choose a sample app
 
 Run `just` (or `just --list`) to list recipes without opening a window. All native
@@ -128,7 +163,9 @@ GPUI libraries for the host platform. **It does not launch an application or bui
 all extension libraries and labs.** Apps, extensions and repository tools have
 their own workspaces and lockfiles; select them with `--manifest-path`.
 
-The checked-in `.cargo/config.toml` maps captured crate names to local source.
+The checked-in `.cargo/config.toml` maps the nine retained framework/backend
+crate names to local source. Supporting crates retain their published identities
+and are not overridden.
 Standalone commands also pass `.cargo/validation.toml` for the pinned
 compatibility overrides used by CI. Run from the root so Cargo discovers the
 local configuration. Do not copy the command into an unrelated working directory.
@@ -162,6 +199,15 @@ validation on Windows/Linux remains tracked in
 See the [media guide](extensions/media-images.md) for backend limits and measurements.
 
 ## Check a change
+
+Build the host framework/backend libraries without launching an app:
+
+```sh
+just build
+just build-full # Also build every retained local library supported on this host.
+```
+
+For faster compile checks and an example extension test:
 
 ```sh
 cargo check --workspace --locked
@@ -210,6 +256,7 @@ demo code, then reload the page. Use `localhost` for browser WebGPU access.
 | Missing Metal compiler | Check the active Xcode installation, or use the macOS runtime-shader commands above. |
 | Build succeeds but nothing opens | The root harness only builds libraries. Launch an app using its manifest. |
 | Lockfile needs an update | Check the branch and manifest you selected. For an intentional dependency change, regenerate that workspace's lockfile and review the diff; do not delete all lockfiles. |
+| Patch location does not contain `collections` or another removed helper | Remove stale helper path patches from the consuming app and refresh its lockfile; use the published packages listed above. |
 | Local GPUI changes do not appear | Run from the repository root and keep its checked-in Cargo configuration enabled. |
 | Browser demos are absent or stale | Build the Wasm assets separately; regenerating the documentation alone does not rebuild them. |
 

@@ -55,12 +55,12 @@ accesskit = { version = "0.24.0", features = ["enumn"] }
 accesskit_unix = { version = "0.22", optional = true }
 anyhow = { version = "1.0.86" }
 bytemuck = { version = "1" }
-collections = { package = "collections", version = "1.25.3" }
+collections = { package = "collections-gpui-unofficial", version = "=1.25.3" }
 futures = { version = "0.3.34" }
 gpui = { package = "gpui", version = "1.25.3" }
-gpui_util = { package = "gpui-util", version = "1.25.3" }
+gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.25.3" }
 gpui_wgpu = { package = "gpui-wgpu", version = "1.25.3", features = ["font-kit"], optional = true }
-http_client = { package = "http-client", version = "1.25.3" }
+http_client = { package = "http-client-gpui-unofficial", version = "=1.25.3" }
 libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 parking_lot = { version = "0.12.1" }
