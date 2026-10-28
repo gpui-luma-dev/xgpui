@@ -15,7 +15,7 @@ const run = code => vm.runInContext(code, context);
 const data = context.window.ROADMAP;
 const indexedPackages = {...data.provenance.packages, ...data.extension_packages};
 assert.equal(data.crates.length, Object.keys(indexedPackages).length);
-assert.equal(data.extension_packages['xgpui-shader'], 'extensions/xgpui-ext/crates/xgpui-shader');
+assert.equal(data.extension_packages['xgpui-shader'], 'extensions/crates/xgpui-shader');
 assert.ok(!data.provenance.packages['xgpui-shader'], 'local extension must not claim upstream provenance');
 assert.equal(Object.keys(data.notes).sort().join(), data.crates.map(c => c.package).sort().join());
 assert.equal(run('parseRoute(crateUrl("gpui", "surface")).tab'), 'surface');
@@ -216,7 +216,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
 assert.equal(Object.keys(data.extension_documents).length, 19);
-assert.equal(data.extension_packages['xgpui-parley'], 'extensions/xgpui-ext/crates/xgpui-parley');
+assert.equal(data.extension_packages['xgpui-parley'], 'extensions/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
 assert.match(extensionOverview, /1\. Paints and shaders/);
@@ -225,7 +225,7 @@ assert.match(extensionOverview, /href="#extension-paints"/);
 assert.match(extensionOverview, /href="#high-gamut-windows"/);
 assert.match(extensionOverview, /href="#parley-text"/);
 assert.match(run('cratePage(crates.find(c => c.package === "xgpui-parley"), "overview")'), /layout_paragraph/);
-assert.equal(data.extension_packages['xgpui-svg'], 'extensions/xgpui-ext/crates/xgpui-svg');
+assert.equal(data.extension_packages['xgpui-svg'], 'extensions/crates/xgpui-svg');
 assert.ok(!data.provenance.packages['xgpui-svg']);
 assert.match(extensionOverview, /4\. Progressive SVG/);
 assert.match(extensionOverview, /href="#svg-rendering"/);
@@ -265,13 +265,13 @@ assert.match(data.extension_documents.brushes.html, /issues\/35/);
 assert.equal(run('parseRoute("#paint-contract-hardening&section=implemented-discardable-recording-transactions").global'), 'paint-contract-hardening');
 assert.equal(run('parseRoute("#paint-contract-hardening&section=implemented-discardable-recording-transactions").section'), 'implemented-discardable-recording-transactions');
 for (const file of [
-  'extensions/xgpui-ext/README.md',
-  'extensions/xgpui-ext/crates/xgpui-shader/README.md',
+  'extensions/crates/README.md',
+  'extensions/crates/xgpui-shader/README.md',
   'apps/xgpui-ext-lab/paint-lab/README.md',
   'apps/xgpui-ext-lab/gamut-lab/README.md',
-  'extensions/xgpui-ext/crates/xgpui-gamut/README.md',
-  'extensions/xgpui-ext/crates/xgpui-svg/README.md',
-  'extensions/xgpui-ext/crates/xgpui-parley/README.md',
+  'extensions/crates/xgpui-gamut/README.md',
+  'extensions/crates/xgpui-svg/README.md',
+  'extensions/crates/xgpui-parley/README.md',
 ]) {
   const url = new URL('../' + file, import.meta.url);
   const markdown = await readFile(url, 'utf8');
@@ -383,7 +383,7 @@ console.log('Verified instanced WGSL guide, native-first launch, companion links
 
 // The standalone color crate must have its own guide and no rendering dependencies.
 const colorCrate = data.crates.find(c => c.package === 'xgpui-color');
-assert.equal(data.extension_packages['xgpui-color'], 'extensions/xgpui-ext/crates/xgpui-color');
+assert.equal(data.extension_packages['xgpui-color'], 'extensions/crates/xgpui-color');
 assert.ok(!data.provenance.packages['xgpui-color']);
 assert.equal(colorCrate.dependencies.length, 0);
 assert.ok(!shaderCrate.dependencies.some(d => ['xgpui-color', 'xgpui-gamut'].includes(d.package)));

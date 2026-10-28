@@ -85,7 +85,7 @@ cargo run --locked --config .cargo/validation.toml \
   --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features portable-shaders
 
 cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib brush::tests
 ```
 
@@ -164,7 +164,7 @@ framebuffer quantization. No temporal variation or texture binding is added.
 Regenerate or verify the 256-byte asset with:
 
 ```sh
-python3 extensions/xgpui-ext/crates/xgpui-shader/scripts/generate_blue_noise.py --check
+python3 extensions/crates/xgpui-shader/scripts/generate_blue_noise.py --check
 ```
 
 The existing 128-byte instance size is retained. Frequency and strength are
@@ -235,7 +235,7 @@ beside native emoji. For focused text checks:
 
 ```sh
 cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib brush::tests::text_tests
 ```
 
@@ -321,7 +321,7 @@ wrapped typography. Focused checks:
 
 ```sh
 cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib brush::tests::spatial_tests
 ```
 
@@ -401,7 +401,7 @@ spatial glyph/noise/clip/DPI and native-path mask checks to distorted patches.
 
 ```sh
 cargo test --offline --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib hermite_tests
 ```
 
@@ -519,7 +519,7 @@ checks:
 
 ```sh
 cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib brush::tests::backdrop_tests
 ```
 
@@ -614,7 +614,7 @@ existing brush CI lanes.
 
 ```sh
 cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib brush::tests::layer_tests
 ```
 
@@ -675,7 +675,7 @@ opacity, cache reuse and nested invalidation. Focused checks:
 
 ```sh
 cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib brush::tests::layer_tests::filter_tests
 ```
 
@@ -728,7 +728,7 @@ validation and the element builders.
 
 ```sh
 cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib brush::tests::layer_tests::filter_tests::tone_tests
 ```
 
@@ -765,7 +765,7 @@ This reuses an existing captured card and stays within the four-group limit.
 
 ```sh
 cargo test --offline --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib invert_tests
 ```
 
@@ -860,7 +860,7 @@ Metal and wgpu/Metal run locally; D3D11/Vulkan runtime checks use the paint lane
 
 ```sh
 cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib direct_path
 ```
 
@@ -915,7 +915,7 @@ changed destinations, filter order, inherited opacity and ancestor clipping.
 
 ```sh
 cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib destination_blend
 ```
 
@@ -1005,7 +1005,7 @@ clip, sampling through ancestor clips, and unchanged hit-testing bounds.
 
 ```sh
 cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --lib subtree_blur
 ```
 

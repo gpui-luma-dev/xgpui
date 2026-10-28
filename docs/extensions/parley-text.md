@@ -25,7 +25,7 @@ changes to existing GPUI callers.
 ```toml
 # Application under apps/:
 [dependencies]
-xgpui-parley = { path = "../../extensions/xgpui-ext/crates/xgpui-parley", features = ["system-fonts"] }
+xgpui-parley = { path = "../../extensions/crates/xgpui-parley", features = ["system-fonts"] }
 ```
 
 ```rust

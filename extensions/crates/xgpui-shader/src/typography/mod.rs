@@ -642,7 +642,7 @@ mod interaction_tests {
             )),
         );
         app.text_system().add_fonts(vec![std::borrow::Cow::Borrowed(include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"), "/../../../../gpui/crates/gpui-web/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
+            env!("CARGO_MANIFEST_DIR"), "/../../../gpui/crates/gpui-web/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
         )).as_slice())]).unwrap();
         let source = "office cafe\u{301} 👩🏽‍💻 🇺🇸";
         let (text, cx) = app.add_window_view(|_, cx| SelectableText::new(source, cx).unwrap());

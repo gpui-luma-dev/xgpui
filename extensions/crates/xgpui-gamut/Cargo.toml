@@ -16,21 +16,21 @@ xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"], opti
 bytemuck = { version = "1", features = ["derive"], optional = true }
 xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "=0.2.0" }
 anyhow = "1"
-gpui = { path = "../../../../gpui/crates/gpui" , package = "xgpui-core", version = "=1.0.0" }
+gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui-core", version = "=1.0.0" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-gpui-apple = { path = "../../../../gpui/crates/gpui-apple" , package = "xgpui-apple", version = "=1.0.0" }
+gpui-apple = { path = "../../../gpui/crates/gpui-apple" , package = "xgpui-apple", version = "=1.0.0" }
 metal = "0.33"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-gpui-windows = { path = "../../../../gpui/crates/gpui-windows" , package = "xgpui-windows", version = "=1.0.0" }
+gpui-windows = { path = "../../../gpui/crates/gpui-windows" , package = "xgpui-windows", version = "=1.0.0" }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
-gpui-apple = { path = "../../../../gpui/crates/gpui-apple", features = ["test-support"] , package = "xgpui-apple", version = "=1.0.0" }
+gpui-apple = { path = "../../../gpui/crates/gpui-apple", features = ["test-support"] , package = "xgpui-apple", version = "=1.0.0" }
 parking_lot = "0.12"
 
 [dev-dependencies]
 xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"] , package = "xgpui-shader", version = "=0.2.0" }
 
 [target.'cfg(target_os = "windows")'.dev-dependencies]
-gpui-windows = { path = "../../../../gpui/crates/gpui-windows", features = ["test-support"] , package = "xgpui-windows", version = "=1.0.0" }
+gpui-windows = { path = "../../../gpui/crates/gpui-windows", features = ["test-support"] , package = "xgpui-windows", version = "=1.0.0" }

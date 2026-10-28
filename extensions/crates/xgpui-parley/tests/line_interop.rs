@@ -10,7 +10,7 @@ fn shape(text: &str, width: Option<f32>) -> Layout<()> {
         parley::fontique::Blob::new(Arc::new(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../../../../gpui/crates/gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
+                "/../../../gpui/crates/gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
             ))
             .to_vec(),
         )),

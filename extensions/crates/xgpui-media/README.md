@@ -3,14 +3,14 @@
 Opt-in bounded native image loading and dedicated mipmapped SDR textures.
 Native Metal and D3D11; optional wgpu. Independent of `xgpui-shader`.
 
-The maintained [media image guide](../../../../docs/extensions/media-images.md)
+The maintained [media image guide](../../../docs/extensions/media-images.md)
 covers usage, payload budgets, cancellation, color/resource contracts, backend
 coverage, validation and remaining asynchronous upload work.
 
 ## GPUI public API changes: additions and compatibility
 
-[GPUI API additions](../../../../docs/extensions/gpui-public-api.md#added-source-sized-media-textures).
-See the [media guide](../../../../docs/extensions/media-images.md#gpui-public-api-changes-additions-and-compatibility).
+[GPUI API additions](../../../docs/extensions/gpui-public-api.md#added-source-sized-media-textures).
+See the [media guide](../../../docs/extensions/media-images.md#gpui-public-api-changes-additions-and-compatibility).
 
 `image_view(image).filter(ImageFilter::new().brightness(1.1).saturation(1.3))`
 applies encoded-sRGB color adjustments in the sampling pass, preserving alpha

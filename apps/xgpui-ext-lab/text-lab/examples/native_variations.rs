@@ -16,7 +16,7 @@ fn main() -> anyhow::Result<()> {
 
     const DATA: &[u8] = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../extensions/xgpui-ext/crates/xgpui-parley/tests/fonts/InterVariable.ttf"
+        "/../../extensions/crates/xgpui-parley/tests/fonts/InterVariable.ttf"
     ));
     const TEXT: &str = "Hamburgefonts 012345";
     fn width(font: &CTFont) -> f64 {

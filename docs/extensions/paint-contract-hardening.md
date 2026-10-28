@@ -259,7 +259,7 @@ cargo test --offline --config .cargo/validation.toml \
 
 # Built-in Metal cache: size alternation, LRU eviction, pending reuse, queues.
 MTL_DEBUG_LAYER=1 cargo test --offline --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --target-dir target --lib metal_cache
 
 # Allocation counts, forced collisions, normalization and early path limits.

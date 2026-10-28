@@ -28,7 +28,7 @@
     {
       "name": "Test main-pass brushes and native coverage parity",
       "scope": "paint-parity",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib brush::tests -- --nocapture"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib brush::tests -- --nocapture"
     }
   ],
   "windows-wgpu": [
@@ -60,7 +60,7 @@
     {
       "name": "Test main-pass brushes and native coverage parity",
       "scope": "paint-parity",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib brush::tests -- --nocapture"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib brush::tests -- --nocapture"
     }
   ],
   "windows-native": [
@@ -97,17 +97,17 @@
     {
       "name": "Test standalone color math and shader translation",
       "scope": "color-gamut",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-color/Cargo.toml"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-color/Cargo.toml"
     },
     {
       "name": "Test independent gamut producers",
       "scope": "color-gamut",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-gamut/Cargo.toml"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-gamut/Cargo.toml"
     },
     {
       "name": "Test optional wide fill and gradient adapters",
       "scope": "color-gamut",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-gamut/Cargo.toml --features instanced"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-gamut/Cargo.toml --features instanced"
     },
     {
       "name": "Test native paints and mesh parity against wgpu",
@@ -122,7 +122,7 @@
     {
       "name": "Test main-pass brushes and native coverage parity",
       "scope": "paint-parity",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib brush::tests -- --nocapture"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib brush::tests -- --nocapture"
     }
   ]
 }

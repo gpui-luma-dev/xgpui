@@ -23,10 +23,10 @@ From an app under `apps/`:
 
 ```toml
 [dependencies]
-xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader" }
+xgpui-shader = { path = "../../extensions/crates/xgpui-shader" }
 
 # For user-authored WGSL:
-# xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader", features = ["portable-shaders"] }
+# xgpui-shader = { path = "../../extensions/crates/xgpui-shader", features = ["portable-shaders"] }
 # Add "wgpu" for the optional wgpu renderer.
 ```
 

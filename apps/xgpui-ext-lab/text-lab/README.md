@@ -115,7 +115,7 @@ Manual macOS/aarch64 results (2026-10-24):
 | Paragraph U.S. accent panel | Placement, candidate selection, commit and Escape cancel: user-confirmed pass; keyboard settings unchanged |
 
 Remaining: paragraph conversion IMEs, Windows/Linux runtime/IME, accessibility,
-and broader BiDi/UAX #14 conformance. See [adapter limits](../../../extensions/xgpui-ext/crates/xgpui-parley/README.md).
+and broader BiDi/UAX #14 conformance. See [adapter limits](../../../extensions/crates/xgpui-parley/README.md).
 
 ## Windows and Linux host testing
 
@@ -129,7 +129,7 @@ is claimed.
 PowerShell/Linux shell, from the repository root; omit `--offline` on first use:
 
 ```sh
-cargo test --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-parley/Cargo.toml --target-dir target --features native-test --test construction
+cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-parley/Cargo.toml --target-dir target --features native-test --test construction
 cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin text-lab --target-dir target
 cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin text-lab --target-dir target -- --workload paragraph
 ```
@@ -138,4 +138,4 @@ Use `--backend both` for comparison or `--workload scroll --scroll-frames 640
 --exit-after-scroll` for sequential profiling. Test Wayland and X11 separately.
 Report OS/display server, scale, GPU/driver and terminal output.
 
-Font licenses: repository Plex assets; [Inter and Noto fixtures](../../../extensions/xgpui-ext/crates/xgpui-parley/tests/fonts/README.md).
+Font licenses: repository Plex assets; [Inter and Noto fixtures](../../../extensions/crates/xgpui-parley/tests/fonts/README.md).

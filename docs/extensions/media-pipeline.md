@@ -531,7 +531,7 @@ methods above remain available independently of rendered placements.
 Run the CPU contract tests from the repository root:
 
 ```sh
-cargo test --release --locked --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-media/Cargo.toml --target-dir target --lib pipeline::
+cargo test --release --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-media/Cargo.toml --target-dir target --lib pipeline::
 ```
 
 On macOS, `--features gpui-apple/runtime_shaders` avoids the build-time Metal

@@ -7,7 +7,7 @@
 ```toml
 # App under apps/:
 [dependencies]
-xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader", features = ["wgpu"] }
+xgpui-shader = { path = "../../extensions/crates/xgpui-shader", features = ["wgpu"] }
 ```
 
 ```rust

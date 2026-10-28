@@ -8,7 +8,7 @@ From an app under `apps/`:
 
 ```toml
 [dependencies]
-xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader", features = ["portable-shaders"] }
+xgpui-shader = { path = "../../extensions/crates/xgpui-shader", features = ["portable-shaders"] }
 # Add "wgpu" for the optional wgpu renderer.
 ```
 
@@ -143,7 +143,7 @@ just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-test
 just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-headless --frames 2 --png /tmp/portable-metal.png
 just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-wgpu --frames 2 --png /tmp/portable-wgpu.png
 cargo test --config .cargo/validation.toml \
-  --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --target-dir target
 ```
 

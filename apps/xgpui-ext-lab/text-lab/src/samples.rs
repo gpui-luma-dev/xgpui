@@ -8,7 +8,7 @@ pub const PLEX: &[u8] = include_bytes!(concat!(
 ));
 pub const INTER: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../extensions/xgpui-ext/crates/xgpui-parley/tests/fonts/InterVariable.ttf"
+    "/../../extensions/crates/xgpui-parley/tests/fonts/InterVariable.ttf"
 ));
 
 pub struct Sample {

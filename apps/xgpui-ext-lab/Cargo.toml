@@ -26,12 +26,12 @@ runtime-shaders = ["gpui_platform/runtime_shaders"]
 [dependencies]
 anyhow = "1"
 gpui = { package = "xgpui-core", path = "../../gpui/crates/gpui", version = "=1.0.0" }
-xgpui-color = { path = "../../extensions/xgpui-ext/crates/xgpui-color", version = "=0.2.0", package = "xgpui-color" }
-xgpui-gamut = { path = "../../extensions/xgpui-ext/crates/xgpui-gamut", version = "=0.2.0", features = ["instanced"] , package = "xgpui-gamut" }
-xgpui-media = { path = "../../extensions/xgpui-ext/crates/xgpui-media", version = "=0.2.0", package = "xgpui-media" }
-xgpui-svg = { path = "../../extensions/xgpui-ext/crates/xgpui-svg", version = "=0.2.0", package = "xgpui-svg" }
-xgpui-parley = { path = "../../extensions/xgpui-ext/crates/xgpui-parley", version = "=0.2.0", package = "xgpui-parley" }
-xgpui-shader = { path = "../../extensions/xgpui-ext/crates/xgpui-shader", version = "=0.2.0", features = ["portable-shaders", "wgpu"] , package = "xgpui-shader" }
+xgpui-color = { path = "../../extensions/crates/xgpui-color", version = "=0.2.0", package = "xgpui-color" }
+xgpui-gamut = { path = "../../extensions/crates/xgpui-gamut", version = "=0.2.0", features = ["instanced"] , package = "xgpui-gamut" }
+xgpui-media = { path = "../../extensions/crates/xgpui-media", version = "=0.2.0", package = "xgpui-media" }
+xgpui-svg = { path = "../../extensions/crates/xgpui-svg", version = "=0.2.0", package = "xgpui-svg" }
+xgpui-parley = { path = "../../extensions/crates/xgpui-parley", version = "=0.2.0", package = "xgpui-parley" }
+xgpui-shader = { path = "../../extensions/crates/xgpui-shader", version = "=0.2.0", features = ["portable-shaders", "wgpu"] , package = "xgpui-shader" }
 gpui-wgpu = { package = "xgpui-wgpu", path = "../../gpui/crates/gpui-wgpu", version = "=1.0.0" }
 image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "webp"] }
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
@@ -46,13 +46,13 @@ clap = { version = "4", features = ["derive"] }
 gpui = { package = "xgpui-core", path = "../../gpui/crates/gpui", version = "=1.0.0", features = ["test-support", "profiler"] }
 gpui_platform = { package = "xgpui-platform", path = "../../gpui/crates/gpui-platform", version = "=1.0.0", default-features = false, features = ["test-support", "font-kit", "wayland", "x11"] }
 gpui-wgpu = { package = "xgpui-wgpu", path = "../../gpui/crates/gpui-wgpu", version = "=1.0.0", features = ["test-support"] }
-xgpui-parley = { path = "../../extensions/xgpui-ext/crates/xgpui-parley", version = "=0.2.0", features = ["system-fonts"] , package = "xgpui-parley" }
+xgpui-parley = { path = "../../extensions/crates/xgpui-parley", version = "=0.2.0", features = ["system-fonts"] , package = "xgpui-parley" }
 sysinfo = { version = "=0.31.4", default-features = false, features = ["system"] }
 libc = "0.2"
 tempfile = "3"
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
-xgpui-media = { path = "../../extensions/xgpui-ext/crates/xgpui-media", version = "=0.2.0", features = ["wgpu"] , package = "xgpui-media" }
+xgpui-media = { path = "../../extensions/crates/xgpui-media", version = "=0.2.0", features = ["wgpu"] , package = "xgpui-media" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-apple = { package = "xgpui-apple", path = "../../gpui/crates/gpui-apple", version = "=1.0.0", features = ["test-support", "font-kit"] }
@@ -63,7 +63,7 @@ core-text = "21"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gpui-web = { package = "xgpui-web", path = "../../gpui/crates/gpui-web", version = "=1.0.0", default-features = false }
-xgpui-media = { path = "../../extensions/xgpui-ext/crates/xgpui-media", version = "=0.2.0", features = ["wgpu"] , package = "xgpui-media" }
+xgpui-media = { path = "../../extensions/crates/xgpui-media", version = "=0.2.0", features = ["wgpu"] , package = "xgpui-media" }
 wasm-bindgen = "=0.2.129"
 web-sys = { version = "0.3", features = ["Window", "Location", "console", "MediaQueryList"] }
 console_error_panic_hook = "0.1"

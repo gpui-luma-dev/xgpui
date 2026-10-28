@@ -7,7 +7,7 @@ on:
       - '.github/workflows/windows-apps.yml'
       - '.cargo/**'
       - 'apps/**'
-      - 'extensions/xgpui-ext/crates/**'
+      - 'extensions/crates/**'
       - 'gpui/crates/**'
 
 permissions:

@@ -4,7 +4,7 @@ Experimental Parley 0.12/HarfRust backend for GPUI: flat-LTR compatibility,
 opt-in BiDi paragraphs, resolved-face metrics, and grayscale rasterization.
 Native platform initialization remains unchanged.
 
-[Website guide](../../../../docs/extensions/parley-text.md).
+[Website guide](../../../docs/extensions/parley-text.md).
 
 ## Install the backend
 
@@ -18,7 +18,7 @@ let app = Application::with_platform_and_text_system(
 Preload the explicit default family. `.SystemUIFont` maps to it. Family names
 are individual names; ordered fallback uses `FontFallbacks`. Optional
 `system-fonts` discovery is off by default. Windows/Linux share this adapter;
-[host validation](../../../../apps/xgpui-ext-lab/text-lab/README.md#windows-and-linux-host-testing) remains outstanding.
+[host validation](../../../apps/xgpui-ext-lab/text-lab/README.md#windows-and-linux-host-testing) remains outstanding.
 
 ## Ownership and identity
 
@@ -82,7 +82,7 @@ types. Native providers default to Unsupported.
 GPUI owns both cache levels, frame retention and font-generation invalidation.
 Painting uses existing glyph bounds/atlas paths; backgrounds and decorations
 remain caller-owned. See [contracts](PARAGRAPH-BIDI.md) and the
-[editing/IME lab](../../../../apps/xgpui-ext-lab/text-lab/README.md).
+[editing/IME lab](../../../apps/xgpui-ext-lab/text-lab/README.md).
 
 ## Limits
 
@@ -109,11 +109,11 @@ Tests use [licensed bundled fixtures](tests/fonts/README.md), without host font
 discovery. Native construction smoke runs on the main thread, without windows:
 
 ```sh
-cargo test --locked --offline --config .cargo/validation.toml --manifest-path extensions/xgpui-ext/crates/xgpui-parley/Cargo.toml --target-dir target
+cargo test --locked --offline --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-parley/Cargo.toml --target-dir target
 # Add --features native-test --test construction for host construction/raster smoke.
 ```
 
 ## GPUI public API changes: additions and compatibility
 
-[GPUI public API changes: additions and compatibility](../../../../docs/extensions/gpui-public-api.md#added-text-backend-and-paragraph-seams).
-See the [crate guide](../../../../docs/extensions/parley-text.md#gpui-public-api-changes-additions-and-compatibility) for required additions and downstream compatibility impact.
+[GPUI public API changes: additions and compatibility](../../../docs/extensions/gpui-public-api.md#added-text-backend-and-paragraph-seams).
+See the [crate guide](../../../docs/extensions/parley-text.md#gpui-public-api-changes-additions-and-compatibility) for required additions and downstream compatibility impact.

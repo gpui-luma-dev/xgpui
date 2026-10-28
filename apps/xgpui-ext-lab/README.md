@@ -5,7 +5,7 @@ overview, target list, unpublished status and browser workflow.
 
 An unpublished development package containing native labs, benchmarks and browser
 demos. It uses one Cargo manifest and lockfile. Extension libraries stay in
-`extensions/xgpui-ext/crates/`; their dependency graphs do not include this package.
+`extensions/crates/`; their dependency graphs do not include this package.
 
 The package is version `0.2.0` with `publish = false`. Publishing can be enabled
 later after checking the package's bundled assets and consumer requirements.
