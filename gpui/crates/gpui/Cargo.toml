@@ -162,7 +162,9 @@ env_logger = { version = "0.11" }
 futures-concurrency = { version = "7.7.1" }
 postage = { version = "0.5", default-features = false, features = ["blocking"] }
 web-time = { version = "1.1.0" }
-gpui_platform = { package = "xgpui-platform", version = "=1.0.0" }
+# Repository-only tests/examples: omit this dependency from the published crate
+# to avoid requiring xgpui-platform before its own xgpui dependency is published.
+gpui_platform = { package = "xgpui-platform", path = "../gpui-platform" }
 gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.25.3" }
 lyon = { version = "1.0", features = ["extra"] }
 rand = { version = "0.9", default-features = true, features = ["std", "std_rng", "os_rng"] }
