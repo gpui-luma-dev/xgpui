@@ -140,4 +140,61 @@ Smoke-test the relevant WebGPU and WebGL2 routes after rendering changes;
 Select **Settings → Pages → Source: GitHub Actions**. The Pages workflow builds
 and verifies the website, packages both browser applications and publishes
 `docs/` on pushes to `main` or manual dispatch. Relative asset and source links
-support the repository URL prefix. Local regeneration does not deploy the site.
+support the domain root, localhost and the legacy repository URL prefix.
+Local regeneration does not deploy the site.
+
+
+## Custom-domain migration
+
+The intended public documentation URL is **https://xgpui.dev/**. Repository
+preparation is tracked in [issue #61](https://github.com/gpui-luma-dev/xgpui/issues/61).
+The previous URL is https://gpui-luma-dev.github.io/xgpui/.
+Preparing these files does not configure the domain: DNS, Pages settings and the
+production cutover remain pending until the migration is approved.
+
+Keep the GitHub Actions publishing source and the `docs/` upload artifact.
+Do not add `docs/CNAME`: custom Actions publishing ignores that file; the
+repository Pages custom-domain setting controls the mapping. Keep asset URLs,
+source links, demo navigation and JavaScript/WASM loaders relative so the same
+build works at the domain root and in localhost previews.
+
+Before cutover, run `just docs-check`, `just web-build` and `just docs-serve`.
+At `http://localhost:8000/`, check search, crate routes, source line links and
+section anchors. Exercise both `examples/extensions/?demo=color` and
+`examples/shaders/?example=minimal`, with `&backend=webgpu` and `&backend=webgl`.
+Inspect console/network requests for failures and obsolete `/xgpui/` prefixes.
+The Node verifier checks links at the domain root, localhost and a project prefix;
+it does not replace running the browser applications.
+
+After approval, perform the following in order:
+
+1. Save existing DNS records and the known-good deployment run for rollback.
+2. Verify `xgpui.dev` in **gpui-luma-dev organization Settings → Pages** using
+   GitHub's exact TXT challenge hostname/value. Retain the verification record.
+3. In repository **Settings → Pages**, retain **GitHub Actions** and save custom
+   domain `xgpui.dev` before changing routing DNS.
+4. Replace conflicting parking/forwarding records while preserving unrelated
+   mail/TXT records. Set apex A records to `185.199.108.153`, `185.199.109.153`,
+   `185.199.110.153` and `185.199.111.153`; set `www` CNAME to
+   `gpui-luma-dev.github.io` without a scheme or repository path. Recheck GitHub's
+   current records before applying them; avoid wildcard records.
+5. Wait for DNS checks and certificate provisioning, then enable **Enforce HTTPS**.
+   DNS propagation and HTTPS availability can take up to 24 hours.
+6. Merge the reviewed migration PR only with explicit approval, watch
+   **Publish documentation**, and confirm its environment URL is `https://xgpui.dev/`.
+7. Check HTTP/HTTPS redirects, `www`, the old project URL (including nested demo
+   paths and queries), hash routes, direct nested refreshes and both demo backends.
+   Inspect for 404s, mixed content, WASM failures and incorrect MIME types.
+8. Update the repository About website URL and record deployment, DNS, HTTPS and
+   browser evidence in issue #61. Confirm a later Actions deployment preserves
+   the custom domain.
+
+For rollback, restore the previous known-good site through the reviewed workflow.
+If removing the domain mapping, remove or restore Pages routing DNS before
+removing the GitHub custom-domain association; retain ownership verification and
+unrelated records. Recheck the previous project URL after rollback.
+
+Official instructions (recheck when executing):
+[custom domain configuration](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site),
+[ownership verification](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/verifying-your-custom-domain-for-github-pages),
+and [troubleshooting](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/troubleshooting-custom-domains-and-github-pages).

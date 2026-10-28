@@ -3,11 +3,20 @@ import { webgpuPreflight, recoveryUrls, monitorGraphics } from './graphics.mjs';
 assert.match(webgpuPreflight({isSecureContext:false,navigator:{gpu:{}}}), /HTTPS or localhost/);
 assert.match(webgpuPreflight({isSecureContext:true,navigator:{}}), /navigator.gpu/);
 assert.equal(webgpuPreflight({isSecureContext:true,navigator:{gpu:{}}}), null);
-const urls = recoveryUrls('https://example.test/xgpui/examples/?demo=layers&backend=webgpu&reload=123');
-assert.equal(new URL(urls.automatic).searchParams.get('demo'), 'layers');
-assert.equal(new URL(urls.automatic).searchParams.has('backend'), false);
-assert.equal(new URL(urls.webgl).searchParams.get('backend'), 'webgl');
-assert.equal(new URL(urls.webgl).pathname, '/xgpui/examples/');
+for (const root of ['https://xgpui.dev/', 'http://localhost:8000/', 'https://example.test/xgpui/']) {
+  for (const route of ['examples/extensions/?demo=layers', 'examples/shaders/?example=minimal']) {
+    const original = new URL(route + '&backend=webgpu&reload=123#sample', root);
+    const urls = recoveryUrls(original.href);
+    for (const [mode, href] of Object.entries(urls)) {
+      const recovered = new URL(href);
+      assert.equal(recovered.origin, original.origin);
+      assert.equal(recovered.pathname, original.pathname);
+      assert.equal(recovered.hash, original.hash);
+      for (const key of ['demo', 'example']) assert.equal(recovered.searchParams.get(key), original.searchParams.get(key));
+      assert.equal(recovered.searchParams.get('backend'), mode === 'webgl' ? 'webgl' : null);
+    }
+  }
+}
 let calls = 0;
 class Canvas { getContext(kind) { calls++; if(kind === 'webgpu') return null; return {kind}; } }
 const state = monitorGraphics({isSecureContext:true,navigator:{gpu:{},userAgent:'test'},HTMLCanvasElement:Canvas});

@@ -8,7 +8,7 @@ which captures GPUI and its supporting crates from
 [Zed](https://github.com/zed-industries/zed). We are moving toward using Zed
 directly as our upstream.
 
-**[Read the documentation →](https://gpui-luma-dev.github.io/xgpui/)**
+**[Read the documentation →](https://xgpui.dev/)**
 
 ## How it works
 

@@ -94,7 +94,9 @@ for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', '
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web'));
-  assert.equal(new URL(`examples/extensions/?demo=${demo}`, 'https://example.github.io/xgpui/').pathname, '/xgpui/examples/extensions/');
+  for (const root of ['https://xgpui.dev/', 'http://localhost:8000/', 'https://example.github.io/xgpui/']) {
+    assert.equal(new URL(`examples/extensions/?demo=${demo}`, root).pathname, new URL(root).pathname + 'examples/extensions/');
+  }
 }
 
 for (const asset of ['favicon.svg', 'favicon.ico', 'style.css', 'extensions.js', 'guides.js', 'pipeline.js', 'app.js', 'data.js']) {
@@ -124,12 +126,17 @@ console.log('Verified complete Wasm demo index, backend links and source targets
 console.log('Verified ' + data.crates.length + ' crates, ' + pages.size + ' source pages, declaration anchors, routes, filtering and assets.');
 
 assert.ok(!index.includes('http-equiv="refresh"'), 'Pages root must serve the website directly');
-// The brand intentionally links to the host root; other local URLs retain the project prefix.
+// Relative URLs must work at the custom-domain root, localhost and the old project prefix.
 assert.ok(index.includes('<a class="brand" href="#overview">xgpui</a>'));
-const pagesRoot = new URL('https://example.github.io/xgpui/');
-for (const match of index.matchAll(/(?:src|href)="([^"#][^"]*)"/g)) {
-  const url = new URL(match[1], pagesRoot);
-  if (url.origin === pagesRoot.origin && match[1] !== '/') assert.ok(url.pathname.startsWith('/xgpui/'));
+for (const root of ['https://xgpui.dev/', 'http://localhost:8000/', 'https://example.github.io/xgpui/']) {
+  const pagesRoot = new URL(root);
+  for (const match of index.matchAll(/(?:src|href)="([^"#][^"]*)"/g)) {
+    const url = new URL(match[1], pagesRoot);
+    if (url.origin === pagesRoot.origin) {
+      assert.ok(!match[1].startsWith('/'), 'site assets and links must remain relative: ' + match[1]);
+      assert.ok(url.pathname.startsWith(pagesRoot.pathname));
+    }
+  }
 }
 
 for (const [fn, title, sections] of [["architecturePage", "The architecture of GPUI", 8]]) {
