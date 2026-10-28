@@ -25,12 +25,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Build native Windows executable
-        run: cargo build --release --locked --config .cargo/validation.toml --manifest-path apps/${{ matrix.app }}/Cargo.toml --target-dir target/windows-apps
+        run: cargo build --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin ${{ matrix.app }} --target-dir target/windows-apps
       - name: Compile app tests
-        run: cargo test --no-run --locked --config .cargo/validation.toml --manifest-path apps/${{ matrix.app }}/Cargo.toml --target-dir target/windows-apps
+        run: cargo test --no-run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin ${{ matrix.app }} --target-dir target/windows-apps
       - name: Run gamut compatibility tests
         if: matrix.app == 'gamut-lab'
-        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --test compatibility --target-dir target/windows-apps
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab --test compatibility --target-dir target/windows-apps
       # Native window tests and physical display checks require a desktop session.
       # The separate portable-paints workflow runs the offscreen D3D11 WARP suite.
       - uses: actions/upload-artifact@v4

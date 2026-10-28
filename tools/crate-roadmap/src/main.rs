@@ -35,6 +35,7 @@ struct Dependency {
 #[derive(Serialize)]
 struct Crate {
     package: String,
+    published_package: String,
     version: String,
     description: String,
     entry: String,
@@ -569,7 +570,7 @@ impl Scan {
 fn dependencies(
     table: &toml::Value,
     target: &str,
-    packages: &BTreeSet<String>,
+    packages: &BTreeMap<String, String>,
     output: &mut Vec<Dependency>,
 ) {
     for (key, kind) in [
@@ -583,7 +584,7 @@ fn dependencies(
                     .get("package")
                     .and_then(toml::Value::as_str)
                     .unwrap_or(alias);
-                if packages.contains(package) {
+                if let Some(package) = packages.get(package) {
                     output.push(Dependency {
                         package: package.into(),
                         alias: alias.into(),
@@ -630,7 +631,25 @@ fn generate(root: &Path) -> Result<()> {
             serde_json::Value::String((*directory).into()),
         );
     }
-    let names: BTreeSet<String> = packages.keys().cloned().collect();
+    let mut names: BTreeMap<String, String> = packages
+        .keys()
+        .map(|name| (name.clone(), name.clone()))
+        .collect();
+    if let Some(identities) = provenance
+        .get("distribution")
+        .and_then(|d| d.get("packages"))
+        .and_then(serde_json::Value::as_object)
+    {
+        for (local, published) in identities {
+            names.insert(
+                published
+                    .as_str()
+                    .context("Invalid package identity")?
+                    .into(),
+                local.clone(),
+            );
+        }
+    }
     let output = root.join("docs");
     fs::create_dir_all(&output)?;
     // This directory contains only generated pages. Rebuild it so removed crates
@@ -697,6 +716,10 @@ fn generate(root: &Path) -> Result<()> {
         );
         crates.push(Crate {
             package: package.clone(),
+            published_package: manifest["package"]["name"]
+                .as_str()
+                .unwrap_or(package)
+                .into(),
             version: manifest["package"]["version"].as_str().unwrap_or("").into(),
             description: manifest["package"]
                 .get("description")
@@ -733,6 +756,7 @@ fn generate(root: &Path) -> Result<()> {
     // Embed them so navigation works offline without fetch.
     let document_sources = [
         ("local-development", "docs/LOCAL_DEVELOPMENT.md"),
+        ("extension-lab", "docs/extensions/extension-lab.md"),
         ("color-math", "docs/extensions/color-math.md"),
         ("media-images", "docs/extensions/media-images.md"),
         ("media-pipeline", "docs/extensions/media-pipeline.md"),
@@ -980,15 +1004,20 @@ include!("generated.rs");"##,
 
     #[test]
     fn dependency_edges_preserve_kind_target_and_optionality() {
-        let manifest: toml::Value = toml::from_str("[dependencies]\ncore = { package = 'gpui', version = '1', optional = true }\n[dev-dependencies]\ngpui = '1'").expect("fixture parses");
+        let manifest: toml::Value = toml::from_str("[dependencies]\ncore = { package = 'xgpui-core', version = '1', optional = true }\n[dev-dependencies]\ngpui = '1'").expect("fixture parses");
         let mut result = vec![];
         dependencies(
             &manifest,
             "cfg(unix)",
-            &BTreeSet::from(["gpui".into()]),
+            &BTreeMap::from([
+                ("gpui".into(), "gpui".into()),
+                ("xgpui-core".into(), "gpui".into()),
+            ]),
             &mut result,
         );
         assert_eq!(result.len(), 2);
+        assert_eq!(result[0].package, "gpui");
+        assert_eq!(result[0].alias, "core");
         assert!(result[0].optional);
         assert_eq!(result[1].kind, "dev");
         assert_eq!(result[0].target, "cfg(unix)");

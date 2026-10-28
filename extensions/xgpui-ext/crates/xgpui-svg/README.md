@@ -8,8 +8,8 @@ The maintained [usage and contract guide](../../../../docs/extensions/svg-render
 is also published on the documentation website. It covers construction, defaults,
 shared pools, lifecycle, diagnostics, low-level APIs and validation commands.
 
-[Native lab and attributed samples](../../../../apps/svg-lab/README.md) ·
-[Performance evidence](../../../../apps/svg-lab/bench/README.md) ·
+[Native lab and attributed samples](../../../../apps/xgpui-ext-lab/svg-lab/README.md) ·
+[Performance evidence](../../../../apps/xgpui-ext-lab/svg-lab/bench/README.md) ·
 [Deferred follow-ups](FOLLOW_UPS.md)
 
 ## GPUI public API changes: additions and compatibility
@@ -24,4 +24,4 @@ contours, caches approximate arc lengths, and applies normalized trim and phased
 dash arrays before GPUI stroke tessellation. Existing SVG raster callers are
 unchanged; imported SVG-to-native conversion is not provided. See the SVG web
 guide for validated limits, composition semantics and examples. The native
-[media lab](../../../../apps/media-lab/README.md) has a `--paths` comparison view.
+[media lab](../../../../apps/xgpui-ext-lab/media-lab/README.md) has a `--paths` comparison view.

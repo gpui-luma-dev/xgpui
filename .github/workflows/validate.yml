@@ -64,7 +64,7 @@ jobs:
       - name: Install WASM packaging tool
         run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
       - name: Build all six browser shader examples
-        run: bash apps/shader-examples/build.sh --release
+        run: bash apps/xgpui-ext-lab/shader-examples/build.sh --release
       - uses: actions/upload-artifact@v4
         with:
           name: shader-examples-wasm

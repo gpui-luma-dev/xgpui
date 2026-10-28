@@ -3,7 +3,7 @@
 The GPU workflows validate rendering at the checked-out commit. Rust **1.99.0**,
 `.cargo/validation.toml`, and committed standalone lockfiles define the build.
 All Cargo commands use `--locked`. The backend lockfiles were seeded from
-`apps/paint-lab/Cargo.lock` to retain compatible shared dependency versions.
+`apps/xgpui-ext-lab/paint-lab/Cargo.lock` to retain compatible shared dependency versions.
 When updating dependencies, refresh affected locks using the same validation
 configuration and pinned compiler; commit the locks with the manifests.
 

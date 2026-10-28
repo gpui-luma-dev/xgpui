@@ -13,17 +13,17 @@
     {
       "name": "Run Vulkan paint reference tests",
       "scope": "paint-parity",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_extension_paints -- --nocapture"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features wgpu,portable-shaders wgpu_extension_paints -- --nocapture"
     },
     {
       "name": "Test compositor uniform growth and recovery",
       "scope": "producer-cache",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_compositor_uniform_frames -- --nocapture"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features wgpu,portable-shaders wgpu_compositor_uniform_frames -- --nocapture"
     },
     {
       "name": "Check low-alpha saturated edges",
       "scope": "paint-parity",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_low_alpha_saturated_edges -- --nocapture"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features wgpu,portable-shaders wgpu_low_alpha_saturated_edges -- --nocapture"
     },
     {
       "name": "Test main-pass brushes and native coverage parity",
@@ -45,17 +45,17 @@
     {
       "name": "Run DirectX 12 wgpu paint reference tests",
       "scope": "paint-parity",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_extension_paints -- --nocapture"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features wgpu,portable-shaders wgpu_extension_paints -- --nocapture"
     },
     {
       "name": "Test compositor uniform growth and recovery",
       "scope": "producer-cache",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_compositor_uniform_frames -- --nocapture"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features wgpu,portable-shaders wgpu_compositor_uniform_frames -- --nocapture"
     },
     {
       "name": "Check low-alpha saturated edges",
       "scope": "paint-parity",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders wgpu_low_alpha_saturated_edges -- --nocapture"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features wgpu,portable-shaders wgpu_low_alpha_saturated_edges -- --nocapture"
     },
     {
       "name": "Test main-pass brushes and native coverage parity",
@@ -67,7 +67,7 @@
     {
       "name": "Check native applications",
       "scope": "paint-parity",
-      "command": "cargo check --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders"
+      "command": "cargo check --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features portable-shaders"
     },
     {
       "name": "Test exact coverage lookups and allocation counts",
@@ -112,12 +112,12 @@
     {
       "name": "Test native paints and mesh parity against wgpu",
       "scope": "paint-parity",
-      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features wgpu,portable-shaders -- --nocapture"
+      "command": "cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features wgpu,portable-shaders -- --nocapture"
     },
     {
       "name": "Render native mesh sample",
       "scope": "paint-parity",
-      "command": "cargo run --locked --config .cargo/validation.toml --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders -- --headless --effect mesh --frames 3 --png native-dx11-mesh.png"
+      "command": "cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features portable-shaders -- --headless --effect mesh --frames 3 --png native-dx11-mesh.png"
     },
     {
       "name": "Test main-pass brushes and native coverage parity",

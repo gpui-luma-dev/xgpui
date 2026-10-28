@@ -201,7 +201,7 @@ cargo test --offline --config .cargo/validation.toml \
 
 # Per-draw values, failed-frame recovery, native batches after custom draws.
 cargo test --offline --config .cargo/validation.toml \
-  --manifest-path apps/paint-lab/Cargo.toml --target-dir target \
+  --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --target-dir target \
   --features wgpu,portable-shaders uniform_frames
 ```
 
@@ -213,7 +213,7 @@ change or GPU completion wait. D3D11 execution requires Windows/WARP validation.
 
 ```sh
 MTL_DEBUG_LAYER=1 cargo test --offline --config .cargo/validation.toml \
-  --manifest-path apps/paint-lab/Cargo.toml --target-dir target \
+  --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --target-dir target \
   --features wgpu,portable-shaders low_alpha_saturated_edges -- --nocapture
 ```
 
@@ -249,8 +249,8 @@ color-contract change, not a correction established by these results.
 
 ```sh
 # Native/portable geometry, alpha, clipping, replay and legacy-producer recovery.
-just --justfile apps/paint-lab/justfile metal-test
-just --justfile apps/paint-lab/justfile portable-test
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile metal-test
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-test
 
 # Request validation, old signature forwarding and fractional-scale geometry.
 cargo test --offline --config .cargo/validation.toml \

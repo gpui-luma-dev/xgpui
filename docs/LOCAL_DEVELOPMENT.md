@@ -24,12 +24,34 @@ XGPUI keeps nine framework and backend crates in `gpui/crates/`: `gpui`,
 `gpui-windows`, `gpui-web` and `gpui-wgpu`. The six XGPUI extension crates live
 under `extensions/xgpui-ext/crates/`.
 
+The downstream release version is **1.0.0**, independent of the captured GPUI
+release. Local directory names and Rust import names stay stable; Cargo package
+names use the XGPUI prefix:
+
+| Local directory / import name | Release package |
+| --- | --- |
+| `gpui` | `xgpui-core` |
+| `gpui-apple` | `xgpui-apple` |
+| `gpui-linux` | `xgpui-linux` |
+| `gpui-macos` | `xgpui-macos` |
+| `gpui-macros` | `xgpui-macros` |
+| `gpui-platform` | `xgpui-platform` |
+| `gpui-web` | `xgpui-web` |
+| `gpui-wgpu` | `xgpui-wgpu` |
+| `gpui-windows` | `xgpui-windows` |
+
+All six extension packages keep their existing `xgpui-*` names and use version
+`0.2.0`, independently of the framework at `1.0.0`. `scripts/release-packages.json` is the authoritative
+name/version map. The `xgpui` facade is a subsequent packaging step; these package
+identities prepare the release and do not mean it has been published.
+
 The supporting crates below are dependencies from the published
 [gpui-unofficial distribution](https://github.com/gpui-archipelago/gpui-unofficial).
 They are no longer copied into this repository. Cargo downloads them from
 crates.io; manifests keep familiar Rust import names using dependency aliases.
 For example, the `collections` dependency uses the package
-`collections-gpui-unofficial`, currently at `=1.25.3` to match the captured release.
+`collections-gpui-unofficial`, currently at `=1.25.3` to match the captured upstream release, rather than the
+independent downstream version `1.0.0`.
 
 | Former local crate names | Published crates.io packages |
 | --- | --- |
@@ -47,10 +69,27 @@ tests. The mapping is maintained in `scripts/registry-crates.json`, and
 The website's crate inventory and source pages cover local crates only.
 
 When building a separate application against this checkout, override only the
-retained framework/backend packages. Remove old patches pointing at helper
+retained framework/backend packages using their `xgpui-*` package identities.
+For example, `gpui = { package = "xgpui-core", path = "../xgpui/gpui/crates/gpui" }`
+keeps the `gpui` import name. Remove old patches pointing at helper
 paths such as `gpui/crates/collections`; those directories no longer exist.
 Run Cargo once without `--locked` to refresh the application's lockfile after
 this dependency change, then resume locked builds.
+
+## Extension labs and benchmarks
+
+See [xgpui-ext-lab](extensions/extension-lab.md) for its targets, purpose and
+unpublished status, and how it differs from the separate `xgpui-lab` application.
+
+All native labs, repeatable benchmarks and browser demos live in the unpublished
+`xgpui-ext-lab` package under `apps/xgpui-ext-lab/`. They share one manifest and
+lockfile, with a separate binary target for each lab. Its `publish = false`
+setting keeps development workloads out of the extension library release.
+
+Use `just lab-build` to compile all native lab/benchmark binaries and
+`just lab-test` to run unit and compatibility tests. The individual launch
+recipes below retain their names. Browser build scripts select the `web` feature
+without the default native targets; hosted demo URLs remain the same.
 
 ## Choose a sample app
 
@@ -140,7 +179,7 @@ Features belong to the selected manifest. For the shader example application,
 pass the platform dependency's feature explicitly:
 
 ```sh
-cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/shader-examples/Cargo.toml --features gpui_platform/runtime_shaders --target-dir target
+cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shader-examples --features gpui_platform/runtime_shaders --target-dir target
 ```
 
 Runtime compilation still needs a functioning Metal-capable system. It avoids
@@ -153,15 +192,16 @@ and launch directly (these commands also work in PowerShell):
 
 ```sh
 cargo build --release --locked
-cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/shader-examples/Cargo.toml --target-dir target
+cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shader-examples --target-dir target
 ```
 
 ## Understand the Cargo layout
 
 The root workspace contains `xgpui-build`, a private harness that builds captured
 GPUI libraries for the host platform. **It does not launch an application or build
-all extension libraries and labs.** Apps, extensions and repository tools have
-their own workspaces and lockfiles; select them with `--manifest-path`.
+all extension libraries and labs.** The labs share the separate `xgpui-ext-lab` workspace and lockfile; extensions
+and repository tools retain their own workspaces. Select a lab with
+`--manifest-path apps/xgpui-ext-lab/Cargo.toml --bin <name>`.
 
 The checked-in `.cargo/config.toml` maps the nine retained framework/backend
 crate names to local source. Supporting crates retain their published identities

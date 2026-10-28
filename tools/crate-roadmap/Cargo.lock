@@ -245,37 +245,37 @@ name = "block"
 version = "0.1.6"
 
 [[patch.unused]]
-name = "gpui"
-version = "1.25.3"
+name = "xgpui-apple"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-apple"
-version = "1.25.3"
+name = "xgpui-core"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-linux"
-version = "1.25.3"
+name = "xgpui-linux"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-macos"
-version = "1.25.3"
+name = "xgpui-macos"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-macros"
-version = "1.25.3"
+name = "xgpui-macros"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-platform"
-version = "1.25.3"
+name = "xgpui-platform"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-web"
-version = "1.25.3"
+name = "xgpui-web"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-wgpu"
-version = "1.25.3"
+name = "xgpui-wgpu"
+version = "1.0.0"
 
 [[patch.unused]]
-name = "gpui-windows"
-version = "1.25.3"
+name = "xgpui-windows"
+version = "1.0.0"

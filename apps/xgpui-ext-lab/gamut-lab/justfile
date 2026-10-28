@@ -1,0 +1,30 @@
+set working-directory := "../../.."
+set positional-arguments
+manifest := "apps/xgpui-ext-lab/Cargo.toml"
+options := "--offline --locked --config .cargo/validation.toml --manifest-path " + manifest + " --bin gamut-lab" + " --target-dir target"
+default:
+    @just --justfile '{{justfile()}}' --list
+ui *args:
+    cargo run {{options}} -- "$@"
+baseline *args:
+    cargo run {{options}} -- --sdr "$@"
+build:
+    cargo build {{options}}
+headless *args:
+    cargo run {{options}} -- --headless "$@"
+capture:
+    cargo run {{options}} -- --headless --png gamut-lab-srgb-preview.png
+metal-test:
+    MTL_DEBUG_LAYER=1 cargo test --offline --config .cargo/validation.toml --manifest-path gpui/crates/gpui-apple/Cargo.toml --features test-support --lib --target-dir target
+fmt:
+    cargo fmt --manifest-path {{manifest}}
+lint:
+    cargo clippy {{options}} --all-targets -- -D warnings
+args:
+    cargo run {{options}} -- --help
+ui-capture:
+    cargo run {{options}} -- --ui-png gamut-lab-ui.png
+fmt-check:
+    cargo fmt --manifest-path {{manifest}} --check
+test:
+    cargo test {{options}}

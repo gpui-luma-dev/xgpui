@@ -65,7 +65,9 @@ ordering, clipping, explicit layers, batch texture boundaries and replay.
 Playback is opt-in, stops after one sequence, and is cleaned up on navigation.
 Reduced-motion preferences suppress SVG movement.
 
-Capture packages use normalized local names. The original gpui-unofficial
+Inventory routes and local directories use normalized local names. Each crate
+page displays its downstream package identity and version from the manifest.
+Dependency edges map downstream identities back to the stable local routes. The original gpui-unofficial
 repository and release remain the provenance source; upstream.json records both
 original and local package maps. Review narrative links and examples after a
 normalization-map change as well as after a release sync.
@@ -116,21 +118,21 @@ WebAssembly demo index. It lists 17 built browser demos across both apps, seven 
 interactive source-gallery examples, and three developer Wasm harnesses. Source-only
 entries are labeled and do not link to nonexistent hosted routes.
 The gallery and the extension crate guides link to the demo source on GitHub.
-The Pages workflow builds `apps/extensions-web` in release mode with the pinned
+The Pages workflow builds `apps/xgpui-ext-lab/extensions-web` in release mode with the pinned
 wasm-bindgen CLI and copies its generated assets into `docs/examples/extensions/`
 before uploading the site. These artifacts are ignored by Git. The same build
-script refreshes both `apps/extensions-web/dist/` and `docs/examples/extensions/`,
+script refreshes both `apps/xgpui-ext-lab/extensions-web/dist/` and `docs/examples/extensions/`,
 so a local docs server serves the current Wasm app too:
 
 ```sh
-bash apps/extensions-web/build.sh --release
+bash apps/xgpui-ext-lab/extensions-web/build.sh --release
 python3 -m http.server 8000 --bind 127.0.0.1 --directory docs
 ```
 
 Open `http://localhost:8000/examples/extensions/?demo=svg`. Rebuild after changing
 branches or demo code, then reload the browser; an older copied HTML file may
 reject new demo names. The standalone demo server is also available; see
-[extensions-web](../apps/extensions-web/README.md).
+[extensions-web](../apps/xgpui-ext-lab/extensions-web/README.md).
 
 ## Instanced WGSL v2
 
@@ -139,17 +141,17 @@ under `#instanced-wgsl-v2`. The main navigation, Extensions overview and shader
 crate guide link to it. It records implementation status, limits, validation and
 remaining acceptance rather than treating the RFC as fully complete.
 
-Native launch is primary: `just --justfile apps/shader-examples/justfile ui`.
+Native launch is primary: `just --justfile apps/xgpui-ext-lab/shader-examples/justfile ui`.
 The companion uses the same Rust example views and WGSL sources, including the
 cyan clipping boundary, Clipping ON/OFF toggle and draw-order legend. Browser
 startup is separate; rebuilding the native app alone does not refresh WASM.
 
-The Pages workflow builds `apps/shader-examples` in release mode. Its build script
+The Pages workflow builds `apps/xgpui-ext-lab/shader-examples` in release mode. Its build script
 copies generated assets to both the app's `dist/` and ignored
 `docs/examples/shaders/`. To preview the current companion with the site:
 
 ```sh
-bash apps/shader-examples/build.sh --release
+bash apps/xgpui-ext-lab/shader-examples/build.sh --release
 python3 -m http.server 8000 --bind 127.0.0.1 --directory docs
 ```
 
@@ -205,7 +207,7 @@ that status with each completed media milestone, regenerate the website and run
 `node docs/verify.mjs`. A cross-compile is recorded as compilation evidence;
 backend execution is marked verified only after its runtime tests pass.
 
-The native `apps/media-lab` provides synchronized atlas/mipmap viewports, loading
+The native `apps/xgpui-ext-lab/media-lab` provides synchronized atlas/mipmap viewports, loading
 stress controls and upload diagnostics. Its launch and Metal/wgpu capture commands
 are maintained in `extensions/media-images.md` and embedded in the media guide.
 
@@ -300,3 +302,17 @@ reused, but custom media captures refresh each paint. Native `just media --video
 also offers exposure, saturation, vignette and blur on generated BGRA/NV12
 surfaces. Native imports are not available in Wasm; test portable blur via
 `?demo=media-tiles&backend=webgpu` and `?demo=media-tiles&backend=webgl`.
+
+## Shared extension-lab package
+
+Native labs, benchmarks and both browser entry points are targets of the
+unpublished `apps/xgpui-ext-lab/Cargo.toml` package. Its native targets use the
+default `native` feature. Browser build scripts select only their binary with
+`--no-default-features --features web` and share the repository target directory.
+Both retain their original JS/WASM output names and `docs/examples/` destinations.
+Source links point into `apps/xgpui-ext-lab/`; hosted demo URLs are unchanged.
+
+The **Labs & benchmarks** navigation item opens `#extension-lab`, embedded from
+`docs/extensions/extension-lab.md`. It documents the unpublished `xgpui-ext-lab`
+package and distinguishes it from the separate `xgpui-lab` desktop application.
+This development package is not included in the reusable library API inventory.

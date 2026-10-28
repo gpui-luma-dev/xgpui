@@ -1,15 +1,16 @@
 [package]
-name = "gpui-apple"
-version = "1.25.3"
+name = "xgpui-apple"
+version = "1.0.0"
 edition = "2024"
 license = "Apache-2.0"
-repository = "https://github.com/gpui-archipelago/gpui-unofficial"
+repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Unofficial release of Zed's gpui_apple crate"
 include = ["src/**/*", "build.rs", "gpui/**/*", "Cargo.toml", "LICENSE*"]
 
 [lib]
 path = "src/gpui_apple.rs"
 doctest = false
+name = "gpui_apple"
 
 [features]
 default = []
@@ -19,7 +20,7 @@ runtime_shaders = []
 font-kit = ["dep:font-kit", "dep:core-text", "dep:objc2-core-text", "dep:pathfinder_geometry"]
 
 [dependencies]
-gpui = { package = "gpui", version = "1.25.3" }
+gpui = { package = "xgpui-core", version = "=1.0.0" }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 anyhow = { version = "1.0.86" }
@@ -74,7 +75,7 @@ thiserror = { version = "2.0.12" }
 cbindgen = { version = "0.28.0", default-features = false }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dev-dependencies]
-gpui = { package = "gpui", version = "1.25.3", features = ["test-support"] }
+gpui = { package = "xgpui-core", version = "=1.0.0", features = ["test-support"] }
 objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVBuffer", "CVImageBuffer", "CVBase"] }
 
 [lints]

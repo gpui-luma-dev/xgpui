@@ -148,3 +148,27 @@ python3 scripts/check_local_dependencies.py /tmp/xgpui-metadata.json
 
 This checks local framework sources, pinned registry helpers, and accidental
 pulls of the upstream framework alongside the local fork.
+
+## Downstream release identities
+
+`scripts/release-packages.json` defines the XGPUI framework version (`1.0.0`),
+per-package version overrides for the six extensions (`0.2.0`), and package
+identities. Normalization applies those versions while keeping directory names,
+library names and dependency aliases stable. The helper package version follows
+the captured `release/1.25.3` provenance independently. `upstream.json` records
+both downstream distribution identities and upstream source/helper versions.
+
+For example, the local `gpui` crate is packaged as `xgpui-core`; applications
+retain `use gpui::*` through a Cargo alias. Internal release-family dependency
+requirements are exact: `=1.0.0` for framework packages and `=0.2.0` for
+extensions. Supporting packages keep their upstream
+identities and `=1.25.3` requirements. This prepares package naming/versioning;
+facade design, packaging verification and the publishing workflow follow later.
+
+## Extension lab package
+
+`apps/xgpui-ext-lab/Cargo.toml` owns the native labs, benchmarks and two browser
+demo targets. `just lab-build` builds the native binaries; `just lab-test` runs
+unit and compatibility tests. Select a particular workload using `--bin`, and
+use its browser build script for WASM packaging. The package has its own shared
+lockfile and `publish = false`; it is excluded from the library release map.

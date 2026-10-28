@@ -1,6 +1,34 @@
 {
   "commit": "39d276b1500d503ec6d37efcaaa0dc0c00730576",
   "destination": "gpui",
+  "distribution": {
+    "packages": {
+      "gpui": "xgpui-core",
+      "gpui-apple": "xgpui-apple",
+      "gpui-linux": "xgpui-linux",
+      "gpui-macos": "xgpui-macos",
+      "gpui-macros": "xgpui-macros",
+      "gpui-platform": "xgpui-platform",
+      "gpui-web": "xgpui-web",
+      "gpui-wgpu": "xgpui-wgpu",
+      "gpui-windows": "xgpui-windows",
+      "xgpui-color": "xgpui-color",
+      "xgpui-gamut": "xgpui-gamut",
+      "xgpui-media": "xgpui-media",
+      "xgpui-parley": "xgpui-parley",
+      "xgpui-shader": "xgpui-shader",
+      "xgpui-svg": "xgpui-svg"
+    },
+    "version": "1.0.0",
+    "versions": {
+      "xgpui-color": "0.2.0",
+      "xgpui-gamut": "0.2.0",
+      "xgpui-media": "0.2.0",
+      "xgpui-parley": "0.2.0",
+      "xgpui-shader": "0.2.0",
+      "xgpui-svg": "0.2.0"
+    }
+  },
   "normalization": {
     "crate_names": {
       "collections-gpui-unofficial": "collections",

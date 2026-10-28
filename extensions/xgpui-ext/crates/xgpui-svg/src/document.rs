@@ -115,7 +115,7 @@ mod tests {
         let renderer = SvgRenderer::new(Arc::new(()));
         let document = SvgDocument::parse(
             &renderer,
-            include_bytes!("../../../../../apps/svg-lab/samples/ribbon-leaf.svg"),
+            include_bytes!("../../../../../apps/xgpui-ext-lab/svg-lab/samples/ribbon-leaf.svg"),
         )
         .unwrap();
         let intrinsic = document.size();

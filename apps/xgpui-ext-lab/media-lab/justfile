@@ -1,0 +1,73 @@
+set working-directory := "../../.."
+set positional-arguments
+manifest := "apps/xgpui-ext-lab/Cargo.toml"
+profile := "release"
+options := "--profile " + profile + " --offline --locked --config .cargo/validation.toml --manifest-path " + manifest + " --bin media-lab" + " --target-dir target"
+
+# Launch the optimized native interactive comparison app; append --image PATH.
+ui *args:
+    cargo run {{options}} -- "$@"
+
+# Save atlas (left) versus mipmapped media (right) to /tmp/media-lab.png.
+capture:
+    cargo run {{options}} -- --headless --png /tmp/media-lab.png
+
+# Capture through the portable renderer.
+wgpu-capture:
+    cargo run {{options}} --features wgpu -- --headless --wgpu --png /tmp/media-lab-wgpu.png
+
+build:
+    cargo build {{options}}
+
+fmt-check:
+    cargo fmt --manifest-path {{manifest}} --check
+
+lint:
+    cargo clippy {{options}} --all-targets --features wgpu -- -D warnings
+
+# Open native contour trim and dash examples.
+paths *args:
+    cargo run {{options}} -- --paths "$@"
+
+# Capture native path comparisons with pixel coverage checks.
+paths-capture:
+    cargo run {{options}} -- --headless --paths --png /tmp/path-effects.png
+
+paths-wgpu-capture:
+    cargo run {{options}} --features wgpu -- --headless --paths --wgpu --png /tmp/path-effects-wgpu.png
+
+# Open synthetic IOSurface video presentation (macOS Metal).
+video *args:
+    cargo run {{options}} -- --video "$@"
+
+video-capture:
+    cargo run {{options}} -- --headless --video --png /tmp/video-lab.png
+
+# Execute native Windows surface/import/ownership regressions in release mode.
+[windows]
+dxgi-test:
+    cargo test --profile {{profile}} --offline --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --target-dir target --features test-support --lib dxgi_
+
+# Validate the DMA-BUF layout contract in release; no native video file required.
+dma-buf-layout-test:
+    cargo test --profile {{profile}} --offline --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-wgpu/Cargo.toml --target-dir target --features dma-buf --lib dma_buf
+
+# Linux GPU export/import, rendered PNG and strict Vulkan validation; no video.
+[linux]
+dma-buf-native-test:
+    WGPU_BACKEND=vulkan WGPU_DEBUG=1 WGPU_VALIDATION=1 VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation cargo test --profile {{profile}} --offline --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-wgpu/Cargo.toml --target-dir target --features dma-buf,test-support --lib custom_draw::dma_buf::native_tests::dma_buf_native_generated_snapshot -- --ignored --exact --nocapture --test-threads=1
+
+# Measure generated-source upload CPU work versus cached rendering, in release.
+upload-bench:
+    cargo run {{options}} -- --headless --upload-bench --bench-report /tmp/media-upload-bench.json --png /tmp/media-upload-bench.png
+
+upload-wgpu-bench:
+    cargo run {{options}} --features wgpu -- --headless --wgpu --upload-bench --bench-report /tmp/media-upload-bench-wgpu.json --png /tmp/media-upload-bench-wgpu.png
+
+# Keep the release window foreground until the report is written (~7 seconds).
+ui-perf:
+    cargo run {{options}} -- --ui-perf-report /tmp/media-ui-perf.json
+
+# Real display baseline: select fixed 60 Hz, keep the window foreground ~45s.
+scroll-perf:
+    cargo run {{options}} -- --scroll-perf-report /tmp/media-scroll-60hz.json

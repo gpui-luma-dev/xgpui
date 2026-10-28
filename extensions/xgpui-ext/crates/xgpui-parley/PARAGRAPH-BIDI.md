@@ -67,4 +67,4 @@ not a union across BiDi fragments. Stale geometry is unavailable until repaint.
 Explicit direction/language/alignment; broader BiDi/UAX #14 conformance; paragraph
 conversion IMEs; Windows/Linux runtime and accessibility validation. Inline
 widgets, vertical text, ellipsis, justification, hyphenation and color emoji
-remain outside scope. [Validation and timing definitions](../../../../apps/text-lab/README.md).
+remain outside scope. [Validation and timing definitions](../../../../apps/xgpui-ext-lab/text-lab/README.md).

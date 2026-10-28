@@ -1,10 +1,10 @@
 [package]
-name = "gpui-web"
-version = "1.25.3"
+name = "xgpui-web"
+version = "1.0.0"
 edition = "2024"
 license = "Apache-2.0"
 autoexamples = false
-repository = "https://github.com/gpui-archipelago/gpui-unofficial"
+repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Unofficial release of Zed's gpui_web crate"
 
 [features]
@@ -14,6 +14,7 @@ multithreaded = ["dep:wasm_thread", "scheduler/wasm-threads"]
 [lib]
 path = "src/gpui_web.rs"
 doctest = false
+name = "gpui_web"
 
 [dependencies]
 unicode-properties = "=0.1.3"
@@ -21,10 +22,10 @@ unicode-script = { version = "0.5.7" }
 unicode-segmentation = { version = "1.10" }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-gpui = { package = "gpui", version = "1.25.3" }
+gpui = { package = "xgpui-core", version = "=1.0.0" }
 scheduler = { package = "scheduler-gpui-unofficial", version = "=1.25.3" }
 parking_lot = { version = "0.12.1", features = ["nightly"] }
-gpui_wgpu = { package = "gpui-wgpu", version = "1.25.3" }
+gpui_wgpu = { package = "xgpui-wgpu", version = "=1.0.0" }
 http_client = { package = "http-client-gpui-unofficial", version = "=1.25.3" }
 anyhow = { version = "1.0.86" }
 async-channel = { version = "2.5", default-features = false }
@@ -43,7 +44,7 @@ web-sys = { version = "0.3", features = ["console", "Blob", "Clipboard", "Clipbo
 
 [dev-dependencies]
 anyhow = { version = "1.0.86" }
-gpui = { package = "gpui", version = "1.25.3" }
+gpui = { package = "xgpui-core", version = "=1.0.0" }
 smallvec = { version = "1.6", features = ["union", "const_new"] }
 
 [workspace]

@@ -11,7 +11,7 @@ Open the browser typography demo through
 The same demo runs natively:
 
 ```sh
-just --justfile apps/shader-examples/justfile typography
+just --justfile apps/xgpui-ext-lab/shader-examples/justfile typography
 ```
 
 Choose Editorial, Ligatures, Unicode or Overflow. Drag to select, double-click a
@@ -265,7 +265,7 @@ accessibility tree. Successful builds alone do not certify screen reader behavio
 cargo test --offline --config .cargo/validation.toml \
   --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
   --target-dir target --features portable-shaders,wgpu typography --lib
-bash apps/extensions-web/build.sh
+bash apps/xgpui-ext-lab/extensions-web/build.sh
 ```
 
 Current local checks: fourteen tests pass, including selection/motion tests with real-font shaping, keyboard

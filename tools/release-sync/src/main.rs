@@ -139,7 +139,103 @@ fn registry_crates(root: &Path) -> Result<Names> {
     }
 }
 
-fn externalize(item: &mut Item, registry: &Names, version: &str) -> Result<()> {
+fn release_packages(root: &Path) -> Result<(String, Names, Names)> {
+    let path = root.join("scripts/release-packages.json");
+    if !path.exists() {
+        return Ok((String::new(), Names::new(), Names::new()));
+    }
+    let config: Json = serde_json::from_str(&fs::read_to_string(path)?)?;
+    let version = config["version"]
+        .as_str()
+        .context("Missing downstream version")?
+        .to_owned();
+    ensure!(
+        version.split('.').count() == 3
+            && version
+                .split('.')
+                .all(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit())),
+        "Invalid downstream version"
+    );
+    let packages: Names = serde_json::from_value(config["packages"].clone())?;
+    let mut unique = BTreeSet::new();
+    for name in packages.values() {
+        ensure!(
+            name.starts_with("xgpui-")
+                && name
+                    .bytes()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
+                && unique.insert(name),
+            "Invalid or duplicate release package {name}"
+        );
+    }
+    let versions: Names =
+        serde_json::from_value(config.get("versions").cloned().unwrap_or_else(|| json!({})))?;
+    for (name, override_version) in &versions {
+        ensure!(
+            packages.values().any(|p| p == name),
+            "Version override for unknown package {name}"
+        );
+        ensure!(
+            override_version.split('.').count() == 3
+                && override_version
+                    .split('.')
+                    .all(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit())),
+            "Invalid version override for {name}"
+        );
+    }
+    Ok((version, packages, versions))
+}
+
+fn prepare_manifest(
+    document: &mut DocumentMut,
+    registry: &Names,
+    upstream_version: &str,
+    release: &Names,
+    release_version: &str,
+    versions: &Names,
+) -> Result<()> {
+    externalize(document.as_item_mut(), registry, upstream_version, true)?;
+    for (local, published) in release {
+        let version = versions
+            .get(published)
+            .map(String::as_str)
+            .unwrap_or(release_version);
+        externalize(
+            document.as_item_mut(),
+            &BTreeMap::from([(local.clone(), published.clone())]),
+            version,
+            false,
+        )?;
+    }
+    if let Some(name) = document
+        .get("package")
+        .and_then(|p| p.get("name"))
+        .and_then(Item::as_str)
+        .map(str::to_owned)
+    {
+        if let Some((local, published)) = release
+            .iter()
+            .find(|(local, published)| **local == name || **published == name)
+        {
+            document["package"]["name"] = toml_edit::value(published.as_str());
+            document["package"]["version"] = toml_edit::value(
+                versions
+                    .get(published)
+                    .map(String::as_str)
+                    .unwrap_or(release_version),
+            );
+            document["package"]["repository"] =
+                toml_edit::value("https://github.com/gpui-luma-dev/xgpui");
+            // Library names and dependency aliases preserve existing source imports.
+            if local.starts_with("gpui") {
+                document["lib"]["name"] = toml_edit::value(local.replace('-', "_"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn externalize(item: &mut Item, registry: &Names, version: &str, remove_paths: bool) -> Result<()> {
     if let Some(table) = item.as_table_like_mut() {
         for (key, value) in table.iter_mut() {
             if matches!(
@@ -165,8 +261,10 @@ fn externalize(item: &mut Item, registry: &Names, version: &str) -> Result<()> {
                             let options = dependency
                                 .as_table_like_mut()
                                 .context("Invalid registry dependency")?;
-                            for field in ["path", "git", "rev", "branch", "tag", "registry"] {
-                                options.remove(field);
+                            if remove_paths {
+                                for field in ["path", "git", "rev", "branch", "tag", "registry"] {
+                                    options.remove(field);
+                                }
                             }
                             options.insert("package", toml_edit::value(published.as_str()));
                             options.insert("version", toml_edit::value(format!("={version}")));
@@ -174,7 +272,7 @@ fn externalize(item: &mut Item, registry: &Names, version: &str) -> Result<()> {
                     }
                 }
             } else {
-                externalize(value, registry, version)?;
+                externalize(value, registry, version, remove_paths)?;
             }
         }
     }
@@ -191,6 +289,7 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
         .context("Missing package map")?
         .clone();
     let registry = registry_crates(root)?;
+    let (release_version, release, versions) = release_packages(root)?;
     let core_path = source
         .get("gpui-unofficial")
         .and_then(Json::as_str)
@@ -202,9 +301,14 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
         root.join("gpui/crates/gpui/Cargo.toml")
     };
     let core: toml::Value = toml::from_str(&fs::read_to_string(core_manifest)?)?;
-    let version = core["package"]["version"]
-        .as_str()
-        .context("Missing release version")?;
+    let upstream_version = provenance
+        .get("ref")
+        .and_then(Json::as_str)
+        .and_then(|r| r.strip_prefix("release/"))
+        .or_else(|| core["package"]["version"].as_str())
+        .context("Missing upstream release version")?
+        .to_owned();
+    let version = upstream_version.as_str();
     let mut packages = BTreeMap::new();
     let mut removals = Vec::new();
     for (old, value) in &source {
@@ -282,7 +386,14 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
                 );
             }
             rewrite_item(document.as_item_mut(), names)?;
-            externalize(document.as_item_mut(), &registry, version)?;
+            prepare_manifest(
+                &mut document,
+                &registry,
+                version,
+                &release,
+                &release_version,
+                &versions,
+            )?;
             let new = document.to_string();
             if old != new {
                 writes.push((path.to_owned(), new));
@@ -304,7 +415,14 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
             }
             let old = fs::read_to_string(entry.path())?;
             let mut document = old.parse::<DocumentMut>()?;
-            externalize(document.as_item_mut(), &registry, version)?;
+            prepare_manifest(
+                &mut document,
+                &registry,
+                version,
+                &release,
+                &release_version,
+                &versions,
+            )?;
             let new = document.to_string();
             if old != new {
                 writes.push((entry.path().to_owned(), new));
@@ -324,10 +442,16 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
             .as_str()
             .context("Missing package name")?;
         ensure!(
-            actual == old || actual == names[old],
+            actual == old
+                || actual == names[old]
+                || release.get(&names[old]).is_some_and(|name| name == actual),
             "Package identity mismatch at {}",
             present.display()
         );
+    }
+    if !release.is_empty() {
+        provenance["distribution"] =
+            json!({"version": release_version, "packages": release, "versions": versions});
     }
     provenance["source_packages"] = Json::Object(source);
     provenance["packages"] = serde_json::to_value(&packages)?;
@@ -341,7 +465,7 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
     for (name, path) in &packages {
         config += &format!(
             "{} = {{ path = {} }}\n",
-            serde_json::to_string(name)?,
+            serde_json::to_string(release.get(name).unwrap_or(name))?,
             serde_json::to_string(path)?
         );
     }
@@ -392,6 +516,7 @@ fn canonical(name: &str) -> &str {
     }
 }
 fn build_manifests(root: &Path, check: bool) -> Result<()> {
+    let (_, release, _) = release_packages(root)?;
     let provenance: Json = serde_json::from_str(&fs::read_to_string(root.join("upstream.json"))?)?;
     let packages: BTreeMap<String, String> =
         serde_json::from_value(provenance["packages"].clone())?;
@@ -406,7 +531,7 @@ fn build_manifests(root: &Path, check: bool) -> Result<()> {
         let manifest: toml::Value =
             toml::from_str(&fs::read_to_string(root.join(path).join("Cargo.toml"))?)?;
         ensure!(
-            manifest["package"]["name"].as_str() == Some(name),
+            manifest["package"]["name"].as_str() == Some(release.get(name).unwrap_or(name)),
             "Stale package map for {name}"
         );
         workspace += &format!("    {},\n", serde_json::to_string(path)?);
@@ -472,8 +597,12 @@ fn build_manifests(root: &Path, check: bool) -> Result<()> {
         } else {
             ", optional = true"
         };
+        let package = release
+            .get(name)
+            .map(|p| format!(", package = {p:?}"))
+            .unwrap_or_default();
         format!(
-            "{name} = {{ path = \"../../{}\"{optional} }}\n",
+            "{name} = {{ path = \"../../{}\"{package}{optional} }}\n",
             packages[name]
         )
     };
@@ -493,8 +622,12 @@ fn build_manifests(root: &Path, check: bool) -> Result<()> {
                 _ => None,
             };
             if let Some(features) = features {
+                let package = release
+                    .get(platform)
+                    .map(|p| format!(", package = {p:?}"))
+                    .unwrap_or_default();
                 harness += &format!(
-                    "{platform} = {{ path = \"../../{}\", features = {features} }}\n",
+                    "{platform} = {{ path = \"../../{}\", features = {features}{package} }}\n",
                     packages[platform]
                 );
             }
@@ -674,6 +807,115 @@ mod tests {
         normalize(root, &names, true).unwrap();
         normalize(root, &names, false).unwrap();
         normalize(root, &names, true).unwrap();
+    }
+
+    #[test]
+    fn downstream_version_and_names_are_independent_of_upstream_helpers() {
+        let (dir, names) = fixture();
+        let root = dir.path();
+        fs::create_dir_all(root.join("scripts")).unwrap();
+        fs::write(
+            root.join("scripts/registry-crates.json"),
+            r#"{"helper":"helper-gpui-unofficial"}"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join("scripts/release-packages.json"),
+            r#"{"version":"1.0.0","packages":{"gpui":"xgpui-core"}}"#,
+        )
+        .unwrap();
+        let mut data: Json =
+            serde_json::from_str(&fs::read_to_string(root.join("upstream.json")).unwrap()).unwrap();
+        data["ref"] = json!("release/1.25.3");
+        fs::write(root.join("upstream.json"), data.to_string()).unwrap();
+        fs::create_dir_all(root.join("apps/example")).unwrap();
+        fs::write(
+            root.join("apps/example/Cargo.toml"),
+            "[dependencies]\ngpui={path='../../gpui/crates/gpui',features=['test-support']}\n",
+        )
+        .unwrap();
+        normalize(root, &names, false).unwrap();
+        let manifest: toml::Value =
+            toml::from_str(&fs::read_to_string(root.join("gpui/crates/gpui/Cargo.toml")).unwrap())
+                .unwrap();
+        assert_eq!(manifest["package"]["name"].as_str(), Some("xgpui-core"));
+        assert_eq!(manifest["package"]["version"].as_str(), Some("1.0.0"));
+        assert_eq!(manifest["lib"]["name"].as_str(), Some("gpui"));
+        assert_eq!(
+            manifest["dependencies"]["helper"]["version"].as_str(),
+            Some("=1.25.3")
+        );
+        let app: toml::Value =
+            toml::from_str(&fs::read_to_string(root.join("apps/example/Cargo.toml")).unwrap())
+                .unwrap();
+        assert_eq!(
+            app["dependencies"]["gpui"]["package"].as_str(),
+            Some("xgpui-core")
+        );
+        assert_eq!(
+            app["dependencies"]["gpui"]["path"].as_str(),
+            Some("../../gpui/crates/gpui")
+        );
+        assert_eq!(
+            app["dependencies"]["gpui"]["features"][0].as_str(),
+            Some("test-support")
+        );
+        let config = fs::read_to_string(root.join(".cargo/config.toml")).unwrap();
+        assert!(config.contains("xgpui-core"));
+        let data: Json =
+            serde_json::from_str(&fs::read_to_string(root.join("upstream.json")).unwrap()).unwrap();
+        assert_eq!(data["distribution"]["version"], "1.0.0");
+        assert_eq!(data["registry_packages"]["version"], "1.25.3");
+        normalize(root, &names, true).unwrap();
+        normalize(root, &names, false).unwrap();
+        normalize(root, &names, true).unwrap();
+    }
+
+    #[test]
+    fn extension_versions_are_independent_of_framework_dependencies() {
+        let release = BTreeMap::from([
+            ("gpui".into(), "xgpui-core".into()),
+            ("xgpui-color".into(), "xgpui-color".into()),
+            ("xgpui-svg".into(), "xgpui-svg".into()),
+        ]);
+        let versions = BTreeMap::from([
+            ("xgpui-color".into(), "0.2.0".into()),
+            ("xgpui-svg".into(), "0.2.0".into()),
+        ]);
+        let mut manifest = "[package]\nname='xgpui-svg'\nversion='1.0.0'\n[dependencies]\ngpui={package='xgpui-core',version='=1.0.0',path='../gpui',features=['test-support']}\nxgpui-color={path='../xgpui-color',version='=1.0.0'}\n".parse::<DocumentMut>().unwrap();
+        prepare_manifest(
+            &mut manifest,
+            &Names::new(),
+            "1.25.3",
+            &release,
+            "1.0.0",
+            &versions,
+        )
+        .unwrap();
+        assert_eq!(manifest["package"]["version"].as_str(), Some("0.2.0"));
+        assert_eq!(
+            manifest["dependencies"]["gpui"]["version"].as_str(),
+            Some("=1.0.0")
+        );
+        assert_eq!(
+            manifest["dependencies"]["gpui"]["path"].as_str(),
+            Some("../gpui")
+        );
+        assert_eq!(
+            manifest["dependencies"]["xgpui-color"]["version"].as_str(),
+            Some("=0.2.0")
+        );
+        let first = manifest.to_string();
+        prepare_manifest(
+            &mut manifest,
+            &Names::new(),
+            "1.25.3",
+            &release,
+            "1.0.0",
+            &versions,
+        )
+        .unwrap();
+        assert_eq!(manifest.to_string(), first);
     }
 
     #[test]

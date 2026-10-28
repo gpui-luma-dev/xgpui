@@ -57,7 +57,7 @@ See [wide fills and gradients](instanced-wgsl-v2.md#reusable-wide-fills-and-grad
 | Window mode and cached status | `gpui` | Public, opt-in |
 | Typed P3 output and ordered compositor | `gpui-apple` / `gpui-macos`, `gpui-windows` | Metal + native D3D11 |
 | Reusable producer | `xgpui-gamut::WideColor` | Metal + typed D3D11 preparation |
-| Test/control app | `apps/gamut-lab` | Uses `xgpui-gamut` |
+| Test/control app | `apps/xgpui-ext-lab/gamut-lab` | Uses `xgpui-gamut` |
 
 Independent of the [paint/shader extension](extension-paints.md). Enabling this
 mode does not reinterpret existing gradients, meshes, colors or controls as P3.
@@ -249,7 +249,7 @@ as the browser Color / Gamut demo: encoded sRGB, linear RGB, OkLab and shorter-h
 OkLCh. Change endpoint presets, gamut mapping and end alpha interactively.
 
 ```sh
-cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --bin color-lab
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab
 ```
 
 Move the window to your P3 monitor and check `Effective: WideGamutSdr` and
@@ -267,26 +267,26 @@ physical P3 output.
 ## Run gamut-lab
 
 ```sh
-just --justfile apps/gamut-lab/justfile ui
-just --justfile apps/gamut-lab/justfile ui --instanced
-just --justfile apps/gamut-lab/justfile ui --instanced --gradient
-just --justfile apps/gamut-lab/justfile baseline
-just --justfile apps/gamut-lab/justfile headless --frames 60
-just --justfile apps/gamut-lab/justfile capture
-just --justfile apps/gamut-lab/justfile metal-test
-just --justfile apps/gamut-lab/justfile test
-just --justfile apps/gamut-lab/justfile lint
-just --justfile apps/gamut-lab/justfile ui --ui-png /tmp/gamut-lab-ui.png
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui --instanced
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui --instanced --gradient
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile baseline
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile headless --frames 60
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile capture
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile metal-test
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile test
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile lint
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui --ui-png /tmp/gamut-lab-ui.png
 ```
 
 On Windows (PowerShell), no `just` installation required:
 
 ```powershell
-cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml
-cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml -- --sdr
-cargo run --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml -- --headless --frames 3 --png gamut-lab-preview.png
-cargo test --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --test compatibility
-cargo test --locked --config .cargo/validation.toml --manifest-path apps/gamut-lab/Cargo.toml --test native_windows
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab -- --sdr
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab -- --headless --frames 3 --png gamut-lab-preview.png
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab --test compatibility
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab --test native_windows
 ```
 
 `--headless` now captures the full lab UI through a hidden native window on both

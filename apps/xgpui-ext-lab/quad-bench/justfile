@@ -1,0 +1,46 @@
+# Run from apps/xgpui-ext-lab/quad-bench/: just ui --count 5000 --pattern overlap
+# From the repository root: just --justfile apps/xgpui-ext-lab/quad-bench/justfile headless --frames 30
+# Argument descriptions and examples: BUILDING.md
+set working-directory := "../../.."
+set positional-arguments
+
+manifest := "apps/xgpui-ext-lab/Cargo.toml"
+config := ".cargo/validation.toml"
+
+# List available recipes (does not launch the app).
+default:
+    @just --justfile '{{justfile()}}' --list
+
+# Show application flags and defaults without opening a window.
+args:
+    cargo run --release --locked --config {{config}} --manifest-path {{manifest}} --bin quad-bench --target-dir target -- --help
+
+# Build the optimized application without launching it.
+build:
+    cargo build --release --locked --config {{config}} --manifest-path {{manifest}} --bin quad-bench --target-dir target
+
+# Launch the bounded native UI (--continuous to keep drawing); append flags such as --count 5000 --pattern overlap.
+ui *args:
+    cargo run --release --locked --config {{config}} --manifest-path {{manifest}} --bin quad-bench --target-dir target -- "$@"
+
+# macOS: bounded UI run with Metal FPS/GPU HUD; writes results/mtl.json.
+[macos]
+mtl *args:
+    mkdir -p apps/xgpui-ext-lab/quad-bench/results
+    MTL_HUD_ENABLED=1 cargo run --release --locked --config {{config}} --manifest-path {{manifest}} --bin quad-bench --target-dir target -- --frames 600 --warmup 120 --json apps/xgpui-ext-lab/quad-bench/results/mtl.json "$@"
+
+# Render offscreen without a window; append workload and output flags.
+headless *args:
+    mkdir -p apps/xgpui-ext-lab/quad-bench/results
+    cargo run --release --locked --config {{config}} --manifest-path {{manifest}} --bin quad-bench --target-dir target -- --headless "$@"
+
+# Measure CPU scene work without initializing a renderer; --png is unavailable.
+cpu *args:
+    mkdir -p apps/xgpui-ext-lab/quad-bench/results
+    cargo run --release --locked --config {{config}} --manifest-path {{manifest}} --bin quad-bench --target-dir target -- --headless --cpu-only "$@"
+
+# Check formatting, run tests and lint the app without opening a window.
+check:
+    cargo fmt --manifest-path {{manifest}} --check
+    cargo test --locked --config {{config}} --manifest-path {{manifest}} --bin quad-bench --target-dir target
+    cargo clippy --locked --config {{config}} --manifest-path {{manifest}} --bin quad-bench --target-dir target --all-targets -- -D warnings

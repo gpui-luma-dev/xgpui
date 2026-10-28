@@ -1,14 +1,15 @@
 [package]
-name = "gpui-macos"
-version = "1.25.3"
+name = "xgpui-macos"
+version = "1.0.0"
 edition = "2024"
 license = "Apache-2.0"
-repository = "https://github.com/gpui-archipelago/gpui-unofficial"
+repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Unofficial release of Zed's gpui_macos crate"
 
 [lib]
 path = "src/gpui_macos.rs"
 doctest = false
+name = "gpui_macos"
 
 [features]
 default = ["gpui/default"]
@@ -19,7 +20,7 @@ font-kit = ["gpui_apple/font-kit"]
 screen-capture = ["gpui/screen-capture", "dep:objc2-core-graphics", "dep:objc2-core-media", "dep:objc2-screen-capture-kit"]
 
 [dependencies]
-gpui = { package = "gpui", version = "1.25.3" }
+gpui = { package = "xgpui-core", version = "=1.0.0" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 accesskit = { version = "0.24.0", features = ["enumn"] }
@@ -35,7 +36,7 @@ ctor = { version = "1.0.12" }
 dispatch2 = { version = "0.3", default-features = false, features = ["std", "block2", "objc2"] }
 foreign-types = { version = "0.5" }
 futures = { version = "0.3.34" }
-gpui_apple = { package = "gpui-apple", version = "1.25.3" }
+gpui_apple = { package = "xgpui-apple", version = "=1.0.0" }
 gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.25.3" }
 image = { version = "0.25.1", default-features = false, features = [
     "bmp",
@@ -136,8 +137,8 @@ uuid = { version = "1.1", features = ["serde"] }
 # GPUI and the extracted renderer. A dependency does not inherit this crate's
 # `cfg(test)`, so dev-dependencies enable those APIs only for test builds.
 [target.'cfg(target_os = "macos")'.dev-dependencies]
-gpui = { package = "gpui", version = "1.25.3", features = ["test-support"] }
-gpui_apple = { package = "gpui-apple", version = "1.25.3", features = ["test-support"] }
+gpui = { package = "xgpui-core", version = "=1.0.0", features = ["test-support"] }
+gpui_apple = { package = "xgpui-apple", version = "=1.0.0", features = ["test-support"] }
 
 [lints]
 rust = { unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }, deprecated = "allow" }

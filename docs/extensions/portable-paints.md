@@ -69,12 +69,12 @@ No producer submission/GPU wait. Cache budgets exclude in-flight retention.
 ## Checks
 
 ```sh
-just --justfile apps/paint-lab/justfile wgpu-test
-just --justfile apps/paint-lab/justfile wgpu-headless --effect mesh --frames 60 --png /tmp/wgpu-mesh.png
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-test
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-headless --effect mesh --frames 60 --png /tmp/wgpu-mesh.png
 
 # One headless backend/device per process; unavailable backend → error.
-WGPU_BACKEND=metal just --justfile apps/paint-lab/justfile wgpu-test
-WGPU_BACKEND=vulkan just --justfile apps/paint-lab/justfile wgpu-test
+WGPU_BACKEND=metal just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-test
+WGPU_BACKEND=vulkan just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-test
 # Windows PowerShell: $env:WGPU_BACKEND = "dx12"
 
 cargo test --config .cargo/validation.toml \

@@ -1323,119 +1323,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui"
-version = "1.25.3"
-dependencies = [
- "accesskit",
- "anyhow",
- "async-channel",
- "async-task",
- "backtrace",
- "bitflags 2.13.2",
- "chrono",
- "collections-gpui-unofficial",
- "ctor",
- "derive_more",
- "embed-resource",
- "etagere",
- "futures",
- "futures-concurrency",
- "getrandom 0.3.4",
- "gpui-macros",
- "gpui-shared-string-gpui-unofficial",
- "gpui-util-gpui-unofficial",
- "heapless",
- "http-client-gpui-unofficial",
- "image",
- "inventory",
- "itertools",
- "libc",
- "log",
- "lyon",
- "num_cpus",
- "objc2-core-foundation",
- "objc2-core-video",
- "parking",
- "parking_lot",
- "pin-project",
- "pollster 0.4.0",
- "postage",
- "profiling",
- "proptest",
- "rand 0.9.5",
- "raw-window-handle",
- "refineable-gpui-unofficial",
- "regex",
- "resvg",
- "scheduler-gpui-unofficial",
- "schemars",
- "seahash",
- "serde",
- "serde_json",
- "slotmap",
- "smallvec",
- "spin 0.10.1",
- "strum",
- "sum-tree-gpui-unofficial",
- "taffy",
- "thiserror 2.0.21",
- "ttf-parser",
- "url",
- "usvg",
- "uuid",
- "waker-fn",
- "web-time",
- "windows 0.62.2",
- "zed-scap",
-]
-
-[[package]]
-name = "gpui-apple"
-version = "1.25.3"
-dependencies = [
- "anyhow",
- "async-task",
- "block2",
- "cbindgen",
- "collections-gpui-unofficial",
- "core-foundation 0.10.1",
- "core-foundation-sys",
- "core-graphics 0.24.0",
- "derive_more",
- "dispatch2",
- "etagere",
- "foreign-types",
- "futures",
- "gpui",
- "gpui-util-gpui-unofficial",
- "image",
- "libc",
- "log",
- "mach2",
- "metal",
- "objc2",
- "objc2-core-foundation",
- "objc2-core-video",
- "objc2-foundation",
- "objc2-metal",
- "objc2-quartz-core",
- "objc2-security",
- "parking_lot",
- "smallvec",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "gpui-macros"
-version = "1.25.3"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "gpui-shared-string-gpui-unofficial"
 version = "1.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1455,60 +1342,6 @@ dependencies = [
  "anyhow",
  "log",
  "which",
-]
-
-[[package]]
-name = "gpui-wgpu"
-version = "1.25.3"
-dependencies = [
- "anyhow",
- "ash",
- "bytemuck",
- "collections-gpui-unofficial",
- "cosmic-text",
- "etagere",
- "gpui",
- "gpui-util-gpui-unofficial",
- "image",
- "itertools",
- "log",
- "parking_lot",
- "profiling",
- "raw-window-handle",
- "smallvec",
- "swash",
- "unicode-bidi",
- "unicode-segmentation",
- "web-sys",
- "wgpu",
-]
-
-[[package]]
-name = "gpui-windows"
-version = "1.25.3"
-dependencies = [
- "accesskit",
- "accesskit_windows",
- "anyhow",
- "collections-gpui-unofficial",
- "dunce",
- "etagere",
- "futures",
- "gpui",
- "gpui-util-gpui-unofficial",
- "image",
- "itertools",
- "log",
- "parking_lot",
- "rand 0.9.5",
- "raw-window-handle",
- "scheduler-gpui-unofficial",
- "smallvec",
- "uuid",
- "windows 0.62.2",
- "windows-core 0.62.2",
- "windows-numerics 0.3.1",
- "windows-registry",
 ]
 
 [[package]]
@@ -4886,36 +4719,146 @@ dependencies = [
 ]
 
 [[package]]
+name = "xgpui-apple"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-task",
+ "block2",
+ "cbindgen",
+ "collections-gpui-unofficial",
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
+ "core-graphics 0.24.0",
+ "derive_more",
+ "dispatch2",
+ "etagere",
+ "foreign-types",
+ "futures",
+ "gpui-util-gpui-unofficial",
+ "image",
+ "libc",
+ "log",
+ "mach2",
+ "metal",
+ "objc2",
+ "objc2-core-foundation",
+ "objc2-core-video",
+ "objc2-foundation",
+ "objc2-metal",
+ "objc2-quartz-core",
+ "objc2-security",
+ "parking_lot",
+ "smallvec",
+ "thiserror 2.0.21",
+ "xgpui-core",
+]
+
+[[package]]
 name = "xgpui-color"
-version = "0.1.0"
+version = "0.2.0"
+
+[[package]]
+name = "xgpui-core"
+version = "1.0.0"
+dependencies = [
+ "accesskit",
+ "anyhow",
+ "async-channel",
+ "async-task",
+ "backtrace",
+ "bitflags 2.13.2",
+ "chrono",
+ "collections-gpui-unofficial",
+ "ctor",
+ "derive_more",
+ "embed-resource",
+ "etagere",
+ "futures",
+ "futures-concurrency",
+ "getrandom 0.3.4",
+ "gpui-shared-string-gpui-unofficial",
+ "gpui-util-gpui-unofficial",
+ "heapless",
+ "http-client-gpui-unofficial",
+ "image",
+ "inventory",
+ "itertools",
+ "libc",
+ "log",
+ "lyon",
+ "num_cpus",
+ "objc2-core-foundation",
+ "objc2-core-video",
+ "parking",
+ "parking_lot",
+ "pin-project",
+ "pollster 0.4.0",
+ "postage",
+ "profiling",
+ "proptest",
+ "rand 0.9.5",
+ "raw-window-handle",
+ "refineable-gpui-unofficial",
+ "regex",
+ "resvg",
+ "scheduler-gpui-unofficial",
+ "schemars",
+ "seahash",
+ "serde",
+ "serde_json",
+ "slotmap",
+ "smallvec",
+ "spin 0.10.1",
+ "strum",
+ "sum-tree-gpui-unofficial",
+ "taffy",
+ "thiserror 2.0.21",
+ "ttf-parser",
+ "url",
+ "usvg",
+ "uuid",
+ "waker-fn",
+ "web-time",
+ "windows 0.62.2",
+ "xgpui-macros",
+ "zed-scap",
+]
+
+[[package]]
+name = "xgpui-macros"
+version = "1.0.0"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "xgpui-media"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
- "gpui",
- "gpui-apple",
- "gpui-wgpu",
- "gpui-windows",
  "half",
  "image",
  "objc2-core-foundation",
  "objc2-core-video",
  "refineable-gpui-unofficial",
+ "xgpui-apple",
  "xgpui-color",
+ "xgpui-core",
  "xgpui-shader",
+ "xgpui-wgpu",
+ "xgpui-windows",
 ]
 
 [[package]]
 name = "xgpui-shader"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bytemuck",
- "gpui",
- "gpui-apple",
- "gpui-windows",
  "metal",
  "naga",
  "refineable-gpui-unofficial",
@@ -4923,6 +4866,63 @@ dependencies = [
  "unicode-bidi",
  "unicode-segmentation",
  "windows 0.62.2",
+ "xgpui-apple",
+ "xgpui-core",
+ "xgpui-windows",
+]
+
+[[package]]
+name = "xgpui-wgpu"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "ash",
+ "bytemuck",
+ "collections-gpui-unofficial",
+ "cosmic-text",
+ "etagere",
+ "gpui-util-gpui-unofficial",
+ "image",
+ "itertools",
+ "log",
+ "parking_lot",
+ "profiling",
+ "raw-window-handle",
+ "smallvec",
+ "swash",
+ "unicode-bidi",
+ "unicode-segmentation",
+ "web-sys",
+ "wgpu",
+ "xgpui-core",
+]
+
+[[package]]
+name = "xgpui-windows"
+version = "1.0.0"
+dependencies = [
+ "accesskit",
+ "accesskit_windows",
+ "anyhow",
+ "collections-gpui-unofficial",
+ "dunce",
+ "etagere",
+ "futures",
+ "gpui-util-gpui-unofficial",
+ "image",
+ "itertools",
+ "log",
+ "parking_lot",
+ "rand 0.9.5",
+ "raw-window-handle",
+ "scheduler-gpui-unofficial",
+ "smallvec",
+ "uuid",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+ "windows-numerics 0.3.1",
+ "windows-registry",
+ "xgpui-core",
 ]
 
 [[package]]
@@ -5132,22 +5132,22 @@ version = "2.5.0"
 source = "git+https://github.com/zed-industries/async-process.git?rev=0b6d6713570af61806e1e5cb40e0f757cb93fd9d#0b6d6713570af61806e1e5cb40e0f757cb93fd9d"
 
 [[patch.unused]]
-name = "gpui-linux"
-version = "1.25.3"
-
-[[patch.unused]]
-name = "gpui-macos"
-version = "1.25.3"
-
-[[patch.unused]]
-name = "gpui-platform"
-version = "1.25.3"
-
-[[patch.unused]]
-name = "gpui-web"
-version = "1.25.3"
-
-[[patch.unused]]
 name = "proptest"
 version = "1.10.0"
 source = "git+https://github.com/proptest-rs/proptest?rev=3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b#3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b"
+
+[[patch.unused]]
+name = "xgpui-linux"
+version = "1.0.0"
+
+[[patch.unused]]
+name = "xgpui-macos"
+version = "1.0.0"
+
+[[patch.unused]]
+name = "xgpui-platform"
+version = "1.0.0"
+
+[[patch.unused]]
+name = "xgpui-web"
+version = "1.0.0"

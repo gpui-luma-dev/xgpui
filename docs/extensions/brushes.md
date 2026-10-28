@@ -82,7 +82,7 @@ Existing native styles and `Paint` serialization are unchanged.
 
 ```sh
 cargo run --locked --config .cargo/validation.toml \
-  --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders
+  --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features portable-shaders
 
 cargo test --locked --config .cargo/validation.toml \
   --manifest-path extensions/xgpui-ext/crates/xgpui-shader/Cargo.toml \
@@ -487,7 +487,7 @@ compare the filtered and unfiltered stripes. Run the app with:
 
 ```sh
 cargo run --locked --config .cargo/validation.toml \
-  --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders
+  --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features portable-shaders
 ```
 
 Automated tests separately assert cache hit/miss counts and compare reused
@@ -1011,13 +1011,13 @@ cargo test --locked --config .cargo/validation.toml \
 
 ## WASM brush and layer galleries
 
-The browser companion in `apps/extensions-web` has separate `?demo=brushes` and
+The browser companion in `apps/xgpui-ext-lab/extensions-web` has separate `?demo=brushes` and
 `?demo=layers` entry points, with automatic, forced WebGPU and forced WebGL2
 selection. Build and serve locally:
 
 ```sh
-bash apps/extensions-web/build.sh --release
-python3 apps/extensions-web/serve.py
+bash apps/xgpui-ext-lab/extensions-web/build.sh --release
+python3 apps/xgpui-ext-lab/extensions-web/serve.py
 ```
 
 Open `http://localhost:8081/?demo=brushes` or `http://localhost:8081/?demo=layers`.
@@ -1048,7 +1048,7 @@ follows the ribbon geometry rather than blurring its silhouette.
 
 ```sh
 cargo run --release --locked --config .cargo/validation.toml \
-  --manifest-path apps/paint-lab/Cargo.toml --features portable-shaders -- --pastel-waves
+  --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features portable-shaders -- --pastel-waves
 ```
 
 Use **Animate / Pause**, **Reverse**, **Grain**, and **Reset**. Motion travels
@@ -1062,7 +1062,7 @@ native path coverage. Frame timing is smoothed and capped, so animation can slow
 under load. [Issue #35](https://github.com/gpui-luma-dev/xgpui/issues/35) tracks
 release profiling, cached-background experiments and directly shaded ribbon
 strips, with in-app comparisons and resource measurements. No performance gain
-or target frame rate is claimed yet. Source: `apps/paint-lab/src/pastel_waves.rs`.
+or target frame rate is claimed yet. Source: `apps/xgpui-ext-lab/paint-lab/src/pastel_waves.rs`.
 
 ## Issue #22 completion review
 
