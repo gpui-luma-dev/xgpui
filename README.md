@@ -11,8 +11,9 @@ which captures GPUI and its supporting crates from
 
 ## How it works
 
-- Releases are captured under `gpui/`. `upstream.json` records the release,
-  source commit and package locations.
+- Modified framework/backend crates are captured under `gpui/`; supporting
+  crates use the matching published `gpui-unofficial` packages. `upstream.json`
+  records the release, source commit, local packages and registry dependencies.
 - The manual **Sync GPUI release** workflow imports a selected release onto
   `upstream`, keeping that branch separate from local development.
 - Release updates are reviewed and integrated into `main`. Documentation,

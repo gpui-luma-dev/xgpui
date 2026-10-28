@@ -28,6 +28,31 @@ jobs:
           cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
           node docs/verify.mjs
 
+  native-libraries:
+    name: Native libraries (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux development libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev
+      - name: Check all retained native libraries
+        run: cargo check --locked --features full-capture,runtime-shaders
+      - name: Verify local framework and registry helper identities
+        shell: bash
+        run: |
+          cargo metadata --locked --format-version 1 > "$RUNNER_TEMP/xgpui-metadata.json"
+          python scripts/check_local_dependencies.py "$RUNNER_TEMP/xgpui-metadata.json"
+
   shader-wasm:
     runs-on: ubuntu-latest
     timeout-minutes: 60

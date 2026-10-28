@@ -50,7 +50,7 @@ anyhow = { version = "1.0.86" }
 async-task = { version = "4.7" }
 backtrace = { version = "0.3" }
 bitflags = { version = "2.6.0" }
-collections = { package = "collections", version = "1.25.3" }
+collections = { package = "collections-gpui-unofficial", version = "=1.25.3" }
 criterion = { version = "0.8.2", features = ["html_reports"], optional = true }
 ctor = { version = "1.0.12" }
 derive_more = { version = "2.1", features = ["deref", "deref_mut", "from_str", "add", "add_assign", "mul", "mul_assign", "not"] }
@@ -58,8 +58,8 @@ etagere = { version = "0.2" }
 futures = { version = "0.3.34" }
 futures-concurrency = { version = "7.7.1", optional = true }
 gpui_macros = { package = "gpui-macros", version = "1.25.3" }
-gpui_shared_string = { package = "gpui-shared-string", version = "1.25.3" }
-http_client = { package = "http-client", version = "1.25.3" }
+gpui_shared_string = { package = "gpui-shared-string-gpui-unofficial", version = "=1.25.3" }
+http_client = { package = "http-client-gpui-unofficial", version = "=1.25.3" }
 image = { version = "0.25.1", default-features = false, features = [
     "bmp",
     "dds",
@@ -88,8 +88,8 @@ profiling = { version = "1" }
 rand = { version = "0.9", default-features = false, features = ["std", "std_rng", "os_rng", "small_rng", "thread_rng"] }
 raw-window-handle = { version = "0.6" }
 regex = { version = "1.5", default-features = true, features = ["std", "perf"] }
-refineable = { package = "refineable", version = "1.25.3" }
-scheduler = { package = "scheduler", version = "1.25.3" }
+refineable = { package = "refineable-gpui-unofficial", version = "=1.25.3" }
+scheduler = { package = "scheduler-gpui-unofficial", version = "=1.25.3" }
 resvg = { version = "0.46.0", default-features = false, features = [
     "text",
     "system-fonts",
@@ -105,10 +105,10 @@ slotmap = { version = "1.0.6" }
 smallvec = { version = "1.6", features = ["union", "const_new"] }
 stacksafe = { version = "1.0", optional = true }
 strum = { version = "0.28", features = ["derive"] }
-sum_tree = { package = "sum-tree", version = "1.25.3" }
+sum_tree = { package = "sum-tree-gpui-unofficial", version = "=1.25.3" }
 taffy = { version = "=0.13.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "grid", "block_layout", "float_layout", "content_size"] }
 thiserror = { version = "2.0.12" }
-gpui_util = { package = "gpui-util", version = "1.25.3" }
+gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.25.3" }
 hdrhistogram = { version = "7", default-features = false, optional = true }
 waker-fn = "1.2.0"
 lyon = "1.0"
@@ -156,22 +156,22 @@ windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Gd
 
 [dev-dependencies]
 backtrace = { version = "0.3" }
-collections = { package = "collections", version = "1.25.3", features = ["test-support"] }
+collections = { package = "collections-gpui-unofficial", version = "=1.25.3", features = ["test-support"] }
 env_logger = { version = "0.11" }
 futures-concurrency = { version = "7.7.1" }
 postage = { version = "0.5", default-features = false, features = ["blocking"] }
 web-time = { version = "1.1.0" }
 gpui_platform = { package = "gpui-platform", version = "1.25.3" }
-gpui_util = { package = "gpui-util", version = "1.25.3" }
+gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.25.3" }
 lyon = { version = "1.0", features = ["extra"] }
 rand = { version = "0.9", default-features = true, features = ["std", "std_rng", "os_rng"] }
-scheduler = { package = "scheduler", version = "1.25.3", features = ["test-support"] }
+scheduler = { package = "scheduler-gpui-unofficial", version = "=1.25.3", features = ["test-support"] }
 unicode-segmentation = { version = "1.10" }
-util_macros = { package = "util-macros", version = "1.25.3" }
+util_macros = { package = "util-macros-gpui-unofficial", version = "=1.25.3" }
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
-http_client = { package = "http-client", version = "1.25.3", features = ["test-support"] }
-reqwest_client = { package = "reqwest-client", version = "1.25.3", features = ["test-support"] }
+http_client = { package = "http-client-gpui-unofficial", version = "=1.25.3", features = ["test-support"] }
+reqwest_client = { package = "reqwest-client-gpui-unofficial", version = "=1.25.3", features = ["test-support"] }
 proptest = { version = "1", features = ["attr-macro"] }
 
 [target.'cfg(target_family = "wasm")'.dev-dependencies]

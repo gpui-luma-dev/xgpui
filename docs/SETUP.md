@@ -58,7 +58,9 @@ normalization. Required per-crate vendored sources are preserved.
 `upstream.json` retains the source repository, release and commit, plus Zed's
 reported provenance. `source_packages` retains original names/paths; `packages`
 describes the local normalized tree. `normalization` records the schema and name
-map. Upstream repository URLs, Rust source, licenses and READMEs are preserved.
+map. `registry_packages` records the supporting crates fetched from the matching
+published `gpui-unofficial` release. Retained local crates preserve upstream
+repository URLs, Rust source, licenses and READMEs.
 
 Package names change for downstream consumers. Existing dependency aliases can
 stay, but their `package` and path fields must point at the normalized names.
@@ -91,6 +93,10 @@ cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manife
 standalone workspace exclusions and the compatibility patches. It supersedes the
 legacy `scripts/update_build.py` generator, which is retained but is not the
 normalized build path. Review and retain the root lockfile.
+
+Supporting crates listed in `scripts/registry-crates.json` resolve from crates.io
+at the captured release version. Only the retained framework/backend crates are
+locally overridden; see [build details](BUILDING.md#published-supporting-dependencies).
 
 For standalone checks, continue invoking Cargo from the repository root so it
 discovers `.cargo/config.toml`. For example, on macOS:

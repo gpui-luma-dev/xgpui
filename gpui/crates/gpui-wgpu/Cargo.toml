@@ -21,7 +21,7 @@ test-support = ["gpui/test-support", "dep:image"]
 gpui = { package = "gpui", version = "1.25.3" }
 anyhow = { version = "1.0.86" }
 bytemuck = { version = "1" }
-collections = { package = "collections", version = "1.25.3" }
+collections = { package = "collections-gpui-unofficial", version = "=1.25.3" }
 cosmic-text = "0.19.0"
 etagere = { version = "0.2" }
 itertools = { version = "0.14.0" }
@@ -50,7 +50,7 @@ swash = { version = "0.2.6" }
 unicode-bidi = { version = "0.3.18", default-features = false, features = [
     "hardcoded-data"] }
 unicode-segmentation = { version = "1.10" }
-gpui_util = { package = "gpui-util", version = "1.25.3" }
+gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.25.3" }
 font-kit = { version = "0.14.1-zed", package = "zed-font-kit", default-features = false, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]

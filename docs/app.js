@@ -9,7 +9,7 @@ const sourceUrl = (file, line=1) => 'source/' + file.split('/').map(encodeURICom
 const sourceLink = (file, line=1, label='Source') => '<a href="' + sourceUrl(file,line) + '">' + escapeHtml(label) + '</a>';
 const crateLink = pkg => '<a href="' + crateUrl(pkg) + '">' + escapeHtml(short(pkg)) + '</a>';
 const tag = label => '<span class="tag">' + escapeHtml(label) + '</span>';
-const groups = ["Extensions", "Core", "Platforms & rendering", "Data & runtime", "Transport & tooling"];
+const groups = ["Extensions", "Core", "Platforms & rendering", "Data & runtime", "Transport & tooling"].filter(group => crates.some(c => notes[c.package].group === group));
 let page = 0;
 function parseRoute(hash) {
   const p = new URLSearchParams(hash.replace(/^#/,''));

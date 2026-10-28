@@ -1,0 +1,19 @@
+{
+  "collections": "collections-gpui-unofficial",
+  "derive-refineable": "derive-refineable-gpui-unofficial",
+  "gpui-shared-string": "gpui-shared-string-gpui-unofficial",
+  "gpui-util": "gpui-util-gpui-unofficial",
+  "http-client": "http-client-gpui-unofficial",
+  "http-client-tls": "http-client-tls-gpui-unofficial",
+  "path": "path-gpui-unofficial",
+  "perf": "perf-gpui-unofficial",
+  "refineable": "refineable-gpui-unofficial",
+  "reqwest-client": "reqwest-client-gpui-unofficial",
+  "scheduler": "scheduler-gpui-unofficial",
+  "sum-tree": "sum-tree-gpui-unofficial",
+  "util": "util-gpui-unofficial",
+  "util-macros": "util-macros-gpui-unofficial",
+  "zlog": "zlog-gpui-unofficial",
+  "ztracing": "ztracing-gpui-unofficial",
+  "ztracing-macro": "ztracing-macro-gpui-unofficial"
+}

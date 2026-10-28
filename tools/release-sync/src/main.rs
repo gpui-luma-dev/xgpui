@@ -129,6 +129,58 @@ fn safe_relative(path: &str) -> Result<&Path> {
     Ok(path)
 }
 
+// Supporting crates keep their upstream package identity so all consumers share types.
+fn registry_crates(root: &Path) -> Result<Names> {
+    let path = root.join("scripts/registry-crates.json");
+    if path.exists() {
+        Ok(serde_json::from_str(&fs::read_to_string(path)?)?)
+    } else {
+        Ok(Names::new())
+    }
+}
+
+fn externalize(item: &mut Item, registry: &Names, version: &str) -> Result<()> {
+    if let Some(table) = item.as_table_like_mut() {
+        for (key, value) in table.iter_mut() {
+            if matches!(
+                key.get(),
+                "dependencies" | "dev-dependencies" | "build-dependencies"
+            ) {
+                if let Some(dependencies) = value.as_table_like_mut() {
+                    for (alias, dependency) in dependencies.iter_mut() {
+                        let package = dependency
+                            .get("package")
+                            .and_then(Item::as_str)
+                            .unwrap_or(alias.get())
+                            .to_owned();
+                        if let Some(published) = registry
+                            .get(&package)
+                            .or_else(|| registry.values().find(|name| **name == package))
+                        {
+                            if dependency.is_str() {
+                                let mut options = toml_edit::InlineTable::new();
+                                options.insert("version", Value::from(format!("={version}")));
+                                *dependency = Item::Value(Value::InlineTable(options));
+                            }
+                            let options = dependency
+                                .as_table_like_mut()
+                                .context("Invalid registry dependency")?;
+                            for field in ["path", "git", "rev", "branch", "tag", "registry"] {
+                                options.remove(field);
+                            }
+                            options.insert("package", toml_edit::value(published.as_str()));
+                            options.insert("version", toml_edit::value(format!("={version}")));
+                        }
+                    }
+                }
+            } else {
+                externalize(value, registry, version)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
     let mut provenance: Json =
         serde_json::from_str(&fs::read_to_string(root.join("upstream.json"))?)?;
@@ -138,11 +190,44 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
         .as_object()
         .context("Missing package map")?
         .clone();
+    let registry = registry_crates(root)?;
+    let core_path = source
+        .get("gpui-unofficial")
+        .and_then(Json::as_str)
+        .context("Missing upstream core")?;
+    let raw_core = root.join(core_path).join("Cargo.toml");
+    let core_manifest = if raw_core.exists() {
+        raw_core
+    } else {
+        root.join("gpui/crates/gpui/Cargo.toml")
+    };
+    let core: toml::Value = toml::from_str(&fs::read_to_string(core_manifest)?)?;
+    let version = core["package"]["version"]
+        .as_str()
+        .context("Missing release version")?;
     let mut packages = BTreeMap::new();
+    let mut removals = Vec::new();
     for (old, value) in &source {
         let new = names
             .get(old)
             .with_context(|| format!("Unmapped crate {old}; review scripts/crate-names.json"))?;
+        if registry.contains_key(new) {
+            ensure!(
+                registry[new] == *old,
+                "Registry identity mismatch for {new}"
+            );
+            for path in [
+                value.as_str().context("Invalid source path")?.to_owned(),
+                format!("gpui/crates/{new}"),
+            ] {
+                safe_relative(&path)?;
+                let path = root.join(path);
+                if path.exists() {
+                    removals.push(path);
+                }
+            }
+            continue;
+        }
         let original = value.as_str().context("Invalid source path")?;
         safe_relative(original)?;
         let path = rewrite(original, names);
@@ -159,7 +244,9 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
     for entry in WalkDir::new(root.join("gpui"))
         .follow_links(false)
         .into_iter()
-        .filter_entry(|entry| entry.path() != staging)
+        .filter_entry(|entry| {
+            entry.path() != staging && !removals.iter().any(|p| entry.path().starts_with(p))
+        })
     {
         let entry = entry?;
         let path = entry.path();
@@ -178,8 +265,7 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
                 );
                 moves.push((path.to_owned(), target));
             }
-        } else if entry.file_name() == "Cargo.lock" || path.extension().is_some_and(|e| e == "toml")
-        {
+        } else if path.extension().is_some_and(|e| e == "toml") {
             let old = fs::read_to_string(path)?;
             let mut document = old
                 .parse::<DocumentMut>()
@@ -196,14 +282,40 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
                 );
             }
             rewrite_item(document.as_item_mut(), names)?;
+            externalize(document.as_item_mut(), &registry, version)?;
             let new = document.to_string();
             if old != new {
                 writes.push((path.to_owned(), new));
             }
         }
     }
+    // Extension/app aliases must resolve to the same registry types as the framework.
+    for directory in ["apps", "extensions"] {
+        if !root.join(directory).exists() {
+            continue;
+        }
+        for entry in WalkDir::new(root.join(directory))
+            .into_iter()
+            .filter_entry(|entry| entry.file_name() != "target" && entry.file_name() != ".git")
+        {
+            let entry = entry?;
+            if entry.file_name() != "Cargo.toml" {
+                continue;
+            }
+            let old = fs::read_to_string(entry.path())?;
+            let mut document = old.parse::<DocumentMut>()?;
+            externalize(document.as_item_mut(), &registry, version)?;
+            let new = document.to_string();
+            if old != new {
+                writes.push((entry.path().to_owned(), new));
+            }
+        }
+    }
     // Validate every expected manifest and identity before touching the capture.
     for (old, value) in &source {
+        if registry.contains_key(&names[old]) {
+            continue;
+        }
         let raw = root.join(value.as_str().context("Invalid source path")?);
         let normalized = root.join(&packages[&names[old]]);
         let present = if raw.is_dir() { raw } else { normalized };
@@ -219,6 +331,9 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
     }
     provenance["source_packages"] = Json::Object(source);
     provenance["packages"] = serde_json::to_value(&packages)?;
+    if !registry.is_empty() {
+        provenance["registry_packages"] = json!({"version": version, "packages": registry});
+    }
     provenance["normalization"] = json!({"schema_version":1,"crate_names":names});
     let metadata = serde_json::to_string_pretty(&provenance)? + "\n";
     let mut config =
@@ -244,7 +359,7 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
     let report = json!({"packages":packages.len(),"renamed_directories":moves.len(),"rewritten_files":writes.len()});
     if check {
         ensure!(
-            writes.is_empty() && moves.is_empty() && !staging.exists(),
+            writes.is_empty() && moves.is_empty() && removals.is_empty() && !staging.exists(),
             "Normalization is stale: {report}"
         );
         return Ok(report);
@@ -255,6 +370,9 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
             "Staging mirror must not be a symlink"
         );
         fs::remove_dir_all(&staging)?;
+    }
+    for path in removals {
+        fs::remove_dir_all(path)?;
     }
     for (path, text) in writes {
         fs::write(path, text)?;
@@ -488,6 +606,76 @@ mod tests {
         normalize(root, &names, false).unwrap();
         normalize(root, &names, true).unwrap();
     }
+    #[test]
+    fn registry_helpers_preserve_aliases_features_and_are_removed_idempotently() {
+        let (dir, names) = fixture();
+        let root = dir.path();
+        fs::create_dir_all(root.join("scripts")).unwrap();
+        fs::write(
+            root.join("scripts/registry-crates.json"),
+            r#"{"helper":"helper-gpui-unofficial"}"#,
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("extensions/example")).unwrap();
+        fs::write(
+            root.join("extensions/example/Cargo.toml"),
+            "[dependencies]\nhelper={path='../../gpui/crates/helper',features=['test-support']}\n",
+        )
+        .unwrap();
+        normalize(root, &names, false).unwrap();
+        assert!(!root.join("gpui/crates/helper-gpui-unofficial").exists());
+        let manifest: toml::Value =
+            toml::from_str(&fs::read_to_string(root.join("gpui/crates/gpui/Cargo.toml")).unwrap())
+                .unwrap();
+        let helper = &manifest["dependencies"]["helper"];
+        assert_eq!(helper["package"].as_str(), Some("helper-gpui-unofficial"));
+        assert_eq!(helper["version"].as_str(), Some("=1.0.0"));
+        assert_eq!(helper["optional"].as_bool(), Some(true));
+        assert!(helper.get("path").is_none());
+        assert_eq!(
+            manifest["target"]["cfg(unix)"]["build-dependencies"]["helper"]["package"].as_str(),
+            Some("helper-gpui-unofficial")
+        );
+        assert_eq!(
+            manifest["features"]["helper-support"][0].as_str(),
+            Some("helper/feature")
+        );
+        let extension: toml::Value = toml::from_str(
+            &fs::read_to_string(root.join("extensions/example/Cargo.toml")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            extension["dependencies"]["helper"]["features"][0].as_str(),
+            Some("test-support")
+        );
+        let provenance: Json =
+            serde_json::from_str(&fs::read_to_string(root.join("upstream.json")).unwrap()).unwrap();
+        assert!(provenance["packages"].get("helper").is_none());
+        assert_eq!(provenance["registry_packages"]["version"], "1.0.0");
+        // Already-externalized app dependencies must also follow a release update.
+        let extension_path = root.join("extensions/example/Cargo.toml");
+        let stale = fs::read_to_string(&extension_path)
+            .unwrap()
+            .replace("=1.0.0", "=0.9.0");
+        fs::write(&extension_path, stale).unwrap();
+        assert!(normalize(root, &names, true).is_err());
+        normalize(root, &names, false).unwrap();
+        assert!(
+            fs::read_to_string(extension_path)
+                .unwrap()
+                .contains("=1.0.0")
+        );
+
+        assert!(
+            provenance["source_packages"]
+                .get("helper-gpui-unofficial")
+                .is_some()
+        );
+        normalize(root, &names, true).unwrap();
+        normalize(root, &names, false).unwrap();
+        normalize(root, &names, true).unwrap();
+    }
+
     #[test]
     fn unmapped_crate_and_directory_collision_do_not_mutate_capture() {
         for collision in [false, true] {
