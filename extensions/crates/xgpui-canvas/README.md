@@ -17,10 +17,23 @@ center, including after resizing. `pan_by` accepts logical screen deltas; zoom
 is clamped to 0.01–64 and anchored to the supplied local point.
 
 The camera projects geometry; `Canvas` clips and draws the grid. Callers own
-input/state and must query `visible_world_bounds` before constructing children.
+input/state. Retain `Scene::new(items)` with `SceneItem { bounds, data }`, then
+iterate `scene.visible(camera, viewport)` before constructing children. Each
+result contains the original item, projected screen bounds, and a suggested
+`LevelOfDetail`: `Point` below 4px, `Bounds` below 48px, otherwise `Full` (longest
+projected side, in logical pixels). Use lightweight painting for proxies and
+construct GPUI children only for full-detail content. Callers can choose their
+own representation; the scene query does not draw anything.
+
+`scene.hit_test(world_point)` returns the topmost AABB hit. Items are stored and
+queried in back-to-front paint order; hit testing reverses that order. Queries
+are linear and scene data is immutable; rebuild the scene when its data changes.
+Bounds must have finite, ordered min/max coordinates. There is no spatial index
+yet. Proxy selection uses original world bounds, without a screen-space tolerance.
+
 Project child positions, dimensions and font sizes explicitly. This is not a
 general transform for arbitrary GPUI subtrees; rotation, transformed text APIs,
-spatial indexes, cached layers and automatic LOD remain follow-ups. Inputs and
+spatial indexes, cached layers and thumbnail LOD remain follow-ups. Inputs and
 viewport dimensions must be finite; dimensions must be nonnegative.
 
 This prototype is not registered for publishing or included in the generated

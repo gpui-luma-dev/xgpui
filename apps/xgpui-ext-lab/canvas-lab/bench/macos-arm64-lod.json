@@ -1,0 +1,75 @@
+{
+  "app": "canvas-lab",
+  "optimized_build": true,
+  "os": "macos",
+  "arch": "aarch64",
+  "viewport_logical_pixels": [
+    1100.0,
+    686.0
+  ],
+  "scale_factor": 2.0,
+  "scope": "Frame intervals include scheduling, layout and rendering; CPU samples include only culling and child construction. Neither is a GPU timing.",
+  "workload": "10k and 100k at 1x; 100k at 0.01x; pan by (1, 0.5) logical pixels per redraw",
+  "scenes": [
+    {
+      "objects": 10000,
+      "zoom": 1.0,
+      "measured_frames": 120,
+      "warmup_frames": 30,
+      "frame_interval_ms": {
+        "mean": 16.664360066666664,
+        "p95": 17.607083999999997,
+        "max": 17.805833
+      },
+      "cpu_cull_and_build_ms": {
+        "mean": 0.10162575,
+        "p95": 0.138834,
+        "max": 0.169959
+      },
+      "visible_min": 36,
+      "visible_max": 49,
+      "element_min": 36,
+      "element_max": 49
+    },
+    {
+      "objects": 100000,
+      "zoom": 1.0,
+      "measured_frames": 120,
+      "warmup_frames": 30,
+      "frame_interval_ms": {
+        "mean": 16.739990283333334,
+        "p95": 16.9695,
+        "max": 25.857000000000003
+      },
+      "cpu_cull_and_build_ms": {
+        "mean": 0.31104339999999997,
+        "p95": 0.42770800000000003,
+        "max": 0.505292
+      },
+      "visible_min": 36,
+      "visible_max": 42,
+      "element_min": 36,
+      "element_max": 42
+    },
+    {
+      "objects": 100000,
+      "zoom": 0.01,
+      "measured_frames": 120,
+      "warmup_frames": 30,
+      "frame_interval_ms": {
+        "mean": 24.51377430833332,
+        "p95": 27.588749999999997,
+        "max": 28.141375
+      },
+      "cpu_cull_and_build_ms": {
+        "mean": 0.10569686666666665,
+        "p95": 0.117833,
+        "max": 0.21962500000000001
+      },
+      "visible_min": 27400,
+      "visible_max": 32300,
+      "element_min": 0,
+      "element_max": 0
+    }
+  ]
+}

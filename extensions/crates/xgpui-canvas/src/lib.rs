@@ -5,6 +5,8 @@
 mod viewport;
 #[cfg(feature = "gpui")]
 pub use viewport::{Canvas, GridPainter, GridStyle};
+mod scene;
+pub use scene::{LevelOfDetail, Scene, SceneItem, VisibleItem};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Point {
@@ -25,6 +27,12 @@ pub struct WorldBounds {
 }
 
 impl WorldBounds {
+    pub fn contains(self, point: Point) -> bool {
+        point.x >= self.min.x
+            && point.x <= self.max.x
+            && point.y >= self.min.y
+            && point.y <= self.max.y
+    }
     pub fn intersects(self, other: Self) -> bool {
         self.min.x <= other.max.x
             && self.max.x >= other.min.x

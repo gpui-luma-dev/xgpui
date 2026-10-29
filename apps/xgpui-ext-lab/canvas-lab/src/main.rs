@@ -4,12 +4,13 @@ use clap::Parser;
 use gpui::{prelude::*, *};
 use std::{path::PathBuf, time::Instant};
 use xgpui_canvas::{
-    Camera2D, Canvas as SpatialCanvas, GridPainter, GridStyle, Point as WorldPoint, WorldBounds,
+    Camera2D, Canvas as SpatialCanvas, GridPainter, GridStyle, LevelOfDetail, Point as WorldPoint,
+    Scene, SceneItem, WorldBounds,
 };
 
 #[derive(Parser)]
 struct Options {
-    /// Profile 10k/100k windowed redraws, save JSON and two PNGs, then quit.
+    /// Profile 10k/100k and dense overview redraws, save JSON/PNGs, then quit.
     #[arg(long)]
     benchmark: Option<PathBuf>,
     /// Capture default, zoom limits, distant world, and resized viewport, then quit.
@@ -22,7 +23,7 @@ struct Lab {
     smoke: Option<(PathBuf, usize)>,
     grid: GridPainter,
     grid_style: GridStyle,
-    scene_count: usize,
+    scene: Scene<usize>,
     focus: FocusHandle,
     space_down: bool,
     camera: Camera2D,
@@ -58,14 +59,20 @@ impl Render for Lab {
                         .zoom_at(WorldPoint::new(137., 247.), smoke_viewport, 1e10),
                     3 => self.camera.pan_by(WorldPoint::new(1e10 + 13., -1e10 + 7.)),
                     4 => window.resize(size(px(800.), px(600.))),
+                    5 => self.camera.zoom_at(
+                        WorldPoint::new(smoke_viewport.x / 2., smoke_viewport.y / 2.),
+                        smoke_viewport,
+                        0.1,
+                    ),
                     _ => (),
                 }
             }
             let capture = (*tick % 8 == 0).then(|| directory.join(format!("{scenario}.png")));
-            let done = *tick >= 40;
+            let done = *tick >= 48;
             let entity = cx.entity();
             window.on_next_frame(move |window, cx| {
                 if let Some(path) = capture {
+                    smoke_click(&entity, window, cx);
                     window
                         .render_to_image()
                         .expect("capture smoke frame")
@@ -81,8 +88,19 @@ impl Render for Lab {
             window.request_animation_frame();
         }
         if let Some(profile) = &mut self.profile {
-            self.scene_count = profile.begin(started);
-            self.grid_style = if self.scene_count == 10_000 {
+            let count = profile.begin(started);
+            if self.scene.len() != count {
+                self.scene = make_scene(count);
+            }
+            if profile.frame == 301 {
+                self.camera = Camera2D::default();
+                self.camera.zoom_at(
+                    WorldPoint::new(smoke_viewport.x / 2., smoke_viewport.y / 2.),
+                    smoke_viewport,
+                    0.01,
+                );
+            }
+            self.grid_style = if self.scene.len() == 10_000 {
                 GridStyle::Lines
             } else {
                 GridStyle::Dots
@@ -90,23 +108,31 @@ impl Render for Lab {
             self.camera.pan_by(WorldPoint::new(1., 0.5));
         }
         let viewport = self.viewport();
-        let visible = self.camera.visible_world_bounds(viewport);
         let zoom = self.camera.zoom() as f32;
         let mut cards = Vec::new();
-        // Cull using lightweight world bounds before constructing GPUI children.
-        for id in 0..self.scene_count {
-            let min = WorldPoint::new(
-                (id % 100) as f64 * 200. - 10000.,
-                (id / 100) as f64 * 120. - 6000.,
-            );
-            let bounds = WorldBounds {
-                min,
-                max: WorldPoint::new(min.x + 160., min.y + 80.),
-            };
-            if !bounds.intersects(visible) {
+        let mut proxies = Vec::new();
+        let mut point_count = 0;
+        for entry in self.scene.visible(self.camera, viewport) {
+            let id = entry.item.data;
+            let screen = entry.screen_bounds.min;
+            if entry.detail != LevelOfDetail::Full {
+                let mut bounds = Bounds::new(
+                    point(px(screen.x as f32), px(screen.y as f32)),
+                    size(
+                        px((entry.screen_bounds.max.x - screen.x) as f32),
+                        px((entry.screen_bounds.max.y - screen.y) as f32),
+                    ),
+                );
+                if entry.detail == LevelOfDetail::Point {
+                    point_count += 1;
+                    // A small filled proxy at the object's center, never a 1px border.
+                    let center = bounds.center();
+                    bounds.size = size(px(1.), px(1.));
+                    bounds.origin = center - point(px(0.5), px(0.5));
+                }
+                proxies.push((bounds, self.selected == Some(id)));
                 continue;
             }
-            let screen = self.camera.world_to_screen(min, viewport);
             cards.push(
                 div()
                     .id(id)
@@ -125,46 +151,21 @@ impl Render for Lab {
                     .border_color(rgb(0x6484a8))
                     .text_size(px(16. * zoom))
                     .text_color(rgb(0xffffff))
-                    .child(format!("Card {id}"))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                            this.focus.focus(window, cx);
-                            if this.space_down {
-                                this.drag = Some(event.position);
-                                cx.stop_propagation();
-                                return;
-                            }
-                            let local = event.position - this.bounds.origin;
-                            let world = this.camera.screen_to_world(
-                                WorldPoint::new(
-                                    f32::from(local.x) as f64,
-                                    f32::from(local.y) as f64,
-                                ),
-                                this.viewport(),
-                            );
-                            if world.x >= bounds.min.x
-                                && world.x <= bounds.max.x
-                                && world.y >= bounds.min.y
-                                && world.y <= bounds.max.y
-                            {
-                                this.selected = Some(id);
-                                cx.notify();
-                            }
-                            cx.stop_propagation();
-                        }),
-                    ),
+                    .child(format!("Card {id}")),
             );
         }
-        let count = cards.len();
+        let full_count = cards.len();
+        let proxy_count = proxies.len();
+        let count = full_count + proxy_count;
         if let Some(profile) = &mut self.profile {
-            profile.record_build(started.elapsed().as_secs_f64() * 1000., count);
+            profile.record_build(started.elapsed().as_secs_f64() * 1000., count, full_count);
             let capture = match profile.frame {
                 20 => Some(profile.output.with_extension("10k.png")),
                 170 => Some(profile.output.with_extension("100k.png")),
+                320 => Some(profile.output.with_extension("overview.png")),
                 _ => None,
             };
-            let done = profile.frame >= 300;
+            let done = profile.frame >= 450;
             let entity = cx.entity();
             window.on_next_frame(move |window, cx| {
                 if let Some(path) = capture {
@@ -200,13 +201,21 @@ impl Render for Lab {
                     cx.notify();
                 }
                 if event.keystroke.key == "r" { this.camera = Camera2D::default(); cx.notify(); }
-                if event.keystroke.key == "b" { this.scene_count = if this.scene_count == 10_000 { 100_000 } else { 10_000 }; cx.notify(); }
+                if event.keystroke.key == "o" {
+                    this.camera = Camera2D::default();
+                    let viewport = this.viewport();
+                    this.camera.zoom_at(WorldPoint::new(viewport.x / 2., viewport.y / 2.), viewport, 0.01);
+                    cx.notify();
+                }
+                if event.keystroke.key == "b" { this.scene = make_scene(if this.scene.len() == 10_000 { 100_000 } else { 10_000 }); this.selected = None; cx.notify(); }
             }))
             .on_key_up(cx.listener(|this, event: &KeyUpEvent, _, cx| {
                 if event.keystroke.key == "space" { this.space_down = false; this.drag = None; cx.stop_propagation(); }
             }))
             .size_full().flex().flex_col().bg(rgb(0x101824)).text_color(rgb(0xffffff))
-            .child(div().h(px(48.)).child(format!("Canvas prototype • Two-finger scroll / Space-drag: pan • Pinch: zoom • Click card: select • {:.1}% • G: grid • R: reset • B: 10k/100k • {count}/{} visible • selected {:?}", zoom * 100., self.scene_count, self.selected)))
+            .child(div().h(px(64.)).flex_none().text_size(px(13.)).flex().flex_col()
+                .child("Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k")
+                .child(format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • Selected {:?}", zoom * 100., self.scene.len(), self.selected)))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
                 .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
                     let delta = event.delta.pixel_delta(px(24.));
@@ -221,6 +230,12 @@ impl Render for Lab {
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &MouseDownEvent, window, cx| {
                     this.focus.focus(window, cx);
                     if this.space_down { this.drag = Some(event.position); }
+                    else {
+                        let local = event.position - this.bounds.origin;
+                        let world = this.camera.screen_to_world(WorldPoint::new(f32::from(local.x) as f64, f32::from(local.y) as f64), this.viewport());
+                        this.selected = this.scene.hit_test(world).map(|item| item.data);
+                        cx.notify();
+                    }
                 }))
                 .on_mouse_down(MouseButton::Middle, cx.listener(|this, event: &MouseDownEvent, _, _| this.drag = Some(event.position)))
                 .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
@@ -241,8 +256,85 @@ impl Render for Lab {
                         if this.bounds != bounds { this.bounds = bounds; cx.notify(); }
                     });
                 }, |_, _, _, _| {}).absolute().size_full())
+                .child(canvas(|_, _, _| (), move |bounds, _, window, _| {
+                    for (mut proxy, selected) in proxies {
+                        proxy.origin += bounds.origin;
+                        window.paint_quad(fill(proxy, rgb(if selected { 0x59b0ff } else { 0x6484a8 })));
+                    }
+                }).absolute().size_full())
                 .children(cards)))
     }
+}
+
+// Dispatch real GPUI input against the rendered viewport in native smoke mode.
+fn smoke_click(entity: &Entity<Lab>, window: &mut Window, cx: &mut App) {
+    let target = {
+        let lab = entity.read(cx);
+        let viewport = lab.viewport();
+        lab.scene.visible(lab.camera, viewport).next().map(|entry| {
+            let rect = entry.screen_bounds;
+            let local = WorldPoint::new(
+                (rect.min.x.max(0.) + rect.max.x.min(viewport.x)) / 2.,
+                (rect.min.y.max(0.) + rect.max.y.min(viewport.y)) / 2.,
+            );
+            let expected = lab
+                .scene
+                .hit_test(lab.camera.screen_to_world(local, viewport))
+                .unwrap()
+                .data;
+            (
+                lab.bounds.origin + point(px(local.x as f32), px(local.y as f32)),
+                expected,
+            )
+        })
+    };
+    if let Some((position, expected)) = target {
+        window.dispatch_event(
+            PlatformInput::MouseMove(MouseMoveEvent {
+                position,
+                ..Default::default()
+            }),
+            cx,
+        );
+        window.dispatch_event(
+            PlatformInput::MouseDown(MouseDownEvent {
+                position,
+                button: MouseButton::Left,
+                click_count: 1,
+                ..Default::default()
+            }),
+            cx,
+        );
+        assert_eq!(
+            entity.read(cx).selected,
+            Some(expected),
+            "native viewport selection"
+        );
+        window.dispatch_event(
+            PlatformInput::MouseUp(MouseUpEvent {
+                position,
+                button: MouseButton::Left,
+                ..Default::default()
+            }),
+            cx,
+        );
+    }
+}
+
+fn make_scene(count: usize) -> Scene<usize> {
+    Scene::new((0..count).map(|id| {
+        let min = WorldPoint::new(
+            (id % 100) as f64 * 200. - 10000.,
+            (id / 100) as f64 * 120. - 6000.,
+        );
+        SceneItem {
+            bounds: WorldBounds {
+                min,
+                max: WorldPoint::new(min.x + 160., min.y + 80.),
+            },
+            data: id,
+        }
+    }))
 }
 
 fn main() {
@@ -288,7 +380,7 @@ fn main() {
                         smoke: options.smoke.map(|directory| (directory, 0)),
                         grid: GridPainter::new().expect("compile canvas grid"),
                         grid_style: GridStyle::Lines,
-                        scene_count: 10_000,
+                        scene: make_scene(10_000),
                         focus,
                         space_down: false,
                         camera: Camera2D::default(),
