@@ -2,7 +2,7 @@
 name = "xgpui-parley"
 version = "0.2.0"
 edition = "2024"
-publish = false
+publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Experimental text extension for xgpui with Parley and HarfRust shaping and rasterization"
 license = "Apache-2.0"

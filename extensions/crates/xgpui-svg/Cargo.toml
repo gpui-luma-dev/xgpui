@@ -2,7 +2,7 @@
 name = "xgpui-svg"
 version = "0.2.0"
 edition = "2024"
-publish = false
+publish = ["crates-io"]
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Experimental SVG extension for xgpui with progressive elements and shared raster scheduling"

@@ -2,7 +2,7 @@
 name = "xgpui-gamut"
 version = "0.2.0"
 edition = "2024"
-publish = false
+publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Wide-gamut color extension for xgpui with opt-in linear Display P3 SDR content producers"
 license = "Apache-2.0"

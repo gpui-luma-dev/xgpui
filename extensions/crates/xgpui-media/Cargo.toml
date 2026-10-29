@@ -2,7 +2,7 @@
 name = "xgpui-media"
 version = "0.2.0"
 edition = "2024"
-publish = false
+publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Experimental media extension for xgpui with image loading, mipmapped textures, and rendering"
 license = "Apache-2.0"
