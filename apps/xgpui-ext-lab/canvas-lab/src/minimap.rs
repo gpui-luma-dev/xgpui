@@ -50,7 +50,8 @@ fn signature(lab: &Lab, scale: f32) -> u64 {
 }
 
 pub(super) fn schedule(lab: &mut Lab, window: &mut Window, cx: &mut Context<Lab>) {
-    if !lab.show_minimap
+    if lab.whole_scene_map
+        || !lab.show_minimap
         || lab.preview.capturing
         || lab.preview.pending
         || lab.preview.signature == Some(signature(lab, window.scale_factor()))
@@ -62,7 +63,7 @@ pub(super) fn schedule(lab: &mut Lab, window: &mut Window, cx: &mut Context<Lab>
     lab.preview.pending = true;
     let entity = cx.entity();
     window.on_next_frame(move |window, cx| {
-        if !entity.read(cx).show_minimap {
+        if entity.read(cx).whole_scene_map || !entity.read(cx).show_minimap {
             entity.update(cx, |lab, _| lab.preview.pending = false);
             return;
         }
@@ -138,6 +139,9 @@ pub(super) fn schedule(lab: &mut Lab, window: &mut Window, cx: &mut Context<Lab>
 impl Lab {
     pub(super) fn invalidate_preview(&mut self) {
         self.preview.signature = None;
+        if self.whole_scene_map {
+            self.refresh_overview();
+        }
     }
 
     pub(super) fn minimap(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -181,7 +185,7 @@ impl Lab {
                     .top(px(3.))
                     .left(px(6.))
                     .text_size(px(12.))
-                    .child("Current canvas view • M to hide"),
+                    .child("Current view • T: map • M: hide"),
             )
             .child(
                 canvas(

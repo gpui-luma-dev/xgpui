@@ -1,5 +1,6 @@
 mod interaction;
 mod minimap;
+mod overview_map;
 mod profile;
 use interaction::Gesture;
 
@@ -28,6 +29,11 @@ struct Lab {
     grid_style: GridStyle,
     scene: Scene<usize>,
     preview: minimap::Preview,
+    overview: Arc<xgpui_canvas::Overview>,
+    minimap_image: Arc<RenderImage>,
+    map_thumbnail: bool,
+    map_drag: bool,
+    whole_scene_map: bool,
     map_bounds: Bounds<Pixels>,
     show_minimap: bool,
     focus: FocusHandle,
@@ -82,6 +88,7 @@ impl Render for Lab {
             let capture = (tick % 8 == 0).then(|| directory.join(format!("{scenario}.png")));
             let preview = (tick % 8 == 3 && (6..=7).contains(&scenario)).then_some(scenario == 6);
             let done = tick >= 64;
+            let overview_capture = directory.join("whole-canvas.png");
             let entity = cx.entity();
             window.on_next_frame(move |window, cx| {
                 if let Some(marquee) = preview {
@@ -99,6 +106,18 @@ impl Render for Lab {
                         .expect("save smoke frame");
                 }
                 if done {
+                    entity.update(cx, |lab, _| {
+                        lab.whole_scene_map = true;
+                        lab.refresh_overview();
+                    });
+                    window.draw(cx).clear(cx);
+                    overview_map::smoke_navigation(&entity, window, cx);
+                    window.draw(cx).clear(cx);
+                    window
+                        .render_to_image()
+                        .expect("capture minimap")
+                        .save(overview_capture)
+                        .expect("save minimap");
                     cx.quit();
                 } else {
                     entity.update(cx, |this, cx| {
@@ -231,7 +250,13 @@ impl Render for Lab {
         let guides = self.snap_guides.clone();
         let camera = self.camera;
         minimap::schedule(self, window, cx);
-        let minimap = (self.show_minimap && !self.preview.hidden).then(|| self.minimap(cx));
+        let minimap = (self.show_minimap && !self.preview.hidden).then(|| {
+            if self.whole_scene_map {
+                self.overview_map(cx)
+            } else {
+                self.minimap(cx)
+            }
+        });
         div().id("canvas-lab").track_focus(&self.focus)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if event.keystroke.key == "space" { this.space_down = true; cx.stop_propagation(); }
@@ -239,6 +264,7 @@ impl Render for Lab {
                     this.grid_style = match this.grid_style { GridStyle::Lines => GridStyle::Dots, GridStyle::Dots => GridStyle::Lines };
                     cx.notify();
                 }
+                if event.keystroke.key == "t" { this.whole_scene_map = !this.whole_scene_map; this.map_drag = false; this.refresh_overview(); cx.notify(); }
                 if event.keystroke.key == "m" { this.show_minimap = !this.show_minimap; cx.notify(); }
                 if event.keystroke.key == "escape" { this.cancel_selection(); this.drag = None; cx.notify(); }
                 if event.keystroke.key == "r" { this.cancel_selection(); this.camera = Camera2D::default(); cx.notify(); }
@@ -257,7 +283,7 @@ impl Render for Lab {
             .relative().size_full().flex().flex_col().bg(rgb(0x101824)).text_color(rgb(0xffffff))
             .child(div().h(px(88.)).flex_none().text_size(px(13.)).flex().flex_col()
                 .child("Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel")
-                .child("Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: preview")
+                .child("Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view")
                 .child(format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len())))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
                 .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
@@ -411,6 +437,7 @@ fn main() {
                     cx.on_blur(&focus, window, |this: &mut Lab, _, cx| {
                         this.cancel_selection();
                         this.space_down = false;
+                        this.map_drag = false;
                         this.drag = None;
 
                         cx.notify();
@@ -427,8 +454,15 @@ fn main() {
                     })
                     .detach();
                     let scene = make_scene(10_000);
+                    let overview = Arc::new(xgpui_canvas::Overview::new(&scene));
+                    let minimap_image = overview_map::thumbnail(&scene, &overview);
                     Lab {
                         preview: minimap::Preview::default(),
+                        overview,
+                        minimap_image,
+                        map_thumbnail: true,
+                        map_drag: false,
+                        whole_scene_map: false,
                         map_bounds: Bounds::default(),
                         show_minimap: true,
                         profile: options.benchmark.map(profile::Profile::new),

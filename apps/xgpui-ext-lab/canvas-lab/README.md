@@ -25,8 +25,10 @@ included in this slice.
 The lower-right **current canvas view** is a live scaled copy of the visible
 viewport. It follows pan, zoom, resize, selection, guides, and scene edits, using
 an actual rendered capture with the toolbar and preview panel excluded. **M**
-hides/shows it. This is a display-only viewport preview, with no whole-scene map,
-viewport locator, or navigation gestures. The former **T** toggle is removed.
+hides/shows the panel. **T** switches between this display-only live preview and
+the whole-canvas minimap. The minimap shows card geometry without a grid, with
+an amber viewport outline; click or drag it to recenter while keeping zoom.
+The whole-canvas mode uses a cached thumbnail and does not perform GPU readback.
 
 Captures are coalesced to at most one every 80 ms and resized to fit 432×276,
 with aspect ratio preserved. The existing canvas grid appears only as part of
