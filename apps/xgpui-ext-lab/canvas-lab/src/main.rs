@@ -28,9 +28,11 @@ struct Lab {
     grid_style: GridStyle,
     scene: Scene<usize>,
     overview: Arc<xgpui_canvas::Overview>,
+    minimap_image: Arc<RenderImage>,
     map_bounds: Bounds<Pixels>,
     map_drag: bool,
     show_minimap: bool,
+    map_thumbnail: bool,
     focus: FocusHandle,
     space_down: bool,
     camera: Camera2D,
@@ -82,9 +84,21 @@ impl Render for Lab {
             let capture = (tick % 8 == 0).then(|| directory.join(format!("{scenario}.png")));
             let preview = (tick % 8 == 3 && (6..=7).contains(&scenario)).then_some(scenario == 6);
             let map_preview = tick % 8 == 3 && scenario == 8;
-            let done = tick >= 72;
+            let thumbnail_preview = tick % 8 == 3 && scenario == 9;
+            let done = tick >= 80;
             let entity = cx.entity();
             window.on_next_frame(move |window, cx| {
+                if thumbnail_preview {
+                    window.dispatch_event(
+                        PlatformInput::KeyDown(KeyDownEvent {
+                            keystroke: Keystroke::parse("t").unwrap(),
+                            is_held: false,
+                            prefer_character_input: false,
+                        }),
+                        cx,
+                    );
+                    assert!(entity.read(cx).map_thumbnail, "thumbnail preview toggle");
+                }
                 if map_preview {
                     minimap::smoke_navigation(&entity, window, cx);
                 }
@@ -120,6 +134,7 @@ impl Render for Lab {
             if self.scene.len() != count {
                 self.scene = make_scene(count);
                 self.overview = Arc::new(xgpui_canvas::Overview::new(&self.scene));
+                self.minimap_image = minimap::thumbnail(&self.scene, &self.overview);
             }
             if profile.frame == 301 {
                 self.camera = Camera2D::default();
@@ -239,6 +254,7 @@ impl Render for Lab {
                     this.grid_style = match this.grid_style { GridStyle::Lines => GridStyle::Dots, GridStyle::Dots => GridStyle::Lines };
                     cx.notify();
                 }
+                if event.keystroke.key == "t" { this.map_thumbnail = !this.map_thumbnail; cx.notify(); }
                 if event.keystroke.key == "m" { this.show_minimap = !this.show_minimap; this.map_drag = false; cx.notify(); }
                 if event.keystroke.key == "escape" { this.cancel_selection(); this.drag = None; this.map_drag = false; cx.notify(); }
                 if event.keystroke.key == "r" { this.cancel_selection(); this.camera = Camera2D::default(); cx.notify(); }
@@ -429,11 +445,14 @@ fn main() {
                     .detach();
                     let scene = make_scene(10_000);
                     let overview = Arc::new(xgpui_canvas::Overview::new(&scene));
+                    let minimap_image = minimap::thumbnail(&scene, &overview);
                     Lab {
+                        minimap_image,
                         overview,
                         map_bounds: Bounds::default(),
                         map_drag: false,
                         show_minimap: true,
+                        map_thumbnail: false,
                         profile: options.benchmark.map(profile::Profile::new),
                         smoke: options.smoke.map(|directory| (directory, 0, false)),
                         grid: GridPainter::new().expect("compile canvas grid"),

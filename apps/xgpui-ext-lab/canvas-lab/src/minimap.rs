@@ -3,6 +3,7 @@ use super::*;
 impl Lab {
     pub(super) fn refresh_overview(&mut self) {
         self.overview = Arc::new(xgpui_canvas::Overview::new(&self.scene));
+        self.minimap_image = thumbnail(&self.scene, &self.overview);
     }
 
     pub(super) fn navigate_map(&mut self, position: Point<Pixels>) {
@@ -18,6 +19,7 @@ impl Lab {
 
     pub(super) fn minimap(&self, cx: &mut Context<Self>) -> AnyElement {
         let overview = self.overview.clone();
+        let thumbnail = self.map_thumbnail.then(|| self.minimap_image.clone());
         let visible = self.camera.visible_world_bounds(self.viewport());
         let entity = cx.entity();
         div()
@@ -91,7 +93,7 @@ impl Lab {
                     .top(px(3.))
                     .left(px(6.))
                     .text_size(px(12.))
-                    .child("Minimap • click/drag • M to hide"),
+                    .child("Minimap • click/drag • T: preview"),
             )
             .child(
                 canvas(
@@ -104,7 +106,7 @@ impl Lab {
                         });
                     },
                     move |bounds, _, window, _| {
-                        paint(window, bounds, &overview, visible);
+                        paint(window, bounds, &overview, thumbnail.clone(), visible);
                     },
                 )
                 .absolute()
@@ -117,10 +119,48 @@ impl Lab {
     }
 }
 
+/// Rasterize actual card bounds in paint order; no grid, density bins, or labels.
+/// The 2x image is retained and rebuilt only when scene geometry changes.
+pub(super) fn thumbnail(
+    scene: &Scene<usize>,
+    overview: &xgpui_canvas::Overview,
+) -> Arc<RenderImage> {
+    const WIDTH: u32 = 432;
+    const HEIGHT: u32 = 276;
+    let size = WorldPoint::new(WIDTH as f64, HEIGHT as f64);
+    let mut pixels = image::RgbaImage::from_pixel(WIDTH, HEIGHT, image::Rgba([16, 24, 36, 255]));
+    for item in scene.items() {
+        let a = overview.world_to_map(item.bounds.min, size);
+        let b = overview.world_to_map(item.bounds.max, size);
+        let left = a.x.max(0.).min(WIDTH as f64);
+        let top = a.y.max(0.).min(HEIGHT as f64);
+        let right = b.x.max(0.).min(WIDTH as f64);
+        let bottom = b.y.max(0.).min(HEIGHT as f64);
+        for y in top.floor() as u32..bottom.ceil() as u32 {
+            for x in left.floor() as u32..right.ceil() as u32 {
+                let coverage = ((right.min(x as f64 + 1.) - left.max(x as f64)).max(0.)
+                    * (bottom.min(y as f64 + 1.) - top.max(y as f64)).max(0.))
+                    as f32;
+                let pixel = pixels.get_pixel_mut(x, y);
+                for (channel, color) in [36., 53., 75.].into_iter().enumerate() {
+                    pixel[channel] =
+                        (pixel[channel] as f32 * (1. - coverage) + color * coverage).round() as u8;
+                }
+            }
+        }
+    }
+    // GPUI RenderImage expects BGRA channel order.
+    for pixel in pixels.pixels_mut() {
+        pixel.0.swap(0, 2);
+    }
+    Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]))
+}
+
 fn paint(
     window: &mut Window,
     bounds: Bounds<Pixels>,
     overview: &xgpui_canvas::Overview,
+    thumbnail: Option<Arc<RenderImage>>,
     visible: WorldBounds,
 ) {
     let size = WorldPoint::new(
@@ -133,23 +173,12 @@ fn paint(
     };
     window.with_content_mask(Some(ContentMask { bounds }), |window| {
         window.paint_quad(fill(bounds, rgb(0x101824)));
-        let max = overview.cells().map(|cell| cell.count).max().unwrap_or(1) as f32;
-        for cell in overview.cells() {
-            let a = screen(cell.bounds.min);
-            let b = screen(cell.bounds.max);
-            let intensity = (cell.count as f32).ln_1p() / max.ln_1p();
-            // Match canvas/card values rather than showing a bright inverse heatmap.
-            // Opaque cells also avoid bright seams where rounded cell edges overlap.
-            let color = (((27. + 9. * intensity) as u32) << 16)
-                | (((42. + 11. * intensity) as u32) << 8)
-                | (60. + 15. * intensity) as u32;
-            window.paint_quad(fill(
-                Bounds::new(
-                    a,
-                    gpui::size((b.x - a.x).max(px(0.5)), (b.y - a.y).max(px(0.5))),
-                ),
-                rgb(color),
-            ));
+        if let Some(thumbnail) = thumbnail {
+            if let Err(error) =
+                window.paint_image(bounds, bounds, Corners::default(), thumbnail, 0, false)
+            {
+                eprintln!("minimap thumbnail: {error}");
+            }
         }
         let a = screen(visible.min);
         let b = screen(visible.max);

@@ -22,12 +22,14 @@ uses the selection's group bounds and excludes selected items. Equal-spacing,
 angle snapping, auto-scroll, undo history, and accelerated bulk refits are not
 included in this slice.
 
-The lower-right **minimap** shows cached object-center density and an amber
-viewport rectangle. Click or drag it to navigate; **M** hides/shows it. Navigation
+The lower-right **minimap** has a plain background and an amber viewport
+rectangle. **T** toggles an optional cached scene thumbnail. Click or drag to
+navigate; **M** hides/shows the minimap. Navigation
 preserves zoom and selection, and never changes scene geometry. The overview
-has at most 1,024 painted cells, refreshed when switching scenes or committing a
-move. Its density stays cached during dragging; the viewport marker updates
-continuously. Fine object geometry is intentionally aggregated. Navigation clamps
+thumbnail is a retained 432×276 image of actual card bounds in paint order, with the canvas
+background and card colors. It has no procedural grid, density tiles, or tiny
+labels. The image refreshes when switching scenes or committing a move and stays
+cached during dragging; the viewport marker updates continuously. Navigation clamps
 letterboxed regions to the scene extent. Wheel/pinch over the map are consumed.
 
 The scene contains 10,000 or 100,000 world-space rectangles. BVH AABB culling happens
