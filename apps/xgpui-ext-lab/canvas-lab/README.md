@@ -8,7 +8,7 @@ reset the camera, **O** for a 1% overview, and **B** to switch between 10,000 an
 shows the visible count, zoom, and selection. Leaving the window clears held
 Space/drag state.
 
-The scene contains 10,000 or 100,000 world-space rectangles. Linear AABB culling happens
+The scene contains 10,000 or 100,000 world-space rectangles. BVH AABB culling happens
 before constructing GPUI children, so offscreen cards do not enter layout or
 text shaping. Scene bounds and IDs are retained between frames. Full-detail
 cards are ordinary positioned GPUI divs with an
@@ -27,7 +27,7 @@ center. Zoom is bounded to 0.01–64. Projection converts to f32 only at the GPU
 boundary.
 
 The grid uses one procedural shader quad, with fading minor/major lines or
-dots. This first experiment excludes rotation, custom inertia, spatial indexes,
+dots. This first experiment excludes rotation, custom inertia, dynamic index updates,
 and web integration. It does not establish arbitrary subtree scaling. Dense
 overviews still record one native quad per proxy; spatial indexing does not
 reduce that paint cost. Aggregated proxies and thumbnail caching remain follow-ups.
@@ -69,3 +69,18 @@ and a 24.51 ms mean interval. CPU query/build time averaged 0.11 ms in that
 overview; most remaining cost is outside this measurement. The viewport is
 1100×686 after the expanded status header, so this is not an exact before/after
 comparison with the original baseline.
+
+The BVH CPU comparison is recorded in `bench/spatial-query-baseline.json`.
+For sparse rectangle queries averaging 35 matches at 100k objects, the local
+indexed mean was 1.25 µs versus 66.30 µs for a linear scan. Building the immutable
+100k index took 29.35 ms. At one million objects it took 347.51 ms to build and
+4.35 µs per sparse query. These exclude GPUI layout and drawing; dense/overlapping
+queries can still visit the whole scene. Run the crate's `spatial_queries`
+example to reproduce the comparison and verify results against the linear scan.
+
+The native BVH run is in `bench/macos-arm64-bvh.json`. At 100k objects/1x zoom,
+mean cull/build time was 0.09 ms (previously 0.31 ms), while frame intervals
+remained around 16.7 ms. The dense overview stayed around 24.5 ms/frame, with
+higher query/build cost (0.35 ms versus 0.11 ms) from traversing and restoring
+paint order for thousands of matches. These are separate local runs, not a
+controlled hardware benchmark.

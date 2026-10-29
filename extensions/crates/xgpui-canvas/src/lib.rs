@@ -6,6 +6,7 @@ mod viewport;
 #[cfg(feature = "gpui")]
 pub use viewport::{Canvas, GridPainter, GridStyle};
 mod scene;
+mod spatial;
 pub use scene::{LevelOfDetail, Scene, SceneItem, VisibleItem};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]

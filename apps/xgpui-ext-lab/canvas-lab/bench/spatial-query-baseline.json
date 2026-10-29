@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-29",
+  "os": "macos",
+  "arch": "aarch64",
+  "optimized_build": true,
+  "scope": "CPU-only immutable BVH build and sparse rectangle queries, checked against a linear reference; no layout or rendering",
+  "queries_per_scene": 200,
+  "viewport_world_size": [1000, 700],
+  "results": [
+    {"objects": 10000, "build_ms": 2.578, "indexed_query_mean_us": 0.952, "linear_query_mean_us": 7.246, "mean_matches": 27.0},
+    {"objects": 100000, "build_ms": 29.353, "indexed_query_mean_us": 1.247, "linear_query_mean_us": 66.304, "mean_matches": 35.1},
+    {"objects": 1000000, "build_ms": 347.512, "indexed_query_mean_us": 4.346, "linear_query_mean_us": 690.000, "mean_matches": 36.0}
+  ]
+}

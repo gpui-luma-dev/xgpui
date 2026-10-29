@@ -25,15 +25,24 @@ projected side, in logical pixels). Use lightweight painting for proxies and
 construct GPUI children only for full-detail content. Callers can choose their
 own representation; the scene query does not draw anything.
 
-`scene.hit_test(world_point)` returns the topmost AABB hit. Items are stored and
-queried in back-to-front paint order; hit testing reverses that order. Queries
-are linear and scene data is immutable; rebuild the scene when its data changes.
-Bounds must have finite, ordered min/max coordinates. There is no spatial index
-yet. Proxy selection uses original world bounds, without a screen-space tolerance.
+`scene.hit_test(world_point)` returns the topmost AABB hit.
+`scene.query(world_bounds)` returns every intersecting item, including boundary
+contact, in back-to-front order. This can drive rectangular selection. Visibility,
+rectangle queries, and hit testing use an immutable, median-split AABB BVH with
+up to eight items per leaf. Spatial partitioning never changes caller paint order.
+Scene data is immutable; rebuild the scene when its data changes. Bounds must
+have finite, ordered min/max coordinates. Proxy selection uses original world
+bounds, without a screen-space tolerance.
+
+Sparse queries prune unrelated nodes. Dense or heavily overlapping scenes can
+still visit every item; ordered rectangle results also cost O(k log k) to sort
+k matches. The index is not a guarantee of logarithmic queries, and it cannot
+reduce the cost of painting thousands of visible proxies. Building the index
+is synchronous; large changing scenes will need a separate update strategy.
 
 Project child positions, dimensions and font sizes explicitly. This is not a
 general transform for arbitrary GPUI subtrees; rotation, transformed text APIs,
-spatial indexes, cached layers and thumbnail LOD remain follow-ups. Inputs and
+dynamic index updates, cached layers and thumbnail LOD remain follow-ups. Inputs and
 viewport dimensions must be finite; dimensions must be nonnegative.
 
 This prototype is not registered for publishing or included in the generated
@@ -44,4 +53,13 @@ See the native lab at `apps/xgpui-ext-lab/canvas-lab`; run `just canvas-lab`.
 ```sh
 cargo test --locked --config .cargo/validation.toml \
   --manifest-path extensions/crates/xgpui-canvas/Cargo.toml --features gpui --target-dir target
+```
+
+CPU-only index comparison, including index construction time and result checks
+against a linear reference:
+
+```sh
+cargo run --release --locked --config .cargo/validation.toml \
+  --manifest-path extensions/crates/xgpui-canvas/Cargo.toml \
+  --example spatial_queries --target-dir target
 ```

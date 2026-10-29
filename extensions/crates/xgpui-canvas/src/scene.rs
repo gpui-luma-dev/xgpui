@@ -1,3 +1,4 @@
+use crate::spatial::SpatialIndex;
 use crate::{Camera2D, Point, WorldBounds};
 
 /// Suggested presentation based on the longest projected side, in logical pixels.
@@ -33,19 +34,21 @@ pub struct VisibleItem<'a, T> {
     pub detail: LevelOfDetail,
 }
 
-/// Retained scene with bounded linear queries. Order is back-to-front.
+/// Retained scene with immutable BVH queries. Order is back-to-front.
 ///
 /// No element construction, layout, or text shaping occurs during queries.
-/// A future spatial index can accelerate queries without changing item data.
+/// Rebuild the scene when items change. Dense or overlapping queries may still
+/// visit every item; ordered query results additionally cost O(k log k) to sort.
 pub struct Scene<T> {
     items: Vec<SceneItem<T>>,
+    index: SpatialIndex,
 }
 
 impl<T> Scene<T> {
     pub fn new(items: impl IntoIterator<Item = SceneItem<T>>) -> Self {
-        Self {
-            items: items.into_iter().collect(),
-        }
+        let items: Vec<_> = items.into_iter().collect();
+        let index = SpatialIndex::new(&items);
+        Self { items, index }
     }
     pub fn len(&self) -> usize {
         self.items.len()
@@ -59,27 +62,32 @@ impl<T> Scene<T> {
         camera: Camera2D,
         viewport: Point,
     ) -> impl Iterator<Item = VisibleItem<'_, T>> {
-        let visible = camera.visible_world_bounds(viewport);
-        self.items.iter().filter_map(move |item| {
-            if !item.bounds.intersects(visible) {
-                return None;
-            }
-            let min = camera.world_to_screen(item.bounds.min, viewport);
-            let max = camera.world_to_screen(item.bounds.max, viewport);
-            Some(VisibleItem {
-                item,
-                screen_bounds: WorldBounds { min, max },
-                detail: LevelOfDetail::for_size(max.x - min.x, max.y - min.y),
+        self.query(camera.visible_world_bounds(viewport))
+            .map(move |item| {
+                let min = camera.world_to_screen(item.bounds.min, viewport);
+                let max = camera.world_to_screen(item.bounds.max, viewport);
+                VisibleItem {
+                    item,
+                    screen_bounds: WorldBounds { min, max },
+                    detail: LevelOfDetail::for_size(max.x - min.x, max.y - min.y),
+                }
             })
-        })
+    }
+
+    /// All AABBs intersecting a world-space rectangle, in back-to-front order.
+    /// Boundary contact counts as intersection. Suitable for rectangular selection.
+    pub fn query(&self, bounds: WorldBounds) -> impl Iterator<Item = &SceneItem<T>> {
+        self.index
+            .query(&self.items, bounds)
+            .into_iter()
+            .map(|index| &self.items[index])
     }
 
     /// Topmost AABB hit, in the same order as painting. Points are world-space.
     pub fn hit_test(&self, world: Point) -> Option<&SceneItem<T>> {
-        self.items
-            .iter()
-            .rev()
-            .find(|item| item.bounds.contains(world))
+        self.index
+            .hit_test(&self.items, world)
+            .map(|index| &self.items[index])
     }
 }
 
@@ -140,5 +148,71 @@ mod tests {
         let empty = Scene::<()>::new([]);
         assert!(empty.is_empty());
         assert_eq!(empty.visible(camera, viewport).count(), 0);
+    }
+
+    #[test]
+    fn indexed_queries_match_linear_reference_across_overlapping_rectangles() {
+        let mut seed = 43_u64;
+        let mut next = || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            (seed >> 32) as u32 as f64 / u32::MAX as f64
+        };
+        let scene = Scene::new((0..4000).map(|data| {
+            let min = Point::new(next() * 10000. - 5000., next() * 10000. - 5000.);
+            SceneItem {
+                bounds: WorldBounds {
+                    min,
+                    max: Point::new(min.x + next() * 800., min.y + next() * 800.),
+                },
+                data,
+            }
+        }));
+        for _ in 0..200 {
+            let min = Point::new(next() * 12000. - 6000., next() * 12000. - 6000.);
+            let bounds = WorldBounds {
+                min,
+                max: Point::new(min.x + next() * 2000., min.y + next() * 2000.),
+            };
+            let expected: Vec<_> = scene
+                .items
+                .iter()
+                .filter(|item| item.bounds.intersects(bounds))
+                .map(|item| item.data)
+                .collect();
+            assert_eq!(
+                scene
+                    .query(bounds)
+                    .map(|item| item.data)
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            let hit = scene
+                .items
+                .iter()
+                .rev()
+                .find(|item| item.bounds.contains(min))
+                .map(|item| item.data);
+            assert_eq!(scene.hit_test(min).map(|item| item.data), hit);
+        }
+    }
+
+    #[test]
+    fn index_handles_empty_coincident_boundary_and_extreme_bounds() {
+        let scene = Scene::new((0..300).map(|index| item(-10., 10., index)));
+        let edge = WorldBounds {
+            min: Point::new(10., 10.),
+            max: Point::new(10., 10.),
+        };
+        assert_eq!(
+            scene.query(edge).map(|item| item.data).collect::<Vec<_>>(),
+            (0..300).collect::<Vec<_>>()
+        );
+        assert_eq!(scene.hit_test(edge.min).unwrap().data, 299);
+        let extreme = Scene::new((0..100).map(|index| item(-f64::MAX, f64::MAX, index)));
+        assert_eq!(extreme.hit_test(Point::default()).unwrap().data, 99);
+        assert_eq!(extreme.query(edge).count(), 100);
+        let empty = Scene::<()>::new([]);
+        assert_eq!(empty.query(edge).count(), 0);
+        assert!(empty.hit_test(Point::default()).is_none());
     }
 }
