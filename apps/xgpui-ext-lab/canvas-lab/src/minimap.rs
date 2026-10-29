@@ -132,18 +132,23 @@ fn paint(
         bounds.origin + point(px(p.x as f32), px(p.y as f32))
     };
     window.with_content_mask(Some(ContentMask { bounds }), |window| {
-        window.paint_quad(fill(bounds, rgb(0x0c1424)));
+        window.paint_quad(fill(bounds, rgb(0x101824)));
         let max = overview.cells().map(|cell| cell.count).max().unwrap_or(1) as f32;
         for cell in overview.cells() {
             let a = screen(cell.bounds.min);
             let b = screen(cell.bounds.max);
             let intensity = (cell.count as f32).ln_1p() / max.ln_1p();
+            // Match canvas/card values rather than showing a bright inverse heatmap.
+            // Opaque cells also avoid bright seams where rounded cell edges overlap.
+            let color = (((27. + 9. * intensity) as u32) << 16)
+                | (((42. + 11. * intensity) as u32) << 8)
+                | (60. + 15. * intensity) as u32;
             window.paint_quad(fill(
                 Bounds::new(
                     a,
                     gpui::size((b.x - a.x).max(px(0.5)), (b.y - a.y).max(px(0.5))),
                 ),
-                rgba(0x59b0ff00 | (80. + intensity * 150.) as u32),
+                rgb(color),
             ));
         }
         let a = screen(visible.min);
