@@ -1816,9 +1816,13 @@ impl MetalRenderer {
                 (first_surface + index) as u64,
             );
         }
-        let views = Cell::new(Some(views));
+        // A CVMetalTexture's final release returns its backing to its cache.
+        // Pending commands can outlive this renderer, so retain the cache too.
+        // Tuple elements drop in order: views must be released before the cache,
+        // including when an unsubmitted command drops its completion block.
+        let resources = Cell::new(Some((views, self.core_video_texture_cache.clone())));
         let keep_alive = RcBlock::new(move |_: ptr::NonNull<AnyObject>| {
-            drop(views.take());
+            drop(resources.take());
         });
         unsafe {
             command_buffer.add_completed_handler(&*RcBlock::as_ptr(&keep_alive).cast());
@@ -2439,6 +2443,68 @@ mod tests {
                 .contains("unsupported CoreVideo surface format"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn surface_sampling_retains_cache_after_renderer_destruction() {
+        for nv12 in [false, true] {
+            for _ in 0..16 {
+                objc2::rc::autoreleasepool(|_| {
+                    use crate::custom_draw::core_video::{Nv12Matrix, test_frame, test_nv12_frame};
+                    let frame = if nv12 {
+                        test_nv12_frame(32, 18, 0, Nv12Matrix::Bt601, false).unwrap()
+                    } else {
+                        test_frame(32, 18, 0).unwrap()
+                    };
+                    let bounds = Bounds::new(
+                        point(ScaledPixels(0.), ScaledPixels(0.)),
+                        size(ScaledPixels(32.), ScaledPixels(18.)),
+                    );
+                    let mut scene = Scene::default();
+                    scene.insert_primitive(PaintSurface {
+                        order: 0,
+                        bounds,
+                        content_mask: ContentMask { bounds },
+                        image_buffer: frame.buffer_for_test(),
+                    });
+                    scene.finish();
+                    drop(frame);
+                    let mut renderer =
+                        MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+                    let cache = renderer.core_video_texture_cache.clone();
+                    let extent = size(DevicePixels(32), DevicePixels(18));
+                    let target = crate::custom_draw::texture(&renderer.device, extent).unwrap();
+                    let command = renderer.render_frame(&scene, &target, extent).unwrap();
+                    drop(scene);
+                    drop(renderer);
+                    // This observer is one owner. Pending sampling must retain its own cache,
+                    // not rely on the renderer or on CVMetalTexture implicitly retaining it.
+                    assert!(
+                        cache.retain_count() >= 2,
+                        "pending Surface sampling lost its CoreVideo cache owner"
+                    );
+                    command.commit();
+                    command.wait_until_completed();
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+                    while cache.retain_count() != 1 && std::time::Instant::now() < deadline {
+                        std::thread::yield_now();
+                    }
+                    assert_eq!(
+                        cache.retain_count(),
+                        1,
+                        "completion must release its cache owner even while command remains alive"
+                    );
+                    let image = read_texture_to_image(&target).unwrap();
+                    let pixel = image.get_pixel(3, 2);
+                    assert!(
+                        pixel[0].abs_diff(224) <= 3
+                            && pixel[1].abs_diff(64) <= 3
+                            && pixel[2].abs_diff(32) <= 3,
+                        "Surface survived renderer teardown: {pixel:?}"
+                    );
+                });
+            }
+        }
     }
 
     #[test]

@@ -68,9 +68,11 @@ impl Output {
     }
 }
 struct Cached {
-    _cache: CFRetained<CVMetalTextureCache>,
-    _views: Vec<CFRetained<CVMetalTexture>>,
+    // Fields drop in declaration order. Release Metal handles and CoreVideo
+    // views before their cache: view finalization calls back into that cache.
     output: Output,
+    _views: Vec<CFRetained<CVMetalTexture>>,
+    _cache: CFRetained<CVMetalTextureCache>,
 }
 struct Inner {
     buffer: CFRetained<CVPixelBuffer>,
