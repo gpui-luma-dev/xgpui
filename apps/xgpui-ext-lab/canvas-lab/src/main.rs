@@ -281,7 +281,7 @@ impl Render for Lab {
                     this.grid_style = match this.grid_style { GridStyle::Lines => GridStyle::Dots, GridStyle::Dots => GridStyle::Lines };
                     cx.notify();
                 }
-                if event.keystroke.key == "f" { this.cancel_selection(); this.fractal.toggle(); this.whole_scene_map = false; this.camera = Camera2D::default(); this.invalidate_preview(); cx.notify(); }
+                if event.keystroke.key == "f" { this.cancel_selection(); this.fractal.toggle(); this.show_minimap = !this.fractal.enabled; this.whole_scene_map = false; this.camera = Camera2D::default(); this.invalidate_preview(); cx.notify(); }
                 if event.keystroke.key == "t" && !this.fractal.enabled { this.whole_scene_map = !this.whole_scene_map; this.map_drag = false; this.refresh_overview(); cx.notify(); }
                 if event.keystroke.key == "m" { this.show_minimap = !this.show_minimap; cx.notify(); }
                 if event.keystroke.key == "escape" { this.cancel_selection(); this.drag = None; cx.notify(); }
@@ -301,8 +301,8 @@ impl Render for Lab {
             .relative().size_full().flex().flex_col().bg(rgb(0x101824)).text_color(rgb(0xffffff))
             .child(div().h(px(88.)).flex_none().text_size(px(13.)).flex().flex_col()
                 .child(if self.fractal.enabled { "CPU Mandelbrot • Drag / scroll: pan • Pinch: zoom • F: cards • R: reset" } else { "Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel" })
-                .child(if self.fractal.enabled { "Background CPU rendering • Coarse while moving, refined after idle • M: preview" } else { "Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view • F: Mandelbrot" })
-                .child(if self.fractal.enabled { format!("{:.1}% • CPU image • 256 iterations • {}", zoom * 100., if self.fractal.refined { "refined" } else { "rendering" }) } else { format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len()) }))
+                .child(if self.fractal.enabled { "Cached CPU tiles • Progressive detail • M: preview (adds capture cost)" } else { "Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view • F: Mandelbrot" })
+                .child(if self.fractal.enabled { format!("{:.1}% • CPU tiles • {} iterations • {}", zoom * 100., mandelbrot::iterations(2_f64.powf(self.camera.zoom().log2().ceil())), if self.fractal.refined { "refined" } else { "rendering" }) } else { format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len()) }))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
                 .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
                     this.cancel_selection();
@@ -313,7 +313,7 @@ impl Render for Lab {
                 .on_pinch(cx.listener(|this, event: &PinchEvent, _, cx| {
                     this.cancel_selection();
                     let anchor = event.position - this.bounds.origin;
-                    this.camera.zoom_at(WorldPoint::new(f32::from(anchor.x) as f64, f32::from(anchor.y) as f64), this.viewport(), (1. + f64::from(event.delta)).max(0.01));
+                    this.camera.zoom_at_with_limits(WorldPoint::new(f32::from(anchor.x) as f64, f32::from(anchor.y) as f64), this.viewport(), (1. + f64::from(event.delta)).max(0.01), 0.01, if this.fractal.enabled { 1e10 } else { 64. });
                     cx.stop_propagation(); cx.notify();
                 }))
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &MouseDownEvent, window, cx| {
@@ -485,7 +485,7 @@ fn main() {
                         map_drag: false,
                         whole_scene_map: false,
                         map_bounds: Bounds::default(),
-                        show_minimap: true,
+                        show_minimap: !options.mandelbrot,
                         profile: options.benchmark.map(profile::Profile::new),
                         smoke: options.smoke.map(|directory| (directory, 0, false)),
                         grid: GridPainter::new().expect("compile canvas grid"),

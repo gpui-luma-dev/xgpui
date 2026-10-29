@@ -132,19 +132,26 @@ just canvas-lab --mandelbrot
 ```
 
 Drag with the left button or scroll to pan; pinch zooms at the pointer. **R**
-resets the camera. **M** toggles the current-view preview. The whole-scene card
+resets the camera. **M** enables/disables the current-view preview, which starts
+hidden in Mandelbrot mode to avoid readback stalls. The whole-scene card
 minimap is unavailable in this mode; switching content resets the camera.
 
 The fractal uses f64 CPU escape-time calculations on a background executor and
-uploads an ordinary BGRA image through GPUI's image painter. No custom fractal
-shader or new canvas API is involved. A 240-pixel-wide render is followed by a
-960-pixel-wide refinement after a 180 ms pause, with height capped at 960 pixels.
-Both use 256 iterations. The previous image is projected at its original world
-bounds while replacement work runs. Camera/size changes cancel obsolete work
-at row boundaries; generation checks reject stale completions. This is a bounded
-resolution demonstration, not a deep-zoom renderer or a CPU/GPU benchmark.
-The existing camera retains its 0.01–64 zoom limits. The optional live preview
-still carries its separate GPU readback cost.
+uploads ordinary BGRA images through GPUI's image painter. No custom fractal
+shader is involved. World-aligned 256×256 tiles are cached across camera changes;
+coarser coverage appears first, followed by full-detail tiles nearest the view
+center. Cached finer detail stays on top rather than being replaced by coarse
+frames. One-texel gutters prevent texture filtering seams. The cache retains up
+to 384 tiles (about 98 MiB of CPU pixels, plus GPU storage).
+
+Obsolete work is cancelled at row boundaries, and generation checks reject stale
+completions. The iteration budget increases with tile zoom from 256 to at most
+2,048. Mandelbrot supports 0.01–10 billion times zoom through the camera's explicit
+`zoom_at_with_limits` API; the card scene retains its 0.01–64 default. This is
+finite f64 exploration, not arbitrary-precision infinite zoom. Deep boundary
+regions can still take time to refine, and iteration caps can classify unresolved
+points as interior. The optional live preview still has its separate GPU readback
+cost. This is not a CPU/GPU benchmark.
 
 Capture a refined native frame and exit:
 

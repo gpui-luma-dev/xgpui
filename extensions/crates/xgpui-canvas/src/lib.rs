@@ -106,11 +106,25 @@ impl Camera2D {
         }
     }
     pub fn zoom_at(&mut self, anchor: Point, viewport: Point, factor: f64) {
+        self.zoom_at_with_limits(anchor, viewport, factor, 0.01, 64.);
+    }
+    /// Pointer-anchored zoom with application-selected finite, positive limits.
+    pub fn zoom_at_with_limits(
+        &mut self,
+        anchor: Point,
+        viewport: Point,
+        factor: f64,
+        min: f64,
+        max: f64,
+    ) {
+        if !min.is_finite() || !max.is_finite() || min <= 0. || max < min {
+            return;
+        }
         if !factor.is_finite() || factor <= 0. || !anchor.x.is_finite() || !anchor.y.is_finite() {
             return;
         }
         let before = self.screen_to_world(anchor, viewport);
-        self.zoom = (self.zoom * factor).clamp(0.01, 64.);
+        self.zoom = (self.zoom * factor).clamp(min, max);
         let after = self.screen_to_world(anchor, viewport);
         self.center.x += before.x - after.x;
         self.center.y += before.y - after.y;
@@ -131,6 +145,20 @@ mod tests {
             (a.x - b.x).abs() < 1e-5 && (a.y - b.y).abs() < 1e-5,
             "{a:?} != {b:?}"
         );
+    }
+    #[test]
+    fn extended_zoom_preserves_anchor_and_rejects_invalid_limits() {
+        let mut camera = Camera2D::default();
+        let viewport = Point::new(1000., 700.);
+        let anchor = Point::new(317., 291.);
+        let expected = camera.screen_to_world(anchor, viewport);
+        camera.zoom_at_with_limits(anchor, viewport, 1e12, 0.01, 1e10);
+        assert_eq!(camera.zoom(), 1e10);
+        close(camera.screen_to_world(anchor, viewport), expected);
+        camera.zoom_at_with_limits(anchor, viewport, 0.5, 2., 1.);
+        assert_eq!(camera.zoom(), 1e10);
+        camera.zoom_at(anchor, viewport, 1.);
+        assert_eq!(camera.zoom(), 64.);
     }
     #[test]
     fn projection_and_anchor_survive_zoom_limits_and_large_world() {

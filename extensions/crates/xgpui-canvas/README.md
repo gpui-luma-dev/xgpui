@@ -14,7 +14,9 @@ Screen coordinates are **viewport-local logical pixels**, positive x right and
 positive y down. Subtract the viewport's window origin from pointer positions
 before `screen_to_world` or `zoom_at`. The world center maps to the viewport
 center, including after resizing. `pan_by` accepts logical screen deltas; zoom
-is clamped to 0.01–64 and anchored to the supplied local point.
+is clamped to 0.01–64 and anchored to the supplied local point. Applications
+can opt into different finite positive limits with `zoom_at_with_limits`; they
+remain responsible for precision and content behavior at those scales.
 
 The camera projects geometry; `Canvas` clips and draws the grid. Callers own
 input/state. Retain `Scene::new(items)` with `SceneItem { bounds, data }`, then
