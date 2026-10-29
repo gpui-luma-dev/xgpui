@@ -1,8 +1,8 @@
 use super::{Gradient, GradientKind};
-use ::metal::*;
 use anyhow::{Result, bail};
 use gpui::{DevicePixels, Size};
 use gpui_apple::custom_draw::MetalCustomContext;
+use gpui_apple::metal::*;
 use std::{
     any::Any,
     sync::{
@@ -29,25 +29,27 @@ impl PipelineCache {
         }
         let library = ctx
             .device
-            .new_library_with_source(include_str!("gradient.metal"), &CompileOptions::new())
+            .newLibraryWithSource_options_error(
+                &objc2_foundation::NSString::from_str(include_str!("gradient.metal")),
+                Some(&CompileOptions::new()),
+            )
             .map_err(anyhow::Error::msg)?;
         let descriptor = RenderPipelineDescriptor::new();
         let vertex = library
-            .get_function("gradient_vertex", None)
+            .newFunctionWithName(&objc2_foundation::NSString::from_str("gradient_vertex"))
+            .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
             .map_err(anyhow::Error::msg)?;
         let fragment = library
-            .get_function("gradient_fragment", None)
+            .newFunctionWithName(&objc2_foundation::NSString::from_str("gradient_fragment"))
+            .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
             .map_err(anyhow::Error::msg)?;
-        descriptor.set_vertex_function(Some(&vertex));
-        descriptor.set_fragment_function(Some(&fragment));
-        descriptor
-            .color_attachments()
-            .object_at(0)
-            .unwrap()
-            .set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+        descriptor.setVertexFunction(Some(&vertex));
+        descriptor.setFragmentFunction(Some(&fragment));
+        unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) }
+            .setPixelFormat(MTLPixelFormat::BGRA8Unorm);
         let pipeline = ctx
             .device
-            .new_render_pipeline_state(&descriptor)
+            .newRenderPipelineStateWithDescriptor_error(&descriptor)
             .map_err(anyhow::Error::msg)?;
         *cached = Some((ctx.cache_key(), pipeline.clone(), ctx.queue.clone()));
         self.compilations.fetch_add(1, Ordering::Relaxed);
@@ -71,12 +73,15 @@ impl Gradient {
         let (output, generated) = self.output.prepare(ctx, extent, || {
             let pipeline = self.pipelines.get(ctx)?;
             let desc = TextureDescriptor::new();
-            desc.set_width(extent.width.0 as u64);
-            desc.set_height(extent.height.0 as u64);
-            desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-            desc.set_storage_mode(MTLStorageMode::Private);
-            desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-            let texture = ctx.device.new_texture(&desc);
+            unsafe { desc.setWidth(extent.width.0 as usize) };
+            unsafe { desc.setHeight(extent.height.0 as usize) };
+            desc.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+            desc.setStorageMode(MTLStorageMode::Private);
+            desc.setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
+            let texture = ctx
+                .device
+                .newTextureWithDescriptor(&desc)
+                .expect("Metal texture allocation failed");
             let (kind, center, radius, angle) = match self.kind {
                 GradientKind::Linear { angle } => (0., [0.5; 2], [0.5; 2], angle),
                 GradientKind::Radial { center, radius } => (1., center, radius, 0.),
@@ -111,26 +116,40 @@ impl Gradient {
                     offset: [s.offset, 0., 0., 0.],
                 })
                 .collect();
-            let command = ctx.queue.new_command_buffer().to_owned();
+            let command = ctx
+                .queue
+                .commandBuffer()
+                .expect("Metal command buffer allocation failed")
+                .to_owned();
             let pass = RenderPassDescriptor::new();
-            let attachment = pass.color_attachments().object_at(0).unwrap();
-            attachment.set_texture(Some(&texture));
-            attachment.set_load_action(MTLLoadAction::DontCare);
-            attachment.set_store_action(MTLStoreAction::Store);
-            let encoder = command.new_render_command_encoder(pass);
-            encoder.set_render_pipeline_state(&pipeline);
-            encoder.set_fragment_bytes(
-                0,
-                std::mem::size_of_val(&params) as u64,
-                params.as_ptr().cast(),
-            );
-            encoder.set_fragment_bytes(
-                1,
-                std::mem::size_of_val(stops.as_slice()) as u64,
-                stops.as_ptr().cast(),
-            );
-            encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, 6);
-            encoder.end_encoding();
+            let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+            attachment.setTexture(Some(&texture));
+            attachment.setLoadAction(MTLLoadAction::DontCare);
+            attachment.setStoreAction(MTLStoreAction::Store);
+            let encoder = command
+                .renderCommandEncoderWithDescriptor(&pass)
+                .expect("Metal render encoder allocation failed");
+            encoder.setRenderPipelineState(&pipeline);
+            unsafe {
+                encoder.setFragmentBytes_length_atIndex(
+                    std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                        .expect("non-null bytes"),
+                    std::mem::size_of_val(&params) as usize,
+                    0,
+                )
+            };
+            unsafe {
+                encoder.setFragmentBytes_length_atIndex(
+                    std::ptr::NonNull::new(stops.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                        .expect("non-null bytes"),
+                    std::mem::size_of_val(stops.as_slice()) as usize,
+                    1,
+                )
+            };
+            unsafe {
+                encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6)
+            };
+            encoder.endEncoding();
             Ok((texture, command))
         })?;
         if generated {
@@ -139,3 +158,7 @@ impl Gradient {
         Ok(Box::new(output))
     }
 }
+
+// SAFETY: pipeline state is immutable; the cache mutex serializes replacement and retains its device/queue.
+unsafe impl Send for PipelineCache {}
+unsafe impl Sync for PipelineCache {}

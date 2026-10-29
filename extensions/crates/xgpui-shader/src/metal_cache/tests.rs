@@ -1,13 +1,15 @@
 use super::*;
 use crate::{Gradient, GradientStop, MeshGradient, MeshGrid, SolidColor};
 use gpui::{CustomContent, size};
-use metal::*;
+use gpui_apple::metal::*;
 use std::sync::Arc;
 
 fn context() -> MetalCustomContext {
-    let device = Device::system_default().expect("Metal device required");
+    let device = MTLCreateSystemDefaultDevice().expect("Metal device required");
     MetalCustomContext {
-        queue: device.new_command_queue(),
+        queue: device
+            .newCommandQueue()
+            .expect("Metal queue allocation failed"),
         device,
     }
 }
@@ -19,20 +21,35 @@ fn generate(
     extent: Size<DevicePixels>,
 ) -> Result<(Texture, CommandBuffer)> {
     let desc = TextureDescriptor::new();
-    desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-    desc.set_width(extent.width.0 as u64);
-    desc.set_height(extent.height.0 as u64);
-    desc.set_storage_mode(MTLStorageMode::Shared);
-    desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-    let texture = ctx.device.new_texture(&desc);
-    let command = ctx.queue.new_command_buffer().to_owned();
+    desc.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+    unsafe { desc.setWidth(extent.width.0 as usize) };
+    unsafe { desc.setHeight(extent.height.0 as usize) };
+    desc.setStorageMode(MTLStorageMode::Shared);
+    desc.setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
+    let texture = ctx
+        .device
+        .newTextureWithDescriptor(&desc)
+        .expect("Metal texture allocation failed");
+    let command = ctx
+        .queue
+        .commandBuffer()
+        .expect("Metal command buffer allocation failed")
+        .to_owned();
     let pass = RenderPassDescriptor::new();
-    let attachment = pass.color_attachments().object_at(0).unwrap();
-    attachment.set_texture(Some(&texture));
-    attachment.set_load_action(MTLLoadAction::Clear);
-    attachment.set_store_action(MTLStoreAction::Store);
-    attachment.set_clear_color(MTLClearColor::new(1., 0., 0., 1.));
-    command.new_render_command_encoder(pass).end_encoding();
+    let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+    attachment.setTexture(Some(&texture));
+    attachment.setLoadAction(MTLLoadAction::Clear);
+    attachment.setStoreAction(MTLStoreAction::Store);
+    attachment.setClearColor(MTLClearColor {
+        red: 1.,
+        green: 0.,
+        blue: 0.,
+        alpha: 1.,
+    });
+    command
+        .renderCommandEncoderWithDescriptor(&pass)
+        .expect("Metal render encoder allocation failed")
+        .endEncoding();
     Ok((texture, command))
 }
 fn prepare(
@@ -45,18 +62,27 @@ fn prepare(
 fn submit(output: &MetalCustomOutput) {
     for command in &output.commands {
         command.commit();
-        command.wait_until_completed();
+        command.waitUntilCompleted();
         assert_eq!(command.status(), MTLCommandBufferStatus::Completed);
     }
 }
 fn red_pixel(texture: &TextureRef) {
     let mut pixel = [0u8; 4];
-    texture.get_bytes(
-        pixel.as_mut_ptr().cast(),
-        4,
-        MTLRegion::new_2d(0, 0, 1, 1),
-        0,
-    );
+    unsafe {
+        texture.getBytes_bytesPerRow_fromRegion_mipmapLevel(
+            std::ptr::NonNull::new(pixel.as_mut_ptr().cast()).unwrap(),
+            4,
+            MTLRegion {
+                origin: MTLOrigin { x: 0, y: 0, z: 0 },
+                size: MTLSize {
+                    width: 1,
+                    height: 1,
+                    depth: 1,
+                },
+            },
+            0,
+        )
+    };
     assert_eq!(pixel, [0, 0, 255, 255]);
 }
 
@@ -220,7 +246,10 @@ fn all_producers_separate_queues_on_the_same_device() {
     let a = context();
     let b = MetalCustomContext {
         device: a.device.clone(),
-        queue: a.device.new_command_queue(),
+        queue: a
+            .device
+            .newCommandQueue()
+            .expect("Metal queue allocation failed"),
     };
     assert_ne!(a.cache_key(), b.cache_key());
     for probe in producers() {

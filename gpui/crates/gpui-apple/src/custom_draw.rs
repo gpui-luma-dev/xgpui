@@ -1,12 +1,12 @@
 //! Metal integration for retained, independently rendered GPU content.
+use crate::metal;
+use crate::metal::*;
+use objc2::{rc::Retained, runtime::ProtocolObject};
 pub mod core_video;
 mod coverage_cache;
 use anyhow::{Result, ensure};
 pub(crate) use coverage_cache::{CoverageCache, CoverageKey};
-use foreign_types::ForeignType;
 use gpui::{CustomDraw, DevicePixels, Size, size};
-use metal::*;
-use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_metal::{MTLCommandBuffer, MTLCommandQueue, MTLDevice, MTLTexture};
 
 /// Borrowed by producers during preparation. Handles belong to the host device.
@@ -22,13 +22,13 @@ impl MetalCustomContext {
     /// Typed objc2 view of the host device, borrowed for this context's lifetime.
     /// Producers may retain it when keeping resources beyond preparation.
     pub fn objc2_device(&self) -> &ProtocolObject<dyn MTLDevice> {
-        crate::metal_compat::device(&self.device)
+        &self.device
     }
 
     /// Typed objc2 view of the host queue. Producers record commands on this
     /// queue; only the host may enqueue or commit them.
     pub fn objc2_queue(&self) -> &ProtocolObject<dyn MTLCommandQueue> {
-        crate::metal_compat::queue(&self.queue)
+        &self.queue
     }
 
     /// Queue-scoped cache identity. Cached command buffers retain their queue.
@@ -57,6 +57,10 @@ pub struct MetalImageOutput {
     output: MetalCustomOutput,
     queue: CommandQueue,
 }
+// SAFETY: the image texture is immutable after its recorded upload. Moving
+// this owner between the staging worker and host does not encode concurrently;
+// the host alone submits commands and cache access is synchronized by callers.
+unsafe impl Send for MetalImageOutput {}
 impl MetalImageOutput {
     /// Host submission has accepted all upload commands; no completion wait.
     pub fn is_submitted(&self) -> bool {
@@ -78,7 +82,7 @@ impl MetalImageOutput {
             "image output belongs to another queue"
         );
         ensure!(
-            self.output.texture.device().registry_id() == context.device.registry_id(),
+            self.output.texture.device().registryID() == context.device.registryID(),
             "image output belongs to another device"
         );
         let mut commands = Vec::new();
@@ -150,68 +154,76 @@ impl MetalCustomContext {
             "foreign image staging pool"
         );
         ensure!(
-            self.queue.device().registry_id() == self.device.registry_id(),
+            self.queue.device().registryID() == self.device.registryID(),
             "host queue belongs to another device"
         );
         let bytes = data.staging_byte_len();
         let allocation = pool.buffers.checkout(bytes as u64, bytes, || {
-            Ok(self
-                .device
-                .new_buffer(bytes as u64, MTLResourceOptions::StorageModeShared))
+            Ok(metal::Buffer(
+                self.device
+                    .newBufferWithLength_options(
+                        bytes as usize,
+                        MTLResourceOptions::StorageModeShared,
+                    )
+                    .expect("Metal buffer allocation failed"),
+            ))
         })?;
         let desc = TextureDescriptor::new();
-        desc.set_width(data.width() as u64);
-        desc.set_height(data.height() as u64);
-        desc.set_mipmap_level_count(data.levels().len() as u64);
-        desc.set_pixel_format(match data.format() {
+        unsafe { desc.setWidth(data.width() as usize) };
+        unsafe { desc.setHeight(data.height() as usize) };
+        unsafe { desc.setMipmapLevelCount(data.levels().len() as usize) };
+        desc.setPixelFormat(match data.format() {
             gpui::ImageTextureFormat::Rgba8Srgb => MTLPixelFormat::RGBA8Unorm,
             gpui::ImageTextureFormat::LinearP3Rgba16Float => MTLPixelFormat::RGBA16Float,
         });
-        desc.set_storage_mode(MTLStorageMode::Private);
-        desc.set_usage(MTLTextureUsage::ShaderRead);
-        let texture = self.device.new_texture(&desc);
-        let command = self.queue.new_command_buffer().to_owned();
-        let encoder = command.new_blit_command_encoder();
+        desc.setStorageMode(MTLStorageMode::Private);
+        desc.setUsage(MTLTextureUsage::ShaderRead);
+        let texture = self
+            .device
+            .newTextureWithDescriptor(&desc)
+            .expect("Metal texture allocation failed");
+        let command = self
+            .queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
+        let encoder = command
+            .blitCommandEncoder()
+            .expect("Metal blit encoder allocation failed");
         let buffer = allocation.resource();
         // The exclusive lease is never in the cache while a worker or a pending
         // GPU command owns it. Completion, not queue submission, permits refill.
-        let mapped =
-            unsafe { std::slice::from_raw_parts_mut(buffer.contents().cast::<u8>(), bytes) };
+        let mapped = unsafe {
+            std::slice::from_raw_parts_mut(buffer.contents().cast::<u8>().as_ptr(), bytes)
+        };
         let mut offset = 0usize;
         for (level, pixels) in data.levels().iter().enumerate() {
-            let width = (data.width() >> level).max(1) as u64;
-            let height = (data.height() >> level).max(1) as u64;
+            let width = (data.width() >> level).max(1) as usize;
+            let height = (data.height() >> level).max(1) as usize;
             let bpp = data.bytes_per_pixel();
-            let row = (width * bpp as u64).div_ceil(256) * 256;
+            let row = (width * bpp as usize).div_ceil(256) * 256;
             for y in 0..height as usize {
                 mapped[offset + y * row as usize..offset + y * row as usize + width as usize * bpp]
                     .copy_from_slice(
                         &pixels[y * width as usize * bpp..(y + 1) * width as usize * bpp],
                     );
             }
-            encoder.copy_from_buffer_to_texture(
-                buffer,
-                offset as u64,
-                row,
-                row * height,
-                MTLSize::new(width, height, 1),
-                &texture,
-                0,
-                level as u64,
-                MTLOrigin { x: 0, y: 0, z: 0 },
-                MTLBlitOption::empty(),
-            );
+            unsafe {
+                encoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_options(buffer, offset as usize, row, row * height, MTLSize { width: width, height: height, depth: 1 }, &texture, 0, level as usize, MTLOrigin { x: 0, y: 0, z: 0 }, MTLBlitOption::empty())
+            };
             offset += row as usize * height as usize;
         }
-        encoder.end_encoding();
+        encoder.endEncoding();
         let completion = std::sync::Mutex::new(Some((allocation, guard)));
-        let block = block2::RcBlock::new(move |_: std::ptr::NonNull<objc2::runtime::AnyObject>| {
-            completion.lock().unwrap().take();
-        });
+        let block = block2::RcBlock::new(
+            move |_: std::ptr::NonNull<ProtocolObject<dyn MTLCommandBuffer>>| {
+                completion.lock().unwrap().take();
+            },
+        );
         // SAFETY: Both views use the Objective-C block pointer ABI. Metal calls
         // the completion block only after this upload can no longer use the buffer.
         unsafe {
-            command.add_completed_handler(&*block2::RcBlock::as_ptr(&block).cast());
+            command.addCompletedHandler(block2::RcBlock::as_ptr(&block));
         }
         Ok(MetalImageOutput {
             output: MetalCustomOutput {
@@ -235,24 +247,17 @@ pub struct MetalWideSdrOutput {
     queue: CommandQueue,
 }
 impl MetalWideSdrOutput {
-    /// Accept objc2-owned resources from a producer during the renderer migration.
+    /// Accept native objc2-owned resources from a producer.
     /// The texture and uncommitted commands retain their identities and transfer
     /// ownership to the host without a GPU copy, enqueue, commit or CPU wait.
-    /// The same device, queue, pixel-format and usage checks as the legacy entry
-    /// point apply. This additive entry point preserves existing producer APIs.
+    /// The same device, queue, pixel-format and usage checks as
+    /// `from_linear_p3_premultiplied` apply.
     pub fn from_objc2_linear_p3_premultiplied(
         context: &MetalCustomContext,
         texture: Retained<ProtocolObject<dyn MTLTexture>>,
         commands: Vec<Retained<ProtocolObject<dyn MTLCommandBuffer>>>,
     ) -> Result<Self> {
-        Self::from_linear_p3_premultiplied(
-            context,
-            crate::metal_compat::into_legacy_texture(texture),
-            commands
-                .into_iter()
-                .map(crate::metal_compat::into_legacy_command)
-                .collect(),
-        )
+        Self::from_linear_p3_premultiplied(context, texture, commands)
     }
 
     /// Take ownership of an explicitly described wide texture and pending work.
@@ -272,7 +277,7 @@ impl MetalWideSdrOutput {
 
     /// Reuse immutable cached output. Pending commands retain identity; commands
     /// submitted by the host are omitted. External enqueue/error or queue changes
-    /// are errors. No CPU wait is introduced. Like the legacy protocol, host-only
+    /// are errors. No CPU wait is introduced. Under the producer protocol, host-only
     /// submission is cooperative; command status cannot identify who committed.
     pub fn reusable_for(&self, context: &MetalCustomContext) -> Result<Self> {
         self.validate_resources(context)?;
@@ -296,18 +301,18 @@ impl MetalWideSdrOutput {
             "wide output belongs to another queue"
         );
         ensure!(
-            context.queue.device().registry_id() == context.device.registry_id(),
+            context.queue.device().registryID() == context.device.registryID(),
             "host queue belongs to another device"
         );
         let t = &self.output.texture;
         ensure!(
-            t.device().registry_id() == context.device.registry_id(),
+            t.device().registryID() == context.device.registryID(),
             "wide texture belongs to another device"
         );
         ensure!(
-            t.pixel_format() == MTLPixelFormat::RGBA16Float
-                && t.texture_type() == MTLTextureType::D2
-                && t.sample_count() == 1
+            t.pixelFormat() == MTLPixelFormat::RGBA16Float
+                && t.textureType() == MTLTextureType::Type2D
+                && t.sampleCount() == 1
                 && t.usage().contains(MTLTextureUsage::ShaderRead)
                 && t.width() > 0
                 && t.height() > 0
@@ -366,8 +371,8 @@ impl MetalNv12Output {
             "NV12 output belongs to another queue"
         );
         ensure!(
-            self.y.device().registry_id() == context.device.registry_id()
-                && self.uv.device().registry_id() == context.device.registry_id(),
+            self.y.device().registryID() == context.device.registryID()
+                && self.uv.device().registryID() == context.device.registryID(),
             "NV12 planes belong to another device"
         );
         Ok(self.clone())
@@ -402,26 +407,31 @@ pub(crate) struct CustomCompositor {
 impl CustomCompositor {
     pub fn new(device: &DeviceRef) -> Result<Self> {
         let library = device
-            .new_library_with_source(include_str!("custom_draw.metal"), &CompileOptions::new())
+            .newLibraryWithSource_options_error(
+                &objc2_foundation::NSString::from_str(include_str!("custom_draw.metal")),
+                Some(&CompileOptions::new()),
+            )
             .map_err(anyhow::Error::msg)?;
         let descriptor = RenderPipelineDescriptor::new();
         let vertex = library
-            .get_function("custom_vertex", None)
+            .newFunctionWithName(&objc2_foundation::NSString::from_str("custom_vertex"))
+            .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
             .map_err(anyhow::Error::msg)?;
         let fragment = library
-            .get_function("custom_fragment", None)
+            .newFunctionWithName(&objc2_foundation::NSString::from_str("custom_fragment"))
+            .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
             .map_err(anyhow::Error::msg)?;
-        descriptor.set_vertex_function(Some(&vertex));
-        descriptor.set_fragment_function(Some(&fragment));
-        let color = descriptor.color_attachments().object_at(0).unwrap();
-        color.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-        color.set_blending_enabled(true);
-        color.set_source_rgb_blend_factor(MTLBlendFactor::SourceAlpha);
-        color.set_destination_rgb_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
-        color.set_source_alpha_blend_factor(MTLBlendFactor::One);
-        color.set_destination_alpha_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
+        descriptor.setVertexFunction(Some(&vertex));
+        descriptor.setFragmentFunction(Some(&fragment));
+        let color = unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) };
+        color.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+        color.setBlendingEnabled(true);
+        color.setSourceRGBBlendFactor(MTLBlendFactor::SourceAlpha);
+        color.setDestinationRGBBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
+        color.setSourceAlphaBlendFactor(MTLBlendFactor::One);
+        color.setDestinationAlphaBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
         let pipeline = device
-            .new_render_pipeline_state(&descriptor)
+            .newRenderPipelineStateWithDescriptor_error(&descriptor)
             .map_err(anyhow::Error::msg)?;
         Ok(Self {
             pipeline,
@@ -516,12 +526,12 @@ impl CustomCompositor {
             .downcast::<MetalCustomOutput>()
             .map_err(|_| anyhow::anyhow!("producer returned a non-Metal output"))?;
         ensure!(
-            output.texture.device().registry_id() == context.device.registry_id(),
+            output.texture.device().registryID() == context.device.registryID(),
             "custom texture belongs to another device"
         );
         if source_sized {
             ensure!(
-                (output.texture.pixel_format() == MTLPixelFormat::RGBA16Float)
+                (output.texture.pixelFormat() == MTLPixelFormat::RGBA16Float)
                     == (draw.content.image_color_mode() != gpui::ImageColorMode::EncodedSrgb),
                 "image texture format does not match source color metadata"
             );
@@ -529,19 +539,19 @@ impl CustomCompositor {
         ensure!(
             (if source_sized {
                 matches!(
-                    output.texture.pixel_format(),
+                    output.texture.pixelFormat(),
                     MTLPixelFormat::RGBA8Unorm
                         | MTLPixelFormat::BGRA8Unorm
                         | MTLPixelFormat::RGBA16Float
                 )
             } else {
-                output.texture.pixel_format() == format
-            }) && output.texture.texture_type() == MTLTextureType::D2
-                && output.texture.sample_count() == 1
+                output.texture.pixelFormat() == format
+            }) && output.texture.textureType() == MTLTextureType::Type2D
+                && output.texture.sampleCount() == 1
                 && output.texture.usage().contains(MTLTextureUsage::ShaderRead)
                 && (source_sized
-                    || (output.texture.width() == extent.width.0 as u64
-                        && output.texture.height() == extent.height.0 as u64)),
+                    || (output.texture.width() == extent.width.0 as usize
+                        && output.texture.height() == extent.height.0 as usize)),
             "invalid custom texture format, usage, or size"
         );
         validate_commands(context, &output.commands)?;
@@ -561,9 +571,9 @@ impl CustomCompositor {
             (&planes.uv, MTLPixelFormat::RG8Unorm),
         ] {
             ensure!(
-                texture.pixel_format() == format
-                    && texture.texture_type() == MTLTextureType::D2
-                    && texture.sample_count() == 1
+                texture.pixelFormat() == format
+                    && texture.textureType() == MTLTextureType::Type2D
+                    && texture.sampleCount() == 1
                     && texture.usage().contains(MTLTextureUsage::ShaderRead),
                 "invalid NV12 texture view"
             );
@@ -647,41 +657,44 @@ impl CustomCompositor {
             vignette,
             linear,
         ];
-        encoder.set_render_pipeline_state(&self.pipeline);
-        encoder.set_vertex_bytes(
-            0,
-            std::mem::size_of_val(&params) as u64,
-            params.as_ptr().cast(),
-        );
-        encoder.set_fragment_bytes(
-            0,
-            std::mem::size_of_val(&params) as u64,
-            params.as_ptr().cast(),
-        );
-        encoder.set_fragment_texture(0, Some(output.color_texture()));
-        encoder.set_fragment_texture(1, coverage.or(Some(output.color_texture())));
-        encoder.set_fragment_texture(
-            2,
-            Some(
-                planes
-                    .map(|p| p.uv.as_ref())
-                    .unwrap_or(output.color_texture()),
-            ),
-        );
-        encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, 6);
+        encoder.setRenderPipelineState(&self.pipeline);
+        unsafe {
+            encoder.setVertexBytes_length_atIndex(
+                std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                    .expect("non-null bytes"),
+                std::mem::size_of_val(&params) as usize,
+                0,
+            )
+        };
+        unsafe {
+            encoder.setFragmentBytes_length_atIndex(
+                std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                    .expect("non-null bytes"),
+                std::mem::size_of_val(&params) as usize,
+                0,
+            )
+        };
+        unsafe { encoder.setFragmentTexture_atIndex(Some(output.color_texture()), 0) };
+        unsafe { encoder.setFragmentTexture_atIndex(coverage.or(Some(output.color_texture())), 1) };
+        unsafe {
+            encoder.setFragmentTexture_atIndex(
+                Some(
+                    planes
+                        .map(|p| p.uv.as_ref())
+                        .unwrap_or(output.color_texture()),
+                ),
+                2,
+            )
+        };
+        unsafe { encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6) };
     }
 }
 
 fn validate_commands(context: &MetalCustomContext, commands: &[CommandBuffer]) -> Result<()> {
     for command in commands {
-        // metal-rs does not bind MTLCommandBuffer.commandQueue. Both objects
-        // remain retained while comparing the borrowed queue's identity.
-        let queue: *mut objc2::runtime::AnyObject = unsafe {
-            let object = &*command.as_ptr().cast::<objc2::runtime::AnyObject>();
-            objc2::msg_send![object, commandQueue]
-        };
+        let queue = command.commandQueue();
         ensure!(
-            queue.cast::<std::ffi::c_void>() == context.queue.as_ptr().cast(),
+            Retained::as_ptr(&queue) == Retained::as_ptr(&context.queue),
             "custom command belongs to another queue"
         );
         ensure!(
@@ -728,16 +741,18 @@ pub(crate) fn texture(device: &DeviceRef, extent: Size<DevicePixels>) -> Result<
         "invalid paint extent"
     );
     ensure!(
-        (extent.width.0 as u64) * (extent.height.0 as u64) * 4 <= 64 * 1024 * 1024,
+        (extent.width.0 as usize) * (extent.height.0 as usize) * 4 <= 64 * 1024 * 1024,
         "paint texture exceeds 64 MiB"
     );
     let desc = TextureDescriptor::new();
-    desc.set_width(extent.width.0 as u64);
-    desc.set_height(extent.height.0 as u64);
-    desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-    desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-    desc.set_storage_mode(MTLStorageMode::Private);
-    Ok(device.new_texture(&desc))
+    unsafe { desc.setWidth(extent.width.0 as usize) };
+    unsafe { desc.setHeight(extent.height.0 as usize) };
+    desc.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+    desc.setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
+    desc.setStorageMode(MTLStorageMode::Private);
+    Ok(device
+        .newTextureWithDescriptor(&desc)
+        .expect("Metal texture allocation failed"))
 }
 
 pub(crate) fn coverage_scene(draw: &CustomDraw, extent: Size<DevicePixels>) -> Result<gpui::Scene> {

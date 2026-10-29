@@ -1,5 +1,7 @@
 use super::*;
 use gpui::{ContentMask, Primitive, PrimitiveBatch, ScaledPixels, Scene, ShaderDraw, point, size};
+#[cfg(target_os = "macos")]
+use gpui_apple::metal::MTLDevice as _;
 fn stop(rgb: [f64; 3], alpha: f64) -> LinearRgba {
     LinearRgba::new(LinearRgb::new(RgbSpace::DisplayP3, rgb).unwrap(), alpha).unwrap()
 }
@@ -188,7 +190,12 @@ fn compare_producer_allocations_and_frame_readback() {
     #[cfg(target_os = "windows")]
     let mut renderer = gpui_windows::Dx11HeadlessRenderer::new().unwrap();
     #[cfg(target_os = "macos")]
-    println!("GPU: {}", metal::Device::system_default().unwrap().name());
+    println!(
+        "GPU: {}",
+        gpui_apple::metal::MTLCreateSystemDefaultDevice()
+            .unwrap()
+            .name()
+    );
     renderer
         .set_color_mode(WindowColorMode::WideGamutSdr)
         .unwrap();

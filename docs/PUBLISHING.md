@@ -444,22 +444,26 @@ it does not claim execution of a GUI or cross-platform runtime tests.
 ## Apple bindings migration (#73)
 
 The published versions above still resolve legacy `block 0.1.6` through Cocoa
-and metal-rs on macOS. Their successful builds emit its `uninhabited_static`
-future-incompatibility warning. The checkout's `vendor/block` patch fixes local
-builds, but consumers do not inherit that override.
+and metal-rs on macOS and can emit `uninhabited_static` warnings. These published
+packages do not include the local migration.
 
-[Issue #73](https://github.com/gpui-luma-dev/xgpui/issues/73) tracks migration to
-objc2 and the other options. The first implementation slice moves the renderer's
-atlas allocation/upload/retention to objc2-metal, adds borrowed objc2 device and
-queue access plus owned producer-output transfer, ports the gamut producer, and
-retains shader cache queues with objc2. Existing producer APIs remain available.
-The internal `metal_compat` bridge preserves object identity and +1 ownership
-while the compositor still uses metal-rs. Remove it as those remaining paths
-migrate; it is not a replacement runtime or a permanent dependency fork.
+The local `codex/objc2-metal-interfaces` branch now uses objc2 and objc2-metal
+throughout the Apple renderer, custom compositors, shader and gamut producers,
+and the macOS windowing, input, menu, display and pasteboard paths. Native resource
+owners use `Retained`; callbacks and dynamically registered AppKit subclasses use
+the objc2 runtime and explicit native ABI types. The temporary `metal_compat`
+bridge and legacy `block` patch are removed. The existing Core Foundation,
+Core Graphics and Core Text C wrappers remain where they do not depend on the
+legacy Objective-C runtime.
 
-The first slice passes 45 Apple library tests (including two new ownership and
-atlas-readback tests), the gamut native compositor pixel test, and five shader
-cache tests. The existing native `paint-lab` also passes a locked compilation
-check. These are local native checks using the existing validation patches.
-They do not demonstrate removal of legacy block from registry consumers. No
-version changes or publication are authorized by this migration work.
+This is an unpublished local migration for native lab smoke testing. It changes
+public native Metal resource types; downstream native producers must use the
+objc2 types and encoder APIs. The sibling xgpui-lab ownership/upload probes have
+been adapted locally. Existing pending test-support hooks are preserved.
+
+Native Apple library, macOS, shader, gamut/instanced and color-math tests validate
+the converted paths. The lab's native video/Surface and lifecycle/ownership
+reports are additional local evidence, not proof of Intel Managed-storage behavior
+or physical display calibration. Recheck source revisions, dependency graphs and
+candidate consumer builds before making any release claim. No version changes,
+registry publication or push are part of this work.

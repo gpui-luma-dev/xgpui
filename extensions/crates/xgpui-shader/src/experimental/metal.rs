@@ -1,6 +1,6 @@
 use super::*;
-use ::metal::*;
 use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput};
+use gpui_apple::metal::*;
 use std::{collections::HashMap, sync::Mutex};
 
 #[derive(Default)]
@@ -12,35 +12,41 @@ impl PipelineCache {
             .lock()
             .map_err(|_| anyhow::anyhow!("portable Metal pipeline cache poisoned"))?;
         if let Some((key, pipeline, _)) = &*cache
-            && *key == context.device.registry_id()
+            && *key == context.device.registryID()
         {
             return Ok(pipeline.clone());
         }
         let library = context
             .device
-            .new_library_with_source(&program.msl, &CompileOptions::new())
+            .newLibraryWithSource_options_error(
+                &objc2_foundation::NSString::from_str(&program.msl),
+                Some(&CompileOptions::new()),
+            )
             .map_err(anyhow::Error::msg)
             .context("compiling translated portable MSL")?;
         let descriptor = RenderPipelineDescriptor::new();
         let vertex = library
-            .get_function(&program.metal_entries[0], None)
+            .newFunctionWithName(&objc2_foundation::NSString::from_str(
+                &program.metal_entries[0],
+            ))
+            .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
             .map_err(anyhow::Error::msg)?;
         let fragment = library
-            .get_function(&program.metal_entries[1], None)
+            .newFunctionWithName(&objc2_foundation::NSString::from_str(
+                &program.metal_entries[1],
+            ))
+            .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
             .map_err(anyhow::Error::msg)?;
-        descriptor.set_vertex_function(Some(&vertex));
-        descriptor.set_fragment_function(Some(&fragment));
-        descriptor
-            .color_attachments()
-            .object_at(0)
-            .unwrap()
-            .set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+        descriptor.setVertexFunction(Some(&vertex));
+        descriptor.setFragmentFunction(Some(&fragment));
+        unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) }
+            .setPixelFormat(MTLPixelFormat::BGRA8Unorm);
         let pipeline = context
             .device
-            .new_render_pipeline_state(&descriptor)
+            .newRenderPipelineStateWithDescriptor_error(&descriptor)
             .map_err(anyhow::Error::msg)?;
         *cache = Some((
-            context.device.registry_id(),
+            context.device.registryID(),
             pipeline.clone(),
             context.device.clone(),
         ));
@@ -107,28 +113,51 @@ impl Snapshot {
             .metal_pipeline
             .get(context, &self.program.0)?;
         let descriptor = TextureDescriptor::new();
-        descriptor.set_width(extent.width.0 as u64);
-        descriptor.set_height(extent.height.0 as u64);
-        descriptor.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-        descriptor.set_storage_mode(MTLStorageMode::Private);
-        descriptor.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-        let texture = context.device.new_texture(&descriptor);
-        let command = context.queue.new_command_buffer().to_owned();
+        unsafe { descriptor.setWidth(extent.width.0 as usize) };
+        unsafe { descriptor.setHeight(extent.height.0 as usize) };
+        descriptor.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+        descriptor.setStorageMode(MTLStorageMode::Private);
+        descriptor.setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
+        let texture = context
+            .device
+            .newTextureWithDescriptor(&descriptor)
+            .expect("Metal texture allocation failed");
+        let command = context
+            .queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
         let pass = RenderPassDescriptor::new();
-        let attachment = pass.color_attachments().object_at(0).unwrap();
-        attachment.set_texture(Some(&texture));
-        attachment.set_load_action(MTLLoadAction::DontCare);
-        attachment.set_store_action(MTLStoreAction::Store);
-        let encoder = command.new_render_command_encoder(pass);
-        encoder.set_render_pipeline_state(&pipeline);
+        let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+        attachment.setTexture(Some(&texture));
+        attachment.setLoadAction(MTLLoadAction::DontCare);
+        attachment.setStoreAction(MTLStoreAction::Store);
+        let encoder = command
+            .renderCommandEncoderWithDescriptor(&pass)
+            .expect("Metal render encoder allocation failed");
+        encoder.setRenderPipelineState(&pipeline);
         let geometry = self.geometry(request);
-        encoder.set_fragment_bytes(0, 16, geometry.as_ptr().cast());
-        encoder.set_fragment_bytes(1, self.bytes.len() as u64, self.bytes.as_ptr().cast());
-        encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, 6);
-        encoder.end_encoding();
+        unsafe {
+            encoder.setFragmentBytes_length_atIndex(
+                std::ptr::NonNull::new(geometry.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                    .expect("non-null bytes"),
+                16,
+                0,
+            )
+        };
+        unsafe {
+            encoder.setFragmentBytes_length_atIndex(
+                std::ptr::NonNull::new(self.bytes.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                    .expect("non-null bytes"),
+                self.bytes.len() as usize,
+                1,
+            )
+        };
+        unsafe { encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6) };
+        encoder.endEncoding();
         let bytes: u64 = cache
             .values()
-            .map(|v| v.texture.width() * v.texture.height() * 4)
+            .map(|v| (v.texture.width() * v.texture.height() * 4) as u64)
             .sum();
         if bytes + extent.width.0 as u64 * extent.height.0 as u64 * 4 > 64 * 1024 * 1024 {
             cache.clear();
@@ -147,3 +176,10 @@ impl Snapshot {
         }))
     }
 }
+
+// SAFETY: cached resources are immutable and access is serialized by the cache mutex.
+unsafe impl Send for Cached {}
+
+// SAFETY: pipeline state is immutable; the cache mutex serializes replacement and retains its device/queue.
+unsafe impl Send for PipelineCache {}
+unsafe impl Sync for PipelineCache {}

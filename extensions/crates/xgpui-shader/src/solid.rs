@@ -3,7 +3,7 @@ use gpui::{CustomContent, DevicePixels, Size};
 #[cfg(target_os = "macos")]
 use gpui_apple::custom_draw::MetalCustomContext;
 #[cfg(target_os = "macos")]
-use metal::*;
+use gpui_apple::metal::*;
 use std::{
     any::Any,
     sync::atomic::{AtomicUsize, Ordering},
@@ -61,27 +61,37 @@ impl SolidColor {
         };
         let (output, generated) = self.cache.prepare(context, size, || {
             let descriptor = TextureDescriptor::new();
-            descriptor.set_texture_type(MTLTextureType::D2);
-            descriptor.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-            descriptor.set_width(size.width.0 as u64);
-            descriptor.set_height(size.height.0 as u64);
-            descriptor.set_storage_mode(MTLStorageMode::Private);
-            descriptor.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-            let texture = context.device.new_texture(&descriptor);
+            descriptor.setTextureType(MTLTextureType::Type2D);
+            descriptor.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+            unsafe { descriptor.setWidth(size.width.0 as usize) };
+            unsafe { descriptor.setHeight(size.height.0 as usize) };
+            descriptor.setStorageMode(MTLStorageMode::Private);
+            descriptor.setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
+            let texture = context
+                .device
+                .newTextureWithDescriptor(&descriptor)
+                .expect("Metal texture allocation failed");
             let pass = RenderPassDescriptor::new();
-            let attachment = pass.color_attachments().object_at(0).unwrap();
-            attachment.set_texture(Some(&texture));
-            attachment.set_load_action(MTLLoadAction::Clear);
-            attachment.set_store_action(MTLStoreAction::Store);
+            let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+            attachment.setTexture(Some(&texture));
+            attachment.setLoadAction(MTLLoadAction::Clear);
+            attachment.setStoreAction(MTLStoreAction::Store);
             let c = self.rgba;
-            attachment.set_clear_color(MTLClearColor::new(
-                c[0] as f64,
-                c[1] as f64,
-                c[2] as f64,
-                c[3] as f64,
-            ));
-            let command = context.queue.new_command_buffer().to_owned();
-            command.new_render_command_encoder(pass).end_encoding();
+            attachment.setClearColor(MTLClearColor {
+                red: c[0] as f64,
+                green: c[1] as f64,
+                blue: c[2] as f64,
+                alpha: c[3] as f64,
+            });
+            let command = context
+                .queue
+                .commandBuffer()
+                .expect("Metal command buffer allocation failed")
+                .to_owned();
+            command
+                .renderCommandEncoderWithDescriptor(&pass)
+                .expect("Metal render encoder allocation failed")
+                .endEncoding();
             Ok((texture, command))
         })?;
         if generated {

@@ -3648,6 +3648,14 @@ impl Window {
         self.invalidator.replace_views(views);
     }
 
+    /// Submit the recorded scene on this window's actual native renderer.
+    /// Native lifecycle tests use this instead of presentation/readback waits.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn submit_frame_for_validation(&self) -> anyhow::Result<()> {
+        self.platform_window
+            .submit_scene_for_validation(&self.rendered_frame.scene)
+    }
+
     #[profiling::function]
     fn present(&mut self) {
         #[cfg(feature = "profiler")]

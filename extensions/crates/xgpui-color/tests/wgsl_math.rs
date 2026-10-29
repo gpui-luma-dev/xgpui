@@ -135,7 +135,7 @@ fn helpers_translate_to_all_native_shader_languages() {
 #[cfg(target_os = "macos")]
 #[test]
 fn metal_float32_matches_cpu_reference() {
-    use metal::*;
+    use objc2_metal::*;
     let cases = vectors();
     let (module, info) = validated(&source(&cases));
     let mut options = naga::back::msl::Options::default();
@@ -153,35 +153,62 @@ fn metal_float32_matches_cpu_reference() {
     options.per_entry_point_map.insert("main".into(), resources);
     let (msl, reflection) =
         naga::back::msl::write_string(&module, &info, &options, &Default::default()).unwrap();
-    let device = Device::system_default().expect("Metal device required for native validation");
-    let compile = CompileOptions::new();
-    compile.set_fast_math_enabled(false);
-    let library = device.new_library_with_source(&msl, &compile).unwrap();
-    let entry = reflection.entry_point_names[0].as_ref().unwrap();
-    let function = library.get_function(entry, None).unwrap();
-    let pipeline = device
-        .new_compute_pipeline_state_with_function(&function)
+    let device =
+        MTLCreateSystemDefaultDevice().expect("Metal device required for native validation");
+    let compile = MTLCompileOptions::new();
+    compile.setFastMathEnabled(false);
+    let library = device
+        .newLibraryWithSource_options_error(
+            &objc2_foundation::NSString::from_str(&msl),
+            Some(&compile),
+        )
         .unwrap();
-    let buffer = device.new_buffer(
-        (cases.len() * 16) as u64,
-        MTLResourceOptions::StorageModeShared,
-    );
-    let queue = device.new_command_queue();
-    let command = queue.new_command_buffer();
-    let encoder = command.new_compute_command_encoder();
-    encoder.set_compute_pipeline_state(&pipeline);
-    encoder.set_buffer(0, Some(&buffer), 0);
-    encoder.dispatch_threads(
-        MTLSize::new(cases.len() as u64, 1, 1),
-        MTLSize::new(1, 1, 1),
-    );
-    encoder.end_encoding();
+    let entry = reflection.entry_point_names[0].as_ref().unwrap();
+    let function = library
+        .newFunctionWithName(&objc2_foundation::NSString::from_str(entry))
+        .expect("Metal function missing");
+    let pipeline = device
+        .newComputePipelineStateWithFunction_error(&function)
+        .unwrap();
+    let buffer = device
+        .newBufferWithLength_options(
+            (cases.len() * 16) as usize,
+            MTLResourceOptions::StorageModeShared,
+        )
+        .expect("Metal buffer allocation failed");
+    let queue = device
+        .newCommandQueue()
+        .expect("Metal queue allocation failed");
+    let command = queue
+        .commandBuffer()
+        .expect("Metal command buffer allocation failed");
+    let encoder = command
+        .computeCommandEncoder()
+        .expect("Metal compute encoder allocation failed");
+    encoder.setComputePipelineState(&pipeline);
+    unsafe { encoder.setBuffer_offset_atIndex(Some(&buffer), 0, 0) };
+    unsafe {
+        encoder.dispatchThreads_threadsPerThreadgroup(
+            MTLSize {
+                width: cases.len() as usize,
+                height: 1,
+                depth: 1,
+            },
+            MTLSize {
+                width: 1,
+                height: 1,
+                depth: 1,
+            },
+        )
+    };
+    encoder.endEncoding();
     command.commit();
-    command.wait_until_completed();
+    command.waitUntilCompleted();
     assert_eq!(command.status(), MTLCommandBufferStatus::Completed);
     // Shared buffer is CPU-readable after command completion; exactly len*16 bytes.
-    let output =
-        unsafe { std::slice::from_raw_parts(buffer.contents() as *const [f32; 4], cases.len()) };
+    let output = unsafe {
+        std::slice::from_raw_parts(buffer.contents().as_ptr() as *const [f32; 4], cases.len())
+    };
     for ((expr, expected), actual) in cases.iter().zip(output) {
         for i in 0..4 {
             assert!(

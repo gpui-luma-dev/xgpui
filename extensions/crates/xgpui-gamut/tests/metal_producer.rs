@@ -1,5 +1,5 @@
-#![cfg(target_os = "macos")]
 //! Exercise the extension producer through the real Metal host, not a copy of it.
+#![cfg(target_os = "macos")]
 use gpui::{
     Bounds, ContentMask, Corners, CustomDraw, DevicePixels, Quad, ScaledPixels, Scene,
     WindowColorMode, point, rgb, size,

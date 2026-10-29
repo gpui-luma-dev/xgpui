@@ -1,18 +1,23 @@
-use cocoa::{
-    appkit::{NSAppearanceNameVibrantDark, NSAppearanceNameVibrantLight},
-    base::id,
-    foundation::NSString,
-};
+use crate::native_appkit::*;
 use gpui::WindowAppearance;
-use objc::{msg_send, sel, sel_impl};
+use objc2::msg_send;
+
 use std::ffi::CStr;
 
 pub(crate) unsafe fn window_appearance_from_native(appearance: id) -> WindowAppearance {
     let name: id = msg_send![appearance, name];
     unsafe {
-        if name == NSAppearanceNameVibrantLight {
+        if name
+            == (std::ptr::from_ref(objc2_app_kit::NSAppearanceNameVibrantLight)
+                .cast_mut()
+                .cast::<Object>())
+        {
             WindowAppearance::VibrantLight
-        } else if name == NSAppearanceNameVibrantDark {
+        } else if name
+            == (std::ptr::from_ref(objc2_app_kit::NSAppearanceNameVibrantDark)
+                .cast_mut()
+                .cast::<Object>())
+        {
             WindowAppearance::VibrantDark
         } else if name == NSAppearanceNameAqua {
             WindowAppearance::Light
@@ -21,7 +26,10 @@ pub(crate) unsafe fn window_appearance_from_native(appearance: id) -> WindowAppe
         } else {
             println!(
                 "unknown appearance: {:?}",
-                CStr::from_ptr(name.UTF8String())
+                CStr::from_ptr({
+                    let value: *const std::ffi::c_char = msg_send![name, UTF8String];
+                    value
+                })
             );
             WindowAppearance::Light
         }

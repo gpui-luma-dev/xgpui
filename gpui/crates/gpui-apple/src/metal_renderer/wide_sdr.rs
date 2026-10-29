@@ -1,5 +1,7 @@
 //! Ordered sRGB UI runs and associated linear-P3 SDR composition.
 use super::*;
+use crate::metal;
+use crate::metal::*;
 use anyhow::ensure;
 use std::collections::HashSet;
 
@@ -11,7 +13,7 @@ pub(super) fn validate_viewport(viewport: Size<DevicePixels>) -> Result<()> {
             && viewport.height.0 <= 16384,
         "invalid wide SDR viewport"
     );
-    let bytes = viewport.width.0 as u64 * viewport.height.0 as u64 * 12;
+    let bytes = viewport.width.0 as usize * viewport.height.0 as usize * 12;
     ensure!(
         bytes <= 256 * 1024 * 1024,
         "wide SDR targets exceed 256 MiB"
@@ -19,15 +21,13 @@ pub(super) fn validate_viewport(viewport: Size<DevicePixels>) -> Result<()> {
     Ok(())
 }
 pub(super) fn configure_layer(layer: &metal::MetalLayerRef) -> Result<()> {
-    use core_graphics::color_space::{CGColorSpace, kCGColorSpaceExtendedLinearDisplayP3};
-    let space = CGColorSpace::create_with_name(unsafe { kCGColorSpaceExtendedLinearDisplayP3 })
+    use objc2_core_graphics::{CGColorSpace, kCGColorSpaceExtendedLinearDisplayP3};
+    let space = CGColorSpace::with_name(Some(unsafe { kCGColorSpaceExtendedLinearDisplayP3 }))
         .ok_or_else(|| anyhow::anyhow!("linear P3 color space unavailable"))?;
-    layer.set_pixel_format(MTLPixelFormat::RGBA16Float);
-    // Both wrappers borrow the same native objects; CAMetalLayer retains the
-    // color space. The typed binding also verifies the correct Objective-C ABI.
-    let native: &objc2_quartz_core::CAMetalLayer = unsafe { &*layer.as_ptr().cast() };
-    native.setColorspace(Some(unsafe { &*space.as_ptr().cast() }));
-    native.setWantsExtendedDynamicRangeContent(false);
+    layer.setPixelFormat(MTLPixelFormat::RGBA16Float);
+    // CAMetalLayer retains the color space independently of this local owner.
+    layer.setColorspace(Some(&space));
+    layer.setWantsExtendedDynamicRangeContent(false);
     Ok(())
 }
 
@@ -41,30 +41,32 @@ pub(super) struct Compositor {
 impl Compositor {
     pub fn new(device: &metal::DeviceRef) -> Result<Self> {
         let library = device
-            .new_library_with_source(
-                include_str!("wide_sdr.metal"),
-                &metal::CompileOptions::new(),
+            .newLibraryWithSource_options_error(
+                &objc2_foundation::NSString::from_str(include_str!("wide_sdr.metal")),
+                Some(&metal::CompileOptions::new()),
             )
             .map_err(anyhow::Error::msg)?;
         let pipeline = |fragment: &str, format, blend| -> Result<metal::RenderPipelineState> {
             let d = metal::RenderPipelineDescriptor::new();
             let vertex = library
-                .get_function("gamut_vertex", None)
+                .newFunctionWithName(&objc2_foundation::NSString::from_str("gamut_vertex"))
+                .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
                 .map_err(anyhow::Error::msg)?;
             let fragment = library
-                .get_function(fragment, None)
+                .newFunctionWithName(&objc2_foundation::NSString::from_str(fragment))
+                .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
                 .map_err(anyhow::Error::msg)?;
-            d.set_vertex_function(Some(&vertex));
-            d.set_fragment_function(Some(&fragment));
-            let c = d.color_attachments().object_at(0).unwrap();
-            c.set_pixel_format(format);
-            c.set_blending_enabled(blend);
-            c.set_source_rgb_blend_factor(metal::MTLBlendFactor::One);
-            c.set_source_alpha_blend_factor(metal::MTLBlendFactor::One);
-            c.set_destination_rgb_blend_factor(metal::MTLBlendFactor::OneMinusSourceAlpha);
-            c.set_destination_alpha_blend_factor(metal::MTLBlendFactor::OneMinusSourceAlpha);
+            d.setVertexFunction(Some(&vertex));
+            d.setFragmentFunction(Some(&fragment));
+            let c = unsafe { d.colorAttachments().objectAtIndexedSubscript(0) };
+            c.setPixelFormat(format);
+            c.setBlendingEnabled(blend);
+            c.setSourceRGBBlendFactor(metal::MTLBlendFactor::One);
+            c.setSourceAlphaBlendFactor(metal::MTLBlendFactor::One);
+            c.setDestinationRGBBlendFactor(metal::MTLBlendFactor::OneMinusSourceAlpha);
+            c.setDestinationAlphaBlendFactor(metal::MTLBlendFactor::OneMinusSourceAlpha);
             device
-                .new_render_pipeline_state(&d)
+                .newRenderPipelineStateWithDescriptor_error(&d)
                 .map_err(anyhow::Error::msg)
         };
         Ok(Self {
@@ -82,18 +84,21 @@ impl Compositor {
     ) -> Result<()> {
         validate_viewport(viewport)?;
         if self.scratch.as_ref().is_some_and(|t| {
-            t.width() == viewport.width.0 as u64 && t.height() == viewport.height.0 as u64
+            t.width() == viewport.width.0 as usize && t.height() == viewport.height.0 as usize
         }) {
             return Ok(());
         }
         let texture = |format| {
             let d = metal::TextureDescriptor::new();
-            d.set_width(viewport.width.0 as u64);
-            d.set_height(viewport.height.0 as u64);
-            d.set_pixel_format(format);
-            d.set_usage(metal::MTLTextureUsage::ShaderRead | metal::MTLTextureUsage::RenderTarget);
-            d.set_storage_mode(metal::MTLStorageMode::Private);
-            renderer.device.new_texture(&d)
+            unsafe { d.setWidth(viewport.width.0 as usize) };
+            unsafe { d.setHeight(viewport.height.0 as usize) };
+            d.setPixelFormat(format);
+            d.setUsage(metal::MTLTextureUsage::ShaderRead | metal::MTLTextureUsage::RenderTarget);
+            d.setStorageMode(metal::MTLStorageMode::Private);
+            renderer
+                .device
+                .newTextureWithDescriptor(&d)
+                .expect("Metal texture allocation failed")
         };
         self.scratch = Some(texture(MTLPixelFormat::BGRA8Unorm));
         self.target = Some(texture(MTLPixelFormat::RGBA16Float));
@@ -171,25 +176,41 @@ impl Compositor {
         params: [[f32; 4]; 9],
         preview: bool,
     ) {
-        encoder.set_render_pipeline_state(if preview {
+        encoder.setRenderPipelineState(if preview {
             &self.preview
         } else {
             &self.compose
         });
-        encoder.set_vertex_bytes(0, mem::size_of_val(&params) as u64, params.as_ptr().cast());
-        encoder.set_fragment_bytes(0, mem::size_of_val(&params) as u64, params.as_ptr().cast());
-        encoder.set_fragment_texture(0, Some(image));
-        encoder.set_fragment_texture(1, Some(mask.unwrap_or(image)));
-        encoder.draw_primitives(metal::MTLPrimitiveType::Triangle, 0, 6);
+        unsafe {
+            encoder.setVertexBytes_length_atIndex(
+                std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                    .expect("non-null bytes"),
+                mem::size_of_val(&params) as usize,
+                0,
+            )
+        };
+        unsafe {
+            encoder.setFragmentBytes_length_atIndex(
+                std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                    .expect("non-null bytes"),
+                mem::size_of_val(&params) as usize,
+                0,
+            )
+        };
+        unsafe { encoder.setFragmentTexture_atIndex(Some(image), 0) };
+        unsafe { encoder.setFragmentTexture_atIndex(Some(mask.unwrap_or(image)), 1) };
+        unsafe {
+            encoder.drawPrimitives_vertexStart_vertexCount(metal::MTLPrimitiveType::Triangle, 0, 6)
+        };
     }
     fn flush(
         &self,
         command: &metal::CommandBufferRef,
-        ui: &mut Option<&metal::RenderCommandEncoderRef>,
+        ui: &mut Option<metal::RenderCommandEncoder>,
         viewport: Size<DevicePixels>,
     ) {
         if let Some(encoder) = ui.take() {
-            encoder.end_encoding();
+            encoder.endEncoding();
             let encoder = new_command_encoder_for_texture(
                 command,
                 self.target.as_ref().unwrap(),
@@ -197,13 +218,13 @@ impl Compositor {
                 None,
             );
             self.draw(
-                encoder,
+                &encoder,
                 self.scratch.as_ref().unwrap(),
                 None,
                 Self::params(viewport, None, 1.),
                 false,
             );
-            encoder.end_encoding();
+            encoder.endEncoding();
         }
     }
     #[allow(clippy::too_many_arguments)]
@@ -227,29 +248,36 @@ impl Compositor {
         );
         self.ensure_targets(renderer, viewport)?;
         let queue = renderer.command_queue.clone();
-        let command = queue.new_command_buffer();
+        let command = queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed");
         let initial = new_command_encoder_for_texture(
-            command,
+            &command,
             self.target.as_ref().unwrap(),
             viewport,
-            Some(metal::MTLClearColor::new(0., 0., 0., 1.)),
+            Some(MTLClearColor {
+                red: 0.,
+                green: 0.,
+                blue: 0.,
+                alpha: 1.,
+            }),
         );
-        initial.end_encoding();
+        initial.endEncoding();
         let mut ui = None;
         for batch in scene.batches() {
             if let PrimitiveBatch::Custom(range) = &batch {
                 for index in range.clone() {
                     if self.wide.contains(&index) {
-                        self.flush(command, &mut ui, viewport);
+                        self.flush(&command, &mut ui, viewport);
                         let e = new_command_encoder_for_texture(
-                            command,
+                            &command,
                             self.target.as_ref().unwrap(),
                             viewport,
                             None,
                         );
                         let mask = outputs[index].1.as_deref();
                         self.draw(
-                            e,
+                            &e,
                             &outputs[index].0.texture,
                             mask,
                             Self::params(
@@ -259,23 +287,30 @@ impl Compositor {
                             ),
                             false,
                         );
-                        e.end_encoding();
+                        e.endEncoding();
                     } else {
-                        let e = *ui.get_or_insert_with(|| {
-                            new_command_encoder_for_texture(
-                                command,
-                                self.scratch.as_ref().unwrap(),
-                                viewport,
-                                Some(metal::MTLClearColor::new(0., 0., 0., 0.)),
-                            )
-                        });
+                        let e = ui
+                            .get_or_insert_with(|| {
+                                new_command_encoder_for_texture(
+                                    &command,
+                                    self.scratch.as_ref().unwrap(),
+                                    viewport,
+                                    Some(MTLClearColor {
+                                        red: 0.,
+                                        green: 0.,
+                                        blue: 0.,
+                                        alpha: 0.,
+                                    }),
+                                )
+                            })
+                            .clone();
                         renderer.custom_compositor.as_ref().unwrap().draw(
                             &scene.custom_draws[index],
                             &outputs[index].0,
                             outputs[index].1.as_deref(),
                             outputs[index].2,
                             viewport,
-                            e,
+                            &e,
                         );
                     }
                 }
@@ -289,9 +324,9 @@ impl Compositor {
                 if scene.shader_draws[range.start].program.output_encoding()
                     == gpui::ShaderOutputEncoding::LinearDisplayP3
                 {
-                    self.flush(command, &mut ui, viewport);
+                    self.flush(&command, &mut ui, viewport);
                     let e = new_command_encoder_for_texture(
-                        command,
+                        &command,
                         self.target.as_ref().unwrap(),
                         viewport,
                         None,
@@ -303,20 +338,27 @@ impl Compositor {
                         viewport,
                         scene.shader_draws[range.start].glyph_mask,
                         false,
-                        e,
+                        &e,
                     );
-                    e.end_encoding();
+                    e.endEncoding();
                     continue;
                 }
             }
-            let mut e = *ui.get_or_insert_with(|| {
-                new_command_encoder_for_texture(
-                    command,
-                    self.scratch.as_ref().unwrap(),
-                    viewport,
-                    Some(metal::MTLClearColor::new(0., 0., 0., 0.)),
-                )
-            });
+            let mut e = ui
+                .get_or_insert_with(|| {
+                    new_command_encoder_for_texture(
+                        &command,
+                        self.scratch.as_ref().unwrap(),
+                        viewport,
+                        Some(MTLClearColor {
+                            red: 0.,
+                            green: 0.,
+                            blue: 0.,
+                            alpha: 0.,
+                        }),
+                    )
+                })
+                .clone();
             match batch {
                 PrimitiveBatch::Shaders { program_id, range } => renderer.draw_shaders(
                     program_id,
@@ -325,16 +367,18 @@ impl Compositor {
                     viewport,
                     scene.shader_draws[range.start].glyph_mask,
                     false,
-                    e,
+                    &e,
                 ),
-                PrimitiveBatch::Quads(r) => renderer.draw_quads(r, bindings, viewport, e),
-                PrimitiveBatch::Shadows(r) => renderer.draw_shadows(r, bindings, viewport, e),
-                PrimitiveBatch::Underlines(r) => renderer.draw_underlines(r, bindings, viewport, e),
+                PrimitiveBatch::Quads(r) => renderer.draw_quads(r, bindings, viewport, &e),
+                PrimitiveBatch::Shadows(r) => renderer.draw_shadows(r, bindings, viewport, &e),
+                PrimitiveBatch::Underlines(r) => {
+                    renderer.draw_underlines(r, bindings, viewport, &e)
+                }
                 PrimitiveBatch::MonochromeSprites { texture_id, range } => {
-                    renderer.draw_monochrome_sprites(texture_id, range, bindings, viewport, e)
+                    renderer.draw_monochrome_sprites(texture_id, range, bindings, viewport, &e)
                 }
                 PrimitiveBatch::PolychromeSprites { texture_id, range } => {
-                    renderer.draw_polychrome_sprites(texture_id, range, bindings, viewport, e)
+                    renderer.draw_polychrome_sprites(texture_id, range, bindings, viewport, &e)
                 }
                 PrimitiveBatch::Surfaces(r) => {
                     if let Err(error) = renderer.draw_surfaces(
@@ -342,36 +386,36 @@ impl Compositor {
                         r.start,
                         bindings,
                         viewport,
-                        e,
-                        command,
+                        &e,
+                        &command,
                     ) {
-                        e.end_encoding();
+                        e.endEncoding();
                         return Err(error);
                     }
                 }
                 PrimitiveBatch::Paths(r) => {
-                    e.end_encoding();
+                    e.endEncoding();
                     let paths = &scene.paths[r];
                     let did_draw =
-                        renderer.draw_paths_to_intermediate(paths, writer, viewport, command)?;
+                        renderer.draw_paths_to_intermediate(paths, writer, viewport, &command)?;
                     e = new_command_encoder_for_texture(
-                        command,
+                        &command,
                         self.scratch.as_ref().unwrap(),
                         viewport,
                         None,
                     );
-                    ui = Some(e);
+                    ui = Some(e.clone());
                     if did_draw {
                         if let Err(error) =
-                            renderer.draw_paths_from_intermediate(paths, writer, viewport, e)
+                            renderer.draw_paths_from_intermediate(paths, writer, viewport, &e)
                         {
-                            e.end_encoding();
+                            e.endEncoding();
                             return Err(error);
                         }
                     }
                 }
                 PrimitiveBatch::SubpixelSprites { .. } => {
-                    e.end_encoding();
+                    e.endEncoding();
                     anyhow::bail!("wide SDR requires grayscale text")
                 }
                 PrimitiveBatch::Custom(_)
@@ -379,44 +423,43 @@ impl Compositor {
                 | PrimitiveBatch::LayerBoundary(_) => unreachable!(),
             }
         }
-        self.flush(command, &mut ui, viewport);
-        if destination.pixel_format() == MTLPixelFormat::RGBA16Float {
-            let blit = command.new_blit_command_encoder();
-            blit.copy_from_texture(
-                self.target.as_ref().unwrap(),
-                0,
-                0,
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-                metal::MTLSize {
-                    width: viewport.width.0 as u64,
-                    height: viewport.height.0 as u64,
+        self.flush(&command, &mut ui, viewport);
+        if destination.pixelFormat() == MTLPixelFormat::RGBA16Float {
+            let blit = command
+                .blitCommandEncoder()
+                .expect("Metal blit encoder allocation failed");
+            unsafe {
+                blit.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin(self.target.as_ref().unwrap(), 0, 0, metal::MTLOrigin { x: 0, y: 0, z: 0 }, metal::MTLSize {
+                    width: viewport.width.0 as usize,
+                    height: viewport.height.0 as usize,
                     depth: 1,
-                },
-                destination,
-                0,
-                0,
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-            );
-            blit.end_encoding();
+                }, destination, 0, 0, metal::MTLOrigin { x: 0, y: 0, z: 0 })
+            };
+            blit.endEncoding();
         } else {
             ensure!(
-                destination.pixel_format() == MTLPixelFormat::BGRA8Unorm,
+                destination.pixelFormat() == MTLPixelFormat::BGRA8Unorm,
                 "unsupported wide SDR destination"
             );
             let e = new_command_encoder_for_texture(
-                command,
+                &command,
                 destination,
                 viewport,
-                Some(metal::MTLClearColor::new(0., 0., 0., 1.)),
+                Some(MTLClearColor {
+                    red: 0.,
+                    green: 0.,
+                    blue: 0.,
+                    alpha: 1.,
+                }),
             );
             self.draw(
-                e,
+                &e,
                 self.target.as_ref().unwrap(),
                 None,
                 Self::params(viewport, None, 0.),
                 true,
             );
-            e.end_encoding();
+            e.endEncoding();
         }
         Ok(command.to_owned())
     }

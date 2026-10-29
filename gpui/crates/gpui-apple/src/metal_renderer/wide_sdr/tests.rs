@@ -1,5 +1,8 @@
 use super::*;
+use crate::metal;
+use crate::metal::*;
 use gpui::{CustomContent, CustomDraw, Quad, rgb, rgba};
+use objc2::{rc::Retained, runtime::ProtocolObject};
 use std::{any::Any, sync::Arc};
 
 #[derive(Debug)]
@@ -17,32 +20,44 @@ impl Patch {
         }
     }
 }
+// SAFETY: the fixture serializes pending command access through its mutex.
+unsafe impl Send for Patch {}
+unsafe impl Sync for Patch {}
 impl CustomContent for Patch {
     fn prepare(&self, backend: &dyn Any, extent: Size<DevicePixels>) -> Result<Box<dyn Any>> {
         let c = backend
             .downcast_ref::<crate::custom_draw::MetalCustomContext>()
             .unwrap();
         let d = metal::TextureDescriptor::new();
-        d.set_width(extent.width.0 as u64);
-        d.set_height(extent.height.0 as u64);
-        d.set_pixel_format(self.format);
-        d.set_storage_mode(metal::MTLStorageMode::Private);
-        d.set_usage(metal::MTLTextureUsage::ShaderRead | metal::MTLTextureUsage::RenderTarget);
-        let texture = c.device.new_texture(&d);
-        let command = c.queue.new_command_buffer();
+        unsafe { d.setWidth(extent.width.0 as usize) };
+        unsafe { d.setHeight(extent.height.0 as usize) };
+        d.setPixelFormat(self.format);
+        d.setStorageMode(metal::MTLStorageMode::Private);
+        d.setUsage(metal::MTLTextureUsage::ShaderRead | metal::MTLTextureUsage::RenderTarget);
+        let texture = c
+            .device
+            .newTextureWithDescriptor(&d)
+            .expect("Metal texture allocation failed");
+        let command = c
+            .queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed");
         let p = metal::RenderPassDescriptor::new();
-        let a = p.color_attachments().object_at(0).unwrap();
-        a.set_texture(Some(&texture));
-        a.set_load_action(metal::MTLLoadAction::Clear);
-        a.set_store_action(metal::MTLStoreAction::Store);
+        let a = unsafe { p.colorAttachments().objectAtIndexedSubscript(0) };
+        a.setTexture(Some(&texture));
+        a.setLoadAction(metal::MTLLoadAction::Clear);
+        a.setStoreAction(metal::MTLStoreAction::Store);
         let [r, g, b, alpha] = self.color;
-        a.set_clear_color(metal::MTLClearColor::new(
-            r * alpha,
-            g * alpha,
-            b * alpha,
-            alpha,
-        ));
-        command.new_render_command_encoder(p).end_encoding();
+        a.setClearColor(MTLClearColor {
+            red: r * alpha,
+            green: g * alpha,
+            blue: b * alpha,
+            alpha: alpha,
+        });
+        command
+            .renderCommandEncoderWithDescriptor(&p)
+            .expect("Metal render encoder allocation failed")
+            .endEncoding();
         self.pending.lock().push(command.to_owned());
         Ok(Box::new(
             crate::custom_draw::MetalWideSdrOutput::from_linear_p3_premultiplied(
@@ -97,40 +112,43 @@ fn half(v: u16) -> f32 {
 fn snapshot(r: &MetalRenderer) -> (metal::Buffer, usize, usize) {
     let t = r.wide_sdr.as_ref().unwrap().target.as_ref().unwrap();
     let stride = (t.width() as usize * 8).div_ceil(256) * 256;
-    let output = r.device.new_buffer(
-        (stride * t.height() as usize) as u64,
-        metal::MTLResourceOptions::StorageModeShared,
-    );
-    let command = r.command_queue.new_command_buffer();
-    let blit = command.new_blit_command_encoder();
-    blit.copy_from_texture_to_buffer(
-        t,
-        0,
-        0,
-        metal::MTLOrigin { x: 0, y: 0, z: 0 },
-        metal::MTLSize {
+    let output = r
+        .device
+        .newBufferWithLength_options(
+            (stride * t.height() as usize) as usize,
+            metal::MTLResourceOptions::StorageModeShared,
+        )
+        .expect("Metal buffer allocation failed");
+    let command = r
+        .command_queue
+        .commandBuffer()
+        .expect("Metal command buffer allocation failed");
+    let blit = command
+        .blitCommandEncoder()
+        .expect("Metal blit encoder allocation failed");
+    unsafe {
+        blit.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toBuffer_destinationOffset_destinationBytesPerRow_destinationBytesPerImage_options(t, 0, 0, metal::MTLOrigin { x: 0, y: 0, z: 0 }, metal::MTLSize {
             width: t.width(),
             height: t.height(),
             depth: 1,
-        },
-        &output,
-        0,
-        stride as u64,
-        (stride * t.height() as usize) as u64,
-        metal::MTLBlitOption::empty(),
-    );
-    blit.end_encoding();
+        }, &output, 0, stride as usize, (stride * t.height() as usize) as usize, metal::MTLBlitOption::empty())
+    };
+    blit.endEncoding();
     command.commit();
-    (output, stride, t.height() as usize)
+    (metal::Buffer(output), stride, t.height() as usize)
 }
 fn sample(s: &(metal::Buffer, usize, usize), x: usize, y: usize) -> [f32; 4] {
-    let words = unsafe { slice::from_raw_parts(s.0.contents().cast::<u16>(), s.1 * s.2 / 2) };
+    let words =
+        unsafe { slice::from_raw_parts(s.0.contents().cast::<u16>().as_ptr(), s.1 * s.2 / 2) };
     std::array::from_fn(|i| half(words[y * s.1 / 2 + x * 4 + i]))
 }
 fn wait(r: &MetalRenderer) {
-    let c = r.command_queue.new_command_buffer();
+    let c = r
+        .command_queue
+        .commandBuffer()
+        .expect("Metal command buffer allocation failed");
     c.commit();
-    c.wait_until_completed();
+    c.waitUntilCompleted();
     assert_ne!(c.status(), metal::MTLCommandBufferStatus::Error);
 }
 fn close(actual: [f32; 4], expected: [f32; 4], epsilon: f32) {
@@ -375,21 +393,21 @@ fn wide_sdr_masks_paths_resize_and_target_budget() -> Result<()> {
 #[test]
 fn wide_sdr_layer_is_explicit_linear_p3_float16_without_edr() {
     objc2::rc::autoreleasepool(|_| {
-        let layer = metal::MetalLayer::new();
+        let layer = metal::CAMetalLayer::new();
         configure_layer(&layer).unwrap();
-        assert_eq!(layer.pixel_format(), MTLPixelFormat::RGBA16Float);
-        let native: &objc2_quartz_core::CAMetalLayer = unsafe { &*layer.as_ptr().cast() };
+        assert_eq!(layer.pixelFormat(), MTLPixelFormat::RGBA16Float);
+        let native = &layer;
         assert!(!native.wantsExtendedDynamicRangeContent());
         let actual = native.colorspace().unwrap();
-        let expected = core_graphics::color_space::CGColorSpace::create_with_name(unsafe {
-            core_graphics::color_space::kCGColorSpaceExtendedLinearDisplayP3
-        })
+        let expected = objc2_core_graphics::CGColorSpace::with_name(Some(unsafe {
+            objc2_core_graphics::kCGColorSpaceExtendedLinearDisplayP3
+        }))
         .unwrap();
         assert_ne!(
             unsafe {
                 core_foundation::base::CFEqual(
                     ptr::from_ref(&*actual).cast(),
-                    expected.as_ptr().cast(),
+                    ptr::from_ref(&*expected).cast(),
                 )
             },
             0
@@ -431,11 +449,11 @@ fn wide_sdr_renderer_isolation_mode_switches_and_queued_resources() -> Result<()
         a.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
         assert_eq!(pipeline, a.wide_sdr.as_ref().unwrap().compose.as_ptr());
         assert_eq!(
-            a.layer().unwrap().pixel_format(),
+            a.layer().unwrap().pixelFormat(),
             MTLPixelFormat::RGBA16Float
         );
         assert_eq!(
-            b_renderer.layer().unwrap().pixel_format(),
+            b_renderer.layer().unwrap().pixelFormat(),
             MTLPixelFormat::BGRA8Unorm
         );
         let mut wide = Scene::default();
@@ -452,10 +470,7 @@ fn wide_sdr_renderer_isolation_mode_switches_and_queued_resources() -> Result<()
         a.render_scene(&wide, size(DevicePixels(8), DevicePixels(8)))?;
         let saved = snapshot(&a); // GPU copy queued, not CPU-complete.
         a.set_color_mode(gpui::WindowColorMode::Default)?;
-        assert_eq!(
-            a.layer().unwrap().pixel_format(),
-            MTLPixelFormat::BGRA8Unorm
-        );
+        assert_eq!(a.layer().unwrap().pixelFormat(), MTLPixelFormat::BGRA8Unorm);
         b_renderer.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
         assert_eq!(a.color_status().requested(), gpui::WindowColorMode::Default);
         b_renderer.render_scene(&wide, size(DevicePixels(8), DevicePixels(8)))?;
@@ -495,10 +510,7 @@ fn wide_sdr_transparency_failure_preserves_configuration() -> Result<()> {
                 .is_err()
         );
         assert_eq!(r.color_status(), status);
-        assert_eq!(
-            r.layer().unwrap().pixel_format(),
-            MTLPixelFormat::BGRA8Unorm
-        );
+        assert_eq!(r.layer().unwrap().pixelFormat(), MTLPixelFormat::BGRA8Unorm);
         r.update_transparency(false);
         r.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
         r.update_transparency(true); // Infallible old API must not invalidate the mode.
@@ -521,14 +533,25 @@ fn wide_sdr_legacy_gpu_output_remains_srgb_and_requires_no_new_producer_method()
                 .downcast_ref::<crate::custom_draw::MetalCustomContext>()
                 .unwrap();
             let t = crate::custom_draw::texture(&c.device, extent)?;
-            let command = c.queue.new_command_buffer();
+            let command = c
+                .queue
+                .commandBuffer()
+                .expect("Metal command buffer allocation failed");
             let p = metal::RenderPassDescriptor::new();
-            let attachment = p.color_attachments().object_at(0).unwrap();
-            attachment.set_texture(Some(&t));
-            attachment.set_load_action(metal::MTLLoadAction::Clear);
-            attachment.set_store_action(metal::MTLStoreAction::Store);
-            attachment.set_clear_color(metal::MTLClearColor::new(0.5, 0.5, 0.5, 1.));
-            command.new_render_command_encoder(p).end_encoding();
+            let attachment = unsafe { p.colorAttachments().objectAtIndexedSubscript(0) };
+            attachment.setTexture(Some(&t));
+            attachment.setLoadAction(metal::MTLLoadAction::Clear);
+            attachment.setStoreAction(metal::MTLStoreAction::Store);
+            attachment.setClearColor(MTLClearColor {
+                red: 0.5,
+                green: 0.5,
+                blue: 0.5,
+                alpha: 1.,
+            });
+            command
+                .renderCommandEncoderWithDescriptor(&p)
+                .expect("Metal render encoder allocation failed")
+                .endEncoding();
             Ok(Box::new(crate::custom_draw::MetalCustomOutput {
                 texture: t,
                 commands: vec![command.to_owned()],

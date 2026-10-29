@@ -7,7 +7,7 @@ fn objc2_producer_transfers_owned_resources_without_submitting() -> Result<()> {
         let c = context();
         let device = c.objc2_device().retain();
         let queue = c.objc2_queue().retain();
-        assert_eq!(device.registryID(), c.device.registry_id());
+        assert_eq!(device.registryID(), c.device.registryID());
         assert_eq!(
             std::ptr::from_ref(&*queue).cast::<()>(),
             c.queue.as_ptr().cast::<()>()
@@ -15,8 +15,8 @@ fn objc2_producer_transfers_owned_resources_without_submitting() -> Result<()> {
         let descriptor = objc2_metal::MTLTextureDescriptor::new();
         // SAFETY: positive 8x8 dimensions are supported by Metal.
         unsafe {
-            descriptor.setWidth(8);
-            descriptor.setHeight(8);
+            unsafe { descriptor.setWidth(8) };
+            unsafe { descriptor.setHeight(8) };
         }
         descriptor.setPixelFormat(objc2_metal::MTLPixelFormat::RGBA16Float);
         descriptor.setUsage(objc2_metal::MTLTextureUsage::ShaderRead);
@@ -56,7 +56,7 @@ fn objc2_producer_transfers_owned_resources_without_submitting() -> Result<()> {
         let pending = output.reusable_for(&c)?;
         submit_custom_commands(&c, [&pending.output])?;
         drop(c);
-        pending.output.commands[0].wait_until_completed();
+        pending.output.commands[0].waitUntilCompleted();
         assert_eq!(
             pending.output.commands[0].status(),
             MTLCommandBufferStatus::Completed
@@ -68,22 +68,31 @@ fn objc2_producer_transfers_owned_resources_without_submitting() -> Result<()> {
 
 fn texture(context: &MetalCustomContext) -> Texture {
     let d = TextureDescriptor::new();
-    d.set_width(8);
-    d.set_height(8);
-    d.set_pixel_format(MTLPixelFormat::RGBA16Float);
-    d.set_usage(MTLTextureUsage::ShaderRead | MTLTextureUsage::RenderTarget);
-    context.device.new_texture(&d)
+    unsafe { d.setWidth(8) };
+    unsafe { d.setHeight(8) };
+    d.setPixelFormat(MTLPixelFormat::RGBA16Float);
+    d.setUsage(MTLTextureUsage::ShaderRead | MTLTextureUsage::RenderTarget);
+    context
+        .device
+        .newTextureWithDescriptor(&d)
+        .expect("Metal texture allocation failed")
 }
 fn context() -> MetalCustomContext {
-    let device = Device::system_default().unwrap();
-    let queue = device.new_command_queue();
+    let device = MTLCreateSystemDefaultDevice().unwrap();
+    let queue = device
+        .newCommandQueue()
+        .expect("Metal queue allocation failed");
     MetalCustomContext { device, queue }
 }
 #[test]
 fn wide_output_pending_reuse_submission_and_queue_separation() -> Result<()> {
     objc2::rc::autoreleasepool(|_| {
         let c = context();
-        let command = c.queue.new_command_buffer().to_owned();
+        let command = c
+            .queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
         let cached = MetalWideSdrOutput::from_linear_p3_premultiplied(
             &c,
             texture(&c),
@@ -101,14 +110,17 @@ fn wide_output_pending_reuse_submission_and_queue_separation() -> Result<()> {
         );
         let other = MetalCustomContext {
             device: c.device.clone(),
-            queue: c.device.new_command_queue(),
+            queue: c
+                .device
+                .newCommandQueue()
+                .expect("Metal queue allocation failed"),
         };
         assert!(cached.reusable_for(&other).is_err());
         assert_eq!(command.status(), MTLCommandBufferStatus::NotEnqueued);
         submit_custom_commands(&c, [&first.output, &second.output])?;
         let ready = cached.reusable_for(&c)?;
         assert!(ready.output.commands.is_empty());
-        command.wait_until_completed();
+        command.waitUntilCompleted();
         assert_ne!(command.status(), MTLCommandBufferStatus::Error);
         assert!(cached.reusable_for(&c)?.output.commands.is_empty());
         Ok(())
@@ -118,14 +130,24 @@ fn wide_output_pending_reuse_submission_and_queue_separation() -> Result<()> {
 fn wide_output_rejects_external_enqueue_and_wrong_queue_commands() -> Result<()> {
     objc2::rc::autoreleasepool(|_| {
         let c = context();
-        let other = c.device.new_command_queue();
-        let wrong = other.new_command_buffer().to_owned();
+        let other = c
+            .device
+            .newCommandQueue()
+            .expect("Metal queue allocation failed");
+        let wrong = other
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
         assert!(
             MetalWideSdrOutput::from_linear_p3_premultiplied(&c, texture(&c), vec![wrong.clone()])
                 .is_err()
         );
         assert_eq!(wrong.status(), MTLCommandBufferStatus::NotEnqueued);
-        let command = c.queue.new_command_buffer().to_owned();
+        let command = c
+            .queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
         let cached = MetalWideSdrOutput::from_linear_p3_premultiplied(
             &c,
             texture(&c),
@@ -136,7 +158,7 @@ fn wide_output_rejects_external_enqueue_and_wrong_queue_commands() -> Result<()>
         let raw = cached.validate_context(&c);
         // Release the reserved queue slot even if an assertion below fails.
         command.commit();
-        command.wait_until_completed();
+        command.waitUntilCompleted();
         assert!(reuse.is_err());
         assert!(raw.is_err());
         Ok(())

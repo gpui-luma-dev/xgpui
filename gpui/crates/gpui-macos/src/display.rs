@@ -1,17 +1,16 @@
+use crate::native_appkit::*;
 use crate::ns_string;
 use anyhow::Result;
-use cocoa::{
-    appkit::NSScreen,
-    base::{BOOL, NO, YES, id, nil},
-    foundation::{NSArray, NSDictionary},
-};
+use objc2::{class, msg_send, sel};
+use objc2_foundation::*;
+
 use core_foundation::base::CFRelease;
 use core_foundation::uuid::{CFUUIDGetUUIDBytes, CFUUIDRef};
 use core_graphics::display::{
     CGDirectDisplayID, CGDisplay, CGDisplayBounds, CGGetActiveDisplayList,
 };
 use gpui::{Bounds, DisplayId, Pixels, PlatformDisplay, point, px, refresh_interval_from_hz, size};
-use objc::{msg_send, sel, sel_impl};
+
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -37,13 +36,25 @@ impl MacDisplay {
         //
         // https://chromium.googlesource.com/chromium/src/+/66.0.3359.158/ui/display/mac/screen_mac.mm#56
         unsafe {
-            let screens = NSScreen::screens(nil);
-            let screen = cocoa::foundation::NSArray::objectAtIndex(screens, 0);
-            let device_description = NSScreen::deviceDescription(screen);
+            let screens = {
+                let value: id = msg_send![class!(NSScreen), screens];
+                value
+            };
+            let screen = {
+                let value: id = msg_send![screens, objectAtIndex: 0usize];
+                value
+            };
+            let device_description = {
+                let value: id = msg_send![screen, deviceDescription];
+                value
+            };
             let screen_number_key: id = ns_string("NSScreenNumber");
-            let screen_number = device_description.objectForKey_(screen_number_key);
-            let screen_number: CGDirectDisplayID = msg_send![screen_number, unsignedIntegerValue];
-            Self(screen_number)
+            let screen_number = {
+                let value: id = msg_send![device_description, objectForKey: screen_number_key];
+                value
+            };
+            let screen_number: NSUInteger = msg_send![screen_number, unsignedIntegerValue];
+            Self(screen_number as CGDirectDisplayID)
         }
     }
 
@@ -135,8 +146,14 @@ impl PlatformDisplay for MacDisplay {
                 return self.bounds();
             }
 
-            let screen_frame = NSScreen::frame(dominated_screen);
-            let visible_frame = NSScreen::visibleFrame(dominated_screen);
+            let screen_frame = {
+                let value: NSRect = msg_send![dominated_screen, frame];
+                value
+            };
+            let visible_frame = {
+                let value: NSRect = msg_send![dominated_screen, visibleFrame];
+                value
+            };
 
             // Convert from bottom-left origin (AppKit) to top-left origin
             let origin_y =
@@ -184,16 +201,41 @@ impl PlatformDisplay for MacDisplay {
 impl MacDisplay {
     /// Find the NSScreen corresponding to this display
     unsafe fn get_nsscreen(&self) -> id {
-        let screens = unsafe { NSScreen::screens(nil) };
-        let count = unsafe { NSArray::count(screens) };
+        let screens = {
+            unsafe {
+                let value: id = msg_send![class!(NSScreen), screens];
+                value
+            }
+        };
+        let count = {
+            unsafe {
+                let value: NSUInteger = msg_send![screens, count];
+                value
+            }
+        };
         let screen_number_key: id = unsafe { ns_string("NSScreenNumber") };
 
         for i in 0..count {
-            let screen = unsafe { NSArray::objectAtIndex(screens, i) };
-            let device_description = unsafe { NSScreen::deviceDescription(screen) };
-            let screen_number = unsafe { device_description.objectForKey_(screen_number_key) };
-            let screen_id: CGDirectDisplayID = msg_send![screen_number, unsignedIntegerValue];
-            if screen_id == self.0 {
+            let screen = {
+                unsafe {
+                    let value: id = msg_send![screens, objectAtIndex: i];
+                    value
+                }
+            };
+            let device_description = {
+                unsafe {
+                    let value: id = msg_send![screen, deviceDescription];
+                    value
+                }
+            };
+            let screen_number = {
+                unsafe {
+                    let value: id = msg_send![device_description, objectForKey: screen_number_key];
+                    value
+                }
+            };
+            let screen_id: NSUInteger = msg_send![screen_number, unsignedIntegerValue];
+            if screen_id == self.0 as NSUInteger {
                 return screen;
             }
         }

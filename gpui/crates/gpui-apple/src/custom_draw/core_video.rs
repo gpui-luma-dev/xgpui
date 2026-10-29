@@ -233,7 +233,7 @@ impl gpui::CustomContent for CoreVideoFrame {
             };
             let texture =
                 CVMetalTextureGetTexture(&view).context("CoreVideo returned no Metal texture")?;
-            let texture = crate::metal_compat::into_legacy_texture(texture);
+            let texture = texture;
             views.push(view);
             Ok(texture)
         };
