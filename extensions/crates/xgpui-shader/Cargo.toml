@@ -2,7 +2,7 @@
 name = "xgpui-shader"
 version = "0.2.0"
 edition = "2024"
-publish = false
+publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Shader and paint extension for xgpui with gradients, brushes, and portable WGSL shaders"
 license = "Apache-2.0"
