@@ -1,4 +1,71 @@
 use super::*;
+#[test]
+fn objc2_producer_transfers_owned_resources_without_submitting() -> Result<()> {
+    use objc2::Message;
+    use objc2_metal::{MTLCommandQueue as _, MTLDevice as _};
+    objc2::rc::autoreleasepool(|_| {
+        let c = context();
+        let device = c.objc2_device().retain();
+        let queue = c.objc2_queue().retain();
+        assert_eq!(device.registryID(), c.device.registry_id());
+        assert_eq!(
+            std::ptr::from_ref(&*queue).cast::<()>(),
+            c.queue.as_ptr().cast::<()>()
+        );
+        let descriptor = objc2_metal::MTLTextureDescriptor::new();
+        // SAFETY: positive 8x8 dimensions are supported by Metal.
+        unsafe {
+            descriptor.setWidth(8);
+            descriptor.setHeight(8);
+        }
+        descriptor.setPixelFormat(objc2_metal::MTLPixelFormat::RGBA16Float);
+        descriptor.setUsage(objc2_metal::MTLTextureUsage::ShaderRead);
+        let texture = device.newTextureWithDescriptor(&descriptor).unwrap();
+        let command = queue.commandBuffer().unwrap();
+        let texture_ptr = Retained::as_ptr(&texture).cast::<()>();
+        let command_ptr = Retained::as_ptr(&command).cast::<()>();
+        let output =
+            MetalWideSdrOutput::from_objc2_linear_p3_premultiplied(&c, texture, vec![command])?;
+        // The original objc2 owners were moved into the host. Identity, +1
+        // ownership and pending state must survive beyond those local handles.
+        assert_eq!(
+            output.output.texture.as_ptr().cast::<()>().cast_const(),
+            texture_ptr
+        );
+        assert_eq!(
+            output.output.commands[0].as_ptr().cast::<()>().cast_const(),
+            command_ptr
+        );
+        assert_eq!(
+            output.output.commands[0].status(),
+            MTLCommandBufferStatus::NotEnqueued
+        );
+        let wrong_queue = device.newCommandQueue().unwrap();
+        let wrong_command = wrong_queue.commandBuffer().unwrap();
+        let wrong_texture = device.newTextureWithDescriptor(&descriptor).unwrap();
+        assert!(
+            MetalWideSdrOutput::from_objc2_linear_p3_premultiplied(
+                &c,
+                wrong_texture,
+                vec![wrong_command],
+            )
+            .is_err()
+        );
+        drop(device);
+        drop(queue);
+        let pending = output.reusable_for(&c)?;
+        submit_custom_commands(&c, [&pending.output])?;
+        drop(c);
+        pending.output.commands[0].wait_until_completed();
+        assert_eq!(
+            pending.output.commands[0].status(),
+            MTLCommandBufferStatus::Completed
+        );
+        assert_eq!(pending.output.texture.width(), 8);
+        Ok(())
+    })
+}
+
 fn texture(context: &MetalCustomContext) -> Texture {
     let d = TextureDescriptor::new();
     d.set_width(8);

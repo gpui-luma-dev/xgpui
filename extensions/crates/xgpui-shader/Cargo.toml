@@ -33,6 +33,8 @@ refineable = { package = "refineable-gpui-unofficial", version = "=1.25.3" }
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-apple = { path = "../../../gpui/crates/gpui-apple" , package = "xgpui-apple", version = "=1.0.0" }
 metal = "0.33"
+objc2 = "0.6"
+objc2-metal = { version = "0.3", default-features = false, features = ["MTLCommandQueue"] }
 
 [dev-dependencies]
 image = { version = "0.25.1", default-features = false }

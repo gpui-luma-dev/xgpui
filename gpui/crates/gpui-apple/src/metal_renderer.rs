@@ -8,7 +8,9 @@ use gpui::{
 };
 #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
 use image::RgbaImage;
+use objc2::Message;
 use objc2::runtime::AnyObject;
+use objc2_metal::MTLTexture as _;
 
 use foreign_types::{ForeignType, ForeignTypeRef};
 use metal::{
@@ -436,17 +438,16 @@ impl MetalRenderer {
         );
         let command_queue = device.new_command_queue();
         let supports_shared_storage = cfg!(target_os = "ios") || is_apple_gpu;
-        let sprite_atlas = Arc::new(MetalAtlas::new(device.clone(), supports_shared_storage));
-        // metal and objc2-metal expose the same Objective-C device; the borrowed
-        // protocol object remains valid while `device` owns it.
+        let sprite_atlas = Arc::new(MetalAtlas::new(
+            crate::metal_compat::device(&device).retain(),
+            supports_shared_storage,
+        ));
         let core_video_texture_cache = unsafe {
             let mut cache = ptr::null_mut();
             let status = CVMetalTextureCache::create(
                 None,
                 None,
-                &*device
-                    .as_ptr()
-                    .cast::<objc2::runtime::ProtocolObject<dyn objc2_metal::MTLDevice>>(),
+                crate::metal_compat::device(&device),
                 None,
                 ptr::NonNull::from(&mut cache),
             );
@@ -1385,7 +1386,7 @@ impl MetalRenderer {
             let Some(texture) = self.sprite_atlas.metal_texture(tile.texture_id) else {
                 return;
             };
-            encoder.set_fragment_texture(0, Some(&texture));
+            encoder.set_fragment_texture(0, Some(crate::metal_compat::legacy_texture(&texture)));
         } else if path_mask {
             encoder.set_fragment_texture(0, self.path_intermediate_texture.as_deref());
         } else {
@@ -1619,7 +1620,10 @@ impl MetalRenderer {
             Some(&instance_bindings.monochrome_sprites.buffer),
             instance_bindings.monochrome_sprites.offset as u64,
         );
-        command_encoder.set_fragment_texture(SpriteInputIndex::AtlasTexture as u64, Some(&texture));
+        command_encoder.set_fragment_texture(
+            SpriteInputIndex::AtlasTexture as u64,
+            Some(crate::metal_compat::legacy_texture(&texture)),
+        );
 
         command_encoder.draw_primitives_instanced_base_instance(
             metal::MTLPrimitiveType::Triangle,
@@ -1675,7 +1679,10 @@ impl MetalRenderer {
             Some(&instance_bindings.polychrome_sprites.buffer),
             instance_bindings.polychrome_sprites.offset as u64,
         );
-        command_encoder.set_fragment_texture(SpriteInputIndex::AtlasTexture as u64, Some(&texture));
+        command_encoder.set_fragment_texture(
+            SpriteInputIndex::AtlasTexture as u64,
+            Some(crate::metal_compat::legacy_texture(&texture)),
+        );
 
         command_encoder.draw_primitives_instanced_base_instance(
             metal::MTLPrimitiveType::Triangle,
@@ -1785,21 +1792,19 @@ impl MetalRenderer {
                 mem::size_of_val(&texture_size) as u64,
                 &texture_size as *const Size<DevicePixels> as *const _,
             );
-            command_encoder.set_fragment_texture(SurfaceInputIndex::YTexture as u64, unsafe {
-                let texture = CVMetalTextureGetTexture(&y_texture)
+            let y_metal_texture = CVMetalTextureGetTexture(&y_texture)
+                .context("CoreVideo returned no Metal texture")?;
+            let cb_cr_metal_texture =
+                CVMetalTextureGetTexture(cb_cr_texture.as_ref().unwrap_or(&y_texture))
                     .context("CoreVideo returned no Metal texture")?;
-                Some(metal::TextureRef::from_ptr(
-                    objc2::rc::Retained::as_ptr(&texture) as *mut _,
-                ))
-            });
-            command_encoder.set_fragment_texture(SurfaceInputIndex::CbCrTexture as u64, unsafe {
-                let texture =
-                    CVMetalTextureGetTexture(cb_cr_texture.as_ref().unwrap_or(&y_texture))
-                        .context("CoreVideo returned no Metal texture")?;
-                Some(metal::TextureRef::from_ptr(
-                    objc2::rc::Retained::as_ptr(&texture) as *mut _,
-                ))
-            });
+            command_encoder.set_fragment_texture(
+                SurfaceInputIndex::YTexture as u64,
+                Some(crate::metal_compat::legacy_texture(&y_metal_texture)),
+            );
+            command_encoder.set_fragment_texture(
+                SurfaceInputIndex::CbCrTexture as u64,
+                Some(crate::metal_compat::legacy_texture(&cb_cr_metal_texture)),
+            );
 
             views.push(y_texture);
             views.extend(cb_cr_texture);

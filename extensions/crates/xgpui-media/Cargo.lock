@@ -4861,13 +4861,15 @@ dependencies = [
  "bytemuck",
  "metal",
  "naga",
+ "objc2",
+ "objc2-metal",
  "refineable-gpui-unofficial",
  "serde",
  "unicode-bidi",
  "unicode-segmentation",
  "windows 0.62.2",
- "xgpui-apple",
  "xgpui",
+ "xgpui-apple",
  "xgpui-windows",
 ]
 

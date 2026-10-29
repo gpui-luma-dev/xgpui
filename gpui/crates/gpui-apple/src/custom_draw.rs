@@ -6,6 +6,8 @@ pub(crate) use coverage_cache::{CoverageCache, CoverageKey};
 use foreign_types::ForeignType;
 use gpui::{CustomDraw, DevicePixels, Size, size};
 use metal::*;
+use objc2::{rc::Retained, runtime::ProtocolObject};
+use objc2_metal::{MTLCommandBuffer, MTLCommandQueue, MTLDevice, MTLTexture};
 
 /// Borrowed by producers during preparation. Handles belong to the host device.
 #[derive(Clone)]
@@ -17,6 +19,18 @@ pub struct MetalCustomContext {
 }
 
 impl MetalCustomContext {
+    /// Typed objc2 view of the host device, borrowed for this context's lifetime.
+    /// Producers may retain it when keeping resources beyond preparation.
+    pub fn objc2_device(&self) -> &ProtocolObject<dyn MTLDevice> {
+        crate::metal_compat::device(&self.device)
+    }
+
+    /// Typed objc2 view of the host queue. Producers record commands on this
+    /// queue; only the host may enqueue or commit them.
+    pub fn objc2_queue(&self) -> &ProtocolObject<dyn MTLCommandQueue> {
+        crate::metal_compat::queue(&self.queue)
+    }
+
     /// Queue-scoped cache identity. Cached command buffers retain their queue.
     pub fn cache_key(&self) -> u64 {
         self.queue.as_ptr() as usize as u64
@@ -221,6 +235,26 @@ pub struct MetalWideSdrOutput {
     queue: CommandQueue,
 }
 impl MetalWideSdrOutput {
+    /// Accept objc2-owned resources from a producer during the renderer migration.
+    /// The texture and uncommitted commands retain their identities and transfer
+    /// ownership to the host without a GPU copy, enqueue, commit or CPU wait.
+    /// The same device, queue, pixel-format and usage checks as the legacy entry
+    /// point apply. This additive entry point preserves existing producer APIs.
+    pub fn from_objc2_linear_p3_premultiplied(
+        context: &MetalCustomContext,
+        texture: Retained<ProtocolObject<dyn MTLTexture>>,
+        commands: Vec<Retained<ProtocolObject<dyn MTLCommandBuffer>>>,
+    ) -> Result<Self> {
+        Self::from_linear_p3_premultiplied(
+            context,
+            crate::metal_compat::into_legacy_texture(texture),
+            commands
+                .into_iter()
+                .map(crate::metal_compat::into_legacy_command)
+                .collect(),
+        )
+    }
+
     /// Take ownership of an explicitly described wide texture and pending work.
     /// Empty commands require content already ready/submitted on the host queue.
     pub fn from_linear_p3_premultiplied(

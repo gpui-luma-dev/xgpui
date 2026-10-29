@@ -440,3 +440,26 @@ registry versions of all 15 packages, including the instanced gamut and portable
 shader features. Cargo metadata confirmed every release dependency came from
 crates.io, with no repository path patches. This checks native consumer compilation;
 it does not claim execution of a GUI or cross-platform runtime tests.
+
+## Apple bindings migration (#73)
+
+The published versions above still resolve legacy `block 0.1.6` through Cocoa
+and metal-rs on macOS. Their successful builds emit its `uninhabited_static`
+future-incompatibility warning. The checkout's `vendor/block` patch fixes local
+builds, but consumers do not inherit that override.
+
+[Issue #73](https://github.com/gpui-luma-dev/xgpui/issues/73) tracks migration to
+objc2 and the other options. The first implementation slice moves the renderer's
+atlas allocation/upload/retention to objc2-metal, adds borrowed objc2 device and
+queue access plus owned producer-output transfer, ports the gamut producer, and
+retains shader cache queues with objc2. Existing producer APIs remain available.
+The internal `metal_compat` bridge preserves object identity and +1 ownership
+while the compositor still uses metal-rs. Remove it as those remaining paths
+migrate; it is not a replacement runtime or a permanent dependency fork.
+
+The first slice passes 45 Apple library tests (including two new ownership and
+atlas-readback tests), the gamut native compositor pixel test, and five shader
+cache tests. The existing native `paint-lab` also passes a locked compilation
+check. These are local native checks using the existing validation patches.
+They do not demonstrate removal of legacy block from registry consumers. No
+version changes or publication are authorized by this migration work.
