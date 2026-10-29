@@ -122,3 +122,32 @@ controlled hardware benchmark.
 
 RFC coverage, API boundaries, limitations, and the next implementation plan are
 recorded in [`docs/extensions/canvas.md`](../../../docs/extensions/canvas.md).
+
+## CPU Mandelbrot image example
+
+Press **F** to switch between cards and Mandelbrot, or start directly with:
+
+```sh
+just canvas-lab --mandelbrot
+```
+
+Drag with the left button or scroll to pan; pinch zooms at the pointer. **R**
+resets the camera. **M** toggles the current-view preview. The whole-scene card
+minimap is unavailable in this mode; switching content resets the camera.
+
+The fractal uses f64 CPU escape-time calculations on a background executor and
+uploads an ordinary BGRA image through GPUI's image painter. No custom fractal
+shader or new canvas API is involved. A 240-pixel-wide render is followed by a
+960-pixel-wide refinement after a 180 ms pause, with height capped at 960 pixels.
+Both use 256 iterations. The previous image is projected at its original world
+bounds while replacement work runs. Camera/size changes cancel obsolete work
+at row boundaries; generation checks reject stale completions. This is a bounded
+resolution demonstration, not a deep-zoom renderer or a CPU/GPU benchmark.
+The existing camera retains its 0.01–64 zoom limits. The optional live preview
+still carries its separate GPU readback cost.
+
+Capture a refined native frame and exit:
+
+```sh
+just canvas-lab --mandelbrot --mandelbrot-capture /tmp/mandelbrot.png
+```

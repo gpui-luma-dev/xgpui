@@ -1,4 +1,5 @@
 mod interaction;
+mod mandelbrot;
 mod minimap;
 mod overview_map;
 mod profile;
@@ -14,6 +15,12 @@ use xgpui_canvas::{
 
 #[derive(Parser)]
 struct Options {
+    /// Open the CPU Mandelbrot image example.
+    #[arg(long, conflicts_with_all = ["smoke", "benchmark"])]
+    mandelbrot: bool,
+    /// Save a refined CPU Mandelbrot frame and quit.
+    #[arg(long, requires = "mandelbrot")]
+    mandelbrot_capture: Option<PathBuf>,
     /// Profile 10k/100k and dense overview redraws, save JSON/PNGs, then quit.
     #[arg(long)]
     benchmark: Option<PathBuf>,
@@ -23,6 +30,7 @@ struct Options {
 }
 
 struct Lab {
+    fractal: mandelbrot::Mandelbrot,
     profile: Option<profile::Profile>,
     smoke: Option<(PathBuf, usize, bool)>,
     grid: GridPainter,
@@ -157,7 +165,7 @@ impl Render for Lab {
         let mut cards = Vec::new();
         let mut proxies = Vec::new();
         let mut point_count = 0;
-        for entry in self.scene.visible(self.camera, viewport) {
+        for entry in self.scene.visible(self.camera, viewport).filter(|_| !self.fractal.enabled) {
             let id = entry.item.data;
             let screen = entry.screen_bounds.min;
             if entry.detail != LevelOfDetail::Full {
@@ -249,6 +257,15 @@ impl Render for Lab {
         let marquee = self.marquee();
         let guides = self.snap_guides.clone();
         let camera = self.camera;
+        self.schedule_mandelbrot(cx);
+        let fractal = self.fractal.enabled.then(|| self.fractal_element());
+        if self.fractal.refined && let Some(path) = self.fractal.capture.take() {
+            window.on_next_frame(move |window, cx| {
+                window.render_to_image().expect("capture Mandelbrot").save(path).expect("save Mandelbrot");
+                cx.quit();
+            });
+            window.request_animation_frame();
+        }
         minimap::schedule(self, window, cx);
         let minimap = (self.show_minimap && !self.preview.hidden).then(|| {
             if self.whole_scene_map {
@@ -264,7 +281,8 @@ impl Render for Lab {
                     this.grid_style = match this.grid_style { GridStyle::Lines => GridStyle::Dots, GridStyle::Dots => GridStyle::Lines };
                     cx.notify();
                 }
-                if event.keystroke.key == "t" { this.whole_scene_map = !this.whole_scene_map; this.map_drag = false; this.refresh_overview(); cx.notify(); }
+                if event.keystroke.key == "f" { this.cancel_selection(); this.fractal.toggle(); this.whole_scene_map = false; this.camera = Camera2D::default(); this.invalidate_preview(); cx.notify(); }
+                if event.keystroke.key == "t" && !this.fractal.enabled { this.whole_scene_map = !this.whole_scene_map; this.map_drag = false; this.refresh_overview(); cx.notify(); }
                 if event.keystroke.key == "m" { this.show_minimap = !this.show_minimap; cx.notify(); }
                 if event.keystroke.key == "escape" { this.cancel_selection(); this.drag = None; cx.notify(); }
                 if event.keystroke.key == "r" { this.cancel_selection(); this.camera = Camera2D::default(); cx.notify(); }
@@ -282,9 +300,9 @@ impl Render for Lab {
             }))
             .relative().size_full().flex().flex_col().bg(rgb(0x101824)).text_color(rgb(0xffffff))
             .child(div().h(px(88.)).flex_none().text_size(px(13.)).flex().flex_col()
-                .child("Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel")
-                .child("Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view")
-                .child(format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len())))
+                .child(if self.fractal.enabled { "CPU Mandelbrot • Drag / scroll: pan • Pinch: zoom • F: cards • R: reset" } else { "Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel" })
+                .child(if self.fractal.enabled { "Background CPU rendering • Coarse while moving, refined after idle • M: preview" } else { "Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view • F: Mandelbrot" })
+                .child(if self.fractal.enabled { format!("{:.1}% • CPU image • 256 iterations • {}", zoom * 100., if self.fractal.refined { "refined" } else { "rendering" }) } else { format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len()) }))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
                 .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
                     this.cancel_selection();
@@ -301,6 +319,7 @@ impl Render for Lab {
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &MouseDownEvent, window, cx| {
                     this.focus.focus(window, cx);
                     if this.space_down { this.drag = Some(event.position); }
+                    else if this.fractal.enabled { this.drag = Some(event.position); }
                     else { this.start_selection(event); cx.notify(); }
                 }))
                 .on_mouse_down(MouseButton::Middle, cx.listener(|this, event: &MouseDownEvent, _, _| this.drag = Some(event.position)))
@@ -308,7 +327,7 @@ impl Render for Lab {
                     if this.gesture.is_some() && event.pressed_button == Some(MouseButton::Left) {
                         this.update_selection(event.position, event.modifiers.alt); cx.notify(); return;
                     }
-                    if event.pressed_button != Some(MouseButton::Middle) && !(this.space_down && event.pressed_button == Some(MouseButton::Left)) { this.drag = None; }
+                    if event.pressed_button != Some(MouseButton::Middle) && !((this.space_down || this.fractal.enabled) && event.pressed_button == Some(MouseButton::Left)) { this.drag = None; }
                     else if let Some(previous) = this.drag.replace(event.position) {
                         let delta = event.position - previous;
                         this.camera.pan_by(WorldPoint::new(f32::from(delta.x) as f64, f32::from(delta.y) as f64));
@@ -332,6 +351,7 @@ impl Render for Lab {
                     }
                 }).absolute().size_full())
                 .children(cards)
+                .children(fractal)
                 .child(canvas(|_, _, _| (), move |bounds, _, window, _| interaction::paint_overlay(window, bounds, camera, marquee, &guides)).absolute().size_full())))
             .children(minimap)
     }
@@ -457,6 +477,7 @@ fn main() {
                     let overview = Arc::new(xgpui_canvas::Overview::new(&scene));
                     let minimap_image = overview_map::thumbnail(&scene, &overview);
                     Lab {
+                        fractal: mandelbrot::Mandelbrot::new(options.mandelbrot, options.mandelbrot_capture),
                         preview: minimap::Preview::default(),
                         overview,
                         minimap_image,

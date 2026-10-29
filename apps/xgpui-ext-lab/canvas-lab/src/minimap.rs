@@ -185,7 +185,7 @@ impl Lab {
                     .top(px(3.))
                     .left(px(6.))
                     .text_size(px(12.))
-                    .child("Current view • T: map • M: hide"),
+                    .child(if self.fractal.enabled { "Current view • M: hide" } else { "Current view • T: map • M: hide" }),
             )
             .child(
                 canvas(
