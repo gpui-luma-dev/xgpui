@@ -28,9 +28,13 @@ own representation; the scene query does not draw anything.
 `scene.hit_test(world_point)` returns the topmost AABB hit.
 `scene.query(world_bounds)` returns every intersecting item, including boundary
 contact, in back-to-front order. This can drive rectangular selection. Visibility,
-rectangle queries, and hit testing use an immutable, median-split AABB BVH with
+rectangle queries, and hit testing use a median-split AABB BVH with
 up to eight items per leaf. Spatial partitioning never changes caller paint order.
-Scene data is immutable; rebuild the scene when its data changes. Bounds must
+`scene.items()` exposes stable paint indices; `scene.set_bounds(index, bounds)`
+updates one item and refits its leaf and ancestors without rebuilding the tree.
+It returns false for invalid bounds or a missing index and leaves the scene
+unchanged. Rebuild for additions/removals or to restore partition quality after
+many large moves. Bounds must
 have finite, ordered min/max coordinates. Proxy selection uses original world
 bounds, without a screen-space tolerance.
 
@@ -38,11 +42,18 @@ Sparse queries prune unrelated nodes. Dense or heavily overlapping scenes can
 still visit every item; ordered rectangle results also cost O(k log k) to sort
 k matches. The index is not a guarantee of logarithmic queries, and it cannot
 reduce the cost of painting thousands of visible proxies. Building the index
-is synchronous; large changing scenes will need a separate update strategy.
+is synchronous. A large group move currently refits each selected item separately.
+
+`scene.snap_translation(group_bounds, delta, tolerance, search_radius, exclude)`
+finds the nearest matching group/item edges or centers independently on each
+axis. Divide logical-pixel tolerance and search radius by camera zoom. Exclude
+selected items from candidates. `SnapResult` supplies the corrected translation
+and optional world-space X/Y alignment guides; callers own input and painting.
+This is bounded local alignment, without equal-spacing or angle snapping.
 
 Project child positions, dimensions and font sizes explicitly. This is not a
 general transform for arbitrary GPUI subtrees; rotation, transformed text APIs,
-dynamic index updates, cached layers and thumbnail LOD remain follow-ups. Inputs and
+bulk index updates, cached layers and thumbnail LOD remain follow-ups. Inputs and
 viewport dimensions must be finite; dimensions must be nonnegative.
 
 This prototype is not registered for publishing or included in the generated

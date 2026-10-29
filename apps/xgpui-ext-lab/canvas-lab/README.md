@@ -8,6 +8,20 @@ reset the camera, **O** for a 1% overview, and **B** to switch between 10,000 an
 shows the visible count, zoom, and selection. Leaving the window clears held
 Space/drag state.
 
+**Shift + left-drag** replaces the selection with all rectangles intersecting the
+marquee, in either drag direction. Drag a selected card to move the entire group;
+dragging an unselected card selects and moves that card. Empty clicks clear the
+selection. Pink guides show nearby edge/center alignments, with a six-logical-pixel
+snap tolerance and 200-pixel neighbour search radius at every zoom. Hold **Option**
+for free movement. **Escape** cancels a move or restores the prior marquee
+selection. Losing focus or changing the camera also cancels an active gesture.
+Mouse release commits movement, including release outside the viewport.
+
+Moves update BVH leaf/ancestor bounds rather than rebuilding the scene. Snapping
+uses the selection's group bounds and excludes selected items. Equal-spacing,
+angle snapping, auto-scroll, undo history, and accelerated bulk refits are not
+included in this slice.
+
 The scene contains 10,000 or 100,000 world-space rectangles. BVH AABB culling happens
 before constructing GPUI children, so offscreen cards do not enter layout or
 text shaping. Scene bounds and IDs are retained between frames. Full-detail
@@ -48,7 +62,10 @@ just canvas-lab --benchmark /tmp/canvas-profile.json
 
 Smoke captures show default zoom, minimum/maximum zoom, a distant world origin,
 and a resized viewport. Smoke mode also dispatches native GPUI mouse events and
-asserts selection for visible full cards, bounds proxies, and point proxies. Captures are for
+asserts selection for visible full cards, bounds proxies, and point proxies. It
+also checks forward/reverse marquee selection, group movement, Option bypass,
+alignment guides, and Escape restoration. Captures include marquee and guide
+overlays. Captures are for
 visual inspection, not pixel assertions. The benchmark sweeps 10k/100k scenes at
 1x zoom and a 100k scene at 0.01x, with 30 warmup and 120 measured frames per case.
 It saves JSON and line/dot/overview PNGs captured during warmup.

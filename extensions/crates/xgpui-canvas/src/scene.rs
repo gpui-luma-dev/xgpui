@@ -34,10 +34,10 @@ pub struct VisibleItem<'a, T> {
     pub detail: LevelOfDetail,
 }
 
-/// Retained scene with immutable BVH queries. Order is back-to-front.
+/// Retained scene with BVH queries. Order is back-to-front.
 ///
 /// No element construction, layout, or text shaping occurs during queries.
-/// Rebuild the scene when items change. Dense or overlapping queries may still
+/// Bounds updates refit the tree; rebuild when adding/removing items. Dense queries may still
 /// visit every item; ordered query results additionally cost O(k log k) to sort.
 pub struct Scene<T> {
     items: Vec<SceneItem<T>>,
@@ -55,6 +55,23 @@ impl<T> Scene<T> {
     }
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
+    }
+
+    /// Stable back-to-front order; positions in this slice identify bounds updates.
+    pub fn items(&self) -> &[SceneItem<T>] {
+        &self.items
+    }
+
+    /// Update one item's bounds and refit its leaf and ancestors without rebuilding.
+    /// Returns false for a missing index or invalid bounds, without changing the scene.
+    /// Large repeated moves can degrade spatial partition quality; rebuild if needed.
+    pub fn set_bounds(&mut self, index: usize, bounds: WorldBounds) -> bool {
+        if index >= self.items.len() || !bounds.is_valid() {
+            return false;
+        }
+        self.items[index].bounds = bounds;
+        self.index.refit(&self.items, index);
+        true
     }
 
     pub fn visible(
@@ -214,5 +231,49 @@ mod tests {
         let empty = Scene::<()>::new([]);
         assert_eq!(empty.query(edge).count(), 0);
         assert!(empty.hit_test(Point::default()).is_none());
+    }
+
+    #[test]
+    fn bounds_updates_refit_all_ancestors_and_reject_invalid_input() {
+        let mut scene = Scene::new(
+            (0..100).map(|index| item(index as f64 * 100., index as f64 * 100. + 10., index)),
+        );
+        for step in 0..300 {
+            let index = step % 100;
+            let value = step as f64 * -500.;
+            let bounds = WorldBounds {
+                min: Point::new(value, value),
+                max: Point::new(value + 10., value + 10.),
+            };
+            assert!(scene.set_bounds(index, bounds));
+            let expected: Vec<_> = scene
+                .items
+                .iter()
+                .filter(|item| item.bounds.intersects(bounds))
+                .map(|item| item.data)
+                .collect();
+            assert_eq!(
+                scene
+                    .query(bounds)
+                    .map(|item| item.data)
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            let hit = scene
+                .items
+                .iter()
+                .rev()
+                .find(|item| item.bounds.contains(bounds.min))
+                .map(|item| item.data);
+            assert_eq!(scene.hit_test(bounds.min).map(|item| item.data), hit);
+        }
+        let invalid = WorldBounds {
+            min: Point::new(f64::NAN, 0.),
+            max: Point::default(),
+        };
+        assert!(!scene.set_bounds(0, invalid));
+        assert!(!scene.set_bounds(100, scene.items[0].bounds));
+        assert!(scene.items[0].bounds.is_valid());
+        assert!(scene.hit_test(Point::new(1., 1.)).is_none());
     }
 }

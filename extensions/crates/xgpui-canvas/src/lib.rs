@@ -6,8 +6,10 @@ mod viewport;
 #[cfg(feature = "gpui")]
 pub use viewport::{Canvas, GridPainter, GridStyle};
 mod scene;
+mod snapping;
 mod spatial;
 pub use scene::{LevelOfDetail, Scene, SceneItem, VisibleItem};
+pub use snapping::{AlignmentGuide, Axis, SnapResult};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Point {
@@ -28,6 +30,19 @@ pub struct WorldBounds {
 }
 
 impl WorldBounds {
+    pub fn translated(self, delta: Point) -> Self {
+        Self {
+            min: Point::new(self.min.x + delta.x, self.min.y + delta.y),
+            max: Point::new(self.max.x + delta.x, self.max.y + delta.y),
+        }
+    }
+    pub fn is_valid(self) -> bool {
+        [self.min.x, self.min.y, self.max.x, self.max.y]
+            .iter()
+            .all(|v| v.is_finite())
+            && self.min.x <= self.max.x
+            && self.min.y <= self.max.y
+    }
     pub fn contains(self, point: Point) -> bool {
         point.x >= self.min.x
             && point.x <= self.max.x

@@ -1,8 +1,10 @@
+mod interaction;
 mod profile;
+use interaction::Gesture;
 
 use clap::Parser;
 use gpui::{prelude::*, *};
-use std::{path::PathBuf, time::Instant};
+use std::{collections::BTreeSet, path::PathBuf, time::Instant};
 use xgpui_canvas::{
     Camera2D, Canvas as SpatialCanvas, GridPainter, GridStyle, LevelOfDetail, Point as WorldPoint,
     Scene, SceneItem, WorldBounds,
@@ -29,7 +31,9 @@ struct Lab {
     camera: Camera2D,
     bounds: Bounds<Pixels>,
     drag: Option<Point<Pixels>>,
-    selected: Option<usize>,
+    selected: BTreeSet<usize>,
+    gesture: Option<Gesture>,
+    snap_guides: Vec<xgpui_canvas::AlignmentGuide>,
 }
 
 impl Lab {
@@ -68,11 +72,18 @@ impl Render for Lab {
                 }
             }
             let capture = (*tick % 8 == 0).then(|| directory.join(format!("{scenario}.png")));
-            let done = *tick >= 48;
+            let preview = (*tick % 8 == 3 && scenario >= 6).then_some(scenario == 6);
+            let done = *tick >= 64;
             let entity = cx.entity();
             window.on_next_frame(move |window, cx| {
+                if let Some(marquee) = preview {
+                    interaction::smoke_preview(&entity, window, cx, marquee);
+                }
                 if let Some(path) = capture {
                     smoke_click(&entity, window, cx);
+                    if scenario == 0 || scenario == 5 {
+                        interaction::smoke_marquee(&entity, window, cx);
+                    }
                     window
                         .render_to_image()
                         .expect("capture smoke frame")
@@ -130,7 +141,7 @@ impl Render for Lab {
                     bounds.size = size(px(1.), px(1.));
                     bounds.origin = center - point(px(0.5), px(0.5));
                 }
-                proxies.push((bounds, self.selected == Some(id)));
+                proxies.push((bounds, self.selected.contains(&id)));
                 continue;
             }
             cards.push(
@@ -142,7 +153,7 @@ impl Render for Lab {
                     .w(px(160. * zoom))
                     .h(px(80. * zoom))
                     .overflow_hidden()
-                    .bg(rgb(if self.selected == Some(id) {
+                    .bg(rgb(if self.selected.contains(&id) {
                         0x316eab
                     } else {
                         0x24354b
@@ -151,7 +162,13 @@ impl Render for Lab {
                     .border_color(rgb(0x6484a8))
                     .text_size(px(16. * zoom))
                     .text_color(rgb(0xffffff))
-                    .child(format!("Card {id}")),
+                    .child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .child(format!("Card {id}")),
+                    ),
             );
         }
         let full_count = cards.len();
@@ -193,6 +210,9 @@ impl Render for Lab {
             window.request_animation_frame();
         }
         let entity = cx.entity();
+        let marquee = self.marquee();
+        let guides = self.snap_guides.clone();
+        let camera = self.camera;
         div().id("canvas-lab").track_focus(&self.focus)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if event.keystroke.key == "space" { this.space_down = true; cx.stop_propagation(); }
@@ -200,29 +220,34 @@ impl Render for Lab {
                     this.grid_style = match this.grid_style { GridStyle::Lines => GridStyle::Dots, GridStyle::Dots => GridStyle::Lines };
                     cx.notify();
                 }
-                if event.keystroke.key == "r" { this.camera = Camera2D::default(); cx.notify(); }
+                if event.keystroke.key == "escape" { this.cancel_selection(); this.drag = None; cx.notify(); }
+                if event.keystroke.key == "r" { this.cancel_selection(); this.camera = Camera2D::default(); cx.notify(); }
                 if event.keystroke.key == "o" {
+                    this.cancel_selection();
                     this.camera = Camera2D::default();
                     let viewport = this.viewport();
                     this.camera.zoom_at(WorldPoint::new(viewport.x / 2., viewport.y / 2.), viewport, 0.01);
                     cx.notify();
                 }
-                if event.keystroke.key == "b" { this.scene = make_scene(if this.scene.len() == 10_000 { 100_000 } else { 10_000 }); this.selected = None; cx.notify(); }
+                if event.keystroke.key == "b" { this.cancel_selection(); this.scene = make_scene(if this.scene.len() == 10_000 { 100_000 } else { 10_000 }); this.selected.clear(); cx.notify(); }
             }))
             .on_key_up(cx.listener(|this, event: &KeyUpEvent, _, cx| {
                 if event.keystroke.key == "space" { this.space_down = false; this.drag = None; cx.stop_propagation(); }
             }))
             .size_full().flex().flex_col().bg(rgb(0x101824)).text_color(rgb(0xffffff))
-            .child(div().h(px(64.)).flex_none().text_size(px(13.)).flex().flex_col()
+            .child(div().h(px(88.)).flex_none().text_size(px(13.)).flex().flex_col()
+                .child("Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel")
                 .child("Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k")
-                .child(format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • Selected {:?}", zoom * 100., self.scene.len(), self.selected)))
+                .child(format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len())))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
                 .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
+                    this.cancel_selection();
                     let delta = event.delta.pixel_delta(px(24.));
                     this.camera.pan_by(WorldPoint::new(f32::from(delta.x) as f64, f32::from(delta.y) as f64));
                     cx.stop_propagation(); cx.notify();
                 }))
                 .on_pinch(cx.listener(|this, event: &PinchEvent, _, cx| {
+                    this.cancel_selection();
                     let anchor = event.position - this.bounds.origin;
                     this.camera.zoom_at(WorldPoint::new(f32::from(anchor.x) as f64, f32::from(anchor.y) as f64), this.viewport(), (1. + f64::from(event.delta)).max(0.01));
                     cx.stop_propagation(); cx.notify();
@@ -230,15 +255,13 @@ impl Render for Lab {
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &MouseDownEvent, window, cx| {
                     this.focus.focus(window, cx);
                     if this.space_down { this.drag = Some(event.position); }
-                    else {
-                        let local = event.position - this.bounds.origin;
-                        let world = this.camera.screen_to_world(WorldPoint::new(f32::from(local.x) as f64, f32::from(local.y) as f64), this.viewport());
-                        this.selected = this.scene.hit_test(world).map(|item| item.data);
-                        cx.notify();
-                    }
+                    else { this.start_selection(event); cx.notify(); }
                 }))
                 .on_mouse_down(MouseButton::Middle, cx.listener(|this, event: &MouseDownEvent, _, _| this.drag = Some(event.position)))
                 .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                    if this.gesture.is_some() && event.pressed_button == Some(MouseButton::Left) {
+                        this.update_selection(event.position, event.modifiers.alt); cx.notify(); return;
+                    }
                     if event.pressed_button != Some(MouseButton::Middle) && !(this.space_down && event.pressed_button == Some(MouseButton::Left)) { this.drag = None; }
                     else if let Some(previous) = this.drag.replace(event.position) {
                         let delta = event.position - previous;
@@ -246,8 +269,8 @@ impl Render for Lab {
                         cx.notify();
                     }
                 }))
-                .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.drag = None))
-                .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, _| this.drag = None))
+                .on_mouse_up(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { this.finish_selection(event); cx.notify(); }))
+                .on_mouse_up_out(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { this.finish_selection(event); cx.notify(); }))
                 .on_mouse_up(MouseButton::Middle, cx.listener(|this, _, _, _| this.drag = None))
                 .on_mouse_up_out(MouseButton::Middle, cx.listener(|this, _, _, _| this.drag = None))
                 .child(SpatialCanvas::new(self.camera, &self.grid, self.grid_style).size_full()
@@ -262,7 +285,8 @@ impl Render for Lab {
                         window.paint_quad(fill(proxy, rgb(if selected { 0x59b0ff } else { 0x6484a8 })));
                     }
                 }).absolute().size_full())
-                .children(cards)))
+                .children(cards)
+                .child(canvas(|_, _, _| (), move |bounds, _, window, _| interaction::paint_overlay(window, bounds, camera, marquee, &guides)).absolute().size_full())))
     }
 }
 
@@ -306,8 +330,8 @@ fn smoke_click(entity: &Entity<Lab>, window: &mut Window, cx: &mut App) {
             cx,
         );
         assert_eq!(
-            entity.read(cx).selected,
-            Some(expected),
+            entity.read(cx).selected.contains(&expected),
+            true,
             "native viewport selection"
         );
         window.dispatch_event(
@@ -363,15 +387,19 @@ fn main() {
                 cx.new(|cx| {
                     let focus = cx.focus_handle();
                     focus.focus(window, cx);
-                    cx.on_blur(&focus, window, |this: &mut Lab, _, _| {
+                    cx.on_blur(&focus, window, |this: &mut Lab, _, cx| {
+                        this.cancel_selection();
                         this.space_down = false;
                         this.drag = None;
+                        cx.notify();
                     })
                     .detach();
-                    cx.observe_window_activation(window, |this: &mut Lab, window, _| {
+                    cx.observe_window_activation(window, |this: &mut Lab, window, cx| {
                         if !window.is_window_active() {
+                            this.cancel_selection();
                             this.space_down = false;
                             this.drag = None;
+                            cx.notify();
                         }
                     })
                     .detach();
@@ -386,7 +414,9 @@ fn main() {
                         camera: Camera2D::default(),
                         bounds: Bounds::default(),
                         drag: None,
-                        selected: None,
+                        selected: BTreeSet::new(),
+                        gesture: None,
+                        snap_guides: Vec::new(),
                     }
                 })
             },

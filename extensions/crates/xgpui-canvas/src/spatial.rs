@@ -4,15 +4,17 @@ use std::ops::Range;
 const LEAF_SIZE: usize = 8;
 
 struct Node {
+    parent: Option<usize>,
     bounds: WorldBounds,
     items: Range<usize>,
     children: Option<(usize, usize)>,
 }
 
-/// Immutable, median-split AABB hierarchy. Item IDs remain original paint indices.
+/// Median-split AABB hierarchy with bounds refitting. IDs remain paint indices.
 pub(crate) struct SpatialIndex {
     nodes: Vec<Node>,
     order: Vec<usize>,
+    leaves: Vec<usize>,
 }
 
 impl SpatialIndex {
@@ -20,6 +22,7 @@ impl SpatialIndex {
         let mut index = Self {
             nodes: Vec::new(),
             order: (0..items.len()).collect(),
+            leaves: vec![0; items.len()],
         };
         if !items.is_empty() {
             index.build(items, 0..items.len());
@@ -38,6 +41,7 @@ impl SpatialIndex {
         }
         let node = self.nodes.len();
         self.nodes.push(Node {
+            parent: None,
             bounds,
             items: range.clone(),
             children: None,
@@ -60,8 +64,34 @@ impl SpatialIndex {
             let left = self.build(items, range.start..mid);
             let right = self.build(items, mid..range.end);
             self.nodes[node].children = Some((left, right));
+            self.nodes[left].parent = Some(node);
+            self.nodes[right].parent = Some(node);
+        } else {
+            for &item in &self.order[range] {
+                self.leaves[item] = node;
+            }
         }
         node
+    }
+
+    pub fn refit<T>(&mut self, items: &[SceneItem<T>], item: usize) {
+        let mut next = Some(self.leaves[item]);
+        while let Some(index) = next {
+            let mut bounds = if let Some((left, _)) = self.nodes[index].children {
+                self.nodes[left].bounds
+            } else {
+                items[self.order[self.nodes[index].items.start]].bounds
+            };
+            if let Some((_, right)) = self.nodes[index].children {
+                bounds = union(bounds, self.nodes[right].bounds);
+            } else {
+                for &item in &self.order[self.nodes[index].items.clone()] {
+                    bounds = union(bounds, items[item].bounds);
+                }
+            }
+            self.nodes[index].bounds = bounds;
+            next = self.nodes[index].parent;
+        }
     }
 
     pub fn query<T>(&self, items: &[SceneItem<T>], bounds: WorldBounds) -> Vec<usize> {
@@ -113,5 +143,12 @@ impl SpatialIndex {
                 leaf(node);
             }
         }
+    }
+}
+
+fn union(a: WorldBounds, b: WorldBounds) -> WorldBounds {
+    WorldBounds {
+        min: Point::new(a.min.x.min(b.min.x), a.min.y.min(b.min.y)),
+        max: Point::new(a.max.x.max(b.max.x), a.max.y.max(b.max.y)),
     }
 }
