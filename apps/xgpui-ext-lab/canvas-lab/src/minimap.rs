@@ -1,29 +1,151 @@
 use super::*;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+    time::Duration,
+};
+
+#[derive(Default)]
+pub(super) struct Preview {
+    image: Option<Arc<RenderImage>>,
+    image_size: [u32; 2],
+    signature: Option<u64>,
+    pending: bool,
+    pub capturing: bool,
+    pub hidden: bool,
+    last_capture: Option<Instant>,
+}
+
+fn signature(lab: &Lab, scale: f32) -> u64 {
+    let mut hash = DefaultHasher::new();
+    let visible = lab.camera.visible_world_bounds(lab.viewport());
+    for value in [visible.min.x, visible.min.y, visible.max.x, visible.max.y] {
+        value.to_bits().hash(&mut hash);
+    }
+    lab.scene.len().hash(&mut hash);
+    lab.scene.revision().hash(&mut hash);
+    lab.selected.hash(&mut hash);
+    matches!(lab.grid_style, GridStyle::Dots).hash(&mut hash);
+    scale.to_bits().hash(&mut hash);
+    for value in [
+        lab.bounds.origin.x,
+        lab.bounds.origin.y,
+        lab.bounds.size.width,
+        lab.bounds.size.height,
+    ] {
+        f32::from(value).to_bits().hash(&mut hash);
+    }
+    if let Some(rect) = lab.marquee() {
+        for value in [rect.min.x, rect.min.y, rect.max.x, rect.max.y] {
+            value.to_bits().hash(&mut hash);
+        }
+    }
+    for guide in &lab.snap_guides {
+        matches!(guide.axis, xgpui_canvas::Axis::X).hash(&mut hash);
+        for value in [guide.coordinate, guide.start, guide.end] {
+            value.to_bits().hash(&mut hash);
+        }
+    }
+    hash.finish()
+}
+
+pub(super) fn schedule(lab: &mut Lab, window: &mut Window, cx: &mut Context<Lab>) {
+    if !lab.show_minimap
+        || lab.preview.capturing
+        || lab.preview.pending
+        || lab.preview.signature == Some(signature(lab, window.scale_factor()))
+        || lab.bounds.size.width <= px(0.)
+        || lab.bounds.size.height <= px(0.)
+    {
+        return;
+    }
+    lab.preview.pending = true;
+    let entity = cx.entity();
+    window.on_next_frame(move |window, cx| {
+        if !entity.read(cx).show_minimap {
+            entity.update(cx, |lab, _| lab.preview.pending = false);
+            return;
+        }
+        let ready = entity
+            .read(cx)
+            .preview
+            .last_capture
+            .is_none_or(|last| last.elapsed() >= Duration::from_millis(80));
+        if ready {
+            // Draw to the scene without presenting the HUD-free frame. Cropping
+            // that frame gives the actual canvas, including text and effects,
+            // with neither the toolbar nor a recursive preview of this panel.
+            entity.update(cx, |lab, _| {
+                lab.preview.capturing = true;
+                lab.preview.hidden = true;
+            });
+            window.draw(cx).clear(cx);
+            let captured = window.render_to_image();
+            let bounds = entity.read(cx).bounds;
+            let scale = window.scale_factor();
+            entity.update(cx, |lab, cx| {
+                lab.preview.hidden = false;
+                match captured {
+                    Ok(image) => {
+                        let x = (f32::from(bounds.origin.x) * scale).max(0.).round() as u32;
+                        let y = (f32::from(bounds.origin.y) * scale).max(0.).round() as u32;
+                        let width = (f32::from(bounds.size.width) * scale).round().max(1.) as u32;
+                        let height = (f32::from(bounds.size.height) * scale).round().max(1.) as u32;
+                        if x < image.width() && y < image.height() {
+                            let crop = image::imageops::crop_imm(
+                                &image,
+                                x,
+                                y,
+                                width.min(image.width() - x),
+                                height.min(image.height() - y),
+                            )
+                            .to_image();
+                            let mut pixels = image::DynamicImage::ImageRgba8(crop)
+                                .thumbnail(432, 276)
+                                .into_rgba8();
+                            lab.preview.image_size = [pixels.width(), pixels.height()];
+                            for pixel in pixels.pixels_mut() {
+                                pixel.0.swap(0, 2);
+                            }
+                            lab.preview.image =
+                                Some(Arc::new(RenderImage::new(vec![image::Frame::new(pixels)])));
+                        }
+                    }
+                    Err(error) => eprintln!("canvas preview: {error}"),
+                }
+                lab.preview.signature = Some(signature(lab, scale));
+                lab.preview.last_capture = Some(Instant::now());
+                cx.notify();
+            });
+            // Restore the normal scene and hitboxes before accepting more input.
+            // Neither offscreen draw advances the smoke/profile frame counters.
+            window.draw(cx).clear(cx);
+            entity.update(cx, |lab, cx| {
+                lab.preview.capturing = false;
+                lab.preview.pending = false;
+                cx.notify();
+            });
+        } else {
+            entity.update(cx, |lab, cx| {
+                lab.preview.pending = false;
+                cx.notify();
+            });
+        }
+    });
+    window.request_animation_frame();
+}
 
 impl Lab {
-    pub(super) fn refresh_overview(&mut self) {
-        self.overview = Arc::new(xgpui_canvas::Overview::new(&self.scene));
-        self.minimap_image = thumbnail(&self.scene, &self.overview);
-    }
-
-    pub(super) fn navigate_map(&mut self, position: Point<Pixels>) {
-        let local = position - self.map_bounds.origin;
-        let size = self.map_bounds.size;
-        if let Some(world) = self.overview.map_to_world(
-            WorldPoint::new(f32::from(local.x) as f64, f32::from(local.y) as f64),
-            WorldPoint::new(f32::from(size.width) as f64, f32::from(size.height) as f64),
-        ) {
-            self.camera.center_on(world);
-        }
+    pub(super) fn invalidate_preview(&mut self) {
+        self.preview.signature = None;
     }
 
     pub(super) fn minimap(&self, cx: &mut Context<Self>) -> AnyElement {
-        let overview = self.overview.clone();
-        let thumbnail = self.map_thumbnail.then(|| self.minimap_image.clone());
-        let visible = self.camera.visible_world_bounds(self.viewport());
         let entity = cx.entity();
+        let image = self.preview.image.clone();
+        let image_size = self.preview.image_size;
         div()
-            .id("minimap")
+            .id("canvas-preview")
             .absolute()
             .right(px(12.))
             .bottom(px(12.))
@@ -33,56 +155,22 @@ impl Lab {
             .border_1()
             .border_color(rgb(0x6484a8))
             .overflow_hidden()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                    this.focus.focus(window, cx);
-                    this.cancel_selection();
-                    this.drag = None;
-                    if this.map_bounds.contains(&event.position) {
-                        this.map_drag = true;
-                        this.navigate_map(event.position);
-                        cx.notify();
-                    }
-                    cx.stop_propagation();
-                }),
-            )
-            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
-                if this.map_drag && event.pressed_button == Some(MouseButton::Left) {
-                    this.navigate_map(event.position);
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_mouse_move(cx.listener(|lab, event: &MouseMoveEvent, _, cx| {
+                if lab.gesture.is_some() && event.pressed_button == Some(MouseButton::Left) {
+                    lab.update_selection(event.position, event.modifiers.alt);
                     cx.notify();
-                } else if this.gesture.is_some() && event.pressed_button == Some(MouseButton::Left)
-                {
-                    this.update_selection(event.position, event.modifiers.alt);
-                    cx.notify();
-                } else if event.pressed_button != Some(MouseButton::Left) {
-                    this.map_drag = false;
                 }
                 cx.stop_propagation();
             }))
             .on_mouse_up(
                 MouseButton::Left,
-                cx.listener(|this, event: &MouseUpEvent, _, cx| {
-                    if this.map_drag {
-                        this.navigate_map(event.position);
-                        this.map_drag = false;
-                        cx.notify();
-                    } else if this.gesture.is_some() {
-                        this.finish_selection(event);
+                cx.listener(|lab, event: &MouseUpEvent, _, cx| {
+                    if lab.gesture.is_some() {
+                        lab.finish_selection(event);
                         cx.notify();
                     }
                     cx.stop_propagation();
-                }),
-            )
-            .on_mouse_up_out(
-                MouseButton::Left,
-                cx.listener(|this, event: &MouseUpEvent, _, cx| {
-                    if this.map_drag {
-                        this.navigate_map(event.position);
-                        this.map_drag = false;
-                        cx.notify();
-                        cx.stop_propagation();
-                    }
                 }),
             )
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
@@ -93,20 +181,41 @@ impl Lab {
                     .top(px(3.))
                     .left(px(6.))
                     .text_size(px(12.))
-                    .child("Minimap • click/drag • T: preview"),
+                    .child("Current canvas view • M to hide"),
             )
             .child(
                 canvas(
                     move |bounds, _, cx| {
-                        entity.update(cx, |this, cx| {
-                            if this.map_bounds != bounds {
-                                this.map_bounds = bounds;
-                                cx.notify();
-                            }
-                        });
+                        entity.update(cx, |lab, _| lab.map_bounds = bounds);
                     },
                     move |bounds, _, window, _| {
-                        paint(window, bounds, &overview, thumbnail.clone(), visible);
+                        window.paint_quad(fill(bounds, rgb(0x101824)));
+                        if let Some(image) = image {
+                            let scale = (f32::from(bounds.size.width) / image_size[0] as f32)
+                                .min(f32::from(bounds.size.height) / image_size[1] as f32);
+                            let size = size(
+                                px(image_size[0] as f32 * scale),
+                                px(image_size[1] as f32 * scale),
+                            );
+                            let image_bounds = Bounds::new(
+                                bounds.origin
+                                    + point(
+                                        (bounds.size.width - size.width) / 2.,
+                                        (bounds.size.height - size.height) / 2.,
+                                    ),
+                                size,
+                            );
+                            if let Err(error) = window.paint_image(
+                                bounds,
+                                image_bounds,
+                                Corners::default(),
+                                image,
+                                0,
+                                false,
+                            ) {
+                                eprintln!("canvas preview paint: {error}");
+                            }
+                        }
                     },
                 )
                 .absolute()
@@ -117,169 +226,4 @@ impl Lab {
             )
             .into_any_element()
     }
-}
-
-/// Rasterize actual card bounds in paint order; no grid, density bins, or labels.
-/// The 2x image is retained and rebuilt only when scene geometry changes.
-pub(super) fn thumbnail(
-    scene: &Scene<usize>,
-    overview: &xgpui_canvas::Overview,
-) -> Arc<RenderImage> {
-    const WIDTH: u32 = 432;
-    const HEIGHT: u32 = 276;
-    let size = WorldPoint::new(WIDTH as f64, HEIGHT as f64);
-    let mut pixels = image::RgbaImage::from_pixel(WIDTH, HEIGHT, image::Rgba([16, 24, 36, 255]));
-    for item in scene.items() {
-        let a = overview.world_to_map(item.bounds.min, size);
-        let b = overview.world_to_map(item.bounds.max, size);
-        let left = a.x.max(0.).min(WIDTH as f64);
-        let top = a.y.max(0.).min(HEIGHT as f64);
-        let right = b.x.max(0.).min(WIDTH as f64);
-        let bottom = b.y.max(0.).min(HEIGHT as f64);
-        for y in top.floor() as u32..bottom.ceil() as u32 {
-            for x in left.floor() as u32..right.ceil() as u32 {
-                let coverage = ((right.min(x as f64 + 1.) - left.max(x as f64)).max(0.)
-                    * (bottom.min(y as f64 + 1.) - top.max(y as f64)).max(0.))
-                    as f32;
-                let pixel = pixels.get_pixel_mut(x, y);
-                for (channel, color) in [36., 53., 75.].into_iter().enumerate() {
-                    pixel[channel] =
-                        (pixel[channel] as f32 * (1. - coverage) + color * coverage).round() as u8;
-                }
-            }
-        }
-    }
-    // GPUI RenderImage expects BGRA channel order.
-    for pixel in pixels.pixels_mut() {
-        pixel.0.swap(0, 2);
-    }
-    Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]))
-}
-
-fn paint(
-    window: &mut Window,
-    bounds: Bounds<Pixels>,
-    overview: &xgpui_canvas::Overview,
-    thumbnail: Option<Arc<RenderImage>>,
-    visible: WorldBounds,
-) {
-    let size = WorldPoint::new(
-        f32::from(bounds.size.width) as f64,
-        f32::from(bounds.size.height) as f64,
-    );
-    let screen = |world| {
-        let p = overview.world_to_map(world, size);
-        bounds.origin + point(px(p.x as f32), px(p.y as f32))
-    };
-    window.with_content_mask(Some(ContentMask { bounds }), |window| {
-        window.paint_quad(fill(bounds, rgb(0x101824)));
-        if let Some(thumbnail) = thumbnail {
-            if let Err(error) =
-                window.paint_image(bounds, bounds, Corners::default(), thumbnail, 0, false)
-            {
-                eprintln!("minimap thumbnail: {error}");
-            }
-        }
-        let a = screen(visible.min);
-        let b = screen(visible.max);
-        // Keep tiny high-zoom viewports visible without changing navigation math.
-        let width = (b.x - a.x).max(px(2.));
-        let height = (b.y - a.y).max(px(2.));
-        let rect = Bounds::new(a, gpui::size(width, height));
-        window.paint_quad(fill(rect, rgba(0xffd47922)));
-        for (origin, size) in [
-            (a, gpui::size(width, px(1.))),
-            (a, gpui::size(px(1.), height)),
-            (
-                a + point(px(0.), height - px(1.)),
-                gpui::size(width, px(1.)),
-            ),
-            (
-                a + point(width - px(1.), px(0.)),
-                gpui::size(px(1.), height),
-            ),
-        ] {
-            window.paint_quad(fill(Bounds::new(origin, size), rgb(0xffd479)));
-        }
-    });
-}
-
-pub(super) fn smoke_navigation(entity: &Entity<Lab>, window: &mut Window, cx: &mut App) {
-    let (a, b, selected, zoom, bounds) = {
-        let lab = entity.read(cx);
-        let a = lab.map_bounds.origin
-            + point(
-                lab.map_bounds.size.width * 0.75,
-                lab.map_bounds.size.height * 0.65,
-            );
-        let b = lab.map_bounds.origin
-            + point(
-                lab.map_bounds.size.width * 0.25,
-                lab.map_bounds.size.height * 0.25,
-            );
-        (
-            a,
-            b,
-            lab.selected.clone(),
-            lab.camera.zoom(),
-            lab.scene.bounds().unwrap(),
-        )
-    };
-    window.dispatch_event(
-        PlatformInput::MouseDown(MouseDownEvent {
-            position: a,
-            button: MouseButton::Left,
-            click_count: 1,
-            ..Default::default()
-        }),
-        cx,
-    );
-    assert!(entity.read(cx).map_drag, "minimap owns pointer gesture");
-    window.dispatch_event(
-        PlatformInput::MouseMove(MouseMoveEvent {
-            position: b,
-            pressed_button: Some(MouseButton::Left),
-            ..Default::default()
-        }),
-        cx,
-    );
-    {
-        let lab = entity.read(cx);
-        let local = b - lab.map_bounds.origin;
-        let size = lab.map_bounds.size;
-        let expected = lab
-            .overview
-            .map_to_world(
-                WorldPoint::new(f32::from(local.x) as f64, f32::from(local.y) as f64),
-                WorldPoint::new(f32::from(size.width) as f64, f32::from(size.height) as f64),
-            )
-            .unwrap();
-        let viewport = lab.viewport();
-        let center = lab
-            .camera
-            .screen_to_world(WorldPoint::new(viewport.x / 2., viewport.y / 2.), viewport);
-        assert!(
-            (center.x - expected.x).abs() < 1e-5 && (center.y - expected.y).abs() < 1e-5,
-            "minimap recentering"
-        );
-        assert_eq!(lab.camera.zoom(), zoom);
-        assert_eq!(
-            lab.selected, selected,
-            "minimap must not select world content"
-        );
-        assert_eq!(lab.scene.bounds().unwrap().min, bounds.min);
-        assert!(lab.gesture.is_none());
-    }
-    window.dispatch_event(
-        PlatformInput::MouseUp(MouseUpEvent {
-            position: b,
-            button: MouseButton::Left,
-            ..Default::default()
-        }),
-        cx,
-    );
-    assert!(
-        !entity.read(cx).map_drag,
-        "minimap release clears drag state"
-    );
 }

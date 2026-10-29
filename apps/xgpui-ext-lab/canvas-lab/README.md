@@ -22,15 +22,21 @@ uses the selection's group bounds and excludes selected items. Equal-spacing,
 angle snapping, auto-scroll, undo history, and accelerated bulk refits are not
 included in this slice.
 
-The lower-right **minimap** has a plain background and an amber viewport
-rectangle. **T** toggles an optional cached scene thumbnail. Click or drag to
-navigate; **M** hides/shows the minimap. Navigation
-preserves zoom and selection, and never changes scene geometry. The overview
-thumbnail is a retained 432×276 image of actual card bounds in paint order, with the canvas
-background and card colors. It has no procedural grid, density tiles, or tiny
-labels. The image refreshes when switching scenes or committing a move and stays
-cached during dragging; the viewport marker updates continuously. Navigation clamps
-letterboxed regions to the scene extent. Wheel/pinch over the map are consumed.
+The lower-right **current canvas view** is a live scaled copy of the visible
+viewport. It follows pan, zoom, resize, selection, guides, and scene edits, using
+an actual rendered capture with the toolbar and preview panel excluded. **M**
+hides/shows it. This is a display-only viewport preview, with no whole-scene map,
+viewport locator, or navigation gestures. The former **T** toggle is removed.
+
+Captures are coalesced to at most one every 80 ms and resized to fit 432×276,
+with aspect ratio preserved. The existing canvas grid appears only as part of
+the captured view; there are no synthetic density tiles. Two unpresented draws
+exclude the HUD from capture and restore normal hitboxes before input resumes.
+This native prototype uses GPU readback, so capture has a performance cost.
+The local run in `bench/macos-arm64-live-preview.json` measured about 17.8 ms
+mean frame intervals in normal views (roughly 50 ms p95 at capture boundaries),
+and 46.2 ms in the dense overview. A future GPU-resident scaled capture can avoid
+the synchronous readback cost; hide the panel with M to disable capture.
 
 The scene contains 10,000 or 100,000 world-space rectangles. BVH AABB culling happens
 before constructing GPUI children, so offscreen cards do not enter layout or
@@ -75,10 +81,8 @@ and a resized viewport. Smoke mode also dispatches native GPUI mouse events and
 asserts selection for visible full cards, bounds proxies, and point proxies. It
 also checks forward/reverse marquee selection, group movement, Option bypass,
 alignment guides, and Escape restoration. Captures include marquee and guide
-overlays. Minimap smoke checks dispatch click/drag input, verify camera projection
-and release state, assert unchanged zoom, selection and scene extent, and check
-cache refresh after committed movement. Captures are for visual inspection, not
-pixel assertions. The benchmark sweeps 10k/100k scenes at
+overlays. Preview captures exercise current-view rendering at multiple zooms
+and after resize. Captures are for visual inspection, not pixel assertions. The benchmark sweeps 10k/100k scenes at
 1x zoom and a 100k scene at 0.01x, with 30 warmup and 120 measured frames per case.
 It saves JSON and line/dot/overview PNGs captured during warmup.
 CPU timings cover culling and child construction only. Frame intervals include

@@ -27,12 +27,9 @@ struct Lab {
     grid: GridPainter,
     grid_style: GridStyle,
     scene: Scene<usize>,
-    overview: Arc<xgpui_canvas::Overview>,
-    minimap_image: Arc<RenderImage>,
+    preview: minimap::Preview,
     map_bounds: Bounds<Pixels>,
-    map_drag: bool,
     show_minimap: bool,
-    map_thumbnail: bool,
     focus: FocusHandle,
     space_down: bool,
     camera: Camera2D,
@@ -58,6 +55,7 @@ impl Render for Lab {
         let smoke_viewport = self.viewport();
         if let Some((directory, stored_tick, pending)) = &mut self.smoke
             && !*pending
+            && !self.preview.capturing
         {
             *pending = true;
             let tick = *stored_tick + 1;
@@ -83,25 +81,9 @@ impl Render for Lab {
             }
             let capture = (tick % 8 == 0).then(|| directory.join(format!("{scenario}.png")));
             let preview = (tick % 8 == 3 && (6..=7).contains(&scenario)).then_some(scenario == 6);
-            let map_preview = tick % 8 == 3 && scenario == 8;
-            let thumbnail_preview = tick % 8 == 3 && scenario == 9;
-            let done = tick >= 80;
+            let done = tick >= 64;
             let entity = cx.entity();
             window.on_next_frame(move |window, cx| {
-                if thumbnail_preview {
-                    window.dispatch_event(
-                        PlatformInput::KeyDown(KeyDownEvent {
-                            keystroke: Keystroke::parse("t").unwrap(),
-                            is_held: false,
-                            prefer_character_input: false,
-                        }),
-                        cx,
-                    );
-                    assert!(entity.read(cx).map_thumbnail, "thumbnail preview toggle");
-                }
-                if map_preview {
-                    minimap::smoke_navigation(&entity, window, cx);
-                }
                 if let Some(marquee) = preview {
                     interaction::smoke_preview(&entity, window, cx, marquee);
                 }
@@ -129,12 +111,12 @@ impl Render for Lab {
             });
             window.request_animation_frame();
         }
-        if let Some(profile) = &mut self.profile {
+        if let Some(profile) = &mut self.profile
+            && !self.preview.capturing
+        {
             let count = profile.begin(started);
             if self.scene.len() != count {
                 self.scene = make_scene(count);
-                self.overview = Arc::new(xgpui_canvas::Overview::new(&self.scene));
-                self.minimap_image = minimap::thumbnail(&self.scene, &self.overview);
             }
             if profile.frame == 301 {
                 self.camera = Camera2D::default();
@@ -207,7 +189,9 @@ impl Render for Lab {
         let full_count = cards.len();
         let proxy_count = proxies.len();
         let count = full_count + proxy_count;
-        if let Some(profile) = &mut self.profile {
+        if let Some(profile) = &mut self.profile
+            && !self.preview.capturing
+        {
             profile.record_build(started.elapsed().as_secs_f64() * 1000., count, full_count);
             let capture = match profile.frame {
                 20 => Some(profile.output.with_extension("10k.png")),
@@ -246,7 +230,8 @@ impl Render for Lab {
         let marquee = self.marquee();
         let guides = self.snap_guides.clone();
         let camera = self.camera;
-        let minimap = self.show_minimap.then(|| self.minimap(cx));
+        minimap::schedule(self, window, cx);
+        let minimap = (self.show_minimap && !self.preview.hidden).then(|| self.minimap(cx));
         div().id("canvas-lab").track_focus(&self.focus)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if event.keystroke.key == "space" { this.space_down = true; cx.stop_propagation(); }
@@ -254,9 +239,8 @@ impl Render for Lab {
                     this.grid_style = match this.grid_style { GridStyle::Lines => GridStyle::Dots, GridStyle::Dots => GridStyle::Lines };
                     cx.notify();
                 }
-                if event.keystroke.key == "t" { this.map_thumbnail = !this.map_thumbnail; cx.notify(); }
-                if event.keystroke.key == "m" { this.show_minimap = !this.show_minimap; this.map_drag = false; cx.notify(); }
-                if event.keystroke.key == "escape" { this.cancel_selection(); this.drag = None; this.map_drag = false; cx.notify(); }
+                if event.keystroke.key == "m" { this.show_minimap = !this.show_minimap; cx.notify(); }
+                if event.keystroke.key == "escape" { this.cancel_selection(); this.drag = None; cx.notify(); }
                 if event.keystroke.key == "r" { this.cancel_selection(); this.camera = Camera2D::default(); cx.notify(); }
                 if event.keystroke.key == "o" {
                     this.cancel_selection();
@@ -265,7 +249,7 @@ impl Render for Lab {
                     this.camera.zoom_at(WorldPoint::new(viewport.x / 2., viewport.y / 2.), viewport, 0.01);
                     cx.notify();
                 }
-                if event.keystroke.key == "b" { this.cancel_selection(); this.scene = make_scene(if this.scene.len() == 10_000 { 100_000 } else { 10_000 }); this.selected.clear(); this.refresh_overview(); cx.notify(); }
+                if event.keystroke.key == "b" { this.cancel_selection(); this.scene = make_scene(if this.scene.len() == 10_000 { 100_000 } else { 10_000 }); this.selected.clear(); this.invalidate_preview(); cx.notify(); }
             }))
             .on_key_up(cx.listener(|this, event: &KeyUpEvent, _, cx| {
                 if event.keystroke.key == "space" { this.space_down = false; this.drag = None; cx.stop_propagation(); }
@@ -273,7 +257,7 @@ impl Render for Lab {
             .relative().size_full().flex().flex_col().bg(rgb(0x101824)).text_color(rgb(0xffffff))
             .child(div().h(px(88.)).flex_none().text_size(px(13.)).flex().flex_col()
                 .child("Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel")
-                .child("Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: minimap")
+                .child("Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: preview")
                 .child(format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len())))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
                 .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
@@ -295,7 +279,6 @@ impl Render for Lab {
                 }))
                 .on_mouse_down(MouseButton::Middle, cx.listener(|this, event: &MouseDownEvent, _, _| this.drag = Some(event.position)))
                 .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
-                    if this.map_drag && event.pressed_button == Some(MouseButton::Left) { this.navigate_map(event.position); cx.notify(); return; }
                     if this.gesture.is_some() && event.pressed_button == Some(MouseButton::Left) {
                         this.update_selection(event.position, event.modifiers.alt); cx.notify(); return;
                     }
@@ -306,8 +289,8 @@ impl Render for Lab {
                         cx.notify();
                     }
                 }))
-                .on_mouse_up(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { if this.map_drag { this.navigate_map(event.position); this.map_drag = false; } else { this.finish_selection(event); } cx.notify(); }))
-                .on_mouse_up_out(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { if this.map_drag { this.navigate_map(event.position); this.map_drag = false; } else { this.finish_selection(event); } cx.notify(); }))
+                .on_mouse_up(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { this.finish_selection(event); cx.notify(); }))
+                .on_mouse_up_out(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { this.finish_selection(event); cx.notify(); }))
                 .on_mouse_up(MouseButton::Middle, cx.listener(|this, _, _, _| this.drag = None))
                 .on_mouse_up_out(MouseButton::Middle, cx.listener(|this, _, _, _| this.drag = None))
                 .child(SpatialCanvas::new(self.camera, &self.grid, self.grid_style).size_full()
@@ -429,7 +412,7 @@ fn main() {
                         this.cancel_selection();
                         this.space_down = false;
                         this.drag = None;
-                        this.map_drag = false;
+
                         cx.notify();
                     })
                     .detach();
@@ -438,21 +421,16 @@ fn main() {
                             this.cancel_selection();
                             this.space_down = false;
                             this.drag = None;
-                            this.map_drag = false;
+
                             cx.notify();
                         }
                     })
                     .detach();
                     let scene = make_scene(10_000);
-                    let overview = Arc::new(xgpui_canvas::Overview::new(&scene));
-                    let minimap_image = minimap::thumbnail(&scene, &overview);
                     Lab {
-                        minimap_image,
-                        overview,
+                        preview: minimap::Preview::default(),
                         map_bounds: Bounds::default(),
-                        map_drag: false,
                         show_minimap: true,
-                        map_thumbnail: false,
                         profile: options.benchmark.map(profile::Profile::new),
                         smoke: options.smoke.map(|directory| (directory, 0, false)),
                         grid: GridPainter::new().expect("compile canvas grid"),

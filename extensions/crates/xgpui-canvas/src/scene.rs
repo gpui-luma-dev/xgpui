@@ -42,14 +42,24 @@ pub struct VisibleItem<'a, T> {
 pub struct Scene<T> {
     items: Vec<SceneItem<T>>,
     index: SpatialIndex,
+    revision: u64,
 }
 
 impl<T> Scene<T> {
     pub fn new(items: impl IntoIterator<Item = SceneItem<T>>) -> Self {
         let items: Vec<_> = items.into_iter().collect();
         let index = SpatialIndex::new(&items);
-        Self { items, index }
+        Self {
+            items,
+            index,
+            revision: 0,
+        }
     }
+    /// Changes whenever bounds are updated; useful for invalidating retained captures.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     pub fn len(&self) -> usize {
         self.items.len()
     }
@@ -75,6 +85,7 @@ impl<T> Scene<T> {
             return false;
         }
         self.items[index].bounds = bounds;
+        self.revision = self.revision.wrapping_add(1);
         self.index.refit(&self.items, index);
         true
     }
@@ -243,6 +254,7 @@ mod tests {
         let mut scene = Scene::new(
             (0..100).map(|index| item(index as f64 * 100., index as f64 * 100. + 10., index)),
         );
+        assert_eq!(scene.revision(), 0);
         for step in 0..300 {
             let index = step % 100;
             let value = step as f64 * -500.;
@@ -278,6 +290,7 @@ mod tests {
         };
         assert!(!scene.set_bounds(0, invalid));
         assert!(!scene.set_bounds(100, scene.items[0].bounds));
+        assert_eq!(scene.revision(), 300);
         assert!(scene.items[0].bounds.is_valid());
         assert!(scene.hit_test(Point::new(1., 1.)).is_none());
     }

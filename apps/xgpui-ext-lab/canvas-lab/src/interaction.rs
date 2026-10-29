@@ -101,7 +101,7 @@ impl Lab {
             _ => false,
         };
         if changed {
-            self.refresh_overview();
+            self.invalidate_preview();
         }
         self.gesture = None;
         self.snap_guides.clear();
@@ -362,7 +362,7 @@ pub(super) fn smoke_marquee(entity: &Entity<Lab>, window: &mut Window, cx: &mut 
         }),
         cx,
     );
-    let cached = entity.read(cx).overview.clone();
+    let before_revision = entity.read(cx).scene.revision();
     window.dispatch_event(
         PlatformInput::MouseMove(MouseMoveEvent {
             position,
@@ -398,8 +398,8 @@ pub(super) fn smoke_marquee(entity: &Entity<Lab>, window: &mut Window, cx: &mut 
         cx,
     );
     assert!(
-        Arc::ptr_eq(&cached, &entity.read(cx).overview),
-        "overview stays cached during movement"
+        entity.read(cx).scene.revision() > before_revision,
+        "movement invalidates viewport capture"
     );
     window.dispatch_event(
         PlatformInput::MouseUp(MouseUpEvent {
@@ -411,14 +411,14 @@ pub(super) fn smoke_marquee(entity: &Entity<Lab>, window: &mut Window, cx: &mut 
         cx,
     );
     assert!(
-        !Arc::ptr_eq(&cached, &entity.read(cx).overview),
-        "committed movement refreshes overview"
+        entity.read(cx).gesture.is_none(),
+        "committed movement ends the gesture"
     );
     entity.update(cx, |lab, _| {
         for (id, bounds) in originals {
             assert!(lab.scene.set_bounds(id, bounds));
         }
-        lab.refresh_overview();
+        lab.invalidate_preview();
     });
 }
 
