@@ -422,3 +422,21 @@ failures stop. `--resume` requires the same source commit and original output;
 published versions are skipped only after comparing their downloaded contents
 and registry checksum with the verified archive. The report retains source SHA,
 commands, logs, inspected file counts and checksums.
+
+The [approved extension release run](https://github.com/gpui-luma-dev/xgpui/actions/runs/40798784916)
+completed successfully on 2026-10-29 UTC from source commit
+`6dd303959ab4d16e9669da96a985692afd67606e`. All six 0.2.0 registry dry runs passed,
+and all six versions are published and unyanked. The downloaded registry archives
+match the complete verified dry-run archive contents; checksums and packaged
+source, README and license inputs were also independently checked.
+
+Media encountered the new-crate rate limit once. The job waited until the
+server's `2026-10-29 01:23:06 UTC` deadline, checked that the version was still
+absent, and then published successfully. The workflow artifact retains the
+report, logs and verified archives for this release.
+
+A separate credential-free macOS consumer passed `cargo check` using exact
+registry versions of all 15 packages, including the instanced gamut and portable
+shader features. Cargo metadata confirmed every release dependency came from
+crates.io, with no repository path patches. This checks native consumer compilation;
+it does not claim execution of a GUI or cross-platform runtime tests.
