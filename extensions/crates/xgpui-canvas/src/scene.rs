@@ -57,6 +57,11 @@ impl<T> Scene<T> {
         self.items.is_empty()
     }
 
+    /// Current scene extent from the BVH root, including refitted bounds.
+    pub fn bounds(&self) -> Option<WorldBounds> {
+        self.index.bounds()
+    }
+
     /// Stable back-to-front order; positions in this slice identify bounds updates.
     pub fn items(&self) -> &[SceneItem<T>] {
         &self.items

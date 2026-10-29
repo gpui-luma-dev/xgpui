@@ -1,10 +1,11 @@
 mod interaction;
+mod minimap;
 mod profile;
 use interaction::Gesture;
 
 use clap::Parser;
 use gpui::{prelude::*, *};
-use std::{collections::BTreeSet, path::PathBuf, time::Instant};
+use std::{collections::BTreeSet, path::PathBuf, sync::Arc, time::Instant};
 use xgpui_canvas::{
     Camera2D, Canvas as SpatialCanvas, GridPainter, GridStyle, LevelOfDetail, Point as WorldPoint,
     Scene, SceneItem, WorldBounds,
@@ -22,10 +23,14 @@ struct Options {
 
 struct Lab {
     profile: Option<profile::Profile>,
-    smoke: Option<(PathBuf, usize)>,
+    smoke: Option<(PathBuf, usize, bool)>,
     grid: GridPainter,
     grid_style: GridStyle,
     scene: Scene<usize>,
+    overview: Arc<xgpui_canvas::Overview>,
+    map_bounds: Bounds<Pixels>,
+    map_drag: bool,
+    show_minimap: bool,
     focus: FocusHandle,
     space_down: bool,
     camera: Camera2D,
@@ -49,10 +54,13 @@ impl Render for Lab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let started = Instant::now();
         let smoke_viewport = self.viewport();
-        if let Some((directory, tick)) = &mut self.smoke {
-            *tick += 1;
-            let scenario = (*tick - 1) / 8;
-            if (*tick - 1) % 8 == 0 {
+        if let Some((directory, stored_tick, pending)) = &mut self.smoke
+            && !*pending
+        {
+            *pending = true;
+            let tick = *stored_tick + 1;
+            let scenario = (tick - 1) / 8;
+            if (tick - 1) % 8 == 0 {
                 self.camera = Camera2D::default();
                 match scenario {
                     1 => self
@@ -71,11 +79,15 @@ impl Render for Lab {
                     _ => (),
                 }
             }
-            let capture = (*tick % 8 == 0).then(|| directory.join(format!("{scenario}.png")));
-            let preview = (*tick % 8 == 3 && scenario >= 6).then_some(scenario == 6);
-            let done = *tick >= 64;
+            let capture = (tick % 8 == 0).then(|| directory.join(format!("{scenario}.png")));
+            let preview = (tick % 8 == 3 && (6..=7).contains(&scenario)).then_some(scenario == 6);
+            let map_preview = tick % 8 == 3 && scenario == 8;
+            let done = tick >= 72;
             let entity = cx.entity();
             window.on_next_frame(move |window, cx| {
+                if map_preview {
+                    minimap::smoke_navigation(&entity, window, cx);
+                }
                 if let Some(marquee) = preview {
                     interaction::smoke_preview(&entity, window, cx, marquee);
                 }
@@ -93,7 +105,12 @@ impl Render for Lab {
                 if done {
                     cx.quit();
                 } else {
-                    entity.update(cx, |_, cx| cx.notify());
+                    entity.update(cx, |this, cx| {
+                        let smoke = this.smoke.as_mut().unwrap();
+                        smoke.1 = tick;
+                        smoke.2 = false;
+                        cx.notify();
+                    });
                 }
             });
             window.request_animation_frame();
@@ -102,6 +119,7 @@ impl Render for Lab {
             let count = profile.begin(started);
             if self.scene.len() != count {
                 self.scene = make_scene(count);
+                self.overview = Arc::new(xgpui_canvas::Overview::new(&self.scene));
             }
             if profile.frame == 301 {
                 self.camera = Camera2D::default();
@@ -213,6 +231,7 @@ impl Render for Lab {
         let marquee = self.marquee();
         let guides = self.snap_guides.clone();
         let camera = self.camera;
+        let minimap = self.show_minimap.then(|| self.minimap(cx));
         div().id("canvas-lab").track_focus(&self.focus)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if event.keystroke.key == "space" { this.space_down = true; cx.stop_propagation(); }
@@ -220,7 +239,8 @@ impl Render for Lab {
                     this.grid_style = match this.grid_style { GridStyle::Lines => GridStyle::Dots, GridStyle::Dots => GridStyle::Lines };
                     cx.notify();
                 }
-                if event.keystroke.key == "escape" { this.cancel_selection(); this.drag = None; cx.notify(); }
+                if event.keystroke.key == "m" { this.show_minimap = !this.show_minimap; this.map_drag = false; cx.notify(); }
+                if event.keystroke.key == "escape" { this.cancel_selection(); this.drag = None; this.map_drag = false; cx.notify(); }
                 if event.keystroke.key == "r" { this.cancel_selection(); this.camera = Camera2D::default(); cx.notify(); }
                 if event.keystroke.key == "o" {
                     this.cancel_selection();
@@ -229,15 +249,15 @@ impl Render for Lab {
                     this.camera.zoom_at(WorldPoint::new(viewport.x / 2., viewport.y / 2.), viewport, 0.01);
                     cx.notify();
                 }
-                if event.keystroke.key == "b" { this.cancel_selection(); this.scene = make_scene(if this.scene.len() == 10_000 { 100_000 } else { 10_000 }); this.selected.clear(); cx.notify(); }
+                if event.keystroke.key == "b" { this.cancel_selection(); this.scene = make_scene(if this.scene.len() == 10_000 { 100_000 } else { 10_000 }); this.selected.clear(); this.refresh_overview(); cx.notify(); }
             }))
             .on_key_up(cx.listener(|this, event: &KeyUpEvent, _, cx| {
                 if event.keystroke.key == "space" { this.space_down = false; this.drag = None; cx.stop_propagation(); }
             }))
-            .size_full().flex().flex_col().bg(rgb(0x101824)).text_color(rgb(0xffffff))
+            .relative().size_full().flex().flex_col().bg(rgb(0x101824)).text_color(rgb(0xffffff))
             .child(div().h(px(88.)).flex_none().text_size(px(13.)).flex().flex_col()
                 .child("Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel")
-                .child("Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k")
+                .child("Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: minimap")
                 .child(format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len())))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
                 .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
@@ -259,6 +279,7 @@ impl Render for Lab {
                 }))
                 .on_mouse_down(MouseButton::Middle, cx.listener(|this, event: &MouseDownEvent, _, _| this.drag = Some(event.position)))
                 .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                    if this.map_drag && event.pressed_button == Some(MouseButton::Left) { this.navigate_map(event.position); cx.notify(); return; }
                     if this.gesture.is_some() && event.pressed_button == Some(MouseButton::Left) {
                         this.update_selection(event.position, event.modifiers.alt); cx.notify(); return;
                     }
@@ -269,8 +290,8 @@ impl Render for Lab {
                         cx.notify();
                     }
                 }))
-                .on_mouse_up(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { this.finish_selection(event); cx.notify(); }))
-                .on_mouse_up_out(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { this.finish_selection(event); cx.notify(); }))
+                .on_mouse_up(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { if this.map_drag { this.navigate_map(event.position); this.map_drag = false; } else { this.finish_selection(event); } cx.notify(); }))
+                .on_mouse_up_out(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { if this.map_drag { this.navigate_map(event.position); this.map_drag = false; } else { this.finish_selection(event); } cx.notify(); }))
                 .on_mouse_up(MouseButton::Middle, cx.listener(|this, _, _, _| this.drag = None))
                 .on_mouse_up_out(MouseButton::Middle, cx.listener(|this, _, _, _| this.drag = None))
                 .child(SpatialCanvas::new(self.camera, &self.grid, self.grid_style).size_full()
@@ -287,6 +308,7 @@ impl Render for Lab {
                 }).absolute().size_full())
                 .children(cards)
                 .child(canvas(|_, _, _| (), move |bounds, _, window, _| interaction::paint_overlay(window, bounds, camera, marquee, &guides)).absolute().size_full())))
+            .children(minimap)
     }
 }
 
@@ -391,6 +413,7 @@ fn main() {
                         this.cancel_selection();
                         this.space_down = false;
                         this.drag = None;
+                        this.map_drag = false;
                         cx.notify();
                     })
                     .detach();
@@ -399,16 +422,23 @@ fn main() {
                             this.cancel_selection();
                             this.space_down = false;
                             this.drag = None;
+                            this.map_drag = false;
                             cx.notify();
                         }
                     })
                     .detach();
+                    let scene = make_scene(10_000);
+                    let overview = Arc::new(xgpui_canvas::Overview::new(&scene));
                     Lab {
+                        overview,
+                        map_bounds: Bounds::default(),
+                        map_drag: false,
+                        show_minimap: true,
                         profile: options.benchmark.map(profile::Profile::new),
-                        smoke: options.smoke.map(|directory| (directory, 0)),
+                        smoke: options.smoke.map(|directory| (directory, 0, false)),
                         grid: GridPainter::new().expect("compile canvas grid"),
                         grid_style: GridStyle::Lines,
-                        scene: make_scene(10_000),
+                        scene,
                         focus,
                         space_down: false,
                         camera: Camera2D::default(),

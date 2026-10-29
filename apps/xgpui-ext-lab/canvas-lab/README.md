@@ -22,6 +22,14 @@ uses the selection's group bounds and excludes selected items. Equal-spacing,
 angle snapping, auto-scroll, undo history, and accelerated bulk refits are not
 included in this slice.
 
+The lower-right **minimap** shows cached object-center density and an amber
+viewport rectangle. Click or drag it to navigate; **M** hides/shows it. Navigation
+preserves zoom and selection, and never changes scene geometry. The overview
+has at most 1,024 painted cells, refreshed when switching scenes or committing a
+move. Its density stays cached during dragging; the viewport marker updates
+continuously. Fine object geometry is intentionally aggregated. Navigation clamps
+letterboxed regions to the scene extent. Wheel/pinch over the map are consumed.
+
 The scene contains 10,000 or 100,000 world-space rectangles. BVH AABB culling happens
 before constructing GPUI children, so offscreen cards do not enter layout or
 text shaping. Scene bounds and IDs are retained between frames. Full-detail
@@ -65,8 +73,10 @@ and a resized viewport. Smoke mode also dispatches native GPUI mouse events and
 asserts selection for visible full cards, bounds proxies, and point proxies. It
 also checks forward/reverse marquee selection, group movement, Option bypass,
 alignment guides, and Escape restoration. Captures include marquee and guide
-overlays. Captures are for
-visual inspection, not pixel assertions. The benchmark sweeps 10k/100k scenes at
+overlays. Minimap smoke checks dispatch click/drag input, verify camera projection
+and release state, assert unchanged zoom, selection and scene extent, and check
+cache refresh after committed movement. Captures are for visual inspection, not
+pixel assertions. The benchmark sweeps 10k/100k scenes at
 1x zoom and a 100k scene at 0.01x, with 30 warmup and 120 measured frames per case.
 It saves JSON and line/dot/overview PNGs captured during warmup.
 CPU timings cover culling and child construction only. Frame intervals include

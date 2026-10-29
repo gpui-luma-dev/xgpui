@@ -93,6 +93,16 @@ impl Lab {
 
     pub(super) fn finish_selection(&mut self, event: &MouseUpEvent) {
         self.update_selection(event.position, event.modifiers.alt);
+        let changed = match &self.gesture {
+            Some(Gesture::Move { originals, .. }) => originals.iter().any(|(id, old)| {
+                let current = self.scene.items()[*id].bounds;
+                current.min != old.min || current.max != old.max
+            }),
+            _ => false,
+        };
+        if changed {
+            self.refresh_overview();
+        }
         self.gesture = None;
         self.snap_guides.clear();
         self.drag = None;
@@ -336,7 +346,7 @@ pub(super) fn smoke_marquee(entity: &Entity<Lab>, window: &mut Window, cx: &mut 
         }),
         cx,
     );
-    for (id, bounds) in originals {
+    for &(id, bounds) in &originals {
         assert_eq!(
             entity.read(cx).scene.items()[id].bounds.min,
             bounds.min,
@@ -352,6 +362,64 @@ pub(super) fn smoke_marquee(entity: &Entity<Lab>, window: &mut Window, cx: &mut 
         }),
         cx,
     );
+    let cached = entity.read(cx).overview.clone();
+    window.dispatch_event(
+        PlatformInput::MouseMove(MouseMoveEvent {
+            position,
+            ..Default::default()
+        }),
+        cx,
+    );
+    window.dispatch_event(
+        PlatformInput::MouseDown(MouseDownEvent {
+            position,
+            button: MouseButton::Left,
+            click_count: 1,
+            ..Default::default()
+        }),
+        cx,
+    );
+    // Releasing a world drag over the HUD must still commit and clear the gesture.
+    assert!(
+        matches!(entity.read(cx).gesture, Some(Gesture::Move { .. })),
+        "native commit gesture starts"
+    );
+    let end = entity.read(cx).map_bounds.center();
+    let modifiers = Modifiers {
+        alt: true,
+        ..Default::default()
+    };
+    window.dispatch_event(
+        PlatformInput::MouseMove(MouseMoveEvent {
+            position: end,
+            pressed_button: Some(MouseButton::Left),
+            modifiers,
+        }),
+        cx,
+    );
+    assert!(
+        Arc::ptr_eq(&cached, &entity.read(cx).overview),
+        "overview stays cached during movement"
+    );
+    window.dispatch_event(
+        PlatformInput::MouseUp(MouseUpEvent {
+            position: end,
+            button: MouseButton::Left,
+            modifiers,
+            ..Default::default()
+        }),
+        cx,
+    );
+    assert!(
+        !Arc::ptr_eq(&cached, &entity.read(cx).overview),
+        "committed movement refreshes overview"
+    );
+    entity.update(cx, |lab, _| {
+        for (id, bounds) in originals {
+            assert!(lab.scene.set_bounds(id, bounds));
+        }
+        lab.refresh_overview();
+    });
 }
 
 pub(super) fn smoke_preview(

@@ -51,6 +51,16 @@ selected items from candidates. `SnapResult` supplies the corrected translation
 and optional world-space X/Y alignment guides; callers own input and painting.
 This is bounded local alignment, without equal-spacing or angle snapping.
 
+`scene.bounds()` reads the current BVH extent in constant time. Build and retain
+`Overview::new(&scene)` for a 32×32 center-density summary with at most 1,024
+occupied cells. Each cell reports world bounds and an object count. Use
+`world_to_map`/`map_to_world` for aspect-preserving projection and navigation;
+inverse mapping clamps letterboxed regions to scene bounds. Map sizes must be
+positive and finite; world spans must be finite. Empty and zero-area scenes
+receive a usable fallback domain. This is an approximate density map, not a
+thumbnail renderer. Rebuild the summary after scene edits, not on every redraw.
+`camera.center_on(world)` recenters without changing zoom.
+
 Project child positions, dimensions and font sizes explicitly. This is not a
 general transform for arbitrary GPUI subtrees; rotation, transformed text APIs,
 bulk index updates, cached layers and thumbnail LOD remain follow-ups. Inputs and

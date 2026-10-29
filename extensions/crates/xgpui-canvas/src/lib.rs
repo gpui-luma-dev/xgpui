@@ -5,9 +5,11 @@
 mod viewport;
 #[cfg(feature = "gpui")]
 pub use viewport::{Canvas, GridPainter, GridStyle};
+mod overview;
 mod scene;
 mod snapping;
 mod spatial;
+pub use overview::{Overview, OverviewCell};
 pub use scene::{LevelOfDetail, Scene, SceneItem, VisibleItem};
 pub use snapping::{AlignmentGuide, Axis, SnapResult};
 
@@ -74,6 +76,14 @@ impl Default for Camera2D {
 }
 
 impl Camera2D {
+    /// Recenter without changing zoom. Invalid coordinates leave the camera unchanged.
+    pub fn center_on(&mut self, world: Point) -> bool {
+        if !world.x.is_finite() || !world.y.is_finite() {
+            return false;
+        }
+        self.center = world;
+        true
+    }
     pub fn zoom(self) -> f64 {
         self.zoom
     }

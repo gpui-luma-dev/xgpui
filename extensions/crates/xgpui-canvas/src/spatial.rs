@@ -18,6 +18,9 @@ pub(crate) struct SpatialIndex {
 }
 
 impl SpatialIndex {
+    pub fn bounds(&self) -> Option<WorldBounds> {
+        self.nodes.first().map(|node| node.bounds)
+    }
     pub fn new<T>(items: &[SceneItem<T>]) -> Self {
         let mut index = Self {
             nodes: Vec::new(),
