@@ -84,3 +84,6 @@ cargo run --release --locked --config .cargo/validation.toml \
   --manifest-path extensions/crates/xgpui-canvas/Cargo.toml \
   --example spatial_queries --target-dir target
 ```
+
+See the [RFC coverage review](../../../docs/extensions/canvas.md) for the current
+crate/lab boundary, known limits, and proposed next milestones.

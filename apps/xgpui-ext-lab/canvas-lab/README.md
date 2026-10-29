@@ -59,10 +59,10 @@ center. Zoom is bounded to 0.01–64. Projection converts to f32 only at the GPU
 boundary.
 
 The grid uses one procedural shader quad, with fading minor/major lines or
-dots. This first experiment excludes rotation, custom inertia, dynamic index updates,
+dots. This first experiment excludes rotation, custom inertia, incremental scene insertion/removal,
 and web integration. It does not establish arbitrary subtree scaling. Dense
 overviews still record one native quad per proxy; spatial indexing does not
-reduce that paint cost. Aggregated proxies and thumbnail caching remain follow-ups.
+reduce that paint cost. Aggregated proxies and cached per-entity LOD thumbnails remain follow-ups.
 
 Camera checks:
 
@@ -119,3 +119,6 @@ remained around 16.7 ms. The dense overview stayed around 24.5 ms/frame, with
 higher query/build cost (0.35 ms versus 0.11 ms) from traversing and restoring
 paint order for thousands of matches. These are separate local runs, not a
 controlled hardware benchmark.
+
+RFC coverage, API boundaries, limitations, and the next implementation plan are
+recorded in [`docs/extensions/canvas.md`](../../../docs/extensions/canvas.md).
