@@ -6454,6 +6454,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "xgpui-canvas"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "xgpui",
+ "xgpui-shader",
+]
+
+[[package]]
 name = "xgpui-color"
 version = "0.2.0"
 
@@ -6481,6 +6491,7 @@ dependencies = [
  "wgpu",
  "xgpui",
  "xgpui-apple",
+ "xgpui-canvas",
  "xgpui-color",
  "xgpui-gamut",
  "xgpui-media",

@@ -11,6 +11,10 @@ options := "--profile " + profile + " --locked --config .cargo/validation.toml -
 default:
     @just --justfile "{{ justfile() }}" --list
 
+# Experimental spatial viewport with 10,000 selectable cards.
+canvas-lab *args:
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin canvas-lab -- "$@"
+
 # Image mipmapping, filters, GPU surfaces and path effects (generated samples).
 media *args:
     cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin media-lab -- "$@"
