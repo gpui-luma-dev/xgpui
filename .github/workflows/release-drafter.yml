@@ -1,0 +1,52 @@
+name: Update next release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: release-draft
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Establish the historical boundary once. Never tag the moving main here.
+      - name: Establish initial release checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          releases=$(gh api "repos/$GH_REPO/releases" --paginate --jq '.[] | select(.draft == false) | .tag_name')
+          if [ -z "$releases" ]; then
+            cat > "$RUNNER_TEMP/baseline-notes.md" <<'NOTES'
+          Initial repository release checkpoint after framework 1.0.0 and extension 0.2.0 publication.
+
+          Framework: xgpui, xgpui-macros, xgpui-apple, xgpui-linux, xgpui-macos,
+          xgpui-platform, xgpui-web, xgpui-wgpu, xgpui-windows: **1.0.0**.
+
+          Extensions: xgpui-color, xgpui-gamut, xgpui-media, xgpui-parley,
+          xgpui-shader, xgpui-svg: **0.2.0**.
+
+          This tag marks the repository checkpoint after publication; it does not
+          assert that every registry archive was built from this exact commit.
+          NOTES
+            gh release create v1.0.0 \
+              --target 632c60ace70931391b867d29a03d2ac242b183c1 \
+              --title 'XGPUI 1.0.0' --notes-file "$RUNNER_TEMP/baseline-notes.md"
+          fi
+      - uses: release-drafter/release-drafter@978bb0b30c5ee8cdd332ced253758157150d43f0 # v7
+        with:
+          disable-autolabeler: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

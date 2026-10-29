@@ -57,6 +57,9 @@ See [documentation instructions](docs/WEBSITE.md) for maintenance and checks.
 
 ## Contributing
 
+See [Release cycle](docs/RELEASING.md) for versioned development and the
+automatically maintained GitHub release notes.
+
 Contributions are welcome, including fully AI-generated code. You are responsible
 for its quality. See [Contributing](CONTRIBUTING.md) for the short guide.
 

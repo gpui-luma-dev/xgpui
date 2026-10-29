@@ -1,0 +1,32 @@
+name-template: 'XGPUI $RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+tag-prefix: v
+commitish: main
+change-template: '- $TITLE (#$NUMBER) by $AUTHOR'
+change-title-escapes: '\<*_&@#`'
+sort-by: merged_at
+sort-direction: ascending
+# A minor release is the default development cycle. No labels are required.
+categories:
+  - type: version-resolver
+    semver-increment: major
+    when:
+      label: major
+  - type: version-resolver
+    semver-increment: minor
+template: |
+  ## Changes
+
+  $CHANGES
+
+  ## Crate versions
+
+  Before publishing this release, replace this paragraph with the exact
+  packages and versions published from the tagged commit. The repository
+  release version names the development cycle; extensions may have different
+  crate versions. Unchanged crates do not require republication.
+
+  ## Validation
+
+  Before publishing this release, record the successful CI and registry
+  consumer checks for the tagged commit.
