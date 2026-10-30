@@ -9,14 +9,20 @@ use std::any::Any;
 pub struct ImageAdjustments(gpui::LinearImagePaint);
 impl ImageAdjustments {
     pub fn new(matrix: ColorMatrix, vignette: Option<Vignette>) -> anyhow::Result<Self> {
+        let p3 = match matrix.primaries() {
+            ImagePrimaries::Srgb => false,
+            ImagePrimaries::DisplayP3 => true,
+            ImagePrimaries::AdobeRgb1998 => anyhow::bail!(
+                "GPU image adjustments require linear sRGB or Display P3 working primaries; convert Adobe RGB input first"
+            ),
+        };
         let rows = matrix.rows().map(|row| row.map(|v| v as f32));
         let vignette = vignette
             .map(|v| v.parameters())
             .unwrap_or([0., 0., 1., 1.])
             .map(|v| v as f32);
         Ok(Self(
-            gpui::LinearImagePaint::new(rows, vignette)?
-                .with_p3(matrix.primaries() == ImagePrimaries::DisplayP3),
+            gpui::LinearImagePaint::new(rows, vignette)?.with_p3(p3),
         ))
     }
     /// Shared renderer SPI parameters, also usable by application-owned image

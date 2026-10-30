@@ -4,7 +4,12 @@ fn vectors() -> Vec<(String, [f64; 4])> {
     let mut cases = Vec::new();
     let rgba = |v: [f64; 3]| [v[0], v[1], v[2], 1.];
     let wg = |v: [f64; 3]| format!("vec3<f32>({:?}, {:?}, {:?})", v[0], v[1], v[2]);
-    let spaces = [RgbSpace::Srgb, RgbSpace::DisplayP3, RgbSpace::Rec2020];
+    let spaces = [
+        RgbSpace::Srgb,
+        RgbSpace::DisplayP3,
+        RgbSpace::Rec2020,
+        RgbSpace::AdobeRgb1998,
+    ];
     for (i, space) in spaces.into_iter().enumerate() {
         for v in [
             [0.; 3],

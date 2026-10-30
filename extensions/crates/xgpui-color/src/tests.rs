@@ -1,5 +1,10 @@
 use super::*;
-const SPACES: [RgbSpace; 3] = [RgbSpace::Srgb, RgbSpace::DisplayP3, RgbSpace::Rec2020];
+const SPACES: [RgbSpace; 4] = [
+    RgbSpace::Srgb,
+    RgbSpace::DisplayP3,
+    RgbSpace::Rec2020,
+    RgbSpace::AdobeRgb1998,
+];
 fn close(a: [f64; 3], b: [f64; 3], eps: f64) {
     for (a, b) in a.into_iter().zip(b) {
         assert!((a - b).abs() <= eps, "{a} != {b} (tolerance {eps})");
@@ -174,4 +179,85 @@ fn rejects_invalid_inputs_and_arithmetic_overflow() {
 fn tiny_negative_hue_stays_in_half_open_range() {
     let hue = Oklch::new(0.5, 0.2, -f64::EPSILON).unwrap().components()[2];
     assert!((0.0..360.0).contains(&hue));
+}
+
+#[test]
+fn adobe_rgb_reference_primaries_and_transfer() {
+    // Reference XYZ columns from CSS Color 4's rational A98 matrix.
+    for (rgb, xyz) in [
+        (
+            [1., 0., 0.],
+            [0.5766690429101305, 0.29734497525053605, 0.02703136138641234],
+        ),
+        (
+            [0., 1., 0.],
+            [0.1855582379065463, 0.6273635662554661, 0.07068885253582723],
+        ),
+        (
+            [0., 0., 1.],
+            [0.1882286462349947, 0.07529145849399788, 0.9913375368376388],
+        ),
+    ] {
+        close(
+            LinearRgb::new(RgbSpace::AdobeRgb1998, rgb)
+                .unwrap()
+                .to_xyz()
+                .unwrap()
+                .components(),
+            xyz,
+            1e-14,
+        );
+    }
+    // High precision power-law reference values, not encode/decode round trips.
+    for (encoded, linear) in [
+        (0., 0.),
+        (0.003, 0.0000028290313452536574),
+        (0.18, 0.023024029316635192),
+        (0.5, 0.21775552814439456),
+        (1., 1.),
+        (1.25, 1.6335270018684131),
+    ] {
+        for sign in [-1., 1.] {
+            close(
+                EncodedRgb::new(RgbSpace::AdobeRgb1998, [encoded * sign; 3])
+                    .unwrap()
+                    .decode()
+                    .unwrap()
+                    .components(),
+                [linear * sign; 3],
+                1e-14,
+            );
+        }
+    }
+    close(
+        LinearRgb::new(RgbSpace::AdobeRgb1998, [0.18, 0.5, 1.25])
+            .unwrap()
+            .encode()
+            .unwrap()
+            .components(),
+        [0.4585294656798946, 0.7296583817678015, 1.106791089860401],
+        1e-14,
+    );
+}
+
+#[test]
+fn adobe_and_p3_cross_gamut_colors_remain_extended_until_mapping() {
+    for value in [[0., 1., 0.], [0., 1., 1.]] {
+        let adobe = LinearRgb::new(RgbSpace::AdobeRgb1998, value).unwrap();
+        let p3 = adobe.convert(RgbSpace::DisplayP3).unwrap().components();
+        assert!(p3.iter().any(|v| !(0. ..=1.).contains(v)), "{p3:?}");
+        close(
+            adobe
+                .convert(RgbSpace::DisplayP3)
+                .unwrap()
+                .convert(RgbSpace::AdobeRgb1998)
+                .unwrap()
+                .components(),
+            value,
+            1e-14,
+        );
+    }
+    let p3_red = LinearRgb::new(RgbSpace::DisplayP3, [1., 0., 0.]).unwrap();
+    let adobe = p3_red.convert(RgbSpace::AdobeRgb1998).unwrap().components();
+    assert!(adobe.iter().any(|v| !(0. ..=1.).contains(v)), "{adobe:?}");
 }

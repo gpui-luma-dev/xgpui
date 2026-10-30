@@ -28,13 +28,33 @@ let perceptual = p3.to_oklab()?.to_oklch()?;
 | Type | Represents |
 | --- | --- |
 | `EncodedRgb`, `LinearRgb` | Encoded or linear RGB with explicit primaries. |
-| `RgbSpace` | sRGB, Display P3 or Rec.2020. |
+| `RgbSpace` | sRGB, Display P3, Rec.2020 or Adobe RGB (1998). |
 | `XyzD65`, `Oklab`, `Oklch` | Intermediate and perceptual color spaces. |
 | `LinearRgba` | Linear color with validated straight alpha. |
 
 CPU calculations use `f64`, D65 and finite extended RGB/XYZ values. Conversion
 does not automatically clip or map gamut. Rec.2020 uses its SDR transfer
-function; PQ, HLG and white-point adaptation are outside this API.
+function. Adobe RGB (1998) uses the exact 563/256 decoding exponent and
+256/563 encoding exponent, including sign-preserving extended channels; it does
+not use the sRGB transfer curve. PQ, HLG and white-point adaptation are outside
+this API.
+
+## Adobe RGB (1998)
+
+```rust
+use xgpui_color::{EncodedRgb, GamutMapping, RgbSpace};
+
+let adobe = EncodedRgb::new(RgbSpace::AdobeRgb1998, [0., 1., 1.])?.decode()?;
+let extended_p3 = adobe.convert(RgbSpace::DisplayP3)?;
+assert!(extended_p3.components()[0] < 0.); // This cyan is outside P3.
+let display_p3 = adobe.map_gamut(RgbSpace::DisplayP3, GamutMapping::ReduceChroma)?;
+# Ok::<(), xgpui_color::ColorError>(())
+```
+
+Conversion and gradients retain extended values until explicit mapping. Adobe
+RGB and P3 do not fully contain one another. Native image/shader producers still
+use bounded linear P3; this math support does not widen those storage or output
+contracts. See the media supplied-pixel API for explicit mapping into P3.
 
 ## Gamut mapping and gradients
 
@@ -68,6 +88,8 @@ local MINDE. Invalid or nonfinite values return `ColorError`.
 `WGSL_COLOR_MATH` contains resource-free WGSL helpers with the `gamut_` prefix.
 Prepend it once to your shader source; it declares no entry point or bindings.
 The GPU contract uses finite `f32` inputs and validated space/policy IDs.
+Space IDs are stable: 0 = sRGB, 1 = Display P3, 2 = Rec.2020, 3 = Adobe RGB (1998).
+Mapping IDs are 0 = clip and 1 = fixed-lightness/hue chroma reduction.
 
 These functions do not change a renderer's output color space. Use the explicit
 linear-P3 contract when integrating wide output with `xgpui-shader` or
