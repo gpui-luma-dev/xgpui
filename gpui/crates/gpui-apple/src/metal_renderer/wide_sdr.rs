@@ -1,4 +1,4 @@
-//! Ordered sRGB UI runs and associated linear-P3 SDR composition.
+//! Ordered sRGB UI runs and associated extended linear-P3 SDR composition.
 use super::*;
 use crate::metal;
 use crate::metal::*;
@@ -163,7 +163,13 @@ impl Compositor {
                 } else {
                     0.
                 },
-                0.,
+                if draw.is_some_and(|d| {
+                    d.content.image_color_mode() == gpui::ImageColorMode::LinearRec2020Wide
+                }) {
+                    1.
+                } else {
+                    0.
+                },
                 0.,
             ],
         ]
@@ -268,7 +274,7 @@ impl Compositor {
                 &renderer.device,
                 scene,
                 viewport,
-                &[renderer.opaque as u64, 1],
+                &[renderer.opaque as u64, 2],
             )?;
         }
         let queue = renderer.command_queue.clone();
@@ -415,7 +421,7 @@ impl Compositor {
             } = batch
             {
                 if scene.shader_draws[range.start].program.output_encoding()
-                    == gpui::ShaderOutputEncoding::LinearDisplayP3
+                    != gpui::ShaderOutputEncoding::EncodedSrgb
                 {
                     self.flush(&command, &mut ui, viewport);
                     let e = new_command_encoder_for_texture(

@@ -271,7 +271,8 @@ execution timings; use platform GPU captures for draw-count/timing acceptance.
 
 `ShaderProgram::new` retains straight-alpha encoded-sRGB SDR semantics.
 `ShaderProgram::new_linear_p3` instead declares bounded straight-alpha linear
-Display P3/D65 producer output. Both wrappers clamp producer RGBA to [0,1]; use
+Display P3/D65 producer output; `new_linear_rec2020` declares bounded linear
+Rec.2020/D65 SDR output. All wrappers clamp producer RGBA to [0,1]; use
 explicit gamut mapping inside the producer when clipping is unsuitable.
 
 Enable `WindowColorMode::WideGamutSdr` outside painting before recording a wide
@@ -280,8 +281,10 @@ renderers also reject unsupported scenes before preparation/submission. wgpu
 and non-macOS Apple rendering currently reject wide programs explicitly.
 
 The generated wrapper applies inherited opacity and associates RGB once. On
-Metal, wide instances draw into the linear-P3 Float16 composition target with
-premultiplied blending. On D3D11, the host selects conversion from linear P3 to
+Metal, wide instances convert to an extended linear-P3 Float16 target with
+premultiplied blending. Rec.2020 can produce negative P3 channels, which survive
+captures, linear filters and normal blending. On D3D11, the host converts the
+declared producer primaries to
 linear scRGB before association; negative and above-one scRGB survive because
 producer clamping happens before that conversion. No per-instance offscreen
 producer texture is allocated. Legacy UI runs still require conversion, and

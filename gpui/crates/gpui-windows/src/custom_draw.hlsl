@@ -68,7 +68,7 @@ float4 custom_fragment(Vertex input) : SV_Target {
             float t=clamp((d-vignette.y)/vignette.z,0.,1.);
             rgb*=1.-vignette.x*t*t*(3.-2.*t);
             if (color_flags.z < .5) rgb=srgb_to_p3(rgb);
-            color.rgb=clamp(rgb,0.,1.)*color.a;
+            color.rgb=rgb*color.a; // Extended linear SDR; no intermediate gamut clamp.
         }
         // Associated linear P3 -> scRGB. Preserve extended channels.
         color.rgb = float3(

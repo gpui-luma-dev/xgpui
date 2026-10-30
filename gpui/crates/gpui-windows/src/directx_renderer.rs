@@ -743,7 +743,11 @@ impl DirectXRenderer {
                     let native = output.is::<Background>();
                     let typed_wide = output.is::<Dx11WideSdrOutput>();
                     let wide = typed_wide
-                        || draw.content.image_color_mode() == gpui::ImageColorMode::LinearP3Wide;
+                        || matches!(
+                            draw.content.image_color_mode(),
+                            gpui::ImageColorMode::LinearP3Wide
+                                | gpui::ImageColorMode::LinearRec2020Wide
+                        );
                     anyhow::ensure!(
                         !wide || self.wide_sdr.is_some(),
                         "wide image requires WideGamutSdr presentation"

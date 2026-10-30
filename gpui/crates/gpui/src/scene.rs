@@ -1592,6 +1592,9 @@ pub enum ShaderOutputEncoding {
     /// Bounded straight-alpha linear Display P3/D65 producer output.
     /// The host wrapper associates alpha and converts to composition primaries.
     LinearDisplayP3,
+    /// Bounded straight-alpha linear Rec.2020/D65 SDR producer output.
+    /// The host converts to extended composition primaries after association.
+    LinearRec2020,
 }
 
 /// Backend-independent compiled fragment program. Created by shader extensions;

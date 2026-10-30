@@ -419,7 +419,7 @@ impl Compositor {
                 } = batch
                 {
                     if scene.shader_draws[range.start].program.output_encoding()
-                        == gpui::ShaderOutputEncoding::LinearDisplayP3
+                        != gpui::ShaderOutputEncoding::EncodedSrgb
                     {
                         if dirty {
                             self.flush_ui(&devices)?;

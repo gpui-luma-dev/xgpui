@@ -286,3 +286,71 @@ fn wide_backdrop_filters_composed_p3_and_keeps_following_path_mask() {
     }
     assert!(r.backdrop_cache_stats().hits > 0);
 }
+
+#[test]
+fn rec2020_capture_blur_nested_cache_and_blending_retain_out_of_p3_channels() {
+    let rec = ShaderProgram::<Tint>::new_linear_rec2020(
+        "struct Parameters { color: vec4<f32>, } fn shade(input: ShaderInput, p: Parameters) -> vec4<f32> { return p.color; }"
+    ).unwrap();
+    let p3 = wide_program();
+    let mut r = renderer();
+    for radius in [0., 4., 8.] {
+        let mut s = Scene::default();
+        wide_rect(&mut s, &p3, viewport().bounds, [1., 0., 1., 1.]);
+        let outer = capture(0.5);
+        let mut inner = capture(0.5);
+        Arc::get_mut(&mut inner).unwrap().blur_radius = ScaledPixels(radius);
+        Arc::get_mut(&mut inner).unwrap().blur_quality = LayerBlurQuality::FullResolution;
+        s.begin_layer_capture(outer.clone(), viewport());
+        s.begin_layer_capture(inner.clone(), viewport());
+        wide_rect(&mut s, &rec, inner.bounds, [0., 1., 0., 1.]);
+        s.end_layer_capture(inner, viewport());
+        s.end_layer_capture(outer, viewport());
+        s.finish();
+        // Independent 120-digit xy solve: Rec.2020 green -> linear P3.
+        // Both extended channels must survive isolation, Gaussian and two
+        // opacity operations before compositing over P3 magenta.
+        let green = [
+            -0.2821796705261357,
+            1.0757879158485746,
+            -0.01959849452449406,
+        ];
+        let expected = preview([
+            0.75 + 0.25 * green[0],
+            0.25 * green[1],
+            0.75 + 0.25 * green[2],
+            1.,
+        ]);
+        for extent in [
+            size(DevicePixels(96), DevicePixels(64)),
+            size(DevicePixels(112), DevicePixels(80)),
+        ] {
+            for _ in 0..2 {
+                let image = r.render_scene_to_image(&s, extent).unwrap();
+                pixel(&image, 48, 32, expected);
+            }
+        }
+        assert!(r.layer_cache_stats().hits > 0);
+    }
+}
+
+#[test]
+fn rec2020_grayscale_uses_physical_luminance() {
+    let rec = ShaderProgram::<Tint>::new_linear_rec2020(
+        "struct Parameters { color: vec4<f32>, } fn shade(input: ShaderInput, p: Parameters) -> vec4<f32> { return p.color; }"
+    ).unwrap();
+    let mut r = renderer();
+    let mut s = Scene::default();
+    let mut c = capture(1.);
+    Arc::get_mut(&mut c).unwrap().saturation = 0.;
+    s.begin_layer_capture(c.clone(), viewport());
+    wide_rect(&mut s, &rec, c.bounds, [0., 1., 0., 1.]);
+    s.end_layer_capture(c, viewport());
+    s.finish();
+    let image = r
+        .render_scene_to_image(&s, size(DevicePixels(96), DevicePixels(64)))
+        .unwrap();
+    // Y from the independent D65 Rec.2020 primary matrix.
+    let y = 0.6779980715188708;
+    pixel(&image, 48, 32, preview([y, y, y, 1.]));
+}

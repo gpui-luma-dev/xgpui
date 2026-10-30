@@ -227,7 +227,7 @@ impl MediaLoader {
         )
     }
     /// Background conversion to bounded associated linear Rec.2020 SDR and mips.
-    /// Retains Adobe RGB/P3 source gamuts; no ICC inference or native wide placement.
+    /// Retains Adobe RGB; keep P3 storage for the full P3 gamut. No ICC inference.
     pub fn load_rec2020_rgba16f(
         &self,
         width: u32,

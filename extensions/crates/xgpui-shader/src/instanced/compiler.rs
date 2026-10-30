@@ -114,10 +114,23 @@ fn compile_impl<T: ShaderInstance>(
     let copy = (0..8)
         .map(|i| format!("out.data{i} = instance.data{i};"))
         .collect::<String>();
-    let output = if encoding == ShaderOutputEncoding::LinearDisplayP3 {
-        // pad is the host composition-space selector: 0=P3, 1=scRGB.
+    let output = if encoding == ShaderOutputEncoding::LinearRec2020 {
         r#"var rgb = color.rgb;
-        if host.pad != 0u {
+        if (host.pad & 1u) != 0u {
+            rgb = vec3(dot(rgb,vec3(1.660491002,-0.587641139,-0.072849863)),
+                dot(rgb,vec3(-0.124550475,1.132899897,-0.008349423)),
+                dot(rgb,vec3(-0.018150763,-0.100578898,1.118729661)));
+        } else {
+            rgb = vec3(dot(rgb,vec3(1.343578253,-0.282179671,-0.061398582)),
+                dot(rgb,vec3(-0.065297453,1.075787916,-0.010490463)),
+                dot(rgb,vec3(0.002821787,-0.019598495,1.016776707)));
+        }
+        return vec4(rgb * alpha, alpha);"#
+    } else if encoding == ShaderOutputEncoding::LinearDisplayP3 {
+        // pad bit 0 selects scRGB (otherwise extended P3); bit 1 selects
+        // Metal alpha-only glyph coverage, independently of composition space.
+        r#"var rgb = color.rgb;
+        if (host.pad & 1u) != 0u {
             rgb = vec3(1.2249401763 * rgb.r - 0.2249401763 * rgb.g,
                 -0.0420569547 * rgb.r + 1.0420569547 * rgb.g,
                 -0.0196375546 * rgb.r - 0.0786360456 * rgb.g + 1.0982736002 * rgb.b);
@@ -141,7 +154,7 @@ fn compile_impl<T: ShaderInstance>(
     let glyph_coverage = if path {
         "path_sample"
     } else if glyph {
-        "select(glyph_sample.r, glyph_sample.a, host.pad == 2u)"
+        "select(glyph_sample.r, glyph_sample.a, (host.pad & 2u) != 0u)"
     } else {
         "1."
     };

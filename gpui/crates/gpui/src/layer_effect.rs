@@ -44,7 +44,9 @@ pub enum LayerBlendMode {
 
 /// Capture-domain color operations in saturation/brightness/contrast/inversion order,
 /// followed by group opacity and destination blending. Default captures use
-/// encoded sRGB; Metal WideGamutSdr captures use associated linear P3.
+/// encoded sRGB; Metal WideGamutSdr captures use associated extended linear P3.
+/// Linear filters preserve extended channels; artistic blend modes retain their
+/// bounded operand definitions.
 #[derive(Clone, Copy, Debug)]
 pub struct LayerColorFilter {
     /// Working resolution policy for subtree blur.
@@ -99,8 +101,8 @@ pub struct LayerCapture {
     pub contrast: f32,
     /// Inversion strength in [0,1], with 0 unchanged and 1 complemented RGB.
     pub invert: f32,
-    /// Shared capture/composition shader. Metal wide captures set viewport.w to 1
-    /// for linear-P3 color filtering; default captures leave it zero.
+    /// Shared capture/composition shader. Metal wide captures set viewport.w to 2
+    /// for extended linear-P3 filtering; 1 retains bounded P3, and 0 encoded sRGB.
     pub program: Arc<SceneShaderProgram>,
 }
 /// A begin/end marker. The renderer must preserve these global pass barriers.

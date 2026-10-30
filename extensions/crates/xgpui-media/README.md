@@ -110,9 +110,11 @@ their clipping default. Mapping precedes associated linear-light mip generation.
 
 This is input conversion support: colors outside P3 are mapped before storage.
 For wider storage, `pipeline::rec2020_rgba16f_data` and
-`MediaLoader::load_rec2020_rgba16f` retain Adobe RGB/P3 colors in explicitly tagged
+`MediaLoader::load_rec2020_rgba16f` retain Adobe RGB colors in explicitly tagged
 bounded premultiplied linear Rec.2020 SDR with associated mipmaps. Metal/D3D11/wgpu
-provide clipped sRGB previews. `wide()` rejects this format until composition and
-captures support it; tiled FP16 pages still require P3. ICC inference and full-gamut
-native presentation remain separate work. Transfer functions are independent of primaries. CPU matrices accept Adobe
+provide clipped sRGB previews. Native `wide()` accepts P3 and Rec.2020 storage:
+Metal composes/captures in extended linear P3; Windows uses scRGB with existing
+capture restrictions. Windows runtime remains unverified. Keep P3 storage for the
+entire P3 gamut: bounded Rec.2020 clips a small P3 boundary region. Tiled FP16 pages
+still require P3. ICC inference remains separate work. Transfer functions are independent of primaries. CPU matrices accept Adobe
 RGB; GPU `ImageAdjustments` explicitly require sRGB or P3 working primaries.

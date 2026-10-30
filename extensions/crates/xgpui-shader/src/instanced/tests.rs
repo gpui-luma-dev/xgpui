@@ -221,22 +221,39 @@ fn explicit_encoding_is_immutable_and_defaults_to_srgb() {
     );
     assert_ne!(ordinary.id(), wide.id());
     assert_eq!(wide.clone().id(), wide.id());
-    assert!(wide.program.wgsl().contains("if host.pad != 0u"));
-    assert!(!ordinary.program.wgsl().contains("if host.pad != 0u"));
+    assert!(wide.program.wgsl().contains("if (host.pad & 1u) != 0u"));
+    assert!(!ordinary.program.wgsl().contains("if (host.pad & 1u) != 0u"));
+}
+
+#[test]
+fn rec2020_encoding_translates_and_remains_distinct() {
+    let rec = ShaderProgram::<EffectInstance>::new_linear_rec2020(ROUNDED_BOX).unwrap();
+    let p3 = ShaderProgram::<EffectInstance>::new_linear_p3(ROUNDED_BOX).unwrap();
+    assert_eq!(
+        rec.program.output_encoding(),
+        ShaderOutputEncoding::LinearRec2020
+    );
+    assert_ne!(rec.id(), p3.id());
+    assert!(!rec.program.metal().0.is_empty());
+    assert!(!rec.program.hlsl().0.is_empty());
 }
 
 #[cfg(feature = "wgpu")]
 #[test]
 fn wgpu_rejects_wide_encoding() {
     use gpui::{DevicePixels, PlatformHeadlessRenderer};
-    let wide = ShaderProgram::<EffectInstance>::new_linear_p3(ROUNDED_BOX).unwrap();
-    let mut scene = Scene::default();
-    scene.insert_primitive(Primitive::Shader(draw(&wide, 4., [1.; 4])));
-    scene.finish();
-    let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new().unwrap();
-    assert!(
-        renderer
-            .render_scene_to_image(&scene, size(DevicePixels(64), DevicePixels(32)))
-            .is_err()
-    );
+    for wide in [
+        ShaderProgram::<EffectInstance>::new_linear_p3(ROUNDED_BOX).unwrap(),
+        ShaderProgram::<EffectInstance>::new_linear_rec2020(ROUNDED_BOX).unwrap(),
+    ] {
+        let mut scene = Scene::default();
+        scene.insert_primitive(Primitive::Shader(draw(&wide, 4., [1.; 4])));
+        scene.finish();
+        let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new().unwrap();
+        assert!(
+            renderer
+                .render_scene_to_image(&scene, size(DevicePixels(64), DevicePixels(32)))
+                .is_err()
+        );
+    }
 }

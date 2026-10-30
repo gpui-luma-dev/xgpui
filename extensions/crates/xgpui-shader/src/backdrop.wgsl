@@ -115,17 +115,19 @@ fn layer_cell(cell: vec2<i32>, output_size: vec2<i32>) -> vec4<f32> {
   let captured = sample_image(image,v.uv);
   // The matrix is linear on associated RGB. Clamping to [0,alpha] is
   // equivalent to filtering/clamping straight RGB, without dividing tiny alpha.
-  // Metal wide captures carry associated linear P3, selected by viewport.w.
+  // Metal wide captures carry associated extended linear P3 (viewport.w=2).
+  // Domain 1 retains the bounded P3 operation for older hosts.
   // Default captures retain their encoded-sRGB filter behavior.
   let luma = select(vec3(0.2126,0.7152,0.0722),
-      vec3(0.2289745641,0.6917385218,0.0792869141),p.viewport.w == 1.);
+      vec3(0.2289745641,0.6917385218,0.0792869141),p.viewport.w >= 1.);
   let gray = dot(captured.rgb,luma);
-  let filtered = clamp(vec3(gray) + (captured.rgb - vec3(gray)) * p.metrics.w,
-      vec3(0.),vec3(captured.a));
-  let brightened = clamp(filtered * p.radii.x,vec3(0.),vec3(captured.a));
+  var filtered = vec3(gray) + (captured.rgb - vec3(gray)) * p.metrics.w;
+  if p.viewport.w < 2. { filtered = clamp(filtered,vec3(0.),vec3(captured.a)); }
+  var brightened = filtered * p.radii.x;
+  if p.viewport.w < 2. { brightened = clamp(brightened,vec3(0.),vec3(captured.a)); }
   let pivot = vec3(0.5 * captured.a);
-  let contrasted = clamp((brightened - pivot) * p.radii.y + pivot,
-      vec3(0.),vec3(captured.a));
+  var contrasted = (brightened - pivot) * p.radii.y + pivot;
+  if p.viewport.w < 2. { contrasted = clamp(contrasted,vec3(0.),vec3(captured.a)); }
   // Complement associated RGB around alpha to preserve transparent pixels.
   let inverted = mix(contrasted,vec3(captured.a)-contrasted,p.radii.z);
   let group = vec4(inverted,captured.a) * p.metrics.z;

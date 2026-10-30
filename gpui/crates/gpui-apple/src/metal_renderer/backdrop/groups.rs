@@ -74,7 +74,7 @@ impl Groups {
         if format == MTLPixelFormat::RGBA16Float {
             for p in &mut self.plans {
                 for params in &mut p.parameters {
-                    params[0][3] = 1.;
+                    params[0][3] = 2.;
                 }
             }
         }

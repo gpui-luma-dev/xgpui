@@ -60,50 +60,45 @@ explicitly reject an Adobe RGB working matrix. CPU color matrices support Adobe
 RGB. Input interpretation does not infer or load an ICC profile.
 
 This implements Stage A of [#85](https://github.com/gpui-luma-dev/xgpui/issues/85).
-The existing P3 loaders map saturated Adobe green/cyan into P3. The explicit
-Rec.2020 storage API below retains these colors; native wide composition and
-captures still use P3, so Rec.2020 native wide placement is rejected. Saturated
-P3 red also exceeds Adobe RGB.
+The existing P3 loaders map saturated Adobe green/cyan into P3. To retain Adobe
+RGB, use explicit bounded linear Rec.2020 storage. To retain the entire P3 gamut,
+keep P3 storage: P3 red converts to Rec.2020 blue **-0.0012103403545183245**, so
+bounded Rec.2020 does not quite contain P3. Both formats use associated linear
+mipmaps and eight bytes per texel. Mapping policies remain explicit at ingestion.
 
 ### Stage B design: preserve both source gamuts
 
-The first Stage B increment adds **bounded linear Rec.2020/D65** image storage,
-associated linear mipmaps and clipped sRGB previews. Use
-`pipeline::rec2020_rgba16f_data` or `MediaLoader::load_rec2020_rgba16f`, with an
-explicit mapping policy. `ImageTextureFormat::LinearRec2020Rgba16Float` retains
-its meaning through upload on Metal/D3D11/wgpu; existing P3 APIs keep their defaults.
-Native wide composition, captures and Rec.2020 working adjustments remain follow-up
-work. `wide()` rejects the new format; GPU adjustments can use sRGB/P3 working
-matrices for its preview. This does not provide HDR or ICC inference.
+Native wide placement accepts both P3 and Rec.2020 textures. Metal converts
+Rec.2020 to **extended linear P3**, then retains negative and above-one channels
+through source-over blending, Gaussian blur, capture isolation and linear color
+filters. Existing P3 producers retain their meaning. The native layer remains
+extended linear P3; its conversion from the composition target is the identity.
+Windows converts to extended linear sRGB/scRGB. Neither path implies HDR,
+increased brightness, monitor coverage or calibration.
 
-| Choice | Benefit | Cost / constraint |
-| --- | --- | --- |
-| Bounded linear Rec.2020 | Contains both source gamuts; retains nonnegative, bounded associated input and linear-light filtering | New texture/producer tags, matrices and working-space selectors; convert to native presentation primaries at the end |
-| Extended linear P3 or sRGB | Can retain both gamuts in the existing FP16 channel count | Negative/above-one RGB invalidates current input checks, producer clamps, effect bounds and some blend/tone assumptions |
-| Current bounded linear P3 | Existing implementation and native output contract | Irrecoverably loses Adobe colors outside P3 when stored |
+`ShaderProgram::new_linear_rec2020` declares bounded straight-alpha linear
+Rec.2020/D65 producer output. The wrapper clamps in that source space, converts
+to native composition primaries and associates alpha. Existing
+`new_linear_p3` output remains P3. GPU image adjustments continue to use explicit
+sRGB/P3 working matrices; wide placement limits each affine row's absolute sum
+to 4 to keep the supported four nested filters within finite FP16 storage.
 
-All three use eight bytes per RGBA16F texel. A broader working gamut changes
-quantization error and conversion cost, so compare independent reference pixels
-after FP16 packing, near black, on saturated edges and after repeated filtering.
-Keeping out-of-P3 channels in CPU math alone is insufficient.
-
-The concrete Stage B audit/migration is:
-
-| Boundary | Required follow-up |
+| Boundary | Contract |
 | --- | --- |
-| `gpui/src/image_texture.rs` | Add an explicit wider format and validate its bounded premultiplied domain; keep old P3 interpretation stable |
-| `xgpui-media/pipeline/float_image.rs` and mipmaps | Preserve source colors in the wider format, then generate associated linear mips; map only on explicit export/preview |
-| `gpui/src/scene.rs`, shader compiler and wide producers | Add a declared wider output encoding; audit all producer clamps and avoid relabeling P3 data |
-| `LinearImagePaint` and image shaders on Metal/D3D11/wgpu | Replace the two-space working selector with a validated space tag; use matching luminance/primary conversion |
-| `metal_renderer/wide_sdr.rs`, `backdrop`, capture shaders | Compose and capture in the wider working space; include the domain in caches and test nested filters without premature P3 clamps |
-| Windows `directx_renderer/wide_sdr.rs` | Match working-space conversions and preserve colors through FP16 scRGB presentation |
-| Final presentation / preview | Convert Rec.2020 to extended linear P3 for the Metal layer or extended linear sRGB for Windows; explicitly map sRGB previews/exports |
+| Image storage | Existing bounded P3, plus opt-in bounded Rec.2020 for Adobe RGB; explicit mapping precedes association |
+| Source sampling | Convert to extended native composition primaries without an intermediate gamut clamp |
+| Metal captures | Associated extended linear P3; normal blending, blur and saturation/brightness/contrast/inversion retain extended channels |
+| Artistic blend modes | Existing bounded channel definitions clamp blend operands; they are deliberate color operations and can discard extended values |
+| Cache | Extended capture domain has a distinct context revision; mode switches rebuild capture storage |
+| Metal presentation | Extended-linear P3 FP16 layer, no extra gamut clamp; native display mapping belongs to the OS |
+| Windows presentation | Extended linear sRGB/scRGB FP16; existing capture/path-mask restrictions remain |
+| Preview | Explicit clipped encoded-sRGB readback; this is not a wide-gamut export |
 
-Keep standard UI colors sRGB. A wider working space does not imply HDR, increased
-brightness, full monitor coverage or calibration. Stage B must demonstrate
-retention of Adobe green/cyan and P3 red through textures, mips, captures and
-blending before final output conversion, with native runtime evidence recorded
-separately for each backend. Automatic ICC import remains Stage C follow-up.
+Metal runtime tests cover independent FP16 matrix oracles, near-black values,
+negative channels, alpha, nested cached captures, blur, grayscale and mixed P3 /
+Rec.2020 blending. macOS wgpu tests verify sRGB previews and rejection of native
+wide output. HLSL translation is checked separately; Windows/Linux native runtime
+is unverified. Tiled FP16 canvas pages remain P3. Automatic ICC import is Stage C.
 
 ## Dependency boundaries
 

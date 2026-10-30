@@ -44,7 +44,7 @@ impl ImageTextureData {
         )
     }
     /// Validate a complete bounded premultiplied linear Rec.2020 SDR mip chain.
-    /// This is a storage contract; native wide placement requires compositor support.
+    /// Native wide placement converts to extended composition primaries.
     pub fn new_linear_rec2020_rgba16f(
         width: u32,
         height: u32,
@@ -459,6 +459,8 @@ pub enum ImageColorMode {
     LinearP3Wide,
     /// Associated linear Rec.2020 SDR input mapped to clipped sRGB.
     LinearRec2020Preview,
+    /// Associated linear Rec.2020 SDR input converted to native extended composition.
+    LinearRec2020Wide,
 }
 impl ImageColorMode {
     /// Stable renderer uniform value.
@@ -468,6 +470,7 @@ impl ImageColorMode {
             Self::LinearP3Preview => 1.,
             Self::LinearP3Wide => 2.,
             Self::LinearRec2020Preview => 3.,
+            Self::LinearRec2020Wide => 4.,
         }
     }
 }

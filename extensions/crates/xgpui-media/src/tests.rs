@@ -714,9 +714,16 @@ fn metal_rgba16f_wide_requires_opt_in_and_maps_after_linear_blending() -> Result
         scene.custom_draws[0].opacity = 0.65;
         let pixels = render_ready(&mut renderer, &image, &scene, extent)?;
         let input = ImageColor::LINEAR_P3.decode(rgba.map(f64::from), working)?;
-        let mapped = matrix
-            .apply(input)?
-            .output(ImageColor::LINEAR_P3, GamutMapping::Clip)?;
+        let adjusted = matrix.apply(input)?.rgba();
+        let space = if working == ImagePrimaries::Srgb {
+            xgpui_color::RgbSpace::Srgb
+        } else {
+            xgpui_color::RgbSpace::DisplayP3
+        };
+        let rgb = xgpui_color::LinearRgb::new(space, [adjusted[0], adjusted[1], adjusted[2]])?
+            .convert(xgpui_color::RgbSpace::DisplayP3)?
+            .components();
+        let mapped = [rgb[0], rgb[1], rgb[2], adjusted[3]];
         // Wide compositor blends in associated linear P3 before its sRGB capture.
         let expected = WorkingPixel::new(
             ImagePrimaries::DisplayP3,
@@ -898,7 +905,10 @@ fn check_rec2020_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<
                 image.format(),
                 gpui::ImageTextureFormat::LinearRec2020Rgba16Float
             );
-            assert!(image.wide(None).is_err());
+            assert_eq!(
+                gpui::CustomContent::image_color_mode(&image.wide(None)?),
+                gpui::ImageColorMode::LinearRec2020Wide
+            );
             let scene = image_scene(&image, 16., false);
             let pixels = render_ready(
                 renderer,
@@ -950,5 +960,80 @@ fn metal_rec2020_storage_and_preview() -> Result<()> {
 #[cfg(feature = "wgpu")]
 #[test]
 fn wgpu_rec2020_storage_and_preview() -> Result<()> {
-    check_rec2020_preview(&mut gpui_wgpu::WgpuHeadlessRenderer::new()?)
+    let mut r = gpui_wgpu::WgpuHeadlessRenderer::new()?;
+    check_rec2020_preview(&mut r)?;
+    let mut job = MediaLoader::default().load_rec2020_rgba16f(
+        1,
+        1,
+        vec![[0., 1., 0., 1.]],
+        pipeline::ImageColor::LINEAR_REC2020,
+        pipeline::GamutMapping::Clip,
+    )?;
+    let image = finish(&mut job)?;
+    let mut s = image_scene(&image, 16., false);
+    s.custom_draws[0].content = Arc::new(image.wide(None)?);
+    assert!(
+        r.render_scene_to_image(&s, size(DevicePixels(28), DevicePixels(28)))
+            .is_err()
+    );
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn adobe_rec2020_wide_blends_before_mapping_and_reuses_uploads() -> Result<()> {
+    use pipeline::*;
+    let mut r = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+    let mut job = MediaLoader::default().load_rec2020_rgba16f(
+        3,
+        1,
+        vec![[0., 1., 0., 0.5]; 3],
+        ImageColor::ADOBE_RGB_1998,
+        GamutMapping::Clip,
+    )?;
+    let image = finish(&mut job)?;
+    let mut scene = image_scene(&image, 16., false);
+    scene.custom_draws[0].content = Arc::new(image.wide(None)?);
+    let extent = size(DevicePixels(28), DevicePixels(28));
+    assert!(r.render_scene_to_image(&scene, extent).is_err());
+    r.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
+    // White arrives through the ordinary sRGB UI path before the wide image.
+    scene.quads.push(gpui::Quad {
+        order: 0,
+        bounds: scene.custom_draws[0].bounds,
+        content_mask: scene.custom_draws[0].content_mask,
+        background: gpui::white().into(),
+        ..Default::default()
+    });
+    scene.quads[0].order = 0;
+    scene.custom_draws[0].order = 1;
+    scene.finish();
+    let pixels = render_ready(&mut r, &image, &scene, extent)?;
+    let input = ImageColor::ADOBE_RGB_1998
+        .decode([0., 1., 0., 0.5], ImagePrimaries::Srgb)?
+        .rgba();
+    let expected = WorkingPixel::new(
+        ImagePrimaries::Srgb,
+        [
+            0.5 + input[0] * 0.5,
+            0.5 + input[1] * 0.5,
+            0.5 + input[2] * 0.5,
+            1.,
+        ],
+    )?
+    .output(ImageColor::SRGB, GamutMapping::Clip)?;
+    for c in 0..3 {
+        assert!(
+            pixels.get_pixel(12, 12).0[c].abs_diff((expected[c] * 255.).round() as u8) <= 2,
+            "{:?} != {expected:?}",
+            pixels.get_pixel(12, 12)
+        );
+    }
+    assert_eq!(image.upload_count(), 1);
+    let too_large = ImageAdjustments::new(
+        ColorMatrix::identity(ImagePrimaries::DisplayP3).exposure(3.)?,
+        None,
+    )?;
+    assert!(image.wide(Some(too_large)).is_err());
+    Ok(())
 }

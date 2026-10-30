@@ -35,7 +35,11 @@ painted()
 Brushes support solid, linear, radial, freeform and Hermite mesh fills, plus
 optional noise and blend modes. Retain brushes in view state and reuse them
 across renders. Ordinary brush colors use encoded-sRGB SDR values; wide-gamut
-output has a separate explicit contract.
+output has a separate explicit contract. `ShaderProgram::new_linear_p3` and
+`new_linear_rec2020` declare bounded linear SDR producer primaries; native wrappers
+convert into extended composition primaries after source clamping. Metal captures
+and normal blending retain extended channels. Artistic blend modes retain bounded
+operand definitions. Native wide output is rejected by wgpu/browser hosts.
 
 See the [brush guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/brushes.md)
 for stop limits, coordinates, interpolation, noise and mesh examples.

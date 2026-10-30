@@ -189,7 +189,7 @@ use Clip for their output conversion. Supplied-pixel ingestion also offers
 
 ### Rec.2020 SDR storage
 
-To retain Adobe RGB and P3 source gamuts, use an explicit wider storage path:
+To retain Adobe RGB source colors, use an explicit wider storage path:
 
 ```rust
 let job = loader.load_rec2020_rgba16f(
@@ -208,9 +208,19 @@ keep their behavior.
 Metal, D3D11 and wgpu image shaders interpret the new storage tag for clipped
 sRGB previews. Native Metal and macOS wgpu execution are tested; D3D11 runtime
 remains unverified. GPU preview adjustments still use sRGB/P3 working matrices.
-`wide()` rejects Rec.2020 storage until native composition and capture support
-lands. Tiled canvas FP16 pages remain P3 and reject Rec.2020 pages. This is the
-storage increment of Stage B, not full-gamut native presentation, HDR or ICC import.
+`wide()` accepts P3 and Rec.2020 storage in an opted-in native wide-SDR window.
+Metal converts Rec.2020 to extended linear P3 and preserves extended channels
+through normal blending, captures and blur. Windows converts to scRGB, with its
+existing capture/path-mask restrictions and unverified native runtime. Browser /
+wgpu hosts reject native wide output. Tiled FP16 canvas pages remain P3.
+
+For the full P3 gamut, keep P3 storage: P3 red has a small negative blue component
+in Rec.2020, which bounded Rec.2020 ingestion maps. Adobe RGB fits Rec.2020.
+Wide image adjustments use sRGB/P3 working matrices and require each affine row's
+absolute sum to be at most 4, retaining finite FP16 values through the four
+supported nested color filters. Artistic blend modes retain their bounded channel
+definitions; normal blending and linear filters preserve extended channels.
+This is SDR rendering support, not HDR, ICC inference or a promise of display coverage.
 
 Independent 120-digit primary/white matrix solves and Adobe transfer calculations
 cover 1,000 source/alpha combinations. Stored channels allow at most one FP16
