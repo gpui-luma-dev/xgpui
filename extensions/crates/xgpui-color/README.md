@@ -28,13 +28,33 @@ let perceptual = p3.to_oklab()?.to_oklch()?;
 | Type | Represents |
 | --- | --- |
 | `EncodedRgb`, `LinearRgb` | Encoded or linear RGB with explicit primaries. |
-| `RgbSpace` | sRGB, Display P3 or Rec.2020. |
+| `RgbSpace` | sRGB, Display P3, Rec.2020 or Adobe RGB (1998). |
 | `XyzD65`, `Oklab`, `Oklch` | Intermediate and perceptual color spaces. |
 | `LinearRgba` | Linear color with validated straight alpha. |
 
 CPU calculations use `f64`, D65 and finite extended RGB/XYZ values. Conversion
 does not automatically clip or map gamut. Rec.2020 uses its SDR transfer
-function; PQ, HLG and white-point adaptation are outside this API.
+function. Adobe RGB (1998) uses the exact 563/256 decoding exponent and
+256/563 encoding exponent, including sign-preserving extended channels; it does
+not use the sRGB transfer curve. PQ, HLG and white-point adaptation are outside
+this API.
+
+## Adobe RGB (1998)
+
+```rust
+use xgpui_color::{EncodedRgb, GamutMapping, RgbSpace};
+
+let adobe = EncodedRgb::new(RgbSpace::AdobeRgb1998, [0., 1., 1.])?.decode()?;
+let extended_p3 = adobe.convert(RgbSpace::DisplayP3)?;
+assert!(extended_p3.components()[0] < 0.); // This cyan is outside P3.
+let display_p3 = adobe.map_gamut(RgbSpace::DisplayP3, GamutMapping::ReduceChroma)?;
+# Ok::<(), xgpui_color::ColorError>(())
+```
+
+Conversion and gradients retain extended values until explicit mapping. Adobe
+RGB and P3 do not fully contain one another. Native image/shader producers still
+use bounded linear P3; this math support does not widen those storage or output
+contracts. See the media supplied-pixel API for explicit mapping into P3.
 
 ## Gamut mapping and gradients
 
@@ -68,6 +88,8 @@ local MINDE. Invalid or nonfinite values return `ColorError`.
 `WGSL_COLOR_MATH` contains resource-free WGSL helpers with the `gamut_` prefix.
 Prepend it once to your shader source; it declares no entry point or bindings.
 The GPU contract uses finite `f32` inputs and validated space/policy IDs.
+Space IDs are stable: 0 = sRGB, 1 = Display P3, 2 = Rec.2020, 3 = Adobe RGB (1998).
+Mapping IDs are 0 = clip and 1 = fixed-lightness/hue chroma reduction.
 
 These functions do not change a renderer's output color space. Use the explicit
 linear-P3 contract when integrating wide output with `xgpui-shader` or
@@ -85,6 +107,38 @@ and [Björn Ottosson's OkLab definition](https://bottosson.github.io/posts/oklab
 Tests cover CPU round trips, Naga WGSL validation/translation and native Metal
 comparisons. Shader translation alone does not verify native D3D11 execution.
 Metal and Naga are development dependencies only.
+
+### Adobe RGB numerical regression criteria
+
+Committed oracles use 120-digit Python Decimal arithmetic on exact binary inputs.
+Primary matrices are independently solved from xy chromaticities and D65 using
+pivoted Gaussian elimination. Transfer oracles use exact rational exponents;
+they are independent of the Rust and WGSL implementation constants.
+
+- CPU tests cover all 65,536 unsigned 16-bit transfer codes, signed zero,
+  subnormals, underflow, overflow rejection, adjacent floats at gamut boundaries,
+  and 21,296 scaled primary-conversion vectors.
+- Scalar error budgets account for binary64 rounding of the reciprocal exponent,
+  `powf` evaluation and underflow. Matrix budgets scale with the matrix norm and
+  input magnitude, including cancellation.
+- Native Metal checks 1,060 independent transfer cases per compiler mode.
+  Acceptance is relative: eight binary32 epsilons (0.96 ppm) with fast math off,
+  64 epsilons (7.63 ppm) with fast math on, plus an eight-subnormal rounding floor.
+  Transfer endpoints must be exact. All nonzero GPU reference results are normal
+  binary32 values; GPU subnormal behavior is outside these vectors.
+- Media tests check exact binary16 patterns near black and at midtones, including
+  intentional storage underflow and fractional alpha. Adobe primary/mip checks
+  permit at most one binary16 representable step.
+
+Reproduce both CPU/GPU and media FP16 oracle fixtures from the repository root:
+
+```sh
+python3 scripts/generate_adobe_rgb_references.py --check
+```
+
+The generator requires Python 3.11+ and rustfmt. Runtime evidence is tracked per
+backend; numerical test thresholds are acceptance criteria for the covered
+domains rather than a cross-device bit-identity promise.
 
 ## Project
 

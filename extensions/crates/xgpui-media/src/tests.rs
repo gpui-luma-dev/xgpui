@@ -819,3 +819,59 @@ fn native_surface_adjustments_follow_conversion_preserve_identity_and_import_onc
     }
     Ok(())
 }
+
+fn check_adobe_rgb_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
+    use pipeline::*;
+    let loader = MediaLoader::default();
+    for mapping in [GamutMapping::Clip, GamutMapping::ReduceChroma] {
+        for rgb in [[0., 1., 0.], [0., 1., 1.], [0.5; 3]] {
+            let rgba = [rgb[0], rgb[1], rgb[2], 0.5];
+            let mut job = loader.load_rgba16f_with_mapping(
+                64,
+                32,
+                vec![rgba; 64 * 32],
+                ImageColor::ADOBE_RGB_1998,
+                mapping,
+            )?;
+            let image = finish(&mut job)?;
+            assert_eq!(image.source_color(), ImageColor::ADOBE_RGB_1998);
+            assert_eq!(
+                image.format(),
+                gpui::ImageTextureFormat::LinearP3Rgba16Float
+            );
+            let scene = image_scene(&image, 16., false);
+            let pixels = render_ready(
+                renderer,
+                &image,
+                &scene,
+                size(DevicePixels(28), DevicePixels(28)),
+            )?;
+            let stored = ImageColor::ADOBE_RGB_1998
+                .decode(rgba.map(f64::from), ImagePrimaries::DisplayP3)?
+                .output(ImageColor::LINEAR_P3, mapping)?;
+            let expected = ImageColor::LINEAR_P3
+                .decode(stored, ImagePrimaries::DisplayP3)?
+                .output(ImageColor::SRGB, GamutMapping::Clip)?;
+            for (c, value) in expected.iter().take(3).enumerate() {
+                let byte = (value * expected[3] * 255.).round() as u8;
+                let actual = pixels.get_pixel(12, 12).0[c];
+                assert!(
+                    actual.abs_diff(byte) <= 2,
+                    "{mapping:?} {rgb:?}: {actual} != {byte}"
+                );
+            }
+            assert_eq!(image.upload_count(), 1);
+        }
+    }
+    Ok(())
+}
+#[cfg(target_os = "macos")]
+#[test]
+fn metal_adobe_rgb_input_with_explicit_mapping() -> Result<()> {
+    check_adobe_rgb_preview(&mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+}
+#[cfg(feature = "wgpu")]
+#[test]
+fn wgpu_adobe_rgb_input_with_explicit_mapping() -> Result<()> {
+    check_adobe_rgb_preview(&mut gpui_wgpu::WgpuHeadlessRenderer::new()?)
+}

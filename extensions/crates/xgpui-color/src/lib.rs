@@ -32,6 +32,8 @@ pub enum RgbSpace {
     Srgb,
     DisplayP3,
     Rec2020,
+    /// Adobe RGB (1998), D65, with the 563/256 decoding exponent.
+    AdobeRgb1998,
 }
 impl RgbSpace {
     /// Linear RGB to relative XYZ/D65 (Y = 1 at reference white).
@@ -47,6 +49,11 @@ impl RgbSpace {
                 [608311. / 1250200., 189793. / 714400., 198249. / 1000160.],
                 [35783. / 156275., 247089. / 357200., 198249. / 2500400.],
                 [0., 32229. / 714400., 5220557. / 5000800.],
+            ],
+            Self::AdobeRgb1998 => [
+                [573536. / 994567., 263643. / 1420810., 187206. / 994567.],
+                [591459. / 1989134., 6239551. / 9945670., 374412. / 4972835.],
+                [53769. / 1989134., 351524. / 4972835., 4929758. / 4972835.],
             ],
             Self::Rec2020 => [
                 [
@@ -79,6 +86,8 @@ impl RgbSpace {
     fn transfer(self, value: f64, decode: bool) -> f64 {
         let x = value.abs();
         let y = match (self, decode) {
+            (Self::AdobeRgb1998, true) => x.powf(563. / 256.),
+            (Self::AdobeRgb1998, false) => x.powf(256. / 563.),
             (Self::Rec2020, true) => {
                 let a = 1.09929682680944;
                 if x < 0.018053968510807 * 4.5 {

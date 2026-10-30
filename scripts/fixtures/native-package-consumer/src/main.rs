@@ -23,6 +23,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     black_box(xgpui_gamut::WideColor::linear_p3([0.2, 0.5, 0.8, 1.])?);
     let _ = black_box(xgpui_media::ImageFilter::new().brightness(1.1));
+    let adobe = xgpui_media::pipeline::ImageColor::ADOBE_RGB_1998;
+    black_box(xgpui_media::pipeline::rgba16f_data_with_mapping(
+        1,
+        1,
+        vec![[0., 1., 1., 0.5]],
+        adobe,
+        xgpui_color::GamutMapping::ReduceChroma,
+    )?);
+    black_box(
+        xgpui_media::MediaLoader::default().load_rgba16f_with_mapping(
+            1,
+            1,
+            vec![[0., 1., 0., 1.]],
+            adobe,
+            xgpui_color::GamutMapping::Clip,
+        )?,
+    );
     black_box(xgpui_svg::SvgScheduler::default());
     black_box(std::mem::size_of::<xgpui_parley::ParleyTextSystem>());
     black_box(std::mem::size_of::<gpui_apple::AppleDispatcher>());

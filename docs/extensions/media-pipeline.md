@@ -14,8 +14,8 @@ RGBA16F supplied-pixel uploads and native wide-SDR placements are available. Pro
 
 | Contract | Meaning |
 | --- | --- |
-| Primaries | [sRGB ↗](https://en.wikipedia.org/wiki/SRGB) or [Display P3 ↗](https://en.wikipedia.org/wiki/DCI-P3), both [D65 ↗](https://en.wikipedia.org/wiki/Standard_illuminant) |
-| Transfer | Explicit linear or sRGB transfer (also used by encoded P3) |
+| Primaries | [sRGB ↗](https://en.wikipedia.org/wiki/SRGB), [Display P3 ↗](https://en.wikipedia.org/wiki/DCI-P3) or [Adobe RGB (1998) ↗](https://en.wikipedia.org/wiki/Adobe_RGB_color_space), all [D65 ↗](https://en.wikipedia.org/wiki/Standard_illuminant) |
+| Transfer | Independent linear, sRGB (also used by encoded P3), or Adobe RGB (1998) transfer |
 | Source pixels | Bounded [SDR ↗](https://en.wikipedia.org/wiki/Standard-dynamic-range_video) RGB and alpha, each 0..1 |
 | Association | Straight, or [premultiplied ↗](https://en.wikipedia.org/wiki/Alpha_compositing) in the declared transfer domain |
 | Working pixels | [Straight-alpha ↗](https://en.wikipedia.org/wiki/Alpha_compositing), linear RGB in explicit working primaries |
@@ -172,7 +172,7 @@ if let Some(image) = job.try_take() {
 ```
 
 Set `ImageColor { primaries, transfer, alpha }` for other supplied conventions:
-sRGB/Display P3, linear/sRGB transfer, straight/premultiplied. The worker validates,
+sRGB/Display P3/Adobe RGB (1998), independent linear/sRGB/Adobe RGB transfer, straight/premultiplied. The worker validates,
 unassociates in the declared source domain, decodes transfer, converts to linear
 P3 and associates alpha. It builds alpha-aware area mips before [binary16 ↗](https://en.wikipedia.org/wiki/Half-precision_floating-point_format) packing.
 Storage is **bounded premultiplied linear Display P3/D65 RGBA16F**, little-endian.
@@ -184,7 +184,34 @@ filtering/mips. An 8-bit preview [framebuffer ↗](https://en.wikipedia.org/wiki
 The GPU converts into the adjustment's named working primaries, retains extended
 intermediates, then clips once to the chosen output gamut. No HDR highlights,
 [RAW ↗](https://en.wikipedia.org/wiki/Raw_image_format) development or ICC profile processing are implied. GPU placements currently
-use Clip; ReduceChroma remains a CPU-reference option.
+use Clip for their output conversion. Supplied-pixel ingestion also offers
+`ReduceChroma` before storage through the explicit mapping API below.
+
+### Explicit Adobe RGB input mapping
+
+```rust
+use xgpui_media::pipeline::{GamutMapping, ImageColor};
+
+let job = loader.load_rgba16f_with_mapping(
+    width, height, adobe_pixels,
+    ImageColor::ADOBE_RGB_1998,
+    GamutMapping::ReduceChroma,
+)?;
+```
+
+The synchronous equivalent is `pipeline::rgba16f_data_with_mapping`.
+Both convert into bounded P3 before associating alpha and generating mipmaps.
+Existing `load_rgba16f` / `rgba16f_data` retain their clipping default.
+These functions accept explicitly described Adobe RGB pixels; they do not
+preserve Adobe RGB colors outside P3 or infer embedded ICC profiles.
+`MediaImage::source_color()` retains the original interpretation, while
+`format()` identifies the canonical P3 storage. Mapping is selected per ingestion
+job and each result retains its own source identity.
+
+`ColorMatrix` can operate in Adobe RGB on the CPU. `ImageAdjustments::new`
+explicitly rejects Adobe RGB working matrices because the GPU currently supports
+only sRGB/P3; convert the input to canonical P3 and choose either supported
+working space for placement. See the [wider-gamut design](color-math.md#stage-b-design-preserve-both-source-gamuts).
 
 `load_rgba16f` uses the same worker admission, cancellation, payload reservation,
 background staging pool, per-frame transfer limits and immutable source cache as

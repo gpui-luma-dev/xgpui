@@ -574,3 +574,103 @@ fn image_blur_rejects_invalid_support_and_accepts_quality_modes() {
             .with_quality(gpui::LayerBlurQuality::FullResolution);
     }
 }
+
+#[test]
+fn adobe_rgb_source_alpha_and_transfer_are_independent_of_primaries() {
+    let adobe = ImageColor::ADOBE_RGB_1998;
+    let rgba = [0.5, 0.18, 0.003, 0.25];
+    let linear = adobe.decode(rgba, ImagePrimaries::AdobeRgb1998).unwrap();
+    for (actual, expected) in linear.rgba().into_iter().zip([
+        0.21775552814439456,
+        0.023_024_029_316_635_19,
+        0.0000028290313452536574,
+        0.25,
+    ]) {
+        near(actual, expected);
+    }
+    let associated = ImageColor {
+        alpha: AlphaMode::Premultiplied,
+        ..adobe
+    };
+    let input = associated
+        .decode([0.125, 0.045, 0.00075, 0.25], ImagePrimaries::AdobeRgb1998)
+        .unwrap();
+    for (actual, expected) in input.rgba().into_iter().zip(linear.rgba()) {
+        near(actual, expected);
+    }
+    for (actual, expected) in linear
+        .output(associated, GamutMapping::Clip)
+        .unwrap()
+        .into_iter()
+        .zip([0.125, 0.045, 0.00075, 0.25])
+    {
+        near(actual, expected);
+    }
+    assert_eq!(
+        adobe
+            .decode([1., 0.5, 0.3, 0.], ImagePrimaries::AdobeRgb1998)
+            .unwrap()
+            .rgba(),
+        [0.; 4]
+    );
+    assert!(
+        associated
+            .decode([0.3, 0., 0., 0.25], ImagePrimaries::AdobeRgb1998)
+            .is_err()
+    );
+
+    // A transfer function describes channel encoding, independently of primaries.
+    for primaries in [
+        ImagePrimaries::Srgb,
+        ImagePrimaries::DisplayP3,
+        ImagePrimaries::AdobeRgb1998,
+    ] {
+        for (transfer, value) in [
+            (TransferFunction::Linear, 0.5),
+            (TransferFunction::Srgb, 0.21404114048223255),
+            (TransferFunction::AdobeRgb1998, 0.21775552814439456),
+        ] {
+            let source = ImageColor {
+                primaries,
+                transfer,
+                alpha: AlphaMode::Straight,
+            };
+            let input = source.decode([0.5, 0.5, 0.5, 0.25], primaries).unwrap();
+            for actual in &input.rgba()[..3] {
+                near(*actual, value);
+            }
+            for actual in &input.output(source, GamutMapping::Clip).unwrap()[..3] {
+                near(*actual, 0.5);
+            }
+        }
+    }
+}
+
+#[test]
+fn adobe_working_matrix_is_cpu_only_and_gpu_rejection_is_explicit() {
+    let matrix = ColorMatrix::identity(ImagePrimaries::AdobeRgb1998)
+        .saturation(0.)
+        .unwrap();
+    let gray = matrix
+        .apply(WorkingPixel::new(ImagePrimaries::AdobeRgb1998, [1., 0., 0., 0.5]).unwrap())
+        .unwrap()
+        .rgba();
+    for actual in &gray[..3] {
+        near(*actual, 0.29734497525053605);
+    }
+    near(gray[3], 0.5);
+    let error = ImageAdjustments::new(matrix, None).unwrap_err().to_string();
+    assert!(error.contains("convert Adobe RGB input first"), "{error}");
+    assert!(
+        !ImageAdjustments::new(ColorMatrix::identity(ImagePrimaries::Srgb), None)
+            .unwrap()
+            .paint()
+            .is_p3()
+    );
+    assert!(
+        ImageAdjustments::new(ColorMatrix::identity(ImagePrimaries::DisplayP3), None)
+            .unwrap()
+            .paint()
+            .is_p3()
+    );
+}

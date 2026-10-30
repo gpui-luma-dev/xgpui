@@ -98,3 +98,17 @@ for additions, affected public types and migration requirements.
 
 This extension uses its own `0.2.0` version, separate from xgpui framework
 `1.0.0` and the upstream GPUI baseline.
+
+
+## Explicit Adobe RGB supplied pixels
+
+`pipeline::ImageColor::ADOBE_RGB_1998` describes encoded Adobe RGB (1998)
+input. `pipeline::rgba16f_data_with_mapping` and
+`MediaLoader::load_rgba16f_with_mapping` select clipping or chroma reduction
+during conversion to bounded premultiplied linear P3 RGBA16F. Existing APIs keep
+their clipping default. Mapping precedes associated linear-light mip generation.
+
+This is input conversion support: colors outside P3 are mapped before storage.
+ICC-profile inference and full-gamut Adobe RGB storage/presentation are separate
+work. Transfer functions are independent of primaries. CPU matrices accept Adobe
+RGB; GPU `ImageAdjustments` explicitly require sRGB or P3 working primaries.

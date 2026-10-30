@@ -1,10 +1,20 @@
 use xgpui_color::*;
 
+#[cfg(target_os = "macos")]
+#[allow(dead_code)]
+#[path = "reference/adobe_rgb.rs"]
+mod adobe_reference;
+
 fn vectors() -> Vec<(String, [f64; 4])> {
     let mut cases = Vec::new();
     let rgba = |v: [f64; 3]| [v[0], v[1], v[2], 1.];
     let wg = |v: [f64; 3]| format!("vec3<f32>({:?}, {:?}, {:?})", v[0], v[1], v[2]);
-    let spaces = [RgbSpace::Srgb, RgbSpace::DisplayP3, RgbSpace::Rec2020];
+    let spaces = [
+        RgbSpace::Srgb,
+        RgbSpace::DisplayP3,
+        RgbSpace::Rec2020,
+        RgbSpace::AdobeRgb1998,
+    ];
     for (i, space) in spaces.into_iter().enumerate() {
         for v in [
             [0.; 3],
@@ -133,11 +143,9 @@ fn helpers_translate_to_all_native_shader_languages() {
 }
 
 #[cfg(target_os = "macos")]
-#[test]
-fn metal_float32_matches_cpu_reference() {
+fn metal_outputs(cases: &[(String, [f64; 4])], fast_math: bool) -> Vec<[f32; 4]> {
     use objc2_metal::*;
-    let cases = vectors();
-    let (module, info) = validated(&source(&cases));
+    let (module, info) = validated(&source(cases));
     let mut options = naga::back::msl::Options::default();
     let mut resources = naga::back::msl::EntryPointResources::default();
     resources.resources.insert(
@@ -156,7 +164,9 @@ fn metal_float32_matches_cpu_reference() {
     let device =
         MTLCreateSystemDefaultDevice().expect("Metal device required for native validation");
     let compile = MTLCompileOptions::new();
-    compile.setFastMathEnabled(false);
+    // Exercise the compiler switch used on the supported older macOS hosts.
+    #[allow(deprecated)]
+    compile.setFastMathEnabled(fast_math);
     let library = device
         .newLibraryWithSource_options_error(
             &objc2_foundation::NSString::from_str(&msl),
@@ -171,10 +181,7 @@ fn metal_float32_matches_cpu_reference() {
         .newComputePipelineStateWithFunction_error(&function)
         .unwrap();
     let buffer = device
-        .newBufferWithLength_options(
-            (cases.len() * 16) as usize,
-            MTLResourceOptions::StorageModeShared,
-        )
+        .newBufferWithLength_options(cases.len() * 16, MTLResourceOptions::StorageModeShared)
         .expect("Metal buffer allocation failed");
     let queue = device
         .newCommandQueue()
@@ -187,20 +194,18 @@ fn metal_float32_matches_cpu_reference() {
         .expect("Metal compute encoder allocation failed");
     encoder.setComputePipelineState(&pipeline);
     unsafe { encoder.setBuffer_offset_atIndex(Some(&buffer), 0, 0) };
-    unsafe {
-        encoder.dispatchThreads_threadsPerThreadgroup(
-            MTLSize {
-                width: cases.len() as usize,
-                height: 1,
-                depth: 1,
-            },
-            MTLSize {
-                width: 1,
-                height: 1,
-                depth: 1,
-            },
-        )
-    };
+    encoder.dispatchThreads_threadsPerThreadgroup(
+        MTLSize {
+            width: cases.len(),
+            height: 1,
+            depth: 1,
+        },
+        MTLSize {
+            width: 1,
+            height: 1,
+            depth: 1,
+        },
+    );
     encoder.endEncoding();
     command.commit();
     command.waitUntilCompleted();
@@ -209,6 +214,14 @@ fn metal_float32_matches_cpu_reference() {
     let output = unsafe {
         std::slice::from_raw_parts(buffer.contents().as_ptr() as *const [f32; 4], cases.len())
     };
+    output.to_vec()
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn metal_float32_matches_cpu_reference() {
+    let cases = vectors();
+    let output = metal_outputs(&cases, false);
     for ((expr, expected), actual) in cases.iter().zip(output) {
         for i in 0..4 {
             assert!(
@@ -216,5 +229,58 @@ fn metal_float32_matches_cpu_reference() {
                 "{expr}: actual={actual:?}, expected={expected:?}"
             );
         }
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn metal_adobe_transfer_matches_decimal_oracle_with_fast_math_on_and_off() {
+    let mut cases = Vec::new();
+    for &(input, decode, encode) in adobe_reference::TRANSFER_F32 {
+        for sign in [-1., 1.] {
+            let value = input as f64 * sign;
+            cases.push((
+                format!("vec4(gamut_decode(vec3<f32>({value:?}),3u),1.0)"),
+                [decode * sign, decode * sign, decode * sign, 1.],
+            ));
+            cases.push((
+                format!("vec4(gamut_encode(vec3<f32>({value:?}),3u),1.0)"),
+                [encode * sign, encode * sign, encode * sign, 1.],
+            ));
+        }
+    }
+    for fast_math in [false, true] {
+        let output = metal_outputs(&cases, fast_math);
+        let mut worst_relative = 0_f64;
+        for ((expr, expected), actual) in cases.iter().zip(output) {
+            for i in 0..4 {
+                let error = (actual[i] as f64 - expected[i]).abs();
+                // Separate acceptance criteria for f32 pow and the compiler's
+                // faster approximation. Both are relative: a fixed SDR-sized
+                // absolute floor would let values disappear near black.
+                // 8 eps = 0.96 ppm; 64 eps = 7.63 ppm. The latter is still well
+                // below FP16's worst-case normal rounding error (488 ppm).
+                let epsilons = if fast_math { 64. } else { 8. };
+                let budget = expected[i].abs() * epsilons * f32::EPSILON as f64
+                    + 8. * f32::from_bits(1) as f64;
+                assert!(
+                    actual[i].is_finite() && error <= budget,
+                    "fast_math={fast_math}, {expr}: {actual:?} != {expected:?}, error={error:e}, budget={budget:e}"
+                );
+                if expected[i] != 0. {
+                    worst_relative = worst_relative.max(error / expected[i].abs());
+                }
+                if expected[i] == 0. || expected[i].abs() == 1. {
+                    assert_eq!(
+                        actual[i] as f64, expected[i],
+                        "transfer endpoints must be exact"
+                    );
+                }
+            }
+        }
+        eprintln!(
+            "Adobe GPU transfer: fast_math={fast_math}, cases={}, worst relative error={worst_relative:e}",
+            cases.len()
+        );
     }
 }

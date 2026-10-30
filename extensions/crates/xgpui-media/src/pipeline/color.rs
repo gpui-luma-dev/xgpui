@@ -6,12 +6,14 @@ use xgpui_color::{EncodedRgb, GamutMapping, LinearRgb, RgbSpace};
 pub enum ImagePrimaries {
     Srgb,
     DisplayP3,
+    AdobeRgb1998,
 }
 impl ImagePrimaries {
     fn space(self) -> RgbSpace {
         match self {
             Self::Srgb => RgbSpace::Srgb,
             Self::DisplayP3 => RgbSpace::DisplayP3,
+            Self::AdobeRgb1998 => RgbSpace::AdobeRgb1998,
         }
     }
 }
@@ -20,6 +22,28 @@ pub enum TransferFunction {
     Linear,
     /// Shared by encoded sRGB and encoded Display P3.
     Srgb,
+    /// Adobe RGB (1998): decode with exponent 563/256, encode with 256/563.
+    AdobeRgb1998,
+}
+impl TransferFunction {
+    // Transfer curves are independent of primaries. Re-tag the numeric channels
+    // for curve evaluation only; no primary conversion occurs here.
+    fn decode(self, rgb: [f64; 3]) -> Result<[f64; 3]> {
+        let space = match self {
+            Self::Linear => return Ok(rgb),
+            Self::Srgb => RgbSpace::Srgb,
+            Self::AdobeRgb1998 => RgbSpace::AdobeRgb1998,
+        };
+        Ok(EncodedRgb::new(space, rgb)?.decode()?.components())
+    }
+    fn encode(self, rgb: [f64; 3]) -> Result<[f64; 3]> {
+        let space = match self {
+            Self::Linear => return Ok(rgb),
+            Self::Srgb => RgbSpace::Srgb,
+            Self::AdobeRgb1998 => RgbSpace::AdobeRgb1998,
+        };
+        Ok(LinearRgb::new(space, rgb)?.encode()?.components())
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AlphaMode {
@@ -38,6 +62,12 @@ impl ImageColor {
     pub const SRGB: Self = Self {
         primaries: ImagePrimaries::Srgb,
         transfer: TransferFunction::Srgb,
+        alpha: AlphaMode::Straight,
+    };
+    /// Explicit encoded Adobe RGB (1998) supplied pixels; no ICC inference.
+    pub const ADOBE_RGB_1998: Self = Self {
+        primaries: ImagePrimaries::AdobeRgb1998,
+        transfer: TransferFunction::AdobeRgb1998,
         alpha: AlphaMode::Straight,
     };
     pub const LINEAR_P3: Self = Self {
@@ -68,10 +98,7 @@ impl ImageColor {
         if alpha == 0. {
             rgb = [0.; 3];
         }
-        let linear = match self.transfer {
-            TransferFunction::Linear => LinearRgb::new(self.primaries.space(), rgb)?,
-            TransferFunction::Srgb => EncodedRgb::new(self.primaries.space(), rgb)?.decode()?,
-        };
+        let linear = LinearRgb::new(self.primaries.space(), self.transfer.decode(rgb)?)?;
         let rgb = linear.convert(working.space())?.components();
         WorkingPixel::new(working, [rgb[0], rgb[1], rgb[2], alpha])
     }
@@ -108,10 +135,7 @@ impl WorkingPixel {
         let [r, g, b, a] = self.rgba;
         let linear = LinearRgb::new(self.primaries.space(), [r, g, b])?
             .map_gamut(destination.primaries.space(), mapping)?;
-        let mut rgb = match destination.transfer {
-            TransferFunction::Linear => linear.components(),
-            TransferFunction::Srgb => linear.encode()?.components(),
-        };
+        let mut rgb = destination.transfer.encode(linear.components())?;
         // Absorb transfer rounding at the endpoints after explicit mapping.
         rgb = rgb.map(|v| v.clamp(0., 1.));
         if destination.alpha == AlphaMode::Premultiplied {

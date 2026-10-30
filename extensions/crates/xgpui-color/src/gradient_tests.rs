@@ -171,7 +171,12 @@ fn geometry_extends_endpoints_and_handles_degenerate_axis() {
 }
 #[test]
 fn mapping_bounds_preservation_and_perceptual_policy() {
-    for space in [RgbSpace::Srgb, RgbSpace::DisplayP3, RgbSpace::Rec2020] {
+    for space in [
+        RgbSpace::Srgb,
+        RgbSpace::DisplayP3,
+        RgbSpace::Rec2020,
+        RgbSpace::AdobeRgb1998,
+    ] {
         let inside = LinearRgb::new(space, [0.1, 0.5, 0.9]).unwrap();
         for policy in [GamutMapping::Clip, GamutMapping::ReduceChroma] {
             assert_eq!(inside.map_gamut(space, policy).unwrap(), inside);
@@ -219,7 +224,12 @@ fn mapping_bounds_preservation_and_perceptual_policy() {
 
 #[test]
 fn mapping_grid_is_bounded_and_idempotent() {
-    for destination in [RgbSpace::Srgb, RgbSpace::DisplayP3, RgbSpace::Rec2020] {
+    for destination in [
+        RgbSpace::Srgb,
+        RgbSpace::DisplayP3,
+        RgbSpace::Rec2020,
+        RgbSpace::AdobeRgb1998,
+    ] {
         for l in [0.05, 0.3, 0.7, 0.99] {
             for h in (0..360).step_by(15) {
                 let source = Oklch::new(l, 0.5, h as f64)

@@ -190,12 +190,32 @@ impl MediaLoader {
     }
     /// Convert supplied bounded SDR pixels on an admitted background worker.
     /// Source metadata is explicit; no RAW/TIFF engine or system decoder needed.
+    /// Clips to bounded linear P3; use `load_rgba16f_with_mapping` to select a
+    /// mapping policy. Out-of-P3 Adobe RGB colors are not retained.
     pub fn load_rgba16f(
         &self,
         width: u32,
         height: u32,
         pixels: Vec<[f32; 4]>,
         color: crate::pipeline::ImageColor,
+    ) -> Result<ImageJob> {
+        self.load_rgba16f_with_mapping(
+            width,
+            height,
+            pixels,
+            color,
+            crate::pipeline::GamutMapping::Clip,
+        )
+    }
+    /// Background conversion with explicit gamut mapping to bounded linear P3.
+    /// Mapping precedes association and mip generation. No ICC inference.
+    pub fn load_rgba16f_with_mapping(
+        &self,
+        width: u32,
+        height: u32,
+        pixels: Vec<[f32; 4]>,
+        color: crate::pipeline::ImageColor,
+        mapping: crate::pipeline::GamutMapping,
     ) -> Result<ImageJob> {
         ensure!(
             crate::pipeline::rgba16f_payload_bytes(width, height)? <= self.0.limits.max_image_bytes,
@@ -207,7 +227,7 @@ impl MediaLoader {
             "supplied pixels exceed input limit"
         );
         self.load_pixels(color, move |_, cancelled| {
-            crate::pipeline::float_image::build(width, height, pixels, color, || {
+            crate::pipeline::float_image::build(width, height, pixels, color, mapping, || {
                 cancelled.load(Ordering::Acquire)
             })
         })
