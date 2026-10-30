@@ -1029,7 +1029,7 @@ impl Platform for MacPlatform {
                 value
             };
             let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
-            msg_send![workspace, openURL: url]
+            let _: BOOL = msg_send![workspace, openURL: url];
         }
     }
 
