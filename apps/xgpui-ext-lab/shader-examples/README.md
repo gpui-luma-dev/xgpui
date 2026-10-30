@@ -65,7 +65,7 @@ must sit above red and below green/blue. Toggle clipping to reveal the full shap
 without moving them; the cyan frame stays fixed. Confirm no
 console errors. Native or translation checks alone do not prove browser behavior.
 
-See [the v2 contract](../../../docs/extensions/instanced-wgsl-v2.md) for authoring,
+See [the instanced shader contract](../../../docs/extensions/instanced-wgsl-v2.md) for authoring,
 ABI validation, transport limits and color semantics.
 
 Validated locally on 2026-10-25 in the in-app Chromium browser: minimal shader,

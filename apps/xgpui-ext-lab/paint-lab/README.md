@@ -108,7 +108,7 @@ uses the same app API; native headless checks use WARP on Windows.
 into the three paint sites. The app authoring example in `src/portable.rs` contains
 no OS/backend branches or binding declarations. The interactive editor continues
 to edit built-in gradients; the user WGSL experiment is headless only.
-See [the experimental v1 contract](../../../docs/extensions/portable-wgsl-v1.md).
+See [the experimental shader-paint contract](../../../docs/extensions/portable-wgsl-v1.md).
 
 ## Pastel waves
 

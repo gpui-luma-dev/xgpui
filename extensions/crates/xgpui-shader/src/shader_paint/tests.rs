@@ -14,7 +14,7 @@ fn parameters() -> ShaderParameters {
 }
 #[test]
 fn portable_program_translates_and_packs_reflected_alignment() -> Result<()> {
-    let program = ShaderProgram::new_v1(SOURCE)?;
+    let program = ShaderProgram::new(SOURCE)?;
     let paint = program.paint(parameters())?;
     assert_eq!(paint.0.bytes.len(), 32);
     assert_eq!(&paint.0.bytes[0..4], &0.25_f32.to_le_bytes());
@@ -31,7 +31,7 @@ fn portable_program_translates_and_packs_reflected_alignment() -> Result<()> {
 }
 #[test]
 fn portable_program_rejects_bad_parameter_sets_and_keeps_snapshots() -> Result<()> {
-    let program = ShaderProgram::new_v1(SOURCE)?;
+    let program = ShaderProgram::new(SOURCE)?;
     assert!(program.paint(ShaderParameters::new()).is_err());
     assert!(program.paint(parameters().float("unknown", 1.)).is_err());
     assert!(program.paint(parameters().vec2("gain", [1.; 2])).is_err());
@@ -64,13 +64,13 @@ fn portable_program_rejects_out_of_subset_source() {
     ];
     for source in cases {
         assert!(
-            ShaderProgram::new_v1(&source).is_err(),
+            ShaderProgram::new(&source).is_err(),
             "accepted unsupported source: {source}"
         );
     }
-    assert!(ShaderProgram::new_v1(&" ".repeat(65537)).is_err());
-    let error=ShaderProgram::new_v1("struct Parameters { gain: f32 }\nfn paint(input: PaintInput) -> vec4<f32> { return missing; }").unwrap_err();
+    assert!(ShaderProgram::new(&" ".repeat(65537)).is_err());
+    let error=ShaderProgram::new("struct Parameters { gain: f32 }\nfn paint(input: PaintInput) -> vec4<f32> { return missing; }").unwrap_err();
     assert!(error.to_string().contains("user WGSL line 2"), "{error:#}");
-    let error = ShaderProgram::new_v1("struct Parameters { gain: f32 }\nfn paint(input: PaintInput) -> vec4<f32> { return input.uv; }").unwrap_err();
+    let error = ShaderProgram::new("struct Parameters { gain: f32 }\nfn paint(input: PaintInput) -> vec4<f32> { return input.uv; }").unwrap_err();
     assert!(error.to_string().contains("user WGSL line 2"), "{error:#}");
 }

@@ -46,7 +46,7 @@ pub(super) fn compile(user: &str) -> Result<Program> {
         for (_, expression) in function.expressions.iter() {
             ensure!(
                 !matches!(expression, naga::Expression::Derivative { .. }),
-                "derivatives are not supported in portable paint v1"
+                "derivatives are not supported in shader paints"
             );
             if let naga::Expression::GlobalVariable(handle) = expression {
                 ensure!(
@@ -220,8 +220,8 @@ pub(super) fn compile(user: &str) -> Result<Program> {
 fn check_block(block: &naga::Block) -> Result<()> {
     for statement in block.iter() {
         match statement {
-            naga::Statement::Kill => bail!("discard is not supported in portable paint v1"),
-            naga::Statement::Loop { .. } => bail!("loops are not supported in portable paint v1"),
+            naga::Statement::Kill => bail!("discard is not supported in shader paints"),
+            naga::Statement::Loop { .. } => bail!("loops are not supported in shader paints"),
             naga::Statement::Block(block) => check_block(block)?,
             naga::Statement::If { accept, reject, .. } => {
                 check_block(accept)?;

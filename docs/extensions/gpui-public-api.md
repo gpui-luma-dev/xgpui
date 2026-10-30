@@ -295,7 +295,7 @@ window.paint_path_with_paint(path, mesh.clone());  // WindowPaintExt trait.
 // window.paint_quad_with_paints(...)             // Same extension trait.
 
 // With the portable-shaders feature:
-use xgpui_shader::experimental::{ShaderProgram, ShaderParameters};
+use xgpui_shader::shader_paint::{ShaderProgram, ShaderParameters};
 ```
 
 `xgpui_gamut::WideColor` and `xgpui_parley::ParleyTextSystem`, `FaceRegistry`,
@@ -344,7 +344,7 @@ browser rasterization run on a worker.
 
 `Scene::shader_draws`, `Primitive::Shader`, `PrimitiveBatch::Shaders`,
 `SceneShaderProgram`, `ShaderDraw` and `Window::paint_shader` support the
-[instanced WGSL v2 extension](instanced-wgsl-v2.md). Exhaustive scene literals
+[instanced shader extension](instanced-wgsl-v2.md). Exhaustive scene literals
 and enum matches must accommodate these additions. Ordinary styled elements
 retain their existing call sites. Programs and backend pipeline ownership are
 separate: the extension validates/translates sources, and each host renderer

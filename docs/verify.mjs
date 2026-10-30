@@ -89,7 +89,7 @@ assert.ok(!index.includes('#method'));
 assert.ok(index.includes('href="examples/extensions/"'));
 assert.ok(index.includes('href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>'));
 assert.ok(index.indexOf('GitHub repository ↗') < index.indexOf('<nav aria-label="Documentation">'));
-assert.ok(index.indexOf('>Live demos ↗</a>') < index.indexOf('>Instanced WGSL v2</a>'));
+assert.ok(index.indexOf('>Live demos ↗</a>') < index.indexOf('>Instanced shaders</a>'));
 for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
@@ -222,7 +222,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 21);
+assert.equal(Object.keys(data.extension_documents).length, 22);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -371,6 +371,7 @@ console.log('Verified API-change source links against regenerated declaration an
 
 // Instanced shaders must be discoverable, rendered offline, and packaged for Pages.
 assert.ok(data.extension_documents['instanced-wgsl-v2']);
+assert.match(run('extensionPage("shader-models")'), /Migration from v1\/v2 terminology/);
 assert.ok(index.includes('href="#instanced-wgsl-v2"'));
 assert.ok(index.includes('href="examples/extensions/"'));
 assert.match(run('shaderCrateGuide()'), /just --justfile apps\/xgpui-ext-lab\/shader-examples\/justfile ui/);
