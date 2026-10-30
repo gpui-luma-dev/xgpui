@@ -1,4 +1,6 @@
-# Portable WGSL paint v1
+# Shader paints (experimental)
+
+See [choosing a shader rendering model and migrating old names](shader-models.md).
 
 Experimental `xgpui-shader/portable-shaders`. Backend selection stays inside the extension.
 
@@ -51,9 +53,9 @@ coverage never remap the field; the host applies coverage/opacity.
 ```rust
 use gpui::{prelude::*, *};
 use xgpui_shader::{painted, WindowPaintExt};
-use xgpui_shader::experimental::{ShaderProgram, ShaderParameters};
+use xgpui_shader::shader_paint::{ShaderProgram, ShaderParameters};
 
-let program = ShaderProgram::new_v1(include_str!("wash.wgsl"))?;
+let program = ShaderProgram::new(include_str!("wash.wgsl"))?;
 
 let parameters_at = |progress| {
     ShaderParameters::new()
@@ -88,7 +90,7 @@ impl ShaderParameters {
 // Reflected layout/padding is packed by the extension; no Rust layout casts.
 ```
 
-| Constraint | v1 |
+| Constraint | Shader paints |
 | --- | --- |
 | Source size | ≤ 64 KiB |
 | Parameter members | 1–32 |
@@ -105,7 +107,7 @@ impl ShaderParameters {
 ## Compilation and cache
 
 ```text
-new_v1(source)
+new(source)
   → parse + validate restricted WGSL
   → reflect parameters/offsets
   → verify MSL + HLSL SM5 + SPIR-V translation
@@ -134,7 +136,7 @@ budget     = 64 MiB live output/backend; excludes in-flight resource retention
 
 Raw Metal commands retain the compatibility submission contract. No new normal-path
 GPU completion waits. Texture parameters, compute/custom geometry, HDR and stable
-API guarantees are outside v1.
+API guarantees are outside this shader-paint contract.
 
 ## Test and capture
 

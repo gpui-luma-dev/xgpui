@@ -22,9 +22,9 @@ pub use surface::{Painted, PaintedElement, Shader, painted, shader};
 #[cfg(feature = "wgpu")]
 mod wgpu;
 
-/// Experimental portable fragment paints. Version one is deliberately restricted.
+/// Experimental shader paints with reflected parameters and declarative paint integration.
 #[cfg(feature = "portable-shaders")]
-pub mod experimental;
+pub mod shader_paint;
 
 #[cfg(target_os = "windows")]
 mod dx11;

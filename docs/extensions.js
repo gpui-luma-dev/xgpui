@@ -1,6 +1,6 @@
 'use strict';
 
-const shaderGuideRoutes = ['typography', 'brushes', 'paint-validation', 'extension-paints', 'shader-producers', 'paint-contract-hardening', 'portable-wgsl-v1', 'instanced-wgsl-v2', 'portable-paints', 'native-dx11-paints'];
+const shaderGuideRoutes = ['shader-models', 'typography', 'brushes', 'paint-validation', 'extension-paints', 'shader-producers', 'paint-contract-hardening', 'portable-wgsl-v1', 'instanced-wgsl-v2', 'portable-paints', 'native-dx11-paints'];
 
 function isExtensionRoute(route) {
   return route === 'extensions' || Object.hasOwn(data.extension_documents, route);
@@ -43,7 +43,7 @@ function colorDemoLinks() {
     '<p>The native companion pairs mapped sRGB and Display P3 swatches using the same 32 reference samples per row. Check effective <code>WideGamutSdr</code> and display support, then compare on your P3 monitor. Display capability does not verify calibration.</p>';
 }
 function instancedDemoLinks() {
-  return '<h2>Instanced WGSL v2 · native app first</h2>' +
+  return '<h2>Instanced shaders · native app first</h2>' +
     '<p>Typed fragment instances, ordered batching, configurable gradient shadows, soft animated borders and direct main-pass rendering. Experimental SDR subset; Windows runtime acceptance remains outstanding.</p>' +
     extensionCode('sh', 'just --justfile apps/xgpui-ext-lab/shader-examples/justfile ui\njust --justfile apps/xgpui-ext-lab/shader-examples/justfile composition') +
     '<p><a href="#instanced-wgsl-v2">API, examples and implementation status →</a> · <a href="examples/shaders/">WASM companion →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/shader-examples">Demo source</a></p>';
@@ -97,7 +97,7 @@ use std::sync::Arc;
 
 painted().bg_paint(Arc::new(SolidColor::new([1.0, 0.2, 0.0, 1.0])?));`) +
     '<p><code>xgpui-shader</code>: gradients, meshes and portable WGSL. Metal, wgpu and native D3D11 adapters; ordinary programs use sRGB. Explicit linear-P3 programs require a native wide-gamut window.</p>' +
-    '<div class="cards">' + extensionCard('extension-paints', 'Start here: dependencies, containers, borders, paths and interaction.') + extensionCard('typography', 'Gradient fills, glyph glow/shadows, typewriter, wave and scramble with stable selection and native accessibility.') + extensionCard('brushes', 'Universal brushes, glyphs, paths, mesh gradients and cached layer effects; pastel waves demo.') + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('paint-contract-hardening', 'Preparation, recording and failure behavior.') + extensionCard('portable-wgsl-v1', 'Rust parameters + portable WGSL source.') + extensionCard('instanced-wgsl-v2', 'Typed main-pass instances, ordered batching, native app and WASM companion.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'Native D3D11 adapter and Windows acceptance.') + '</div>' +
+    '<div class="cards">' + extensionCard('shader-models', 'Choose shader paints or instanced shaders; migrate existing names.') + extensionCard('extension-paints', 'Start here: dependencies, containers, borders, paths and interaction.') + extensionCard('typography', 'Gradient fills, glyph glow/shadows, typewriter, wave and scramble with stable selection and native accessibility.') + extensionCard('brushes', 'Universal brushes, glyphs, paths, mesh gradients and cached layer effects; pastel waves demo.') + extensionCard('shader-producers', 'Mesh sources, parameters, limits and caches.') + extensionCard('paint-contract-hardening', 'Preparation, recording and failure behavior.') + extensionCard('portable-wgsl-v1', 'Rust parameters + portable WGSL source.') + extensionCard('instanced-wgsl-v2', 'Typed main-pass instances, ordered batching, native app and WASM companion.') + extensionCard('portable-paints', 'wgpu support and validation.') + extensionCard('native-dx11-paints', 'Native D3D11 adapter and Windows acceptance.') + '</div>' +
     extensionCode('sh', `just --justfile apps/xgpui-ext-lab/paint-lab/justfile radial
 just --justfile apps/xgpui-ext-lab/paint-lab/justfile --list`) +
     instancedDemoLinks() +

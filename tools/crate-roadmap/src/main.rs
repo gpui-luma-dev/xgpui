@@ -781,6 +781,7 @@ fn generate(root: &Path) -> Result<()> {
             "native-dx11-paints",
             "docs/extensions/native-dx11-paints.md",
         ),
+        ("shader-models", "docs/extensions/shader-models.md"),
         ("portable-wgsl-v1", "docs/extensions/portable-wgsl-v1.md"),
         ("instanced-wgsl-v2", "docs/extensions/instanced-wgsl-v2.md"),
         ("brushes", "docs/extensions/brushes.md"),

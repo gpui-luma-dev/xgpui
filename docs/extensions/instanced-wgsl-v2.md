@@ -1,8 +1,9 @@
-# Instanced WGSL fragment shaders (experimental v2)
+# Instanced shaders (experimental)
+
+See [choosing a shader rendering model and migrating old names](shader-models.md).
 
 Issue [#21](https://github.com/gpui-luma-dev/xgpui/issues/21). Enable
-`xgpui-shader/portable-shaders`. `instanced` is a new API alongside portable paint
-v1; existing texture producers keep their existing behavior.
+`xgpui-shader/portable-shaders`. `instanced` is an API alongside shader paints; existing texture producers keep their existing behavior.
 
 `WindowShaderExt::paint_custom_shader(bounds, &program, instance)` records an
 immutable typed instance. GPUI clips and applies inherited opacity, preserves
@@ -81,7 +82,7 @@ down. The generated vertex stage transports flat instance parameters; the
 fragment wrapper clips against the content mask and applies opacity once.
 User source supplies functions, constants and types, without entry points,
 global variables, overrides or resource bindings. Derivatives and loops are
-subject to Naga validation rather than the restricted v1 subset.
+subject to Naga validation rather than the restricted shader-paint subset.
 
 Output is finite, straight-alpha encoded-sRGB SDR; the wrapper clamps channels
 to 0..1. The shader author must avoid non-finite arithmetic. Intensity above one

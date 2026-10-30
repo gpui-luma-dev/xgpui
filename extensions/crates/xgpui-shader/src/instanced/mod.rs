@@ -1,4 +1,4 @@
-//! Experimental v2: ordered, main-pass fragment shaders with typed instances.
+//! Experimental instanced shaders: ordered, main-pass fragment shaders with typed instances.
 //! Transport is limited to 128 bytes of f32 scalars/vectors for WebGL2 parity.
 use anyhow::{Result, ensure};
 use gpui::{Bounds, Pixels, SceneShaderProgram, ShaderOutputEncoding, Window};

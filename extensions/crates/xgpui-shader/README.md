@@ -73,6 +73,12 @@ and complexity limits are documented in the
 
 ## Custom shaders, shadows and borders
 
+Use `shader_paint::ShaderProgram::new` for reflected shader paints integrated
+with backgrounds, borders and paths. Use `instanced::ShaderProgram<T>::new` for
+typed WGSL programs drawn in the host render pass. Both APIs are experimental.
+See [choosing a rendering model and migrating old names](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/shader-models.md)
+for parameter limits, backend coverage and migration from the removed beta API names.
+
 The `instanced` module draws typed WGSL programs in the host render pass.
 `ShadowPainter` adds programmable rounded-box shadows; `AnimatedBorder` provides
 reusable conic border animation. The application drives animation and reduced

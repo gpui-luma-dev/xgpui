@@ -2,9 +2,8 @@ use gpui::{prelude::*, *};
 use std::sync::Arc;
 use web_time::Instant;
 use xgpui_shader::{
-    Gradient, GradientStop, MeshGradient, MeshGrid, Paint, SolidColor, WindowPaintExt,
-    experimental::{ShaderParameters, ShaderProgram},
-    painted,
+    Gradient, GradientStop, MeshGradient, MeshGrid, Paint, SolidColor, WindowPaintExt, painted,
+    shader_paint::{ShaderParameters, ShaderProgram},
 };
 
 pub struct ShaderDemo {
@@ -105,7 +104,7 @@ impl ShaderDemo {
             ),
         ];
         let mesh = Arc::new(MeshGradient::new(Self::grid(0.0), 18).unwrap());
-        let program = ShaderProgram::new_v1(include_str!("wash.wgsl")).unwrap();
+        let program = ShaderProgram::new(include_str!("wash.wgsl")).unwrap();
         let wash = program.paint(Self::parameters(0.0)).unwrap().into();
         Self {
             paints,
