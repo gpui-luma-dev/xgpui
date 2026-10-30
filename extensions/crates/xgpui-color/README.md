@@ -108,6 +108,38 @@ Tests cover CPU round trips, Naga WGSL validation/translation and native Metal
 comparisons. Shader translation alone does not verify native D3D11 execution.
 Metal and Naga are development dependencies only.
 
+### Adobe RGB numerical regression criteria
+
+Committed oracles use 120-digit Python Decimal arithmetic on exact binary inputs.
+Primary matrices are independently solved from xy chromaticities and D65 using
+pivoted Gaussian elimination. Transfer oracles use exact rational exponents;
+they are independent of the Rust and WGSL implementation constants.
+
+- CPU tests cover all 65,536 unsigned 16-bit transfer codes, signed zero,
+  subnormals, underflow, overflow rejection, adjacent floats at gamut boundaries,
+  and 21,296 scaled primary-conversion vectors.
+- Scalar error budgets account for binary64 rounding of the reciprocal exponent,
+  `powf` evaluation and underflow. Matrix budgets scale with the matrix norm and
+  input magnitude, including cancellation.
+- Native Metal checks 1,060 independent transfer cases per compiler mode.
+  Acceptance is relative: eight binary32 epsilons (0.96 ppm) with fast math off,
+  64 epsilons (7.63 ppm) with fast math on, plus an eight-subnormal rounding floor.
+  Transfer endpoints must be exact. All nonzero GPU reference results are normal
+  binary32 values; GPU subnormal behavior is outside these vectors.
+- Media tests check exact binary16 patterns near black and at midtones, including
+  intentional storage underflow and fractional alpha. Adobe primary/mip checks
+  permit at most one binary16 representable step.
+
+Reproduce both CPU/GPU and media FP16 oracle fixtures from the repository root:
+
+```sh
+python3 scripts/generate_adobe_rgb_references.py --check
+```
+
+The generator requires Python 3.11+ and rustfmt. Runtime evidence is tracked per
+backend; numerical test thresholds are acceptance criteria for the covered
+domains rather than a cross-device bit-identity promise.
+
 ## Project
 
 [Repository](https://github.com/gpui-luma-dev/xgpui) · [Release preparation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/PUBLISHING.md) ·

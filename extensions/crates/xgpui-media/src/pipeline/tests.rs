@@ -582,7 +582,7 @@ fn adobe_rgb_source_alpha_and_transfer_are_independent_of_primaries() {
     let linear = adobe.decode(rgba, ImagePrimaries::AdobeRgb1998).unwrap();
     for (actual, expected) in linear.rgba().into_iter().zip([
         0.21775552814439456,
-        0.023024029316635192,
+        0.023_024_029_316_635_19,
         0.0000028290313452536574,
         0.25,
     ]) {

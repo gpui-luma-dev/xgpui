@@ -122,6 +122,7 @@ pub(crate) fn build(
 #[cfg(test)]
 mod tests {
     use super::*;
+    include!("adobe_fp16_reference.rs");
     fn pixel(bytes: &[u8]) -> [f32; 4] {
         std::array::from_fn(|i| f16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]).to_f32())
     }
@@ -167,13 +168,22 @@ mod tests {
         ];
         for (actual, expected) in [first, second].into_iter().zip(expected) {
             for (a, e) in actual.into_iter().zip(expected) {
-                assert!((a as f64 - e).abs() < 0.0005, "{a} != {e}");
+                let actual = f16::from_f32(a).to_bits();
+                let reference = f16::from_f64(e).to_bits();
+                assert!(
+                    actual.abs_diff(reference) <= 1,
+                    "FP16 result {a} differs by more than one representable step from {e}"
+                );
+                if e == 0. {
+                    assert_eq!(actual, 0);
+                }
             }
         }
         assert_eq!(pixel(&data.levels()[0][16..]), [0.; 4]);
         let mip = pixel(&data.levels()[1]);
         for i in 0..4 {
-            assert!((mip[i] as f64 - (expected[0][i] + expected[1][i]) / 3.).abs() < 0.0005);
+            let reference = f16::from_f64((expected[0][i] + expected[1][i]) / 3.).to_bits();
+            assert!(f16::from_f32(mip[i]).to_bits().abs_diff(reference) <= 1);
         }
         let legacy = rgba16f_data(3, 1, pixels.clone(), ImageColor::ADOBE_RGB_1998).unwrap();
         assert_eq!(legacy.levels(), data.levels());
@@ -193,6 +203,34 @@ mod tests {
                 assert!(rgba.iter().all(|v| (0. ..=1.).contains(v)));
                 assert!(rgba[..3].iter().all(|v| *v <= rgba[3]));
             }
+        }
+    }
+
+    #[test]
+    fn adobe_near_black_and_midtones_match_independent_fp16_bit_patterns() {
+        // Decimal(120 digits) powers of the exact f32 inputs, then IEEE binary16
+        // round-to-nearest-even via Python struct.pack("e"). These include
+        // intentional FP16 underflow and the first subnormal storage values.
+        for &(encoded, alpha, bits) in ADOBE_FP16_GRAY_REFERENCES {
+            let data = rgba16f_data(
+                1,
+                1,
+                vec![[encoded, encoded, encoded, alpha]],
+                ImageColor::ADOBE_RGB_1998,
+            )
+            .unwrap();
+            let stored = &data.levels()[0];
+            for channel in 0..3 {
+                let actual = u16::from_le_bytes([stored[channel * 2], stored[channel * 2 + 1]]);
+                assert_eq!(
+                    actual, bits,
+                    "encoded={encoded}, alpha={alpha}, channel={channel}"
+                );
+            }
+            assert_eq!(
+                u16::from_le_bytes([stored[6], stored[7]]),
+                f16::from_f32(alpha).to_bits()
+            );
         }
     }
 

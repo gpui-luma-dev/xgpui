@@ -113,6 +113,14 @@ and [HDR ↗](https://en.wikipedia.org/wiki/High_dynamic_range) are separate wor
 
 ## Validation
 
+Adobe-specific numerical tests use reproducible 120-digit Decimal oracles,
+independent chromaticity-derived matrices, a full 16-bit ramp and scale-aware
+error budgets. Native transfer tests exercise Metal fast math both on and off;
+media tests check exact FP16 patterns near black. See the
+[numerical regression criteria](https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-color/README.md#adobe-rgb-numerical-regression-criteria)
+for tolerances, covered domains and fixture regeneration.
+
+
 ```sh
 cargo test --locked --manifest-path extensions/crates/xgpui-color/Cargo.toml
 cargo check --locked --manifest-path extensions/crates/xgpui-color/Cargo.toml --lib --target wasm32-unknown-unknown
