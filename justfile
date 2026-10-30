@@ -43,6 +43,14 @@ gamut *args:
 color *args:
     cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab -- "$@"
 
+# Chromaticity diagrams, FP16 inspection and native-wide comparisons (sibling xgpui-lab).
+chromaticity *args:
+    just --justfile ../xgpui-lab/justfile --set profile "{{ profile }}" chromaticity "$@"
+
+# Numerical and dataset checks for the sibling chromaticity lab.
+chromaticity-test *args:
+    just --justfile ../xgpui-lab/justfile chromaticity-test "$@"
+
 # Native versus Parley text, paragraphs and scrolling.
 text *args:
     cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin text-lab -- "$@"
