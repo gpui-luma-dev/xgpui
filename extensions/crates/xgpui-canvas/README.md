@@ -1,5 +1,7 @@
 # xgpui-canvas
 
+> **BETA — Expect significant API changes.**
+
 Spatial camera and clipped viewport prototype for issue #54. Default features
 provide dependency-free f64 camera math. Enable `gpui` for `Canvas`, `GridPainter`,
 and `GridStyle` through the existing portable shader pipeline.

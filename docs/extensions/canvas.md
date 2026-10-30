@@ -1,5 +1,7 @@
 # Spatial canvas
 
+<aside class="canvas-beta" aria-label="Canvas beta warning"><strong>BETA</strong> — Expect significant API changes.</aside>
+
 `xgpui-canvas` adds a spatial viewport to GPUI: an f64 pan/zoom camera, retained
 scenes with BVH culling and hit testing, LOD hints, alignment snapping, and a
 procedural line/dot grid. Native and browser labs show the same camera driving

@@ -24,3 +24,5 @@ pre .token.function,pre .token.macro{color:var(--syntax-function)}
 pre .token.class-name,pre .token.type-definition,pre .token.property,pre .token.table{color:var(--syntax-type)}
 pre .token.punctuation,pre .token.operator{color:var(--ink)}
 pre .token.attribute,pre .token.annotation{color:var(--syntax-type)}
+
+.canvas-beta{max-width:820px;margin:20px 0;padding:16px 20px;border-left:4px solid #ad6800;border-radius:4px;background:#fff1cc;color:#573800;font-size:15px;line-height:1.6}.canvas-beta strong{font-weight:800;letter-spacing:.08em}

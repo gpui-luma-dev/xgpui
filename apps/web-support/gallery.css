@@ -6,3 +6,8 @@
 .preview-canvas { background: linear-gradient(90deg,#72c7ff15 1px,transparent 1px),linear-gradient(#72c7ff15 1px,transparent 1px),#101824; background-size: 20px 20px; position:relative; }
 .preview-canvas::before { content:""; position:absolute; inset:24% 18%; border:1px solid #72c7ff; background:#24354b; box-shadow:28px 18px 0 -1px #355578,-28px -18px 0 -1px #46688a; }
 .preview-mandelbrot { background:radial-gradient(ellipse at 62% 50%,#050810 0 21%,transparent 22%),radial-gradient(circle at 34% 50%,#050810 0 13%,transparent 14%),repeating-radial-gradient(ellipse at 55% 50%,#80c6cf 0 4px,#d4b586 7px,#40568f 13px,#25425d 21px); }
+
+/* Distinct media previews, with a shared translucent sample surface. */
+.preview-media-filters{background:linear-gradient(135deg,#402b73 0%,#bd5b87 48%,#f2b16c 100%)}
+.preview-media-float{background:radial-gradient(ellipse at 80% 20%,#c8efad,transparent 65%),linear-gradient(135deg,#174969,#45b7a4 65%,#9edbb8)}
+.preview-media-tiles{background:linear-gradient(155deg,#222f64 0%,#5879bd 48%,#b3cce5 100%)}
