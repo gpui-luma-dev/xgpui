@@ -528,7 +528,10 @@ impl WgpuImageUploadContext {
             dimension: wgpu::TextureDimension::D2,
             format: match data.format() {
                 gpui::ImageTextureFormat::Rgba8Srgb => wgpu::TextureFormat::Rgba8Unorm,
-                gpui::ImageTextureFormat::LinearP3Rgba16Float => wgpu::TextureFormat::Rgba16Float,
+                gpui::ImageTextureFormat::LinearP3Rgba16Float
+                | gpui::ImageTextureFormat::LinearRec2020Rgba16Float => {
+                    wgpu::TextureFormat::Rgba16Float
+                }
             },
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],

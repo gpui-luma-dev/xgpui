@@ -22,6 +22,10 @@ fn p3_to_srgb(c: vec3<f32>) -> vec3<f32> {
 fn srgb_to_p3(c: vec3<f32>) -> vec3<f32> {
     return vec3(dot(c,vec3(0.82246197,0.17753803,0.)),dot(c,vec3(0.03319420,0.96680580,0.)),dot(c,vec3(0.01708263,0.07239744,0.91051993)));
 }
+// Linear SDR Rec.2020 -> P3; retain extended channels until preview mapping.
+fn rec2020_to_p3(c: vec3<f32>) -> vec3<f32> {
+    return vec3(dot(c,vec3(1.343578253,-0.282179671,-0.061398582)),dot(c,vec3(-0.065297453,1.075787916,-0.010490463)),dot(c,vec3(0.002821787,-0.019598495,1.016776707)));
+}
 @fragment fn custom_fragment(in: Vertex) -> @location(0) vec4<f32> {
     if any(in.position.xy < p.mask.xy) || any(in.position.xy >= p.mask.xy + p.mask.zw) { discard; }
     let local = in.uv * p.bounds.zw;
@@ -33,6 +37,7 @@ fn srgb_to_p3(c: vec3<f32>) -> vec3<f32> {
     var coverage = clamp(0.5 - distance,0.,1.);
     if (u32(p.viewport.w) & 1u) != 0u { coverage = textureSample(shape_mask,paint_sampler,in.uv).r; }
     var color = textureSample(image,paint_sampler,in.uv);
+    if p.linear.y > 2.5 { color = vec4(rec2020_to_p3(color.rgb), color.a); }
     if p.viewport.w > 1.5 && color.a > 0. { color = vec4(color.rgb / color.a, color.a); }
     let processing = p.linear.x > 0.5 || p.linear.y > 0.5;
     var rgb = color.rgb;

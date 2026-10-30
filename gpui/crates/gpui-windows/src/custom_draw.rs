@@ -328,7 +328,10 @@ impl Dx11ImageUploadContext {
             ),
             match data.format() {
                 gpui::ImageTextureFormat::Rgba8Srgb => DXGI_FORMAT_R8G8B8A8_UNORM,
-                gpui::ImageTextureFormat::LinearP3Rgba16Float => DXGI_FORMAT_R16G16B16A16_FLOAT,
+                gpui::ImageTextureFormat::LinearP3Rgba16Float
+                | gpui::ImageTextureFormat::LinearRec2020Rgba16Float => {
+                    DXGI_FORMAT_R16G16B16A16_FLOAT
+                }
             },
             data.bytes_per_pixel() as u64,
             gpui::ImageTextureData::MAX_BYTES as u64,

@@ -40,6 +40,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             xgpui_color::GamutMapping::Clip,
         )?,
     );
+    let rec2020 = xgpui_media::pipeline::rec2020_rgba16f_data(
+        1,
+        1,
+        vec![[0., 1., 0., 1.]],
+        adobe,
+        xgpui_color::GamutMapping::Clip,
+    )?;
+    assert_eq!(
+        rec2020.format(),
+        gpui::ImageTextureFormat::LinearRec2020Rgba16Float
+    );
+    black_box(xgpui_media::MediaLoader::default().load_rec2020_rgba16f(
+        1,
+        1,
+        vec![[0., 1., 1., 0.5]],
+        adobe,
+        xgpui_color::GamutMapping::Clip,
+    )?);
     black_box(xgpui_svg::SvgScheduler::default());
     black_box(std::mem::size_of::<xgpui_parley::ParleyTextSystem>());
     black_box(std::mem::size_of::<gpui_apple::AppleDispatcher>());

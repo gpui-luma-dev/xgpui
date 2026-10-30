@@ -1,4 +1,4 @@
-//! Supplied SDR pixels, normalized to bounded associated linear Display P3.
+//! Supplied SDR pixels, normalized to explicitly selected bounded linear storage.
 use super::{AlphaMode, GamutMapping, ImageColor, ImagePrimaries};
 use anyhow::{Result, ensure};
 use gpui::ImageTextureData;
@@ -47,6 +47,51 @@ pub(crate) fn build(
     mapping: GamutMapping,
     cancelled: impl Fn() -> bool,
 ) -> Result<ImageTextureData> {
+    build_in(
+        width,
+        height,
+        pixels,
+        color,
+        mapping,
+        ImagePrimaries::DisplayP3,
+        cancelled,
+    )
+}
+
+/// Preserve supplied Adobe RGB/P3 colors in bounded linear Rec.2020 SDR storage.
+/// Mapping is explicit for sources outside Rec.2020; mips average associated light.
+/// Native wide placement is unavailable until the compositor supports this format.
+pub fn rec2020_rgba16f_data(
+    width: u32,
+    height: u32,
+    pixels: Vec<[f32; 4]>,
+    color: ImageColor,
+    mapping: GamutMapping,
+) -> Result<ImageTextureData> {
+    build_in(
+        width,
+        height,
+        pixels,
+        color,
+        mapping,
+        ImagePrimaries::Rec2020,
+        || false,
+    )
+}
+
+pub(crate) fn build_in(
+    width: u32,
+    height: u32,
+    pixels: Vec<[f32; 4]>,
+    color: ImageColor,
+    mapping: GamutMapping,
+    working: ImagePrimaries,
+    cancelled: impl Fn() -> bool,
+) -> Result<ImageTextureData> {
+    ensure!(
+        matches!(working, ImagePrimaries::DisplayP3 | ImagePrimaries::Rec2020),
+        "unsupported image storage primaries"
+    );
     rgba16f_payload_bytes(width, height)?;
     ensure!(
         pixels.len() == width as usize * height as usize,
@@ -54,6 +99,7 @@ pub(crate) fn build(
     );
     let canonical = ImageColor {
         alpha: AlphaMode::Premultiplied,
+        primaries: working,
         ..ImageColor::LINEAR_P3
     };
     let mut input = Vec::with_capacity(pixels.len());
@@ -62,7 +108,7 @@ pub(crate) fn build(
         for p in row {
             input.push(
                 color
-                    .decode(p.map(f64::from), ImagePrimaries::DisplayP3)?
+                    .decode(p.map(f64::from), working)?
                     .output(canonical, mapping)?
                     .map(|v| v as f32),
             );
@@ -116,7 +162,12 @@ pub(crate) fn build(
         w = nw;
         h = nh;
     }
-    ImageTextureData::new_linear_p3_rgba16f(width, height, levels)
+    match working {
+        ImagePrimaries::Rec2020 => {
+            ImageTextureData::new_linear_rec2020_rgba16f(width, height, levels)
+        }
+        _ => ImageTextureData::new_linear_p3_rgba16f(width, height, levels),
+    }
 }
 
 #[cfg(test)]
@@ -248,5 +299,115 @@ mod tests {
         assert!(rgba16f_data(1, 1, vec![[0.6, 0., 0., 0.5]], premul).is_err());
         assert!(ImageTextureData::new_linear_p3_rgba16f(1, 1, vec![vec![255; 8]]).is_err());
         assert!(build(1, 1, vec![[0.; 4]], premul, GamutMapping::Clip, || true).is_err());
+    }
+}
+
+#[cfg(test)]
+mod rec2020_tests {
+    use super::*;
+    include!("rec2020_reference.rs");
+
+    #[test]
+    fn source_gamuts_and_alpha_match_independent_rec2020_fp16_oracles() {
+        for &(adobe, rgba, expected) in REC2020_REFERENCES {
+            let color = if adobe {
+                ImageColor::ADOBE_RGB_1998
+            } else {
+                ImageColor::LINEAR_P3
+            };
+            let data = rec2020_rgba16f_data(1, 1, vec![rgba], color, GamutMapping::Clip).unwrap();
+            assert_eq!(
+                data.format(),
+                gpui::ImageTextureFormat::LinearRec2020Rgba16Float
+            );
+            for (i, e) in expected.into_iter().enumerate() {
+                let actual =
+                    u16::from_le_bytes([data.levels()[0][2 * i], data.levels()[0][2 * i + 1]]);
+                // At most one binary16 step covers f64 -> f32 -> f16 double rounding.
+                assert!(
+                    actual.abs_diff(e) <= 1,
+                    "adobe={adobe} {rgba:?}, channel={i}: {actual:x} != {e:x}"
+                );
+                if e == 0 {
+                    assert_eq!(actual, 0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn retains_out_of_p3_green_and_mips_in_rec2020() {
+        let rgba = vec![[0., 1., 0., 0.5], [0., 1., 1., 1.], [1., 0., 0., 0.]];
+        let data = rec2020_rgba16f_data(3, 1, rgba, ImageColor::ADOBE_RGB_1998, GamutMapping::Clip)
+            .unwrap();
+        // Source green remains outside P3 after storage instead of clipping red.
+        let pixel: [f64; 4] = std::array::from_fn(|i| {
+            f64::from(
+                f16::from_le_bytes([data.levels()[0][2 * i], data.levels()[0][2 * i + 1]]).to_f32(),
+            )
+        });
+        let color = ImageColor {
+            alpha: AlphaMode::Premultiplied,
+            ..ImageColor::LINEAR_REC2020
+        };
+        assert!(
+            color
+                .decode(pixel, ImagePrimaries::DisplayP3)
+                .unwrap()
+                .rgba()[0]
+                < -0.05
+        );
+        assert_eq!(&data.levels()[0][16..], &[0; 8]);
+        // 3 -> 1 averages all pixels; use independently generated source oracles.
+        let mut sum = [0.; 4];
+        for rgba in [[0., 1., 0., 0.5], [0., 1., 1., 1.]] {
+            let &(_, _, bits) = REC2020_REFERENCES
+                .iter()
+                .find(|(a, p, _)| *a && *p == rgba)
+                .unwrap_or_else(|| panic!("missing reference"));
+            for i in 0..3 {
+                sum[i] += f16::from_bits(bits[i]).to_f64() / 3.;
+            }
+            sum[3] += f64::from(rgba[3]) / 3.;
+        }
+        for (i, value) in sum.into_iter().enumerate() {
+            let actual = u16::from_le_bytes([data.levels()[1][2 * i], data.levels()[1][2 * i + 1]]);
+            assert!(actual.abs_diff(f16::from_f64(value).to_bits()) <= 1);
+        }
+    }
+
+    #[test]
+    fn validates_rec2020_storage_and_input_contracts() {
+        for channel in [0x8000u16, 0xbc00, 0x3c01, 0x7c00, 0x7e00] {
+            let mut bytes = vec![0; 8];
+            bytes[0..2].copy_from_slice(&channel.to_le_bytes());
+            bytes[6..8].copy_from_slice(&0x3c00u16.to_le_bytes());
+            assert!(ImageTextureData::new_linear_rec2020_rgba16f(1, 1, vec![bytes]).is_err());
+        }
+        for value in [f32::NAN, f32::INFINITY, -0.1, 1.1] {
+            assert!(
+                rec2020_rgba16f_data(
+                    1,
+                    1,
+                    vec![[value, 0., 0., 1.]],
+                    ImageColor::LINEAR_REC2020,
+                    GamutMapping::Clip
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            build_in(
+                1,
+                1,
+                vec![[0.; 4]],
+                ImageColor::LINEAR_REC2020,
+                GamutMapping::Clip,
+                ImagePrimaries::Rec2020,
+                || true
+            )
+            .is_err()
+        );
+        assert!(ImageTextureData::new_linear_rec2020_rgba16f(3, 1, vec![vec![0; 24]]).is_err());
     }
 }

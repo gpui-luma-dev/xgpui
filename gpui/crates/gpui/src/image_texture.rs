@@ -9,6 +9,8 @@ pub enum ImageTextureFormat {
     Rgba8Srgb,
     /// Premultiplied, bounded linear Display P3 / D65, little-endian binary16.
     LinearP3Rgba16Float,
+    /// Premultiplied, bounded linear Rec.2020 / D65 SDR, little-endian binary16.
+    LinearRec2020Rgba16Float,
 }
 
 /// Full mip chain with a validated storage, color and alpha contract.
@@ -38,6 +40,21 @@ impl ImageTextureData {
             height,
             levels,
             ImageTextureFormat::LinearP3Rgba16Float,
+            false,
+        )
+    }
+    /// Validate a complete bounded premultiplied linear Rec.2020 SDR mip chain.
+    /// This is a storage contract; native wide placement requires compositor support.
+    pub fn new_linear_rec2020_rgba16f(
+        width: u32,
+        height: u32,
+        levels: Vec<Vec<u8>>,
+    ) -> Result<Self> {
+        Self::with_format(
+            width,
+            height,
+            levels,
+            ImageTextureFormat::LinearRec2020Rgba16Float,
             false,
         )
     }
@@ -83,7 +100,7 @@ impl ImageTextureData {
                     });
                     ensure!(
                         c[3] <= 0x3c00 && c[..3].iter().all(|v| *v <= c[3]),
-                        "RGBA16F requires bounded premultiplied linear P3"
+                        "RGBA16F requires bounded premultiplied linear RGB"
                     );
                 }
             }
@@ -440,6 +457,8 @@ pub enum ImageColorMode {
     LinearP3Preview,
     /// Associated linear-P3 input presented by the native wide-SDR compositor.
     LinearP3Wide,
+    /// Associated linear Rec.2020 SDR input mapped to clipped sRGB.
+    LinearRec2020Preview,
 }
 impl ImageColorMode {
     /// Stable renderer uniform value.
@@ -448,6 +467,7 @@ impl ImageColorMode {
             Self::EncodedSrgb => 0.,
             Self::LinearP3Preview => 1.,
             Self::LinearP3Wide => 2.,
+            Self::LinearRec2020Preview => 3.,
         }
     }
 }

@@ -172,7 +172,7 @@ if let Some(image) = job.try_take() {
 ```
 
 Set `ImageColor { primaries, transfer, alpha }` for other supplied conventions:
-sRGB/Display P3/Adobe RGB (1998), independent linear/sRGB/Adobe RGB transfer, straight/premultiplied. The worker validates,
+sRGB/Display P3/Adobe RGB (1998)/Rec.2020 primaries, independent linear/sRGB/Adobe RGB transfer, straight/premultiplied. The worker validates,
 unassociates in the declared source domain, decodes transfer, converts to linear
 P3 and associates alpha. It builds alpha-aware area mips before [binary16 ↗](https://en.wikipedia.org/wiki/Half-precision_floating-point_format) packing.
 Storage is **bounded premultiplied linear Display P3/D65 RGBA16F**, little-endian.
@@ -186,6 +186,37 @@ intermediates, then clips once to the chosen output gamut. No HDR highlights,
 [RAW ↗](https://en.wikipedia.org/wiki/Raw_image_format) development or ICC profile processing are implied. GPU placements currently
 use Clip for their output conversion. Supplied-pixel ingestion also offers
 `ReduceChroma` before storage through the explicit mapping API below.
+
+### Rec.2020 SDR storage
+
+To retain Adobe RGB and P3 source gamuts, use an explicit wider storage path:
+
+```rust
+let job = loader.load_rec2020_rgba16f(
+    width, height, supplied_rgba, ImageColor::ADOBE_RGB_1998,
+    GamutMapping::Clip,
+)?;
+```
+
+The synchronous equivalent is `pipeline::rec2020_rgba16f_data`. The output tag is
+`ImageTextureFormat::LinearRec2020Rgba16Float`: bounded premultiplied linear
+Rec.2020/D65, eight bytes per texel, with associated linear area mipmaps. Mapping
+is into Rec.2020 before association. `ImageColor::LINEAR_REC2020` describes linear
+supplied input, independently of any encoded transfer curve. Existing P3 loaders
+keep their behavior.
+
+Metal, D3D11 and wgpu image shaders interpret the new storage tag for clipped
+sRGB previews. Native Metal and macOS wgpu execution are tested; D3D11 runtime
+remains unverified. GPU preview adjustments still use sRGB/P3 working matrices.
+`wide()` rejects Rec.2020 storage until native composition and capture support
+lands. Tiled canvas FP16 pages remain P3 and reject Rec.2020 pages. This is the
+storage increment of Stage B, not full-gamut native presentation, HDR or ICC import.
+
+Independent 120-digit primary/white matrix solves and Adobe transfer calculations
+cover 1,000 source/alpha combinations. Stored channels allow at most one FP16
+step for intermediate rounding, with exact zeros. Odd mips and retention of
+out-of-P3 Adobe green are checked. Regenerate with
+`python3 scripts/generate_adobe_rgb_references.py --check`.
 
 ### Explicit Adobe RGB input mapping
 

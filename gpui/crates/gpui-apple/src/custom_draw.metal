@@ -16,6 +16,10 @@ float3 p3_to_srgb(float3 c) {
 float3 srgb_to_p3(float3 c) {
     return float3(dot(c,float3(0.82246197,0.17753803,0.)),dot(c,float3(0.03319420,0.96680580,0.)),dot(c,float3(0.01708263,0.07239744,0.91051993)));
 }
+// Linear SDR Rec.2020 -> P3; retain extended channels until preview mapping.
+float3 rec2020_to_p3(float3 c) {
+    return float3(dot(c,float3(1.343578253,-0.282179671,-0.061398582)),dot(c,float3(-0.065297453,1.075787916,-0.010490463)),dot(c,float3(0.002821787,-0.019598495,1.016776707)));
+}
 fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buffer(0)]], texture2d<float> image [[texture(0)]], texture2d<float> mask [[texture(1)]], texture2d<float> chroma [[texture(2)]]) {
     float2 xy = in.position.xy;
     if (any(xy < p.mask.xy) || any(xy >= p.mask.xy + p.mask.zw)) discard_fragment();
@@ -36,6 +40,7 @@ fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buf
         color = image.sample(s, in.uv);
     }
     if (fmod(floor(p.viewport.w / 2.0), 2.0) > 0.5 && color.a > 0.0) color.rgb /= color.a;
+    if (p.linear.y > 2.5) color.rgb = rec2020_to_p3(color.rgb);
     bool processing = p.linear.x > 0.5 || p.linear.y > 0.5;
     if (p.linear.y > 0.5) {
         color.rgb = color.a > 0.0 ? color.rgb / color.a : float3(0.0, 0.0, 0.0);

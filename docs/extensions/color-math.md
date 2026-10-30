@@ -60,14 +60,21 @@ explicitly reject an Adobe RGB working matrix. CPU color matrices support Adobe
 RGB. Input interpretation does not infer or load an ICC profile.
 
 This implements Stage A of [#85](https://github.com/gpui-luma-dev/xgpui/issues/85).
-It does not provide full-gamut Adobe RGB image storage or presentation: native
-textures and wide producers remain bounded linear P3. Saturated Adobe green and
-cyan require mapping into P3; saturated P3 red also exceeds Adobe RGB.
+The existing P3 loaders map saturated Adobe green/cyan into P3. The explicit
+Rec.2020 storage API below retains these colors; native wide composition and
+captures still use P3, so Rec.2020 native wide placement is rejected. Saturated
+P3 red also exceeds Adobe RGB.
 
 ### Stage B design: preserve both source gamuts
 
-Recommend **bounded linear Rec.2020/D65** for a future explicit wider SDR image
-format and composition path. Retain current P3 APIs and defaults during rollout.
+The first Stage B increment adds **bounded linear Rec.2020/D65** image storage,
+associated linear mipmaps and clipped sRGB previews. Use
+`pipeline::rec2020_rgba16f_data` or `MediaLoader::load_rec2020_rgba16f`, with an
+explicit mapping policy. `ImageTextureFormat::LinearRec2020Rgba16Float` retains
+its meaning through upload on Metal/D3D11/wgpu; existing P3 APIs keep their defaults.
+Native wide composition, captures and Rec.2020 working adjustments remain follow-up
+work. `wide()` rejects the new format; GPU adjustments can use sRGB/P3 working
+matrices for its preview. This does not provide HDR or ICC inference.
 
 | Choice | Benefit | Cost / constraint |
 | --- | --- | --- |
