@@ -4,7 +4,9 @@
 #[cfg(feature = "gpui")]
 mod viewport;
 #[cfg(feature = "gpui")]
-pub use viewport::{Canvas, GridPainter, GridStyle};
+pub use viewport::{Canvas, GridOptions, GridPainter, GridStyle};
+mod input;
+pub use input::PanGesture;
 mod overview;
 mod scene;
 mod snapping;

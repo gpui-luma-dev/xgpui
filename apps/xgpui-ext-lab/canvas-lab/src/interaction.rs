@@ -15,6 +15,12 @@ pub(super) enum Gesture {
 }
 
 impl Lab {
+    pub(super) fn cancel_interaction(&mut self) {
+        self.cancel_selection();
+        self.drag.end();
+        self.map_drag = false;
+    }
+
     pub(super) fn world_at(&self, position: Point<Pixels>) -> WorldPoint {
         let local = position - self.bounds.origin;
         self.camera.screen_to_world(
@@ -105,7 +111,7 @@ impl Lab {
         }
         self.gesture = None;
         self.snap_guides.clear();
-        self.drag = None;
+        self.drag.end();
     }
 
     pub(super) fn cancel_selection(&mut self) {

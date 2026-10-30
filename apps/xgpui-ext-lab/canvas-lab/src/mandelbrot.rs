@@ -53,9 +53,11 @@ fn keys(bounds: WorldBounds, level: i32) -> Vec<Key> {
     });
     result
 }
-pub(super) fn iterations(zoom: f64) -> u32 {
-    (256. + zoom.log2().max(0.) * 48.).min(2048.) as u32
-}
+#[path = "../../shared/mandelbrot.rs"]
+mod fractal_math;
+#[cfg(test)]
+use fractal_math::escape;
+pub(super) use fractal_math::iterations;
 
 #[derive(Default)]
 pub(super) struct Mandelbrot {
@@ -82,21 +84,6 @@ impl Mandelbrot {
         self.refined = false;
     }
 }
-fn escape(cx: f64, cy: f64, limit: u32) -> u32 {
-    // Analytic interior tests avoid the most expensive common pixels.
-    let q = (cx - 0.25) * (cx - 0.25) + cy * cy;
-    if q * (q + cx - 0.25) <= 0.25 * cy * cy || (cx + 1.) * (cx + 1.) + cy * cy <= 0.0625 {
-        return limit;
-    }
-    let (mut x, mut y) = (0., 0.);
-    for i in 0..limit {
-        if x * x + y * y > 4. {
-            return i;
-        }
-        (x, y) = (x * x - y * y + cx, 2. * x * y + cy);
-    }
-    limit
-}
 fn render(key: Key, generation: &AtomicU64, token: u64) -> Option<image::RgbaImage> {
     let bounds = key.bounds();
     let step = (bounds.max.x - bounds.min.x) / TILE as f64;
@@ -109,18 +96,11 @@ fn render(key: Key, generation: &AtomicU64, token: u64) -> Option<image::RgbaIma
         for x in 0..TILE + 2 {
             let real = (bounds.min.x + (x as f64 - 0.5) * step) / 300. - 0.5;
             let imaginary = (bounds.min.y + (y as f64 - 0.5) * step) / 300.;
-            let n = escape(real, imaginary, limit);
-            let rgb = if n == limit {
-                [5, 8, 16]
-            } else {
-                let t = n as f64 * 0.11;
-                [
-                    ((t.sin() * 0.5 + 0.5) * 255.) as u8,
-                    (((t + 2.).sin() * 0.5 + 0.5) * 255.) as u8,
-                    (((t + 4.).sin() * 0.5 + 0.5) * 255.) as u8,
-                ]
-            };
-            image.put_pixel(x, y, image::Rgba([rgb[2], rgb[1], rgb[0], 255]));
+            image.put_pixel(
+                x,
+                y,
+                image::Rgba(fractal_math::bgra(real, imaginary, limit)),
+            );
         }
     }
     Some(image)

@@ -22,13 +22,17 @@ uses the selection's group bounds and excludes selected items. Equal-spacing,
 angle snapping, auto-scroll, undo history, and accelerated bulk refits are not
 included in this slice.
 
-The lower-right **current canvas view** is a live scaled copy of the visible
+The lower-right panel defaults to the **whole-canvas minimap** for cards. Press
+**T** to opt into the **current canvas view**, a live scaled copy of the visible
 viewport. It follows pan, zoom, resize, selection, guides, and scene edits, using
 an actual rendered capture with the toolbar and preview panel excluded. **M**
 hides/shows the panel. **T** switches between this display-only live preview and
 the whole-canvas minimap. The minimap shows card geometry without a grid, with
 an amber viewport outline; click or drag it to recenter while keeping zoom.
 The whole-canvas mode uses a cached thumbnail and does not perform GPU readback.
+Its geometry refreshes once per render when scene identity/revision changes,
+including active moves, cancellation and scene replacement. T/M/Escape cancel
+active world/map drags; focus loss clears held modifiers and pointer ownership.
 
 Captures are coalesced to at most one every 80 ms and resized to fit 432×276,
 with aspect ratio preserved. The existing canvas grid appears only as part of

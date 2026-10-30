@@ -43,6 +43,7 @@ pub struct Scene<T> {
     items: Vec<SceneItem<T>>,
     index: SpatialIndex,
     revision: u64,
+    identity: usize,
 }
 
 impl<T> Scene<T> {
@@ -53,9 +54,19 @@ impl<T> Scene<T> {
             items,
             index,
             revision: 0,
+            identity: {
+                static NEXT: std::sync::atomic::AtomicUsize =
+                    std::sync::atomic::AtomicUsize::new(1);
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            },
         }
     }
     /// Changes whenever bounds are updated; useful for invalidating retained captures.
+    /// Process-local geometry cache key, distinct even for replacement scenes at revision zero.
+    pub fn cache_key(&self) -> (usize, u64) {
+        (self.identity, self.revision)
+    }
+
     pub fn revision(&self) -> u64 {
         self.revision
     }
@@ -136,6 +147,18 @@ mod tests {
             data,
         }
     }
+    #[test]
+    fn cache_key_tracks_geometry_and_distinguishes_replacement_scenes() {
+        let mut scene = Scene::new([item(0., 10., 0)]);
+        let original = scene.cache_key();
+        let replacement = Scene::new([item(0., 10., 0)]);
+        assert_ne!(original, replacement.cache_key());
+        assert!(!scene.set_bounds(99, scene.items()[0].bounds));
+        assert_eq!(original, scene.cache_key());
+        assert!(scene.set_bounds(0, item(20., 30., 0).bounds));
+        assert_ne!(original, scene.cache_key());
+    }
+
     #[test]
     fn culling_preserves_paint_order_and_hit_test_returns_topmost() {
         let scene = Scene::new([item(-10., 10., 1), item(0., 20., 2), item(1000., 1010., 3)]);

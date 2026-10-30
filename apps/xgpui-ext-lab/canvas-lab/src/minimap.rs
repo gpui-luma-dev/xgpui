@@ -139,9 +139,6 @@ pub(super) fn schedule(lab: &mut Lab, window: &mut Window, cx: &mut Context<Lab>
 impl Lab {
     pub(super) fn invalidate_preview(&mut self) {
         self.preview.signature = None;
-        if self.whole_scene_map {
-            self.refresh_overview();
-        }
     }
 
     pub(super) fn minimap(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -185,7 +182,11 @@ impl Lab {
                     .top(px(3.))
                     .left(px(6.))
                     .text_size(px(12.))
-                    .child(if self.fractal.enabled { "Current view • M: hide" } else { "Current view • T: map • M: hide" }),
+                    .child(if self.fractal.enabled {
+                        "Current view • M: hide"
+                    } else {
+                        "Current view • T: map • M: hide"
+                    }),
             )
             .child(
                 canvas(

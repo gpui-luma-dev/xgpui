@@ -4,6 +4,7 @@ impl Lab {
     pub(super) fn refresh_overview(&mut self) {
         self.overview = Arc::new(xgpui_canvas::Overview::new(&self.scene));
         self.minimap_image = thumbnail(&self.scene, &self.overview);
+        self.overview_key = self.scene.cache_key();
     }
 
     pub(super) fn navigate_map(&mut self, position: Point<Pixels>) {
@@ -38,7 +39,7 @@ impl Lab {
                 cx.listener(|this, event: &MouseDownEvent, window, cx| {
                     this.focus.focus(window, cx);
                     this.cancel_selection();
-                    this.drag = None;
+                    this.drag.end();
                     if this.map_bounds.contains(&event.position) {
                         this.map_drag = true;
                         this.navigate_map(event.position);
@@ -282,4 +283,92 @@ pub(super) fn smoke_navigation(entity: &Entity<Lab>, window: &mut Window, cx: &m
         !entity.read(cx).map_drag,
         "minimap release clears drag state"
     );
+}
+
+/// Native event coverage for cache refresh and HUD ownership transitions.
+pub(super) fn smoke_invalidation_and_modes(
+    entity: &Entity<Lab>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    entity.update(cx, |lab, _| {
+        lab.cancel_interaction();
+        lab.show_minimap = true;
+        lab.whole_scene_map = true;
+        let original = lab.scene.items()[0].bounds;
+        lab.gesture = Some(Gesture::Move {
+            anchor: original.min,
+            originals: vec![(0, original)],
+            group: original,
+        });
+        lab.scene
+            .set_bounds(0, original.translated(WorldPoint::new(-500., -500.)));
+    });
+    window.draw(cx).clear(cx);
+    assert_eq!(
+        entity.read(cx).overview_key,
+        entity.read(cx).scene.cache_key(),
+        "map refreshes during geometry edits"
+    );
+    assert_eq!(
+        entity.read(cx).overview.domain().min,
+        entity.read(cx).scene.bounds().unwrap().min
+    );
+    let image = entity.read(cx).minimap_image.clone();
+    window.draw(cx).clear(cx);
+    assert!(
+        Arc::ptr_eq(&image, &entity.read(cx).minimap_image),
+        "unchanged redraw retains the thumbnail"
+    );
+    entity.update(cx, |lab, _| lab.cancel_interaction());
+    window.draw(cx).clear(cx);
+    assert_eq!(
+        entity.read(cx).overview.domain().min,
+        entity.read(cx).scene.bounds().unwrap().min,
+        "cancellation restores minimap geometry"
+    );
+    assert!(!Arc::ptr_eq(&image, &entity.read(cx).minimap_image));
+    let prior = entity.read(cx).overview_key;
+    entity.update(cx, |lab, _| {
+        lab.scene = make_scene(10_000);
+    });
+    window.draw(cx).clear(cx);
+    assert_ne!(
+        entity.read(cx).overview_key,
+        prior,
+        "replacement scene invalidates revision-zero cache"
+    );
+    for key in ["m", "m", "t", "t", "r", "o", "f", "f", "escape"] {
+        entity.update(cx, |lab, _| {
+            lab.map_drag = true;
+            lab.drag.begin(WorldPoint::default());
+        });
+        window.dispatch_event(
+            PlatformInput::KeyDown(KeyDownEvent {
+                keystroke: Keystroke::parse(key).unwrap(),
+                is_held: false,
+                prefer_character_input: false,
+            }),
+            cx,
+        );
+        let lab = entity.read(cx);
+        assert!(
+            !lab.map_drag && !lab.drag.is_active() && lab.gesture.is_none(),
+            "mode change cancels pointer ownership: {key}"
+        );
+        window.draw(cx).clear(cx);
+    }
+    entity.update(cx, |lab, _| {
+        lab.map_drag = true;
+        lab.space_down = true;
+    });
+    window.blur(cx);
+    window.draw(cx).clear(cx);
+    assert!(
+        !entity.read(cx).map_drag && !entity.read(cx).space_down,
+        "focus loss clears map and modifier state"
+    );
+    entity.update(cx, |lab, cx| {
+        lab.focus.focus(window, cx);
+    });
 }

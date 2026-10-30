@@ -39,6 +39,7 @@ struct Lab {
     preview: minimap::Preview,
     overview: Arc<xgpui_canvas::Overview>,
     minimap_image: Arc<RenderImage>,
+    overview_key: (usize, u64),
     map_thumbnail: bool,
     map_drag: bool,
     whole_scene_map: bool,
@@ -48,7 +49,7 @@ struct Lab {
     space_down: bool,
     camera: Camera2D,
     bounds: Bounds<Pixels>,
-    drag: Option<Point<Pixels>>,
+    drag: xgpui_canvas::PanGesture,
     selected: BTreeSet<usize>,
     gesture: Option<Gesture>,
     snap_guides: Vec<xgpui_canvas::AlignmentGuide>,
@@ -120,6 +121,7 @@ impl Render for Lab {
                     });
                     window.draw(cx).clear(cx);
                     overview_map::smoke_navigation(&entity, window, cx);
+                    overview_map::smoke_invalidation_and_modes(&entity, window, cx);
                     window.draw(cx).clear(cx);
                     window
                         .render_to_image()
@@ -165,7 +167,11 @@ impl Render for Lab {
         let mut cards = Vec::new();
         let mut proxies = Vec::new();
         let mut point_count = 0;
-        for entry in self.scene.visible(self.camera, viewport).filter(|_| !self.fractal.enabled) {
+        for entry in self
+            .scene
+            .visible(self.camera, viewport)
+            .filter(|_| !self.fractal.enabled)
+        {
             let id = entry.item.data;
             let screen = entry.screen_bounds.min;
             if entry.detail != LevelOfDetail::Full {
@@ -259,12 +265,22 @@ impl Render for Lab {
         let camera = self.camera;
         self.schedule_mandelbrot(cx);
         let fractal = self.fractal.enabled.then(|| self.fractal_element());
-        if self.fractal.refined && let Some(path) = self.fractal.capture.take() {
+        if self.fractal.refined
+            && let Some(path) = self.fractal.capture.take()
+        {
             window.on_next_frame(move |window, cx| {
-                window.render_to_image().expect("capture Mandelbrot").save(path).expect("save Mandelbrot");
+                window
+                    .render_to_image()
+                    .expect("capture Mandelbrot")
+                    .save(path)
+                    .expect("save Mandelbrot");
                 cx.quit();
             });
             window.request_animation_frame();
+        }
+        if self.show_minimap && self.whole_scene_map && self.overview_key != self.scene.cache_key()
+        {
+            self.refresh_overview();
         }
         minimap::schedule(self, window, cx);
         let minimap = (self.show_minimap && !self.preview.hidden).then(|| {
@@ -281,22 +297,22 @@ impl Render for Lab {
                     this.grid_style = match this.grid_style { GridStyle::Lines => GridStyle::Dots, GridStyle::Dots => GridStyle::Lines };
                     cx.notify();
                 }
-                if event.keystroke.key == "f" { this.cancel_selection(); this.fractal.toggle(); this.show_minimap = !this.fractal.enabled; this.whole_scene_map = false; this.camera = Camera2D::default(); this.invalidate_preview(); cx.notify(); }
-                if event.keystroke.key == "t" && !this.fractal.enabled { this.whole_scene_map = !this.whole_scene_map; this.map_drag = false; this.refresh_overview(); cx.notify(); }
-                if event.keystroke.key == "m" { this.show_minimap = !this.show_minimap; cx.notify(); }
-                if event.keystroke.key == "escape" { this.cancel_selection(); this.drag = None; cx.notify(); }
-                if event.keystroke.key == "r" { this.cancel_selection(); this.camera = Camera2D::default(); cx.notify(); }
+                if event.keystroke.key == "f" { this.cancel_interaction(); this.fractal.toggle(); this.show_minimap = !this.fractal.enabled; this.whole_scene_map = !this.fractal.enabled; this.camera = Camera2D::default(); this.invalidate_preview(); cx.notify(); }
+                if event.keystroke.key == "t" && !this.fractal.enabled { this.cancel_interaction(); this.whole_scene_map = !this.whole_scene_map; cx.notify(); }
+                if event.keystroke.key == "m" { this.cancel_interaction(); this.show_minimap = !this.show_minimap; cx.notify(); }
+                if event.keystroke.key == "escape" { this.cancel_interaction(); cx.notify(); }
+                if event.keystroke.key == "r" { this.cancel_interaction(); this.camera = Camera2D::default(); cx.notify(); }
                 if event.keystroke.key == "o" {
-                    this.cancel_selection();
+                    this.cancel_interaction();
                     this.camera = Camera2D::default();
                     let viewport = this.viewport();
                     this.camera.zoom_at(WorldPoint::new(viewport.x / 2., viewport.y / 2.), viewport, 0.01);
                     cx.notify();
                 }
-                if event.keystroke.key == "b" { this.cancel_selection(); this.scene = make_scene(if this.scene.len() == 10_000 { 100_000 } else { 10_000 }); this.selected.clear(); this.invalidate_preview(); cx.notify(); }
+                if event.keystroke.key == "b" { this.cancel_interaction(); this.scene = make_scene(if this.scene.len() == 10_000 { 100_000 } else { 10_000 }); this.selected.clear(); this.invalidate_preview(); cx.notify(); }
             }))
             .on_key_up(cx.listener(|this, event: &KeyUpEvent, _, cx| {
-                if event.keystroke.key == "space" { this.space_down = false; this.drag = None; cx.stop_propagation(); }
+                if event.keystroke.key == "space" { this.space_down = false; this.drag.end(); cx.stop_propagation(); }
             }))
             .relative().size_full().flex().flex_col().bg(rgb(0x101824)).text_color(rgb(0xffffff))
             .child(div().h(px(88.)).flex_none().text_size(px(13.)).flex().flex_col()
@@ -305,39 +321,38 @@ impl Render for Lab {
                 .child(if self.fractal.enabled { format!("{:.1}% • CPU tiles • {} iterations • {}", zoom * 100., mandelbrot::iterations(2_f64.powf(self.camera.zoom().log2().ceil())), if self.fractal.refined { "refined" } else { "rendering" }) } else { format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len()) }))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
                 .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
-                    this.cancel_selection();
+                    this.cancel_interaction();
                     let delta = event.delta.pixel_delta(px(24.));
                     this.camera.pan_by(WorldPoint::new(f32::from(delta.x) as f64, f32::from(delta.y) as f64));
                     cx.stop_propagation(); cx.notify();
                 }))
                 .on_pinch(cx.listener(|this, event: &PinchEvent, _, cx| {
-                    this.cancel_selection();
+                    this.cancel_interaction();
                     let anchor = event.position - this.bounds.origin;
                     this.camera.zoom_at_with_limits(WorldPoint::new(f32::from(anchor.x) as f64, f32::from(anchor.y) as f64), this.viewport(), (1. + f64::from(event.delta)).max(0.01), 0.01, if this.fractal.enabled { 1e10 } else { 64. });
                     cx.stop_propagation(); cx.notify();
                 }))
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &MouseDownEvent, window, cx| {
                     this.focus.focus(window, cx);
-                    if this.space_down { this.drag = Some(event.position); }
-                    else if this.fractal.enabled { this.drag = Some(event.position); }
+                    if this.space_down { this.drag.begin(WorldPoint::new(f32::from(event.position.x) as f64, f32::from(event.position.y) as f64)); }
+                    else if this.fractal.enabled { this.drag.begin(WorldPoint::new(f32::from(event.position.x) as f64, f32::from(event.position.y) as f64)); }
                     else { this.start_selection(event); cx.notify(); }
                 }))
-                .on_mouse_down(MouseButton::Middle, cx.listener(|this, event: &MouseDownEvent, _, _| this.drag = Some(event.position)))
+                .on_mouse_down(MouseButton::Middle, cx.listener(|this, event: &MouseDownEvent, _, _| this.drag.begin(WorldPoint::new(f32::from(event.position.x) as f64, f32::from(event.position.y) as f64))))
                 .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                     if this.gesture.is_some() && event.pressed_button == Some(MouseButton::Left) {
                         this.update_selection(event.position, event.modifiers.alt); cx.notify(); return;
                     }
-                    if event.pressed_button != Some(MouseButton::Middle) && !((this.space_down || this.fractal.enabled) && event.pressed_button == Some(MouseButton::Left)) { this.drag = None; }
-                    else if let Some(previous) = this.drag.replace(event.position) {
-                        let delta = event.position - previous;
-                        this.camera.pan_by(WorldPoint::new(f32::from(delta.x) as f64, f32::from(delta.y) as f64));
+                    if event.pressed_button != Some(MouseButton::Middle) && !((this.space_down || this.fractal.enabled) && event.pressed_button == Some(MouseButton::Left)) { this.drag.end(); }
+                    else if let Some(delta) = this.drag.update(WorldPoint::new(f32::from(event.position.x) as f64, f32::from(event.position.y) as f64)) {
+                        this.camera.pan_by(delta);
                         cx.notify();
                     }
                 }))
                 .on_mouse_up(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { this.finish_selection(event); cx.notify(); }))
                 .on_mouse_up_out(MouseButton::Left, cx.listener(|this, event: &MouseUpEvent, _, cx| { this.finish_selection(event); cx.notify(); }))
-                .on_mouse_up(MouseButton::Middle, cx.listener(|this, _, _, _| this.drag = None))
-                .on_mouse_up_out(MouseButton::Middle, cx.listener(|this, _, _, _| this.drag = None))
+                .on_mouse_up(MouseButton::Middle, cx.listener(|this, _, _, _| this.drag.end()))
+                .on_mouse_up_out(MouseButton::Middle, cx.listener(|this, _, _, _| this.drag.end()))
                 .child(SpatialCanvas::new(self.camera, &self.grid, self.grid_style).size_full()
                 .child(canvas(move |bounds, _, cx| {
                     entity.update(cx, |this, cx| {
@@ -455,19 +470,16 @@ fn main() {
                     let focus = cx.focus_handle();
                     focus.focus(window, cx);
                     cx.on_blur(&focus, window, |this: &mut Lab, _, cx| {
-                        this.cancel_selection();
+                        this.cancel_interaction();
                         this.space_down = false;
-                        this.map_drag = false;
-                        this.drag = None;
 
                         cx.notify();
                     })
                     .detach();
                     cx.observe_window_activation(window, |this: &mut Lab, window, cx| {
                         if !window.is_window_active() {
-                            this.cancel_selection();
+                            this.cancel_interaction();
                             this.space_down = false;
-                            this.drag = None;
 
                             cx.notify();
                         }
@@ -477,13 +489,17 @@ fn main() {
                     let overview = Arc::new(xgpui_canvas::Overview::new(&scene));
                     let minimap_image = overview_map::thumbnail(&scene, &overview);
                     Lab {
-                        fractal: mandelbrot::Mandelbrot::new(options.mandelbrot, options.mandelbrot_capture),
+                        fractal: mandelbrot::Mandelbrot::new(
+                            options.mandelbrot,
+                            options.mandelbrot_capture,
+                        ),
                         preview: minimap::Preview::default(),
                         overview,
                         minimap_image,
+                        overview_key: scene.cache_key(),
                         map_thumbnail: true,
                         map_drag: false,
-                        whole_scene_map: false,
+                        whole_scene_map: !options.mandelbrot && options.smoke.is_none(),
                         map_bounds: Bounds::default(),
                         show_minimap: !options.mandelbrot,
                         profile: options.benchmark.map(profile::Profile::new),
@@ -495,7 +511,7 @@ fn main() {
                         space_down: false,
                         camera: Camera2D::default(),
                         bounds: Bounds::default(),
-                        drag: None,
+                        drag: xgpui_canvas::PanGesture::default(),
                         selected: BTreeSet::new(),
                         gesture: None,
                         snap_guides: Vec::new(),

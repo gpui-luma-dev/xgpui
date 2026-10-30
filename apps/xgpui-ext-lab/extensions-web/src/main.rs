@@ -9,6 +9,7 @@ use std::{borrow::Cow, cell::RefCell, rc::Rc, sync::Arc};
 
 // Share the native lab's editor, including its UTF-16/IME bridge and BiDi geometry.
 mod brushes;
+mod canvas;
 mod color;
 mod color_samples;
 mod hermite;
@@ -42,6 +43,8 @@ pub fn demo_build_id() -> String {
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn demo_behavior(demo: &str) -> String {
     match demo {
+        "canvas" => "Spatial canvas: 10k/100k cards • BVH culling • selection, snapping and minimap",
+        "mandelbrot" => "CPU Mandelbrot: shared f64 math • progressive bounded browser slices • pointer-anchored zoom",
         "media-tiles" => "72 MP tiled canvas: progressive preview • bounded immutable pages • viewport selection",
         "media-float" => "RGBA16F: supplied linear P3 pixels • explicit clipped sRGB preview",
         "media-filters" => {
@@ -87,6 +90,8 @@ fn launch() -> anyhow::Result<()> {
     } else {
         WebBackendPreference::Auto
     };
+    let canvas = parameters.contains(&"demo=canvas");
+    let mandelbrot = parameters.contains(&"demo=mandelbrot");
     let typography = parameters.contains(&"demo=typography");
     let parley = parameters.contains(&"demo=parley");
     let svg = parameters.contains(&"demo=svg");
@@ -138,7 +143,12 @@ fn launch() -> anyhow::Result<()> {
     let handle = app.run_embedded(move |cx| {
         cx.set_reduce_motion(reduced_motion);
         let options = WindowOptions::default();
-        if parley {
+        if canvas || mandelbrot {
+            cx.open_window(options, |window, cx| {
+                cx.new(|cx| canvas::CanvasDemo::new(mandelbrot, window, cx))
+            })
+            .expect("open canvas demo");
+        } else if parley {
             let timings = paragraph::measure(cx.text_system().clone(), 5)
                 .expect("paragraph layout diagnostics");
             cx.open_window(options, |window, cx| {

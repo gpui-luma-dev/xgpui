@@ -89,3 +89,33 @@ cargo run --release --locked --config .cargo/validation.toml \
 
 See the [RFC coverage review](../../../docs/extensions/canvas.md) for the current
 crate/lab boundary, known limits, and proposed next milestones.
+
+## GPUI public API changes: additions and compatibility
+
+Canvas uses existing GPUI containers, clipping and the xgpui-shader pipeline;
+no GPUI public signature changes are required. Its own unpublished API remains
+experimental. See [canvas integration compatibility](../../../docs/extensions/gpui-public-api.md#canvas-reuses-existing-gpui-apis).
+
+## Input and grid configuration
+
+`PanGesture::begin/update/end` supplies logical screen deltas without choosing
+mouse buttons or modifiers. End it on release, Escape, focus loss and mode
+changes. `examples/pan.rs` is a headless consumer without lab IDs or GPUI.
+
+Use `Canvas::with_grid_options(camera, &grid, GridOptions { spacing: 40.,
+major_interval: 4, color: [0.3, 0.4, 0.5, 1.], ..Default::default() })` for
+configurable spacing, major interval and RGBA color. Spacing must be finite in
+0.001..=1e12; interval is 2..=16; color channels are finite 0..=1. The painter
+returns an error for invalid settings. Line/dot style shares one shader.
+
+`Scene::cache_key()` combines process-local scene identity and geometry revision.
+Use it for geometry caches, including replacement scenes starting at revision
+zero. Caller-owned item data is immutable through this API; content caches with
+additional application state need their own key.
+
+## Browser companions
+
+The website includes `?demo=canvas` (retained cards, selection/snapping and density
+minimap) and `?demo=mandelbrot` (bounded progressive CPU fractal). They share this
+crate with the native lab. See [controls, API and browser limits](../../../docs/extensions/canvas.md).
+Build with `bash apps/xgpui-ext-lab/extensions-web/build.sh --release`.
