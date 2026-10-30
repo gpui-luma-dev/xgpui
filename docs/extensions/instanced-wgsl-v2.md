@@ -248,9 +248,9 @@ bash apps/xgpui-ext-lab/shader-examples/build.sh --release
 python3 apps/xgpui-ext-lab/shader-examples/serve.py
 ```
 
-Open `http://localhost:8083/`. The build also refreshes
-`docs/examples/shaders/` for documentation previews; the Pages workflow packages
-that companion with the website. See the
+Open `http://localhost:8083/`. The build writes
+`target/web/shaders/`; `just docs-serve` and the Pages workflow stage
+that companion at `target/site/examples/shaders/` with the website. See the
 [demo source and run guide](https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/shader-examples).
 
 ```sh

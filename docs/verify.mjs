@@ -385,7 +385,7 @@ for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows',
 const pagesWorkflow = await readFile(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
 assert.ok(pagesWorkflow.includes('bash apps/xgpui-ext-lab/shader-examples/build.sh --release'));
 const shaderBuild = await readFile(new URL('../apps/xgpui-ext-lab/shader-examples/build.sh', import.meta.url), 'utf8');
-assert.ok(shaderBuild.includes('docs/examples/shaders/'));
+assert.ok(shaderBuild.includes('target/web/shaders'));
 console.log('Verified instanced WGSL guide, native-first launch, companion links and Pages packaging.');
 
 // The standalone color crate must have its own guide and no rendering dependencies.

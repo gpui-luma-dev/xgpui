@@ -39,8 +39,8 @@ python3 apps/xgpui-ext-lab/extensions-web/serve.py
 
 Open <http://localhost:8081/>. Add `--release` to the build command for an optimized
 build. The server accepts `--port 8082` if needed. Stop it with Ctrl-C; rebuild and
-reload after changes. The build also refreshes `docs/examples/extensions/` for
-local documentation previews, so `/examples/extensions/?demo=svg` uses the same
+reload after changes. The build writes `target/web/extensions/`. `just docs-serve` stages it at
+`target/site/examples/extensions/` for local documentation previews, so `/examples/extensions/?demo=svg` uses the same
 HTML, JavaScript and Wasm as this server. No Trunk, nightly toolchain, worker pool, or shared Wasm
 memory configuration is required. The app opts into wgpu's
 `fragile-send-sync-non-atomic-wasm` compatibility feature because GPUI paint

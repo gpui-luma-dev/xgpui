@@ -20,7 +20,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8081)
     args = parser.parse_args()
-    directory = Path(__file__).resolve().parent / "dist"
+    directory = Path(__file__).resolve().parents[3] / "target" / "web" / "extensions"
     if not (directory / "extensions_web_bg.wasm").is_file():
         parser.error("build the demos first: bash apps/xgpui-ext-lab/extensions-web/build.sh")
     server = ThreadingHTTPServer(
