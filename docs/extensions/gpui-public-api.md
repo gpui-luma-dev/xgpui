@@ -573,7 +573,7 @@ separate effect memory and runtime QA limits. No core ABI change was needed.
 
 ## Canvas reuses existing GPUI APIs
 
-The experimental, unpublished `xgpui-canvas` crate uses existing containers,
+The `xgpui-canvas` crate uses existing containers,
 content masks and the xgpui-shader instanced pipeline. It adds no GPUI public
 signatures or fields. Its own camera, scene, pan and grid APIs are experimental;
 callers project children explicitly and own application input/selection policy.

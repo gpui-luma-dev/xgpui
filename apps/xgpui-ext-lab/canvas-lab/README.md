@@ -56,7 +56,7 @@ logical pixel. The viewport clips drawing and input through
 the normal GPUI container, and clicks are checked against inverse-projected
 world bounds using the scene's topmost hit test. Empty clicks clear selection.
 
-The unpublished `xgpui-canvas` crate holds dependency-free f64 camera math; its
+The `xgpui-canvas` crate holds dependency-free f64 camera math; its
 optional `gpui` feature supplies the reusable `Canvas` container and grid painter.
 Screen coordinates are local logical pixels; world origin starts at the viewport
 center. Zoom is bounded to 0.01–64. Projection converts to f32 only at the GPUI

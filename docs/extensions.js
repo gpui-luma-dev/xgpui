@@ -68,7 +68,7 @@ function extensionPage(route) {
   const banner = route === 'color-math'
     ? '<p class="guide-intro"><strong>Standalone color math.</strong> CPU conversions, gamut mapping, gradients and WGSL source without GPUI.</p>'
     : route === 'canvas'
-    ? '<p class="guide-intro"><strong>Experimental spatial canvas.</strong> Native camera, retained scenes and clipped procedural grids; unpublished.</p>'
+    ? '<p class="guide-intro"><strong>Experimental spatial canvas.</strong> Camera, retained scenes and clipped procedural grids.</p>'
     : route === 'svg-rendering'
     ? '<p class="guide-intro"><strong>Experimental SVG extension.</strong> Progressive rasterization, shared admission and accounted image budgets.</p>'
     : route === 'media-pipeline'
@@ -119,7 +119,7 @@ just --justfile apps/xgpui-ext-lab/gamut-lab/justfile test`) +
     '<h2>5. Standalone color math</h2><p><code>xgpui-color</code> provides color conversions, gamut mapping, OkLab/OkLCh interpolation and reusable WGSL helpers with zero runtime dependencies. Use it without GPUI or a GPU context.</p>' +
     '<div class="cards">' + extensionCard('color-math', 'CPU types, browser runtime diagnostics, native P3 comparison, dependency boundaries and validation.') + '</div>' +
     '<h2>6. Dedicated media images</h2><p>Display large images at several sizes, adjust their colors, or show frames from a native producer. Start with small examples and the browser demos.</p><div class="cards">' + extensionCard('media-images', 'Examples, loading limits, platform support and test results.') + '</div>' +
-    '<h2>7. Spatial canvas prototype</h2><div class="cards">' + extensionCard('canvas', 'Native lab, camera and scene API, controls and known limits. Explore the card canvas and CPU Mandelbrot browser companions.') + '</div>' +
+    '<h2>7. Spatial canvas</h2><div class="cards">' + extensionCard('canvas', 'Native lab, camera and scene API, controls and known limits. Explore the card canvas and CPU Mandelbrot browser companions.') + '</div>' +
     '<h2>Shared GPUI integration</h2><div class="cards">' + extensionCard('gpui-public-api', 'Public additions and altered upstream types, separated by capability.') + '</div>';
 
 }

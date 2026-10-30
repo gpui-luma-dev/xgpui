@@ -124,7 +124,7 @@
     "group": "Extensions",
     "role": "Experimental native spatial viewport, f64 camera and retained BVH scenes.",
     "surface": "Camera2D, PanGesture, Scene, snapping and Overview; optional GPUI Canvas and configurable GridPainter.",
-    "review": "Unpublished native prototype. Callers own selection and input policy. Web, rotation, isometric grids and general subtree transforms remain deferred.",
+    "review": "Callers own selection and input policy. Native and browser labs cover cards and CPU fractals; rotation, isometric grids and general subtree transforms remain follow-ups.",
     "entry": "src/lib.rs"
   }
 }

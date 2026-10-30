@@ -1,4 +1,4 @@
-# xgpui-canvas (experimental, unpublished)
+# xgpui-canvas
 
 Spatial camera and clipped viewport prototype for issue #54. Default features
 provide dependency-free f64 camera math. Enable `gpui` for `Canvas`, `GridPainter`,
@@ -68,8 +68,7 @@ general transform for arbitrary GPUI subtrees; rotation, transformed text APIs,
 bulk index updates, cached layers and thumbnail LOD remain follow-ups. Inputs and
 viewport dimensions must be finite; dimensions must be nonnegative.
 
-This prototype is not registered for publishing or included in the generated
-release package set. No framework rendering API changes are required.
+No framework rendering API changes are required.
 
 See the native lab at `apps/xgpui-ext-lab/canvas-lab`; run `just canvas-lab`.
 
@@ -87,14 +86,13 @@ cargo run --release --locked --config .cargo/validation.toml \
   --example spatial_queries --target-dir target
 ```
 
-See the [RFC coverage review](../../../docs/extensions/canvas.md) for the current
+See the [canvas overview](../../../docs/extensions/canvas.md) for the current
 crate/lab boundary, known limits, and proposed next milestones.
 
 ## GPUI public API changes: additions and compatibility
 
 Canvas uses existing GPUI containers, clipping and the xgpui-shader pipeline;
-no GPUI public signature changes are required. Its own unpublished API remains
-experimental. See [canvas integration compatibility](../../../docs/extensions/gpui-public-api.md#canvas-reuses-existing-gpui-apis).
+no GPUI public signature changes are required. Its camera and scene APIs live in the extension. See [canvas integration compatibility](../../../docs/extensions/gpui-public-api.md#canvas-reuses-existing-gpui-apis).
 
 ## Input and grid configuration
 
