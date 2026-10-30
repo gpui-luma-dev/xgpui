@@ -4,22 +4,127 @@ Use `xgpui-color` for CPU color conversions, [gamut mapping ↗](https://en.wiki
 math and reusable WGSL helpers. Its default configuration has zero runtime dependencies and needs no GPUI,
 window, GPU context or shader compiler. Naga and native Metal are test-only dependencies.
 
+For an application under `apps/`:
+
 ```toml
-# App under apps/:
 [dependencies]
 xgpui-color = { path = "../../extensions/crates/xgpui-color" }
 ```
 
+## Common scenarios
+
+All RGB arrays below use normalized channel values. `EncodedRgb` means values
+with a transfer curve (such as ordinary sRGB bytes); `LinearRgb` means linear
+light. The examples use `?` inside a function returning a compatible `Result`.
+These CPU operations do not configure a window or a browser canvas.
+
+### Read an 8-bit sRGB color
+
+Normalize bytes to 0–1, then decode before doing linear-light calculations.
+
+```rust
+use xgpui_color::{EncodedRgb, RgbSpace};
+
+let bytes = [64u8, 128, 255];
+let encoded = EncodedRgb::new(RgbSpace::Srgb, bytes.map(|v| f64::from(v) / 255.0))?;
+let linear = encoded.decode()?;
+let channels = linear.components();
+```
+
+### Convert sRGB to Display P3
+
+Decode, convert the primaries, then encode for a consumer expecting encoded P3.
+This preserves the represented color; it does not make it more saturated.
+
+```rust
+use xgpui_color::{EncodedRgb, RgbSpace};
+
+let srgb = EncodedRgb::new(RgbSpace::Srgb, [0.2, 0.5, 0.8])?;
+let p3 = srgb.decode()?.convert(RgbSpace::DisplayP3)?.encode()?;
+let encoded_p3 = p3.components();
+```
+
+### Make an sRGB preview of Adobe RGB pixels
+
+Choose a mapping policy explicitly. A plain conversion retains out-of-gamut
+channels; mapping makes the result fit the destination. Use `Clip` for channel
+clipping or `ReduceChroma` for the core's chroma-reduction policy.
+
 ```rust
 use xgpui_color::{EncodedRgb, GamutMapping, RgbSpace};
 
-let srgb = EncodedRgb::new(RgbSpace::Srgb, [0.2, 0.5, 0.8])?;
-let linear_p3 = srgb.decode()?.convert(RgbSpace::DisplayP3)?;
-let perceptual = linear_p3.to_oklab()?.to_oklch()?;
-let bounded = linear_p3.map_gamut(RgbSpace::DisplayP3, GamutMapping::ReduceChroma)?;
+let adobe_green = EncodedRgb::new(RgbSpace::AdobeRgb1998, [0.0, 1.0, 0.0])?.decode()?;
+let preview = adobe_green
+    .map_gamut(RgbSpace::Srgb, GamutMapping::ReduceChroma)?
+    .encode()?;
+let srgb_preview = preview.components();
 ```
 
-For integration, start with [color tasks](color-workflows.md) and [pixels + metadata](pixels-and-metadata.md). Optional [ICC parsing](icc-profiles.md) adds a parser dependency without adding a pixel transform engine.
+A preview can discard distinctions between source colors. Keep the original
+pixels and metadata when you also need native wide output; see
+[pixels + metadata](pixels-and-metadata.md).
+
+### Inspect brightness and chromaticity
+
+XYZ Y is relative luminance for the decoded color. xy describes chromaticity,
+without brightness. Black has no defined chromaticity, so guard the denominator.
+
+```rust
+use xgpui_color::{EncodedRgb, RgbSpace};
+
+let color = EncodedRgb::new(RgbSpace::Srgb, [0.2, 0.5, 0.8])?.decode()?;
+let [x, y, z] = color.to_xyz()?.components();
+let relative_luminance = y;
+let sum = x + y + z;
+let chromaticity = (sum > 0.0).then(|| [x / sum, y / sum]);
+```
+
+These describe the supplied color, not measured monitor brightness or gamut.
+
+### Sample a gradient with transparency
+
+Declare linear-light stops and the interpolation method. Sample, map to the
+output gamut, then associate alpha when the consumer requires it.
+
+```rust
+use xgpui_color::{ColorInterpolation, EncodedRgb, GamutMapping, LinearGradient, LinearRgba, RgbSpace};
+
+let red = EncodedRgb::new(RgbSpace::Srgb, [1.0, 0.0, 0.0])?.decode()?;
+let blue = EncodedRgb::new(RgbSpace::Srgb, [0.0, 0.0, 1.0])?.decode()?;
+let gradient = LinearGradient::new(
+    [0.0, 0.0], [100.0, 0.0],
+    [LinearRgba::new(red, 1.0)?, LinearRgba::new(blue, 0.5)?],
+    RgbSpace::Srgb, ColorInterpolation::Oklab,
+)?;
+let midpoint = gradient.sample_at(0.5)?;
+let associated_linear_rgba = midpoint
+    .map_gamut(RgbSpace::Srgb, GamutMapping::ReduceChroma)?
+    .premultiplied();
+```
+
+The result is associated **linear** RGBA, not encoded sRGB bytes. Choose
+`ColorInterpolation::LinearRgb` to interpolate in the output's linear primaries.
+
+### Decode a supplied RGB ICC profile
+
+Enable `features = ["icc"]` on the color dependency. Parse once and reuse the
+resolved definition; the application supplies bytes and owns file decoding.
+
+```rust
+use xgpui_color::{XyzD65, icc::IccRgbProfile};
+
+fn decode_pixel(profile_bytes: &[u8], encoded_rgb: [f64; 3])
+    -> Result<XyzD65, Box<dyn std::error::Error>>
+{
+    let profile = IccRgbProfile::parse(profile_bytes)?;
+    let xyz = profile.rgb_definition().decode_to_xyz_d65(encoded_rgb)?;
+    Ok(xyz)
+}
+```
+
+Only the documented RGB matrix/TRC subset is supported; propagate rejection
+instead of silently assuming sRGB. See [ICC scope](icc-profiles.md),
+[color workflows](color-workflows.md) and [labs](color-labs.md).
 
 ## Types and contracts
 

@@ -106,7 +106,7 @@
   "xgpui-color": {
     "short": "xgpui-color",
     "group": "Extensions",
-    "role": "Standalone CPU color science and reusable WGSL math, with zero runtime dependencies.",
+    "role": "Standalone CPU color conversions and reusable WGSL math; zero runtime dependencies by default, with optional ICC parsing.",
     "surface": "EncodedRgb, LinearRgb, RgbSpace, XyzD65, Oklab, Oklch, GamutMapping, LinearRgba, LinearGradient and WGSL_COLOR_MATH. No GPUI or GPU context required. Browser color demo reports its sRGB canvas separately from P3 display capability; a native companion displays paired sRGB/P3 samples.",
     "review": "Keep conversion separate from gamut mapping and rendering. Preserve finite extended values, explicit alpha/hue rules and CPU/GPU reference tolerances.",
     "entry": "src/lib.rs"

@@ -209,7 +209,7 @@ function svgCrateGuide() {
 }
 
 function colorCrateGuide() {
-  return browserDemoLinks('color') + '<article class="extension-document">' +
+  return '<p><a href="#color-workflows">Choose a color task →</a> · <a href="#color-labs">Demo walkthroughs and limits →</a></p>' + browserDemoLinks('pixel-metadata') + browserDemoLinks('color') + '<article class="extension-document">' +
     data.extension_documents['color-math'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
 }
 
