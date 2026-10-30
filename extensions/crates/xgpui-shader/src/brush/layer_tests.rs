@@ -716,3 +716,7 @@ mod blur_tests;
 
 #[path = "effect_cleanup_tests.rs"]
 mod effect_cleanup_tests;
+
+#[cfg(target_os = "macos")]
+#[path = "wide_capture_tests.rs"]
+mod wide_capture_tests;

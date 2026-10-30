@@ -14,7 +14,8 @@ pub struct TextShadow {
 }
 impl TextShadow {
     /// Gaussian support radius in [0,12] logical pixels, offset per axis in [-12,12].
-    /// Rendering uses the existing SDR layer filter (at most 64 physical pixels).
+    /// Rendering uses the bounded layer filter (at most 64 physical pixels).
+    /// Metal WideGamutSdr captures and filters in premultiplied linear P3.
     pub fn new(color: Hsla, offset: Point<Pixels>, radius: Pixels) -> Result<Self> {
         ensure!(
             [offset.x, offset.y]

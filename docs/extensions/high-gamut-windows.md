@@ -211,8 +211,21 @@ out.a   = src.a   + dst.a   * (1 - src.a)
 Opaque panels retain legacy blending within each run. Translucent controls over
 wide content use linear composition; exact legacy blending across that boundary
 is not promised. Flattening a transparent run loses individual backdrop
-interactions. Grayscale text coverage is supported; backdrop-reading effects and
-LCD/subpixel text require another contract. macOS Metal's subpixel batch remains
+interactions. On macOS Metal, explicit backdrop and layer boundaries flush the
+preceding UI run into the linear P3 target before capturing. Captures and blur
+scratch use premultiplied linear P3 RGBA16F; filtered layers restore their saved
+destination before applying group opacity and blending. Saturation uses P3
+luminance coefficients; tone and blend operations use linear P3 in this mode.
+Default-mode effects retain encoded-sRGB behavior, so filtered colors can differ
+between modes. Path-masked shader draws retain their coverage pass.
+
+Retained capture textures are rebuilt when switching between default and wide
+modes. Four 1024-square layer groups remain the limit; FP16 group textures consume
+eight bytes per texel, with at most 128 MiB retained for groups. Backdrops retain
+their separate four-boundary/1024-side limits. The viewport target budget remains
+256 MiB. These limits exclude driver and in-flight references.
+
+Grayscale text coverage is supported. macOS Metal's LCD/subpixel batch remains
 unsupported. Low-alpha pixels are tested without an arbitrary epsilon cutoff.
 
 ## API surface

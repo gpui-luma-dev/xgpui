@@ -247,6 +247,30 @@ impl Compositor {
             "wide SDR does not support transparent top-level windows"
         );
         self.ensure_targets(renderer, viewport)?;
+        if let Some(program) = scene
+            .backdrops
+            .first()
+            .map(|d| &d.program)
+            .or_else(|| scene.layer_boundaries.first().map(|b| &b.capture.program))
+        {
+            if renderer
+                .backdrops
+                .as_ref()
+                .is_none_or(|b| b.format() != MTLPixelFormat::RGBA16Float)
+            {
+                renderer.backdrops = Some(backdrop::Backdrops::with_format(
+                    &renderer.device,
+                    program,
+                    MTLPixelFormat::RGBA16Float,
+                )?);
+            }
+            renderer.backdrops.as_mut().unwrap().prepare(
+                &renderer.device,
+                scene,
+                viewport,
+                &[renderer.opaque as u64, 1],
+            )?;
+        }
         let queue = renderer.command_queue.clone();
         let command = queue
             .commandBuffer()
@@ -264,7 +288,76 @@ impl Compositor {
         );
         initial.endEncoding();
         let mut ui = None;
+        let mut executed_groups = Vec::new();
+        let mut executed_backdrops = Vec::new();
+        let mut skip_group_end = None;
         for batch in scene.batches() {
+            if let Some(end) = skip_group_end {
+                if !matches!(&batch, PrimitiveBatch::LayerBoundary(index) if *index == end) {
+                    continue;
+                }
+                skip_group_end = None;
+            }
+            // Captures observe all preceding UI and wide draws in linear P3.
+            // End isolation and restore the saved destination before subsequent UI.
+            if let PrimitiveBatch::LayerBoundary(index) = &batch {
+                self.flush(&command, &mut ui, viewport);
+                let effects = renderer.backdrops.as_mut().unwrap();
+                let (slot, begin) = effects.groups.boundary(*index);
+                if begin {
+                    effects.groups.start(slot);
+                    executed_groups.push(slot);
+                }
+                let hit = effects.groups.hit(slot);
+                if begin || !hit {
+                    effects
+                        .groups
+                        .copy(&command, self.target.as_ref().unwrap(), slot, begin);
+                }
+                if !begin {
+                    effects.group_filter(&command, slot);
+                }
+                if begin && hit {
+                    skip_group_end = Some(effects.groups.end(slot));
+                } else {
+                    let e = new_command_encoder_for_texture(
+                        &command,
+                        self.target.as_ref().unwrap(),
+                        viewport,
+                        None,
+                    );
+                    effects.group_draw(&e, slot, begin);
+                    e.endEncoding();
+                }
+                continue;
+            }
+            if let PrimitiveBatch::Backdrop(index) = &batch {
+                self.flush(&command, &mut ui, viewport);
+                let effects = renderer.backdrops.as_mut().unwrap();
+                executed_backdrops.push(*index);
+                effects.filter(&command, self.target.as_ref().unwrap(), *index);
+                let e = new_command_encoder_for_texture(
+                    &command,
+                    self.target.as_ref().unwrap(),
+                    viewport,
+                    None,
+                );
+                effects.composite(&e, *index);
+                e.endEncoding();
+                continue;
+            }
+            if let PrimitiveBatch::Shaders { ref range, .. } = batch
+                && scene.shader_draws[range.start].path_mask.is_some()
+            {
+                self.flush(&command, &mut ui, viewport);
+                let paths: Vec<_> = scene.shader_draws[range.clone()]
+                    .iter()
+                    .map(|d| d.path_mask.as_ref().unwrap().as_ref().clone())
+                    .collect();
+                if !renderer.draw_paths_to_intermediate(&paths, writer, viewport, &command)? {
+                    continue;
+                }
+            }
             if let PrimitiveBatch::Custom(range) = &batch {
                 for index in range.clone() {
                     if self.wide.contains(&index) {
@@ -337,7 +430,7 @@ impl Compositor {
                         bindings,
                         viewport,
                         scene.shader_draws[range.start].glyph_mask,
-                        false,
+                        scene.shader_draws[range.start].path_mask.is_some(),
                         &e,
                     );
                     e.endEncoding();
@@ -366,7 +459,7 @@ impl Compositor {
                     bindings,
                     viewport,
                     scene.shader_draws[range.start].glyph_mask,
-                    false,
+                    scene.shader_draws[range.start].path_mask.is_some(),
                     &e,
                 ),
                 PrimitiveBatch::Quads(r) => renderer.draw_quads(r, bindings, viewport, &e),
@@ -424,6 +517,10 @@ impl Compositor {
             }
         }
         self.flush(&command, &mut ui, viewport);
+        if let Some(effects) = &mut renderer.backdrops {
+            effects.groups.commit(&executed_groups);
+            effects.cache.commit(&executed_backdrops);
+        }
         if destination.pixelFormat() == MTLPixelFormat::RGBA16Float {
             let blit = command
                 .blitCommandEncoder()

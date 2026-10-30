@@ -1058,13 +1058,6 @@ impl MetalRenderer {
     ) -> Result<metal::CommandBuffer> {
         #[cfg(target_os = "macos")]
         if let Some(mut lab) = self.wide_sdr.take() {
-            if !scene.backdrops.is_empty()
-                || !scene.layer_boundaries.is_empty()
-                || scene.shader_draws.iter().any(|d| d.path_mask.is_some())
-            {
-                self.wide_sdr = Some(lab);
-                anyhow::bail!("captured effects require SDR presentation");
-            }
             let result = lab.render(
                 self,
                 scene,
@@ -1087,7 +1080,11 @@ impl MetalRenderer {
                 texture.pixelFormat() == metal::MTLPixelFormat::BGRA8Unorm,
                 "backdrop blur requires BGRA8 SDR"
             );
-            if self.backdrops.is_none() {
+            if self
+                .backdrops
+                .as_ref()
+                .is_none_or(|b| b.format() != MTLPixelFormat::BGRA8Unorm)
+            {
                 self.backdrops = Some(backdrop::Backdrops::new(&self.device, program)?);
             }
             self.backdrops.as_mut().unwrap().prepare(
