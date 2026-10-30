@@ -88,6 +88,39 @@ pub(crate) fn build_in(
     working: ImagePrimaries,
     cancelled: impl Fn() -> bool,
 ) -> Result<ImageTextureData> {
+    build_pixels_in(
+        width,
+        height,
+        pixels,
+        color.into(),
+        mapping,
+        working,
+        cancelled,
+    )
+}
+
+/// Convert supplied pixels plus resolved metadata into explicitly mapped storage.
+/// Custom definitions and extended-linear input need no file decoder or ICC engine.
+pub fn pixels_rgba16f_data(
+    width: u32,
+    height: u32,
+    pixels: Vec<[f32; 4]>,
+    color: super::PixelColor,
+    storage: ImagePrimaries,
+    mapping: GamutMapping,
+) -> Result<ImageTextureData> {
+    build_pixels_in(width, height, pixels, color, mapping, storage, || false)
+}
+
+pub(crate) fn build_pixels_in(
+    width: u32,
+    height: u32,
+    pixels: Vec<[f32; 4]>,
+    color: super::PixelColor,
+    mapping: GamutMapping,
+    working: ImagePrimaries,
+    cancelled: impl Fn() -> bool,
+) -> Result<ImageTextureData> {
     ensure!(
         matches!(working, ImagePrimaries::DisplayP3 | ImagePrimaries::Rec2020),
         "unsupported image storage primaries"
@@ -433,5 +466,206 @@ mod rec2020_tests {
             .is_err()
         );
         assert!(ImageTextureData::new_linear_rec2020_rgba16f(3, 1, vec![vec![0; 24]]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod pixel_metadata_tests {
+    include!("adobe_fp16_reference.rs");
+    use super::*;
+    use crate::pipeline::PixelColor;
+    fn first(data: &ImageTextureData) -> [f32; 4] {
+        std::array::from_fn(|i| {
+            f16::from_le_bytes([data.levels()[0][i * 2], data.levels()[0][i * 2 + 1]]).to_f32()
+        })
+    }
+    #[test]
+    fn extended_input_maps_after_unassociation_and_canonicalizes_transparency() {
+        for alpha in [AlphaMode::Straight, AlphaMode::Premultiplied] {
+            let source = PixelColor::ExtendedLinear {
+                primaries: ImagePrimaries::DisplayP3,
+                alpha,
+            };
+            let input = if alpha == AlphaMode::Straight {
+                [-0.25, 1.5, 0.5, 0.5]
+            } else {
+                [-0.125, 0.75, 0.25, 0.5]
+            };
+            let data = pixels_rgba16f_data(
+                1,
+                1,
+                vec![input],
+                source,
+                ImagePrimaries::DisplayP3,
+                GamutMapping::Clip,
+            )
+            .unwrap();
+            assert_eq!(first(&data), [0., 0.5, 0.25, 0.5]);
+            let transparent = pixels_rgba16f_data(
+                1,
+                1,
+                vec![[-2., 4., 1., 0.]],
+                source,
+                ImagePrimaries::DisplayP3,
+                GamutMapping::Clip,
+            )
+            .unwrap();
+            assert_eq!(first(&transparent), [0.; 4]);
+            for bad in [[f32::NAN, 0., 0., 1.], [0., 0., 0., 1.1]] {
+                assert!(
+                    pixels_rgba16f_data(
+                        1,
+                        1,
+                        vec![bad],
+                        source,
+                        ImagePrimaries::DisplayP3,
+                        GamutMapping::Clip
+                    )
+                    .is_err()
+                );
+            }
+        }
+    }
+    #[test]
+    fn custom_adobe_metadata_matches_independent_half_references() {
+        let definition = xgpui_color::RgbDefinition::new_d65(
+            xgpui_color::RgbSpace::AdobeRgb1998.linear_to_xyz_matrix(),
+            [xgpui_color::RgbCurve::Gamma(563. / 256.); 3],
+        )
+        .unwrap();
+        let source = PixelColor::Custom {
+            rgb: definition,
+            alpha: AlphaMode::Straight,
+        };
+
+        for &(gray, a, bits) in ADOBE_FP16_GRAY_REFERENCES {
+            let data = pixels_rgba16f_data(
+                1,
+                1,
+                vec![[gray, gray, gray, a]],
+                source,
+                ImagePrimaries::Rec2020,
+                GamutMapping::Clip,
+            )
+            .unwrap();
+            for c in 0..3 {
+                let actual =
+                    u16::from_le_bytes([data.levels()[0][2 * c], data.levels()[0][2 * c + 1]]);
+                assert!(
+                    actual.abs_diff(bits) <= 1,
+                    "{gray} {a}: {actual:04x} vs {bits:04x}"
+                );
+                if bits == 0 {
+                    assert_eq!(actual, 0);
+                }
+            }
+        }
+    }
+    #[test]
+    fn custom_alpha_rejection_storage_admission_and_cancellation() {
+        let definition = xgpui_color::RgbDefinition::new_d65(
+            xgpui_color::RgbSpace::Srgb.linear_to_xyz_matrix(),
+            [xgpui_color::RgbCurve::Linear; 3],
+        )
+        .unwrap();
+        let source = PixelColor::Custom {
+            rgb: definition,
+            alpha: AlphaMode::Premultiplied,
+        };
+        for bad in [[0.6, 0., 0., 0.5], [-0.1, 0., 0., 1.]] {
+            assert!(
+                pixels_rgba16f_data(
+                    1,
+                    1,
+                    vec![bad],
+                    source,
+                    ImagePrimaries::DisplayP3,
+                    GamutMapping::Clip
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            pixels_rgba16f_data(
+                1,
+                1,
+                vec![[0.; 4]],
+                source,
+                ImagePrimaries::Srgb,
+                GamutMapping::Clip
+            )
+            .is_err()
+        );
+        assert!(
+            pixels_rgba16f_data(
+                0,
+                1,
+                vec![],
+                source,
+                ImagePrimaries::DisplayP3,
+                GamutMapping::Clip
+            )
+            .is_err()
+        );
+        assert!(
+            build_pixels_in(
+                1,
+                1,
+                vec![[0.; 4]],
+                source,
+                GamutMapping::Clip,
+                ImagePrimaries::DisplayP3,
+                || true
+            )
+            .is_err()
+        );
+    }
+}
+
+#[cfg(test)]
+mod custom_grid_tests {
+    use super::*;
+    include!("rec2020_reference.rs");
+    #[test]
+    fn custom_colorants_saturations_and_alpha_match_120_digit_oracle() {
+        for &(adobe, rgba, reference) in REC2020_REFERENCES {
+            let (space, curve) = if adobe {
+                (
+                    xgpui_color::RgbSpace::AdobeRgb1998,
+                    xgpui_color::RgbCurve::Gamma(563. / 256.),
+                )
+            } else {
+                (
+                    xgpui_color::RgbSpace::DisplayP3,
+                    xgpui_color::RgbCurve::Linear,
+                )
+            };
+            let definition =
+                xgpui_color::RgbDefinition::new_d65(space.linear_to_xyz_matrix(), [curve; 3])
+                    .unwrap();
+            let data = pixels_rgba16f_data(
+                1,
+                1,
+                vec![rgba],
+                crate::pipeline::PixelColor::Custom {
+                    rgb: definition,
+                    alpha: AlphaMode::Straight,
+                },
+                ImagePrimaries::Rec2020,
+                GamutMapping::Clip,
+            )
+            .unwrap();
+            for (c, expected) in reference.into_iter().enumerate() {
+                let actual =
+                    u16::from_le_bytes([data.levels()[0][2 * c], data.levels()[0][2 * c + 1]]);
+                assert!(
+                    actual.abs_diff(expected) <= 1,
+                    "adobe={adobe} {rgba:?} channel {c}: {actual:04x} vs {expected:04x}"
+                );
+                if expected == 0 {
+                    assert_eq!(actual, 0);
+                }
+            }
+        }
     }
 }

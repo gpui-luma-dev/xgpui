@@ -322,3 +322,73 @@ impl Vignette {
         WorkingPixel::new(pixel.primaries, [r * factor, g * factor, b * factor, a])
     }
 }
+
+/// Resolved supplied-pixel interpretation, independent of image files and ICC.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PixelColor {
+    /// Existing bounded SDR interpretation.
+    Named(ImageColor),
+    /// Bounded encoded RGB with independent channel curves and adapted D65 colorants.
+    Custom {
+        rgb: xgpui_color::RgbDefinition,
+        alpha: AlphaMode,
+    },
+    /// Finite extended linear RGB, including negative and above-one channels.
+    /// Associated channels may exceed alpha; unassociation is in linear light.
+    ExtendedLinear {
+        primaries: ImagePrimaries,
+        alpha: AlphaMode,
+    },
+}
+impl From<ImageColor> for PixelColor {
+    fn from(color: ImageColor) -> Self {
+        Self::Named(color)
+    }
+}
+impl PixelColor {
+    pub fn decode(self, rgba: [f64; 4], working: ImagePrimaries) -> Result<WorkingPixel> {
+        if let Self::Named(color) = self {
+            return color.decode(rgba, working);
+        }
+        ensure!(
+            rgba.iter().all(|v| v.is_finite()) && (0. ..=1.).contains(&rgba[3]),
+            "invalid supplied pixel"
+        );
+        let [r, g, b, a] = rgba;
+        let mut rgb = [r, g, b];
+        let alpha = match self {
+            Self::Custom { alpha, .. } | Self::ExtendedLinear { alpha, .. } => alpha,
+            Self::Named(_) => unreachable!(),
+        };
+        if matches!(self, Self::Custom { .. }) {
+            ensure!(
+                rgb.iter().all(|v| (0. ..=1.).contains(v)),
+                "invalid bounded custom RGB"
+            );
+            if alpha == AlphaMode::Premultiplied {
+                ensure!(
+                    rgb.iter().all(|v| *v <= a),
+                    "premultiplied RGB exceeds alpha"
+                );
+            }
+        }
+        if a == 0. {
+            rgb = [0.; 3];
+        } else if alpha == AlphaMode::Premultiplied {
+            rgb = rgb.map(|v| v / a);
+        }
+        let converted = match self {
+            Self::Custom {
+                rgb: definition, ..
+            } => definition
+                .decode_to_xyz_d65(rgb)?
+                .to_linear(working.space())?,
+            Self::ExtendedLinear { primaries, .. } => {
+                LinearRgb::new(primaries.space(), rgb)?.convert(working.space())?
+            }
+            Self::Named(_) => unreachable!(),
+        }
+        .components();
+        WorkingPixel::new(working, [converted[0], converted[1], converted[2], a])
+    }
+}

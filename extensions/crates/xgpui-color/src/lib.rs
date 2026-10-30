@@ -3,6 +3,8 @@
 #![doc = include_str!("../README.md")]
 
 use std::fmt;
+mod definition;
+pub use definition::{RgbCurve, RgbDefinition};
 mod gradient;
 mod mapping;
 pub use gradient::{ColorInterpolation, HueInterpolation, LinearGradient, LinearRgba};

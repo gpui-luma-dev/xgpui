@@ -33,7 +33,7 @@ pub enum UploadStatus {
 pub struct MediaImage(Arc<Inner>);
 struct Inner {
     data: ImageTextureData,
-    source_color: crate::pipeline::ImageColor,
+    source_color: crate::pipeline::PixelColor,
     uploads: AtomicUsize,
     reservation: Arc<Reservation>,
     state: Mutex<State>,
@@ -279,7 +279,7 @@ impl MediaImage {
     pub(crate) fn new_with_color(
         data: ImageTextureData,
         reservation: Arc<Reservation>,
-        source_color: crate::pipeline::ImageColor,
+        source_color: crate::pipeline::PixelColor,
     ) -> Self {
         Self(Arc::new(Inner {
             data,
@@ -290,7 +290,7 @@ impl MediaImage {
         }))
     }
     /// Original supplied pixel interpretation, before canonical upload conversion.
-    pub fn source_color(&self) -> crate::pipeline::ImageColor {
+    pub fn source_color(&self) -> crate::pipeline::PixelColor {
         self.0.source_color
     }
     pub fn format(&self) -> gpui::ImageTextureFormat {

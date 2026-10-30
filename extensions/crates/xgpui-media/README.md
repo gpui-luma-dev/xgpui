@@ -12,6 +12,17 @@ gpui = { package = "xgpui", version = "1.0.0" }
 xgpui-media = "0.3.0"
 ```
 
+## Pixels and color metadata
+
+For applications that already produce pixels, supply an explicit `ImageColor`
+(primaries, transfer and alpha association) to the supplied-pixel loaders. Select
+gamut mapping and storage deliberately; declaring Adobe RGB does not discover or
+parse an ICC profile. File decoding and metadata discovery belong in application
+adapters. The existing file loader below is an sRGB convenience path.
+
+Custom RGB metadata is described below. Optional ICC adaptation remains future
+work in the [pixels and color metadata design](../../../docs/extensions/icc-import-plan.md).
+
 ## Load an image
 
 Create a loader once, retain the pending job, and poll its result from the view
@@ -118,3 +129,34 @@ capture restrictions. Windows runtime remains unverified. Keep P3 storage for th
 entire P3 gamut: bounded Rec.2020 clips a small P3 boundary region. Tiled FP16 pages
 still require P3. ICC inference remains separate work. Transfer functions are independent of primaries. CPU matrices accept Adobe
 RGB; GPU `ImageAdjustments` explicitly require sRGB or P3 working primaries.
+
+## Resolved supplied-pixel metadata
+
+`pipeline::PixelColor` accepts a bounded `Named(ImageColor)`, bounded `Custom`
+RGB definition, or `ExtendedLinear` RGB. Custom definitions come from
+`xgpui_color::RgbDefinition` and have already-adapted D65 colorants and independent
+channel curves. Extended-linear RGB may be negative or above one; alpha remains
+in 0–1. Premultiplied input is unassociated in its declared domain, transparent
+RGB is canonicalized to zero, and conversion retains extended values until the
+explicit storage mapping.
+
+```rust,ignore
+use xgpui_media::pipeline::{AlphaMode, GamutMapping, ImagePrimaries, PixelColor};
+
+let source = PixelColor::ExtendedLinear {
+    primaries: ImagePrimaries::DisplayP3,
+    alpha: AlphaMode::Straight,
+};
+let job = loader.load_pixel_buffer(
+    width, height, pixels, source,
+    ImagePrimaries::Rec2020, GamutMapping::Clip,
+)?;
+```
+
+The buffer is tightly packed, row-major `Vec<[f32; 4]>`; dimensions and byte
+admission are checked before worker creation. No arbitrary layout/stride or
+additional source precision is implied. Destination storage is explicitly P3
+or Rec.2020 RGBA16F. `pipeline::pixels_rgba16f_data` is the synchronous equivalent.
+Mipmaps average mapped associated linear light. `MediaImage::source_color()` now
+returns the resolved `PixelColor`, preserving custom metadata rather than
+mislabeling it as a named space. These paths add no file decoder or ICC dependency.
