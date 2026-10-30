@@ -1,7 +1,7 @@
 # xgpui-color: standalone color math
 
 Use `xgpui-color` for CPU color conversions, [gamut mapping ↗](https://en.wikipedia.org/wiki/Gamut), two-stop gradient
-math and reusable WGSL helpers. It has no runtime dependencies and needs no GPUI,
+math and reusable WGSL helpers. Its default configuration has zero runtime dependencies and needs no GPUI,
 window, GPU context or shader compiler. Naga and native Metal are test-only dependencies.
 
 ```toml
@@ -19,13 +19,15 @@ let perceptual = linear_p3.to_oklab()?.to_oklch()?;
 let bounded = linear_p3.map_gamut(RgbSpace::DisplayP3, GamutMapping::ReduceChroma)?;
 ```
 
+For integration, start with [color tasks](color-workflows.md) and [pixels + metadata](pixels-and-metadata.md). Optional [ICC parsing](icc-profiles.md) adds a parser dependency without adding a pixel transform engine.
+
 ## Types and contracts
 
 `EncodedRgb` and `LinearRgb` distinguish transfer-encoded values from linear
 light. `RgbSpace` supplies [sRGB ↗](https://en.wikipedia.org/wiki/SRGB), [Display P3 ↗](https://en.wikipedia.org/wiki/DCI-P3), [Adobe RGB (1998) ↗](https://en.wikipedia.org/wiki/Adobe_RGB_color_space) and [SDR ↗](https://en.wikipedia.org/wiki/Standard-dynamic-range_video) Rec.2020 primaries and
 [transfer functions ↗](https://en.wikipedia.org/wiki/Transfer_functions_in_imaging). `XyzD65`, `Oklab` and `Oklch` provide conversion coordinates.
 RGB and perceptual conversion retain extended values; gamut mapping is explicit.
-CPU calculations use f64 and reject non-finite inputs/results. All working RGB
+CPU calculations use f64 and reject non-finite inputs/results. All named RGB
 spaces use [D65 ↗](https://en.wikipedia.org/wiki/Standard_illuminant), so these conversions need no white-point adaptation.
 
 `LinearRgba` validates [straight alpha ↗](https://en.wikipedia.org/wiki/Alpha_compositing). `LinearGradient` provides two fixed stops,
@@ -37,6 +39,10 @@ GPUI element or enable wide-gamut window presentation.
 `WGSL_COLOR_MATH` supplies resource-free, prefixed f32 helpers for conversions,
 mapping and interpolation. Host code must validate input ranges and IDs. The
 crate README documents IDs, tolerances, hue handling and bounded search behavior.
+
+## Custom RGB definitions
+
+Use `RgbDefinition` for caller-supplied primaries, transfer curves and a reference white. Neutral-space constructors validate a neutral ramp; `from_relative_xyz_matrix` preserves an explicit relative XYZ matrix whose column sum can differ from its declared reference white. Conversion adapts that reference white to D65 once. The [ICC guide](icc-profiles.md) explains the supported profile path.
 
 ## Adobe RGB input and gamut preservation
 
@@ -59,14 +65,14 @@ primaries. GPU image adjustments still require sRGB/P3 working matrices and
 explicitly reject an Adobe RGB working matrix. CPU color matrices support Adobe
 RGB. Input interpretation does not infer or load an ICC profile.
 
-This implements Stage A of [#85](https://github.com/gpui-luma-dev/xgpui/issues/85).
+For the practical input contract, see [pixels + metadata](pixels-and-metadata.md).
 The existing P3 loaders map saturated Adobe green/cyan into P3. To retain Adobe
 RGB, use explicit bounded linear Rec.2020 storage. To retain the entire P3 gamut,
 keep P3 storage: P3 red converts to Rec.2020 blue **-0.0012103403545183245**, so
 bounded Rec.2020 does not quite contain P3. Both formats use associated linear
 mipmaps and eight bytes per texel. Mapping policies remain explicit at ingestion.
 
-### Stage B design: preserve both source gamuts
+### Preserve both source gamuts
 
 Native wide placement accepts both P3 and Rec.2020 textures. Metal converts
 Rec.2020 to **extended linear P3**, then retains negative and above-one channels
@@ -98,11 +104,11 @@ Metal runtime tests cover independent FP16 matrix oracles, near-black values,
 negative channels, alpha, nested cached captures, blur, grayscale and mixed P3 /
 Rec.2020 blending. macOS wgpu tests verify sRGB previews and rejection of native
 wide output. HLSL translation is checked separately; Windows/Linux native runtime
-is unverified. Tiled FP16 canvas pages remain P3. Automatic ICC import is Stage C.
+is unverified. Tiled FP16 canvas pages remain P3. Supplied RGB matrix/TRC profiles are supported by the optional [ICC adapter](icc-profiles.md); automatic file metadata inference is separate.
 
 ## Dependency boundaries
 
-- `xgpui-color`: standalone CPU math and WGSL source, zero runtime dependencies.
+- `xgpui-color`: standalone CPU math and WGSL source, zero runtime dependencies by default; optional `icc` parsing uses moxcms.
 - `xgpui-gamut`: depends on color and re-exports it as `xgpui_gamut::color`;
   owns native wide-SDR producers. The `instanced` feature adds an optional shader
   adapter; comparison tests also use shader as a development dependency.
@@ -110,8 +116,7 @@ is unverified. Tiled FP16 canvas pages remain P3. Automatic ICC import is Stage 
 
 Wide shader output uses an explicit [instanced rendering contract](instanced-wgsl-v2.md).
 Window negotiation and Metal P3 / Windows [scRGB ↗](https://en.wikipedia.org/wiki/ScRGB) composition belong to the
-[native presentation backends](high-gamut-windows.md). [ICC ↗](https://en.wikipedia.org/wiki/ICC_profile) profiles, calibration
-and [HDR ↗](https://en.wikipedia.org/wiki/High_dynamic_range) are separate work.
+[native presentation backends](high-gamut-windows.md). The optional [ICC adapter](icc-profiles.md) supplies RGB definitions; calibration and [HDR ↗](https://en.wikipedia.org/wiki/High_dynamic_range) are separate work.
 
 ## Validation
 

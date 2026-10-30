@@ -9,6 +9,8 @@ fails explicitly if unavailable; check the browser console for adapter details.
 
 | Crate | URL query | What it demonstrates |
 | --- | --- | --- |
+| Color tasks | `?demo=chromaticity` | Spectral locus, four gamut outlines, simulated bounds and mapped sRGB fill. |
+| Pixel metadata | `?demo=pixel-metadata` | Named and supplied ICC interpretation, source XYZ and actual CPU-packed FP16 words; sRGB preview. |
 | `xgpui-color` | `?demo=color` | Display P3 endpoints, encoded sRGB / linear RGB / OkLab / OkLCh interpolation, gamut mapping and alpha. Runtime diagnostics distinguish the sRGB canvas from P3 display capability. |
 | `xgpui-shader` | `?demo=typography` | Gradient/glow/drop-shadow styling plus typewriter, wave and scramble effects; source inspection and reduced-motion preview. |
 | `xgpui-shader` | `?demo=shader` | Existing gradients, meshes and portable WGSL paints. |
@@ -200,7 +202,7 @@ rather than copying a wildcard listening address from a server's output.
 
 ## Unified All demos page
 
-The index lists all 21 hosted WASM examples from this app and `shader-examples`,
+The index lists all 23 hosted WASM examples from this app and `shader-examples`,
 grouped into Brushes & paints, Layer effects, Shaders & motion, Text, Media & paths, and SVG &
 color. Native labs are a separate section with repository-root launch commands,
 including pastel waves and the full paint-lab/Hermite editor. The shader gallery
@@ -328,3 +330,15 @@ Refinement is capped at 480×360, zoom at 1e8, iterations at 2,048; f64 limits
 apply. Check reset/resize/rapid navigation and refinement on both backends.
 
 See [extension usage and native/browser differences](../../../docs/extensions/canvas.md).
+
+## Color task demos
+
+The two color task routes use the real Rust color and pixel-packing APIs in Wasm. Browser rendering is explicitly an sRGB preview; browser-reported wide-gamut capability and the queried canvas configuration are separate diagnostics. CPU-packed FP16 bytes are not GPU readback. Native wide composition and Metal FP16 checks remain desktop lab tasks.
+
+`web` enables the optional RGB matrix/TRC ICC adapter. Four fixed published profiles are embedded, with no network fetch or file decoder. `color-attribution.html` and the bundled notices document CIE data and ICC profile provenance and licenses.
+
+Run the calculation tests without native lab binaries:
+
+```sh
+cargo test --offline --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --no-default-features --features web --test color-tasks
+```

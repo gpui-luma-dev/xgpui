@@ -7,7 +7,8 @@
   [card canvas](examples/extensions/?demo=canvas) or
   [Mandelbrot explorer](examples/extensions/?demo=mandelbrot), or start with
   the [canvas guide](#canvas).
-- **Two new Wasm demos.** The browser gallery now has 21 examples, including
+- **Color tasks and Wasm previews.** [Practical color guides](#color-workflows) separate source metadata, storage and native wide-gamut presentation. Try [chromaticity](examples/extensions/?demo=chromaticity) and [pixels + metadata](examples/extensions/?demo=pixel-metadata), both explicitly sRGB previews. The gallery contains 23 examples.
+- **Spatial Wasm demos.** Explore
   10k/100k-card scenes and a progressive CPU fractal explorer. Both new demos
   support WebGPU and WebGL2. [Open all demos](examples/extensions/).
 - **Modern Apple bindings.** Migrated the Apple renderer and macOS backend to

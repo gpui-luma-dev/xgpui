@@ -577,3 +577,11 @@ The `xgpui-canvas` crate uses existing containers,
 content masks and the xgpui-shader instanced pipeline. It adds no GPUI public
 signatures or fields. Its own camera, scene, pan and grid APIs are experimental;
 callers project children explicitly and own application input/selection policy.
+
+## Supplied pixels, custom RGB and native color checks
+
+Start with [color tasks](color-workflows.md) for practical integration. `PixelColor` distinguishes named `ImageColor`, custom `RgbDefinition` and extended-linear source samples. `MediaLoader::load_pixel_buffer` accepts that resolved interpretation, an explicit storage space and a mapping policy. Storage can be bounded P3 or Rec.2020 RGBA16F; native-wide placement converts it into the compositor's extended coordinates.
+
+`RgbDefinition` supports reference-white adaptation and independent channel curves. `from_relative_xyz_matrix` preserves relative colorants whose sum differs from the declared XYZ reference white. The optional `xgpui-color/icc` parser constructs definitions from a bounded RGB matrix/TRC subset; it does not add image-file decoding or a general ICC transform engine. See [pixels + metadata](pixels-and-metadata.md) and [ICC scope](icc-profiles.md).
+
+The Metal test-support API `Window::render_to_linear_p3` reads FP16 composition values before OS display mapping. The ordinary 8-bit screenshot remains an sRGB preview. [Color labs](color-labs.md) separates CPU conversion, GPU composition, browser preview and physical display claims.

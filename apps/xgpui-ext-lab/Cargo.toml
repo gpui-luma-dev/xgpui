@@ -17,7 +17,7 @@ default-run = "shader-examples"
 [features]
 default = ["native"]
 native = []
-web = []
+web = ["xgpui-color/icc"]
 native-window-tests = ["native"]
 portable-shaders = ["xgpui-shader/portable-shaders"]
 wgpu = ["xgpui-media/wgpu", "xgpui-shader/wgpu"]
@@ -141,3 +141,8 @@ required-features = ["native-window-tests"]
 name = "native_variations"
 path = "text-lab/examples/native_variations.rs"
 required-features = ["native"]
+
+[[test]]
+name = "color-tasks"
+path = "extensions-web/src/color_tasks_model.rs"
+required-features = ["web"]

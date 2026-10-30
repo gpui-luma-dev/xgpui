@@ -21,11 +21,10 @@ lockfiles. Recipes allow dependency downloads; they do not force offline mode.
 
 XGPUI keeps nine framework and backend crates in `gpui/crates/`: `gpui`,
 `gpui-macros`, `gpui-platform`, `gpui-apple`, `gpui-macos`, `gpui-linux`,
-`gpui-windows`, `gpui-web` and `gpui-wgpu`. The six XGPUI extension crates live
+`gpui-windows`, `gpui-web` and `gpui-wgpu`. The seven XGPUI extension crates live
 under `extensions/crates/`.
 
-The downstream release version is **1.0.0**, independent of the captured GPUI
-release. Local directory names and Rust import names stay stable; Cargo package
+Downstream versions are independent of the captured GPUI release and vary by package. Local directory names and Rust import names stay stable; Cargo package
 names use the XGPUI prefix:
 
 | Local directory / import name | Release package |
@@ -40,8 +39,7 @@ names use the XGPUI prefix:
 | `gpui-wgpu` | `xgpui-wgpu` |
 | `gpui-windows` | `xgpui-windows` |
 
-All six extension packages keep their existing `xgpui-*` names and use version
-`0.2.0`, independently of the framework at `1.0.0`. `scripts/release-packages.json` is the authoritative
+All seven extension packages keep their existing `xgpui-*` names. `scripts/release-packages.json` is the authoritative
 name/version map. The `xgpui` facade is a subsequent packaging step; these package
 identities prepare the release and do not mean it has been published.
 
@@ -51,7 +49,7 @@ They are no longer copied into this repository. Cargo downloads them from
 crates.io; manifests keep familiar Rust import names using dependency aliases.
 For example, the `collections` dependency uses the package
 `collections-gpui-unofficial`, currently at `=1.25.3` to match the captured upstream release, rather than the
-independent downstream version `1.0.0`.
+independent downstream package versions.
 
 | Former local crate names | Published crates.io packages |
 | --- | --- |

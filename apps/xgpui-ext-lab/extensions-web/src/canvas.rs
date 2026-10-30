@@ -123,7 +123,7 @@ impl Raster {
                 )),
             );
             work.next += 1;
-            if work.next % 32 == 0 && started.elapsed().as_secs_f64() >= 0.004 {
+            if work.next.is_multiple_of(32) && started.elapsed().as_secs_f64() >= 0.004 {
                 break;
             }
         }

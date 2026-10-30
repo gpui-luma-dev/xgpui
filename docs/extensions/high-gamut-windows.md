@@ -1,5 +1,8 @@
 # xgpui-gamut
 
+**Wide gamut is a capability; Display P3 is a specific RGB space.** `WideGamutSdr` requests native wide presentation. It does not select an Adobe RGB monitor mode. Metal uses extended linear P3; Windows uses scRGB. Source Adobe RGB pixels can travel through either contract. Start with [color tasks](color-workflows.md), [pixels + metadata](pixels-and-metadata.md) and [lab limits](color-labs.md).
+
+
 Opt-in **macOS Metal / Windows D3D11** presentation: wide [SDR ↗](https://en.wikipedia.org/wiki/Standard-dynamic-range_video) surfaces and normal
 [sRGB ↗](https://en.wikipedia.org/wiki/SRGB) controls in one window. Windows integration is cross-compiled here; native
 WARP/desktop execution and physical display checks remain required. Linux, [HDR ↗](https://en.wikipedia.org/wiki/High_dynamic_range)
@@ -269,14 +272,14 @@ OkLCh. Change endpoint presets, gamut mapping and end alpha interactively.
 cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab
 ```
 
-Move the window to your P3 monitor and check `Effective: WideGamutSdr` and
+Move the window to your wide-gamut monitor and check `Effective: WideGamutSdr` and
 `Display wide gamut: Some(true)`. `None` means display capability is unknown.
 macOS Metal runtime presentation was checked; Windows cross-compilation passes,
 while Windows native execution and physical display acceptance remain separate.
 The status reports negotiation and capability, not calibrated color accuracy.
 
 The [browser comparison and runtime diagnostics](color-math.md#browser-color--gamut-lab)
-remain an sRGB preview. A P3-capable display alone does not change its output:
+remain an sRGB preview. A wide-gamut display alone does not change its output:
 WebGL reads `drawingBufferColorSpace`, and WebGPU queries its canvas configuration
 where supported. Unavailable queries report unknown. Screenshots cannot prove
 physical P3 output.

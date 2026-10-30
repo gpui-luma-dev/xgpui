@@ -1,5 +1,8 @@
 # Media pipeline contracts
 
+For new integrations, start with [pixels + metadata](pixels-and-metadata.md). That guide separates source interpretation, storage and presentation, including custom RGB definitions and the optional supplied-profile [ICC adapter](icc-profiles.md). File convenience loaders do not infer these properties.
+
+
 Phases 1–5 of [issue #26](https://github.com/gpui-luma-dev/xgpui/issues/26) define
 CPU reference behavior, retained-source linear adjustments and the contracts for the next image pipeline. The types
 live in `xgpui_media::pipeline`. The existing image loader, encoded-sRGB `ImageFilter` and native video surfaces
@@ -14,7 +17,7 @@ RGBA16F supplied-pixel uploads and native wide-SDR placements are available. Pro
 
 | Contract | Meaning |
 | --- | --- |
-| Primaries | [sRGB ↗](https://en.wikipedia.org/wiki/SRGB), [Display P3 ↗](https://en.wikipedia.org/wiki/DCI-P3) or [Adobe RGB (1998) ↗](https://en.wikipedia.org/wiki/Adobe_RGB_color_space), all [D65 ↗](https://en.wikipedia.org/wiki/Standard_illuminant) |
+| Primaries | [sRGB ↗](https://en.wikipedia.org/wiki/SRGB), [Display P3 ↗](https://en.wikipedia.org/wiki/DCI-P3) , SDR Rec.2020 or [Adobe RGB (1998) ↗](https://en.wikipedia.org/wiki/Adobe_RGB_color_space), all [D65 ↗](https://en.wikipedia.org/wiki/Standard_illuminant) |
 | Transfer | Independent linear, sRGB (also used by encoded P3), or Adobe RGB (1998) transfer |
 | Source pixels | Bounded [SDR ↗](https://en.wikipedia.org/wiki/Standard-dynamic-range_video) RGB and alpha, each 0..1 |
 | Association | Straight, or [premultiplied ↗](https://en.wikipedia.org/wiki/Alpha_compositing) in the declared transfer domain |
@@ -252,7 +255,7 @@ job and each result retains its own source identity.
 `ColorMatrix` can operate in Adobe RGB on the CPU. `ImageAdjustments::new`
 explicitly rejects Adobe RGB working matrices because the GPU currently supports
 only sRGB/P3; convert the input to canonical P3 and choose either supported
-working space for placement. See the [wider-gamut design](color-math.md#stage-b-design-preserve-both-source-gamuts).
+working space for placement. See the [wider-gamut design](color-math.md#preserve-both-source-gamuts).
 
 `load_rgba16f` uses the same worker admission, cancellation, payload reservation,
 background staging pool, per-frame transfer limits and immutable source cache as
@@ -285,7 +288,7 @@ The release native lab generates a 1280 × 800 source with saturated P3 colors,
 near-black gradients and transparent edges. The left panel is an sRGB preview;
 the right uses accepted native wide output. Cycle exposure/saturation, vignette,
 opacity and output mode, then reset. Both panels must retain one preparation.
-A screenshot is an sRGB capture, not a wide-gamut export.
+The ordinary 8-bit screenshot is an sRGB preview. Metal test-support also exposes linear-P3 FP16 readback before OS display mapping; see [what the labs prove](color-labs.md). Neither is a measurement of physical monitor output.
 
 - [RGBA16F browser demo](../examples/extensions/?demo=media-float)
 - [Force WebGPU](../examples/extensions/?demo=media-float&backend=webgpu)

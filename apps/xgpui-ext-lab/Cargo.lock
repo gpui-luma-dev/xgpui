@@ -6466,6 +6466,9 @@ dependencies = [
 [[package]]
 name = "xgpui-color"
 version = "0.2.1"
+dependencies = [
+ "moxcms",
+]
 
 [[package]]
 name = "xgpui-ext-lab"

@@ -90,7 +90,7 @@ assert.ok(index.includes('href="examples/extensions/"'));
 assert.ok(index.includes('href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>'));
 assert.ok(index.indexOf('GitHub repository ↗') < index.indexOf('<nav aria-label="Documentation">'));
 assert.ok(index.indexOf('>Live demos ↗</a>') < index.indexOf('>Instanced shaders</a>'));
-for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
+for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'chromaticity', 'pixel-metadata', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web'));
@@ -111,7 +111,7 @@ const listedModules = [...wasmIndex.matchAll(/data-wasm-module="([^"]+)"/g)].map
 const legacyModules = [...legacyManifest.matchAll(/\[\[bin\]\]\s+name = "([^"]+)"/g)].map(m => m[1]);
 assert.deepEqual(listedModules.slice().sort(), legacyModules.sort(), 'every legacy Wasm binary needs an index entry');
 for (const [, module] of legacyGallery.matchAll(/data-module="([^"]+)"/g)) assert.ok(listedModules.includes(module), module);
-for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
+for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'chromaticity', 'pixel-metadata', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="?demo=' + demo + suffix + '"'), demo + suffix);
   }
@@ -222,7 +222,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 22);
+assert.equal(Object.keys(data.extension_documents).length, 26);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -442,8 +442,8 @@ console.log('Verified demo discovery, distinct brush/layer launch labels and vis
 
 // "All demos" includes both hosted apps, without duplicating launch cards.
 const allLaunches = [...wasmIndex.matchAll(/<a href="([^"]+)">Open demo ↗<\/a>/g)].map(m => m[1]);
-assert.equal(allLaunches.length, 21);
-assert.equal(new Set(allLaunches).size, 21);
+assert.equal(allLaunches.length, 23);
+assert.equal(new Set(allLaunches).size, 23);
 for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="../shaders/?example=' + example + suffix + '"'));
@@ -454,7 +454,7 @@ for (const id of ['brushes-paints','layer-effects','shaders-motion','typography'
 }
 assert.ok(wasmIndex.includes('--pastel-waves'));
 assert.ok(wasmIndex.includes('Show launch command'));
-console.log('Verified unified index covers all 21 hosted demos and separates native launch commands.');
+console.log('Verified unified index covers all 23 hosted demos and separates native launch commands.');
 
 assert.match(run('extensionPage("typography")'), /Selectable typography/);
 assert.match(run('extensionPage("typography")'), /demo=typography/);
@@ -590,3 +590,16 @@ assert.match(run('canvasCrateGuide()'), /Expect significant API changes/);
 assert.match(data.extension_documents['whats-new'].html, /apple-bindings-why-what-and-impact/);
 assert.match(data.extension_documents['whats-new'].html, /zed-scap/);
 console.log('Verified post-release header, canvas beta notice and Apple migration details.');
+
+// Task-focused color entry points and bundled data notices must remain discoverable.
+assert.ok(index.includes('href="#color-workflows"'));
+for (const route of ['color-workflows', 'pixels-and-metadata', 'icc-profiles', 'color-labs']) {
+  assert.match(run(`extensionPage("${route}")`), /Color tasks/);
+  assert.ok(extensionOverview.includes(`href="#${route}"`));
+}
+assert.match(data.extension_documents['color-workflows'].html, /Wide gamut is not another name for P3/);
+assert.match(data.extension_documents['icc-profiles'].html, /no silent sRGB fallback/);
+assert.match(data.extension_documents['color-labs'].html, /not a measurement of physical monitor output|physical display accuracy/);
+const colorBuild = await readFile(new URL('../apps/xgpui-ext-lab/extensions-web/build.sh', import.meta.url), 'utf8');
+for (const asset of ['color-attribution.html', 'colorimetry', 'CC0-1.0.txt']) assert.ok(colorBuild.includes(asset));
+console.log('Verified color task routes, terminology, lab limits and packaged notices.');

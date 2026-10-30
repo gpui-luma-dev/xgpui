@@ -11,7 +11,7 @@ function extensionTitle(route) {
 const browserDemoNames = {
   canvas: 'spatial card canvas', mandelbrot: 'Mandelbrot explorer',
   typography: 'Selectable typography', brushes: 'Brush gallery', layers: 'Layer effects', shader: 'Gradient paints',
-  hermite: 'Hermite editor', color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs',
+  chromaticity: 'Chromaticity & gamut', 'pixel-metadata': 'Pixels + metadata', hermite: 'Hermite editor', color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs',
 };
 function browserDemoLinks(demo) {
   return '<p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=' + demo + '">Open ' + browserDemoNames[demo] + ' ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p>';
@@ -29,18 +29,19 @@ function liveDemoOverview() {
     '<a class="demo-launch" href="examples/shaders/"><div class="demo-thumb shader-thumb"></div><strong>Shader playground ↗</strong><span>Particles, composition, shadows and animated borders.</span></a></div></section>';
 }
 function gamutDemoPanel() {
-  return '<section class="demo-entry" aria-label="Wide-gamut demos"><div class="demo-entry-heading"><span>EXPLORE COLOR &amp; P3</span><a href="examples/extensions/">All demos →</a></div><div class="demo-launch-grid">' +
+  return '<section class="demo-entry" aria-label="Wide-gamut demos"><div class="demo-entry-heading"><span>EXPLORE COLOR &amp; WIDE GAMUT</span><a href="examples/extensions/">All demos →</a></div><div class="demo-launch-grid">' +
     '<article class="demo-launch gamut-native"><div class="demo-thumb gamut-thumb" aria-hidden="true"></div><strong>Native Display P3 lab</strong><span>Compare wide SDR content with ordinary sRGB controls on macOS or Windows. Run from the repository root:</span>' +
     extensionCode('sh', 'cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab') +
-    '<span>Move the window to a P3 display. Check <code>Effective: WideGamutSdr</code> and <code>Display wide gamut: Some(true)</code>. These report negotiated support, not display calibration.</span></article>' +
+    '<span>Move the window to a wide-gamut display. Check <code>Effective: WideGamutSdr</code> and <code>Display wide gamut: Some(true)</code>. These report negotiated support, not display calibration.</span></article>' +
     '<a class="demo-launch" href="examples/extensions/?demo=color"><div class="demo-thumb gamut-preview-thumb" aria-hidden="true"></div><strong>Open color comparison ↗</strong><span>Interactive browser preview of interpolation and gamut mapping. Rendered as sRGB; use the native lab to compare actual Display P3 output.</span></a></div></section>';
 }
 function colorDemoLinks() {
   return '<h2>Color comparison · browser and native desktop</h2>' +
-    browserDemoLinks('color') +
-    '<p>The browser compares interpolation and gamut mapping as an sRGB preview. Its runtime panel reports source space, mapping, actual canvas color space (or unknown) and browser-reported P3 display capability.</p>' +
+    browserDemoLinks('chromaticity') + browserDemoLinks('pixel-metadata') + browserDemoLinks('color') +
+    '<p><a href="#color-workflows">Start with a color task →</a> · <a href="#color-labs">What each lab proves →</a></p>' +
+    '<p>The browser compares interpolation and gamut mapping as an sRGB preview. Its runtime panel reports source space, mapping, actual canvas color space (or unknown) and browser-reported wide-gamut capability (at least P3).</p>' +
     extensionCode('sh', 'cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab') +
-    '<p>The native companion pairs mapped sRGB and Display P3 swatches using the same 32 reference samples per row. Check effective <code>WideGamutSdr</code> and display support, then compare on your P3 monitor. Display capability does not verify calibration.</p>';
+    '<p>The native companion pairs mapped sRGB and Display P3 swatches using the same 32 reference samples per row. Check effective <code>WideGamutSdr</code> and display support, then compare on your wide-gamut monitor. Display capability does not verify calibration.</p>';
 }
 function instancedDemoLinks() {
   return '<h2>Instanced shaders · native app first</h2>' +
@@ -68,14 +69,16 @@ function extensionPage(route) {
       gamutDemoPanel() + '<article class="extension-document">' + doc.html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
   }
 
-  const banner = route === 'color-math'
+  const banner = ['color-workflows', 'pixels-and-metadata', 'icc-profiles', 'color-labs'].includes(route)
+    ? '<p class="guide-intro"><strong>Color tasks.</strong> Pixels, metadata, storage and presentation. <a href="#color-workflows">Choose a task →</a></p>'
+    : route === 'color-math'
     ? '<p class="guide-intro"><strong>Standalone color math.</strong> CPU conversions, gamut mapping, gradients and WGSL source without GPUI.</p>'
     : route === 'canvas'
     ? '<p class="guide-intro"><strong>Experimental spatial canvas.</strong> Camera, retained scenes and clipped procedural grids.</p>'
     : route === 'svg-rendering'
     ? '<p class="guide-intro"><strong>Experimental SVG extension.</strong> Progressive rasterization, shared admission and accounted image budgets.</p>'
     : route === 'media-pipeline'
-    ? '<p class="guide-intro"><strong>Phases 1–5.</strong> Linear adjustments, RGBA16F/P3 sources, progressive tiled canvases, bounded preview blur and native video effects.</p>'
+    ? '<p class="guide-intro"><strong>Pixel and media pipeline.</strong> Explicit metadata, linear adjustments, RGBA16F sources, progressive tiled canvases, bounded preview blur and native video effects.</p>'
     : route === 'media-images'
     ? '<p class="guide-intro"><strong>Images and video frames.</strong> Practical examples for loading, adjusting and displaying media in GPUI.</p>'
     : route === 'parley-text'
@@ -91,7 +94,7 @@ function extensionPage(route) {
   }
   return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation, text and SVG extensions.') + banner +
     '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p>' +
-    liveDemoOverview() + '<h2>1. Paints and shaders</h2>' +
+    liveDemoOverview() + '<h2>Color tasks</h2><div class="cards">' + extensionCard('color-workflows', 'Start here: wide gamut versus Display P3; choose a practical task.') + extensionCard('pixels-and-metadata', 'Supply pixels, transfer, alpha and storage explicitly.') + extensionCard('icc-profiles', 'Use a supplied RGB matrix/TRC profile within the supported subset.') + extensionCard('color-labs', 'Browser previews, native presentation and what the measurements prove.') + '</div><h2>1. Paints and shaders</h2>' +
     extensionCode('rust', `use xgpui_shader::{painted, SolidColor};
 use std::sync::Arc;
 
@@ -119,7 +122,7 @@ just --justfile apps/xgpui-ext-lab/gamut-lab/justfile test`) +
     '<div class="cards">' + extensionCard('parley-text', 'Construction, paragraph/input seams, cache and face identity, supported subset and validation.') + '</div>' +
     '<h2>4. Progressive SVG</h2><p>Experimental full-color static SVG elements with preview/detail refinement, shared FIFO admission and aggregate image accounting. Native lab and attributed offline samples; smaller budgets reduce deep-zoom detail.</p>' +
     '<div class="cards">' + extensionCard('svg-rendering', 'Use SvgImage and SvgScheduler, understand accounting limits, and run the native sample.') + '</div>' +
-    '<h2>5. Standalone color math</h2><p><code>xgpui-color</code> provides color conversions, gamut mapping, OkLab/OkLCh interpolation and reusable WGSL helpers with zero runtime dependencies. Use it without GPUI or a GPU context.</p>' +
+    '<h2>5. Standalone color math</h2><p><code>xgpui-color</code> provides color conversions, gamut mapping, OkLab/OkLCh interpolation and reusable WGSL helpers with zero runtime dependencies in its default configuration. Optional ICC parsing adds a parser dependency. Use it without GPUI or a GPU context.</p>' +
     '<div class="cards">' + extensionCard('color-math', 'CPU types, browser runtime diagnostics, native P3 comparison, dependency boundaries and validation.') + '</div>' +
     '<h2>6. Dedicated media images</h2><p>Display large images at several sizes, adjust their colors, or show frames from a native producer. Start with small examples and the browser demos.</p><div class="cards">' + extensionCard('media-images', 'Examples, loading limits, platform support and test results.') + '</div>' +
     '<h2>7. Spatial canvas</h2><div class="cards">' + extensionCard('canvas', 'Native lab, camera and scene API, controls and known limits. Explore the card canvas and CPU Mandelbrot browser companions.') + '</div>' +

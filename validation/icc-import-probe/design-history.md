@@ -1,3 +1,9 @@
+# Historical design and investigation notes
+
+Archived during the task-focused documentation rewrite. This records successive
+implementation stages; statements of future work and test counts are historical.
+Current usage and scope: docs/extensions/icc-profiles.md.
+
 # Pixels and color metadata — #85 Stage C
 
 Status: pixels + metadata, f64 sampled/parametric decoding and a bounded optional RGB matrix/TRC parsing adapter are implemented. General ICC support remains out of scope. Draft #88/#89 remain separate review units; neither is merged. Windows/Linux native acceptance remains outstanding.
