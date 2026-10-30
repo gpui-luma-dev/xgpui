@@ -581,3 +581,11 @@ assert.ok(run('overview()').includes('href="#whats-new"'));
 assert.match(run('extensionPage("whats-new")'), /← Overview/);
 assert.match(run('extensionPage("whats-new")'), /October 30, 2026/);
 console.log("Verified What's new page and Overview navigation.");
+
+assert.match(run('overview()'), /XGPUI \/ Extensions \/ GPUI/);
+assert.doesNotMatch(run('overview()'), /- GPU /);
+assert.match(run('extensionPage("canvas")'), /class="canvas-beta"/);
+assert.match(run('canvasCrateGuide()'), /Expect significant API changes/);
+assert.match(data.extension_documents['whats-new'].html, /apple-bindings-why-what-and-impact/);
+assert.match(data.extension_documents['whats-new'].html, /zed-scap/);
+console.log('Verified post-release header, canvas beta notice and Apple migration details.');
