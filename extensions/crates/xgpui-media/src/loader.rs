@@ -11,7 +11,8 @@ use std::{
 };
 
 /// Conservative admission limits shared by all clones of a loader. Payload
-/// budgets cover retained mip bytes, not decoder scratch or driver allocations.
+/// budgets cover retained mip bytes and custom metadata, not decoder scratch
+/// or driver allocations.
 #[derive(Clone, Copy, Debug)]
 pub struct MediaLimits {
     pub max_jobs: usize,
@@ -49,11 +50,12 @@ impl Default for MediaLoader {
     }
 }
 /// A retained reservation travels with every clone of the resulting image.
-/// Reserve the per-image maximum before decode; conservative unused capacity is
+/// Reserve the per-image maximum plus custom metadata before conversion; unused capacity is
 /// released only when the job and all image snapshots have been dropped.
 pub(crate) struct Reservation {
     pool: Arc<Pool>,
     _guard: Option<Arc<dyn Send + Sync>>,
+    bytes: usize,
 }
 impl Reservation {
     pub(crate) fn uploads(&self) -> Arc<UploadScheduler> {
@@ -62,7 +64,7 @@ impl Reservation {
 }
 impl Drop for Reservation {
     fn drop(&mut self) {
-        self.pool.usage.lock().unwrap().bytes -= self.pool.limits.max_image_bytes;
+        self.pool.usage.lock().unwrap().bytes -= self.bytes;
     }
 }
 struct ActiveJob(Arc<Pool>);
@@ -262,8 +264,12 @@ impl MediaLoader {
         );
         ensure!(
             pixels.len() == width as usize * height as usize
-                && pixels.len().saturating_mul(16) <= self.0.limits.max_encoded_bytes,
-            "supplied pixels exceed input limit"
+                && pixels
+                    .len()
+                    .saturating_mul(16)
+                    .saturating_add(color.retained_metadata_bytes())
+                    <= self.0.limits.max_encoded_bytes,
+            "supplied pixels and metadata exceed input limit"
         );
         ensure!(
             matches!(
@@ -273,7 +279,7 @@ impl MediaLoader {
             ),
             "unsupported image storage primaries"
         );
-        self.load_guarded(color, None, move |_, cancelled| {
+        self.load_guarded(color.clone(), None, move |_, cancelled| {
             crate::pipeline::float_image::build_pixels_in(
                 width,
                 height,
@@ -329,19 +335,26 @@ impl MediaLoader {
         build: impl FnOnce(MediaLimits, &AtomicBool) -> Result<gpui::ImageTextureData> + Send + 'static,
     ) -> Result<ImageJob> {
         let color = color.into();
+        let reserved_bytes = self
+            .0
+            .limits
+            .max_image_bytes
+            .checked_add(color.retained_metadata_bytes())
+            .context("media metadata reservation overflow")?;
         {
             let mut usage = self.0.usage.lock().unwrap();
             ensure!(usage.jobs < self.0.limits.max_jobs, "media workers busy");
             ensure!(
-                self.0.limits.max_image_bytes <= self.0.limits.max_resident_bytes - usage.bytes,
+                reserved_bytes <= self.0.limits.max_resident_bytes - usage.bytes,
                 "media payload budget exhausted"
             );
             usage.jobs += 1;
-            usage.bytes += self.0.limits.max_image_bytes;
+            usage.bytes += reserved_bytes;
         }
         let reservation = Arc::new(Reservation {
             pool: self.0.clone(),
             _guard: guard,
+            bytes: reserved_bytes,
         });
         let active = ActiveJob(self.0.clone());
         let job = ImageJob {

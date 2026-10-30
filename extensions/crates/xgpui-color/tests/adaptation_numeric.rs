@@ -100,9 +100,12 @@ fn d50_colorants_adapt_once_and_validate_source_white() {
     // published CAT column times the corresponding D50 white component.
     let w = WhitePoint::D50.xyz();
     let source = [[w[0], 0., 0.], [0., w[1], 0.], [0., 0., w[2]]];
-    let definition =
-        RgbDefinition::new_with_white_point(source, [RgbCurve::Linear; 3], WhitePoint::D50)
-            .unwrap();
+    let definition = RgbDefinition::new_with_white_point(
+        source,
+        [const { RgbCurve::Linear }; 3],
+        WhitePoint::D50,
+    )
+    .unwrap();
     let green = definition
         .decode_to_xyz_d65([0., 1., 0.])
         .unwrap()
@@ -114,18 +117,18 @@ fn d50_colorants_adapt_once_and_validate_source_white() {
     ]) {
         assert!((a - b).abs() <= 8. * f64::EPSILON);
     }
-    assert!(RgbDefinition::new_d65(source, [RgbCurve::Linear; 3]).is_err());
+    assert!(RgbDefinition::new_d65(source, [const { RgbCurve::Linear }; 3]).is_err());
     assert!(
         RgbDefinition::new_with_white_point(
             definition.linear_to_xyz_d65_matrix(),
-            [RgbCurve::Linear; 3],
+            [const { RgbCurve::Linear }; 3],
             WhitePoint::D50
         )
         .is_err()
     );
     let unchanged = RgbDefinition::new_with_white_point(
         definition.linear_to_xyz_d65_matrix(),
-        [RgbCurve::Linear; 3],
+        [const { RgbCurve::Linear }; 3],
         WhitePoint::D65,
     )
     .unwrap();
@@ -133,16 +136,25 @@ fn d50_colorants_adapt_once_and_validate_source_white() {
     // Quantized metadata has an admission bound distinct from numerical error.
     let quantized = source.map(|r| r.map(|v| (v * 65536.).round() / 65536.));
     assert!(
-        RgbDefinition::new_with_white_point(quantized, [RgbCurve::Linear; 3], WhitePoint::D50)
-            .is_ok()
+        RgbDefinition::new_with_white_point(
+            quantized,
+            [const { RgbCurve::Linear }; 3],
+            WhitePoint::D50
+        )
+        .is_ok()
     );
     let mut bad = source;
     bad[1][1] += 4. / 65536.;
     assert!(
-        RgbDefinition::new_with_white_point(bad, [RgbCurve::Linear; 3], WhitePoint::D50).is_err()
+        RgbDefinition::new_with_white_point(bad, [const { RgbCurve::Linear }; 3], WhitePoint::D50)
+            .is_err()
     );
     assert!(
-        RgbDefinition::new_with_white_point(source, [RgbCurve::Gamma(0.); 3], WhitePoint::D50)
-            .is_err()
+        RgbDefinition::new_with_white_point(
+            source,
+            std::array::from_fn(|_| RgbCurve::Gamma(0.)),
+            WhitePoint::D50
+        )
+        .is_err()
     );
 }

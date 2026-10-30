@@ -5,9 +5,11 @@
 
 use std::fmt;
 mod adaptation;
+#[cfg(feature = "icc")]
+pub mod icc;
 pub use adaptation::{BradfordAdaptation, WhitePoint};
 mod definition;
-pub use definition::{RgbCurve, RgbDefinition};
+pub use definition::{ParametricCurve, RgbCurve, RgbDefinition, SampledCurve};
 mod gradient;
 mod mapping;
 pub use gradient::{ColorInterpolation, HueInterpolation, LinearGradient, LinearRgba};

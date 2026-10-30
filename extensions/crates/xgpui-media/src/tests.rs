@@ -1043,11 +1043,11 @@ fn resolved_pixel_metadata_survives_background_preparation() -> Result<()> {
     use pipeline::*;
     let definition = xgpui_color::RgbDefinition::new_d65(
         xgpui_color::RgbSpace::AdobeRgb1998.linear_to_xyz_matrix(),
-        [xgpui_color::RgbCurve::Gamma(563. / 256.); 3],
+        std::array::from_fn(|_| xgpui_color::RgbCurve::Gamma(563. / 256.)),
     )?;
     for source in [
         PixelColor::Custom {
-            rgb: definition,
+            rgb: definition.into(),
             alpha: AlphaMode::Straight,
         },
         PixelColor::ExtendedLinear {
@@ -1060,7 +1060,7 @@ fn resolved_pixel_metadata_survives_background_preparation() -> Result<()> {
             3,
             1,
             vec![[0., 1., 0., 0.5]; 3],
-            source,
+            source.clone(),
             ImagePrimaries::Rec2020,
             GamutMapping::Clip,
         )?;
@@ -1076,7 +1076,7 @@ fn resolved_pixel_metadata_survives_background_preparation() -> Result<()> {
                     1,
                     1,
                     vec![],
-                    source,
+                    source.clone(),
                     ImagePrimaries::Rec2020,
                     GamutMapping::Clip
                 )
@@ -1088,12 +1088,68 @@ fn resolved_pixel_metadata_survives_background_preparation() -> Result<()> {
                     1,
                     1,
                     vec![[0.; 4]],
-                    source,
+                    source.clone(),
                     ImagePrimaries::Srgb,
                     GamutMapping::Clip
                 )
                 .is_err()
         );
     }
+    Ok(())
+}
+
+#[test]
+fn custom_sample_metadata_is_admitted_and_released_with_image() -> Result<()> {
+    use pipeline::*;
+    let table = xgpui_color::SampledCurve::new(vec![0, 32768, 65535])?;
+    let definition = xgpui_color::RgbDefinition::new_d65(
+        xgpui_color::RgbSpace::DisplayP3.linear_to_xyz_matrix(),
+        std::array::from_fn(|_| xgpui_color::RgbCurve::Sampled(table.clone())),
+    )?;
+    let source = PixelColor::Custom {
+        rgb: definition.into(),
+        alpha: AlphaMode::Straight,
+    };
+    let bytes = source.retained_metadata_bytes();
+    let loader = MediaLoader::new(MediaLimits {
+        max_jobs: 1,
+        max_image_bytes: 8,
+        max_resident_bytes: 8 + bytes,
+        max_encoded_bytes: 4096,
+    })?;
+    let load = || {
+        loader.load_pixel_buffer(
+            1,
+            1,
+            vec![[0.25, 0.5, 1., 0.5]],
+            source.clone(),
+            ImagePrimaries::DisplayP3,
+            GamutMapping::Clip,
+        )
+    };
+    let image = finish(&mut load()?)?;
+    assert_eq!(image.source_color(), source);
+    assert!(load().is_err());
+    drop(image);
+    let next = finish(&mut load()?)?;
+    assert_eq!(next.source_color(), source);
+    let tight = MediaLoader::new(MediaLimits {
+        max_jobs: 1,
+        max_image_bytes: 8,
+        max_resident_bytes: 8,
+        max_encoded_bytes: 4096,
+    })?;
+    assert!(
+        tight
+            .load_pixel_buffer(
+                1,
+                1,
+                vec![[0.; 4]],
+                source,
+                ImagePrimaries::DisplayP3,
+                GamutMapping::Clip
+            )
+            .is_err()
+    );
     Ok(())
 }

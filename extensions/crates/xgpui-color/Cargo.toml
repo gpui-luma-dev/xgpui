@@ -14,7 +14,12 @@ categories = ["graphics", "mathematics"]
 
 [workspace]
 
+[features]
+default = []
+icc = ["dep:moxcms"]
+
 [dependencies]
+moxcms = { version = "=0.8.1", optional = true, default-features = false }
 
 [dev-dependencies]
 naga = { version = "30.0.1", features = ["wgsl-in", "msl-out", "hlsl-out", "spv-out"] }

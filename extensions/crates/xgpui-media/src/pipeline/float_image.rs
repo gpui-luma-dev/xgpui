@@ -495,7 +495,7 @@ mod pixel_metadata_tests {
                 1,
                 1,
                 vec![input],
-                source,
+                source.clone(),
                 ImagePrimaries::DisplayP3,
                 GamutMapping::Clip,
             )
@@ -505,7 +505,7 @@ mod pixel_metadata_tests {
                 1,
                 1,
                 vec![[-2., 4., 1., 0.]],
-                source,
+                source.clone(),
                 ImagePrimaries::DisplayP3,
                 GamutMapping::Clip,
             )
@@ -517,7 +517,7 @@ mod pixel_metadata_tests {
                         1,
                         1,
                         vec![bad],
-                        source,
+                        source.clone(),
                         ImagePrimaries::DisplayP3,
                         GamutMapping::Clip
                     )
@@ -530,11 +530,11 @@ mod pixel_metadata_tests {
     fn custom_adobe_metadata_matches_independent_half_references() {
         let definition = xgpui_color::RgbDefinition::new_d65(
             xgpui_color::RgbSpace::AdobeRgb1998.linear_to_xyz_matrix(),
-            [xgpui_color::RgbCurve::Gamma(563. / 256.); 3],
+            std::array::from_fn(|_| xgpui_color::RgbCurve::Gamma(563. / 256.)),
         )
         .unwrap();
         let source = PixelColor::Custom {
-            rgb: definition,
+            rgb: definition.into(),
             alpha: AlphaMode::Straight,
         };
 
@@ -543,7 +543,7 @@ mod pixel_metadata_tests {
                 1,
                 1,
                 vec![[gray, gray, gray, a]],
-                source,
+                source.clone(),
                 ImagePrimaries::Rec2020,
                 GamutMapping::Clip,
             )
@@ -565,11 +565,11 @@ mod pixel_metadata_tests {
     fn custom_alpha_rejection_storage_admission_and_cancellation() {
         let definition = xgpui_color::RgbDefinition::new_d65(
             xgpui_color::RgbSpace::Srgb.linear_to_xyz_matrix(),
-            [xgpui_color::RgbCurve::Linear; 3],
+            [const { xgpui_color::RgbCurve::Linear }; 3],
         )
         .unwrap();
         let source = PixelColor::Custom {
-            rgb: definition,
+            rgb: definition.into(),
             alpha: AlphaMode::Premultiplied,
         };
         for bad in [[0.6, 0., 0., 0.5], [-0.1, 0., 0., 1.]] {
@@ -578,7 +578,7 @@ mod pixel_metadata_tests {
                     1,
                     1,
                     vec![bad],
-                    source,
+                    source.clone(),
                     ImagePrimaries::DisplayP3,
                     GamutMapping::Clip
                 )
@@ -590,7 +590,7 @@ mod pixel_metadata_tests {
                 1,
                 1,
                 vec![[0.; 4]],
-                source,
+                source.clone(),
                 ImagePrimaries::Srgb,
                 GamutMapping::Clip
             )
@@ -601,7 +601,7 @@ mod pixel_metadata_tests {
                 0,
                 1,
                 vec![],
-                source,
+                source.clone(),
                 ImagePrimaries::DisplayP3,
                 GamutMapping::Clip
             )
@@ -612,7 +612,7 @@ mod pixel_metadata_tests {
                 1,
                 1,
                 vec![[0.; 4]],
-                source,
+                source.clone(),
                 GamutMapping::Clip,
                 ImagePrimaries::DisplayP3,
                 || true
@@ -640,15 +640,17 @@ mod custom_grid_tests {
                     xgpui_color::RgbCurve::Linear,
                 )
             };
-            let definition =
-                xgpui_color::RgbDefinition::new_d65(space.linear_to_xyz_matrix(), [curve; 3])
-                    .unwrap();
+            let definition = xgpui_color::RgbDefinition::new_d65(
+                space.linear_to_xyz_matrix(),
+                std::array::from_fn(|_| curve.clone()),
+            )
+            .unwrap();
             let data = pixels_rgba16f_data(
                 1,
                 1,
                 vec![rgba],
                 crate::pipeline::PixelColor::Custom {
-                    rgb: definition,
+                    rgb: definition.into(),
                     alpha: AlphaMode::Straight,
                 },
                 ImagePrimaries::Rec2020,
@@ -679,11 +681,14 @@ mod d50_metadata_tests {
         use xgpui_color::{RgbCurve, RgbDefinition, WhitePoint};
         let white = WhitePoint::D50.xyz();
         let colorants = [[white[0], 0., 0.], [0., 1., 0.], [0., 0., white[2]]];
-        let definition =
-            RgbDefinition::new_with_white_point(colorants, [RgbCurve::Linear; 3], WhitePoint::D50)
-                .unwrap();
+        let definition = RgbDefinition::new_with_white_point(
+            colorants,
+            [const { RgbCurve::Linear }; 3],
+            WhitePoint::D50,
+        )
+        .unwrap();
         let source = crate::pipeline::PixelColor::Custom {
-            rgb: definition,
+            rgb: definition.into(),
             alpha: AlphaMode::Straight,
         };
         for &(rgba, expected) in D50_FP16 {
@@ -691,7 +696,7 @@ mod d50_metadata_tests {
                 1,
                 1,
                 vec![rgba],
-                source,
+                source.clone(),
                 ImagePrimaries::Rec2020,
                 GamutMapping::Clip,
             )

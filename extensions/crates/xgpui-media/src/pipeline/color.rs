@@ -324,13 +324,13 @@ impl Vignette {
 }
 
 /// Resolved supplied-pixel interpretation, independent of image files and ICC.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PixelColor {
     /// Existing bounded SDR interpretation.
     Named(ImageColor),
     /// Bounded encoded RGB with independent channel curves and adapted D65 colorants.
     Custom {
-        rgb: xgpui_color::RgbDefinition,
+        rgb: std::sync::Arc<xgpui_color::RgbDefinition>,
         alpha: AlphaMode,
     },
     /// Finite extended linear RGB, including negative and above-one channels.
@@ -346,7 +346,13 @@ impl From<ImageColor> for PixelColor {
     }
 }
 impl PixelColor {
-    pub fn decode(self, rgba: [f64; 4], working: ImagePrimaries) -> Result<WorkingPixel> {
+    pub fn retained_metadata_bytes(&self) -> usize {
+        match self {
+            Self::Custom { rgb, .. } => rgb.retained_bytes(),
+            _ => 0,
+        }
+    }
+    pub fn decode(&self, rgba: [f64; 4], working: ImagePrimaries) -> Result<WorkingPixel> {
         if let Self::Named(color) = self {
             return color.decode(rgba, working);
         }
@@ -357,7 +363,7 @@ impl PixelColor {
         let [r, g, b, a] = rgba;
         let mut rgb = [r, g, b];
         let alpha = match self {
-            Self::Custom { alpha, .. } | Self::ExtendedLinear { alpha, .. } => alpha,
+            Self::Custom { alpha, .. } | Self::ExtendedLinear { alpha, .. } => *alpha,
             Self::Named(_) => unreachable!(),
         };
         if matches!(self, Self::Custom { .. }) {

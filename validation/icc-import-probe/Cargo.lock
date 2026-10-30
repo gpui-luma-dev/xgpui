@@ -34,10 +34,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
+name = "xgpui-color"
+version = "0.2.1"
+dependencies = [
+ "moxcms",
+]
+
+[[package]]
 name = "xgpui-icc-probe"
 version = "0.0.0"
 dependencies = [
  "moxcms",
+ "xgpui-color",
 ]
 
 [[patch.unused]]

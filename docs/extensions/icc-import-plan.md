@@ -1,6 +1,6 @@
 # Pixels and color metadata — #85 Stage C
 
-Status: pixels + metadata foundation implemented locally; ICC remains unimplemented. Draft #88/#89 remain separate review units; neither is merged. Windows/Linux native acceptance remains outstanding.
+Status: pixels + metadata, f64 sampled/parametric decoding and a bounded optional RGB matrix/TRC parsing adapter are implemented. General ICC support remains out of scope. Draft #88/#89 remain separate review units; neither is merged. Windows/Linux native acceptance remains outstanding.
 
 ## Boundary
 
@@ -100,3 +100,15 @@ moxcms 0.8.1 exceeds the unchanged decoded-energy-scaled f32 budget on 298/510 p
 The ordinary probe suite has 4 passing diagnostic/setup checks and 2 explicitly ignored strict acceptance gates. Running `-- --ignored` or the executable's `--strict-curves` intentionally fails. No tolerance was widened to claim acceptance. Strict Clippy and fixture regeneration remain separate checks, not evidence that the numerical gates pass.
 
 Revised recommendation: evaluate using the existing dependency only for parsing profile bytes, then validate/resolve colorants and curves and evaluate them in our color core. This requires adding independently tested sampled/parametric curves and auditing parser admission/PCS semantics. Do not patch the dependency or adopt its broader transform path by default. A maintained ICC reader is not yet required. No product code, dependency or file-format support changes in this investigation.
+
+## Replacement implemented
+
+The optional `xgpui-color/icc` adapter uses unmodified moxcms only for parsing. `SampledCurve` interpolates normalized u16 samples continuously in f64; `ParametricCurve` evaluates actual serialized coefficients and branch thresholds in f64, without named-curve substitutions. Default color builds remain runtime-dependency-free. No image codec was added.
+
+The replacement passes all 1,032 curve vectors from the failing transform investigation at a much tighter 64-f64-epsilon, source-energy-scaled budget (maximum observed absolute error 6.661338147750939e-16). A separate set of 516 independent exact-tag cases checks individual curves at 16 f64 epsilon and both original PCS and encoded-white-to-D65 adaptation. No replacement acceptance tests are ignored. The old transform's two diagnostic gates remain ignored/failing only as evidence of the path being replaced.
+
+The adapter accepts a declared, bounded subset: v2/v4 RGB input/display profiles, standard encoded D50 XYZ PCS, matrix colorants, monotone sampled curves and parametric types 0/3/4 with coefficients below magnitude 128. It rejects unsupported tags, CICP, LUT/CMYK/gray/HDR-related paths and malformed structures rather than silently guessing. Caps and framing checks precede dependency parsing; parser limits are also configured. It does not apply chad again to already-PCS colorants or use media white as PCS white. Tests cover these semantics and rejection cases. Full real-profile diversity/fuzzing and Windows/Linux native validation remain future work.
+
+`RgbDefinition` and `PixelColor` are now Clone-based; shared tables/definitions avoid copies during per-pixel decoding. Media worker admission counts custom metadata in input/residency budgets and releases that reservation with the image. Parsing is synchronous; callers own its worker admission and missing-profile policy. The existing file convenience loader is unchanged.
+
+Replacement validation: 35 color tests (including 5 active ICC/curve tests), 70 serial Metal/wgpu media tests and 8 sibling lab tests pass. The standalone probe has 5 passing checks including full replacement acceptance, plus 2 ignored gates for the discarded external transform. Strict color, media-library and probe Clippy, formatting, dependency-free default graph, oracle regeneration and whitespace checks pass. No new native Windows/Linux validation is claimed.

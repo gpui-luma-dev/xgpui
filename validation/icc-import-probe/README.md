@@ -118,3 +118,23 @@ that passes validated colorants and curves into our color core. That requires
 adding precise sampled/parametric evaluation to the core and validating parser
 limits and profile semantics. This avoids a dependency fork without committing
 to owning a general ICC reader. No product dependency or behavior changed here.
+
+
+## Replacement acceptance
+
+The color core now provides f64 sampled/parametric decoding and an optional
+parsing-only adapter. The probe's `replacement_passes_both_curve_acceptance_sets`
+test passes all **1,032** existing curve vectors against the exact-tag oracle at
+a tighter 64-f64-epsilon source-energy-scaled bound. Maximum absolute error is
+6.661338147750939e-16. Its PCS-to-destination matrix calculation is validation
+code; no dependency pixel-transform function is used by this replacement.
+
+```sh
+cargo test --offline --locked --manifest-path validation/icc-import-probe/Cargo.toml replacement_passes
+```
+
+The ordinary probe now has **5 passed, 2 ignored**. The two ignored gates and
+`--strict-curves` continue to describe the old dependency transform, not the
+replacement. Replacement acceptance is active, strict and passing. The generator
+also emits 516 per-source curve/PCS/adaptation references into the color crate's
+own test assets so packaged color tests do not depend on files outside the crate.
