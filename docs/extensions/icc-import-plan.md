@@ -54,16 +54,20 @@ Budget responsibilities follow the boundary: application adapters own encoded by
 
 ## Conversion engine investigation
 
-The locally cached `moxcms` 0.8.1 is a candidate, not selected. Its upstream project documents pure Rust ICC conversion: <https://github.com/awxkee/moxcms>. No product dependency was added.
+The isolated `validation/icc-import-probe` now passes against the unmodified cached `moxcms` 0.8.1. No product dependency was added. Its upstream project documents pure Rust ICC conversion: <https://github.com/awxkee/moxcms>.
 
-A standalone exploratory probe is retained in `validation/icc-import-probe`. It creates built-in Adobe RGB and Display P3 profiles, replaces destination TRCs with gamma 1, disables CICP transfer substitution, and requests relative colorimetric floating-point conversion.
+The earlier failing probe had two errors in our setup: it replaced the destination curves with linear curves while retaining the factory's sRGB CICP metadata, and it asserted the wrong sign for Adobe green's P3 blue channel. Clearing the stale CICP field in that deliberately edited synthetic profile fixes its consistency; green has negative P3 red and positive blue. This is not a recommendation to strip metadata from imported profiles or patch the dependency. Factory profile constants are not assumed identical to ideal named-space matrices.
+
+The replacement harness uses 432 independently generated Little CMS reference vectors from serialized synthetic ICC profiles: Adobe RGB gamma input to linear P3 and Rec.2020. Profiles are reopened after serialization, so the comparison includes colorant/curve quantization. It exercises black, near-black, midtones, saturated primaries, white, and negative P3 outputs. Actual maximum absolute channel error was 1.1920928955078125e-7; maximum usage of the decoded-energy-scaled 16-f32-epsilon budget was 6.49%. Float64 entry points still use float32 internals in this engine path. Exact black is required.
 
 ```sh
-cargo run --offline --manifest-path validation/icc-import-probe/Cargo.toml
-cargo run --offline --manifest-path validation/icc-import-probe/Cargo.toml -- --extended
+cargo test --offline --locked --manifest-path validation/icc-import-probe/Cargo.toml
+cargo run --offline --locked --manifest-path validation/icc-import-probe/Cargo.toml
 ```
 
-Both commands currently fail the Adobe-green sign assertion. Without extended range the result clips negative P3 channels. With extended range, this custom destination setup returned Adobe green approximately `[-1.9405562, 0.9793242, 0.1775280]`, inconsistent with the expected primary conversion. This is an unresolved setup/engine investigation, not a confirmed upstream defect or a reason to patch upstream. Investigate profile construction, chromatic adaptation and transform options first. Passing white or a round trip is insufficient. The probe is intentionally outside product tests and dependencies.
+The fixture generator uses an installed Little CMS 2.19 only during regeneration; normal probe tests need no Little CMS installation. See the probe README for provenance and commands.
+
+Recommendation: retain the existing engine as a candidate behind an optional adapter; there is no demonstrated need for a fork or owned ICC reader for this tested subset. This is not acceptance of all RGB profiles. Independent sampled/parametric curve fixtures, real profile diversity, source/destination PCS semantics, metadata limits and worker integration remain gates before a production adapter. Conflicting real ICC/CICP metadata needs an explicit adapter policy; this synthetic setup correction does not resolve that policy.
 
 ## Numerical acceptance
 
