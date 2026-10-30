@@ -1,0 +1,84 @@
+name: Prepare daily release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: 'Release tag to compare (empty selects latest ancestor release-* tag)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: daily-release-preparation
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Prepare version proposals and generated manifests
+        env:
+          BASELINE: ${{ inputs.baseline }}
+        run: |
+          python3 scripts/daily_release.py prepare --baseline "${BASELINE:-$(git describe --tags --match 'release-*' --abbrev=0)}" --apply --report "$RUNNER_TEMP/preparation.json" --notes "$RUNNER_TEMP/release-notes.md"
+      - name: Refresh local lockfile identities without dependency upgrades
+        run: |
+          git ls-files '**/Cargo.lock' Cargo.lock | while IFS= read -r lock; do
+            cargo metadata --config .cargo/validation.toml --format-version 1 --no-deps --manifest-path "${lock%Cargo.lock}Cargo.toml" > /dev/null
+          done
+      - name: Test release tooling and canonical manifests
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_*.py'
+          cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- normalize --check
+          cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests --check
+          git diff --check
+      - name: Open release PR and start validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then
+            echo 'No crate changes require a release.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          branch="codex/release-${GITHUB_SHA:0:12}"
+          git switch -c "$branch"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          git commit -m 'release: propose next crate versions'
+          # Existing branch is never force-pushed; a rerun reuses the existing PR.
+          if git ls-remote --exit-code --heads origin "$branch"; then
+            git fetch origin "$branch"
+            remote_commit=$(git rev-parse FETCH_HEAD)
+            if ! git diff --quiet "$remote_commit" HEAD; then
+              echo 'Existing preparation branch differs; review it before retrying.' >&2
+              exit 1
+            fi
+          else
+            git push origin "$branch"
+          fi
+          if ! gh pr view "$branch" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"; then
+            gh pr create --base main --head "$branch" --title 'release: next crate versions' --body-file "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # GITHUB_TOKEN PR events do not trigger CI; dispatch validation explicitly.
+          gh workflow run validate.yml --ref "$branch"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-preparation-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/preparation.json
+            ${{ runner.temp }}/release-notes.md
