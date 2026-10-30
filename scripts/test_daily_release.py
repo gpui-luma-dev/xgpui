@@ -61,3 +61,19 @@ xgpui = "1.1.0"
 
 if __name__ == '__main__':
     unittest.main()
+
+class PreparationEdgeTests(unittest.TestCase):
+    def test_exact_pins_stay_exact(self):
+        text = '[dependencies]\ngpui = { package = "xgpui", version = "=1.1.0" }\n'
+        self.assertIn('version = "=1.1.1"', release.rewrite_manifest(text, {'xgpui': '1.1.1'}))
+
+    def test_unsupported_multiline_pin_stops_preparation(self):
+        text = '[dependencies.gpui]\npackage = "xgpui"\nversion = "1.1.0"\n'
+        with self.assertRaisesRegex(ValueError, 'Unsupported internal'):
+            release.rewrite_manifest(text, {'xgpui': '1.1.1'})
+
+    def test_commit_date_stabilizes_retry_tag(self):
+        original = DailyReleaseTests().report()
+        first = release.release_metadata(original, '2026-10-30T11:00:00+00:00')[0]
+        retry = release.release_metadata(original | dict(started_at='2026-11-01T11:00:00+00:00'), '2026-10-30T11:00:00+00:00')[0]
+        self.assertEqual(first, retry)

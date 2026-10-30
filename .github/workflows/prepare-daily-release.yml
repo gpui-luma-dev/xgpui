@@ -37,7 +37,7 @@ jobs:
       - name: Refresh local lockfile identities without dependency upgrades
         run: |
           git ls-files '**/Cargo.lock' Cargo.lock | while IFS= read -r lock; do
-            cargo metadata --config .cargo/validation.toml --format-version 1 --no-deps --manifest-path "${lock%Cargo.lock}Cargo.toml" > /dev/null
+            cargo metadata --config .cargo/validation.toml --format-version 1 --manifest-path "${lock%Cargo.lock}Cargo.toml" > /dev/null
           done
       - name: Test release tooling and canonical manifests
         run: |

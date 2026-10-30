@@ -9,6 +9,7 @@ import subprocess
 import tomllib
 
 from prepare_registry_release import release_plan
+from publish_preflight import dependencies
 
 
 def git(root, *args):
@@ -77,7 +78,12 @@ def rewrite_manifest(text, versions):
                         raise ValueError('Unsupported dependency: ' + line)
         result.append(line)
     updated = ''.join(result)
-    tomllib.loads(updated)
+    parsed = tomllib.loads(updated)
+    specs = list(dependencies(parsed)) + list(dependencies(parsed.get('workspace', {})))
+    for spec in specs:
+        if spec['package'] in versions and spec.get('version'):
+            if spec['version'].lstrip('=~^') != versions[spec['package']]:
+                raise ValueError('Unsupported internal dependency syntax; edit manually: ' + spec['alias'])
     return updated
 
 
@@ -106,7 +112,11 @@ def apply(root, plan):
                 for row in plan['packages']:
                     block = block.replace('"' + row['name'] + ' ' + row['old'] + '"', '"' + row['name'] + ' ' + row['new'] + '"')
                 blocks[i] = block
-            path.write_text('[[package]]'.join(blocks))
+            updated = '[[package]]'.join(blocks)
+            for name, version in versions.items():
+                pattern = r'(\[\[patch\.unused\]\]\s+name = "' + re.escape(name) + r'"\s+version = ")[^"]+"'
+                updated = re.sub(pattern, lambda m: m[1] + version + '"', updated)
+            path.write_text(updated)
     # Canonical generators own captured and generated manifests.
     for command in ('normalize', 'build-manifests'):
         subprocess.run(['cargo', 'run', '--locked', '--manifest-path', 'tools/release-sync/Cargo.toml', '--', command], cwd=root, check=True)
