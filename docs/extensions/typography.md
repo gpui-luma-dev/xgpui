@@ -176,7 +176,12 @@ public compositing engine. Color emoji keep their native colors.
 Radius is Gaussian support in 0–12 logical pixels; each offset axis is bounded to
 −12–12 logical pixels. High display scales clamp filter support to the existing
 64-physical-pixel limit. Radius zero paints a sharp offset copy without a blur
-capture. Nonzero blur uses the existing bounded SDR layer pipeline, at full resolution. Wide output is split into at most four device-aligned
+capture. Nonzero blur uses the bounded layer pipeline at full resolution. On macOS Metal,
+glow and drop shadows also work in `WideGamutSdr`: glyph colors keep their sRGB
+meaning, then captures, filtering and composition use premultiplied linear P3
+RGBA16F. The window can stay in wide mode while typography effects change.
+Default presentation retains the existing encoded-sRGB filter behavior.
+Wide text output is split into at most four device-aligned
 captures, each within the 1024-physical-pixel side limit. The four layer groups
 are shared with other layer effects in the frame; keep that total budget in mind.
 Footprints that need more than four captures fall back to a sharp offset shadow. This is an opt-in offscreen effect with GPU pass and

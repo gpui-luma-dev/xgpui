@@ -7,6 +7,7 @@ struct Slot {
 }
 pub(super) struct Backdrops {
     filter: RenderPipelineState,
+    format: MTLPixelFormat,
     slots: Vec<Slot>,
     pub plans: Vec<gpui::BackdropPlan>,
     program: u64,
@@ -15,6 +16,13 @@ pub(super) struct Backdrops {
 }
 impl Backdrops {
     pub fn new(device: &DeviceRef, program: &gpui::SceneShaderProgram) -> Result<Self> {
+        Self::with_format(device, program, MTLPixelFormat::BGRA8Unorm)
+    }
+    pub fn with_format(
+        device: &DeviceRef,
+        program: &gpui::SceneShaderProgram,
+        format: MTLPixelFormat,
+    ) -> Result<Self> {
         let library = device
             .newLibraryWithSource_options_error(
                 &objc2_foundation::NSString::from_str(&program.metal().0),
@@ -34,7 +42,7 @@ impl Backdrops {
             desc.setVertexFunction(Some(&vertex));
             desc.setFragmentFunction(Some(&fragment));
             let color = unsafe { desc.colorAttachments().objectAtIndexedSubscript(0) };
-            color.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+            color.setPixelFormat(format);
             color.setBlendingEnabled(blend);
             color.setSourceRGBBlendFactor(MTLBlendFactor::SourceAlpha);
             color.setDestinationRGBBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
@@ -46,12 +54,16 @@ impl Backdrops {
         };
         Ok(Self {
             filter: pipeline(false)?,
+            format,
             slots: Vec::new(),
             plans: Vec::new(),
             program: program.id(),
             groups: Default::default(),
             cache: Default::default(),
         })
+    }
+    pub fn format(&self) -> MTLPixelFormat {
+        self.format
     }
     /// Release frame-owned captures while preserving pipelines and lifetime statistics.
     pub fn clear(&mut self) {
@@ -100,7 +112,7 @@ impl Backdrops {
                     let size = if j == 0 { plan.size } else { plan.reduced };
                     let desc = TextureDescriptor::new();
                     desc.setTextureType(MTLTextureType::Type2D);
-                    desc.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+                    desc.setPixelFormat(self.format);
                     unsafe { desc.setWidth(size[0] as usize) };
                     unsafe { desc.setHeight(size[1] as usize) };
                     desc.setStorageMode(MTLStorageMode::Private);
@@ -123,7 +135,7 @@ impl Backdrops {
         self.slots.truncate(self.plans.len());
         self.cache
             .prepare(scene.backdrop_cache_keys(size)?, context);
-        self.groups.prepare(device, scene, size)?;
+        self.groups.prepare(device, scene, size, self.format)?;
         Ok(())
     }
     pub fn group_filter(&self, cb: &CommandBufferRef, slot: usize) {

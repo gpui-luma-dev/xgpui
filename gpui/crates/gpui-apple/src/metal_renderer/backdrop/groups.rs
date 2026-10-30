@@ -29,7 +29,15 @@ impl Groups {
         self.slots
             .iter()
             .flat_map(|slot| &slot.textures)
-            .map(|texture| (texture.width() * texture.height() * 4) as u64)
+            .map(|texture| {
+                (texture.width()
+                    * texture.height()
+                    * if texture.pixelFormat() == MTLPixelFormat::RGBA16Float {
+                        8
+                    } else {
+                        4
+                    }) as u64
+            })
             .sum()
     }
     pub fn prepare(
@@ -37,8 +45,39 @@ impl Groups {
         device: &DeviceRef,
         scene: &Scene,
         size: Size<DevicePixels>,
+        format: MTLPixelFormat,
     ) -> Result<()> {
         self.plans = scene.layer_plans(size)?;
+        // Four bounded 1024-square groups, with up to four FP16 textures each.
+        let bytes: u64 = self
+            .plans
+            .iter()
+            .map(|p| {
+                let pixels = 2 * p.size[0] as u64 * p.size[1] as u64
+                    + if p.blur_radius > 0. {
+                        2 * p.blur_size[0] as u64 * p.blur_size[1] as u64
+                    } else {
+                        0
+                    };
+                pixels
+                    * if format == MTLPixelFormat::RGBA16Float {
+                        8
+                    } else {
+                        4
+                    }
+            })
+            .sum();
+        anyhow::ensure!(
+            bytes <= 128 * 1024 * 1024,
+            "layer capture targets exceed 128 MiB"
+        );
+        if format == MTLPixelFormat::RGBA16Float {
+            for p in &mut self.plans {
+                for params in &mut p.parameters {
+                    params[0][3] = 1.;
+                }
+            }
+        }
         self.hits.clear();
         for (i, p) in self.plans.iter().enumerate() {
             if self.slots.get(i).is_none_or(|s| s.size != p.size) {
@@ -79,7 +118,7 @@ impl Groups {
                 };
                 let d = TextureDescriptor::new();
                 d.setTextureType(MTLTextureType::Type2D);
-                d.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+                d.setPixelFormat(format);
                 unsafe { d.setWidth(extent[0] as usize) };
                 unsafe { d.setHeight(extent[1] as usize) };
                 d.setStorageMode(MTLStorageMode::Private);

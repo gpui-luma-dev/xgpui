@@ -25,7 +25,8 @@ impl LayerEffect {
         })
     }
     /// Construct saturation in [0,2]: 0 is grayscale, 1 unchanged, 2 intensified.
-    /// RGB is filtered in encoded sRGB; alpha is preserved before group opacity.
+    /// RGB is filtered in the capture domain: encoded sRGB by default,
+    /// linear Display P3 in Metal WideGamutSdr. Alpha is preserved before opacity.
     pub fn saturation(saturation: f32) -> Result<Self> {
         Self::opacity(1.)?.with_saturation(saturation)
     }
@@ -77,7 +78,7 @@ impl LayerEffect {
         Ok(self)
     }
     /// Invert completed subtree RGB: 0 unchanged, 1 complemented, 0.5 gray.
-    /// Applied after contrast in encoded sRGB; alpha is preserved.
+    /// Applied after contrast in the capture domain; alpha is preserved.
     pub fn invert(amount: f32) -> Result<Self> {
         Self::opacity(1.)?.with_invert(amount)
     }
@@ -112,7 +113,8 @@ impl LayerEffect {
         self.color_filter.blur_quality = quality;
         self
     }
-    /// Blend the completed subtree with destination pixels, in encoded sRGB.
+    /// Blend the completed subtree with destination pixels in the capture domain.
+    /// Default rendering uses encoded sRGB; Metal WideGamutSdr uses linear P3.
     /// Filtering and group opacity are applied before source-over blending.
     pub fn blend(mode: crate::BlendMode) -> Result<Self> {
         Ok(Self::opacity(1.)?.with_blend_mode(mode))

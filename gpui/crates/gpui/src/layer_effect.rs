@@ -20,7 +20,8 @@ pub enum LayerBlurQuality {
     FullResolution,
 }
 
-/// Blend a completed isolated subtree with its saved destination in encoded sRGB.
+/// Blend a completed isolated subtree with its saved destination.
+/// Uses encoded sRGB by default, or linear P3 in Metal WideGamutSdr.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(u8)]
 pub enum LayerBlendMode {
@@ -41,8 +42,9 @@ pub enum LayerBlendMode {
     LinearBurn = 6,
 }
 
-/// Encoded-sRGB color operations in saturation/brightness/contrast/inversion order,
-/// followed by group opacity and destination blending.
+/// Capture-domain color operations in saturation/brightness/contrast/inversion order,
+/// followed by group opacity and destination blending. Default captures use
+/// encoded sRGB; Metal WideGamutSdr captures use associated linear P3.
 #[derive(Clone, Copy, Debug)]
 pub struct LayerColorFilter {
     /// Working resolution policy for subtree blur.
@@ -89,15 +91,16 @@ pub struct LayerCapture {
     pub clip: Option<Bounds<ScaledPixels>>,
     /// Opacity of the completed group, including inherited opacity exactly once.
     pub opacity: f32,
-    /// Encoded-sRGB saturation in [0,2], with 0 grayscale and 1 unchanged.
+    /// Capture-domain saturation in [0,2], with 0 grayscale and 1 unchanged.
     pub saturation: f32,
-    /// Encoded-sRGB brightness multiplier in [0,2].
+    /// Capture-domain brightness multiplier in [0,2].
     pub brightness: f32,
-    /// Encoded-sRGB contrast in [0,2], centered on straight RGB 0.5.
+    /// Capture-domain contrast in [0,2], centered on straight RGB 0.5.
     pub contrast: f32,
     /// Inversion strength in [0,1], with 0 unchanged and 1 complemented RGB.
     pub invert: f32,
-    /// Shared encoded-sRGB capture/composition shader.
+    /// Shared capture/composition shader. Metal wide captures set viewport.w to 1
+    /// for linear-P3 color filtering; default captures leave it zero.
     pub program: Arc<SceneShaderProgram>,
 }
 /// A begin/end marker. The renderer must preserve these global pass barriers.

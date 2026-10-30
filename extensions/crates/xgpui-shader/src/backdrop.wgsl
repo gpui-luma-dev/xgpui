@@ -115,7 +115,11 @@ fn layer_cell(cell: vec2<i32>, output_size: vec2<i32>) -> vec4<f32> {
   let captured = sample_image(image,v.uv);
   // The matrix is linear on associated RGB. Clamping to [0,alpha] is
   // equivalent to filtering/clamping straight RGB, without dividing tiny alpha.
-  let gray = dot(captured.rgb,vec3(0.2126,0.7152,0.0722));
+  // Metal wide captures carry associated linear P3, selected by viewport.w.
+  // Default captures retain their encoded-sRGB filter behavior.
+  let luma = select(vec3(0.2126,0.7152,0.0722),
+      vec3(0.2289745641,0.6917385218,0.0792869141),p.viewport.w == 1.);
+  let gray = dot(captured.rgb,luma);
   let filtered = clamp(vec3(gray) + (captured.rgb - vec3(gray)) * p.metrics.w,
       vec3(0.),vec3(captured.a));
   let brightened = clamp(filtered * p.radii.x,vec3(0.),vec3(captured.a));
