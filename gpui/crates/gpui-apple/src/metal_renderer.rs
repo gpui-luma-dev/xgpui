@@ -901,6 +901,48 @@ impl MetalRenderer {
         read_texture_to_image(&drawable.texture())
     }
 
+    /// Validation-only readback of the composition before display color management.
+    #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+    pub fn render_to_linear_p3(&mut self, scene: &Scene) -> Result<gpui::LinearP3Image> {
+        let layer = self
+            .layer
+            .as_ref()
+            .context("linear P3 window readback requires a layer")?;
+        let extent = layer.drawableSize();
+        self.render_scene_to_linear_p3(
+            scene,
+            size(
+                DevicePixels(extent.width.ceil() as i32),
+                DevicePixels(extent.height.ceil() as i32),
+            ),
+        )
+    }
+
+    #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+    fn render_scene_to_linear_p3(
+        &mut self,
+        scene: &Scene,
+        extent: Size<DevicePixels>,
+    ) -> Result<gpui::LinearP3Image> {
+        ensure!(
+            self.wide_sdr.is_some(),
+            "linear P3 readback requires WideGamutSdr"
+        );
+        objc2::rc::autoreleasepool(|_| {
+            let command = self.submit_scene(scene, extent)?;
+            let image = self
+                .wide_sdr
+                .as_ref()
+                .unwrap()
+                .readback(&self.device, &self.command_queue)?;
+            ensure!(
+                command.status() == metal::MTLCommandBufferStatus::Completed,
+                "linear P3 scene GPU command failed"
+            );
+            Ok(image)
+        })
+    }
+
     /// Renders a scene to an image without requiring a window or CAMetalLayer.
     ///
     /// This is the primary method for headless rendering. It creates an offscreen
@@ -977,6 +1019,15 @@ impl MetalRenderer {
     /// inspected.
     #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
     pub fn render_scene(&mut self, scene: &Scene, size: Size<DevicePixels>) -> Result<()> {
+        self.submit_scene(scene, size).map(|_| ())
+    }
+
+    #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
+    fn submit_scene(
+        &mut self,
+        scene: &Scene,
+        size: Size<DevicePixels>,
+    ) -> Result<metal::CommandBuffer> {
         if size.width.0 <= 0 || size.height.0 <= 0 {
             anyhow::bail!("Invalid size for render_scene: {:?}", size);
         }
@@ -1017,7 +1068,7 @@ impl MetalRenderer {
             // Commit without waiting, mirroring presentation to a real window where
             // the CPU doesn't block on the GPU.
             command_buffer.commit();
-            Ok(())
+            Ok(command_buffer)
         })
     }
 
@@ -2560,6 +2611,17 @@ impl MetalHeadlessRenderer {
     ) -> Result<gpui::WindowColorStatus> {
         self.renderer.set_color_mode(mode)
     }
+    /// Synchronous associated extended linear-P3 FP16 validation snapshot.
+    /// Requires WideGamutSdr and preserves negative/above-one channels.
+    #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+    pub fn render_scene_to_linear_p3(
+        &mut self,
+        scene: &Scene,
+        extent: Size<DevicePixels>,
+    ) -> Result<gpui::LinearP3Image> {
+        self.renderer.render_scene_to_linear_p3(scene, extent)
+    }
+
     pub fn new() -> Self {
         let instance_buffer_pool = Arc::new(Mutex::new(InstanceBufferPool::default()));
         let renderer = MetalRenderer::new_headless(instance_buffer_pool);

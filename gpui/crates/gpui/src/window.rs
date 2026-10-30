@@ -2893,6 +2893,15 @@ impl Window {
             .render_to_image(&self.rendered_frame.scene)
     }
 
+    /// Synchronously re-render the last painted scene and read its associated
+    /// extended linear-P3 FP16 composition, before display color management.
+    /// Metal WideGamutSdr only. This waits for GPU completion; use on demand.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn render_to_linear_p3(&self) -> anyhow::Result<crate::LinearP3Image> {
+        self.platform_window
+            .render_to_linear_p3(&self.rendered_frame.scene)
+    }
+
     /// Returns the quads in the most recently rendered frame's scene, so tests can assert on
     /// painted output without rasterizing the frame. Quad bounds are in scaled pixels and are
     /// not clipped; each quad carries the content mask it will be clipped to when drawn. Quads

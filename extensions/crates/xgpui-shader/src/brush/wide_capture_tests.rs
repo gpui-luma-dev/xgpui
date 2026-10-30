@@ -354,3 +354,103 @@ fn rec2020_grayscale_uses_physical_luminance() {
     let y = 0.6779980715188708;
     pixel(&image, 48, 32, preview([y, y, y, 1.]));
 }
+
+#[test]
+fn fp16_readback_checks_extended_conversion_alpha_and_nested_blur() {
+    let rec = ShaderProgram::<Tint>::new_linear_rec2020(
+        "struct Parameters { color: vec4<f32>, } fn shade(input: ShaderInput, p: Parameters) -> vec4<f32> { return p.color; }"
+    ).unwrap();
+    let p3 = wide_program();
+    let mut r = renderer();
+    // Independent 120-digit xy primary solve, not production matrix calls.
+    let matrix = [
+        [1.343578252584332, -0.2821796705261357, -0.06139858205819628],
+        [
+            -0.06529745278911953,
+            1.0757879158485746,
+            -0.010490463059454957,
+        ],
+        [
+            0.0028217872617009514,
+            -0.01959849452449406,
+            1.0167767072627931,
+        ],
+    ];
+    for rec_space in [false, true] {
+        for rgb in [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.], [0.0001_f32; 3]] {
+            for alpha in [0., 0.5, 1.] {
+                for radius in [None, Some(0.), Some(4.), Some(8.)] {
+                    let mut s = Scene::default();
+                    wide_rect(&mut s, &p3, viewport().bounds, [0., 0., 0., 1.]);
+                    let outer = capture(0.5);
+                    let mut inner = capture(0.5);
+                    Arc::get_mut(&mut inner).unwrap().blur_radius =
+                        ScaledPixels(radius.unwrap_or(0.));
+                    if radius.is_some() {
+                        s.begin_layer_capture(outer.clone(), viewport());
+                        s.begin_layer_capture(inner.clone(), viewport());
+                    }
+                    wide_rect(
+                        &mut s,
+                        if rec_space { &rec } else { &p3 },
+                        inner.bounds,
+                        [rgb[0], rgb[1], rgb[2], alpha],
+                    );
+                    if radius.is_some() {
+                        s.end_layer_capture(inner, viewport());
+                        s.end_layer_capture(outer, viewport());
+                    }
+                    s.finish();
+                    let image = r
+                        .render_scene_to_linear_p3(&s, size(DevicePixels(96), DevicePixels(64)))
+                        .unwrap();
+                    let bits = image.pixels[32 * 96 + 48];
+                    let actual = bits.map(|v| {
+                        let sign = if v & 0x8000 == 0 { 1. } else { -1. };
+                        let exponent = (v >> 10) & 31;
+                        let fraction = f64::from(v & 1023);
+                        if exponent == 31 {
+                            return f64::NAN;
+                        }
+                        sign * if exponent == 0 {
+                            fraction * 2f64.powi(-24)
+                        } else {
+                            (1. + fraction / 1024.) * 2f64.powi(i32::from(exponent) - 15)
+                        }
+                    });
+                    let opacity = if radius.is_some() { 0.25 } else { 1. };
+                    for c in 0..3 {
+                        let terms: [f64; 3] = std::array::from_fn(|j| {
+                            let coefficient = if rec_space {
+                                matrix[c][j]
+                            } else {
+                                f64::from(c == j)
+                            };
+                            coefficient * f64::from(rgb[j]) * f64::from(alpha) * opacity
+                        });
+                        let expected: f64 = terms.into_iter().sum();
+                        let energy: f64 = terms.into_iter().map(f64::abs).sum();
+                        // 3 direct or 12 capture/blur FP16 rounding stages, plus
+                        // f32 matrix arithmetic and half-subnormal roundoff.
+                        let stages = if radius.is_some() { 12. } else { 3. };
+                        let budget = stages * (2f64.powi(-11) * energy + 2f64.powi(-25))
+                            + 8. * f64::from(f32::EPSILON) * energy;
+                        assert!(
+                            actual[c].is_finite() && (actual[c] - expected).abs() <= budget,
+                            "rec={rec_space} rgb={rgb:?} alpha={alpha} blur={radius:?} channel={c}: {} vs {expected}, budget {budget}",
+                            actual[c]
+                        );
+                        if expected.abs() > 2f64.powi(-14) {
+                            assert_eq!(actual[c].is_sign_negative(), expected.is_sign_negative());
+                            assert_ne!(actual[c], 0.);
+                        }
+                        if expected > 1. + budget {
+                            assert!(actual[c] > 1.);
+                        }
+                    }
+                    assert_eq!(actual[3], 1.);
+                }
+            }
+        }
+    }
+}

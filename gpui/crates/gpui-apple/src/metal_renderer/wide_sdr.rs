@@ -39,6 +39,67 @@ pub(super) struct Compositor {
     target: Option<metal::Texture>,
 }
 impl Compositor {
+    #[cfg(any(test, feature = "test-support"))]
+    pub(super) fn readback(
+        &self,
+        device: &metal::DeviceRef,
+        queue: &metal::CommandQueueRef,
+    ) -> Result<gpui::LinearP3Image> {
+        let target = self
+            .target
+            .as_ref()
+            .context("no linear P3 composition target")?;
+        let width = target.width();
+        let height = target.height();
+        let stride = (width * 8).div_ceil(256) * 256;
+        let output = device
+            .newBufferWithLength_options(
+                stride * height,
+                metal::MTLResourceOptions::StorageModeShared,
+            )
+            .context("FP16 readback allocation failed")?;
+        let command = queue
+            .commandBuffer()
+            .context("FP16 readback command allocation failed")?;
+        let blit = command
+            .blitCommandEncoder()
+            .context("FP16 readback encoder allocation failed")?;
+        // The copy follows scene submission on the same queue. Shared buffers work
+        // on both discrete and unified-memory Macs; no CPU read of a private texture.
+        unsafe {
+            blit.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toBuffer_destinationOffset_destinationBytesPerRow_destinationBytesPerImage_options(
+                target, 0, 0, metal::MTLOrigin { x: 0, y: 0, z: 0 },
+                metal::MTLSize { width, height, depth: 1 }, &output, 0, stride, stride * height, metal::MTLBlitOption::empty());
+        }
+        blit.endEncoding();
+        command.commit();
+        command.waitUntilCompleted();
+        ensure!(
+            command.status() == metal::MTLCommandBufferStatus::Completed,
+            "FP16 readback GPU command failed"
+        );
+        // SAFETY: GPU copy completed, the shared buffer is alive, and the slice
+        // covers its allocated extent. Remove padded rows from the public result.
+        let words = unsafe {
+            slice::from_raw_parts(
+                output.contents().cast::<u16>().as_ptr(),
+                stride * height / 2,
+            )
+        };
+        let pixels = words
+            .chunks_exact(stride / 2)
+            .flat_map(|row| {
+                row[..width * 4]
+                    .chunks_exact(4)
+                    .map(|p| [p[0], p[1], p[2], p[3]])
+            })
+            .collect();
+        Ok(gpui::LinearP3Image {
+            size: size(DevicePixels(width as i32), DevicePixels(height as i32)),
+            pixels,
+        })
+    }
+
     pub fn new(device: &metal::DeviceRef) -> Result<Self> {
         let library = device
             .newLibraryWithSource_options_error(
