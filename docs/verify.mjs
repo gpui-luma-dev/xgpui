@@ -222,7 +222,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 20);
+assert.equal(Object.keys(data.extension_documents).length, 21);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -251,7 +251,7 @@ assert.match(data.extension_documents['high-gamut-windows'].html, /xgpui-gamut/)
 assert.match(run('extensionPage("extensions")'), /Downstream extensions to GPUI/);
 assert.ok(!index.includes('<a href="#extensions">Extensions to GPUI</a>'), 'extensions belong in the crate group');
 for (const [route, doc] of Object.entries(data.extension_documents)) {
-  assert.equal(doc.source, route === 'local-development' ? 'docs/LOCAL_DEVELOPMENT.md' : 'docs/extensions/' + route + '.md');
+  assert.equal(doc.source, route === 'local-development' ? 'docs/LOCAL_DEVELOPMENT.md' : route === 'whats-new' ? 'docs/WHATS_NEW.md' : 'docs/extensions/' + route + '.md');
   await readFile(new URL('../' + doc.source, import.meta.url));
   context.location.hash = '#' + route;
   run('render()');
@@ -575,3 +575,9 @@ for (const demo of ['canvas', 'mandelbrot']) {
   assert.ok(wasmIndex.includes('href="?demo=' + demo + '&backend=webgl"'));
 }
 console.log('Verified canvas documentation, demo discovery and both backend launch links.');
+
+assert.match(index, /href="#overview">Overview<\/a><a href="#whats-new">What's new<\/a>/);
+assert.ok(run('overview()').includes('href="#whats-new"'));
+assert.match(run('extensionPage("whats-new")'), /← Overview/);
+assert.match(run('extensionPage("whats-new")'), /October 30, 2026/);
+console.log("Verified What's new page and Overview navigation.");

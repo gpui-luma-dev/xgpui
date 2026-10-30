@@ -52,6 +52,9 @@ function extensionCode(language, source) {
   return '<pre><code class="language-' + language + '">' + escapeHtml(source) + '</code></pre>';
 }
 function extensionPage(route) {
+  if (route === 'whats-new') {
+    return '<p><a href="#overview">← Overview</a></p><article class="extension-document">' + data.extension_documents[route].html + '</article>';
+  }
   if (route === 'local-development' || route === 'extension-lab') {
     const doc = data.extension_documents[route];
     return '<p><a href="#overview">← Overview</a></p><article class="extension-document">' + doc.html + '</article>';

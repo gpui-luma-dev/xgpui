@@ -756,6 +756,7 @@ fn generate(root: &Path) -> Result<()> {
     // Published guides live in the web documentation source tree.
     // Embed them so navigation works offline without fetch.
     let document_sources = [
+        ("whats-new", "docs/WHATS_NEW.md"),
         ("local-development", "docs/LOCAL_DEVELOPMENT.md"),
         ("extension-lab", "docs/extensions/extension-lab.md"),
         ("canvas", "docs/extensions/canvas.md"),
