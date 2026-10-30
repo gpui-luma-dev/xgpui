@@ -1,7 +1,6 @@
 //! IOSurface-backed BGRA and NV12 snapshots sampled by the host compositor.
 use super::*;
 use anyhow::Context as _;
-use foreign_types::ForeignTypeRef;
 use objc2_core_foundation::CFRetained;
 use objc2_core_video::*;
 use std::{
@@ -69,9 +68,11 @@ impl Output {
     }
 }
 struct Cached {
-    _cache: CFRetained<CVMetalTextureCache>,
-    _views: Vec<CFRetained<CVMetalTexture>>,
+    // Fields drop in declaration order. Release Metal handles and CoreVideo
+    // views before their cache: view finalization calls back into that cache.
     output: Output,
+    _views: Vec<CFRetained<CVMetalTexture>>,
+    _cache: CFRetained<CVMetalTextureCache>,
 }
 struct Inner {
     buffer: CFRetained<CVPixelBuffer>,
@@ -195,10 +196,7 @@ impl gpui::CustomContent for CoreVideoFrame {
             CVMetalTextureCache::create(
                 None,
                 None,
-                &*context
-                    .device
-                    .as_ptr()
-                    .cast::<objc2::runtime::ProtocolObject<dyn objc2_metal::MTLDevice>>(),
+                context.objc2_device(),
                 None,
                 ptr::NonNull::from(&mut cache),
             )
@@ -235,9 +233,7 @@ impl gpui::CustomContent for CoreVideoFrame {
             };
             let texture =
                 CVMetalTextureGetTexture(&view).context("CoreVideo returned no Metal texture")?;
-            let texture =
-                unsafe { TextureRef::from_ptr(objc2::rc::Retained::as_ptr(&texture) as *mut _) }
-                    .to_owned();
+            let texture = texture;
             views.push(view);
             Ok(texture)
         };

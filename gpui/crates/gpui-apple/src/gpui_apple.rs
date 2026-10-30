@@ -8,6 +8,7 @@
 pub mod custom_draw;
 mod dispatcher;
 pub mod keychain;
+pub mod metal;
 mod metal_atlas;
 pub mod metal_renderer;
 pub mod thermal;

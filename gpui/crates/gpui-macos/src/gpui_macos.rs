@@ -4,10 +4,14 @@
 //! macOS screens have a y axis that goes up from the bottom of the screen and
 //! an origin at the bottom left of the main display.
 
+use crate::native_appkit::*;
+use objc2::msg_send;
+use objc2_foundation::*;
 mod display;
 mod display_link;
 mod events;
 mod keyboard;
+mod native_appkit;
 mod pasteboard;
 mod system_notifications;
 
@@ -27,12 +31,6 @@ mod platform;
 mod window;
 mod window_appearance;
 
-use cocoa::{
-    base::{id, nil},
-    foundation::{NSAutoreleasePool, NSNotFound, NSString, NSUInteger},
-};
-
-use objc::runtime::{BOOL, NO, YES};
 use std::{
     ffi::{CStr, c_char},
     ops::Range,
@@ -64,7 +62,10 @@ trait NSStringExt {
 impl NSStringExt for id {
     unsafe fn to_str(&self) -> &str {
         unsafe {
-            let cstr = self.UTF8String();
+            let cstr = {
+                let value: *const std::ffi::c_char = msg_send![*self, UTF8String];
+                value
+            };
             if cstr.is_null() {
                 ""
             } else {
@@ -113,19 +114,22 @@ impl From<Range<usize>> for NSRange {
     }
 }
 
-unsafe impl objc::Encode for NSRange {
-    fn encode() -> objc::Encoding {
-        let encoding = format!(
-            "{{NSRange={}{}}}",
-            NSUInteger::encode().as_str(),
-            NSUInteger::encode().as_str()
-        );
-        unsafe { objc::Encoding::from_str(&encoding) }
-    }
+unsafe impl objc2::encode::Encode for NSRange {
+    const ENCODING: objc2::encode::Encoding =
+        objc2::encode::Encoding::Struct("_NSRange", &[usize::ENCODING, usize::ENCODING]);
+}
+unsafe impl objc2::encode::RefEncode for NSRange {
+    const ENCODING_REF: objc2::encode::Encoding =
+        objc2::encode::Encoding::Pointer(&<Self as objc2::encode::Encode>::ENCODING);
 }
 
 /// Allow NSString::alloc use here because it sets autorelease
 #[allow(clippy::disallowed_methods)]
 unsafe fn ns_string(string: &str) -> id {
-    unsafe { NSString::alloc(nil).init_str(string).autorelease() }
+    unsafe {
+        msg_send![
+            objc2::rc::Retained::into_raw(objc2_foundation::NSString::from_str(string)),
+            autorelease
+        ]
+    }
 }

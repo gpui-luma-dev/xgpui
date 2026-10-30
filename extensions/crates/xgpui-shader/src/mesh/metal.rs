@@ -1,8 +1,8 @@
 use super::MeshGradient;
-use ::metal::*;
 use anyhow::{Result, bail};
 use gpui::{DevicePixels, Size};
 use gpui_apple::custom_draw::MetalCustomContext;
+use gpui_apple::metal::*;
 use std::{
     any::Any,
     sync::{
@@ -55,37 +55,40 @@ impl PipelineCache {
         }
         let library = ctx
             .device
-            .new_library_with_source(include_str!("mesh.metal"), &CompileOptions::new())
+            .newLibraryWithSource_options_error(
+                &objc2_foundation::NSString::from_str(include_str!("mesh.metal")),
+                Some(&CompileOptions::new()),
+            )
             .map_err(anyhow::Error::msg)?;
         let compute = |name| -> Result<ComputePipelineState> {
             let function = library
-                .get_function(name, None)
+                .newFunctionWithName(&objc2_foundation::NSString::from_str(name))
+                .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
                 .map_err(anyhow::Error::msg)?;
             ctx.device
-                .new_compute_pipeline_state_with_function(&function)
+                .newComputePipelineStateWithFunction_error(&function)
                 .map_err(anyhow::Error::msg)
         };
         let vertex = library
-            .get_function("mesh_vertex", None)
+            .newFunctionWithName(&objc2_foundation::NSString::from_str("mesh_vertex"))
+            .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
             .map_err(anyhow::Error::msg)?;
         let fragment = library
-            .get_function("mesh_fragment", None)
+            .newFunctionWithName(&objc2_foundation::NSString::from_str("mesh_fragment"))
+            .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
             .map_err(anyhow::Error::msg)?;
         let descriptor = RenderPipelineDescriptor::new();
-        descriptor.set_vertex_function(Some(&vertex));
-        descriptor.set_fragment_function(Some(&fragment));
-        descriptor
-            .color_attachments()
-            .object_at(0)
-            .unwrap()
-            .set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+        descriptor.setVertexFunction(Some(&vertex));
+        descriptor.setFragmentFunction(Some(&fragment));
+        unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) }
+            .setPixelFormat(MTLPixelFormat::BGRA8Unorm);
         let pipelines = Arc::new(Pipelines {
             coefficients: compute("mesh_coefficients")?,
             evaluate: compute("mesh_evaluate")?,
             triangles: compute("mesh_triangles")?,
             draw: ctx
                 .device
-                .new_render_pipeline_state(&descriptor)
+                .newRenderPipelineStateWithDescriptor_error(&descriptor)
                 .map_err(anyhow::Error::msg)?,
         });
         *cached = Some(CachedPipelines {
@@ -105,24 +108,37 @@ fn compute(
     params: &Params,
     count: u32,
 ) {
-    let encoder = command.new_compute_command_encoder();
-    encoder.set_compute_pipeline_state(pipeline);
-    encoder.set_buffer(0, Some(input), 0);
-    encoder.set_buffer(1, Some(output), 0);
-    encoder.set_bytes(
-        2,
-        std::mem::size_of_val(params) as u64,
-        (params as *const Params).cast(),
-    );
+    let encoder = command
+        .computeCommandEncoder()
+        .expect("Metal compute encoder allocation failed");
+    encoder.setComputePipelineState(pipeline);
+    unsafe { encoder.setBuffer_offset_atIndex(Some(input), 0, 0) };
+    unsafe { encoder.setBuffer_offset_atIndex(Some(output), 0, 1) };
+    unsafe {
+        encoder.setBytes_length_atIndex(
+            std::ptr::NonNull::new((params as *const Params).cast::<std::ffi::c_void>() as *mut _)
+                .expect("non-null bytes"),
+            std::mem::size_of_val(params) as usize,
+            2,
+        )
+    };
     let group = pipeline
-        .thread_execution_width()
-        .min(pipeline.max_total_threads_per_threadgroup());
-    encoder.dispatch_thread_groups(
-        MTLSize::new((count as u64).div_ceil(group), 1, 1),
-        MTLSize::new(group, 1, 1),
+        .threadExecutionWidth()
+        .min(pipeline.maxTotalThreadsPerThreadgroup());
+    encoder.dispatchThreadgroups_threadsPerThreadgroup(
+        MTLSize {
+            width: (count as usize).div_ceil(group),
+            height: 1,
+            depth: 1,
+        },
+        MTLSize {
+            width: group,
+            height: 1,
+            depth: 1,
+        },
     );
     // Separate tracked-resource encoders order writes before the next stage.
-    encoder.end_encoding();
+    encoder.endEncoding();
 }
 impl MeshGradient {
     pub(super) fn prepare_metal(
@@ -145,32 +161,55 @@ impl MeshGradient {
                     color: [p.color[0], p.color[1], p.color[2], 1.],
                 })
                 .collect();
-            let controls = ctx.device.new_buffer_with_data(
-                upload.as_ptr().cast(),
-                std::mem::size_of_val(upload.as_slice()) as u64,
-                MTLResourceOptions::StorageModeShared,
-            );
-            let patches = ctx.device.new_buffer(
-                self.stats.patches as u64 * 320,
-                MTLResourceOptions::StorageModePrivate,
-            );
-            let vertices = ctx.device.new_buffer(
-                self.stats.evaluated_vertices as u64 * 32,
-                MTLResourceOptions::StorageModePrivate,
-            );
-            let triangles = ctx.device.new_buffer(
-                self.stats.triangles as u64 * 3 * 32,
-                MTLResourceOptions::StorageModePrivate,
-            );
+            let controls = unsafe {
+                ctx.device
+                        .newBufferWithBytes_length_options(
+                            std::ptr::NonNull::new(
+                                upload.as_ptr().cast::<std::ffi::c_void>() as *mut _
+                            )
+                            .expect("non-null upload"),
+                            std::mem::size_of_val(upload.as_slice()) as usize,
+                            MTLResourceOptions::StorageModeShared,
+                        )
+                        .expect("Metal buffer allocation failed")
+            };
+            let patches = ctx
+                .device
+                .newBufferWithLength_options(
+                    self.stats.patches as usize * 320,
+                    MTLResourceOptions::StorageModePrivate,
+                )
+                .expect("Metal buffer allocation failed");
+            let vertices = ctx
+                .device
+                .newBufferWithLength_options(
+                    self.stats.evaluated_vertices as usize * 32,
+                    MTLResourceOptions::StorageModePrivate,
+                )
+                .expect("Metal buffer allocation failed");
+            let triangles = ctx
+                .device
+                .newBufferWithLength_options(
+                    self.stats.triangles as usize * 3 * 32,
+                    MTLResourceOptions::StorageModePrivate,
+                )
+                .expect("Metal buffer allocation failed");
             let descriptor = TextureDescriptor::new();
-            descriptor.set_texture_type(MTLTextureType::D2);
-            descriptor.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-            descriptor.set_width(size.width.0 as u64);
-            descriptor.set_height(size.height.0 as u64);
-            descriptor.set_storage_mode(MTLStorageMode::Private);
-            descriptor.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-            let texture = ctx.device.new_texture(&descriptor);
-            let command = ctx.queue.new_command_buffer().to_owned();
+            descriptor.setTextureType(MTLTextureType::Type2D);
+            descriptor.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+            unsafe { descriptor.setWidth(size.width.0 as usize) };
+            unsafe { descriptor.setHeight(size.height.0 as usize) };
+            descriptor.setStorageMode(MTLStorageMode::Private);
+            descriptor.setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
+            let texture = ctx
+                .device
+                .newTextureWithDescriptor(&descriptor)
+                .expect("Metal texture allocation failed");
+            let command = ctx
+                .queue
+                .commandBuffer()
+                .expect("Metal command buffer allocation failed")
+                .to_owned();
             let params = Params {
                 width: self.grid.width,
                 height: self.grid.height,
@@ -202,15 +241,22 @@ impl MeshGradient {
                 self.stats.triangles / 2,
             );
             let pass = RenderPassDescriptor::new();
-            let attachment = pass.color_attachments().object_at(0).unwrap();
-            attachment.set_texture(Some(&texture));
-            attachment.set_load_action(MTLLoadAction::Clear);
-            attachment.set_store_action(MTLStoreAction::Store);
-            attachment.set_clear_color(MTLClearColor::new(0., 0., 0., 0.));
-            let encoder = command.new_render_command_encoder(pass);
-            encoder.set_render_pipeline_state(&pipelines.draw);
-            encoder.set_cull_mode(MTLCullMode::None);
-            encoder.set_viewport(MTLViewport {
+            let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+            attachment.setTexture(Some(&texture));
+            attachment.setLoadAction(MTLLoadAction::Clear);
+            attachment.setStoreAction(MTLStoreAction::Store);
+            attachment.setClearColor(MTLClearColor {
+                red: 0.,
+                green: 0.,
+                blue: 0.,
+                alpha: 0.,
+            });
+            let encoder = command
+                .renderCommandEncoderWithDescriptor(&pass)
+                .expect("Metal render encoder allocation failed");
+            encoder.setRenderPipelineState(&pipelines.draw);
+            encoder.setCullMode(MTLCullMode::None);
+            encoder.setViewport(MTLViewport {
                 originX: 0.,
                 originY: 0.,
                 width: size.width.0 as f64,
@@ -218,13 +264,15 @@ impl MeshGradient {
                 znear: 0.,
                 zfar: 1.,
             });
-            encoder.set_vertex_buffer(0, Some(&triangles), 0);
-            encoder.draw_primitives(
-                MTLPrimitiveType::Triangle,
-                0,
-                self.stats.triangles as u64 * 3,
-            );
-            encoder.end_encoding();
+            unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&triangles), 0, 0) };
+            unsafe {
+                encoder.drawPrimitives_vertexStart_vertexCount(
+                    MTLPrimitiveType::Triangle,
+                    0,
+                    self.stats.triangles as usize * 3,
+                )
+            };
+            encoder.endEncoding();
             Ok((texture, command))
         })?;
         if generated {
@@ -253,3 +301,7 @@ mod tests {
         );
     }
 }
+
+// SAFETY: pipeline state is immutable; the cache mutex serializes replacement and retains its device/queue.
+unsafe impl Send for PipelineCache {}
+unsafe impl Sync for PipelineCache {}

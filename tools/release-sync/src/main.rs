@@ -481,9 +481,7 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
             serde_json::to_string(path)?
         );
     }
-    if root.join("vendor/block/Cargo.toml").is_file() {
-        config += "block = { path = \"vendor/block\" }\n";
-    }
+
     for (path, text) in [
         (root.join("upstream.json"), metadata),
         (root.join(".cargo/config.toml"), config),

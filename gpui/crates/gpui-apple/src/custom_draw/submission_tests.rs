@@ -1,4 +1,5 @@
 use super::*;
+use crate::metal::*;
 use gpui::{Bounds, ContentMask, Corners, CustomContent, ScaledPixels, point};
 use std::sync::Arc;
 
@@ -32,8 +33,10 @@ fn draw() -> CustomDraw {
 
 fn with_context(test: impl FnOnce(MetalCustomContext)) {
     objc2::rc::autoreleasepool(|_| {
-        let device = Device::system_default().expect("Metal device");
-        let queue = device.new_command_queue();
+        let device = MTLCreateSystemDefaultDevice().expect("Metal device");
+        let queue = device
+            .newCommandQueue()
+            .expect("Metal queue allocation failed");
         test(MetalCustomContext { device, queue });
     });
 }
@@ -52,7 +55,11 @@ fn validate(context: &MetalCustomContext, output: MetalCustomOutput) -> Result<M
 #[test]
 fn submission_accepts_host_queue_and_commits_shared_buffer_once() {
     with_context(|context| {
-        let command = context.queue.new_command_buffer().to_owned();
+        let command = context
+            .queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
         let output = validate(
             &context,
             output(&context, vec![command.clone(), command.clone()]),
@@ -61,7 +68,7 @@ fn submission_accepts_host_queue_and_commits_shared_buffer_once() {
         // Duplicate both inside a result and across results. A second commit
         // would be rejected by Metal API validation.
         submit_custom_commands(&context, [&output, &output]).unwrap();
-        command.wait_until_completed();
+        command.waitUntilCompleted();
         assert_eq!(command.status(), MTLCommandBufferStatus::Completed);
     });
 }
@@ -69,8 +76,14 @@ fn submission_accepts_host_queue_and_commits_shared_buffer_once() {
 #[test]
 fn submission_rejects_another_queue_on_the_same_device() {
     with_context(|context| {
-        let other_queue = context.device.new_command_queue();
-        let command = other_queue.new_command_buffer().to_owned();
+        let other_queue = context
+            .device
+            .newCommandQueue()
+            .expect("Metal queue allocation failed");
+        let command = other_queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
         let error = validate(&context, output(&context, vec![command.clone()]))
             .err()
             .unwrap();
@@ -82,12 +95,16 @@ fn submission_rejects_another_queue_on_the_same_device() {
 #[test]
 fn submission_rejects_enqueued_and_completed_commands() {
     with_context(|context| {
-        let command = context.queue.new_command_buffer().to_owned();
+        let command = context
+            .queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
         command.enqueue();
         let result = validate(&context, output(&context, vec![command.clone()]));
         // Commit even if the assertion fails, to release this queue's slot.
         command.commit();
-        command.wait_until_completed();
+        command.waitUntilCompleted();
         assert_eq!(
             result.err().unwrap().to_string(),
             "custom command already submitted"
@@ -102,10 +119,20 @@ fn submission_rejects_enqueued_and_completed_commands() {
 #[test]
 fn submission_validates_whole_batch_before_committing_any_commands() {
     with_context(|context| {
-        let good_command = context.queue.new_command_buffer().to_owned();
+        let good_command = context
+            .queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
         let good = output(&context, vec![good_command.clone()]);
-        let other_queue = context.device.new_command_queue();
-        let bad_command = other_queue.new_command_buffer().to_owned();
+        let other_queue = context
+            .device
+            .newCommandQueue()
+            .expect("Metal queue allocation failed");
+        let bad_command = other_queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
         let bad = output(&context, vec![bad_command.clone()]);
         assert!(submit_custom_commands(&context, [&good, &bad]).is_err());
         assert_eq!(good_command.status(), MTLCommandBufferStatus::NotEnqueued);
@@ -116,12 +143,16 @@ fn submission_validates_whole_batch_before_committing_any_commands() {
 #[test]
 fn submission_rechecks_command_state_after_preparation() {
     with_context(|context| {
-        let command = context.queue.new_command_buffer().to_owned();
+        let command = context
+            .queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
         let output = validate(&context, output(&context, vec![command.clone()])).unwrap();
         command.enqueue(); // Simulate a later producer violating ownership.
         let result = submit_custom_commands(&context, [&output]);
         command.commit();
-        command.wait_until_completed();
+        command.waitUntilCompleted();
         assert_eq!(
             result.unwrap_err().to_string(),
             "custom command already submitted"
@@ -137,12 +168,15 @@ fn submission_rejects_invalid_texture_extent_and_format() {
             (8, MTLPixelFormat::RGBA8Unorm),
         ] {
             let descriptor = TextureDescriptor::new();
-            descriptor.set_width(width);
-            descriptor.set_height(8);
-            descriptor.set_pixel_format(format);
-            descriptor.set_usage(MTLTextureUsage::ShaderRead);
+            unsafe { descriptor.setWidth(width) };
+            unsafe { descriptor.setHeight(8) };
+            descriptor.setPixelFormat(format);
+            descriptor.setUsage(MTLTextureUsage::ShaderRead);
             let output = MetalCustomOutput {
-                texture: context.device.new_texture(&descriptor),
+                texture: context
+                    .device
+                    .newTextureWithDescriptor(&descriptor)
+                    .expect("Metal texture allocation failed"),
                 commands: vec![],
             };
             assert_eq!(
@@ -157,15 +191,18 @@ fn submission_rejects_invalid_texture_extent_and_format() {
 #[cfg(target_os = "macos")]
 fn submission_rejects_foreign_device_when_available() {
     with_context(|context| {
-        let Some(other) = Device::all()
+        let Some(other) = MTLCopyAllDevices()
+            .to_vec()
             .into_iter()
-            .find(|device| device.registry_id() != context.device.registry_id())
+            .find(|device| device.registryID() != context.device.registryID())
         else {
             eprintln!("foreign-device GPU test unavailable: this machine has one Metal device");
             return;
         };
         let other_context = MetalCustomContext {
-            queue: other.new_command_queue(),
+            queue: other
+                .newCommandQueue()
+                .expect("Metal queue allocation failed"),
             device: other,
         };
         let output = output(&other_context, vec![]);
@@ -173,7 +210,11 @@ fn submission_rejects_foreign_device_when_available() {
             validate(&context, output).err().unwrap().to_string(),
             "custom texture belongs to another device"
         );
-        let command = other_context.queue.new_command_buffer().to_owned();
+        let command = other_context
+            .queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
         assert!(validate_commands(&context, &[command]).is_err());
     });
 }
@@ -194,7 +235,7 @@ fn metal_staging_pool_returns_buffer_after_gpu_completion() {
         );
         let output = CustomCompositor::validate(&context, &draw(), Box::new(staged)).unwrap();
         submit_custom_commands(&context, [&output]).unwrap();
-        output.commands[0].wait_until_completed();
+        output.commands[0].waitUntilCompleted();
         assert_eq!(pool.stats().cached_bytes, 768);
         let _next = context
             .stage_image_upload_with_pool(&data, &pool, None)

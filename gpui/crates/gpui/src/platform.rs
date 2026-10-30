@@ -1289,6 +1289,11 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn on_appearance_changed(&self, callback: Box<dyn FnMut()>);
     fn on_button_layout_changed(&self, _callback: Box<dyn FnMut()>) {}
     fn draw(&self, scene: &Scene);
+    /// Submit on this window's native renderer without presentation or readback.
+    #[cfg(any(test, feature = "test-support"))]
+    fn submit_scene_for_validation(&self, _scene: &Scene) -> anyhow::Result<()> {
+        anyhow::bail!("native window ownership validation is unsupported on this backend")
+    }
     fn schedule_frame(&self) {}
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas>;
     fn is_subpixel_rendering_supported(&self) -> bool;

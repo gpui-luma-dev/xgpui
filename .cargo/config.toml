@@ -9,4 +9,3 @@
 "xgpui-web" = { path = "gpui/crates/gpui-web" }
 "xgpui-wgpu" = { path = "gpui/crates/gpui-wgpu" }
 "xgpui-windows" = { path = "gpui/crates/gpui-windows" }
-block = { path = "vendor/block" }

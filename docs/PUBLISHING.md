@@ -440,3 +440,30 @@ registry versions of all 15 packages, including the instanced gamut and portable
 shader features. Cargo metadata confirmed every release dependency came from
 crates.io, with no repository path patches. This checks native consumer compilation;
 it does not claim execution of a GUI or cross-platform runtime tests.
+
+## Apple bindings migration (#73)
+
+The published versions above still resolve legacy `block 0.1.6` through Cocoa
+and metal-rs on macOS and can emit `uninhabited_static` warnings. These published
+packages do not include the local migration.
+
+The local `codex/objc2-metal-interfaces` branch now uses objc2 and objc2-metal
+throughout the Apple renderer, custom compositors, shader and gamut producers,
+and the macOS windowing, input, menu, display and pasteboard paths. Native resource
+owners use `Retained`; callbacks and dynamically registered AppKit subclasses use
+the objc2 runtime and explicit native ABI types. The temporary `metal_compat`
+bridge and legacy `block` patch are removed. The existing Core Foundation,
+Core Graphics and Core Text C wrappers remain where they do not depend on the
+legacy Objective-C runtime.
+
+This is an unpublished local migration for native lab smoke testing. It changes
+public native Metal resource types; downstream native producers must use the
+objc2 types and encoder APIs. The sibling xgpui-lab ownership/upload probes have
+been adapted locally. Existing pending test-support hooks are preserved.
+
+Native Apple library, macOS, shader, gamut/instanced and color-math tests validate
+the converted paths. The lab's native video/Surface and lifecycle/ownership
+reports are additional local evidence, not proof of Intel Managed-storage behavior
+or physical display calibration. Recheck source revisions, dependency graphs and
+candidate consumer builds before making any release claim. No version changes,
+registry publication or push are part of this work.

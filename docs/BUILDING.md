@@ -110,11 +110,10 @@ utility crate requires Zed's async-process fork: its process launcher calls
 revision is taken from the original Zed release's workspace patch. These
 overrides repair extraction omissions without editing captured source.
 
-A local MIT-licensed `block` 0.1.6 compatibility copy under `vendor/block` fixes
-an invalid foreign static in the legacy Cocoa/Metal dependency. Its patch notes
-record the source, ABI-preserving changes, and removal criteria. The normal local
-Cargo configuration also applies it to standalone builds; consumer lockfiles
-record the local source. Account for this patch when preparing published packages.
+The local Apple backends and extension producers use `objc2`, `objc2-metal`,
+and `block2`. The legacy Cocoa/metal-rs `block` compatibility patch is no longer
+needed by this checkout. Published versions can still resolve the older bindings;
+verify a consumer's selected dependency graph independently of local builds.
 
 ## Local naming
 

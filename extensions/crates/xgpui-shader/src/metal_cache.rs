@@ -2,7 +2,10 @@
 use anyhow::{Result, bail, ensure};
 use gpui::{DevicePixels, Size};
 use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput};
-use metal::{CommandBuffer, CommandQueue, MTLCommandBufferStatus, Texture};
+use gpui_apple::metal::*;
+use gpui_apple::metal::{CommandBuffer, MTLCommandBufferStatus, Texture};
+use objc2::{Message, rc::Retained, runtime::ProtocolObject};
+use objc2_metal::MTLCommandQueue;
 use std::{collections::HashMap, sync::Mutex};
 
 const OUTPUT_BUDGET: u64 = 64 * 1024 * 1024;
@@ -16,7 +19,7 @@ struct Entry {
     texture: Texture,
     command: CommandBuffer,
     // Prevent queue identity from being recycled while this entry exists.
-    _queue: CommandQueue,
+    _queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
     used: u64,
     bytes: u64,
 }
@@ -105,7 +108,7 @@ impl OutputCache {
                 Entry {
                     texture: texture.clone(),
                     command: command.clone(),
-                    _queue: context.queue.clone(),
+                    _queue: context.objc2_queue().retain(),
                     used,
                     bytes,
                 },
@@ -126,9 +129,9 @@ impl OutputCache {
         let name = if state
             .entries
             .values()
-            .all(|e| e.texture.device().registry_id() == first.registry_id())
+            .all(|e| e.texture.device().registryID() == first.registryID())
         {
-            first.name().to_owned()
+            first.name().to_string()
         } else {
             "Multiple Metal devices".to_owned()
         };
@@ -138,3 +141,6 @@ impl OutputCache {
 
 #[cfg(test)]
 mod tests;
+
+// SAFETY: cache entries are immutable GPU resources; all access/submission is serialized by the cache mutex.
+unsafe impl Send for Entry {}
