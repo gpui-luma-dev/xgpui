@@ -36,9 +36,7 @@ jobs:
           python3 scripts/daily_release.py prepare --baseline "${BASELINE:-$(git describe --tags --match 'release-*' --abbrev=0)}" --apply --report "$RUNNER_TEMP/preparation.json" --notes "$RUNNER_TEMP/release-notes.md"
       - name: Refresh local lockfile identities without dependency upgrades
         run: |
-          git ls-files '**/Cargo.lock' Cargo.lock | while IFS= read -r lock; do
-            cargo metadata --config .cargo/validation.toml --format-version 1 --manifest-path "${lock%Cargo.lock}Cargo.toml" > /dev/null
-          done
+          python3 scripts/daily_release.py refresh-locks
       - name: Test release tooling and canonical manifests
         run: |
           python3 -m unittest discover -s scripts -p 'test_*.py'

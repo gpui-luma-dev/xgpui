@@ -122,6 +122,36 @@ def apply(root, plan):
         subprocess.run(['cargo', 'run', '--locked', '--manifest-path', 'tools/release-sync/Cargo.toml', '--', command], cwd=root, check=True)
 
 
+def refresh_locks(root, offline=False):
+    for name in git(root, 'ls-files').splitlines():
+        if Path(name).name != 'Cargo.lock':
+            continue
+        packages = tomllib.loads((root / name).read_text()).get('package', [])
+        compatibility = any('github.com/proptest-rs/proptest' in r.get('source', '')
+                            or 'github.com/zed-industries/async-process' in r.get('source', '')
+                            for r in packages)
+        command = ['cargo', 'metadata', '--format-version', '1', '--manifest-path',
+                   str(Path(name).with_name('Cargo.toml'))]
+        if compatibility:
+            command += ['--config', '.cargo/validation.toml']
+        if offline:
+            command.append('--offline')
+        subprocess.run(command, cwd=root, check=True, stdout=subprocess.DEVNULL)
+    check_lock_sources(root)
+
+
+def check_lock_sources(root):
+    """Reject accidental external dependency upgrades during preparation."""
+    def external(text):
+        return {(r['name'], r['version'], r['source'], r.get('checksum'))
+                for r in tomllib.loads(text).get('package', []) if 'source' in r}
+    for name in git(root, 'ls-files').splitlines():
+        if Path(name).name == 'Cargo.lock':
+            before = git(root, 'show', 'HEAD:' + name)
+            if external(before) != external((root / name).read_text()):
+                raise ValueError('External dependency resolution changed; review manually: ' + name)
+
+
 def preparation_notes(plan):
     lines = ['Daily release preparation', '', f"Baseline: `{plan['baseline']}` (`{plan['baseline_commit']}`).", '',
              '**Review required:** patch bumps are proposals. Review public API changes and choose minor/major versions where needed before merging.', '',
@@ -173,14 +203,23 @@ def finalize(root, report, repo):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare', 'finalize'])
+    parser.add_argument('command', choices=['prepare', 'finalize', 'check-locks', 'refresh-locks'])
     parser.add_argument('--baseline')
     parser.add_argument('--apply', action='store_true')
-    parser.add_argument('--report', type=Path, required=True)
+    parser.add_argument('--offline', action='store_true')
+    parser.add_argument('--report', type=Path)
     parser.add_argument('--notes', type=Path)
     parser.add_argument('--repo')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
+    if args.command == 'refresh-locks':
+        refresh_locks(root, args.offline)
+        return
+    if args.command == 'check-locks':
+        check_lock_sources(root)
+        return
+    if not args.report:
+        parser.error('--report required')
     if args.command == 'prepare':
         plan = prepare(root, args.baseline)
         if args.apply:
