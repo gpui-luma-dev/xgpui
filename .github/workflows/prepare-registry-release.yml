@@ -1,10 +1,22 @@
 name: Prepare registry release
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/prepare-registry-release.yml'
+      - 'scripts/*release*.py'
+      - 'scripts/publish*.py'
+      - 'scripts/test_publish*.py'
+      - 'scripts/release-packages.json'
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'Plan checks archives/registry; dry-run verifies available dependency roots; publish uploads missing versions'
+        type: choice
+        options: [plan, dry-run, publish]
+        default: plan
       confirmation:
-        description: "Leave blank for offline preparation; approved upload: publish six extensions 0.2.0 only"
+        description: 'Publish only: enter publish FULL_COMMIT_SHA for the selected branch commit'
         required: false
         type: string
 
@@ -12,52 +24,59 @@ permissions:
   contents: read
 
 concurrency:
-  group: prepare-registry-release
+  group: registry-release
   cancel-in-progress: false
 
 jobs:
-  plan:
-    if: inputs.confirmation == ''
+  tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - name: Test release tooling
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
-      - name: Prepare framework-first release inventory
-        run: python3 scripts/prepare_registry_release.py --out "$RUNNER_TEMP/registry-release"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: registry-release-plan
-          path: ${{ runner.temp }}/registry-release/release-plan.json
-          if-no-files-found: error
-          retention-days: 30
-  extensions:
-    if: inputs.confirmation == 'publish six extensions 0.2.0 only'
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: tests
     runs-on: macos-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 6dd303959ab4d16e9669da96a985692afd67606e
+          ref: ${{ github.sha }}
           persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: dtolnay/rust-toolchain@stable
-      - name: Test publication safeguards
-        run: python3 -m unittest discover -s scripts -p 'test_*.py'
-      - name: Verify and publish six approved extensions
+      - name: Plan or verify without upload credentials
+        if: inputs.mode != 'publish'
+        env:
+          RELEASE_MODE: ${{ inputs.mode }}
+        run: >-
+          python3 scripts/publish_registry_release.py
+          --out "$RUNNER_TEMP/registry-release" --mode "$RELEASE_MODE"
+      - name: Publish explicitly confirmed commit
+        if: inputs.mode == 'publish'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
         run: >-
-          python3 scripts/publish_extensions.py
-          --out "$RUNNER_TEMP/extension-release"
-          --publish --confirmation 'publish six extensions 0.2.0 only'
+          python3 scripts/publish_registry_release.py
+          --out "$RUNNER_TEMP/registry-release" --mode publish
+          --confirmation "$RELEASE_CONFIRMATION"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: extension-release-${{ github.run_id }}-${{ github.run_attempt }}
+          name: registry-release-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/extension-release/report.json
-            ${{ runner.temp }}/extension-release/*.log
-            ${{ runner.temp }}/extension-release/target/package/**/*.crate
-          if-no-files-found: error
+            ${{ runner.temp }}/registry-release/report.json
+            ${{ runner.temp }}/registry-release/*.log
+            ${{ runner.temp }}/registry-release/prepared/*.crate
+          if-no-files-found: warn
           retention-days: 30

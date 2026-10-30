@@ -467,3 +467,42 @@ reports are additional local evidence, not proof of Intel Managed-storage behavi
 or physical display calibration. Recheck source revisions, dependency graphs and
 candidate consumer builds before making any release claim. No version changes,
 registry publication or push are part of this work.
+
+## Map-driven releases
+
+Use **Prepare registry release** on the exact branch/commit to review. The
+workflow now checks out the dispatch SHA and reads each crate/version from
+`scripts/release-packages.json`; it is no longer pinned to the six-extension
+0.2.0 release. Local equivalents (new output directory outside the checkout):
+
+```sh
+python3 scripts/publish_registry_release.py --mode plan --out /tmp/xgpui-release-plan
+python3 scripts/publish_registry_release.py --mode dry-run --out /tmp/xgpui-release-dry-run
+```
+
+- **plan** creates and inspects candidate archives, checks registry versions,
+  and reports `publish-needed`, `already-published` or `version-conflict`.
+  Changed files under an existing version fail the plan before any upload.
+- **dry-run** additionally runs registry-backed `cargo package` build verification
+  where dependencies are published. Dependents of missing candidate versions
+  are reported as blocked, not claimed as verified. Neither mode gets upload
+  credentials; they may read crates.io and download dependencies.
+- **publish** requires `publish FULL_COMMIT_SHA` plus the registry token. It
+  preflights every candidate before uploading, then verifies/builds and uploads
+  missing packages in framework-first dependency order. Manifest publication
+  policy must allow crates.io. Each upload is checked through the API and a
+  checksum-verified registry download before its dependents proceed.
+
+Existing versions are skipped only when packaged source files and the normalized
+manifest match. Generated Cargo.lock/VCS metadata and publication permissions are
+excluded from this comparison; dependency requirements, features, resources,
+README and source contents are retained. Differences require a new version.
+
+Reports, per-command logs and prepared archives are retained as workflow artifacts,
+including on failure. Rerun the same immutable commit to resume: registry contents
+are checked again and matching published versions are skipped. Unknown upload
+outcomes stop; retries require an explicit registry quota deadline or a separately
+reviewed rerun. No branch merge, Git tag or GitHub release is performed.
+
+The old `publish_extensions.py` remains only as the historical fixed-release
+helper. The workflow uses `publish_registry_release.py` for new releases.
