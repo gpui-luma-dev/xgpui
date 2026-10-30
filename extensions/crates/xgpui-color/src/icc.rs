@@ -104,8 +104,10 @@ impl IccRgbProfile {
             profile.white_point.z,
         ];
         // Matrix tags already describe the PCS. chad describes their history;
-        // applying it again would double-adapt. Adapt the encoded PCS white once.
-        let definition = RgbDefinition::new_with_xyz_white(colorants, curves, pcs_white)?;
+        // applying it again would double-adapt. Use the header PCS illuminant,
+        // not the media-white tag or matrix sum, as the adaptation reference.
+        // Real profiles need not map RGB(1,1,1) exactly to that reference white.
+        let definition = RgbDefinition::from_relative_xyz_matrix(colorants, curves, pcs_white)?;
         Ok(Self {
             definition,
             colorants,

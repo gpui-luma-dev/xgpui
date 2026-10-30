@@ -143,10 +143,22 @@ own test assets so packaged color tests do not depend on files outside the crate
 ## Published-profile corpus
 
 The color crate now tests nine pinned, unmodified external profiles, including
-765 high-precision vectors for Compact v4 sRGB, Display P3 and Adobe-compatible
-profiles. See `extensions/crates/xgpui-color/tests/reference/real-icc/README.md`
+4,108 high-precision vectors for Compact v4 sRGB, Display P3, Adobe-compatible
+and ICC-authored sampled sRGB2014 profiles. See `extensions/crates/xgpui-color/tests/reference/real-icc/README.md`
 from the repository root for hashes, licensing and explicit acceptance/rejection
-results. The pinned sRGB2014 mirror remains outside the matrix/white coherence
-contract; compact v2 files remain outside the strict tag-overlap policy. These
-are active expected-rejection tests, not ignored accuracy failures. No decoder
+results. The pinned sRGB2014 mirror now preserves its non-neutral relative PCS matrix
+through the explicit relative-matrix constructor. Compact v2 files remain
+outside the strict tag-overlap policy, with active expected-rejection tests. No decoder
 or transform-engine dependency was added.
+
+
+The matrix/PCS distinction has a secondary endpoint check:
+
+```sh
+python3 validation/icc-import-probe/check_srgb2014.py
+```
+
+Little CMS 2.19, relative colorimetric and no BPC/optimization, retains the
+serialized sRGB2014 primary/white offsets within a source-energy-scaled f32
+budget. This validation-only check does not use the engine as a sampled-curve
+precision oracle or alter the old dependency-transform precision gates above.
