@@ -27,7 +27,7 @@ gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=1.0
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-apple = { path = "../../../gpui/crates/gpui-apple" , package = "xgpui-apple", version = "=1.0.0" }
-metal = "0.33"
+objc2-metal = { version = "0.3", default-features = false, features = ["MTLAllocation", "MTLCommandBuffer", "MTLCommandEncoder", "MTLCommandQueue", "MTLDevice", "MTLPixelFormat", "MTLRenderCommandEncoder", "MTLRenderPass", "MTLResource", "MTLTexture"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 gpui-windows = { path = "../../../gpui/crates/gpui-windows" , package = "xgpui-windows", version = "=1.0.0" }

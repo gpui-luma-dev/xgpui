@@ -6,6 +6,3 @@
 proptest = { version = "=1.10.0", git = "https://github.com/proptest-rs/proptest", rev = "3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b" }
 # util's macOS process launcher requires Child::adopt_raw_pid from Zed's fork.
 async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
-
-# Legacy Cocoa/Metal block ABI shim: fix Rust uninhabited_static without suppressing it.
-block = { path = "vendor/block" }

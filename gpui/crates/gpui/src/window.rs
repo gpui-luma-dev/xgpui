@@ -3356,6 +3356,11 @@ impl Window {
     #[inline]
     fn cover_bounds(&self, bounds: Bounds<Pixels>) -> Bounds<ScaledPixels> {
         let scale_factor = self.scale_factor();
+        // Rounding a zero-width fractional clip outward can invent a pixel
+        // outside a layer capture when the clipped glyph lies beyond its tile.
+        if bounds.is_empty() {
+            return Bounds::new(bounds.origin.scale(scale_factor), Size::default());
+        }
         let left = floor_to_device_pixel(bounds.left().0, scale_factor);
         let top = floor_to_device_pixel(bounds.top().0, scale_factor);
         let right = ceil_to_device_pixel(bounds.right().0, scale_factor).max(left);
@@ -3641,6 +3646,14 @@ impl Window {
             self.mark_view_dirty(entity);
         }
         self.invalidator.replace_views(views);
+    }
+
+    /// Submit the recorded scene on this window's actual native renderer.
+    /// Native lifecycle tests use this instead of presentation/readback waits.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn submit_frame_for_validation(&self) -> anyhow::Result<()> {
+        self.platform_window
+            .submit_scene_for_validation(&self.rendered_frame.scene)
     }
 
     #[profiling::function]
@@ -8327,6 +8340,30 @@ mod tests {
         TouchId, TouchPhase, Underline, UnderlineStyle, Window, WindowAppearance, WindowOptions,
         canvas, div, hsla, point, px, size,
     };
+
+    #[gpui::test]
+    fn test_cover_bounds_preserves_empty_fractional_clips(cx: &mut TestAppContext) {
+        let window = cx.add_window(|_, _| EmptyView);
+        window
+            .update(cx, |_, window, _| {
+                for scale in [1., 1.25, 2.] {
+                    window.scale_factor = scale;
+                    let tile = Bounds::new(point(px(10.), px(10.)), size(px(20.), px(20.)));
+                    let glyph = Bounds::new(point(px(40.25), px(15.25)), size(px(4.), px(4.)));
+                    for clip in [
+                        tile.intersect(&glyph),
+                        Bounds::new(point(px(40.25), px(15.25)), size(px(0.), px(4.))),
+                        Bounds::new(point(px(15.25), px(40.25)), size(px(4.), px(0.))),
+                    ] {
+                        assert!(clip.is_empty());
+                        assert!(window.cover_bounds(clip).is_empty());
+                    }
+                    let visible = Bounds::new(point(px(15.25), px(15.25)), size(px(0.1), px(0.1)));
+                    assert!(!window.cover_bounds(visible).is_empty());
+                }
+            })
+            .unwrap();
+    }
 
     #[cfg(feature = "profiler")]
     #[gpui::test]

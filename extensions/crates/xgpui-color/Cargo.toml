@@ -20,4 +20,6 @@ categories = ["graphics", "mathematics"]
 naga = { version = "30.0.1", features = ["wgsl-in", "msl-out", "hlsl-out", "spv-out"] }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
-metal = "0.33"
+objc2 = "0.6"
+objc2-metal = "0.3"
+objc2-foundation = "0.3.2"

@@ -1,20 +1,27 @@
 use anyhow::{Context as _, Result};
-use derive_more::{Deref, DerefMut};
+use derive_more::Deref;
 use etagere::BucketedAtlasAllocator;
 use gpui::{
     AtlasBackend, AtlasKey, AtlasState, AtlasTextureId, AtlasTextureKind, AtlasTextureList,
     AtlasTile, Bounds, DevicePixels, PlatformAtlas, Point, Size,
 };
-use metal::Device;
+use objc2::{rc::Retained, runtime::ProtocolObject};
+use objc2_metal::{
+    MTLDevice, MTLOrigin, MTLPixelFormat, MTLRegion, MTLSize, MTLStorageMode, MTLTexture,
+    MTLTextureDescriptor, MTLTextureUsage,
+};
 use parking_lot::Mutex;
 use std::borrow::Cow;
 
 pub struct MetalAtlas(Mutex<AtlasState<MetalAtlasTextures>>);
 
 impl MetalAtlas {
-    pub(crate) fn new(device: Device, supports_shared_storage: bool) -> Self {
+    pub(crate) fn new(
+        device: Retained<ProtocolObject<dyn MTLDevice>>,
+        supports_shared_storage: bool,
+    ) -> Self {
         MetalAtlas(Mutex::new(AtlasState::new(MetalAtlasTextures {
-            device: AssertSend(device),
+            device,
             supports_shared_storage,
             monochrome_textures: Default::default(),
             polychrome_textures: Default::default(),
@@ -25,13 +32,16 @@ impl MetalAtlas {
     /// has been removed. A scene can still reference such a texture when a
     /// cached view replays a paint from before the image was dropped, so
     /// callers must skip those sprites rather than assume the texture exists.
-    pub(crate) fn metal_texture(&self, id: AtlasTextureId) -> Option<metal::Texture> {
+    pub(crate) fn metal_texture(
+        &self,
+        id: AtlasTextureId,
+    ) -> Option<Retained<ProtocolObject<dyn MTLTexture>>> {
         Some(self.0.lock().backend.texture(id)?.metal_texture.clone())
     }
 }
 
 struct MetalAtlasTextures {
-    device: AssertSend<Device>,
+    device: Retained<ProtocolObject<dyn MTLDevice>>,
     supports_shared_storage: bool,
     monochrome_textures: AtlasTextureList<MetalAtlasTexture>,
     polychrome_textures: AtlasTextureList<MetalAtlasTexture>,
@@ -136,32 +146,38 @@ impl MetalAtlasTextures {
             height: DevicePixels(16384),
         };
         let size = min_size.min(&MAX_ATLAS_SIZE).max(&DEFAULT_ATLAS_SIZE);
-        let texture_descriptor = metal::TextureDescriptor::new();
-        texture_descriptor.set_width(size.width.into());
-        texture_descriptor.set_height(size.height.into());
+        let texture_descriptor = MTLTextureDescriptor::new();
+        // SAFETY: allocation extents are positive and clamped to Metal's maximum.
+        unsafe {
+            texture_descriptor.setWidth(size.width.0 as usize);
+            texture_descriptor.setHeight(size.height.0 as usize);
+        }
         let pixel_format;
         let usage;
         match kind {
             AtlasTextureKind::Monochrome => {
-                pixel_format = metal::MTLPixelFormat::A8Unorm;
-                usage = metal::MTLTextureUsage::ShaderRead;
+                pixel_format = MTLPixelFormat::A8Unorm;
+                usage = MTLTextureUsage::ShaderRead;
             }
             AtlasTextureKind::Polychrome => {
-                pixel_format = metal::MTLPixelFormat::BGRA8Unorm;
-                usage = metal::MTLTextureUsage::ShaderRead;
+                pixel_format = MTLPixelFormat::BGRA8Unorm;
+                usage = MTLTextureUsage::ShaderRead;
             }
             AtlasTextureKind::Subpixel => unreachable!(),
         }
-        texture_descriptor.set_pixel_format(pixel_format);
-        texture_descriptor.set_usage(usage);
+        texture_descriptor.setPixelFormat(pixel_format);
+        texture_descriptor.setUsage(usage);
         // Shared memory mode can be used only on Apple GPU families
         // https://developer.apple.com/documentation/metal/mtlresourceoptions/storagemodeshared
-        texture_descriptor.set_storage_mode(if self.supports_shared_storage {
-            metal::MTLStorageMode::Shared
+        texture_descriptor.setStorageMode(if self.supports_shared_storage {
+            MTLStorageMode::Shared
         } else {
-            metal::MTLStorageMode::Managed
+            MTLStorageMode::Managed
         });
-        let metal_texture = self.device.new_texture(&texture_descriptor);
+        let metal_texture = self
+            .device
+            .newTextureWithDescriptor(&texture_descriptor)
+            .expect("failed to allocate Metal atlas texture");
 
         let texture_list = match kind {
             AtlasTextureKind::Monochrome => &mut self.monochrome_textures,
@@ -177,7 +193,7 @@ impl MetalAtlasTextures {
                 kind,
             },
             allocator: etagere::BucketedAtlasAllocator::new(size_to_etagere(size)),
-            metal_texture: AssertSend(metal_texture),
+            metal_texture: AtlasTextureHandle(metal_texture),
             live_atlas_keys: 0,
         };
 
@@ -206,7 +222,7 @@ impl MetalAtlasTextures {
 struct MetalAtlasTexture {
     id: AtlasTextureId,
     allocator: BucketedAtlasAllocator,
-    metal_texture: AssertSend<metal::Texture>,
+    metal_texture: AtlasTextureHandle,
     live_atlas_keys: u32,
 }
 
@@ -227,25 +243,41 @@ impl MetalAtlasTexture {
     }
 
     fn upload(&self, bounds: Bounds<DevicePixels>, bytes: &[u8]) {
-        let region = metal::MTLRegion::new_2d(
-            bounds.origin.x.into(),
-            bounds.origin.y.into(),
-            bounds.size.width.into(),
-            bounds.size.height.into(),
+        let region = MTLRegion {
+            origin: MTLOrigin {
+                x: bounds.origin.x.0 as usize,
+                y: bounds.origin.y.0 as usize,
+                z: 0,
+            },
+            size: MTLSize {
+                width: bounds.size.width.0 as usize,
+                height: bounds.size.height.0 as usize,
+                depth: 1,
+            },
+        };
+        let row_bytes = bounds.size.width.to_bytes(self.bytes_per_pixel());
+        assert!(
+            bytes.len() >= row_bytes as usize * bounds.size.height.0 as usize,
+            "atlas upload must contain every pixel in the region"
         );
-        self.metal_texture.replace_region(
-            region,
-            0,
-            bytes.as_ptr() as *const _,
-            bounds.size.width.to_bytes(self.bytes_per_pixel()) as u64,
-        );
+        // SAFETY: the allocated tile bounds are within this texture, mip level
+        // zero exists, and the checked byte slice covers every uploaded row.
+        // Metal copies bytes synchronously; it does not retain the slice pointer.
+        unsafe {
+            self.metal_texture
+                .replaceRegion_mipmapLevel_withBytes_bytesPerRow(
+                    region,
+                    0,
+                    std::ptr::NonNull::new(bytes.as_ptr().cast_mut().cast()).unwrap(),
+                    row_bytes as usize,
+                );
+        }
     }
 
     fn bytes_per_pixel(&self) -> u8 {
-        use metal::MTLPixelFormat::*;
-        match self.metal_texture.pixel_format() {
-            A8Unorm | R8Unorm => 1,
-            RGBA8Unorm | BGRA8Unorm => 4,
+        match self.metal_texture.pixelFormat() {
+            MTLPixelFormat::A8Unorm | MTLPixelFormat::R8Unorm => 1,
+            MTLPixelFormat::RGBA8Unorm | MTLPixelFormat::BGRA8Unorm => 4,
             _ => unimplemented!(),
         }
     }
@@ -270,10 +302,13 @@ fn point_from_etagere(value: etagere::Point) -> Point<DevicePixels> {
     }
 }
 
-#[derive(Deref, DerefMut)]
-struct AssertSend<T>(T);
+#[derive(Deref)]
+struct AtlasTextureHandle(Retained<ProtocolObject<dyn MTLTexture>>);
 
-unsafe impl<T> Send for AssertSend<T> {}
+// SAFETY: Metal texture retain/release is thread-safe. Atlas mutations and CPU
+// uploads are serialized by MetalAtlas's mutex; descriptors are immutable after
+// allocation. This assertion is restricted to atlas textures, not arbitrary T.
+unsafe impl Send for AtlasTextureHandle {}
 
 #[cfg(test)]
 mod tests {
@@ -281,8 +316,59 @@ mod tests {
     use gpui::PlatformAtlas;
     use std::borrow::Cow;
 
+    #[test]
+    fn objc2_atlas_upload_and_retained_texture_survive_eviction() {
+        objc2::rc::autoreleasepool(|_| {
+            let device =
+                objc2_metal::MTLCreateSystemDefaultDevice().expect("Metal device required");
+            let shared = device.supportsFamily(objc2_metal::MTLGPUFamily::Apple1);
+            let atlas = MetalAtlas::new(device, shared);
+            let size = Size {
+                width: DevicePixels(2),
+                height: DevicePixels(2),
+            };
+            let pixels = vec![13, 27, 61, 255].repeat(4);
+            let key = make_image_key(42, 0);
+            let tile = atlas
+                .get_or_insert_with(key.clone(), &mut || {
+                    Ok(Some((size, Cow::Borrowed(pixels.as_slice()))))
+                })
+                .unwrap()
+                .unwrap();
+            let texture = atlas.metal_texture(tile.texture_id).unwrap();
+            atlas.remove(&key);
+            assert!(atlas.metal_texture(tile.texture_id).is_none());
+            drop(atlas);
+            let mut actual = vec![0u8; pixels.len()];
+            let region = MTLRegion {
+                origin: MTLOrigin {
+                    x: tile.bounds.origin.x.0 as usize,
+                    y: tile.bounds.origin.y.0 as usize,
+                    z: 0,
+                },
+                size: MTLSize {
+                    width: 2,
+                    height: 2,
+                    depth: 1,
+                },
+            };
+            // SAFETY: the retained texture still owns its storage after atlas
+            // eviction. Level zero and this tile region exist; the writable
+            // destination has four BGRA8 pixels, with a tightly packed 8-byte row.
+            unsafe {
+                texture.getBytes_bytesPerRow_fromRegion_mipmapLevel(
+                    std::ptr::NonNull::new(actual.as_mut_ptr().cast()).unwrap(),
+                    8,
+                    region,
+                    0,
+                );
+            }
+            assert_eq!(actual, pixels);
+        });
+    }
+
     fn create_atlas() -> Option<MetalAtlas> {
-        let device = metal::Device::system_default()?;
+        let device = objc2_metal::MTLCreateSystemDefaultDevice()?;
         Some(MetalAtlas::new(device, true))
     }
 

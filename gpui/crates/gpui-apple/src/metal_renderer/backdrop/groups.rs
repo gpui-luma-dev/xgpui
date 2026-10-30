@@ -29,7 +29,7 @@ impl Groups {
         self.slots
             .iter()
             .flat_map(|slot| &slot.textures)
-            .map(|texture| texture.width() * texture.height() * 4)
+            .map(|texture| (texture.width() * texture.height() * 4) as u64)
             .sum()
     }
     pub fn prepare(
@@ -78,13 +78,17 @@ impl Groups {
                     p.blur_size
                 };
                 let d = TextureDescriptor::new();
-                d.set_texture_type(MTLTextureType::D2);
-                d.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-                d.set_width(extent[0] as u64);
-                d.set_height(extent[1] as u64);
-                d.set_storage_mode(MTLStorageMode::Private);
-                d.set_usage(MTLTextureUsage::ShaderRead | MTLTextureUsage::RenderTarget);
-                slot.textures.push(device.new_texture(&d));
+                d.setTextureType(MTLTextureType::Type2D);
+                d.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+                unsafe { d.setWidth(extent[0] as usize) };
+                unsafe { d.setHeight(extent[1] as usize) };
+                d.setStorageMode(MTLStorageMode::Private);
+                d.setUsage(MTLTextureUsage::ShaderRead | MTLTextureUsage::RenderTarget);
+                slot.textures.push(
+                    device
+                        .newTextureWithDescriptor(&d)
+                        .expect("Metal texture allocation failed"),
+                );
             }
             self.hits.push(
                 self.slots[i]
@@ -124,27 +128,21 @@ impl Groups {
     }
     pub fn copy(&self, cb: &CommandBufferRef, source: &TextureRef, slot: usize, begin: bool) {
         let p = &self.plans[slot];
-        let blit = cb.new_blit_command_encoder();
-        blit.copy_from_texture(
-            source,
-            0,
-            0,
-            MTLOrigin {
-                x: p.origin[0] as u64,
-                y: p.origin[1] as u64,
+        let blit = cb
+            .blitCommandEncoder()
+            .expect("Metal blit encoder allocation failed");
+        unsafe {
+            blit.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin(source, 0, 0, MTLOrigin {
+                x: p.origin[0] as usize,
+                y: p.origin[1] as usize,
                 z: 0,
-            },
-            MTLSize {
-                width: p.size[0] as u64,
-                height: p.size[1] as u64,
+            }, MTLSize {
+                width: p.size[0] as usize,
+                height: p.size[1] as usize,
                 depth: 1,
-            },
-            &self.slots[slot].textures[usize::from(!begin)],
-            0,
-            0,
-            MTLOrigin { x: 0, y: 0, z: 0 },
-        );
-        blit.end_encoding();
+            }, &self.slots[slot].textures[usize::from(!begin)], 0, 0, MTLOrigin { x: 0, y: 0, z: 0 })
+        };
+        blit.endEncoding();
     }
     pub fn draw(
         &self,
@@ -154,21 +152,37 @@ impl Groups {
         begin: bool,
     ) {
         let params = &self.plans[slot].parameters[usize::from(!begin)];
-        e.set_render_pipeline_state(pipeline);
-        e.set_vertex_bytes(1, 96, params.as_ptr().cast());
-        e.set_fragment_bytes(1, 96, params.as_ptr().cast());
-        e.set_fragment_texture(
-            0,
-            Some(
-                &self.slots[slot].textures[if !begin && self.plans[slot].blur_radius > 0. {
-                    3
-                } else {
-                    1
-                }],
-            ),
-        );
-        e.set_fragment_texture(1, Some(&self.slots[slot].textures[0]));
-        e.draw_primitives(MTLPrimitiveType::Triangle, 0, 6);
+        e.setRenderPipelineState(pipeline);
+        unsafe {
+            e.setVertexBytes_length_atIndex(
+                std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                    .expect("non-null bytes"),
+                96,
+                1,
+            )
+        };
+        unsafe {
+            e.setFragmentBytes_length_atIndex(
+                std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                    .expect("non-null bytes"),
+                96,
+                1,
+            )
+        };
+        unsafe {
+            e.setFragmentTexture_atIndex(
+                Some(
+                    &self.slots[slot].textures[if !begin && self.plans[slot].blur_radius > 0. {
+                        3
+                    } else {
+                        1
+                    }],
+                ),
+                0,
+            )
+        };
+        unsafe { e.setFragmentTexture_atIndex(Some(&self.slots[slot].textures[0]), 1) };
+        unsafe { e.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6) };
     }
     pub fn filter(&self, cb: &CommandBufferRef, pipeline: &RenderPipelineStateRef, slot: usize) {
         let p = &self.plans[slot];
@@ -183,16 +197,35 @@ impl Groups {
                     DevicePixels(p.blur_size[0] as i32),
                     DevicePixels(p.blur_size[1] as i32),
                 ),
-                Some(MTLClearColor::new(0., 0., 0., 0.)),
+                Some(MTLClearColor {
+                    red: 0.,
+                    green: 0.,
+                    blue: 0.,
+                    alpha: 0.,
+                }),
             );
             let params = &p.parameters[axis + 2];
-            e.set_render_pipeline_state(pipeline);
-            e.set_vertex_bytes(1, 96, params.as_ptr().cast());
-            e.set_fragment_bytes(1, 96, params.as_ptr().cast());
-            e.set_fragment_texture(0, Some(&self.slots[slot].textures[axis + 1]));
-            e.set_fragment_texture(1, Some(&self.slots[slot].textures[0]));
-            e.draw_primitives(MTLPrimitiveType::Triangle, 0, 6);
-            e.end_encoding();
+            e.setRenderPipelineState(pipeline);
+            unsafe {
+                e.setVertexBytes_length_atIndex(
+                    std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                        .expect("non-null bytes"),
+                    96,
+                    1,
+                )
+            };
+            unsafe {
+                e.setFragmentBytes_length_atIndex(
+                    std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                        .expect("non-null bytes"),
+                    96,
+                    1,
+                )
+            };
+            unsafe { e.setFragmentTexture_atIndex(Some(&self.slots[slot].textures[axis + 1]), 0) };
+            unsafe { e.setFragmentTexture_atIndex(Some(&self.slots[slot].textures[0]), 1) };
+            unsafe { e.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6) };
+            e.endEncoding();
         }
     }
     pub fn commit(&mut self, executed: &[usize]) {

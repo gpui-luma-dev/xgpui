@@ -1,7 +1,9 @@
 use super::*;
 use crate::custom_draw::{MetalCustomContext, MetalCustomOutput};
+use crate::metal;
+use crate::metal::*;
 use gpui::{CustomContent, CustomDraw};
-use metal::*;
+use objc2::{rc::Retained, runtime::ProtocolObject};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Debug)]
@@ -11,6 +13,10 @@ struct LegacyCachedProducer {
     queue: CommandQueue,
     calls: AtomicUsize,
 }
+
+// SAFETY: fixture resources are immutable after recording; submission is serialized by this test.
+unsafe impl Send for LegacyCachedProducer {}
+unsafe impl Sync for LegacyCachedProducer {}
 
 // No request-aware method: this exercises the compatibility adapter as well.
 impl CustomContent for LegacyCachedProducer {
@@ -38,7 +44,7 @@ impl CustomContent for LegacyCachedProducer {
 struct ReleaseEvent(SharedEvent);
 impl Drop for ReleaseEvent {
     fn drop(&mut self) {
-        self.0.set_signaled_value(1);
+        self.0.setSignaledValue(1);
     }
 }
 
@@ -48,17 +54,32 @@ fn submission_renderer_reuses_pending_cached_output_without_cpu_wait() {
         let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
         let extent = size(DevicePixels(8), DevicePixels(8));
         let texture = crate::custom_draw::texture(&renderer.device, extent).unwrap();
-        let event = renderer.device.new_shared_event();
+        let event = renderer
+            .device
+            .newSharedEvent()
+            .expect("Metal event allocation failed");
         let release = ReleaseEvent(event.clone());
-        let command = renderer.command_queue.new_command_buffer().to_owned();
-        command.encode_wait_for_event(&event, 1);
+        let command = renderer
+            .command_queue
+            .commandBuffer()
+            .expect("Metal command buffer allocation failed")
+            .to_owned();
+        unsafe { command.encodeWaitForEvent_value(ProtocolObject::from_ref(&*event), 1) };
         let pass = RenderPassDescriptor::new();
-        let attachment = pass.color_attachments().object_at(0).unwrap();
-        attachment.set_texture(Some(&texture));
-        attachment.set_load_action(MTLLoadAction::Clear);
-        attachment.set_store_action(MTLStoreAction::Store);
-        attachment.set_clear_color(MTLClearColor::new(1., 0., 0., 1.));
-        command.new_render_command_encoder(pass).end_encoding();
+        let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+        attachment.setTexture(Some(&texture));
+        attachment.setLoadAction(MTLLoadAction::Clear);
+        attachment.setStoreAction(MTLStoreAction::Store);
+        attachment.setClearColor(MTLClearColor {
+            red: 1.,
+            green: 0.,
+            blue: 0.,
+            alpha: 1.,
+        });
+        command
+            .renderCommandEncoderWithDescriptor(&pass)
+            .expect("Metal render encoder allocation failed")
+            .endEncoding();
         let producer = Arc::new(LegacyCachedProducer {
             texture,
             command: command.clone(),

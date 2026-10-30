@@ -1,5 +1,5 @@
 use super::*;
-use metal::*;
+use crate::metal::*;
 mod groups;
 struct Slot {
     size: [u32; 2],
@@ -16,27 +16,32 @@ pub(super) struct Backdrops {
 impl Backdrops {
     pub fn new(device: &DeviceRef, program: &gpui::SceneShaderProgram) -> Result<Self> {
         let library = device
-            .new_library_with_source(&program.metal().0, &CompileOptions::new())
+            .newLibraryWithSource_options_error(
+                &objc2_foundation::NSString::from_str(&program.metal().0),
+                Some(&CompileOptions::new()),
+            )
             .map_err(anyhow::Error::msg)?;
         let vertex = library
-            .get_function(&program.metal().1, None)
+            .newFunctionWithName(&objc2_foundation::NSString::from_str(&program.metal().1))
+            .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
             .map_err(anyhow::Error::msg)?;
         let fragment = library
-            .get_function(&program.metal().2, None)
+            .newFunctionWithName(&objc2_foundation::NSString::from_str(&program.metal().2))
+            .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
             .map_err(anyhow::Error::msg)?;
         let pipeline = |blend| -> Result<RenderPipelineState> {
             let desc = RenderPipelineDescriptor::new();
-            desc.set_vertex_function(Some(&vertex));
-            desc.set_fragment_function(Some(&fragment));
-            let color = desc.color_attachments().object_at(0).unwrap();
-            color.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-            color.set_blending_enabled(blend);
-            color.set_source_rgb_blend_factor(MTLBlendFactor::SourceAlpha);
-            color.set_destination_rgb_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
-            color.set_source_alpha_blend_factor(MTLBlendFactor::One);
-            color.set_destination_alpha_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
+            desc.setVertexFunction(Some(&vertex));
+            desc.setFragmentFunction(Some(&fragment));
+            let color = unsafe { desc.colorAttachments().objectAtIndexedSubscript(0) };
+            color.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+            color.setBlendingEnabled(blend);
+            color.setSourceRGBBlendFactor(MTLBlendFactor::SourceAlpha);
+            color.setDestinationRGBBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
+            color.setSourceAlphaBlendFactor(MTLBlendFactor::One);
+            color.setDestinationAlphaBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
             device
-                .new_render_pipeline_state(&desc)
+                .newRenderPipelineStateWithDescriptor_error(&desc)
                 .map_err(anyhow::Error::msg)
         };
         Ok(Self {
@@ -94,13 +99,15 @@ impl Backdrops {
                 let textures = std::array::from_fn(|j| {
                     let size = if j == 0 { plan.size } else { plan.reduced };
                     let desc = TextureDescriptor::new();
-                    desc.set_texture_type(MTLTextureType::D2);
-                    desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-                    desc.set_width(size[0] as u64);
-                    desc.set_height(size[1] as u64);
-                    desc.set_storage_mode(MTLStorageMode::Private);
-                    desc.set_usage(MTLTextureUsage::ShaderRead | MTLTextureUsage::RenderTarget);
-                    device.new_texture(&desc)
+                    desc.setTextureType(MTLTextureType::Type2D);
+                    desc.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+                    unsafe { desc.setWidth(size[0] as usize) };
+                    unsafe { desc.setHeight(size[1] as usize) };
+                    desc.setStorageMode(MTLStorageMode::Private);
+                    desc.setUsage(MTLTextureUsage::ShaderRead | MTLTextureUsage::RenderTarget);
+                    device
+                        .newTextureWithDescriptor(&desc)
+                        .expect("Metal texture allocation failed")
                 });
                 let slot = Slot {
                     size: plan.size,
@@ -127,12 +134,26 @@ impl Backdrops {
     }
     fn draw(&self, e: &RenderCommandEncoderRef, index: usize, pass: usize) {
         let params = &self.plans[index].parameters[pass];
-        e.set_render_pipeline_state(&self.filter);
-        e.set_vertex_bytes(1, 96, params.as_ptr().cast());
-        e.set_fragment_bytes(1, 96, params.as_ptr().cast());
-        e.set_fragment_texture(0, Some(&self.slots[index].textures[pass]));
-        e.set_fragment_texture(1, Some(&self.slots[index].textures[0]));
-        e.draw_primitives(MTLPrimitiveType::Triangle, 0, 6);
+        e.setRenderPipelineState(&self.filter);
+        unsafe {
+            e.setVertexBytes_length_atIndex(
+                std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                    .expect("non-null bytes"),
+                96,
+                1,
+            )
+        };
+        unsafe {
+            e.setFragmentBytes_length_atIndex(
+                std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                    .expect("non-null bytes"),
+                96,
+                1,
+            )
+        };
+        unsafe { e.setFragmentTexture_atIndex(Some(&self.slots[index].textures[pass]), 0) };
+        unsafe { e.setFragmentTexture_atIndex(Some(&self.slots[index].textures[0]), 1) };
+        unsafe { e.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6) };
     }
     pub fn filter(&mut self, cb: &CommandBufferRef, source: &TextureRef, index: usize) {
         self.cache.start(index);
@@ -141,27 +162,21 @@ impl Backdrops {
         }
         let plan = &self.plans[index];
         let textures = &self.slots[index].textures;
-        let blit = cb.new_blit_command_encoder();
-        blit.copy_from_texture(
-            source,
-            0,
-            0,
-            MTLOrigin {
-                x: plan.origin[0] as u64,
-                y: plan.origin[1] as u64,
+        let blit = cb
+            .blitCommandEncoder()
+            .expect("Metal blit encoder allocation failed");
+        unsafe {
+            blit.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin(source, 0, 0, MTLOrigin {
+                x: plan.origin[0] as usize,
+                y: plan.origin[1] as usize,
                 z: 0,
-            },
-            MTLSize {
-                width: plan.size[0] as u64,
-                height: plan.size[1] as u64,
+            }, MTLSize {
+                width: plan.size[0] as usize,
+                height: plan.size[1] as usize,
                 depth: 1,
-            },
-            &textures[0],
-            0,
-            0,
-            MTLOrigin { x: 0, y: 0, z: 0 },
-        );
-        blit.end_encoding();
+            }, &textures[0], 0, 0, MTLOrigin { x: 0, y: 0, z: 0 })
+        };
+        blit.endEncoding();
         for pass in 0..2 {
             let e = new_command_encoder_for_texture(
                 cb,
@@ -170,10 +185,15 @@ impl Backdrops {
                     DevicePixels(plan.reduced[0] as i32),
                     DevicePixels(plan.reduced[1] as i32),
                 ),
-                Some(MTLClearColor::new(0., 0., 0., 0.)),
+                Some(MTLClearColor {
+                    red: 0.,
+                    green: 0.,
+                    blue: 0.,
+                    alpha: 0.,
+                }),
             );
-            self.draw(e, index, pass);
-            e.end_encoding();
+            self.draw(&e, index, pass);
+            e.endEncoding();
         }
     }
     pub fn composite(&self, e: &RenderCommandEncoderRef, index: usize) {

@@ -32,7 +32,6 @@ accesskit = { version = "0.24.0", features = ["enumn"] }
 accesskit_macos = { version = "0.26.0" }
 anyhow = { version = "1.0.86" }
 block2 = { version = "0.6" }
-cocoa = { version = "=0.26.0" }
 collections = { package = "collections-gpui-unofficial", version = "=1.25.3" }
 core-foundation = { version = "0.10" }
 core-foundation-sys = { version = "0.8.6" }
@@ -61,55 +60,70 @@ image = { version = "0.25.1", default-features = false, features = [
     "webp"] }
 itertools = { version = "0.14.0" }
 log = { version = "0.4", default-features = false, features = ["std"] }
-objc = { version = "0.2" }
 objc2 = { version = "0.6" }
-objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = [
+    "NSAccessibility",
     "NSAlert",
+    "NSAppearance",
     "NSApplication",
+    "NSAttributedString",
     "NSButton",
+    "NSColor",
+    "NSColorSpace",
     "NSControl",
+    "NSCursor",
+    "NSDocumentController",
     "NSDraggingItem",
+    "NSEvent",
     "NSGraphics",
     "NSImage",
+    "NSMenuItem",
     "NSOpenPanel",
     "NSPanel",
     "NSPasteboard",
     "NSResponder",
+    "NSRunningApplication",
     "NSSavePanel",
     "NSScreen",
-    "NSColorSpace",
-    "objc2-core-graphics",
+    "NSScroller",
+    "NSTextField",
+    "NSTextInputClient",
+    "NSTextInputContext",
+    "NSTextView",
     "NSTrackingArea",
     "NSView",
+    "NSVisualEffectView",
     "NSWindow",
     "NSWorkspace",
     "block2",
-    "objc2-core-foundation"] }
+    "objc2-core-foundation",
+    "objc2-core-graphics",
+    "std",
+] }
 objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["CGDirectDisplay"], optional = true }
 objc2-core-media = { version = "=0.3.2", default-features = false, features = ["CMSampleBuffer", "objc2-core-video"], optional = true }
 objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVBuffer", "CVImageBuffer", "CVHostTime"] }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = [
     "NSArray",
     "NSAttributedString",
-    "NSCoder",
+    "NSAutoreleasePool",
+    "NSBundle",
     "NSData",
-    "NSDate",
     "NSDictionary",
-    "NSEnumerator",
     "NSError",
-    "NSGeometry",
-    "NSNull",
-    "NSObjCRuntime",
+    "NSKeyedArchiver",
     "NSObject",
     "NSProcessInfo",
     "NSRange",
-    "NSRunLoop",
     "NSSet",
     "NSString",
+    "NSThread",
     "NSURL",
-    "NSValue",
+    "NSUserDefaults",
+    "block2",
     "objc2-core-foundation",
-    "std"] }
+    "std",
+] }
 objc2-screen-capture-kit = { version = "=0.3.2", default-features = false, features = [
     "block2",
     "dispatch2",
