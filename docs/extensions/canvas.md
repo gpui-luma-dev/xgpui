@@ -81,8 +81,8 @@ on release, Escape, focus loss or ownership transfer. Caller selection policy
 stays separate. Use `Scene::cache_key()` to invalidate geometry caches when
 bounds change or a scene is replaced.
 
-See the complete [browser consumer](https://github.com/gpui-luma-dev/xgpui/blob/codex/canvas-prototype/apps/xgpui-ext-lab/extensions-web/src/canvas.rs)
-and [native lab](https://github.com/gpui-luma-dev/xgpui/tree/codex/canvas-prototype/apps/xgpui-ext-lab/canvas-lab).
+See the complete [browser consumer](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/extensions-web/src/canvas.rs)
+and [native lab](https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/canvas-lab).
 
 ## RFC coverage
 
@@ -103,8 +103,8 @@ and [native lab](https://github.com/gpui-luma-dev/xgpui/tree/codex/canvas-protot
 ## Reusable API boundary
 
 The default crate has no dependencies: `Camera2D`, `Point`, `WorldBounds`,
-`Scene<T>`, `SceneItem<T>`, `LevelOfDetail`, alignment snapping, and `Overview`.
-The optional `gpui` feature supplies `Canvas`, `GridPainter`, and `GridStyle`.
+`Scene<T>`, `SceneItem<T>`, `LevelOfDetail`, `PanGesture`, alignment snapping, and `Overview`.
+The optional `gpui` feature supplies `Canvas`, `GridPainter`, `GridOptions`, and `GridStyle`.
 
 Screen points are viewport-local logical pixels, positive right/down. Subtract
 the viewport's window origin before inverse projection or pointer-anchored zoom.
@@ -148,7 +148,8 @@ the live preview captures the rendered viewport, including text/grid/overlays.
    Dense overview paints one native quad per proxy. Sparse-query speed does not
    establish dense rendering performance or a worst-case logarithmic guarantee.
 5. Validation evidence is local macOS arm64. The shader uses the portable
-   pipeline, but this canvas lab has not established Windows/Linux/web behavior.
+   pipeline, but the native canvas lab has not established Windows/Linux behavior. Browser
+   companion evidence is recorded separately below.
    Tests cover camera, queries, refits, snapping, overview, and shader layout;
    screenshots require visual inspection rather than pixel assertions.
 
