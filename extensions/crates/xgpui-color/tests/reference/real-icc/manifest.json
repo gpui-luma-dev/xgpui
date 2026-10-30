@@ -1,0 +1,56 @@
+[
+  {
+    "file": "AdobeCompat-v2.icc",
+    "url": "https://raw.githubusercontent.com/saucecontrol/Compact-ICC-Profiles/bdd84663061bc4ae95ca70decff54f581e27f702/profiles/AdobeCompat-v2.icc",
+    "sha256": "60fb2adecacf82132db0b1c09b303316f3bbd9e2823e7ba096d01627d12d57c9",
+    "size": 374
+  },
+  {
+    "file": "AdobeCompat-v4.icc",
+    "url": "https://raw.githubusercontent.com/saucecontrol/Compact-ICC-Profiles/bdd84663061bc4ae95ca70decff54f581e27f702/profiles/AdobeCompat-v4.icc",
+    "sha256": "1e35b53d118eba6835a7bac06137ea87cd5ad6eee97b20a88b29ab6356b00e43",
+    "size": 480
+  },
+  {
+    "file": "CGATS001Compat-v2-micro.icc",
+    "url": "https://raw.githubusercontent.com/saucecontrol/Compact-ICC-Profiles/bdd84663061bc4ae95ca70decff54f581e27f702/profiles/CGATS001Compat-v2-micro.icc",
+    "sha256": "73e1ba37d2bad5bab2a964f40a9eed96209666efc067c3322626214bbef234a0",
+    "size": 8464
+  },
+  {
+    "file": "DisplayP3-v2-magic.icc",
+    "url": "https://raw.githubusercontent.com/saucecontrol/Compact-ICC-Profiles/bdd84663061bc4ae95ca70decff54f581e27f702/profiles/DisplayP3-v2-magic.icc",
+    "sha256": "fa7905dea9d49e775f4e367966e6fc3411e843b44ea91fd7908104b7943a1446",
+    "size": 736
+  },
+  {
+    "file": "DisplayP3-v4.icc",
+    "url": "https://raw.githubusercontent.com/saucecontrol/Compact-ICC-Profiles/bdd84663061bc4ae95ca70decff54f581e27f702/profiles/DisplayP3-v4.icc",
+    "sha256": "cb51de38e482ee974c0c76b9689e16aad04bad16e226fed2f30c842d15ff3a3d",
+    "size": 480
+  },
+  {
+    "file": "sGrey-v4.icc",
+    "url": "https://raw.githubusercontent.com/saucecontrol/Compact-ICC-Profiles/bdd84663061bc4ae95ca70decff54f581e27f702/profiles/sGrey-v4.icc",
+    "sha256": "00c0f94e09127520a17dc0e1d9264b5702081d96dbdb1549ee88e3631ce42a9d",
+    "size": 360
+  },
+  {
+    "file": "sRGB-v2-magic.icc",
+    "url": "https://raw.githubusercontent.com/saucecontrol/Compact-ICC-Profiles/bdd84663061bc4ae95ca70decff54f581e27f702/profiles/sRGB-v2-magic.icc",
+    "sha256": "af4efe28f6d311799865f325ba39184a2e978b113ca74124d60af7de22b105f4",
+    "size": 736
+  },
+  {
+    "file": "sRGB-v4.icc",
+    "url": "https://raw.githubusercontent.com/saucecontrol/Compact-ICC-Profiles/bdd84663061bc4ae95ca70decff54f581e27f702/profiles/sRGB-v4.icc",
+    "sha256": "c56e1685d888f5edb92fe07f2750f387f8fe8e91b32ff8fb0b56bfbbb9458353",
+    "size": 480
+  },
+  {
+    "file": "sRGB2014.icc",
+    "url": "https://raw.githubusercontent.com/AOMediaCodec/libavif/9b07a9d7a874b159bb4e14b80a6f08bb469d06f7/tests/data/sRGB2014.icc",
+    "sha256": "384b832de3412066743b52a75ee906b6fb9fb8d9e09e936fc2c43223815c6e0a",
+    "size": 3024
+  }
+]
