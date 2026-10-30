@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/prepare-registry-release.yml'
       - 'scripts/*release*.py'
+      - '.github/workflows/prepare-daily-release.yml'
       - 'scripts/publish*.py'
       - 'scripts/test_publish*.py'
       - 'scripts/release-packages.json'
@@ -45,6 +46,8 @@ jobs:
     needs: tests
     runs-on: macos-latest
     timeout-minutes: 90
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,6 +73,15 @@ jobs:
           python3 scripts/publish_registry_release.py
           --out "$RUNNER_TEMP/registry-release" --mode publish
           --confirmation "$RELEASE_CONFIRMATION"
+      - name: Mark the verified release
+        if: inputs.mode == 'publish'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: >-
+          python3 scripts/daily_release.py finalize
+          --report "$RUNNER_TEMP/registry-release/report.json"
+          --repo "$RELEASE_REPOSITORY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
