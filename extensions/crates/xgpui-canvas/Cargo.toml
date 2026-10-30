@@ -3,8 +3,14 @@ name = "xgpui-canvas"
 version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
-description = "Experimental spatial camera foundation for xgpui"
-publish = false
+description = "Spatial viewport, f64 camera, scene culling and procedural grids for xgpui"
+repository = "https://github.com/gpui-luma-dev/xgpui"
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#canvas"
+readme = "README.md"
+keywords = ["xgpui", "gpui", "gui", "canvas", "graphics"]
+categories = ["gui", "graphics"]
+publish = ["crates-io"]
 
 [workspace]
 
@@ -12,7 +18,7 @@ publish = false
 gpui = ["dep:gpui", "dep:xgpui-shader", "dep:bytemuck", "dep:anyhow"]
 
 [dependencies]
-gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "=1.0.0", optional = true }
-xgpui-shader = { path = "../xgpui-shader", version = "=0.2.0", features = ["portable-shaders"], optional = true }
+gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "=1.1.0", optional = true }
+xgpui-shader = { path = "../xgpui-shader", version = "=0.2.1", features = ["portable-shaders"], optional = true , package = "xgpui-shader" }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 anyhow = { version = "1", optional = true }

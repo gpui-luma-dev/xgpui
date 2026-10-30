@@ -9,7 +9,7 @@ GPUI continues to own layout, input and scene composition.
 ```toml
 [dependencies]
 gpui = { package = "xgpui", version = "1.0.0" }
-xgpui-shader = { version = "0.2.0", features = ["portable-shaders"] }
+xgpui-shader = { version = "0.2.1", features = ["portable-shaders"] }
 ```
 
 ## Brushes and gradients
