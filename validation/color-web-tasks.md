@@ -33,3 +33,7 @@ cargo test --offline --locked --config .cargo/validation.toml --manifest-path ap
 cargo clippy --offline --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --no-default-features --features web --bin extensions-web --target wasm32-unknown-unknown -- -D warnings
 bash apps/xgpui-ext-lab/extensions-web/build.sh --release --offline
 ```
+
+## Guided metadata follow-up
+
+Added Red, three deterministic lesson presets and a same-pixels named-sRGB reference swatch. The embedded tutorial explains the expected observation and when to read XYZ/FP16 rather than expect a visible difference. Gray Adobe is slightly darker than named sRGB, saturated Adobe green can clip to nearly the same preview, and sampled sRGB differences are numerical. A third model test checks those claims and the red sample. All three tests pass; website verification, release Wasm build and strict Wasm Clippy pass. Live WebGPU checks exercise all lesson presets and Red; sampled-profile half-alpha words remain unchanged. These changes do not add browser wide output.

@@ -23,6 +23,26 @@ Each route offers forced WebGPU and WebGL2 links in the
 backends. No image-file decoder, arbitrary file chooser or network profile fetch
 is required. The chromaticity locus is attributed CIE data, not monitor samples.
 
+## Pixels + metadata: a short walkthrough
+
+Click the numbered lesson buttons to set up repeatable comparisons. The left
+swatch always interprets the same samples as named sRGB; the right uses the
+selected interpretation. Both are sRGB previews.
+
+1. **Gray + Adobe:** compare brightness and source XYZ Y. Adobe's transfer
+   curve decodes 0.18 differently, so the right swatch should look slightly darker.
+2. **Green + Adobe:** compare XYZ and packed storage values. Saturated green
+   may look identical on both sides because the browser clips to sRGB.
+   Equal previews do not establish equal source colors.
+3. **Sampled ICC:** inspect XYZ and FP16 words. The sampled sRGB profile's
+   differences are small; a visible tint is not expected. Half alpha makes the
+   white background contribute to the preview.
+
+Then cycle **Pixels** to try Red, and **Storage** or **Mapping**. A storage
+change changes coordinates/packing; mapping matters only when a color exceeds
+those storage bounds. Neither necessarily changes the final sRGB preview.
+The native lab is needed to compare actual wide output or inspect GPU readback.
+
 ## Run the native chromaticity lab
 
 The standalone app lives in the sibling `xgpui-lab` checkout, outside the

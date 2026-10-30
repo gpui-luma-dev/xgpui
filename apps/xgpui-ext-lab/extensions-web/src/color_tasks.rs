@@ -102,6 +102,13 @@ impl ColorTasks {
                             this.luminance = (this.luminance + 1) % 3
                         }
                     }
+                    6..=8 => {
+                        this.source = if action == 8 { 7 } else { 2 };
+                        this.patch = if action == 7 { 0 } else { 2 };
+                        this.rec = true;
+                        this.reduce = false;
+                        this.translucent = action == 8;
+                    }
                     _ => this.fill = !this.fill,
                 }
                 this.rebuild();
@@ -235,9 +242,44 @@ impl Render for ColorTasks {
                 .child(self.button(if self.metadata {format!("Storage: {}",if self.rec {"Rec.2020"}else{"P3"})}else{format!("Simulated gamut: {}",model::NAMES[self.simulated])},3,cx))
                 .child(self.button(if self.metadata {format!("Alpha: {}",if self.translucent {0.5}else{1.})}else{format!("Fill Y: {}",model::LUMINANCE[self.luminance])},4,cx)));
         if self.metadata {
+            body = body.child(div().p_3().rounded_md().bg(rgb(0x203047)).flex().flex_col().gap_2()
+                .child("Start here — click a lesson, then compare the two previews and the numbers below.")
+                .child(div().flex().flex_wrap().gap_2()
+                    .child(self.button("1. Gray + Adobe".into(), 6, cx))
+                    .child(self.button("2. Green + Adobe".into(), 7, cx))
+                    .child(self.button("3. Sampled ICC".into(), 8, cx)))
+                .child("1. Gray: Adobe's transfer curve makes the same 0.18 samples slightly darker than sRGB. Look at the preview and XYZ Y.")
+                .child("2. Green: Adobe green has different XYZ and storage values, but both previews can look like the same green after sRGB clipping. Identical previews do not mean identical source colors.")
+                .child("3. ICC: the sampled profile differs only slightly from named sRGB. Look at XYZ and FP16 words; a visible tint is not expected. Alpha 0.5 mixes the preview with white.")
+                .child("Then try Pixels (including Red), Storage and Mapping. They cycle on each click. Storage changes representation; mapping changes only out-of-storage colors. Neither guarantees a visible preview change."));
             if let Some(s) = &self.sample {
-                body=body.child(div().h(px(130.)).flex_shrink_0().bg(Rgba{r:s.preview[0],g:s.preview[1],b:s.preview[2],a:1.}))
-                    .child("sRGB preview over white in linear light; source pixels are unchanged by the selector.")
+                let baseline = model::sample(
+                    0,
+                    model::PATCHES[self.patch].1,
+                    if self.translucent { 0.5 } else { 1. },
+                    self.rec,
+                    self.policy(),
+                )
+                .expect("valid named sRGB lesson sample");
+                let swatch = |label: &str, color: [f32; 3]| {
+                    div()
+                        .flex_1()
+                        .flex()
+                        .flex_col()
+                        .gap_2()
+                        .child(label.to_owned())
+                        .child(div().h(px(100.)).flex_shrink_0().bg(Rgba {
+                            r: color[0],
+                            g: color[1],
+                            b: color[2],
+                            a: 1.,
+                        }))
+                };
+                body=body.child(div().flex().gap_3()
+                    .child(swatch("Reference: same pixels as sRGB", baseline.preview))
+                    .child(swatch("Selected interpretation", s.preview)))
+                    .child("Both swatches are sRGB previews over white in linear light. The reference keeps named sRGB interpretation; supplied pixels, alpha, storage and mapping match the selected side.")
+                    .child(div().p_3().bg(rgb(0x203047)).child("Browser limit: wide-gamut source colors are clipped into this sRGB canvas. This demo teaches interpretation and CPU storage, not your monitor's gamut. Use the native lab for wide output and Metal GPU checks."))
                     .child(format!("Supplied RGB {:?} • source XYZ D65 {:.10?}",model::PATCHES[self.patch].1,s.xyz))
                     .child(format!("Actual stored associated RGBA16F {:.10?} • bits {:04x?}",s.stored,s.bits))
                     .child("ICC modes parse bundled, pinned RGB matrix/TRC profiles with xgpui-color/icc. Curves and colorants come from the bytes, not the profile name. sRGB2014's small neutral offset is retained. No image file is decoded.")

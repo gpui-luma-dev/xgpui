@@ -19,12 +19,13 @@ pub const NAMES: [&str; 8] = [
     "ICC Adobe-compatible v4",
     "ICC sRGB2014 sampled",
 ];
-pub const PATCHES: [(&str, [f32; 3]); 5] = [
+pub const PATCHES: [(&str, [f32; 3]); 6] = [
     ("Green", [0., 1., 0.]),
     ("Cyan", [0., 1., 1.]),
     ("Mid gray", [0.18; 3]),
     ("Near black", [0.0001; 3]),
     ("White", [1.; 3]),
+    ("Red", [1., 0., 0.]),
 ];
 pub const LUMINANCE: [f64; 3] = [0.05, 0.18, 0.5];
 pub const COLORS: [u32; 4] = [0x65d7ff, 0xff9a62, 0xc4a0ff, 0x91df86];
@@ -246,6 +247,32 @@ mod tests {
                 .unwrap()
                 .xyz,
             p.xyz
+        );
+    }
+    #[test]
+    fn tutorial_comparisons_match_the_promised_observations() {
+        let srgb = sample(0, [0.18; 3], 1., true, GamutMapping::Clip).unwrap();
+        let adobe = sample(2, [0.18; 3], 1., true, GamutMapping::Clip).unwrap();
+        assert!(adobe.xyz[1] < srgb.xyz[1]);
+        assert!(adobe.preview[0] < srgb.preview[0] - 0.01);
+        let green = sample(2, [0., 1., 0.], 1., true, GamutMapping::Clip).unwrap();
+        let reference = sample(0, [0., 1., 0.], 1., true, GamutMapping::Clip).unwrap();
+        assert!((green.xyz[1] - reference.xyz[1]).abs() > 0.05);
+        assert!(
+            green
+                .preview
+                .into_iter()
+                .zip(reference.preview)
+                .all(|(a, b)| (a - b).abs() < 0.01)
+        );
+        let red = PATCHES.iter().find(|p| p.0 == "Red").unwrap().1;
+        assert_eq!(red, [1., 0., 0.]);
+        assert!(
+            sample(2, red, 1., true, GamutMapping::Clip)
+                .unwrap()
+                .preview
+                .into_iter()
+                .all(|v| v.is_finite())
         );
     }
     #[test]
