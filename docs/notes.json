@@ -118,5 +118,13 @@
     "surface": "MediaLoader, MediaLimits, UploadLimits, FrameUploadLimits, ImageJob, MediaImage, UploadStatus and image_view. Metal/wgpu completion-driven staging reuse; shared per-scene source count/byte admission; backend-specific staging and host-only submission. ImageFilter, FilteredImage and image_view.filter provide ordered in-shader SDR RGB adjustments without reuploading source textures. VideoStream/VideoFrame provide bounded latest-frame presentation, with macOS BGRA and two-plane NV12 IOSurface import (BT.601/709, full/video range, same-pass conversion) and completion-safe snapshot lifetime; Windows dedicated immutable same-device BGRA textures have an initial native adapter (cross-checked, runtime pending); keyed NT-handle snapshots now support nonblocking ownership handoff (Windows test code cross-checks, execution pending); Linux now has an opt-in immutable linear BGRA DMA-BUF Vulkan snapshot adapter (Linux cross-check and host layout tests; GPU runtime pending). A generated Linux native fixture now exercises export/import, pixel capture, cache reuse and lifetime with Vulkan validation-error counting; the harness cross-compiles but native execution remains pending. Explicit fence import, pool reuse and foreign-family imports remain pending. A release benchmark records upload-phase versus cached render CPU samples, staging-pool reuse and pixel validation on macOS Metal/wgpu; GPU timing and zero-stutter guarantees are not claimed. The lab defaults to release builds; system playback adapters are separate follow-up work.",
     "review": "Preserve completion-held exclusive buffer leases, stale-generation rejection, abandoned-recording retry and shared frame budgets. D3D11 pooling/runtime validation, chunked uploads, fairness and timing benchmarks remain pending. Limits do not bound total driver/process memory.",
     "entry": "src/lib.rs"
+  },
+  "xgpui-canvas": {
+    "short": "xgpui-canvas",
+    "group": "Extensions",
+    "role": "Experimental native spatial viewport, f64 camera and retained BVH scenes.",
+    "surface": "Camera2D, PanGesture, Scene, snapping and Overview; optional GPUI Canvas and configurable GridPainter.",
+    "review": "Callers own selection and input policy. Native and browser labs cover cards and CPU fractals; rotation, isometric grids and general subtree transforms remain follow-ups.",
+    "entry": "src/lib.rs"
   }
 }

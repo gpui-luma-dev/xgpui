@@ -11,6 +11,18 @@ options := "--profile " + profile + " --locked --config .cargo/validation.toml -
 default:
     @just --justfile "{{ justfile() }}" --list
 
+# Preview all ignored Cargo outputs, including standalone crates and old app paths.
+clean-preview:
+    {{ python }} scripts/clean_build_outputs.py
+
+# Remove all ignored Cargo target directories in this checkout.
+clean:
+    {{ python }} scripts/clean_build_outputs.py --apply
+
+# Experimental spatial viewport with 10,000 selectable cards.
+canvas-lab *args:
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin canvas-lab -- "$@"
+
 # Image mipmapping, filters, GPU surfaces and path effects (generated samples).
 media *args:
     cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin media-lab -- "$@"
@@ -65,7 +77,8 @@ docs-check: docs
 
 # Serve generated documentation at http://localhost:8000 (optional port argument).
 docs-serve port="8000":
-    {{ python }} -m http.server "{{ port }}" --bind 127.0.0.1 --directory docs
+    {{ python }} scripts/stage_website.py
+    {{ python }} -m http.server "{{ port }}" --bind 127.0.0.1 --directory target/site
 
 # Build both browser demo collections; requires pinned wasm-bindgen and Python 3.
 web-build:

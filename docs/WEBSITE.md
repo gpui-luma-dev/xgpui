@@ -116,12 +116,12 @@ just docs-serve
 
 `just web-build` runs both release packaging scripts:
 
-- `apps/xgpui-ext-lab/extensions-web/build.sh` refreshes its `dist/` and
-  `docs/examples/extensions/`.
-- `apps/xgpui-ext-lab/shader-examples/build.sh` refreshes its `dist/` and
-  `docs/examples/shaders/`.
+- `apps/xgpui-ext-lab/extensions-web/build.sh` writes `target/web/extensions/`.
+- `apps/xgpui-ext-lab/shader-examples/build.sh` writes `target/web/shaders/`.
 
-Generated demo assets are ignored by Git. The unified gallery at
+`just docs-serve` stages documentation and these bundles in `target/site/`.
+Deployment uses the same staging script with both bundles required. All of these
+generated outputs are ignored by Git and removed by root `cargo clean`. The unified gallery at
 `http://localhost:8000/examples/extensions/` lists 19 hosted demos across both
 entry points, with native labs and launch instructions listed separately.
 The shader companion is at `http://localhost:8000/examples/shaders/`.

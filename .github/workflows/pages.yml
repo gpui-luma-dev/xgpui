@@ -37,15 +37,14 @@ jobs:
       - name: Check browser color preview samples
         run: bash apps/xgpui-ext-lab/extensions-web/check-color.sh
       - name: Build browser extension demos
-        run: |
-          bash apps/xgpui-ext-lab/extensions-web/build.sh --release
-          mkdir -p docs/examples/extensions
-          cp apps/xgpui-ext-lab/extensions-web/dist/* docs/examples/extensions/
+        run: bash apps/xgpui-ext-lab/extensions-web/build.sh --release
       - name: Build instanced shader WASM companion
         run: bash apps/xgpui-ext-lab/shader-examples/build.sh --release
+      - name: Stage documentation and browser demos
+        run: python3 scripts/stage_website.py --require-web
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: target/site
 
   deploy:
     needs: build

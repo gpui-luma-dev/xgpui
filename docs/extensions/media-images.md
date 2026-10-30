@@ -889,9 +889,9 @@ PATH="/path/to/matching/wasm-bindgen/bin:$PATH" bash apps/xgpui-ext-lab/extensio
 python3 apps/xgpui-ext-lab/extensions-web/serve.py
 ```
 
-Use the pinned wasm-bindgen version in the app README. The build refreshes both
-standalone demo output and the generated `docs/examples/extensions/` assets;
-publication still requires the normal site deployment. No deployment is implied
+Use the pinned wasm-bindgen version in the app README. The build refreshes
+`target/web/extensions/`; documentation previews and deployment stage it at
+`target/site/examples/extensions/`. Publication still requires the normal site deployment. No deployment is implied
 by a local build. See [demo source](https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web/src/media.rs).
 
 The small 1024² offline fixture uses the public synchronous

@@ -50,8 +50,8 @@ Open http://localhost:8083/ and choose an example and backend. WebGPU needs a
 supporting browser/adapter and localhost or HTTPS. WebGL2 is explicitly available;
 errors appear on the page and in the console. No worker, shared memory or atomic
 WASM build is used. For performance comparisons, build with `--release`.
-The build writes this app's ignored `dist/` and the docs companion at
-`docs/examples/shaders/`.
+The build writes `target/web/shaders/`. `just docs-serve` stages the docs
+companion at `target/site/examples/shaders/`.
 
 All effects use the same typed shader API on Metal, D3D11 and wgpu. A compatible
 run is eligible for one instanced draw; composition intentionally splits at the

@@ -90,7 +90,7 @@ assert.ok(index.includes('href="examples/extensions/"'));
 assert.ok(index.includes('href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>'));
 assert.ok(index.indexOf('GitHub repository ↗') < index.indexOf('<nav aria-label="Documentation">'));
 assert.ok(index.indexOf('>Live demos ↗</a>') < index.indexOf('>Instanced WGSL v2</a>'));
-for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
+for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web'));
@@ -111,7 +111,7 @@ const listedModules = [...wasmIndex.matchAll(/data-wasm-module="([^"]+)"/g)].map
 const legacyModules = [...legacyManifest.matchAll(/\[\[bin\]\]\s+name = "([^"]+)"/g)].map(m => m[1]);
 assert.deepEqual(listedModules.slice().sort(), legacyModules.sort(), 'every legacy Wasm binary needs an index entry');
 for (const [, module] of legacyGallery.matchAll(/data-module="([^"]+)"/g)) assert.ok(listedModules.includes(module), module);
-for (const demo of ['shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
+for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="?demo=' + demo + suffix + '"'), demo + suffix);
   }
@@ -222,7 +222,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 19);
+assert.equal(Object.keys(data.extension_documents).length, 21);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -251,7 +251,7 @@ assert.match(data.extension_documents['high-gamut-windows'].html, /xgpui-gamut/)
 assert.match(run('extensionPage("extensions")'), /Downstream extensions to GPUI/);
 assert.ok(!index.includes('<a href="#extensions">Extensions to GPUI</a>'), 'extensions belong in the crate group');
 for (const [route, doc] of Object.entries(data.extension_documents)) {
-  assert.equal(doc.source, route === 'local-development' ? 'docs/LOCAL_DEVELOPMENT.md' : 'docs/extensions/' + route + '.md');
+  assert.equal(doc.source, route === 'local-development' ? 'docs/LOCAL_DEVELOPMENT.md' : route === 'whats-new' ? 'docs/WHATS_NEW.md' : 'docs/extensions/' + route + '.md');
   await readFile(new URL('../' + doc.source, import.meta.url));
   context.location.hash = '#' + route;
   run('render()');
@@ -347,6 +347,7 @@ const extensionApiGuides = {
   'xgpui-parley': ['parley-text', 'added-text-backend-and-paragraph-seams'],
   'xgpui-svg': ['svg-rendering', 'added-svg-viewport-size'],
   'xgpui-media': ['media-images', 'added-source-sized-media-textures'],
+  'xgpui-canvas': ['canvas', 'canvas-reuses-existing-gpui-apis'],
 };
 assert.deepEqual(Object.keys(extensionApiGuides).sort(), Object.keys(data.extension_packages).filter(p => p !== 'xgpui-color').sort(), 'every rendering extension needs an API compatibility guide');
 for (const [pkg, [route, section]] of Object.entries(extensionApiGuides)) {
@@ -385,7 +386,7 @@ for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows',
 const pagesWorkflow = await readFile(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
 assert.ok(pagesWorkflow.includes('bash apps/xgpui-ext-lab/shader-examples/build.sh --release'));
 const shaderBuild = await readFile(new URL('../apps/xgpui-ext-lab/shader-examples/build.sh', import.meta.url), 'utf8');
-assert.ok(shaderBuild.includes('docs/examples/shaders/'));
+assert.ok(shaderBuild.includes('target/web/shaders'));
 console.log('Verified instanced WGSL guide, native-first launch, companion links and Pages packaging.');
 
 // The standalone color crate must have its own guide and no rendering dependencies.
@@ -440,19 +441,19 @@ console.log('Verified demo discovery, distinct brush/layer launch labels and vis
 
 // "All demos" includes both hosted apps, without duplicating launch cards.
 const allLaunches = [...wasmIndex.matchAll(/<a href="([^"]+)">Open demo ↗<\/a>/g)].map(m => m[1]);
-assert.equal(allLaunches.length, 19);
-assert.equal(new Set(allLaunches).size, 19);
+assert.equal(allLaunches.length, 21);
+assert.equal(new Set(allLaunches).size, 21);
 for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="../shaders/?example=' + example + suffix + '"'));
   }
 }
-for (const id of ['brushes-paints','layer-effects','shaders-motion','typography','svg-color','media-effects','native-labs']) {
+for (const id of ['brushes-paints','layer-effects','shaders-motion','typography','svg-color','media-effects','spatial-canvas','native-labs']) {
   assert.ok(wasmIndex.includes('id="' + id + '"'));
 }
 assert.ok(wasmIndex.includes('--pastel-waves'));
 assert.ok(wasmIndex.includes('Show launch command'));
-console.log('Verified unified index covers all 19 hosted demos and separates native launch commands.');
+console.log('Verified unified index covers all 21 hosted demos and separates native launch commands.');
 
 assert.match(run('extensionPage("typography")'), /Selectable typography/);
 assert.match(run('extensionPage("typography")'), /demo=typography/);
@@ -566,3 +567,17 @@ for (const route of ['media-images', 'media-pipeline', 'gpui-public-api', 'color
   }
 }
 console.log('Verified Wikipedia glossary arrows and new-tab attributes across media/color guides.');
+
+assert.equal(data.extension_packages['xgpui-canvas'], 'extensions/crates/xgpui-canvas');
+for (const demo of ['canvas', 'mandelbrot']) {
+  assert.ok(run('extensionPage("canvas")').includes('examples/extensions/?demo=' + demo));
+  assert.ok(wasmIndex.includes('href="?demo=' + demo + '&backend=webgpu"'));
+  assert.ok(wasmIndex.includes('href="?demo=' + demo + '&backend=webgl"'));
+}
+console.log('Verified canvas documentation, demo discovery and both backend launch links.');
+
+assert.match(index, /href="#overview">Overview<\/a><a href="#whats-new">What's new<\/a>/);
+assert.ok(run('overview()').includes('href="#whats-new"'));
+assert.match(run('extensionPage("whats-new")'), /← Overview/);
+assert.match(run('extensionPage("whats-new")'), /October 30, 2026/);
+console.log("Verified What's new page and Overview navigation.");

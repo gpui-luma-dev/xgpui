@@ -9,6 +9,7 @@ function extensionTitle(route) {
   return route === 'extensions' ? 'Extensions to GPUI' : data.extension_documents[route].title;
 }
 const browserDemoNames = {
+  canvas: 'spatial card canvas', mandelbrot: 'Mandelbrot explorer',
   typography: 'Selectable typography', brushes: 'Brush gallery', layers: 'Layer effects', shader: 'Gradient paints',
   hermite: 'Hermite editor', color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs',
 };
@@ -51,6 +52,9 @@ function extensionCode(language, source) {
   return '<pre><code class="language-' + language + '">' + escapeHtml(source) + '</code></pre>';
 }
 function extensionPage(route) {
+  if (route === 'whats-new') {
+    return '<p><a href="#overview">← Overview</a></p><article class="extension-document">' + data.extension_documents[route].html + '</article>';
+  }
   if (route === 'local-development' || route === 'extension-lab') {
     const doc = data.extension_documents[route];
     return '<p><a href="#overview">← Overview</a></p><article class="extension-document">' + doc.html + '</article>';
@@ -66,6 +70,8 @@ function extensionPage(route) {
 
   const banner = route === 'color-math'
     ? '<p class="guide-intro"><strong>Standalone color math.</strong> CPU conversions, gamut mapping, gradients and WGSL source without GPUI.</p>'
+    : route === 'canvas'
+    ? '<p class="guide-intro"><strong>Experimental spatial canvas.</strong> Camera, retained scenes and clipped procedural grids.</p>'
     : route === 'svg-rendering'
     ? '<p class="guide-intro"><strong>Experimental SVG extension.</strong> Progressive rasterization, shared admission and accounted image budgets.</p>'
     : route === 'media-pipeline'
@@ -81,7 +87,7 @@ function extensionPage(route) {
       : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
-    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'typography' ? browserDemoLinks('typography') : route === 'brushes' ? brushDemoLinks() : route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
+    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'canvas' ? browserDemoLinks('canvas') + browserDemoLinks('mandelbrot') : route === 'typography' ? browserDemoLinks('typography') : route === 'brushes' ? brushDemoLinks() : route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
   return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation, text and SVG extensions.') + banner +
     '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p>' +
@@ -116,6 +122,7 @@ just --justfile apps/xgpui-ext-lab/gamut-lab/justfile test`) +
     '<h2>5. Standalone color math</h2><p><code>xgpui-color</code> provides color conversions, gamut mapping, OkLab/OkLCh interpolation and reusable WGSL helpers with zero runtime dependencies. Use it without GPUI or a GPU context.</p>' +
     '<div class="cards">' + extensionCard('color-math', 'CPU types, browser runtime diagnostics, native P3 comparison, dependency boundaries and validation.') + '</div>' +
     '<h2>6. Dedicated media images</h2><p>Display large images at several sizes, adjust their colors, or show frames from a native producer. Start with small examples and the browser demos.</p><div class="cards">' + extensionCard('media-images', 'Examples, loading limits, platform support and test results.') + '</div>' +
+    '<h2>7. Spatial canvas</h2><div class="cards">' + extensionCard('canvas', 'Native lab, camera and scene API, controls and known limits. Explore the card canvas and CPU Mandelbrot browser companions.') + '</div>' +
     '<h2>Shared GPUI integration</h2><div class="cards">' + extensionCard('gpui-public-api', 'Public additions and altered upstream types, separated by capability.') + '</div>';
 
 }
@@ -206,4 +213,8 @@ function colorCrateGuide() {
 function mediaCrateGuide() {
   return '<article class="extension-document">' +
     data.extension_documents['media-images'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
+}
+
+function canvasCrateGuide() {
+  return browserDemoLinks('canvas') + browserDemoLinks('mandelbrot') + '<article class="extension-document">' + data.extension_documents['canvas'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
 }

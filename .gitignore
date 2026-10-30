@@ -8,7 +8,7 @@
 
 /docs/examples/shaders/
 
-# Retain ignored caches and historical generated outputs at pre-consolidation paths.
+# Ignore legacy output paths so older branches cannot accidentally track artifacts.
 /apps/color-field-bench/
 /apps/extensions-web/
 /apps/gamut-lab/

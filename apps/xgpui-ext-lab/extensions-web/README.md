@@ -1,6 +1,6 @@
 # All demos index and browser extension examples
 
-A standalone Wasm app for `xgpui-shader`, `xgpui-parley`, `xgpui-svg`, `xgpui-media`, and `xgpui-color`. All use the existing
+A standalone Wasm app for `xgpui-shader`, `xgpui-parley`, `xgpui-svg`, `xgpui-media`, `xgpui-color`, and `xgpui-canvas`. All use the existing
 GPUI web platform and wgpu renderer. The gallery offers automatic selection
 (WebGPU with WebGL2 fallback), forced WebGPU, and forced WebGL2. A forced backend
 fails explicitly if unavailable; check the browser console for adapter details.
@@ -39,8 +39,8 @@ python3 apps/xgpui-ext-lab/extensions-web/serve.py
 
 Open <http://localhost:8081/>. Add `--release` to the build command for an optimized
 build. The server accepts `--port 8082` if needed. Stop it with Ctrl-C; rebuild and
-reload after changes. The build also refreshes `docs/examples/extensions/` for
-local documentation previews, so `/examples/extensions/?demo=svg` uses the same
+reload after changes. The build writes `target/web/extensions/`. `just docs-serve` stages it at
+`target/site/examples/extensions/` for local documentation previews, so `/examples/extensions/?demo=svg` uses the same
 HTML, JavaScript and Wasm as this server. No Trunk, nightly toolchain, worker pool, or shared Wasm
 memory configuration is required. The app opts into wgpu's
 `fragile-send-sync-non-atomic-wasm` compatibility feature because GPUI paint
@@ -200,7 +200,7 @@ rather than copying a wildcard listening address from a server's output.
 
 ## Unified All demos page
 
-The index lists all 19 hosted WASM examples from this app and `shader-examples`,
+The index lists all 21 hosted WASM examples from this app and `shader-examples`,
 grouped into Brushes & paints, Layer effects, Shaders & motion, Text, Media & paths, and SVG &
 color. Native labs are a separate section with repository-root launch commands,
 including pastel waves and the full paint-lab/Hermite editor. The shader gallery
@@ -307,3 +307,24 @@ reused, but custom media captures refresh each paint. Native `just media --video
 also offers exposure, saturation, vignette and blur on generated BGRA/NV12
 surfaces. Native imports are not available in Wasm; test portable blur via
 `?demo=media-tiles&backend=webgpu` and `?demo=media-tiles&backend=webgl`.
+
+## Spatial canvas and Mandelbrot companions
+
+Open `?demo=canvas` or `?demo=mandelbrot`, then repeat with
+`&backend=webgpu` and `&backend=webgl`.
+
+The card example uses the real `xgpui-canvas` camera, BVH Scene, LOD suggestions,
+clipped Canvas, procedural grid, snapping and Overview. Test 10k/100k, overview,
+line/dot grids, click/Shift-marquee selection, snapped/free group moves, Escape,
+reset, focus loss and minimap navigation. Scroll pans; Ctrl/Cmd+wheel and pinch
+zoom; Space-drag/middle drag pans. The map shows density cells, not rendered card
+thumbnails. It does no GPU readback.
+
+The fractal shares `shared/mandelbrot.rs` with the native lab. Drag pans;
+wheel/pinch or −/+ zooms. Coarse then fine images are computed in bounded slices
+on the browser thread (no workers/shared memory). Camera changes cancel pending
+pixels. It retains one completed image rather than the native tile cache.
+Refinement is capped at 480×360, zoom at 1e8, iterations at 2,048; f64 limits
+apply. Check reset/resize/rapid navigation and refinement on both backends.
+
+See [extension usage and native/browser differences](../../../docs/extensions/canvas.md).

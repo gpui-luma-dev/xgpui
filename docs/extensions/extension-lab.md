@@ -135,8 +135,9 @@ just docs-serve
 ```
 
 `web-build` requires the pinned `wasm-bindgen` CLI, currently `0.2.129`, and the
-`wasm32-unknown-unknown` Rust target. It updates both `docs/examples/extensions/`
-and `docs/examples/shaders/`. Generating the documentation alone does not rebuild
+`wasm32-unknown-unknown` Rust target. It writes `target/web/extensions/`
+and `target/web/shaders/`. `just docs-serve` stages them under the unchanged
+`examples/` URLs in `target/site/`. Generating the documentation alone does not rebuild
 WASM. Reload the page after rebuilding.
 
 [Open the browser demo gallery](../examples/extensions/) or

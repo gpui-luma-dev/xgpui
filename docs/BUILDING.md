@@ -35,6 +35,24 @@ require their own native checks.
 
 ## Requirements and options
 
+### Cleaning build outputs
+
+The repository Cargo configuration shares the root `target/` directory across
+standalone crates too, so root `cargo clean` removes normal build outputs.
+Older branches or explicit overrides can still leave nested target directories.
+Stop active builds, then run `just clean-preview` to list all of them and
+`just clean` to remove them. Without Just, use
+`python3 scripts/clean_build_outputs.py` and add `--apply` to delete.
+The cleaner skips symlinks and refuses directories containing tracked files or
+not ignored by Git. It leaves source assets intact. Web bundles (`target/web/`)
+and staged deployment
+files (`target/site/`) live under the root target directory and are cleaned too.
+Build outputs outside this checkout (such as an external `CARGO_TARGET_DIR`)
+are not included. Use `--target-dir target` for standalone builds to share the
+root output directory, as the lab recipes already do.
+
+### Build prerequisites
+
 - Rust with the 2024 edition; tested with Rust 1.99.0 on Apple Silicon macOS.
 - Xcode selected as the active developer directory, with the Metal compiler
   installed, for the default macOS shader build.

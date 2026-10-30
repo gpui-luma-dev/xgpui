@@ -1,0 +1,49 @@
+{
+  "app": "canvas-lab",
+  "optimized_build": true,
+  "os": "macos",
+  "arch": "aarch64",
+  "viewport_logical_pixels": [
+    1100.0,
+    702.0
+  ],
+  "scale_factor": 2.0,
+  "scope": "Frame intervals include scheduling, layout and rendering; CPU samples include only culling and child construction. Neither is a GPU timing.",
+  "workload": "1x zoom, pan by (1, 0.5) logical pixels per redraw; lines at 10k, dots at 100k",
+  "scenes": [
+    {
+      "objects": 10000,
+      "measured_frames": 120,
+      "warmup_frames": 30,
+      "frame_interval_ms": {
+        "mean": 16.659305899999996,
+        "p95": 17.640167,
+        "max": 17.728875000000002
+      },
+      "cpu_cull_and_build_ms": {
+        "mean": 0.11153401666666667,
+        "p95": 0.165459,
+        "max": 0.170875
+      },
+      "visible_min": 36,
+      "visible_max": 49
+    },
+    {
+      "objects": 100000,
+      "measured_frames": 120,
+      "warmup_frames": 30,
+      "frame_interval_ms": {
+        "mean": 16.666675691666665,
+        "p95": 17.624792,
+        "max": 17.645541
+      },
+      "cpu_cull_and_build_ms": {
+        "mean": 0.3655076249999997,
+        "p95": 0.600792,
+        "max": 0.680125
+      },
+      "visible_min": 36,
+      "visible_max": 42
+    }
+  ]
+}

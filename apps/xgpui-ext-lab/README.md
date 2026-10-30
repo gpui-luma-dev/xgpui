@@ -32,7 +32,7 @@ cargo run --release --locked --config .cargo/validation.toml --manifest-path app
 
 Native binaries use the default `native` feature. Browser scripts build only the
 selected WASM binary with `--no-default-features --features web`; generated JS/WASM
-names and the hosted `docs/examples/extensions/` and `docs/examples/shaders/`
+names and the hosted `/examples/extensions/` and `/examples/shaders/`
 destinations remain unchanged. Source, fixtures and benchmark reports are grouped
 by target under this package.
 

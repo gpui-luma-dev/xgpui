@@ -613,6 +613,7 @@ fn generate(root: &Path) -> Result<()> {
     let provenance: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(root.join("upstream.json"))?)?;
     let extension_packages = BTreeMap::from([
+        ("xgpui-canvas", "extensions/crates/xgpui-canvas"),
         ("xgpui-color", "extensions/crates/xgpui-color"),
         ("xgpui-shader", "extensions/crates/xgpui-shader"),
         ("xgpui-gamut", "extensions/crates/xgpui-gamut"),
@@ -755,8 +756,10 @@ fn generate(root: &Path) -> Result<()> {
     // Published guides live in the web documentation source tree.
     // Embed them so navigation works offline without fetch.
     let document_sources = [
+        ("whats-new", "docs/WHATS_NEW.md"),
         ("local-development", "docs/LOCAL_DEVELOPMENT.md"),
         ("extension-lab", "docs/extensions/extension-lab.md"),
+        ("canvas", "docs/extensions/canvas.md"),
         ("color-math", "docs/extensions/color-math.md"),
         ("media-images", "docs/extensions/media-images.md"),
         ("media-pipeline", "docs/extensions/media-pipeline.md"),
