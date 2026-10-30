@@ -146,3 +146,8 @@ required-features = ["native"]
 name = "color-tasks"
 path = "extensions-web/src/color_tasks_model.rs"
 required-features = ["web"]
+
+[[test]]
+name = "italy-photo"
+path = "extensions-web/src/italy.rs"
+required-features = ["web"]

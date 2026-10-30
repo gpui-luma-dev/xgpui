@@ -15,6 +15,7 @@ mod color_samples;
 mod color_tasks;
 mod color_tasks_model;
 mod hermite;
+mod italy;
 mod media;
 #[path = "../../text-lab/src/paragraph.rs"]
 mod paragraph;
@@ -65,6 +66,7 @@ pub fn demo_behavior(demo: &str) -> String {
         "shader" => "Shader: gradients, paths and animation",
         "chromaticity" => "Chromaticity: gamut simulation and mapping • sRGB preview",
         "pixel-metadata" => "Pixels + metadata: named/ICC interpretation and actual CPU FP16 • sRGB preview",
+        "italy" => "Italy photos: original browser color management • Rust/Wasm clipped sRGB previews",
         "color" => "Color / Gamut: interpolation and mapping • sRGB preview",
         _ => "Unknown demo",
     }
@@ -87,6 +89,11 @@ fn launch() -> anyhow::Result<()> {
         .search()
         .map_err(|error| anyhow::anyhow!("read URL: {error:?}"))?;
     let parameters: Vec<_> = search.trim_start_matches('?').split('&').collect();
+    // Profiled DOM images use the browser's color-managed presentation rather
+    // than the GPUI canvas, which currently presents only sRGB on the web.
+    if parameters.contains(&"demo=italy") {
+        return Ok(());
+    }
     let backend = if parameters.contains(&"backend=webgpu") {
         WebBackendPreference::WebGpu
     } else if parameters.contains(&"backend=webgl") {

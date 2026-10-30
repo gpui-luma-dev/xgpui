@@ -35,6 +35,9 @@ import sys
 source, destination, revision = sys.argv[1:]
 pathlib.Path(destination).write_text(pathlib.Path(source).read_text().replace("__BUILD_ID__", revision))
 PYTHON
+cp "$app/italy.mjs" "$app/italy.css" "$out/"
+mkdir -p "$out/italy"
+cp "$app/assets/italy/"*.jpg "$app/assets/italy/README.md" "$app/assets/italy/prepare.swift" "$out/italy/"
 cp "$app/color-attribution.html" "$out/color-attribution.html"
 cp -R "$app/assets/colorimetry" "$out/colorimetry"
 mkdir -p "$out/icc"

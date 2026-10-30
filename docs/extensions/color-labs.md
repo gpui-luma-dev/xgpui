@@ -11,6 +11,7 @@ an API rather than investigating a specific sample.
 | --- | --- | --- |
 | [Chromaticity and gamut](../examples/extensions/?demo=chromaticity) | Keep the pixel fixed, change interpretation; compare simulated gamuts, Y and mapping | CPU color relationships, locus outlines, mapping and an sRGB fill preview |
 | [Pixels + metadata](../examples/extensions/?demo=pixel-metadata) | Keep Mid gray fixed, cycle named/ICC interpretation, alpha and storage | Decoding, XYZ changes and actual CPU-packed FP16 bytes |
+| [Italy photo comparison](../examples/extensions/?demo=italy) | Select sRGB, Display P3 or highlighted; compare Original / browser color with sRGB preview on the same selected photo | Browser-managed original JPEGs compared with Rust/Wasm clipped sRGB derivatives; not GPUI canvas wide output |
 | [Interpolation](../examples/extensions/?demo=color) | Compare encoded/linear/perceptual rows and transparent stops | Interpolation and mapping differences in an sRGB preview |
 
 The runtime panel reports the actual canvas color space where queryable and
@@ -18,10 +19,24 @@ reports browser display capability separately. A report of P3 display capability
 does not turn an sRGB canvas into a wide-gamut canvas. GPU readback and native
 wide-SDR composition are not part of these browser demos.
 
-Each route offers forced WebGPU and WebGL2 links in the
+The canvas routes offer forced WebGPU and WebGL2 links in the
 [gallery](../examples/extensions/). Source calculations are Rust/Wasm in both
 backends. No image-file decoder, arbitrary file chooser or network profile fetch
 is required. The chromaticity locus is attributed CIE data, not monitor samples.
+
+## Italy: compare the same photograph
+
+Select **Display P3**, then switch **Original / browser color** and **sRGB preview**.
+Look at the orange/red umbrellas. Original mode uses WebKit’s unmodified JPEG
+with its embedded profile, presented by a browser image element. The preview
+uses the desktop lab’s prepared linear P3 pixels and Rust/Wasm `xgpui-color`
+clipping to sRGB. Neither control changes your monitor mode. A wide-gamut display
+and browser color management affect visible differences; on an sRGB display they
+may be small. These controls do not configure GPUI WebGPU/WebGL2 presentation.
+
+The three thumbnails select separate WebKit image versions. The highlighted
+photograph contains diagnostic markings, visible in both presentation modes.
+All assets are served locally, with [WebKit attribution](https://webkit.org/blog-files/color-gamut/).
 
 ## Pixels + metadata: a short walkthrough
 

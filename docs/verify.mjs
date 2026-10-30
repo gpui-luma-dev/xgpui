@@ -442,8 +442,8 @@ console.log('Verified demo discovery, distinct brush/layer launch labels and vis
 
 // "All demos" includes both hosted apps, without duplicating launch cards.
 const allLaunches = [...wasmIndex.matchAll(/<a href="([^"]+)">Open demo ↗<\/a>/g)].map(m => m[1]);
-assert.equal(allLaunches.length, 23);
-assert.equal(new Set(allLaunches).size, 23);
+assert.equal(allLaunches.length, 24);
+assert.equal(new Set(allLaunches).size, 24);
 for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="../shaders/?example=' + example + suffix + '"'));
@@ -454,7 +454,7 @@ for (const id of ['brushes-paints','layer-effects','shaders-motion','typography'
 }
 assert.ok(wasmIndex.includes('--pastel-waves'));
 assert.ok(wasmIndex.includes('Show launch command'));
-console.log('Verified unified index covers all 23 hosted demos and separates native launch commands.');
+console.log('Verified unified index covers all 24 hosted demos and separates native launch commands.');
 
 assert.match(run('extensionPage("typography")'), /Selectable typography/);
 assert.match(run('extensionPage("typography")'), /demo=typography/);
@@ -603,3 +603,12 @@ assert.match(data.extension_documents['color-labs'].html, /not a measurement of 
 const colorBuild = await readFile(new URL('../apps/xgpui-ext-lab/extensions-web/build.sh', import.meta.url), 'utf8');
 for (const asset of ['color-attribution.html', 'colorimetry', 'CC0-1.0.txt']) assert.ok(colorBuild.includes(asset));
 console.log('Verified color task routes, terminology, lab limits and packaged notices.');
+
+assert.ok(wasmIndex.includes('href="?demo=italy"'));
+const italyUi = await readFile(new URL('../apps/xgpui-ext-lab/extensions-web/italy.mjs', import.meta.url), 'utf8');
+assert.ok(italyUi.includes('bindings.italy_srgb_preview(i)'));
+for (const file of ['Italy-sRGB.jpg', 'Italy-P3.jpg', 'Italy-oog.jpg']) {
+  await readFile(new URL('../apps/xgpui-ext-lab/extensions-web/assets/italy/' + file, import.meta.url));
+  assert.ok(italyUi.includes(file));
+}
+console.log('Verified Italy browser-color comparison and local source assets.');
