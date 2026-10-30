@@ -9,7 +9,7 @@ of existing UI paints.
 ```toml
 [dependencies]
 gpui = { package = "xgpui", version = "1.0.0" }
-xgpui-gamut = "0.2.0"
+xgpui-gamut = "0.2.1"
 ```
 
 ## Enable wide content

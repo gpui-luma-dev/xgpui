@@ -12,6 +12,7 @@
       "gpui-web": "xgpui-web",
       "gpui-wgpu": "xgpui-wgpu",
       "gpui-windows": "xgpui-windows",
+      "xgpui-canvas": "xgpui-canvas",
       "xgpui-color": "xgpui-color",
       "xgpui-gamut": "xgpui-gamut",
       "xgpui-media": "xgpui-media",
@@ -21,12 +22,21 @@
     },
     "version": "1.0.0",
     "versions": {
-      "xgpui-color": "0.2.0",
-      "xgpui-gamut": "0.2.0",
-      "xgpui-media": "0.2.0",
-      "xgpui-parley": "0.2.0",
-      "xgpui-shader": "0.2.0",
-      "xgpui-svg": "0.2.0"
+      "xgpui": "1.1.0",
+      "xgpui-apple": "2.0.0",
+      "xgpui-canvas": "0.2.0",
+      "xgpui-color": "0.2.1",
+      "xgpui-gamut": "0.2.1",
+      "xgpui-linux": "1.0.1",
+      "xgpui-macos": "2.0.0",
+      "xgpui-media": "0.3.0",
+      "xgpui-parley": "0.2.1",
+      "xgpui-platform": "1.0.1",
+      "xgpui-shader": "0.2.1",
+      "xgpui-svg": "0.2.1",
+      "xgpui-web": "1.0.1",
+      "xgpui-wgpu": "1.0.1",
+      "xgpui-windows": "1.0.1"
     }
   },
   "normalization": {

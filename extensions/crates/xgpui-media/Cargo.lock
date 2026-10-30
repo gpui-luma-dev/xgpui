@@ -4713,7 +4713,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -4780,7 +4780,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-apple"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "async-task",
@@ -4816,7 +4816,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-color"
-version = "0.2.0"
+version = "0.2.1"
 
 [[package]]
 name = "xgpui-macros"
@@ -4830,7 +4830,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-media"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "half",
@@ -4848,7 +4848,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-shader"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -4868,7 +4868,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-wgpu"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "ash",
@@ -4894,7 +4894,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-windows"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -5133,16 +5133,16 @@ source = "git+https://github.com/proptest-rs/proptest?rev=3dca198a8fef1b32e3a66f
 
 [[patch.unused]]
 name = "xgpui-linux"
-version = "1.0.0"
+version = "1.0.1"
 
 [[patch.unused]]
 name = "xgpui-macos"
-version = "1.0.0"
+version = "2.0.0"
 
 [[patch.unused]]
 name = "xgpui-platform"
-version = "1.0.0"
+version = "1.0.1"
 
 [[patch.unused]]
 name = "xgpui-web"
-version = "1.0.0"
+version = "1.0.1"
