@@ -12,7 +12,7 @@ When the user says **“prepare today's release”**:
 - Compare code, packaged documentation, dependencies and publication changes.
 - Run release preparation and open a PR with proposed old → new crate versions.
 - Prepare release notes with change titles, short summaries, links and the version table.
-- Review automatic version proposals against the project's agreed release policy.
+- Review automatic version proposals against the versioning policy below. Include a reason for every bump in the PR.
 - Run relevant checks and a no-upload crates.io plan; resolve failures and version conflicts.
 - Present the PR, proposed versions and validation results to the user.
 
@@ -53,8 +53,32 @@ When the user says **“prepare today's release”**:
 
 **Agent:** manually dispatch Pages after successful crate publication, monitor it to completion, verify the live site, documented versions, galleries and Wasm bundles, and add the deployment link to the release record. Report the release complete.
 
+## Versioning policy
+
+Apply this policy during preparation, starting with the next release:
+
+- **Patch:** compatible fixes, internal backend changes, packaged documentation and compatible dependency updates.
+- **Minor:** new capabilities that preserve supported public APIs.
+- **Major:** deliberate breaking changes to supported public APIs.
+- **Before 1.0:** use a minor bump for breaking changes or new capabilities; use a patch for compatible fixes, internal changes and packaged docs. State whether a minor release contains breaking changes.
+- **Dependent crates:** bump only when packaged content or dependency requirements change. Do not automatically propagate a major bump; review whether changed dependency types affect the crate's public API.
+- **Compatibility review:** inspect removed or renamed APIs, signatures, exhaustive enum variants, features and minimum supported Rust version. Explain their impact and the proposed version in the PR.
+- **Exceptions:** obtain explicit user approval and record the compatibility impact in the release notes.
+
+Require a version rationale for every changed crate. Automated Rust API checks should inform this review; they must not assign versions blindly. Until those checks are implemented, the agent performs the review.
+
+## Documentation-only publishing
+
+Website fixes and improvements may be published independently, without a crate release, release tag or crate version bump. The agent validates the docs, obtains deployment approval and manually runs Pages.
+
+Keep the website accurate for currently published crates. Do not announce unreleased APIs as available. Record which source commit was deployed; a docs-only deployment is not a new crate-release baseline.
+
+Documentation inside a published crate archive is different: shipping its updated contents requires a new crate version.
+
 ## Agent responsibility for automation gaps
 
 The agent performs any steps the workflows do not yet automate. Current workflows create the tag/record after uploads and can replace notes with a version table: create the tag and draft beforehand, preserve the reviewed notes, and restore them before publishing the record.
+
+Mark abandoned partial releases **incomplete** or **superseded**, preserving their source tags and publication results. Never use them as completed baselines.
 
 Always use the most recent **completed** release in the approved source history as the preparation baseline, including an earlier release from the same day. Exclude unfinished release tags. Ask the user only for a missing decision, required approval or a blocker the agent cannot resolve.
