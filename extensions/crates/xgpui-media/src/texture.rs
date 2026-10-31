@@ -291,7 +291,7 @@ impl MediaImage {
     }
     /// Original supplied pixel interpretation, before canonical upload conversion.
     pub fn source_color(&self) -> crate::pipeline::PixelColor {
-        self.0.source_color
+        self.0.source_color.clone()
     }
     pub fn format(&self) -> gpui::ImageTextureFormat {
         self.0.data.format()

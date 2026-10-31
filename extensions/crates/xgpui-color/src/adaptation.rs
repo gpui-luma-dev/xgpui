@@ -51,6 +51,42 @@ impl BradfordAdaptation {
             identity: false,
         }
     }
+    /// Adapt explicitly normalized positive XYZ whites (Y=1), including encoded
+    /// PCS illuminants. Reject nonpositive cone responses and nonfinite ratios.
+    pub fn from_xyz_whites(source: [f64; 3], destination: [f64; 3]) -> Result<Self> {
+        for white in [source, destination] {
+            finite(white)?;
+            if white[1] != 1. || white.iter().any(|v| *v <= 0.) {
+                return Err(crate::ColorError);
+            }
+        }
+        if source == destination {
+            return Ok(Self::new(WhitePoint::D65, WhitePoint::D65));
+        }
+        let cone = [
+            [0.8951, 0.2664, -0.1614],
+            [-0.7502, 1.7135, 0.0367],
+            [0.0389, -0.0685, 1.0296],
+        ];
+        let a = finite(mul(cone, source))?;
+        let b = finite(mul(cone, destination))?;
+        if a.iter().chain(b.iter()).any(|v| *v <= 0.) {
+            return Err(crate::ColorError);
+        }
+        let ratios = finite(std::array::from_fn(|i| b[i] / a[i]))?;
+        let scaled: [[f64; 3]; 3] = std::array::from_fn(|i| cone[i].map(|v| v * ratios[i]));
+        let inv = inverse(cone);
+        let matrix: [[f64; 3]; 3] = std::array::from_fn(|i| {
+            std::array::from_fn(|j| (0..3).map(|k| inv[i][k] * scaled[k][j]).sum())
+        });
+        for row in matrix {
+            finite(row)?;
+        }
+        Ok(Self {
+            matrix,
+            identity: false,
+        })
+    }
     pub fn matrix(self) -> [[f64; 3]; 3] {
         self.matrix
     }

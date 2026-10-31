@@ -135,6 +135,88 @@ fn check_curve_profiles(sampled: bool) -> usize {
     violations
 }
 
+fn inverse_matrix(matrix: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    let mut rows: [[f64; 6]; 3] = std::array::from_fn(|i| {
+        std::array::from_fn(|j| {
+            if j < 3 {
+                matrix[i][j]
+            } else {
+                f64::from(i == j - 3)
+            }
+        })
+    });
+    for column in 0..3 {
+        let pivot = (column..3)
+            .max_by(|a, b| rows[*a][column].abs().total_cmp(&rows[*b][column].abs()))
+            .unwrap();
+        rows.swap(column, pivot);
+        let scale = rows[column][column];
+        assert!(scale.is_finite() && scale != 0.);
+        rows[column] = rows[column].map(|v| v / scale);
+        for i in 0..3 {
+            if i != column {
+                let factor = rows[i][column];
+                let normalized = rows[column];
+                for (value, pivot) in rows[i].iter_mut().zip(normalized) {
+                    *value -= factor * pivot;
+                }
+            }
+        }
+    }
+    std::array::from_fn(|i| std::array::from_fn(|j| rows[i][j + 3]))
+}
+
+fn check_replacement_curves() {
+    use xgpui_color::icc::IccRgbProfile;
+    let mut count = 0;
+    let mut max_error = 0_f64;
+    for sampled in [false, true] {
+        let source = IccRgbProfile::parse(if sampled {
+            include_bytes!("../fixtures/sampled-rgb.icc").as_slice()
+        } else {
+            include_bytes!("../fixtures/parametric-rgb.icc").as_slice()
+        })
+        .unwrap();
+        for rec2020 in [false, true] {
+            let destination = IccRgbProfile::parse(if rec2020 {
+                include_bytes!("../fixtures/linear-rec2020.icc").as_slice()
+            } else {
+                include_bytes!("../fixtures/linear-p3.icc").as_slice()
+            })
+            .unwrap();
+            let inverse = inverse_matrix(destination.colorants());
+            for &(is_sampled, is_rec, rgb, decoded, _, expected) in
+                curve_reference::CURVE_REFERENCES
+            {
+                if sampled != is_sampled || rec2020 != is_rec {
+                    continue;
+                }
+                count += 1;
+                let pcs = source.decode_to_pcs(rgb).unwrap();
+                let actual =
+                    inverse.map(|row| row.into_iter().zip(pcs).map(|(a, b)| a * b).sum::<f64>());
+                let magnitude: f64 = decoded.iter().map(|v| v.abs()).sum();
+                for i in 0..3 {
+                    let error = (actual[i] - expected[i]).abs();
+                    assert!(
+                        error <= 64. * f64::EPSILON * magnitude + 4. * f64::from_bits(1),
+                        "replacement sampled={sampled} rec2020={rec2020} {rgb:?} channel {i}: {} vs {}, error={error:e}",
+                        actual[i],
+                        expected[i]
+                    );
+                    max_error = max_error.max(error);
+                    if magnitude == 0. {
+                        assert_eq!(actual[i], 0.);
+                    }
+                }
+            }
+        }
+    }
+    println!(
+        "Replacement: {count} curve vectors PASS at f64 precision; max absolute error {max_error:e}"
+    );
+}
+
 fn check_synthetic_destination() {
     let source = ColorProfile::new_adobe_rgb();
     let mut destination = ColorProfile::new_display_p3();
@@ -169,6 +251,7 @@ fn check_synthetic_destination() {
 fn main() {
     check_synthetic_destination();
     check_profiles();
+    check_replacement_curves();
     let violations = check_curve_profiles(false) + check_curve_profiles(true);
     if std::env::args().any(|arg| arg == "--strict-curves") {
         assert_eq!(
@@ -204,6 +287,10 @@ mod tests {
     #[ignore = "known sampled-curve interpolation precision gap; run --ignored to reproduce"]
     fn sampled_curve_precision_acceptance() {
         assert_eq!(super::check_curve_profiles(true), 0);
+    }
+    #[test]
+    fn replacement_passes_both_curve_acceptance_sets() {
+        super::check_replacement_curves();
     }
     #[test]
     fn malformed_profile_is_rejected() {

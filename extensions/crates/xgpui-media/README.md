@@ -160,3 +160,24 @@ or Rec.2020 RGBA16F. `pipeline::pixels_rgba16f_data` is the synchronous equivale
 Mipmaps average mapped associated linear light. `MediaImage::source_color()` now
 returns the resolved `PixelColor`, preserving custom metadata rather than
 mislabeling it as a named space. These paths add no file decoder or ICC dependency.
+
+
+Custom `PixelColor` metadata now holds an `Arc<RgbDefinition>`; construct it with
+`rgb: definition.into()` and clone it cheaply when reusing the source. Decoding
+borrows metadata, so it does not clone a table for every pixel. The input limit
+counts pixels plus custom metadata, and residency reservations retain a
+conservative metadata/table allowance until the image is released. Shared tables
+may be counted more than once for conservative admission.
+
+An application may enable `xgpui-color/icc`, parse profile bytes on its worker,
+and supply the resulting definition without adding any codec support here:
+
+```rust,ignore
+let definition = xgpui_color::icc::IccRgbProfile::parse(&profile_bytes)?
+    .into_rgb_definition();
+let source = xgpui_media::pipeline::PixelColor::Custom {
+    rgb: definition.into(),
+    alpha: xgpui_media::pipeline::AlphaMode::Straight,
+};
+let job = loader.load_pixel_buffer(width, height, pixels, source, storage, mapping)?;
+```

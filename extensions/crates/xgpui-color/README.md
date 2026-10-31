@@ -174,6 +174,61 @@ D50 xy=(0.3457,0.3585), D65 xy=(0.3127,0.3290), both normalized to Y=1.
 This is not ICC rendering-intent handling. A future adapter must resolve profile
 PCS normalization, encoded illuminant values and existing adaptation tags before
 using this API; a profile's media-white label alone is insufficient. These two
-reference whites do not represent every custom or encoded ICC white. Sampled
-and ICC parametric curves, ICC parsing, alpha and file decoding remain outside
-this color API.
+reference whites do not represent every custom or encoded ICC white. Sampled and parametric curves and optional ICC parsing are described below.
+Alpha and file decoding stay outside this color API.
+
+## Sampled and parametric decoding
+
+`SampledCurve::new(Vec<u16>)` accepts 2–65,536 nondecreasing samples. Decoding
+interpolates continuously in f64 between normalized entries; it does not round
+input to an integer lookup index. Tables are immutable shared allocations.
+
+`ParametricCurve::new([g,a,b,c,d,e,f])` evaluates `(a*x+b)^g+e` for `x>=d`, or
+`c*x+f` below it. It validates finite coefficients, positive exponent/slope,
+nonnegative lower slope, power domain and finite endpoints. Quantized branch
+locations and discontinuities are retained. Output is bounded to 0–1; nonfinite
+arithmetic is rejected before clipping. It never substitutes an approximate
+named curve. These two curve types require bounded 0–1 inputs; existing named
+linear/sRGB/gamma curves retain their signed-extension behavior.
+
+`RgbCurve` and `RgbDefinition` are now `Clone`, with borrowed evaluation/accessors.
+Sample tables remain shared when metadata is cloned.
+
+## Optional ICC parsing adapter
+
+Enable `xgpui-color`'s **`icc`** feature to use `icc::IccRgbProfile`. Default builds
+still have no runtime dependencies. The optional moxcms dependency only parses;
+all curve evaluation, adaptation and conversion use this crate's f64 core.
+
+```rust,ignore
+use xgpui_color::icc::IccRgbProfile;
+
+// Profile bytes are extracted by the application; parse on its admitted worker.
+let profile = IccRgbProfile::parse(&profile_bytes)?;
+let rgb = profile.into_rgb_definition();
+// Supply rgb as custom metadata alongside decoded pixels to xgpui-media.
+```
+
+The initial subset is deliberately strict: ICC v2/v4 RGB input/display profiles,
+XYZ PCS with the standard encoded D50 illuminant, matrix colorants, monotone
+u16 curves (including linear/gamma encodings), and parametric function types
+0, 3 and 4. Parametric coefficients must have magnitude below 128 so their
+s15Fixed16 values remain exact through the parser's f32 representation. The
+adapter rejects LUTs, CMYK/gray, device links/output profiles, CICP, unrecognized
+tags and unsupported curve semantics. Informational description/copyright/device
+text and chromaticity tags are permitted. This is not general ICC support.
+
+Admission caps: 512 KiB profile bytes, 32 tags, 65,536 entries per curve and 4 KiB
+per informational tag. Preflight checks header size, tag bounds, duplicates,
+partial overlap and curve counts before calling the parser. Exact shared tag
+ranges are permitted. The dependency's own parser limits are also configured.
+Parsing is synchronous and bounded, with no implicit thread creation; applications
+own worker admission and missing-profile policy. This is not a fuzzing/security
+certification.
+
+Matrix tags already describe PCS colorants. The adapter uses the encoded header
+PCS white, adapts once to D65 and does not reapply `chad` or substitute media
+white. It provides no rendering-intent selection, black-point compensation,
+profile-name inference or file decoding. `decode_to_pcs` exposes the original
+relative XYZ PCS for validation/integration; `rgb_definition` supplies the
+adapted custom definition used by media ingestion.
