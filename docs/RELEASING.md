@@ -26,6 +26,8 @@ the PR. The release map is `scripts/release-packages.json`. Registry planning is
 the final authority on whether existing versions match published payloads.
 Generated PRs use `GITHUB_TOKEN`; because those PR events do not start CI, the
 workflow explicitly dispatches **Validate repository tooling** on the PR branch.
+If that workflow is disabled, it respects the setting and dispatches a no-upload
+registry plan instead. This fallback does not claim full native backend coverage.
 Repository Actions settings must allow workflows to create pull requests.
 Rerunning preparation for the same source reuses its branch/PR without force pushes.
 

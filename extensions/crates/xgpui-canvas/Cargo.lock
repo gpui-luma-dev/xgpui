@@ -3834,7 +3834,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -3897,7 +3897,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-apple"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "anyhow",
  "async-task",
@@ -3933,7 +3933,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-canvas"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -3953,7 +3953,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-shader"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -3973,7 +3973,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-windows"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -4183,31 +4183,21 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "async-process"
-version = "2.5.0"
-source = "git+https://github.com/zed-industries/async-process.git?rev=0b6d6713570af61806e1e5cb40e0f757cb93fd9d#0b6d6713570af61806e1e5cb40e0f757cb93fd9d"
-
-[[patch.unused]]
-name = "proptest"
-version = "1.10.0"
-source = "git+https://github.com/proptest-rs/proptest?rev=3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b#3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b"
-
-[[patch.unused]]
 name = "xgpui-linux"
-version = "1.0.1"
+version = "1.0.2"
 
 [[patch.unused]]
 name = "xgpui-macos"
-version = "2.0.0"
+version = "2.0.1"
 
 [[patch.unused]]
 name = "xgpui-platform"
-version = "1.0.1"
+version = "1.0.2"
 
 [[patch.unused]]
 name = "xgpui-web"
-version = "1.0.1"
+version = "1.0.2"
 
 [[patch.unused]]
 name = "xgpui-wgpu"
-version = "1.0.1"
+version = "1.0.2"
