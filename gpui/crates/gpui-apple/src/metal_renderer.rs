@@ -182,15 +182,10 @@ impl MetalRenderer {
             gpui::WindowColorMode::Default => {
                 #[cfg(target_os = "macos")]
                 {
-                    if self.wide_sdr.is_some() {
-                        if let Some(layer) = &self.layer {
-                            layer.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
-                            let native = layer;
-                            native.setColorspace(None);
-                            native.setWantsExtendedDynamicRangeContent(false);
-                        }
-                        self.wide_sdr = None;
+                    if let Some(layer) = &self.layer {
+                        Self::configure_srgb_layer(layer)?;
                     }
+                    self.wide_sdr = None;
                 }
                 Ok(self.color_status())
             }
@@ -241,9 +236,24 @@ impl MetalRenderer {
         Self::new_internal(device, Some(layer), !transparent, instance_buffer_pool)
     }
 
+    #[cfg(target_os = "macos")]
+    fn configure_srgb_layer(layer: &metal::MetalLayerRef) -> Result<()> {
+        use objc2_core_graphics::{CGColorSpace, kCGColorSpaceSRGB};
+        let space = CGColorSpace::with_name(Some(unsafe { kCGColorSpaceSRGB }))
+            .context("sRGB presentation color space unavailable")?;
+        layer.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+        // Unspecified layer colorspace means unmanaged device output, not sRGB.
+        // Match the encoded, bounded sRGB bytes produced by the default renderer.
+        layer.setColorspace(Some(&space));
+        layer.setWantsExtendedDynamicRangeContent(false);
+        Ok(())
+    }
+
     fn configure_layer(layer: &metal::MetalLayerRef, device: &metal::DeviceRef, transparent: bool) {
         layer.setDevice(Some(device));
         layer.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+        #[cfg(target_os = "macos")]
+        Self::configure_srgb_layer(layer).expect("sRGB presentation color space unavailable");
         // Support direct-to-display rendering if the window is not transparent
         // https://developer.apple.com/documentation/metal/managing-your-game-window-for-metal-in-macos
         layer.setOpaque(!transparent);
