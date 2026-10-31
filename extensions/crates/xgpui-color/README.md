@@ -147,3 +147,17 @@ domains rather than a cross-device bit-identity promise.
 
 This extension uses its own `0.2.0` version, separate from xgpui framework
 `1.0.0` and the upstream GPUI baseline.
+
+## Custom RGB metadata
+
+`RgbDefinition::new_d65(matrix, curves)` validates a row-major linear RGB →
+relative XYZ/D65 matrix and three independent `RgbCurve` values (`Linear`,
+`Srgb`, or positive `Gamma`). `decode_to_xyz_d65` retains finite extended RGB
+and rejects conversion overflow. Matrices must be nonsingular, reasonably
+conditioned and normalized to D65 white (Y=1); white admission permits at most
+3/65536 absolute error per XYZ channel for quantized colorants. This metadata
+admission bound is not the numerical accuracy promised by conversions.
+
+The caller must adapt colorants to D65 before construction. This API performs
+no ICC parsing or implicit D50 adaptation; sampled and ICC parametric curves
+are not yet supported. Alpha and file decoding are outside this color API.

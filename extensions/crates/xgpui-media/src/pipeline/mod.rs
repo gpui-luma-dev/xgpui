@@ -3,7 +3,8 @@
 //! `ImageAdjustments` renders matrix/vignette effects on retained RGBA8 sources
 //! in linear sRGB or P3. Supplied RGBA16F pixels use explicit source metadata. Existing `ImageFilter` remains encoded sRGB. Progressive
 //! providers and bounded tiled scheduling use immutable source pages.
-//! All source color contracts here use D65 and bounded SDR.
+//! Color definitions use D65. Explicit extended-linear supplied RGB remains
+//! finite and unclipped until destination mapping; alpha is bounded SDR.
 mod blur;
 pub use blur::ImageBlur;
 mod canvas;
@@ -16,14 +17,16 @@ mod adjustments;
 pub use adjustments::{AdjustedImage, ImageAdjustments, WideImage};
 pub(crate) mod float_image;
 pub use float_image::{
-    rec2020_rgba16f_data, rgba16f_data, rgba16f_data_with_mapping, rgba16f_payload_bytes,
+    pixels_rgba16f_data, rec2020_rgba16f_data, rgba16f_data, rgba16f_data_with_mapping,
+    rgba16f_payload_bytes,
 };
 mod color;
 mod progressive;
 mod tiles;
 
 pub use color::{
-    AlphaMode, ColorMatrix, ImageColor, ImagePrimaries, TransferFunction, Vignette, WorkingPixel,
+    AlphaMode, ColorMatrix, ImageColor, ImagePrimaries, PixelColor, TransferFunction, Vignette,
+    WorkingPixel,
 };
 pub use progressive::{
     ProgressiveImage, ProgressiveStatus, SourceCapabilities, SourceEvent, SourceId, SourceRequest,

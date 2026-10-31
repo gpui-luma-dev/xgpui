@@ -245,6 +245,46 @@ impl MediaLoader {
             crate::pipeline::ImagePrimaries::Rec2020,
         )
     }
+    /// Prepare supplied pixels with resolved metadata on an admitted worker.
+    /// No file decoding or ICC parsing. Mapping is explicit and precedes mips.
+    pub fn load_pixel_buffer(
+        &self,
+        width: u32,
+        height: u32,
+        pixels: Vec<[f32; 4]>,
+        color: crate::pipeline::PixelColor,
+        storage: crate::pipeline::ImagePrimaries,
+        mapping: crate::pipeline::GamutMapping,
+    ) -> Result<ImageJob> {
+        ensure!(
+            crate::pipeline::rgba16f_payload_bytes(width, height)? <= self.0.limits.max_image_bytes,
+            "image exceeds payload limit"
+        );
+        ensure!(
+            pixels.len() == width as usize * height as usize
+                && pixels.len().saturating_mul(16) <= self.0.limits.max_encoded_bytes,
+            "supplied pixels exceed input limit"
+        );
+        ensure!(
+            matches!(
+                storage,
+                crate::pipeline::ImagePrimaries::DisplayP3
+                    | crate::pipeline::ImagePrimaries::Rec2020
+            ),
+            "unsupported image storage primaries"
+        );
+        self.load_guarded(color, None, move |_, cancelled| {
+            crate::pipeline::float_image::build_pixels_in(
+                width,
+                height,
+                pixels,
+                color,
+                mapping,
+                storage,
+                || cancelled.load(Ordering::Acquire),
+            )
+        })
+    }
     fn load_rgba16f_in(
         &self,
         width: u32,
@@ -284,10 +324,11 @@ impl MediaLoader {
     }
     pub(crate) fn load_guarded(
         &self,
-        color: crate::pipeline::ImageColor,
+        color: impl Into<crate::pipeline::PixelColor>,
         guard: Option<Arc<dyn Send + Sync>>,
         build: impl FnOnce(MediaLimits, &AtomicBool) -> Result<gpui::ImageTextureData> + Send + 'static,
     ) -> Result<ImageJob> {
+        let color = color.into();
         {
             let mut usage = self.0.usage.lock().unwrap();
             ensure!(usage.jobs < self.0.limits.max_jobs, "media workers busy");

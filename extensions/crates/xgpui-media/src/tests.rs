@@ -605,7 +605,7 @@ fn check_float_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()
     ] {
         let mut job = loader.load_rgba16f(64, 32, vec![rgba; 64 * 32], ImageColor::LINEAR_P3)?;
         let image = finish(&mut job)?;
-        assert_eq!(image.source_color(), ImageColor::LINEAR_P3);
+        assert_eq!(image.source_color(), ImageColor::LINEAR_P3.into());
         assert_eq!(
             image.format(),
             gpui::ImageTextureFormat::LinearP3Rgba16Float
@@ -841,7 +841,7 @@ fn check_adobe_rgb_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Resul
                 mapping,
             )?;
             let image = finish(&mut job)?;
-            assert_eq!(image.source_color(), ImageColor::ADOBE_RGB_1998);
+            assert_eq!(image.source_color(), ImageColor::ADOBE_RGB_1998.into());
             assert_eq!(
                 image.format(),
                 gpui::ImageTextureFormat::LinearP3Rgba16Float
@@ -900,7 +900,7 @@ fn check_rec2020_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<
             let mut job =
                 loader.load_rec2020_rgba16f(3, 1, vec![rgba; 3], color, GamutMapping::Clip)?;
             let image = finish(&mut job)?;
-            assert_eq!(image.source_color(), color);
+            assert_eq!(image.source_color(), color.into());
             assert_eq!(
                 image.format(),
                 gpui::ImageTextureFormat::LinearRec2020Rgba16Float
@@ -1035,5 +1035,65 @@ fn adobe_rec2020_wide_blends_before_mapping_and_reuses_uploads() -> Result<()> {
         None,
     )?;
     assert!(image.wide(Some(too_large)).is_err());
+    Ok(())
+}
+
+#[test]
+fn resolved_pixel_metadata_survives_background_preparation() -> Result<()> {
+    use pipeline::*;
+    let definition = xgpui_color::RgbDefinition::new_d65(
+        xgpui_color::RgbSpace::AdobeRgb1998.linear_to_xyz_matrix(),
+        [xgpui_color::RgbCurve::Gamma(563. / 256.); 3],
+    )?;
+    for source in [
+        PixelColor::Custom {
+            rgb: definition,
+            alpha: AlphaMode::Straight,
+        },
+        PixelColor::ExtendedLinear {
+            primaries: ImagePrimaries::DisplayP3,
+            alpha: AlphaMode::Straight,
+        },
+    ] {
+        let loader = MediaLoader::default();
+        let mut job = loader.load_pixel_buffer(
+            3,
+            1,
+            vec![[0., 1., 0., 0.5]; 3],
+            source,
+            ImagePrimaries::Rec2020,
+            GamutMapping::Clip,
+        )?;
+        let image = finish(&mut job)?;
+        assert_eq!(image.source_color(), source);
+        assert_eq!(
+            image.format(),
+            gpui::ImageTextureFormat::LinearRec2020Rgba16Float
+        );
+        assert!(
+            loader
+                .load_pixel_buffer(
+                    1,
+                    1,
+                    vec![],
+                    source,
+                    ImagePrimaries::Rec2020,
+                    GamutMapping::Clip
+                )
+                .is_err()
+        );
+        assert!(
+            loader
+                .load_pixel_buffer(
+                    1,
+                    1,
+                    vec![[0.; 4]],
+                    source,
+                    ImagePrimaries::Srgb,
+                    GamutMapping::Clip
+                )
+                .is_err()
+        );
+    }
     Ok(())
 }

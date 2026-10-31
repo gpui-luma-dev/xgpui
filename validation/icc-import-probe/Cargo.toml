@@ -1,0 +1,8 @@
+[package]
+name = "xgpui-icc-probe"
+version = "0.0.0"
+edition = "2024"
+[dependencies]
+moxcms = { version = "=0.8.1", features = ["extended_range"] }
+
+[workspace]
