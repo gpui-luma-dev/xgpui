@@ -673,3 +673,31 @@ fn rec2020_native_conversion_retains_extended_p3_channels() -> Result<()> {
 }
 
 include!("rec2020_reference.rs");
+
+#[test]
+fn public_fp16_readback_preserves_extended_channels_and_unpads_rows() -> Result<()> {
+    objc2::rc::autoreleasepool(|_| {
+        let mut r = renderer();
+        let mut scene = Scene::default();
+        scene.insert_primitive(draw(
+            b(0., 0., 13., 7.),
+            Arc::new(Patch::new([-0.125, 1.25, 0.00006103515625, 1.])),
+        ));
+        scene.finish();
+        let image = r.render_scene_to_linear_p3(&scene, size(DevicePixels(13), DevicePixels(7)))?;
+        assert_eq!(image.size, size(DevicePixels(13), DevicePixels(7)));
+        assert_eq!(image.pixels.len(), 91);
+        for pixel in image.pixels {
+            assert_eq!(pixel, [0xb000, 0x3d00, 0x0400, 0x3c00]);
+        }
+        // Resize must replace the source target and return the new dimensions.
+        let image = r.render_scene_to_linear_p3(&scene, size(DevicePixels(5), DevicePixels(3)))?;
+        assert_eq!(image.pixels.len(), 15);
+        r.set_color_mode(gpui::WindowColorMode::Default)?;
+        assert!(
+            r.render_scene_to_linear_p3(&scene, size(DevicePixels(5), DevicePixels(3)))
+                .is_err()
+        );
+        Ok(())
+    })
+}

@@ -2786,6 +2786,11 @@ impl PlatformWindow for MacWindow {
         this.renderer.render_to_image(scene)
     }
 
+    #[cfg(any(test, feature = "test-support"))]
+    fn render_to_linear_p3(&self, scene: &gpui::Scene) -> Result<gpui::LinearP3Image> {
+        self.0.lock().renderer.render_to_linear_p3(scene)
+    }
+
     fn a11y_init(&self, callbacks: gpui::A11yCallbacks) {
         let mut lock = self.0.lock();
 

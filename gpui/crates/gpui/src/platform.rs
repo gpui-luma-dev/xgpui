@@ -1417,6 +1417,13 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
         None
     }
 
+    /// Synchronously re-render and read associated extended linear-P3 FP16 pixels.
+    /// Supported on Metal WideGamutSdr only; never silently returns an sRGB preview.
+    #[cfg(any(test, feature = "test-support"))]
+    fn render_to_linear_p3(&self, _scene: &Scene) -> Result<LinearP3Image> {
+        anyhow::bail!("linear P3 readback is unsupported on this backend")
+    }
+
     /// Renders the given scene to a texture and returns the pixel data as an RGBA image.
     /// This does not present the frame to screen - useful for visual testing where we want
     /// to capture what would be rendered without displaying it or requiring the window to be visible.
@@ -1424,6 +1431,18 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn render_to_image(&self, _scene: &Scene) -> Result<RgbaImage> {
         anyhow::bail!("render_to_image not implemented for this platform")
     }
+}
+
+/// Validation snapshot before display color management: row-major associated
+/// extended linear Display-P3 RGBA, preserving the GPU's IEEE binary16 bits.
+/// Negative and above-one RGB values are valid. This is not a screenshot or HDR.
+#[cfg(any(test, feature = "test-support"))]
+#[derive(Debug)]
+pub struct LinearP3Image {
+    /// Physical pixel dimensions.
+    pub size: Size<DevicePixels>,
+    /// Row-major RGBA binary16 words, without row padding.
+    pub pixels: Vec<[u16; 4]>,
 }
 
 /// A renderer for headless windows that can produce real rendered output.
