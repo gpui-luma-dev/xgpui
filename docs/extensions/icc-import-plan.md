@@ -67,7 +67,7 @@ cargo run --offline --locked --manifest-path validation/icc-import-probe/Cargo.t
 
 The fixture generator uses an installed Little CMS 2.19 only during regeneration; normal probe tests need no Little CMS installation. See the probe README for provenance and commands.
 
-Recommendation: retain the existing engine as a candidate behind an optional adapter; there is no demonstrated need for a fork or owned ICC reader for this tested subset. This is not acceptance of all RGB profiles. Independent sampled/parametric curve fixtures, real profile diversity, source/destination PCS semantics, metadata limits and worker integration remain gates before a production adapter. Conflicting real ICC/CICP metadata needs an explicit adapter policy; this synthetic setup correction does not resolve that policy.
+The original gamma-only result supports that tested subset. The broader curve investigation below changes the recommendation for a general adapter. This is not acceptance of all RGB profiles. Independent sampled/parametric curve fixtures, real profile diversity, source/destination PCS semantics, metadata limits and worker integration remain gates before a production adapter. Conflicting real ICC/CICP metadata needs an explicit adapter policy; this synthetic setup correction does not resolve that policy.
 
 ## Numerical acceptance
 
@@ -90,3 +90,13 @@ These results establish CPU conversion/storage behavior and existing macOS rende
 The 120-digit oracle in `scripts/generate_bradford_references.py` uses a pivoted Gauss-Jordan inverse independent of production's cofactor inverse. It covers 408 signed, zero, near-black and large XYZ vectors in both directions. Scale-aware bounds account for cancellation while constructing matrix off-diagonals; there is no ordinary absolute-error floor that hides dark errors. A second check uses the published CSS matrix. D50 diagonal-colorant fixtures independently verify explicit mapping and associated FP16 storage. Identity is exact; nonfinite inputs and overflow are rejected. Source colorant quantization admission is propagated through the CAT separately from numerical conversion tolerances.
 
 Follow-up validation: 20 color unit tests, 4 adaptation tests, 6 independent Adobe numerical tests, 69 serial Metal/wgpu media tests and 8 sibling lab tests pass. Strict color all-target and media library Clippy, formatting, fixture regeneration and diff checks pass. Windows/Linux native execution remains unverified.
+
+## Sampled/parametric curve investigation — acceptance unresolved
+
+The isolated probe now adds 1,032 vectors for serialized sRGB-style parametric curves and three independent 257-entry sampled curves. Expected results include both Little CMS and a separate 120-digit evaluation of actual serialized curve coefficients, sampled entries and colorants. Boundary inputs cover near-black ramps, quantized parametric thresholds and selected sampled knots.
+
+moxcms 0.8.1 exceeds the unchanged decoded-energy-scaled f32 budget on 298/510 parametric and 386/522 sampled vectors. Maximum absolute errors against the direct oracle are approximately 1.05e-6 and 8.75e-6, respectively. Sampled blue input 0.0001 differs by about 8.45% in its P3 blue output; near-black precision must not be judged solely by absolute error. Little CMS sampled results also differ from continuous piecewise-linear evaluation, so agreement with another engine alone is insufficient.
+
+The ordinary probe suite has 4 passing diagnostic/setup checks and 2 explicitly ignored strict acceptance gates. Running `-- --ignored` or the executable's `--strict-curves` intentionally fails. No tolerance was widened to claim acceptance. Strict Clippy and fixture regeneration remain separate checks, not evidence that the numerical gates pass.
+
+Revised recommendation: evaluate using the existing dependency only for parsing profile bytes, then validate/resolve colorants and curves and evaluate them in our color core. This requires adding independently tested sampled/parametric curves and auditing parser admission/PCS semantics. Do not patch the dependency or adopt its broader transform path by default. A maintained ICC reader is not yet required. No product code, dependency or file-format support changes in this investigation.
