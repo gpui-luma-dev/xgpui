@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-color"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 publish = ["crates-io"]
 description = "Color science extension for xgpui with standalone CPU conversions, gamut mapping, gradients, and WGSL math"

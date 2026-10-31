@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-media"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -21,23 +21,23 @@ wgpu = ["dep:gpui-wgpu", "gpui-wgpu/dma-buf"]
 [dependencies]
 anyhow = "1"
 half = "2.7"
-xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"] , package = "xgpui-shader", version = "=0.2.1" }
-xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "=0.2.1" }
+xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"] , package = "xgpui-shader", version = "=0.2.2" }
+xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "=0.2.2" }
 refineable = { package = "refineable-gpui-unofficial", version = "=1.25.3" }
-gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=1.1.0" }
-gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", optional = true , package = "xgpui-wgpu", version = "=1.0.1" }
+gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=1.1.1" }
+gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", optional = true , package = "xgpui-wgpu", version = "=1.0.2" }
 image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "webp"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-gpui-apple = { path = "../../../gpui/crates/gpui-apple" , package = "xgpui-apple", version = "=2.0.0" }
+gpui-apple = { path = "../../../gpui/crates/gpui-apple" , package = "xgpui-apple", version = "=2.0.1" }
 objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFBase"] }
 objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVPixelBuffer", "CVBuffer"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-gpui-windows = { path = "../../../gpui/crates/gpui-windows" , package = "xgpui-windows", version = "=1.0.1" }
+gpui-windows = { path = "../../../gpui/crates/gpui-windows" , package = "xgpui-windows", version = "=1.0.2" }
 
 [dev-dependencies]
-gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", features = ["test-support"] , package = "xgpui-wgpu", version = "=1.0.1" }
+gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", features = ["test-support"] , package = "xgpui-wgpu", version = "=1.0.2" }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
-gpui-apple = { path = "../../../gpui/crates/gpui-apple", features = ["test-support"] , package = "xgpui-apple", version = "=2.0.0" }
+gpui-apple = { path = "../../../gpui/crates/gpui-apple", features = ["test-support"] , package = "xgpui-apple", version = "=2.0.1" }
