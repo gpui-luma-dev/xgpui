@@ -5896,7 +5896,7 @@ checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
 
 [[package]]
 name = "xgpui"
-version = "2.0.0"
+version = "1.2.0"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -5959,7 +5959,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-apple"
-version = "3.0.0"
+version = "2.0.1"
 dependencies = [
  "anyhow",
  "async-task",
@@ -6014,7 +6014,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-linux"
-version = "2.0.0"
+version = "1.0.2"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -6057,7 +6057,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-macos"
-version = "3.0.0"
+version = "2.0.1"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -6103,7 +6103,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-platform"
-version = "2.0.0"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -6116,7 +6116,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-web"
-version = "2.0.0"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -6144,7 +6144,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-wgpu"
-version = "2.0.0"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -6169,7 +6169,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-windows"
-version = "2.0.0"
+version = "1.0.2"
 dependencies = [
  "accesskit",
  "accesskit_windows",

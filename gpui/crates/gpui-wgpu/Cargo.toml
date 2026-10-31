@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-wgpu"
-version = "2.0.0"
+version = "1.0.2"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -24,7 +24,7 @@ font-kit = ["dep:font-kit"]
 test-support = ["gpui/test-support", "dep:image"]
 
 [dependencies]
-gpui = { package = "xgpui", version = "=2.0.0" }
+gpui = { package = "xgpui", version = "=1.2.0" }
 anyhow = { version = "1.0.86" }
 bytemuck = { version = "1" }
 collections = { package = "collections-gpui-unofficial", version = "=1.25.3" }
@@ -74,7 +74,7 @@ wgpu = { version = "30.0.1", default-features = false, features = ["webgl"] }
 
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["html_reports"] }
-gpui = { package = "xgpui", version = "=2.0.0", features = ["test-support"] }
+gpui = { package = "xgpui", version = "=1.2.0", features = ["test-support"] }
 image = { version = "0.25.1", default-features = false, features = [
     "bmp",
     "dds",

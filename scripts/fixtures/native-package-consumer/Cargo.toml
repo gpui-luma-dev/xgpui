@@ -7,15 +7,15 @@ publish = false
 [workspace]
 
 [dependencies]
-gpui = { package = "xgpui", version = "=2.0.0" }
-gpui_platform = { package = "xgpui-platform", version = "=2.0.0" }
-gpui_apple = { package = "xgpui-apple", version = "=3.0.0" }
-gpui_macos = { package = "xgpui-macos", version = "=3.0.0" }
+gpui = { package = "xgpui", version = "=1.2.0" }
+gpui_platform = { package = "xgpui-platform", version = "=1.0.2" }
+gpui_apple = { package = "xgpui-apple", version = "=2.0.1" }
+gpui_macos = { package = "xgpui-macos", version = "=2.0.1" }
 gpui_macros = { package = "xgpui-macros", version = "=1.0.0" }
-gpui_wgpu = { package = "xgpui-wgpu", version = "=2.0.0" }
+gpui_wgpu = { package = "xgpui-wgpu", version = "=1.0.2" }
 xgpui-color = "=0.3.0"
-xgpui-gamut = { version = "=0.3.0", features = ["instanced"] }
+xgpui-gamut = { version = "=0.2.2", features = ["instanced"] }
 xgpui-media = "=0.4.0"
-xgpui-parley = "=0.3.0"
+xgpui-parley = "=0.2.2"
 xgpui-shader = { version = "=0.3.0", features = ["portable-shaders"] }
-xgpui-svg = "=0.3.0"
+xgpui-svg = "=0.2.2"

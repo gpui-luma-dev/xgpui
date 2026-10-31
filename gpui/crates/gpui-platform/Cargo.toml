@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-platform"
-version = "2.0.0"
+version = "1.0.2"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -41,26 +41,26 @@ required-features = ["bench-support"]
 
 [dependencies]
 anyhow = { version = "1.0.86" }
-gpui = { package = "xgpui", version = "=2.0.0" }
+gpui = { package = "xgpui", version = "=1.2.0" }
 
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["html_reports"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-gpui_macos = { package = "xgpui-macos", version = "=3.0.0" }
+gpui_macos = { package = "xgpui-macos", version = "=2.0.1" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-gpui_windows = { package = "xgpui-windows", version = "=2.0.0" }
-gpui = { package = "xgpui", version = "=2.0.0", features = ["windows-manifest"] }
+gpui_windows = { package = "xgpui-windows", version = "=1.0.2" }
+gpui = { package = "xgpui", version = "=1.2.0", features = ["windows-manifest"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
-gpui_linux = { package = "xgpui-linux", version = "=2.0.0" }
+gpui_linux = { package = "xgpui-linux", version = "=1.0.2" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-gpui_wgpu = { package = "xgpui-wgpu", version = "=2.0.0", optional = true }
+gpui_wgpu = { package = "xgpui-wgpu", version = "=1.0.2", optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-gpui_web = { package = "xgpui-web", version = "=2.0.0" }
+gpui_web = { package = "xgpui-web", version = "=1.0.2" }
 console_error_panic_hook = { version = "0.1.7" }
 
 [workspace]

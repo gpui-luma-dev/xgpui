@@ -50,19 +50,19 @@ dependencies = [
 
 [[patch.unused]]
 name = "xgpui"
-version = "2.0.0"
+version = "1.2.0"
 
 [[patch.unused]]
 name = "xgpui-apple"
-version = "3.0.0"
+version = "2.0.1"
 
 [[patch.unused]]
 name = "xgpui-linux"
-version = "2.0.0"
+version = "1.0.2"
 
 [[patch.unused]]
 name = "xgpui-macos"
-version = "3.0.0"
+version = "2.0.1"
 
 [[patch.unused]]
 name = "xgpui-macros"
@@ -70,16 +70,16 @@ version = "1.0.0"
 
 [[patch.unused]]
 name = "xgpui-platform"
-version = "2.0.0"
+version = "1.0.2"
 
 [[patch.unused]]
 name = "xgpui-web"
-version = "2.0.0"
+version = "1.0.2"
 
 [[patch.unused]]
 name = "xgpui-wgpu"
-version = "2.0.0"
+version = "1.0.2"
 
 [[patch.unused]]
 name = "xgpui-windows"
-version = "2.0.0"
+version = "1.0.2"
