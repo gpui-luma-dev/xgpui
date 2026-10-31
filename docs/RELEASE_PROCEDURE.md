@@ -1,48 +1,43 @@
 # Release recipe
 
-## 1. Prepare
-
-Say **“prepare today's release.”**
+## 1. Prepare the release PR
 
 - Compare `main` with the last completed release.
-- Open a PR with proposed crate versions and release notes: titles, short summaries and change links.
-- Run checks and a crates.io plan. Verify unchanged published versions and skip them.
+- Propose crate versions and update dependency pins and lockfiles.
+- Write release notes with change titles, short summaries, links and a version table.
+- Run validation and a crates.io plan; verify and skip unchanged published versions.
 
 ## 2. Review and merge
 
-- Agree on the version numbers and notes.
-- Explicitly approve merging the release PR.
-- Record the exact merged commit SHA.
+- Approve the versions, notes and release PR.
+- Merge the PR and record the exact commit SHA.
 
-## 3. Tag and draft — before uploading
+## 3. Create the tag and release record
 
-- Create `release-YYYY-MM-DD-COMMIT` at that SHA, using the commit date in UTC and its first 12 hex characters.
-- Create a **draft GitHub release** with the reviewed notes and version table.
-- Confirm the remote tag points to the approved commit. Never move it after an upload.
+**Complete this before uploading any crates.**
 
-## 4. Publish crates
+- Tag the approved commit as `release-YYYY-MM-DD-COMMIT`, using the commit date in UTC and its first 12 hex characters.
+- Create the GitHub release record as a **draft**, containing the reviewed notes and version table.
+- Verify the remote tag points to the approved commit.
 
-- Explicitly approve publication.
-- Run **Prepare registry release → publish**, selecting the tag and entering `publish FULL_COMMIT_SHA`.
-- Verify every crate is published and verified, or already published and verified.
-- Check that a registry-only consumer builds and runs.
+## 4. Publish and verify crates
 
-**If publication fails:** keep the tag and draft. Retry the same commit; skip verified uploads and resume missing ones. Do not publish the release record or deploy Pages until verification completes.
+- Obtain publication approval.
+- Run **Prepare registry release → publish** against the tag, confirming `publish FULL_COMMIT_SHA`.
+- Verify all intended versions; skip matching versions already published.
+- Build and run a registry-only consumer.
+- Add the results and workflow link to the existing release record, then publish the draft.
 
-## 5. Publish the release record
+**On failure:** retain the tag and draft. Retry the same commit, skipping verified uploads. Never move a tag after an upload. Keep the record in draft and hold documentation deployment until verification succeeds.
 
-- Preserve the reviewed highlights and version table.
-- Add verification results and the publication workflow link.
-- Publish the draft GitHub release.
+## 5. Deploy documentation
 
-## 6. Deploy Pages
-
-- Manually run **Publish documentation** after crate publication succeeds.
-- Verify `xgpui.dev`, documented versions, galleries and both Wasm bundles.
+- Manually run **Publish documentation** after successful crate publication.
+- Verify the live website, documented versions, galleries and Wasm bundles.
 - Add the deployment link to the release record.
 
-## Manual steps still required
+## Automation requirements
 
-Current automation creates the tag/release **after** uploads and replaces notes with a version table. Until updated, create the tag and draft manually in step 3, then restore the reviewed notes and publish the draft in step 5.
+Tag and release-record creation must precede uploads, and reviewed notes must be preserved. Until the workflows support this order, perform step 3 manually and restore the reviewed notes if the publication finalizer replaces them.
 
-If an unfinished release tag exists, give preparation the last **completed** release tag as its baseline.
+Use the last **completed** release as the preparation baseline; exclude unfinished release tags.
