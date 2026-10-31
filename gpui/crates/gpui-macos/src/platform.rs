@@ -613,8 +613,9 @@ impl MacPlatform {
                         SystemMenuType::Services => {
                             let app: id = msg_send![APP_CLASS, sharedApplication];
                             ({
-                                let value: () = msg_send![app, setServicesMenu: item];
-                                value
+                                (&*app.cast::<objc2_app_kit::NSApplication>()).setServicesMenu(
+                                    Some(&*submenu.cast::<objc2_app_kit::NSMenu>()),
+                                );
                             });
                         }
                     }

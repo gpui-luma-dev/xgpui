@@ -71,6 +71,7 @@ impl Pasteboard {
     }
 
     pub fn read(&self) -> Option<ClipboardItem> {
+        self.inner.as_ref()?;
         unsafe {
             // Check for file paths first
             let filenames = {
@@ -134,7 +135,7 @@ impl Pasteboard {
                 let value: id = msg_send![self.inner_ptr(), types];
                 value
             };
-            if msg_send![types, containsObject: ut_type.inner()] {
+            if !types.is_null() && msg_send![types, containsObject: ut_type.inner()] {
                 self.data_for_type(ut_type.inner_mut()).map(|bytes| {
                     let bytes = bytes.to_vec();
                     let id = hash(&bytes);
@@ -157,7 +158,9 @@ impl Pasteboard {
             };
             let string_type: id = ns_string("public.utf8-plain-text");
 
-            if !msg_send![pasteboard_types, containsObject: string_type] {
+            if pasteboard_types.is_null()
+                || !msg_send![pasteboard_types, containsObject: string_type]
+            {
                 return None;
             }
 
@@ -218,6 +221,9 @@ impl Pasteboard {
     }
 
     pub fn write(&self, item: ClipboardItem) {
+        if self.inner.is_none() {
+            return;
+        }
         unsafe {
             match item.entries.as_slice() {
                 [] => {
@@ -417,6 +423,47 @@ mod tests {
     use gpui::{ClipboardEntry, ClipboardItem, ClipboardString, ImageFormat};
 
     use super::*;
+
+    #[test]
+    fn unavailable_pasteboard_read_and_write_are_harmless() {
+        objc2::rc::autoreleasepool(|_| {
+            let pasteboard = unsafe { Pasteboard::new(nil) };
+            assert!(pasteboard.read().is_none());
+            pasteboard.write(ClipboardItem {
+                entries: Vec::new(),
+            });
+        });
+    }
+
+    #[test]
+    fn empty_pasteboard_types_are_harmless() {
+        extern "C-unwind" fn types(_: *const Object, _: objc2::runtime::Sel) -> id {
+            nil
+        }
+        extern "C-unwind" fn property_list(_: *const Object, _: objc2::runtime::Sel, _: id) -> id {
+            nil
+        }
+        static CLASS: std::sync::OnceLock<&'static objc2::runtime::AnyClass> =
+            std::sync::OnceLock::new();
+        let class = CLASS.get_or_init(|| unsafe {
+            let mut builder =
+                ClassBuilder::new(c"GPUIEmptyPasteboardTest", class!(NSObject)).unwrap();
+            builder.add_method(
+                objc2::sel!(types),
+                types as extern "C-unwind" fn(*const Object, objc2::runtime::Sel) -> id,
+            );
+            builder.add_method(
+                objc2::sel!(propertyListForType:),
+                property_list as extern "C-unwind" fn(*const Object, objc2::runtime::Sel, id) -> id,
+            );
+            builder.register()
+        });
+        objc2::rc::autoreleasepool(|_| unsafe {
+            let object: objc2::rc::Retained<Object> = msg_send![*class, new];
+            let pasteboard = Pasteboard::new(objc2::rc::Retained::as_ptr(&object).cast_mut());
+            assert!(pasteboard.read().is_none());
+        });
+    }
 
     unsafe fn simulate_external_file_copy(pasteboard: &Pasteboard, paths: &[&str]) {
         unsafe {

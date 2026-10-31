@@ -239,7 +239,7 @@ unsafe fn build_classes() {
             decl.add_method(
                 sel!(firstRectForCharacterRange:actualRange:),
                 first_rect_for_character_range
-                    as extern "C-unwind" fn(*const Object, Sel, NSRange, id) -> NSRect,
+                    as extern "C-unwind" fn(*const Object, Sel, NSRange, *mut NSRange) -> NSRect,
             );
             decl.add_method(
                 sel!(insertText:replacementRange:),
@@ -256,7 +256,7 @@ unsafe fn build_classes() {
             decl.add_method(
                 sel!(attributedSubstringForProposedRange:actualRange:),
                 attributed_substring_for_proposed_range
-                    as extern "C-unwind" fn(*const Object, Sel, NSRange, *mut c_void) -> id,
+                    as extern "C-unwind" fn(*const Object, Sel, NSRange, *mut NSRange) -> id,
             );
             decl.add_method(
                 sel!(viewDidChangeEffectiveAppearance),
@@ -2140,9 +2140,10 @@ impl PlatformWindow for MacWindow {
         let executor = self.0.lock().foreground_executor.clone();
         executor
             .spawn(async move {
-                 {
-                    let app = unsafe { let value: id = msg_send![class!(NSApplication), sharedApplication]; value };
-                    (unsafe { let value: () = msg_send![app, requestUserAttention: NSRequestUserAttentionType::InformationalRequest]; value });
+                unsafe {
+                    let app: id = msg_send![class!(NSApplication), sharedApplication];
+                    (&*app.cast::<NSApplication>())
+                        .requestUserAttention(NSRequestUserAttentionType::InformationalRequest);
                 }
             })
             .detach();
@@ -3900,7 +3901,7 @@ extern "C-unwind" fn first_rect_for_character_range(
     this: *const Object,
     _: Sel,
     range: NSRange,
-    _: id,
+    _: *mut NSRange,
 ) -> NSRect {
     let this = unsafe { &*this };
     let frame = get_frame(this);
@@ -3999,7 +4000,7 @@ extern "C-unwind" fn attributed_substring_for_proposed_range(
     this: *const Object,
     _: Sel,
     range: NSRange,
-    actual_range: *mut c_void,
+    actual_range: *mut NSRange,
 ) -> id {
     let this = unsafe { &*this };
     with_input_handler(this, |input_handler| {
@@ -4010,19 +4011,25 @@ extern "C-unwind" fn attributed_substring_for_proposed_range(
         let mut adjusted: Option<Range<usize>> = None;
 
         let selected_text = input_handler.text_for_range(range.clone(), &mut adjusted)?;
-        if let Some(adjusted) = adjusted
-            && adjusted != range
-        {
-            unsafe { (actual_range as *mut NSRange).write(NSRange::from(adjusted)) };
-        }
+        // AppKit permits a null output pointer. Report the actual range even
+        // when the input handler did not adjust the requested range.
+        unsafe { write_actual_text_range(actual_range, adjusted.unwrap_or(range)) };
         unsafe {
             let string: id = msg_send![class!(NSAttributedString), alloc];
             let string: id = msg_send![string, initWithString: ns_string(&selected_text)];
+            let string: id = msg_send![string, autorelease];
             Some(string)
         }
     })
     .flatten()
     .unwrap_or(nil)
+}
+
+/// AppKit's optional NSRange output parameters are borrowed for the callback.
+unsafe fn write_actual_text_range(actual_range: *mut NSRange, range: Range<usize>) {
+    if !actual_range.is_null() {
+        unsafe { actual_range.write(NSRange::from(range)) };
+    }
 }
 
 // We ignore which selector it asks us to do because the user may have
@@ -4569,6 +4576,112 @@ extern "C-unwind" fn toggle_tab_bar(this: *const Object, _sel: Sel, _id: id) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Compare our dynamic registrations with AppKit's own protocol metadata,
+    // independently of the Rust function signatures used to register them.
+    #[test]
+    fn registered_callbacks_match_system_protocols() {
+        use objc2::encode::EncodingBox;
+        fn encodings(mut types: &str) -> Vec<EncodingBox> {
+            let mut result = Vec::new();
+            while !types.is_empty() {
+                result.push(EncodingBox::from_start_of_str(&mut types).unwrap());
+                types = types.trim_start_matches(|c: char| c.is_ascii_digit() || c == '-');
+            }
+            result
+        }
+        let mut checked = 0;
+        for name in [
+            c"GPUIView",
+            c"GPUIWindow",
+            c"GPUIPanel",
+            c"GPUIApplicationDelegate",
+            c"GPUIWindowStateArchiverDelegate",
+        ] {
+            let class = Class::get(name).unwrap();
+            for method in class.instance_methods().iter() {
+                for protocol_name in [
+                    c"NSTextInputClient",
+                    c"NSWindowDelegate",
+                    c"NSDraggingSource",
+                    c"NSDraggingDestination",
+                    c"NSApplicationDelegate",
+                    c"NSMenuDelegate",
+                    c"NSMenuItemValidation",
+                    c"CALayerDelegate",
+                    c"NSKeyedArchiverDelegate",
+                ] {
+                    let protocol = AnyProtocol::get(protocol_name).unwrap();
+                    for required in [YES, NO] {
+                        let description = unsafe {
+                            objc2::ffi::protocol_getMethodDescription(
+                                protocol,
+                                method.name(),
+                                required,
+                                YES,
+                            )
+                        };
+                        if description.types.is_null() {
+                            continue;
+                        }
+                        let expected = encodings(
+                            unsafe { CStr::from_ptr(description.types) }
+                                .to_str()
+                                .unwrap(),
+                        );
+                        let actual = encodings(method.return_type().to_str().unwrap());
+                        assert_eq!(
+                            actual[0],
+                            expected[0],
+                            "{name:?} {:?}: return encoding",
+                            method.name()
+                        );
+                        assert_eq!(method.arguments_count(), expected.len() - 1);
+                        for (index, expected) in expected[1..].iter().enumerate() {
+                            let argument = method.argument_type(index).unwrap();
+                            let actual = encodings(argument.to_str().unwrap());
+                            assert_eq!(
+                                &actual[0],
+                                expected,
+                                "{name:?} {:?}: argument {index}",
+                                method.name()
+                            );
+                        }
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert!(checked >= 30, "only checked {checked} callback signatures");
+    }
+
+    #[test]
+    fn native_attention_signature_matches_appkit() {
+        class!(NSApplication)
+            .verify_sel::<(NSRequestUserAttentionType,), NSInteger>(sel!(requestUserAttention:))
+            .unwrap();
+    }
+
+    #[test]
+    fn text_input_range_pointer_signatures_match_appkit() {
+        let view = unsafe { &*VIEW_CLASS };
+        view.verify_sel::<(NSRange, *mut NSRange), NSRect>(
+            sel!(firstRectForCharacterRange:actualRange:),
+        )
+        .unwrap();
+        view.verify_sel::<(NSRange, *mut NSRange), id>(
+            sel!(attributedSubstringForProposedRange:actualRange:),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn optional_actual_text_range_accepts_null_and_reports_range() {
+        unsafe { write_actual_text_range(ptr::null_mut(), 2..5) };
+        let mut actual = NSRange::invalid();
+        unsafe { write_actual_text_range(&mut actual, 2..5) };
+        assert_eq!(actual.to_range(), Some(2..5));
+    }
 
     #[test]
     fn layer_background_can_be_cleared_with_objc_checks_enabled() {
