@@ -217,6 +217,43 @@ impl MediaLoader {
         color: crate::pipeline::ImageColor,
         mapping: crate::pipeline::GamutMapping,
     ) -> Result<ImageJob> {
+        self.load_rgba16f_in(
+            width,
+            height,
+            pixels,
+            color,
+            mapping,
+            crate::pipeline::ImagePrimaries::DisplayP3,
+        )
+    }
+    /// Background conversion to bounded associated linear Rec.2020 SDR and mips.
+    /// Retains Adobe RGB/P3 source gamuts; no ICC inference or native wide placement.
+    pub fn load_rec2020_rgba16f(
+        &self,
+        width: u32,
+        height: u32,
+        pixels: Vec<[f32; 4]>,
+        color: crate::pipeline::ImageColor,
+        mapping: crate::pipeline::GamutMapping,
+    ) -> Result<ImageJob> {
+        self.load_rgba16f_in(
+            width,
+            height,
+            pixels,
+            color,
+            mapping,
+            crate::pipeline::ImagePrimaries::Rec2020,
+        )
+    }
+    fn load_rgba16f_in(
+        &self,
+        width: u32,
+        height: u32,
+        pixels: Vec<[f32; 4]>,
+        color: crate::pipeline::ImageColor,
+        mapping: crate::pipeline::GamutMapping,
+        working: crate::pipeline::ImagePrimaries,
+    ) -> Result<ImageJob> {
         ensure!(
             crate::pipeline::rgba16f_payload_bytes(width, height)? <= self.0.limits.max_image_bytes,
             "image exceeds payload limit"
@@ -227,9 +264,15 @@ impl MediaLoader {
             "supplied pixels exceed input limit"
         );
         self.load_pixels(color, move |_, cancelled| {
-            crate::pipeline::float_image::build(width, height, pixels, color, mapping, || {
-                cancelled.load(Ordering::Acquire)
-            })
+            crate::pipeline::float_image::build_in(
+                width,
+                height,
+                pixels,
+                color,
+                mapping,
+                working,
+                || cancelled.load(Ordering::Acquire),
+            )
         })
     }
     fn load_pixels(

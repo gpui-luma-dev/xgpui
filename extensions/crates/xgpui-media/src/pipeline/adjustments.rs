@@ -12,6 +12,9 @@ impl ImageAdjustments {
         let p3 = match matrix.primaries() {
             ImagePrimaries::Srgb => false,
             ImagePrimaries::DisplayP3 => true,
+            ImagePrimaries::Rec2020 => anyhow::bail!(
+                "GPU image adjustments require linear sRGB or Display P3 working primaries; Rec.2020 input can be adjusted in either space"
+            ),
             ImagePrimaries::AdobeRgb1998 => anyhow::bail!(
                 "GPU image adjustments require linear sRGB or Display P3 working primaries; convert Adobe RGB input first"
             ),

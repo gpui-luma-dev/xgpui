@@ -658,8 +658,11 @@ impl TileCanvas {
                 && data.height() == upload.height
                 && data.levels().len() == 1
                 && data.byte_len() as u64 == tile.payload_bytes()
-                && (data.format() == ImageTextureFormat::Rgba8Srgb)
-                    == (tile.key().image.format == PixelFormat::Rgba8),
+                && data.format()
+                    == match tile.key().image.format {
+                        PixelFormat::Rgba8 => ImageTextureFormat::Rgba8Srgb,
+                        PixelFormat::Rgba16Float => ImageTextureFormat::LinearP3Rgba16Float,
+                    },
             "provider returned wrong tile extent, format or payload"
         );
         Ok(())
@@ -1225,6 +1228,25 @@ mod tests {
             TileCanvas::validate_page(tile, &ImageTextureData::new(1, 1, vec![vec![0; 4]])?)
                 .is_err()
         );
+        let image = ImageDescriptor::new(1, 1, PixelFormat::Rgba16Float, ImageColor::LINEAR_P3)?;
+        let tile = TilePyramid::new(image, TileLayout::new(64, 0)?).tile(
+            SourceId {
+                asset: 1,
+                generation: 0,
+            },
+            0,
+            0,
+            0,
+        )?;
+        let p3 = ImageTextureData::page(1, 1, vec![0; 8], ImageTextureFormat::LinearP3Rgba16Float)?;
+        let rec = ImageTextureData::page(
+            1,
+            1,
+            vec![0; 8],
+            ImageTextureFormat::LinearRec2020Rgba16Float,
+        )?;
+        assert!(TileCanvas::validate_page(tile, &p3).is_ok());
+        assert!(TileCanvas::validate_page(tile, &rec).is_err());
         let r = gpui::Bounds::new(
             gpui::point(gpui::px(0.), gpui::px(0.)),
             gpui::size(gpui::px(100.), gpui::px(80.)),

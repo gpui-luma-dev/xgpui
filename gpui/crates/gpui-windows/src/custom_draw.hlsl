@@ -36,6 +36,10 @@ float3 p3_to_srgb(float3 c) {
 float3 srgb_to_p3(float3 c) {
     return float3(dot(c,float3(0.82246197,0.17753803,0.)),dot(c,float3(0.03319420,0.96680580,0.)),dot(c,float3(0.01708263,0.07239744,0.91051993)));
 }
+// Linear SDR Rec.2020 -> P3; retain extended channels until preview mapping.
+float3 rec2020_to_p3(float3 c) {
+    return float3(dot(c,float3(1.343578253,-0.282179671,-0.061398582)),dot(c,float3(-0.065297453,1.075787916,-0.010490463)),dot(c,float3(0.002821787,-0.019598495,1.016776707)));
+}
 float4 custom_fragment(Vertex input) : SV_Target {
     float2 xy = input.position.xy;
     if (any(xy < mask.xy) || any(xy >= mask.xy + mask.zw)) discard;
@@ -51,6 +55,7 @@ float4 custom_fragment(Vertex input) : SV_Target {
     if ((uint(viewport.w) & 1) != 0) coverage = shape_mask.Sample(paint_sampler, input.uv).r;
 
     float4 color = image.Sample(paint_sampler, input.uv);
+    if (color_flags.y > 2.5) color.rgb = rec2020_to_p3(color.rgb);
     if ((uint(viewport.w) & 4) != 0) {
         if (color_flags.y > 1.5 && color_flags.x > .5) {
             float3 rgb = color.a > 0 ? color.rgb / color.a : float3(0,0,0);

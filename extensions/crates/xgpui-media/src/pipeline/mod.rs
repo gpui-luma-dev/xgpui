@@ -15,7 +15,9 @@ pub use generated::GeneratedCanvas;
 mod adjustments;
 pub use adjustments::{AdjustedImage, ImageAdjustments, WideImage};
 pub(crate) mod float_image;
-pub use float_image::{rgba16f_data, rgba16f_data_with_mapping, rgba16f_payload_bytes};
+pub use float_image::{
+    rec2020_rgba16f_data, rgba16f_data, rgba16f_data_with_mapping, rgba16f_payload_bytes,
+};
 mod color;
 mod progressive;
 mod tiles;

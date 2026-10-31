@@ -875,3 +875,80 @@ fn metal_adobe_rgb_input_with_explicit_mapping() -> Result<()> {
 fn wgpu_adobe_rgb_input_with_explicit_mapping() -> Result<()> {
     check_adobe_rgb_preview(&mut gpui_wgpu::WgpuHeadlessRenderer::new()?)
 }
+
+fn check_rec2020_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
+    use pipeline::*;
+    let loader = MediaLoader::default();
+    for color in [
+        ImageColor::ADOBE_RGB_1998,
+        ImageColor::LINEAR_P3,
+        ImageColor::LINEAR_REC2020,
+    ] {
+        for rgba in [
+            [0., 1., 0., 1.],
+            [0., 1., 1., 0.5],
+            [0.18, 0.3, 0.7, 0.25],
+            [0.5, 0.2, 0.1, 0.],
+        ] {
+            let mut job =
+                loader.load_rec2020_rgba16f(3, 1, vec![rgba; 3], color, GamutMapping::Clip)?;
+            let image = finish(&mut job)?;
+            assert_eq!(image.source_color(), color);
+            assert_eq!(
+                image.format(),
+                gpui::ImageTextureFormat::LinearRec2020Rgba16Float
+            );
+            assert!(image.wide(None).is_err());
+            let scene = image_scene(&image, 16., false);
+            let pixels = render_ready(
+                renderer,
+                &image,
+                &scene,
+                size(DevicePixels(28), DevicePixels(28)),
+            )?;
+            let expected = color
+                .decode(rgba.map(f64::from), ImagePrimaries::Rec2020)?
+                .output(ImageColor::SRGB, GamutMapping::Clip)?;
+            for c in 0..3 {
+                let byte = (expected[c] * expected[3] * 255.).round() as u8;
+                assert!(
+                    pixels.get_pixel(12, 12).0[c].abs_diff(byte) <= 2,
+                    "{color:?} {rgba:?}: {:?}, expected {expected:?}",
+                    pixels.get_pixel(12, 12)
+                );
+            }
+            for working in [ImagePrimaries::Srgb, ImagePrimaries::DisplayP3] {
+                let matrix = ColorMatrix::identity(working)
+                    .exposure(-1.)?
+                    .saturation(0.8)?;
+                let mut adjusted = image_scene(&image, 16., false);
+                adjusted.custom_draws[0].content =
+                    Arc::new(image.adjusted(ImageAdjustments::new(matrix, None)?));
+                let pixels = renderer
+                    .render_scene_to_image(&adjusted, size(DevicePixels(28), DevicePixels(28)))?;
+                let expected = matrix
+                    .apply(color.decode(rgba.map(f64::from), working)?)?
+                    .output(ImageColor::SRGB, GamutMapping::Clip)?;
+                for c in 0..3 {
+                    let byte = (expected[c] * expected[3] * 255.).round() as u8;
+                    assert!(
+                        pixels.get_pixel(12, 12).0[c].abs_diff(byte) <= 2,
+                        "{working:?} {color:?} {rgba:?}"
+                    );
+                }
+            }
+            assert_eq!(image.upload_count(), 1);
+        }
+    }
+    Ok(())
+}
+#[cfg(target_os = "macos")]
+#[test]
+fn metal_rec2020_storage_and_preview() -> Result<()> {
+    check_rec2020_preview(&mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+}
+#[cfg(feature = "wgpu")]
+#[test]
+fn wgpu_rec2020_storage_and_preview() -> Result<()> {
+    check_rec2020_preview(&mut gpui_wgpu::WgpuHeadlessRenderer::new()?)
+}

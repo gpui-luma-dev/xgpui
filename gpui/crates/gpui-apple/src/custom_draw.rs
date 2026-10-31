@@ -174,7 +174,8 @@ impl MetalCustomContext {
         unsafe { desc.setMipmapLevelCount(data.levels().len() as usize) };
         desc.setPixelFormat(match data.format() {
             gpui::ImageTextureFormat::Rgba8Srgb => MTLPixelFormat::RGBA8Unorm,
-            gpui::ImageTextureFormat::LinearP3Rgba16Float => MTLPixelFormat::RGBA16Float,
+            gpui::ImageTextureFormat::LinearP3Rgba16Float
+            | gpui::ImageTextureFormat::LinearRec2020Rgba16Float => MTLPixelFormat::RGBA16Float,
         });
         desc.setStorageMode(MTLStorageMode::Private);
         desc.setUsage(MTLTextureUsage::ShaderRead);

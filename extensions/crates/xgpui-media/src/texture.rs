@@ -247,6 +247,9 @@ impl Host<'_> {
     }
     fn placeholder(&self, format: gpui::ImageTextureFormat) -> Result<Output> {
         let data = match format {
+            gpui::ImageTextureFormat::LinearRec2020Rgba16Float => {
+                ImageTextureData::new_linear_rec2020_rgba16f(1, 1, vec![vec![0; 8]])?
+            }
             gpui::ImageTextureFormat::Rgba8Srgb => ImageTextureData::new(1, 1, vec![vec![0; 4]])?,
             gpui::ImageTextureFormat::LinearP3Rgba16Float => {
                 ImageTextureData::new_linear_p3_rgba16f(1, 1, vec![vec![0; 8]])?
@@ -427,6 +430,9 @@ impl MediaImage {
 impl CustomContent for MediaImage {
     fn image_color_mode(&self) -> gpui::ImageColorMode {
         match self.format() {
+            gpui::ImageTextureFormat::LinearRec2020Rgba16Float => {
+                gpui::ImageColorMode::LinearRec2020Preview
+            }
             gpui::ImageTextureFormat::Rgba8Srgb => gpui::ImageColorMode::EncodedSrgb,
             gpui::ImageTextureFormat::LinearP3Rgba16Float => gpui::ImageColorMode::LinearP3Preview,
         }

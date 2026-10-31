@@ -7,6 +7,8 @@ pub enum ImagePrimaries {
     Srgb,
     DisplayP3,
     AdobeRgb1998,
+    /// Rec.2020 D65 primaries for bounded linear SDR; no HDR transfer implied.
+    Rec2020,
 }
 impl ImagePrimaries {
     fn space(self) -> RgbSpace {
@@ -14,6 +16,7 @@ impl ImagePrimaries {
             Self::Srgb => RgbSpace::Srgb,
             Self::DisplayP3 => RgbSpace::DisplayP3,
             Self::AdobeRgb1998 => RgbSpace::AdobeRgb1998,
+            Self::Rec2020 => RgbSpace::Rec2020,
         }
     }
 }
@@ -72,6 +75,11 @@ impl ImageColor {
     };
     pub const LINEAR_P3: Self = Self {
         primaries: ImagePrimaries::DisplayP3,
+        transfer: TransferFunction::Linear,
+        alpha: AlphaMode::Straight,
+    };
+    pub const LINEAR_REC2020: Self = Self {
+        primaries: ImagePrimaries::Rec2020,
         transfer: TransferFunction::Linear,
         alpha: AlphaMode::Straight,
     };
