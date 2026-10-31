@@ -1462,8 +1462,10 @@ impl MacWindow {
                                 active_sheet
                             }
                         };
-                        let _: () =
-                            msg_send![parent, beginSheet: native_window completionHandler: nil];
+                        (&*parent.cast::<objc2_app_kit::NSWindow>()).beginSheet_completionHandler(
+                            &*native_window.cast::<objc2_app_kit::NSWindow>(),
+                            None,
+                        );
                         sheet_parent = Some(parent);
                     }
                 }
@@ -3950,8 +3952,7 @@ extern "C-unwind" fn insert_text(
 ) {
     let this = unsafe { &*this };
     unsafe {
-        let is_attributed_string: BOOL =
-            msg_send![text, isKindOfClass: [class!(NSAttributedString)]];
+        let is_attributed_string: BOOL = msg_send![text, isKindOfClass: class!(NSAttributedString)];
         let text: id = if is_attributed_string == YES {
             msg_send![text, string]
         } else {
@@ -3975,8 +3976,7 @@ extern "C-unwind" fn set_marked_text(
 ) {
     let this = unsafe { &*this };
     unsafe {
-        let is_attributed_string: BOOL =
-            msg_send![text, isKindOfClass: [class!(NSAttributedString)]];
+        let is_attributed_string: BOOL = msg_send![text, isKindOfClass: class!(NSAttributedString)];
         let text: id = if is_attributed_string == YES {
             msg_send![text, string]
         } else {
@@ -4412,7 +4412,7 @@ extern "C-unwind" fn blurred_view_update_layer(this: *const Object, _: Sel) {
 
 unsafe fn remove_layer_background(layer: id) {
     unsafe {
-        let _: () = msg_send![layer, setBackgroundColor:nil];
+        (&*layer.cast::<objc2_quartz_core::CALayer>()).setBackgroundColor(None);
 
         let class_name: id = msg_send![layer, className];
         if {
@@ -4569,6 +4569,33 @@ extern "C-unwind" fn toggle_tab_bar(this: *const Object, _sel: Sel, _id: id) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn layer_background_can_be_cleared_with_objc_checks_enabled() {
+        objc2::rc::autoreleasepool(|_| {
+            let layer = objc2_quartz_core::CALayer::new();
+            unsafe {
+                remove_layer_background(Retained::as_ptr(&layer).cast_mut().cast());
+            }
+            assert!(layer.backgroundColor().is_none());
+        });
+    }
+
+    #[test]
+    fn text_input_class_checks_accept_plain_and_attributed_strings() {
+        objc2::rc::autoreleasepool(|_| unsafe {
+            let plain = objc2_foundation::NSString::from_str("text");
+            let attributed = objc2_foundation::NSAttributedString::initWithString(
+                objc2_foundation::NSAttributedString::alloc(),
+                &plain,
+            );
+            let plain_result: BOOL = msg_send![&*plain, isKindOfClass: class!(NSAttributedString)];
+            let attributed_result: BOOL =
+                msg_send![&*attributed, isKindOfClass: class!(NSAttributedString)];
+            assert!(!plain_result.as_bool());
+            assert!(attributed_result.as_bool());
+        });
+    }
 
     #[test]
     fn display_id_for_screen_returns_none_for_null_screen() {

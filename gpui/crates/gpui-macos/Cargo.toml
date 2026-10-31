@@ -103,6 +103,7 @@ objc2-app-kit = { version = "=0.3.2", default-features = false, features = [
 objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["CGDirectDisplay"], optional = true }
 objc2-core-media = { version = "=0.3.2", default-features = false, features = ["CMSampleBuffer", "objc2-core-video"], optional = true }
 objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVBuffer", "CVImageBuffer", "CVHostTime"] }
+objc2-quartz-core = "=0.3.2"
 objc2-foundation = { version = "=0.3.2", default-features = false, features = [
     "NSArray",
     "NSAttributedString",
