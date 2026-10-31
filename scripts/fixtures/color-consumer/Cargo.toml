@@ -7,4 +7,4 @@ publish = false
 [workspace]
 
 [dependencies]
-xgpui-color = "=0.2.2"
+xgpui-color = "=0.3.0"

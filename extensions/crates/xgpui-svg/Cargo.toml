@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-svg"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2024"
 publish = ["crates-io"]
 license = "Apache-2.0"
@@ -17,7 +17,7 @@ categories = ["gui", "graphics", "multimedia::images"]
 [dependencies]
 anyhow = "1"
 web-time = "1"
-gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=1.1.1" }
+gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=2.0.0" }
 
 [dev-dependencies]
-gpui = { path = "../../../gpui/crates/gpui", features = ["test-support"] , package = "xgpui", version = "=1.1.1" }
+gpui = { path = "../../../gpui/crates/gpui", features = ["test-support"] , package = "xgpui", version = "=2.0.0" }

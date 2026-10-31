@@ -72,7 +72,13 @@ jobs:
             gh pr create --base main --head "$branch" --title 'release: next crate versions' --body-file "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_STEP_SUMMARY"
           fi
           # GITHUB_TOKEN PR events do not trigger CI; dispatch validation explicitly.
-          gh workflow run validate.yml --ref "$branch"
+          validation_state=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/validate.yml" --jq .state)
+          if [ "$validation_state" = active ]; then
+            gh workflow run validate.yml --ref "$branch"
+          else
+            echo 'Broad validation is disabled; running registry planning without uploads instead.' >> "$GITHUB_STEP_SUMMARY"
+            gh workflow run prepare-registry-release.yml --ref "$branch" -f mode=plan
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

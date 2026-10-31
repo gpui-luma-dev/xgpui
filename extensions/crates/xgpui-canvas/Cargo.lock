@@ -3834,7 +3834,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui"
-version = "1.1.1"
+version = "2.0.0"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -3897,7 +3897,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-apple"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "async-task",
@@ -3933,7 +3933,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-canvas"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -3953,7 +3953,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-shader"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -3973,7 +3973,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-windows"
-version = "1.0.2"
+version = "2.0.0"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -4184,20 +4184,20 @@ dependencies = [
 
 [[patch.unused]]
 name = "xgpui-linux"
-version = "1.0.2"
+version = "2.0.0"
 
 [[patch.unused]]
 name = "xgpui-macos"
-version = "2.0.1"
+version = "3.0.0"
 
 [[patch.unused]]
 name = "xgpui-platform"
-version = "1.0.2"
+version = "2.0.0"
 
 [[patch.unused]]
 name = "xgpui-web"
-version = "1.0.2"
+version = "2.0.0"
 
 [[patch.unused]]
 name = "xgpui-wgpu"
-version = "1.0.2"
+version = "2.0.0"
