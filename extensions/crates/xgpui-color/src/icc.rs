@@ -201,14 +201,20 @@ fn preflight(bytes: &[u8]) -> Result<()> {
         ranges.push((offset, finish));
         if ![
             b"rXYZ", b"gXYZ", b"bXYZ", b"rTRC", b"gTRC", b"bTRC", b"wtpt", b"chad", b"desc",
-            b"cprt", b"dmnd", b"dmdd", b"chrm",
+            b"cprt", b"dmnd", b"dmdd", b"chrm", b"lumi", b"meas", b"bkpt", b"tech", b"vued",
         ]
         .contains(&sig.try_into().map_err(|_| IccError::Malformed)?)
         {
             return Err(IccError::Unsupported);
         }
-        if [b"desc", b"cprt", b"dmnd", b"dmdd", b"chrm"]
-            .contains(&sig.try_into().map_err(|_| IccError::Malformed)?)
+        // Descriptive/display-measurement metadata does not alter this adapter's
+        // relative matrix/TRC decoding. In particular, do not apply black-point
+        // compensation or absolute display luminance to supplied source pixels.
+        if [
+            b"desc", b"cprt", b"dmnd", b"dmdd", b"chrm", b"lumi", b"meas", b"bkpt", b"tech",
+            b"vued",
+        ]
+        .contains(&sig.try_into().map_err(|_| IccError::Malformed)?)
             && size > 4096
         {
             return Err(IccError::Limit);

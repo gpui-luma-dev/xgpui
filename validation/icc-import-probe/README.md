@@ -138,3 +138,15 @@ The ordinary probe now has **5 passed, 2 ignored**. The two ignored gates and
 replacement. Replacement acceptance is active, strict and passing. The generator
 also emits 516 per-source curve/PCS/adaptation references into the color crate's
 own test assets so packaged color tests do not depend on files outside the crate.
+
+
+## Published-profile corpus
+
+The color crate now tests nine pinned, unmodified external profiles, including
+765 high-precision vectors for Compact v4 sRGB, Display P3 and Adobe-compatible
+profiles. See `extensions/crates/xgpui-color/tests/reference/real-icc/README.md`
+from the repository root for hashes, licensing and explicit acceptance/rejection
+results. The pinned sRGB2014 mirror remains outside the matrix/white coherence
+contract; compact v2 files remain outside the strict tag-overlap policy. These
+are active expected-rejection tests, not ignored accuracy failures. No decoder
+or transform-engine dependency was added.
