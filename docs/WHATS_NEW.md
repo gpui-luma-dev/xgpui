@@ -2,31 +2,6 @@
 
 ## Latest
 
-### xgpui-canvas: spatial scenes and a Mandelbrot explorer
-
-**xgpui-canvas** brings a spatial viewport to GPUI, with an f64 pan/zoom camera,
-BVH viewport culling and hit testing, level-of-detail hints, alignment snapping,
-and configurable procedural line/dot grids. Applications retain world-space
-scenes and build only the visible content.
-
-- **Explore large scenes.** The [card canvas](examples/extensions/?demo=canvas)
-  demonstrates 10k/100k cards, marquee selection, group movement, snapping guides
-  and a minimap you can click or drag to navigate.
-- **Try image-based content.** The
-  [Mandelbrot explorer](examples/extensions/?demo=mandelbrot) uses progressive
-  CPU-rendered tiles with pointer-anchored zoom. Cached detail stays visible
-  while new tiles render; iteration budgets increase as you zoom in.
-- **Use native or browser labs.** Both browser examples support WebGPU and
-  WebGL2. Run `just canvas-lab` or `just canvas-lab --mandelbrot` for the native
-  versions. The native card lab also offers a live viewport preview.
-
-**Beta: expect significant API changes.** Canvas clips and paints the grid;
-applications still project their content explicitly. Rotation, arbitrary subtree
-transforms and reusable selection/minimap widgets remain follow-ups. Native
-Windows/Linux runtime validation is outstanding. Start with the
-[canvas guide](#canvas) for integration, controls and current limits, or browse
-the [crate API](#crate=xgpui-canvas&tab=surface).
-
 ### Color and wide gamut, from source pixels to the display
 
 XGPUI’s expanded color pipeline connects **sRGB, Display P3, Adobe RGB (1998)
