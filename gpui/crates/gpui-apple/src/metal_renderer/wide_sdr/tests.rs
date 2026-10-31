@@ -391,6 +391,56 @@ fn wide_sdr_masks_paths_resize_and_target_budget() -> Result<()> {
 }
 
 #[test]
+fn standard_layer_is_explicit_srgb_at_startup_and_after_wide_toggle() -> Result<()> {
+    objc2::rc::autoreleasepool(|_| {
+        let mut r = renderer();
+        r.set_color_mode(gpui::WindowColorMode::Default)?;
+        let layer = metal::CAMetalLayer::new();
+        MetalRenderer::configure_layer(&layer, &r.device, false);
+        let srgb = objc2_core_graphics::CGColorSpace::with_name(Some(unsafe {
+            objc2_core_graphics::kCGColorSpaceSRGB
+        }))
+        .unwrap();
+        let assert_srgb = |layer: &metal::MetalLayerRef| {
+            assert_eq!(layer.pixelFormat(), MTLPixelFormat::BGRA8Unorm);
+            assert!(!layer.wantsExtendedDynamicRangeContent());
+            let actual = layer
+                .colorspace()
+                .expect("standard layer must be color-matched");
+            assert_ne!(
+                unsafe {
+                    core_foundation::base::CFEqual(
+                        ptr::from_ref(&*actual).cast(),
+                        ptr::from_ref(&*srgb).cast(),
+                    )
+                },
+                0
+            );
+        };
+        assert_srgb(&layer);
+        r.layer = Some(layer);
+        for _ in 0..2 {
+            assert_eq!(
+                r.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?
+                    .effective(),
+                gpui::WindowColorMode::WideGamutSdr
+            );
+            assert_eq!(
+                r.layer.as_ref().unwrap().pixelFormat(),
+                MTLPixelFormat::RGBA16Float
+            );
+            assert_eq!(
+                r.set_color_mode(gpui::WindowColorMode::Default)?
+                    .effective(),
+                gpui::WindowColorMode::Default
+            );
+            assert_srgb(r.layer.as_ref().unwrap());
+        }
+        Ok(())
+    })
+}
+
+#[test]
 fn wide_sdr_layer_is_explicit_linear_p3_float16_without_edr() {
     objc2::rc::autoreleasepool(|_| {
         let layer = metal::CAMetalLayer::new();
