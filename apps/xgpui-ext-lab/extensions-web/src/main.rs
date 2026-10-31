@@ -12,7 +12,10 @@ mod brushes;
 mod canvas;
 mod color;
 mod color_samples;
+mod color_tasks;
+mod color_tasks_model;
 mod hermite;
+mod italy;
 mod media;
 #[path = "../../text-lab/src/paragraph.rs"]
 mod paragraph;
@@ -61,6 +64,9 @@ pub fn demo_behavior(demo: &str) -> String {
         "hermite" => "Hermite: live 2×2 / 3×3 mesh editor • points and tangent vectors",
         "layers" => "Layers: subtree filters, blending and blur",
         "shader" => "Shader: gradients, paths and animation",
+        "chromaticity" => "Chromaticity: gamut simulation and mapping • sRGB preview",
+        "pixel-metadata" => "Pixels + metadata: named/ICC interpretation and actual CPU FP16 • sRGB preview",
+        "italy" => "Italy photos: original browser color management • Rust/Wasm clipped sRGB previews",
         "color" => "Color / Gamut: interpolation and mapping • sRGB preview",
         _ => "Unknown demo",
     }
@@ -83,6 +89,11 @@ fn launch() -> anyhow::Result<()> {
         .search()
         .map_err(|error| anyhow::anyhow!("read URL: {error:?}"))?;
     let parameters: Vec<_> = search.trim_start_matches('?').split('&').collect();
+    // Profiled DOM images use the browser's color-managed presentation rather
+    // than the GPUI canvas, which currently presents only sRGB on the web.
+    if parameters.contains(&"demo=italy") {
+        return Ok(());
+    }
     let backend = if parameters.contains(&"backend=webgpu") {
         WebBackendPreference::WebGpu
     } else if parameters.contains(&"backend=webgl") {
@@ -96,6 +107,8 @@ fn launch() -> anyhow::Result<()> {
     let parley = parameters.contains(&"demo=parley");
     let svg = parameters.contains(&"demo=svg");
     let color = parameters.contains(&"demo=color");
+    let chromaticity = parameters.contains(&"demo=chromaticity");
+    let metadata = parameters.contains(&"demo=pixel-metadata");
     let brushes = parameters.contains(&"demo=brushes");
     let layers = parameters.contains(&"demo=layers");
     let tiled = parameters.contains(&"demo=media-tiles");
@@ -174,6 +187,11 @@ fn launch() -> anyhow::Result<()> {
         } else if brushes || layers {
             cx.open_window(options, |_, cx| cx.new(|_| brushes::BrushDemo::new(layers)))
                 .expect("open brush gallery");
+        } else if chromaticity || metadata {
+            cx.open_window(options, |_, cx| {
+                cx.new(|_| color_tasks::ColorTasks::new(metadata))
+            })
+            .expect("open color task demo");
         } else if color {
             cx.open_window(options, |_, cx| cx.new(|_| color::ColorDemo::new()))
                 .expect("open color demo");

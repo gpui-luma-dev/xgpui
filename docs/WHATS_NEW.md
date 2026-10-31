@@ -1,5 +1,67 @@
 # What's new
 
+## Latest
+
+### Color and wide gamut, from source pixels to the display
+
+XGPUI’s expanded color pipeline connects **sRGB, Display P3, Adobe RGB (1998)
+and Rec.2020** through explicit conversion, image storage and native wide-gamut
+rendering. It covers everyday UI colors, wide-gamut photographs, perceptual
+color editing and custom RGB profiles. Applications choose their own image
+decoder and supply **pixels plus color metadata** to the library.
+
+- **Choose the space for the task.** sRGB remains the basis for ordinary UI and
+  portable previews. Display P3 supports wide-gamut content and P3 image storage.
+  Adobe RGB (1998) adds a photographic source space, while Rec.2020 provides
+  wider SDR image storage that can retain Adobe RGB colors outside P3. Each
+  source keeps its declared primaries and transfer function during conversion.
+- **Convert, inspect and interpolate.** Move between the four named RGB spaces,
+  inspect XYZ and chromaticity coordinates, and use OkLab/OkLCh for perceptual
+  color operations and gradients. Explicit gamut mapping controls how colors
+  fit the destination; D50/D65 white-point adaptation supports custom definitions
+  and profile interpretation. See the [color math guide](#color-math).
+- **Preserve wider colors.** Use Display P3 or Rec.2020 image storage deliberately,
+  then retain extended color values through native composition, normal blending,
+  blur and linear color filters until output mapping. Ordinary UI colors remain
+  sRGB; choosing Rec.2020 storage does not enable HDR.
+- **Interpret the source correctly.** Named color spaces, custom RGB definitions
+  and extended linear pixels share the supplied-pixel pipeline, with explicit
+  transfer curves, alpha handling and gamut mapping.
+- **Use embedded RGB profiles.** The optional ICC adapter resolves a bounded
+  matrix/TRC subset, including sampled and parametric curves and white-point
+  adaptation. It preserves the profile’s actual values and reports unsupported
+  profiles explicitly. See [supported ICC profiles](#icc-profiles).
+- **Check the numbers and the rendering.** Independent high-precision references
+  cover RGB conversion, white-point adaptation, profile curves, near-black values
+  and alpha.
+  Metal FP16 readback checks native composition before display color management,
+  including colors that an ordinary sRGB screenshot cannot retain.
+
+**Wide gamut is a capability; Display P3 is a particular color space.** Source
+interpretation, image storage, window presentation and the physical display are
+separate choices. The new [practical color guides](#color-workflows),
+[pixels and metadata guide](#pixels-and-metadata) and
+[lab walkthroughs](#color-labs) explain common tasks without requiring a color
+science background. The [color overview](#crate=xgpui-color&tab=overview) includes
+small examples for everyday conversions, mapping and image input.
+
+Try the new browser examples:
+
+- [Chromaticity and gamut](examples/extensions/?demo=chromaticity): explore gamut
+  boundaries, luminance and mapping with an sRGB chart preview.
+- [Pixels + metadata](examples/extensions/?demo=pixel-metadata): keep the samples
+  fixed while changing their interpretation; guided lessons show when to inspect
+  XYZ values and packed FP16 bytes rather than expect a large visual change.
+- [Italy photo comparison](examples/extensions/?demo=italy): compare WebKit’s
+  sRGB, Display P3 and highlighted photographs, or switch the selected photo
+  between its browser-managed original and a Rust/Wasm sRGB preview.
+
+The [gallery](examples/extensions/) now contains **24 examples**. The Italy
+example uses browser image color management; the GPUI web canvas demos remain
+sRGB previews. Native wide-gamut rendering has macOS/Metal validation;
+Windows/Linux native runtime acceptance remains outstanding. Visible output
+still depends on the browser or OS color management and the actual display.
+
 ## October 30, 2026
 
 - **Spatial canvas.** Pan and zoom retained scenes with viewport culling,
@@ -7,7 +69,7 @@
   [card canvas](examples/extensions/?demo=canvas) or
   [Mandelbrot explorer](examples/extensions/?demo=mandelbrot), or start with
   the [canvas guide](#canvas).
-- **Two new Wasm demos.** The browser gallery now has 21 examples, including
+- **Spatial Wasm demos.** Explore
   10k/100k-card scenes and a progressive CPU fractal explorer. Both new demos
   support WebGPU and WebGL2. [Open all demos](examples/extensions/).
 - **Modern Apple bindings.** Migrated the Apple renderer and macOS backend to

@@ -122,7 +122,7 @@ just docs-serve
 `just docs-serve` stages documentation and these bundles in `target/site/`.
 Deployment uses the same staging script with both bundles required. All of these
 generated outputs are ignored by Git and removed by root `cargo clean`. The unified gallery at
-`http://localhost:8000/examples/extensions/` lists 19 hosted demos across both
+`http://localhost:8000/examples/extensions/` lists 23 hosted demos across both
 entry points, with native labs and launch instructions listed separately.
 The shader companion is at `http://localhost:8000/examples/shaders/`.
 

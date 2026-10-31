@@ -1,5 +1,8 @@
 # xgpui-media
 
+For caller-owned pixels and explicit color metadata, use [pixels + metadata](pixels-and-metadata.md). The optional [ICC adapter](icc-profiles.md) interprets supplied RGB matrix/TRC profile bytes; this does not turn the file convenience loaders below into a general color-managed decoder.
+
+
 Images and GPU-backed video frames for GPUI. Use it when your app needs large
 photos, image adjustments, or a view of frames produced by another part of your
 application. The API is experimental.

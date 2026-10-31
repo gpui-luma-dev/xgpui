@@ -20,8 +20,7 @@ gamut mapping and storage deliberately; declaring Adobe RGB does not discover or
 parse an ICC profile. File decoding and metadata discovery belong in application
 adapters. The existing file loader below is an sRGB convenience path.
 
-Custom RGB metadata is described below. Optional ICC adaptation remains future
-work in the [pixels and color metadata design](../../../docs/extensions/icc-import-plan.md).
+Use `MediaLoader::load_pixel_buffer` with `PixelColor` for named, custom or extended-linear interpretation. The optional color-crate [ICC adapter](../../../docs/extensions/icc-profiles.md) resolves supplied RGB matrix/TRC bytes into a custom definition. Start with [pixels + metadata](../../../docs/extensions/pixels-and-metadata.md) for the complete path.
 
 ## Load an image
 

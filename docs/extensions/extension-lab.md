@@ -156,3 +156,7 @@ labs, repeatable benchmarks and the source for this website's WASM demos. The tw
 names refer to different applications and development roles.
 
 [Browse the package source](https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab).
+
+## Color tasks and the sibling lab
+
+The browser gallery includes [chromaticity](../examples/extensions/?demo=chromaticity) and [pixels + metadata](../examples/extensions/?demo=pixel-metadata) demos. Both are sRGB previews of Rust/Wasm calculations. The standalone native chromaticity app lives in the separate sibling `xgpui-lab` repository. From this repository use `just profile=dev chromaticity`; see [color labs](color-labs.md) for commands, controls and the limits of CPU values, GPU readback and display capability reports.

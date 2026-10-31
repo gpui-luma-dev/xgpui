@@ -35,6 +35,15 @@ import sys
 source, destination, revision = sys.argv[1:]
 pathlib.Path(destination).write_text(pathlib.Path(source).read_text().replace("__BUILD_ID__", revision))
 PYTHON
+cp "$app/italy.mjs" "$app/italy.css" "$out/"
+mkdir -p "$out/italy"
+cp "$app/assets/italy/"*.jpg "$app/assets/italy/README.md" "$app/assets/italy/prepare.swift" "$out/italy/"
+cp "$app/color-attribution.html" "$out/color-attribution.html"
+cp -R "$app/assets/colorimetry" "$out/colorimetry"
+mkdir -p "$out/icc"
+for notice in README.md manifest.json CC0-1.0.txt; do
+    cp "extensions/crates/xgpui-color/tests/reference/real-icc/$notice" "$out/icc/$notice"
+done
 cp "$app/svg-attribution.html" "$out/svg-attribution.html"
 cp apps/xgpui-ext-lab/svg-lab/samples/ATTRIBUTION.md "$out/svg-ATTRIBUTION.md"
 for sample in ribbon-leaf.svg AJ_Digital_Camera.svg rg1024_green_grapes.svg rg1024_metal_effect.svg dragon.svg; do
