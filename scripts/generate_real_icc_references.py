@@ -18,7 +18,7 @@ from generate_adobe_rgb_references import inverse, array
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / 'extensions/crates/xgpui-color/tests/reference/real-icc'
 OUTPUT = FIXTURES.parent / 'real_icc.rs'
-ACCEPTED = ['sRGB-v4.icc', 'DisplayP3-v4.icc', 'AdobeCompat-v4.icc']
+ACCEPTED = ['sRGB-v4.icc', 'DisplayP3-v4.icc', 'AdobeCompat-v4.icc', 'sRGB2014.icc']
 
 
 def multiply(a, b):
@@ -32,6 +32,14 @@ def tags(data):
 
 
 def decode(tag, x):
+    if tag[:4] == b'curv':
+        count = struct.unpack_from('>I', tag, 8)[0]
+        assert count == 1024  # Pinned sRGB2014 fixture, not a general ICC reader.
+        values = struct.unpack_from(f'>{count}H', tag, 12)
+        position = D.from_float(x)*(count-1)
+        index = min(int(position), count-2)
+        fraction = position-index
+        return (D(values[index])*(1-fraction)+D(values[index+1])*fraction)/65535
     assert tag[:4] == b'para' and struct.unpack_from('>H', tag, 8)[0] == 3
     g, a, b, c, d = [D(v)/65536 for v in struct.unpack_from('>5i', tag, 12)]
     x = D.from_float(x)
@@ -52,10 +60,11 @@ def generate():
         cone = [[D(v) for v in row] for row in [['.8951','.2664','-.1614'],['-.7502','1.7135','.0367'],['.0389','-.0685','1.0296']]]
         d65 = [[D('0.3127')/D('0.3290')], [D(1)], [(D(1)-D('0.3127')-D('0.3290'))/D('0.3290')]]
         for index, name in enumerate(ACCEPTED):
-            t = tags((FIXTURES/name).read_bytes())
+            payload = (FIXTURES/name).read_bytes()
+            t = tags(payload)
             columns = [[D(v)/65536 for v in struct.unpack_from('>3i', t[tag], 8)] for tag in [b'rXYZ', b'gXYZ', b'bXYZ']]
             matrix = [[columns[j][i] for j in range(3)] for i in range(3)]
-            white = [[D(v)/65536] for v in struct.unpack_from('>3i', t[b'wtpt'], 8)]
+            white = [[D(v)/65536] for v in struct.unpack_from('>3i', payload, 68)]
             a, b = multiply(cone, white), multiply(cone, d65)
             cat = multiply(inverse(cone), [[cone[i][j]*b[i][0]/a[i][0] for j in range(3)] for i in range(3)])
             adapted = multiply(cat, matrix)
@@ -63,12 +72,22 @@ def generate():
             inputs += [(i/65536,)*3 for i in range(33)]
             inputs += [(struct.unpack("<f", struct.pack("<f", v))[0],)*3 for v in [.0001, .18]]
             for tag in [b'rTRC', b'gTRC', b'bTRC']:
-                boundary = struct.unpack_from('>i', t[tag], 28)[0]/65536
-                bits = struct.unpack('<I', struct.pack('<f', boundary))[0]
-                for offset in [-1, 0, 1]:
-                    x = struct.unpack('<f', struct.pack('<I', bits+offset))[0]
-                    inputs.append((x, x, x))
-                inputs.extend([(math.nextafter(boundary, direction),)*3 for direction in [0., 1.]])
+                if t[tag][:4] == b'curv':
+                    count = struct.unpack_from('>I', t[tag], 8)[0]
+                    # Every serialized knot and both f64 neighbors. Also check
+                    # f32 neighbors at representative low/middle/high knots.
+                    for i in range(1, count-1):
+                        boundary = i/(count-1)
+                        inputs.extend([(x,)*3 for x in [boundary, math.nextafter(boundary, 0.), math.nextafter(boundary, 1.)]])
+                    boundaries = [i/(count-1) for i in [1, 2, 15, 31, 128, 511, 512, 767, 1022]]
+                else:
+                    boundaries = [struct.unpack_from('>i', t[tag], 28)[0]/65536]
+                for boundary in boundaries:
+                    bits = struct.unpack('<I', struct.pack('<f', boundary))[0]
+                    for offset in [-1, 0, 1]:
+                        x = struct.unpack('<f', struct.pack('<I', bits+offset))[0]
+                        inputs.append((x, x, x))
+                    inputs.extend([(math.nextafter(boundary, direction),)*3 for direction in [0., 1.]])
             for rgb in sorted(set(inputs)):
                 linear = [decode(t[tag], rgb[i]) for i, tag in enumerate([b'rTRC', b'gTRC', b'bTRC'])]
                 pcs = [row[0] for row in multiply(matrix, [[v] for v in linear])]

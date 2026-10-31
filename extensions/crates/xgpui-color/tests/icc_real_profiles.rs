@@ -5,6 +5,7 @@ const ACCEPTED: &[&[u8]] = &[
     include_bytes!("reference/real-icc/sRGB-v4.icc"),
     include_bytes!("reference/real-icc/DisplayP3-v4.icc"),
     include_bytes!("reference/real-icc/AdobeCompat-v4.icc"),
+    include_bytes!("reference/real-icc/sRGB2014.icc"),
 ];
 #[test]
 fn real_profiles_accept_matrix_trc_and_reject_other_models_and_overlaps() {
@@ -40,7 +41,7 @@ mod reference {
 }
 
 #[test]
-fn real_parametric_profiles_match_exact_tag_oracles_without_named_substitution() {
+fn real_profiles_match_exact_tag_oracles_without_named_substitution() {
     let profiles: Vec<_> = ACCEPTED
         .iter()
         .map(|bytes| IccRgbProfile::parse(bytes).unwrap())
@@ -81,39 +82,28 @@ fn real_parametric_profiles_match_exact_tag_oracles_without_named_substitution()
 }
 
 #[test]
-fn srgb2014_informational_tags_are_bounded_but_white_admission_is_unchanged() {
+fn srgb2014_preserves_non_neutral_matrix_and_bounds_informational_tags() {
     let bytes = include_bytes!("reference/real-icc/sRGB2014.icc");
-    // Metadata is now admitted; its colorants still exceed our declared white
-    // coherence contract. Do not widen precision budgets or normalize them.
-    assert_eq!(
-        IccRgbProfile::parse(bytes).unwrap_err(),
-        IccError::InvalidColor
+    let profile = IccRgbProfile::parse(bytes).unwrap();
+    let white = profile.decode_to_pcs([1.; 3]).unwrap();
+    // Exact serialized column sums; do not normalize to the PCS white.
+    assert_eq!(white, [63195. / 65536., 65534. / 65536., 54073. / 65536.]);
+    assert_eq!(profile.pcs_white(), [63190. / 65536., 1., 54061. / 65536.]);
+    let actual = profile
+        .rgb_definition()
+        .decode_to_xyz_d65([1.; 3])
+        .unwrap()
+        .components();
+    assert!((actual[2] - xgpui_color::WhitePoint::D65.xyz()[2]).abs() > 1e-4);
+    // Neutral analytic-space construction keeps its existing admission contract.
+    assert!(
+        xgpui_color::RgbDefinition::new_with_xyz_white(
+            profile.colorants(),
+            profile.rgb_definition().curves().clone(),
+            profile.pcs_white()
+        )
+        .is_err()
     );
-    // A test-only balanced copy proves the original rejection comes from its
-    // colorants, rather than the newly admitted descriptive metadata. Original
-    // upstream fixture bytes remain unchanged and checksum-pinned.
-    let count = u32::from_be_bytes(bytes[128..132].try_into().unwrap()) as usize;
-    let tag_offset = |sig: &[u8]| {
-        let at = (0..count)
-            .map(|i| 132 + i * 12)
-            .find(|&i| &bytes[i..i + 4] == sig)
-            .unwrap();
-        u32::from_be_bytes(bytes[at + 4..at + 8].try_into().unwrap()) as usize
-    };
-    let mut balanced = bytes.to_vec();
-    for c in 0..3 {
-        let read = |sig: &[u8]| {
-            i32::from_be_bytes(
-                bytes[tag_offset(sig) + 8 + c * 4..tag_offset(sig) + 12 + c * 4]
-                    .try_into()
-                    .unwrap(),
-            )
-        };
-        let adjusted = read(b"wtpt") - read(b"gXYZ") - read(b"bXYZ");
-        let at = tag_offset(b"rXYZ") + 8 + c * 4;
-        balanced[at..at + 4].copy_from_slice(&adjusted.to_be_bytes());
-    }
-    IccRgbProfile::parse(&balanced).unwrap();
     let mut oversized = bytes.to_vec();
     let count = u32::from_be_bytes(bytes[128..132].try_into().unwrap()) as usize;
     let at = (0..count)

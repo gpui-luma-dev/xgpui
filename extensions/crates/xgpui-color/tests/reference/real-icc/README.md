@@ -24,38 +24,62 @@ not identify its exact revision; the hash does.
 | sRGB-v2-magic, DisplayP3-v2-magic, AdobeCompat-v2 | Rejected: Malformed | Strict range policy disallows other tags overlapping the declared desc range |
 | sGrey-v4 | Rejected: Unsupported | Grayscale input |
 | CGATS001Compat-v2-micro | Rejected: Unsupported | CMYK/LUT input |
-| sRGB2014 | Rejected: InvalidColor | Matrix/white coherence exceeds the existing 3/65536 metadata bound |
+| sRGB2014 | Accepted | Explicit relative PCS matrix with 1024-entry sampled curves |
 
 The compact v2 files deliberately pack tag storage; the error classification
 above describes our adapter policy, not a claim that these upstream files are
 corrupt. They also encode historical v2 white-point conventions outside our
 current explicit PCS-white contract; overlap rejection is the first boundary.
 
-The pinned sRGB2014 colorant sums differ from its encoded white by
-`[5,-2,12]/65536`. Its informational `lumi`, `meas`, `bkpt`, `tech` and `vued`
-tags are now admitted with a 4096-byte per-tag cap. They do not change relative
-matrix/TRC decoding: no black-point compensation, absolute display luminance or
-viewing-condition transform is applied. A balanced test-only copy proves that
-metadata admission works, while the original remains rejected and unchanged.
-No matrix renormalization or wider numerical error budget is introduced.
+The pinned sRGB2014 colorant sums differ from its encoded PCS white by
+`[5,-2,12]/65536`. That offset is preserved. `RgbDefinition::from_relative_xyz_matrix`
+separates the declared XYZ reference white from the actual transform's neutral
+ramp. It adapts the original matrix from the header PCS illuminant to D65 once,
+without normalizing its columns or substituting the matrix sum as the CAT white.
+Existing neutral-space constructors retain their 3/65536 admission bound.
 
-Accepted profiles have 765 exact-tag reference vectors from 120-digit Decimal
-arithmetic, including near-black, mixed colors, endpoints and f32/f64 neighbors
-of actual serialized parametric thresholds. Curve and XYZ tolerances remain
-16/64 f64 epsilon scaled by decoded source energy. The reference applies PCS
-white→D65 once; it does not reapply chad or substitute named curves/primaries.
+Its informational `lumi`, `meas`, `bkpt`, `tech` and `vued` tags have a
+4096-byte per-tag cap. They do not change relative matrix/TRC decoding: no
+black-point compensation, absolute display luminance or viewing-condition
+transform is applied. Neither media-white nor chad tags are reapplied to
+already-PCS colorants. [ICC's explanation of D50 PCS and display whites](https://www.color.org/whyd50/)
+provides context for the coordinate-system distinction. The byte-exact fixture
+and independent secondary-engine check establish the retained offset here.
+
+Four accepted profiles have 4,108 exact-tag reference vectors from 120-digit
+Decimal arithmetic. These include near-black, mixed colors, endpoints, f32/f64
+neighbors of serialized parametric thresholds, every sampled-curve knot and
+its two f64 neighbors, and representative f32 knot neighbors. Curve and XYZ
+tolerances remain 16/64 f64 epsilon scaled by decoded source energy. The
+reference uses the encoded header PCS illuminant and applies PCS→D65 once.
+It does not reapply chad, normalize matrices or substitute named curves.
 
 ```sh
 python3 scripts/generate_real_icc_references.py --check
 cargo test --offline --manifest-path extensions/crates/xgpui-color/Cargo.toml --features icc
 ```
 
-Validation: all 41 color tests and 3 active doctests pass (one preexisting
+Validation: all 42 color tests and 3 active doctests pass (one preexisting
 illustrative doctest is ignored). Strict color-crate Clippy passes. The sibling
-lab embeds the three accepted v4 files with their CC0 notice and exercises
+lab embeds the three accepted v4 files with their CC0 notice and the ICC-authored sRGB2014 with its original copyright and exercises
 published metadata through the existing pixels-plus-metadata path.
 
-Follow-up: decide on an explicit contract for non-neutral measured/profile
-matrices before supporting the pinned sRGB2014 case. Separately investigate
-compact-v2 packing and historical white semantics. Do not infer general ICC,
-monitor-profile, LUT, grayscale or CMYK support from these fixtures.
+Optional independent endpoint check (requires locally installed Little CMS 2):
+
+```sh
+python3 validation/icc-import-probe/check_srgb2014.py
+```
+
+Little CMS 2.19 agrees with the unnormalized PCS endpoints within a source-energy
+scaled f32 budget, using relative colorimetric intent and no BPC/optimization.
+This isolates matrix semantics; it does not replace the strict continuous f64
+sampled-curve oracle or adopt a transform-engine dependency.
+
+The relative-matrix constructor still rejects nonfinite, singular and poorly
+conditioned matrices, invalid curves and invalid reference whites. It also
+rejects an overflowed cofactor inversion that produces an all-zero inverse.
+No precision budget was widened.
+
+Follow-up: separately investigate compact-v2 packing and historical white
+semantics. Do not infer general ICC, monitor-profile, LUT, grayscale or CMYK
+support from these fixtures.

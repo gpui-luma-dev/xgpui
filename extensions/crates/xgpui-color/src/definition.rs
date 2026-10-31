@@ -133,7 +133,8 @@ impl RgbCurve {
 }
 
 /// Validated custom RGB definition with relative XYZ/D65 colorants.
-/// Matrix rows multiply column RGB vectors. White is normalized to Y=1.
+/// Matrix rows multiply column RGB vectors. The XYZ reference white has Y=1.
+/// A profile matrix may encode a neutral ramp that differs from that reference.
 /// Use `new_with_white_point` to explicitly adapt D50 colorants; `new_d65`
 /// accepts already-adapted colorants. Adaptation must not be applied twice.
 /// This is neither an ICC profile nor a display calibration descriptor.
@@ -186,17 +187,28 @@ impl RgbDefinition {
             .map(|row| row.iter().map(|v| v.abs()).sum::<f64>() * 3. / 65536. + 16. * f64::EPSILON);
         Self::validate_d65(adapted, curves, tolerance)
     }
+    /// Preserve an explicit relative RGB → XYZ matrix in a declared reference
+    /// white. Bradford-adapt its columns once to D65, without renormalizing them.
+    /// Unlike the neutral-space constructors, RGB(1,1,1) is not required to map
+    /// to the reference white. This is useful for measured/profile transforms;
+    /// the reference white describes the XYZ coordinate system, not a matrix sum.
+    /// Matrices must remain finite, invertible and numerically well conditioned.
+    /// This does not interpret ICC media-white/chad tags or rendering intents.
+    pub fn from_relative_xyz_matrix(
+        colorants: [[f64; 3]; 3],
+        curves: [RgbCurve; 3],
+        reference_white: [f64; 3],
+    ) -> Result<Self> {
+        let adaptation =
+            BradfordAdaptation::from_xyz_whites(reference_white, WhitePoint::D65.xyz())?;
+        Self::validate_matrix(adaptation.apply_colorants(colorants)?, curves)
+    }
+
     fn validate_d65(
         to_xyz_d65: [[f64; 3]; 3],
         curves: [RgbCurve; 3],
         white_tolerance: [f64; 3],
     ) -> Result<Self> {
-        for row in to_xyz_d65 {
-            finite(row)?;
-        }
-        for curve in &curves {
-            curve.validate()?;
-        }
         // Three independently quantized s15Fixed16 colorants can contribute
         // at most 3/65536 absolute white error. This is metadata admission,
         // not a tolerance for conversion results.
@@ -210,6 +222,15 @@ impl RgbDefinition {
         {
             return Err(ColorError);
         }
+        Self::validate_matrix(to_xyz_d65, curves)
+    }
+    fn validate_matrix(to_xyz_d65: [[f64; 3]; 3], curves: [RgbCurve; 3]) -> Result<Self> {
+        for row in to_xyz_d65 {
+            finite(row)?;
+        }
+        for curve in &curves {
+            curve.validate()?;
+        }
         let inv = inverse(to_xyz_d65);
         for row in inv {
             finite(row)?;
@@ -220,7 +241,16 @@ impl RgbDefinition {
                 .fold(0., f64::max)
         };
         // Reject matrices whose condition estimate exhausts practical f64 precision.
-        if norm(to_xyz_d65) * norm(inv) > 1. / (128. * f64::EPSILON) {
+        let matrix_norm = norm(to_xyz_d65);
+        let inverse_norm = norm(inv);
+        let condition = matrix_norm * inverse_norm;
+        if !matrix_norm.is_finite()
+            || !inverse_norm.is_finite()
+            || matrix_norm <= 0.
+            || inverse_norm <= 0.
+            || !condition.is_finite()
+            || condition > 1. / (128. * f64::EPSILON)
+        {
             return Err(ColorError);
         }
         Ok(Self { to_xyz_d65, curves })
@@ -348,6 +378,53 @@ mod tests {
             .is_err()
         );
     }
+    #[test]
+    fn relative_matrix_preserves_non_neutral_ramps_and_rejects_unusable_metadata() {
+        let m = [[0.5, 0., 0.], [0., 0.25, 0.], [0., 0., 0.75]];
+        let curves = [const { RgbCurve::Linear }; 3];
+        let white = WhitePoint::D65.xyz();
+        let d = RgbDefinition::from_relative_xyz_matrix(m, curves.clone(), white).unwrap();
+        assert_eq!(d.linear_to_xyz_d65_matrix(), m);
+        assert_eq!(
+            d.decode_to_xyz_d65([1.; 3]).unwrap().components(),
+            [0.5, 0.25, 0.75]
+        );
+        assert_eq!(
+            d.decode_to_xyz_d65([-0.5, 0.5, 2.]).unwrap().components(),
+            [-0.25, 0.125, 1.5]
+        );
+        assert!(RgbDefinition::new_d65(m, curves.clone()).is_err());
+        for matrix in [
+            [[0.; 3]; 3],
+            [[1., 1., 0.], [1., 1. + f64::EPSILON, 0.], [0., 0., 1.]],
+            [[f64::NAN, 0., 0.], [0., 1., 0.], [0., 0., 1.]],
+            [[f64::INFINITY, 0., 0.], [0., 1., 0.], [0., 0., 1.]],
+            // Cofactor inversion overflows the determinant to infinity and
+            // underflows every inverse entry to zero: reject, never admit it.
+            [[1e110, 0., 0.], [0., 1e110, 0.], [0., 0., 1e110]],
+        ] {
+            assert!(
+                RgbDefinition::from_relative_xyz_matrix(matrix, curves.clone(), white).is_err()
+            );
+        }
+        assert!(
+            RgbDefinition::from_relative_xyz_matrix(
+                m,
+                [RgbCurve::Gamma(0.), RgbCurve::Linear, RgbCurve::Linear],
+                white
+            )
+            .is_err()
+        );
+        for reference in [
+            [1., 0., 1.],
+            [1., 2., 1.],
+            [-1., 1., 1.],
+            [f64::NAN, 1., 1.],
+        ] {
+            assert!(RgbDefinition::from_relative_xyz_matrix(m, curves.clone(), reference).is_err());
+        }
+    }
+
     #[test]
     fn srgb_curve_independent_midpoint() {
         let definition = RgbDefinition::new_d65(
