@@ -1440,7 +1440,11 @@ impl WgpuRendererCore {
                 let prepared_draw = batch.prepare(|context| {
                     let extent = extent(draw)?;
                     anyhow::ensure!(
-                        draw.content.image_color_mode() != gpui::ImageColorMode::LinearP3Wide,
+                        !matches!(
+                            draw.content.image_color_mode(),
+                            gpui::ImageColorMode::LinearP3Wide
+                                | gpui::ImageColorMode::LinearRec2020Wide
+                        ),
                         "wgpu supports explicit sRGB preview, not wide image presentation"
                     );
                     let request = gpui::PreparationRequest::new(

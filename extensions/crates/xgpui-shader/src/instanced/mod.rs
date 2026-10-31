@@ -54,6 +54,11 @@ impl<T: ShaderInstance> ShaderProgram<T> {
     pub fn new_linear_p3(source: &str) -> Result<Self> {
         Self::with_encoding(source, ShaderOutputEncoding::LinearDisplayP3)
     }
+    /// Bounded linear Rec.2020/D65 SDR output, converted to native composition
+    /// primaries by the wrapper. This does not enable HDR.
+    pub fn new_linear_rec2020(source: &str) -> Result<Self> {
+        Self::with_encoding(source, ShaderOutputEncoding::LinearRec2020)
+    }
     fn with_encoding(source: &str, encoding: ShaderOutputEncoding) -> Result<Self> {
         Ok(Self {
             program: Arc::new(compiler::compile::<T>(source, encoding)?),
@@ -126,7 +131,7 @@ impl WindowShaderExt for Window {
             .all(|v| v.is_finite()),
             "non-finite shader bounds"
         );
-        if program.program.output_encoding() == ShaderOutputEncoding::LinearDisplayP3 {
+        if program.program.output_encoding() != ShaderOutputEncoding::EncodedSrgb {
             ensure!(
                 self.color_status().effective() == gpui::WindowColorMode::WideGamutSdr,
                 "linear P3 shaders require an active native WideGamutSdr window"

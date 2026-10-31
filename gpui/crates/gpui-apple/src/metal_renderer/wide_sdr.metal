@@ -24,6 +24,9 @@ float3 p3_to_srgb(float3 c) {
                   dot(c,float3(-.042056955,1.042056955,0)),
                   dot(c,float3(-.019637555,-.078636046,1.098273600)));
 }
+float3 rec2020_to_p3(float3 c) {
+    return float3(dot(c,float3(1.343578253,-0.282179671,-0.061398582)),dot(c,float3(-0.065297453,1.075787916,-0.010490463)),dot(c,float3(0.002821787,-0.019598495,1.016776707)));
+}
 fragment float4 gamut_fragment(Vertex in [[stage_in]], constant Params &p [[buffer(0)]],
  texture2d<float> image [[texture(0)]], texture2d<float> mask [[texture(1)]]) {
     float2 xy=in.position.xy;
@@ -35,6 +38,7 @@ fragment float4 gamut_fragment(Vertex in [[stage_in]], constant Params &p [[buff
         c.rgb=c.a>0 ? srgb_to_p3(decode_srgb(c.rgb/c.a))*c.a : float3(0);
     } else { // Explicit private wide contract: associated linear P3.
         c=image.sample(s,in.uv);
+        if (p.linear.z > .5) c.rgb=rec2020_to_p3(c.rgb);
         if (p.linear.x > .5) {
             float3 rgb=c.a>0 ? c.rgb/c.a : float3(0);
             if (p.linear.y < .5) rgb=p3_to_srgb(rgb);
@@ -46,7 +50,7 @@ fragment float4 gamut_fragment(Vertex in [[stage_in]], constant Params &p [[buff
             float t=clamp((d-p.vignette.y)/p.vignette.z,0.,1.);
             rgb*=1.-p.vignette.x*t*t*(3.-2.*t);
             if (p.linear.y < .5) rgb=srgb_to_p3(rgb);
-            c.rgb=clamp(rgb,0.,1.)*c.a;
+            c.rgb=rgb*c.a; // Extended linear SDR; map only at final preview/presentation.
         }
     }
     float2 local=in.uv*p.bounds.zw;

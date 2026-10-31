@@ -744,7 +744,11 @@ impl MetalRenderer {
                 } else {
                     let output =
                         crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?;
-                    if draw.content.image_color_mode() == gpui::ImageColorMode::LinearP3Wide {
+                    if matches!(
+                        draw.content.image_color_mode(),
+                        gpui::ImageColorMode::LinearP3Wide
+                            | gpui::ImageColorMode::LinearRec2020Wide
+                    ) {
                         anyhow::ensure!(
                             self.wide_sdr.is_some(),
                             "wide image requires WideGamutSdr presentation"
@@ -2889,7 +2893,7 @@ fn create_shader_pipeline(
     unsafe { buffer.setStepRate(1) };
     descriptor.setVertexDescriptor(Some(&layout));
     let color = unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) };
-    let wide = program.output_encoding() == gpui::ShaderOutputEncoding::LinearDisplayP3;
+    let wide = program.output_encoding() != gpui::ShaderOutputEncoding::EncodedSrgb;
     color.setPixelFormat(if wide {
         MTLPixelFormat::RGBA16Float
     } else {

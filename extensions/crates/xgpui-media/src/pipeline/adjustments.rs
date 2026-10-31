@@ -4,7 +4,7 @@ use std::any::Any;
 
 /// Validated GPU placement adjustments for retained RGBA8 or RGBA16F images.
 /// Source identity is unchanged. Uses declared linear sRGB/P3 working primaries,
-/// clips once at output and preserves source alpha.
+/// maps at the preview output; native wide preserves extended RGB and source alpha.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ImageAdjustments(gpui::LinearImagePaint);
 impl ImageAdjustments {
@@ -77,6 +77,8 @@ impl CustomContent for AdjustedImage {
 
 /// Explicit native wide-SDR placement. Requires a canonical RGBA16F source and
 /// an accepted WideGamutSdr window. wgpu/browser hosts reject this output policy.
+/// Adjustment affine row absolute sums must not exceed 4, keeping four nested
+/// wide color filters finite in binary16.
 #[derive(Clone, Debug)]
 pub struct WideImage {
     image: crate::MediaImage,
@@ -85,9 +87,23 @@ pub struct WideImage {
 impl crate::MediaImage {
     pub fn wide(&self, adjustments: Option<ImageAdjustments>) -> anyhow::Result<WideImage> {
         anyhow::ensure!(
-            self.format() == gpui::ImageTextureFormat::LinearP3Rgba16Float,
+            matches!(
+                self.format(),
+                gpui::ImageTextureFormat::LinearP3Rgba16Float
+                    | gpui::ImageTextureFormat::LinearRec2020Rgba16Float
+            ),
             "wide placement requires RGBA16F source pixels"
         );
+        if let Some(adjustments) = adjustments {
+            anyhow::ensure!(
+                adjustments.paint().rows().iter().all(|row| row
+                    .iter()
+                    .map(|v| f64::from(v.abs()))
+                    .sum::<f64>()
+                    <= 4.),
+                "wide SDR adjustment row magnitude exceeds 4"
+            );
+        }
         Ok(WideImage {
             image: self.clone(),
             adjustments,
@@ -96,7 +112,12 @@ impl crate::MediaImage {
 }
 impl CustomContent for WideImage {
     fn image_color_mode(&self) -> gpui::ImageColorMode {
-        gpui::ImageColorMode::LinearP3Wide
+        match self.image.format() {
+            gpui::ImageTextureFormat::LinearRec2020Rgba16Float => {
+                gpui::ImageColorMode::LinearRec2020Wide
+            }
+            _ => gpui::ImageColorMode::LinearP3Wide,
+        }
     }
     fn image_linear_adjustments(&self) -> Option<gpui::LinearImagePaint> {
         self.adjustments.map(|v| v.paint())

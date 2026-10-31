@@ -139,7 +139,24 @@ def generate():
                         "// Independent 120-digit source xy matrices/gamma -> associated FP16.\n"
                         "const REC2020_REFERENCES: &[(bool, [f32; 4], [u16; 3])] = &["
                         + ", ".join(rec_rows) + "];\n")
+        native_rows = []
+        rec_to_p3 = multiply(inverse(matrices[1]), matrices[2])
+        for r in [0., 2. ** -14, .5, 1.]:
+            for g in [0., 2. ** -14, .5, 1.]:
+                for b in [0., 2. ** -14, .5, 1.]:
+                    for alpha in [0., .5, 1.]:
+                        # Texture contains associated half values; oracle starts
+                        # from those exact stored inputs, independently of CPU math.
+                        bits = [struct.unpack("<H", struct.pack("<e", v * alpha))[0] for v in [r,g,b]]
+                        values = [D.from_float(struct.unpack("<e", struct.pack("<H", v))[0]) for v in bits]
+                        rgb = [sum(x*y for x,y in zip(row, values)) for row in rec_to_p3]
+                        out = [struct.unpack("<H", struct.pack("<e", float(v)))[0] for v in rgb]
+                        bits += [struct.unpack("<H", struct.pack("<e", alpha))[0]]
+                        native_rows.append("([" + ",".join(f"0x{v:04x}" for v in bits) + "], [" + ",".join(f"0x{v:04x}" for v in out) + "])")
+        native = formatted("// Generated independent 120-digit xy matrix solve; exact half inputs.\n"
+                           "const REC2020_P3_REFERENCES: &[([u16;4],[u16;3])] = &[" + ",".join(native_rows) + "];\n")
         return {
+            ROOT / "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr/rec2020_reference.rs": native,
             ROOT / "extensions/crates/xgpui-media/src/pipeline/rec2020_reference.rs": rec,
             OUTPUT: formatted("\n".join(lines) + "\n"),
             FP16_OUTPUT: formatted("\n".join(half) + "\n"),

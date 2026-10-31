@@ -58,9 +58,9 @@ pub(crate) fn build(
     )
 }
 
-/// Preserve supplied Adobe RGB/P3 colors in bounded linear Rec.2020 SDR storage.
+/// Preserve supplied Adobe RGB colors in bounded linear Rec.2020 SDR storage.
 /// Mapping is explicit for sources outside Rec.2020; mips average associated light.
-/// Native wide placement is unavailable until the compositor supports this format.
+/// Keep P3 storage for its full gamut: bounded Rec.2020 maps a small P3 boundary region.
 pub fn rec2020_rgba16f_data(
     width: u32,
     height: u32,
@@ -374,6 +374,30 @@ mod rec2020_tests {
             let actual = u16::from_le_bytes([data.levels()[1][2 * i], data.levels()[1][2 * i + 1]]);
             assert!(actual.abs_diff(f16::from_f64(value).to_bits()) <= 1);
         }
+    }
+
+    #[test]
+    fn p3_red_requires_p3_storage_to_avoid_bounded_rec2020_mapping() {
+        let rgba = [1., 0., 0., 1.];
+        let extended = ImageColor::LINEAR_P3
+            .decode(rgba, ImagePrimaries::Rec2020)
+            .unwrap()
+            .rgba();
+        assert!((extended[2] - -0.0012103403545183245).abs() < 32. * f64::EPSILON);
+        let p3 = rgba16f_data(1, 1, vec![rgba.map(|v| v as f32)], ImageColor::LINEAR_P3).unwrap();
+        let rec = rec2020_rgba16f_data(
+            1,
+            1,
+            vec![rgba.map(|v| v as f32)],
+            ImageColor::LINEAR_P3,
+            GamutMapping::Clip,
+        )
+        .unwrap();
+        assert_eq!(
+            f16::from_le_bytes([p3.levels()[0][0], p3.levels()[0][1]]),
+            f16::ONE
+        );
+        assert_eq!(&rec.levels()[0][4..6], &[0, 0]);
     }
 
     #[test]

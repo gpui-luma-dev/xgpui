@@ -58,6 +58,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         adobe,
         xgpui_color::GamutMapping::Clip,
     )?);
+    black_box(xgpui_shader::instanced::ShaderProgram::<
+        xgpui_shader::instanced::presets::EffectInstance,
+    >::new_linear_rec2020(
+        xgpui_shader::instanced::presets::ROUNDED_BOX
+    )?);
     black_box(xgpui_svg::SvgScheduler::default());
     black_box(std::mem::size_of::<xgpui_parley::ParleyTextSystem>());
     black_box(std::mem::size_of::<gpui_apple::AppleDispatcher>());

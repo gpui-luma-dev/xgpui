@@ -213,9 +213,13 @@ wide content use linear composition; exact legacy blending across that boundary
 is not promised. Flattening a transparent run loses individual backdrop
 interactions. On macOS Metal, explicit backdrop and layer boundaries flush the
 preceding UI run into the linear P3 target before capturing. Captures and blur
-scratch use premultiplied linear P3 RGBA16F; filtered layers restore their saved
+scratch use premultiplied extended linear P3 RGBA16F; filtered layers restore their saved
 destination before applying group opacity and blending. Saturation uses P3
-luminance coefficients; tone and blend operations use linear P3 in this mode.
+luminance coefficients; linear tone operations preserve extended channels. Normal
+blending preserves extended channels; artistic modes retain bounded operand
+definitions. Rec.2020 image/instanced shader sources convert to extended P3 on
+Metal or scRGB on Windows. P3 sources keep P3 storage, since bounded Rec.2020
+maps a small P3 boundary region. Windows capture restrictions remain unchanged.
 Default-mode effects retain encoded-sRGB behavior, so filtered colors can differ
 between modes. Path-masked shader draws retain their coverage pass.
 

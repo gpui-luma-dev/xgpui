@@ -30,7 +30,7 @@ impl Pipeline {
         Ok(Self {
             shader: CompositorPipeline::new(device, source, vertex, fragment)?,
             layout: layout.context("shader input layout")?,
-            wide: program.output_encoding() == gpui::ShaderOutputEncoding::LinearDisplayP3,
+            wide: program.output_encoding() != gpui::ShaderOutputEncoding::EncodedSrgb,
         })
     }
 }

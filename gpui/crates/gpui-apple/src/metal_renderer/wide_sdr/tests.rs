@@ -594,3 +594,82 @@ fn wide_sdr_invalid_viewport_is_rejected_before_gpu_allocation() -> Result<()> {
     assert!(renderer.wide_sdr.as_ref().unwrap().scratch.is_none());
     Ok(())
 }
+
+#[derive(Debug)]
+struct Rec2020Patch(gpui::ImageTextureData);
+impl CustomContent for Rec2020Patch {
+    fn image_color_mode(&self) -> gpui::ImageColorMode {
+        gpui::ImageColorMode::LinearRec2020Wide
+    }
+    fn prepare(&self, backend: &dyn Any, _: Size<DevicePixels>) -> Result<Box<dyn Any>> {
+        let context = backend
+            .downcast_ref::<crate::custom_draw::MetalCustomContext>()
+            .unwrap();
+        Ok(Box::new(context.create_image_output(&self.0)?))
+    }
+}
+
+#[test]
+fn rec2020_native_conversion_retains_extended_p3_channels() -> Result<()> {
+    objc2::rc::autoreleasepool(|_| {
+        let mut r = renderer();
+        let mut bytes = Vec::new();
+        for &(input, _) in REC2020_P3_REFERENCES {
+            for v in input {
+                bytes.extend_from_slice(&v.to_le_bytes());
+            }
+        }
+        let count = REC2020_P3_REFERENCES.len();
+        let data = gpui::ImageTextureData::page(
+            count as u32,
+            1,
+            bytes,
+            gpui::ImageTextureFormat::LinearRec2020Rgba16Float,
+        )?;
+        let bounds = b(0., 0., count as f32, 1.);
+        let mut s = Scene::default();
+        s.insert_primitive(CustomDraw {
+            order: 0,
+            bounds,
+            content_mask: ContentMask { bounds },
+            corner_radii: gpui::Corners::all(ScaledPixels(0.)),
+            opacity: 1.,
+            content: Arc::new(Rec2020Patch(data)),
+            coverage: None,
+        });
+        s.finish();
+        r.render_scene(&s, size(DevicePixels(count as i32), DevicePixels(1)))?;
+        let shot = snapshot(&r);
+        wait(&r);
+        for (x, &(_, expected)) in REC2020_P3_REFERENCES.iter().enumerate() {
+            let actual = sample(&shot, x, 0);
+            for i in 0..3 {
+                let e = half(expected[i]);
+                // One binary16 step covers shader matrix rounding before storage.
+                let next = half(expected[i].saturating_add(1));
+                let previous = half(expected[i].saturating_sub(1));
+                let budget = (next - e)
+                    .abs()
+                    .max((previous - e).abs())
+                    .min(0.001)
+                    .max(2f32.powi(-24));
+                assert!(
+                    (actual[i] - e).abs() <= budget,
+                    "pixel {x} channel {i}: {} != {e} (budget {budget})",
+                    actual[i]
+                );
+                if e == 0. {
+                    assert_eq!(actual[i], 0.);
+                }
+            }
+        }
+        // Rec.2020 green explicitly has negative red and blue in linear P3.
+        assert!(REC2020_P3_REFERENCES.iter().enumerate().any(|(x, _)| {
+            let p = sample(&shot, x, 0);
+            p[0] < -0.1 && p[2] < -0.01
+        }));
+        Ok(())
+    })
+}
+
+include!("rec2020_reference.rs");
