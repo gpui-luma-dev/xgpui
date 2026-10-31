@@ -29,6 +29,7 @@ When the user says **“prepare today's release”**:
 **Before any crates.io upload:**
 
 - Tag the approved commit as `release-YYYY-MM-DD-COMMIT`, using its UTC commit date and first 12 hex characters.
+- Support multiple releases per day: each distinct approved commit gets its own tag, for example `release-2026-10-31-ed4469267251` and `release-2026-10-31-a1b2c3d4e5f6`. Retries of the same release reuse its tag and record; do not create a new release identity for a retry.
 - Create a draft GitHub release containing the reviewed notes and version table.
 - Verify the remote tag points to the approved commit and present the draft to the user.
 
@@ -56,4 +57,4 @@ When the user says **“prepare today's release”**:
 
 The agent performs any steps the workflows do not yet automate. Current workflows create the tag/record after uploads and can replace notes with a version table: create the tag and draft beforehand, preserve the reviewed notes, and restore them before publishing the record.
 
-Always use the last **completed** release as the preparation baseline, excluding unfinished release tags. Ask the user only for a missing decision, required approval or a blocker the agent cannot resolve.
+Always use the most recent **completed** release in the approved source history as the preparation baseline, including an earlier release from the same day. Exclude unfinished release tags. Ask the user only for a missing decision, required approval or a blocker the agent cannot resolve.
