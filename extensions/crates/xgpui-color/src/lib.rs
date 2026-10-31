@@ -1,8 +1,11 @@
-//! CPU-only, unclipped color conversions. All RGB spaces and XYZ use D65.
+//! CPU-only, unclipped color conversions. Named RGB spaces and XyzD65 use D65.
+//! Custom D50 colorants can be explicitly adapted to D65.
 //! Matrices are row-major and multiply column vectors. Alpha is not involved.
 #![doc = include_str!("../README.md")]
 
 use std::fmt;
+mod adaptation;
+pub use adaptation::{BradfordAdaptation, WhitePoint};
 mod definition;
 pub use definition::{RgbCurve, RgbDefinition};
 mod gradient;

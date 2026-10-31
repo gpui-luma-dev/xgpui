@@ -19,7 +19,7 @@ The existing PNG/JPEG/WebP convenience loader remains unchanged during this work
 
 `xgpui-color::RgbDefinition` now validates custom D65 colorants with independent linear, sRGB or gamma channel curves. `PixelColor` resolves named, custom bounded, or extended-linear input. `MediaLoader::load_pixel_buffer` and synchronous `pixels_rgba16f_data` accept tightly packed RGBA f32 buffers and explicit P3/Rec.2020 storage/mapping. Retained images preserve the resolved metadata. No codec or ICC dependency was added.
 
-The first increment deliberately requires already-adapted D65 colorants. Sampled/ICC parametric curves, source-white adaptation, other layouts/precisions and ICC parsing remain future work. Matrix white admission allows 3/65536 per XYZ channel for quantized colorants; conversion tests use much tighter scale-aware f64 or one-step FP16 bounds.
+The foundation accepts already-adapted D65 colorants. A follow-up adds explicit Bradford adaptation between the CSS D50/D65 reference whites and a constructor that adapts declared D50 colorants once. Sampled/ICC parametric curves, arbitrary/encoded profile-white handling, other layouts/precisions and ICC parsing remain future work. Matrix white admission allows 3/65536 per XYZ channel for quantized colorants; conversion tests use much tighter scale-aware f64 or one-step FP16 bounds.
 
 ## Original API audit
 
@@ -27,7 +27,7 @@ The first increment deliberately requires already-adapted D65 colorants. Sampled
 
 The original audit identified two seams, addressed by this foundation:
 
-1. `ImageColor` describes only named D65 primaries and shared named channel curves. The new custom definition supplies validated D65 colorants and per-channel curves; source-white adaptation remains an adapter responsibility. Profile names must never select conversion behavior.
+1. `ImageColor` describes only named D65 primaries and shared named channel curves. The new custom definition supplies validated D65 colorants and per-channel curves; the caller explicitly declares the matrix white. ICC tag interpretation remains an adapter responsibility. Profile names must never select conversion behavior.
 2. The original supplied-pixel ingestion accepted only bounded source RGB. A reusable ICC transform can produce negative or above-one linear channels. That output must enter a validated extended-linear path before explicit destination mapping; passing it through the bounded source decoder would reject it or encourage premature clipping.
 
 Do not disguise custom profiles as `RgbSpace` enum variants. Keep `ImageColor` as a convenient named interpretation, and design its relationship to an owned, validated custom definition deliberately. Both new routes are exercised by numerical fixtures.
@@ -35,7 +35,7 @@ Do not disguise custom profiles as `RgbSpace` enum variants. Keep `ImageColor` a
 ## Implementation order
 
 1. Foundation implemented for tightly packed RGBA f32: dimensions, layout/stride, precision, color interpretation and alpha association. Document ownership and admission limits. Reuse existing types where sufficient; do not add speculative formats.
-2. Custom conversion and extended ingestion implemented with synthetic matrix/curve fixtures, independently of ICC parsing. Define white-point adaptation exactly once. Carry finite extended-linear RGB until the caller's explicit storage mapping; associate alpha afterward and generate mips in linear light.
+2. Custom conversion and extended ingestion implemented with synthetic matrix/curve fixtures, independently of ICC parsing. The follow-up defines explicit reference-white adaptation once. Carry finite extended-linear RGB until the caller's explicit storage mapping; associate alpha afterward and generate mips in linear light.
 3. Evaluate an existing ICC implementation behind an optional adapter. Accept profile bytes, build a reusable transform once, and process bounded rows on admitted workers. The core must remain usable without that dependency.
 4. If the dependency needs patches or a maintained fork, prefer owning a deliberately limited RGB matrix/TRC reader. Support only the validated subset, reject everything else clearly, and document the maintenance cost. Do not implement a general ICC engine by default.
 5. Exercise the boundary in xgpui-lab. The app can decode a small fixture set and extract profiles; the library receives pixels + metadata. Report interpretation, storage and mapping separately from display capability.
@@ -77,4 +77,12 @@ At the application boundary, a tagged/untagged fixture pair with identical pixel
 
 20 color unit tests, 6 independent Adobe numerical tests, 68 serial media tests with Metal/wgpu, and 8 sibling chromaticity-lab tests pass. The custom definition path checks the existing 1,000-vector 120-digit oracle against actual FP16 storage (at most one representable step, exact zeros). Additional synthetic rational XYZ references check per-channel curves, extended input, nonfinite/overflow rejection, singular matrices, alpha association, cancellation and background source metadata. Strict color all-target and media library Clippy pass. Oracle regeneration and diff whitespace checks pass.
 
-These results establish CPU conversion/storage behavior and existing macOS renderer regressions. No ICC engine, source-white adaptation or new Windows/Linux native validation is claimed.
+These results establish CPU conversion/storage behavior and existing macOS renderer regressions. No ICC engine, ICC white/tag interpretation or new Windows/Linux native validation is claimed.
+
+## Explicit reference-white adaptation follow-up
+
+`WhitePoint::{D50,D65}`, `BradfordAdaptation`, and `RgbDefinition::new_with_white_point` add explicit adaptation without any file/profile dependency. D50/D65 use the CSS chromaticities, not arbitrary encoded ICC PCS illuminant values. Adapters must resolve PCS normalization and any existing adaptation before selecting the matrix white. No profile-name inference is performed.
+
+The 120-digit oracle in `scripts/generate_bradford_references.py` uses a pivoted Gauss-Jordan inverse independent of production's cofactor inverse. It covers 408 signed, zero, near-black and large XYZ vectors in both directions. Scale-aware bounds account for cancellation while constructing matrix off-diagonals; there is no ordinary absolute-error floor that hides dark errors. A second check uses the published CSS matrix. D50 diagonal-colorant fixtures independently verify explicit mapping and associated FP16 storage. Identity is exact; nonfinite inputs and overflow are rejected. Source colorant quantization admission is propagated through the CAT separately from numerical conversion tolerances.
+
+Follow-up validation: 20 color unit tests, 4 adaptation tests, 6 independent Adobe numerical tests, 69 serial Metal/wgpu media tests and 8 sibling lab tests pass. Strict color all-target and media library Clippy, formatting, fixture regeneration and diff checks pass. Windows/Linux native execution remains unverified.

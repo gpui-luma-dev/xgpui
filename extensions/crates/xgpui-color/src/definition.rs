@@ -1,5 +1,7 @@
 //! Explicit custom RGB metadata. No profile parser or file-format knowledge.
-use crate::{ColorError, Result, RgbSpace, XyzD65, finite, inverse, mul};
+use crate::{
+    BradfordAdaptation, ColorError, Result, RgbSpace, WhitePoint, XyzD65, finite, inverse, mul,
+};
 
 /// Independent channel decoding curve. Gamma uses sign-preserving powers.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -28,7 +30,8 @@ impl RgbCurve {
 
 /// Validated custom RGB definition with relative XYZ/D65 colorants.
 /// Matrix rows multiply column RGB vectors. White is normalized to Y=1.
-/// An adapter must perform any source-white adaptation before construction.
+/// Use `new_with_white_point` to explicitly adapt D50 colorants; `new_d65`
+/// accepts already-adapted colorants. Adaptation must not be applied twice.
 /// This is neither an ICC profile nor a display calibration descriptor.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RgbDefinition {
@@ -37,6 +40,44 @@ pub struct RgbDefinition {
 }
 impl RgbDefinition {
     pub fn new_d65(to_xyz_d65: [[f64; 3]; 3], curves: [RgbCurve; 3]) -> Result<Self> {
+        Self::validate_d65(to_xyz_d65, curves, [3. / 65536.; 3])
+    }
+    /// Construct from relative RGB → XYZ colorants in the declared matrix white.
+    /// D50 is Bradford-adapted once to D65. This does not infer ICC tag semantics,
+    /// media white, rendering intent, or an existing chromatic-adaptation tag.
+    pub fn new_with_white_point(
+        colorants: [[f64; 3]; 3],
+        curves: [RgbCurve; 3],
+        matrix_white: WhitePoint,
+    ) -> Result<Self> {
+        if matrix_white == WhitePoint::D65 {
+            return Self::new_d65(colorants, curves);
+        }
+        for row in colorants {
+            finite(row)?;
+        }
+        let white = finite(mul(colorants, [1.; 3]))?;
+        if white
+            .iter()
+            .zip(matrix_white.xyz())
+            .any(|(a, b)| (a - b).abs() > 3. / 65536.)
+        {
+            return Err(ColorError);
+        }
+        let adaptation = BradfordAdaptation::new(matrix_white, WhitePoint::D65);
+        let adapted = adaptation.apply_colorants(colorants)?;
+        // Propagate admitted source colorant quantization through the CAT;
+        // it is not a conversion-error allowance or a silent renormalization.
+        let tolerance = adaptation
+            .matrix()
+            .map(|row| row.iter().map(|v| v.abs()).sum::<f64>() * 3. / 65536. + 16. * f64::EPSILON);
+        Self::validate_d65(adapted, curves, tolerance)
+    }
+    fn validate_d65(
+        to_xyz_d65: [[f64; 3]; 3],
+        curves: [RgbCurve; 3],
+        white_tolerance: [f64; 3],
+    ) -> Result<Self> {
         for row in to_xyz_d65 {
             finite(row)?;
         }
@@ -46,12 +87,13 @@ impl RgbDefinition {
         // Three independently quantized s15Fixed16 colorants can contribute
         // at most 3/65536 absolute white error. This is metadata admission,
         // not a tolerance for conversion results.
-        let white = mul(to_xyz_d65, [1.; 3]);
-        let d65 = [0.3127 / 0.3290, 1., (1. - 0.3127 - 0.3290) / 0.3290];
+        let white = finite(mul(to_xyz_d65, [1.; 3]))?;
+        let d65 = WhitePoint::D65.xyz();
         if white
             .iter()
             .zip(d65)
-            .any(|(a, b)| (a - b).abs() > 3. / 65536.)
+            .zip(white_tolerance)
+            .any(|((a, b), tolerance)| (a - b).abs() > tolerance)
         {
             return Err(ColorError);
         }

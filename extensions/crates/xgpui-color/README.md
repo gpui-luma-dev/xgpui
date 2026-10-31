@@ -158,6 +158,22 @@ conditioned and normalized to D65 white (Y=1); white admission permits at most
 3/65536 absolute error per XYZ channel for quantized colorants. This metadata
 admission bound is not the numerical accuracy promised by conversions.
 
-The caller must adapt colorants to D65 before construction. This API performs
-no ICC parsing or implicit D50 adaptation; sampled and ICC parametric curves
-are not yet supported. Alpha and file decoding are outside this color API.
+`new_d65` accepts already-adapted colorants. Alternatively,
+`RgbDefinition::new_with_white_point(matrix, curves, WhitePoint::D50)` explicitly
+Bradford-adapts D50 colorants to D65 once. The matrix must sum to the declared
+white within the colorant quantization bound. That bound is propagated through
+the adaptation matrix; colorants are never silently renormalized.
+
+`BradfordAdaptation::new(source, destination)` also adapts relative XYZ or colorant
+matrices directly between `WhitePoint::D50` and `WhitePoint::D65`. Same-white
+adaptation preserves finite input exactly, including signed zero. Other routes
+retain finite extended coordinates and reject overflow. The white chromaticities
+and Bradford convention follow [CSS Color 4](https://www.w3.org/TR/css-color-4/#color-conversion-code):
+D50 xy=(0.3457,0.3585), D65 xy=(0.3127,0.3290), both normalized to Y=1.
+
+This is not ICC rendering-intent handling. A future adapter must resolve profile
+PCS normalization, encoded illuminant values and existing adaptation tags before
+using this API; a profile's media-white label alone is insufficient. These two
+reference whites do not represent every custom or encoded ICC white. Sampled
+and ICC parametric curves, ICC parsing, alpha and file decoding remain outside
+this color API.

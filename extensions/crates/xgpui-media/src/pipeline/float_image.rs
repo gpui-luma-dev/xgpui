@@ -669,3 +669,44 @@ mod custom_grid_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod d50_metadata_tests {
+    use super::*;
+    include!("d50_fp16_reference.rs");
+    #[test]
+    fn d50_colorants_reach_explicitly_mapped_associated_fp16() {
+        use xgpui_color::{RgbCurve, RgbDefinition, WhitePoint};
+        let white = WhitePoint::D50.xyz();
+        let colorants = [[white[0], 0., 0.], [0., 1., 0.], [0., 0., white[2]]];
+        let definition =
+            RgbDefinition::new_with_white_point(colorants, [RgbCurve::Linear; 3], WhitePoint::D50)
+                .unwrap();
+        let source = crate::pipeline::PixelColor::Custom {
+            rgb: definition,
+            alpha: AlphaMode::Straight,
+        };
+        for &(rgba, expected) in D50_FP16 {
+            let data = pixels_rgba16f_data(
+                1,
+                1,
+                vec![rgba],
+                source,
+                ImagePrimaries::Rec2020,
+                GamutMapping::Clip,
+            )
+            .unwrap();
+            for (c, bits) in expected.into_iter().enumerate() {
+                let actual =
+                    u16::from_le_bytes([data.levels()[0][2 * c], data.levels()[0][2 * c + 1]]);
+                assert!(
+                    actual.abs_diff(bits) <= 1,
+                    "{rgba:?} {c}: {actual:04x} vs {bits:04x}"
+                );
+                if bits == 0 {
+                    assert_eq!(actual, 0);
+                }
+            }
+        }
+    }
+}
