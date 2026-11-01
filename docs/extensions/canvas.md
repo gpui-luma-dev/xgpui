@@ -5,7 +5,8 @@
 `xgpui-canvas` adds a spatial viewport to GPUI: an f64 pan/zoom camera, retained
 scenes with BVH culling and hit testing, LOD hints, alignment snapping, and a
 procedural line/dot grid. Native and browser labs show the same camera driving
-cards and CPU-rendered fractals.
+cards and fractals. The native fractal uses coherent viewport images; the browser
+companion uses bounded CPU rendering.
 
 ## Try it
 
@@ -72,15 +73,21 @@ and [native lab controls and benchmarks](https://github.com/gpui-luma-dev/xgpui/
 
 ## Scope and performance
 
-The native fractal caches world-space tiles on a background executor. The
-browser computes bounded slices, refining a coarse image to at most 480×360;
-f64 precision and a 2,048-iteration cap limit deep detail. The native live
-preview uses GPU readback; the default minimap avoids that cost.
+The native fractal presents complete buffered viewport images, reprojecting the
+last completed image during navigation. Shallow Metal views use GPU calculation
+with linear P3 float textures at a steady resolution; deep views use f64 CPU
+calculation, retain sharper completed images where possible, and blend in detail
+after settling. GPU deep-zoom
+perturbation is not implemented. The browser retains bounded CPU slices, refining
+a coarse image to at most 480×360; f64 precision and a 2,048-iteration cap limit
+deep detail. The native live preview uses GPU readback; the default minimap
+avoids that cost.
 
 Local macOS measurements averaged 16.7 ms/frame in normal card views and
 23.3 ms in the dense 100k overview. These are observations, not guarantees.
-Native smoke checks, 19 core tests and three fractal tests passed; both browser
-demos were checked in Chromium with WebGPU and WebGL2. Native Windows/Linux
+The original native smoke checkpoint recorded 19 core tests and three fractal
+tests; the native frame redesign adds scheduler/precision tests and Metal pixel
+comparison with the f64 reference. Both browser demos were checked in Chromium with WebGPU and WebGL2. Native Windows/Linux
 runtime validation remains outstanding.
 
 Rotation, isometric grids, general subtree transforms, reusable selection/map

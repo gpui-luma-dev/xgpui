@@ -15,10 +15,22 @@ use xgpui_canvas::{
 
 #[derive(Parser)]
 struct Options {
-    /// Open the CPU Mandelbrot image example.
+    /// Open the coherent-frame Mandelbrot explorer.
     #[arg(long, conflicts_with_all = ["smoke", "benchmark"])]
     mandelbrot: bool,
-    /// Save a refined CPU Mandelbrot frame and quit.
+    /// Use the f64 CPU renderer for all Mandelbrot views.
+    #[arg(long, requires = "mandelbrot")]
+    mandelbrot_cpu: bool,
+    /// Run a bounded camera sweep, capture settled views and write timing JSON.
+    #[arg(long, requires = "mandelbrot", conflicts_with = "mandelbrot_capture")]
+    mandelbrot_check: Option<PathBuf>,
+    /// Initial Mandelbrot zoom (0.01 through 1e10).
+    #[arg(long, requires = "mandelbrot", default_value = "1", value_parser = parse_mandelbrot_zoom)]
+    mandelbrot_zoom: f64,
+    /// Initial world-space center, useful for repeatable deep-zoom checks.
+    #[arg(long, requires = "mandelbrot", num_args = 2, allow_negative_numbers = true, value_names = ["WORLD_X", "WORLD_Y"], value_parser = parse_finite)]
+    mandelbrot_center: Option<Vec<f64>>,
+    /// Save a refined Mandelbrot frame and quit.
     #[arg(long, requires = "mandelbrot")]
     mandelbrot_capture: Option<PathBuf>,
     /// Profile 10k/100k and dense overview redraws, save JSON/PNGs, then quit.
@@ -27,6 +39,14 @@ struct Options {
     /// Capture default, zoom limits, distant world, and resized viewport, then quit.
     #[arg(long, conflicts_with = "benchmark")]
     smoke: Option<PathBuf>,
+}
+
+fn parse_finite(value: &str) -> Result<f64, String> {
+    value.parse::<f64>().ok().filter(|v| v.is_finite()).ok_or_else(|| "expected a finite number".into())
+}
+fn parse_mandelbrot_zoom(value: &str) -> Result<f64, String> {
+    let zoom = parse_finite(value)?;
+    if (0.01..=1e10).contains(&zoom) { Ok(zoom) } else { Err("zoom must be in 0.01..=1e10".into()) }
 }
 
 struct Lab {
@@ -64,9 +84,19 @@ impl Lab {
     }
 }
 
+impl Lab {
+    fn reset_view(&mut self) {
+        self.cancel_interaction();
+        self.space_down = false;
+        self.camera = Camera2D::default();
+        self.invalidate_preview();
+    }
+}
+
 impl Render for Lab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let started = Instant::now();
+        self.check_mandelbrot(window, cx);
         let smoke_viewport = self.viewport();
         if let Some((directory, stored_tick, pending)) = &mut self.smoke
             && !*pending
@@ -263,9 +293,9 @@ impl Render for Lab {
         let marquee = self.marquee();
         let guides = self.snap_guides.clone();
         let camera = self.camera;
-        self.schedule_mandelbrot(cx);
+        self.schedule_mandelbrot(window, cx);
         let fractal = self.fractal.enabled.then(|| self.fractal_element());
-        if self.fractal.refined
+        if self.fractal.ready_for_capture()
             && let Some(path) = self.fractal.capture.take()
         {
             window.on_next_frame(move |window, cx| {
@@ -301,7 +331,7 @@ impl Render for Lab {
                 if event.keystroke.key == "t" && !this.fractal.enabled { this.cancel_interaction(); this.whole_scene_map = !this.whole_scene_map; cx.notify(); }
                 if event.keystroke.key == "m" { this.cancel_interaction(); this.show_minimap = !this.show_minimap; cx.notify(); }
                 if event.keystroke.key == "escape" { this.cancel_interaction(); cx.notify(); }
-                if event.keystroke.key == "r" { this.cancel_interaction(); this.camera = Camera2D::default(); cx.notify(); }
+                if event.keystroke.key == "r" { this.reset_view(); cx.notify(); }
                 if event.keystroke.key == "o" {
                     this.cancel_interaction();
                     this.camera = Camera2D::default();
@@ -315,18 +345,35 @@ impl Render for Lab {
                 if event.keystroke.key == "space" { this.space_down = false; this.drag.end(); cx.stop_propagation(); }
             }))
             .relative().size_full().flex().flex_col().bg(rgb(0x101824)).text_color(rgb(0xffffff))
-            .child(div().h(px(88.)).flex_none().text_size(px(13.)).flex().flex_col()
-                .child(if self.fractal.enabled { "CPU Mandelbrot • Drag / scroll: pan • Pinch: zoom • F: cards • R: reset" } else { "Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel" })
-                .child(if self.fractal.enabled { "Cached CPU tiles • Progressive detail • M: preview (adds capture cost)" } else { "Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view • F: Mandelbrot" })
-                .child(if self.fractal.enabled { format!("{:.1}% • CPU tiles • {} iterations • {}", zoom * 100., mandelbrot::iterations(2_f64.powf(self.camera.zoom().log2().ceil())), if self.fractal.refined { "refined" } else { "rendering" }) } else { format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len()) }))
+            .child(div().h(px(116.)).flex_none().text_size(px(13.)).flex().flex_col()
+                .child(div().id("reset-view").role(Role::Button).aria_label("Reset view to startup position and zoom")
+                    .px_3().py_1().rounded_md().bg(rgb(0x334155)).cursor_pointer()
+                    .hover(|style| style.bg(rgb(0x475569)))
+                    .child("Reset view (R)")
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.reset_view();
+                        this.focus.focus(window, cx);
+                        cx.notify();
+                    })))
+                .child(if self.fractal.enabled { "P3 Mandelbrot • Drag: pan • Scroll: zoom • F: cards • R: reset" } else { "Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel" })
+                .child(if self.fractal.enabled { if window.color_status().effective() == WindowColorMode::WideGamutSdr { "Display P3 wide SDR • M: preview (adds capture cost)" } else { "Mapped sRGB fallback • M: preview (adds capture cost)" } } else { "Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view • F: Mandelbrot" })
+                .child(if self.fractal.enabled { format!("{:.1}% • {}", self.camera.zoom() * 100., self.fractal.status()) } else { format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len()) }))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
                 .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
                     this.cancel_interaction();
                     let delta = event.delta.pixel_delta(px(24.));
-                    this.camera.pan_by(WorldPoint::new(f32::from(delta.x) as f64, f32::from(delta.y) as f64));
+                    if this.fractal.enabled {
+                        let anchor = event.position - this.bounds.origin;
+                        this.camera.zoom_at_with_limits(
+                            WorldPoint::new(f32::from(anchor.x) as f64, f32::from(anchor.y) as f64),
+                            this.viewport(), (f64::from(f32::from(delta.y)) * 0.005).clamp(-1., 1.).exp(), 0.01, 1e10);
+                    } else {
+                        this.camera.pan_by(WorldPoint::new(f32::from(delta.x) as f64, f32::from(delta.y) as f64));
+                    }
                     cx.stop_propagation(); cx.notify();
                 }))
                 .on_pinch(cx.listener(|this, event: &PinchEvent, _, cx| {
+                    if this.fractal.enabled { cx.stop_propagation(); return; }
                     this.cancel_interaction();
                     let anchor = event.position - this.bounds.origin;
                     this.camera.zoom_at_with_limits(WorldPoint::new(f32::from(anchor.x) as f64, f32::from(anchor.y) as f64), this.viewport(), (1. + f64::from(event.delta)).max(0.01), 0.01, if this.fractal.enabled { 1e10 } else { 64. });
@@ -457,6 +504,9 @@ fn main() {
         .detach();
         cx.open_window(
             WindowOptions {
+                // A bounded timing sweep must not measure the normal inactive
+                // window throttle when a tool or another app takes focus.
+                inactive_frame_interval: if options.mandelbrot_check.is_some() { None } else { WindowOptions::default().inactive_frame_interval },
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                     None,
                     size(px(1100.), px(750.)),
@@ -466,6 +516,9 @@ fn main() {
             },
             move |window, cx| {
                 window.set_window_title("XGPUI Canvas Prototype");
+                if let Err(error) = window.set_color_mode(WindowColorMode::WideGamutSdr) {
+                    eprintln!("Wide SDR unavailable; using sRGB preview: {error}");
+                }
                 cx.new(|cx| {
                     let focus = cx.focus_handle();
                     focus.focus(window, cx);
@@ -486,12 +539,21 @@ fn main() {
                     })
                     .detach();
                     let scene = make_scene(10_000);
+                    let mut camera = Camera2D::default();
+                    if options.mandelbrot {
+                        if let Some(center) = &options.mandelbrot_center {
+                            camera.center_on(WorldPoint::new(center[0], center[1]));
+                        }
+                        camera.zoom_at_with_limits(WorldPoint::default(), WorldPoint::default(), options.mandelbrot_zoom, 0.01, 1e10);
+                    }
                     let overview = Arc::new(xgpui_canvas::Overview::new(&scene));
                     let minimap_image = overview_map::thumbnail(&scene, &overview);
                     Lab {
                         fractal: mandelbrot::Mandelbrot::new(
                             options.mandelbrot,
                             options.mandelbrot_capture,
+                            options.mandelbrot_cpu,
+                            options.mandelbrot_check,
                         ),
                         preview: minimap::Preview::default(),
                         overview,
@@ -509,7 +571,7 @@ fn main() {
                         scene,
                         focus,
                         space_down: false,
-                        camera: Camera2D::default(),
+                        camera,
                         bounds: Bounds::default(),
                         drag: xgpui_canvas::PanGesture::default(),
                         selected: BTreeSet::new(),
@@ -522,4 +584,23 @@ fn main() {
         .expect("open canvas lab");
         cx.activate(true);
     });
+}
+
+#[cfg(test)]
+mod launch_tests {
+    use super::*;
+    #[::core::prelude::v1::test]
+    fn default_card_launch_does_not_require_mandelbrot() {
+        let options = Options::try_parse_from(["canvas-lab"]).unwrap();
+        assert!(!options.mandelbrot);
+        assert_eq!(options.mandelbrot_zoom, 1.);
+    }
+    #[::core::prelude::v1::test]
+    fn repeatable_views_validate_zoom_and_finite_center() {
+        for invalid in ["NaN", "inf", "0", "10000000001"] {
+            assert!(Options::try_parse_from(["canvas-lab", "--mandelbrot", "--mandelbrot-zoom", invalid]).is_err());
+        }
+        let options = Options::try_parse_from(["canvas-lab", "--mandelbrot", "--mandelbrot-zoom", "1e10", "--mandelbrot-center", "-75", "30"]).unwrap();
+        assert_eq!(options.mandelbrot_center, Some(vec![-75., 30.]));
+    }
 }
