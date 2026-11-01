@@ -431,3 +431,77 @@ fn browser_preview_accepts_every_kind_and_32_stops() {
         );
     }
 }
+
+#[test]
+fn parameter_edits_keep_completed_pixels_visible_while_gpu_work_is_pending() {
+    struct Release(Arc<MetalContentTestGate>);
+    impl Drop for Release {
+        fn drop(&mut self) {
+            self.0.release();
+        }
+    }
+    for kind in [
+        GradientKind::Linear { angle: 45. },
+        GradientKind::Radial {
+            center: [0.5; 2],
+            radius: [0.5; 2],
+        },
+        GradientKind::Conic {
+            center: [0.5; 2],
+            angle: 45.,
+        },
+        GradientKind::Diamond {
+            center: [0.5; 2],
+            radius: [0.5; 2],
+            angle: 45.,
+        },
+    ] {
+        let mut renderer = MetalHeadlessRenderer::new();
+        let rx = wake(&mut renderer);
+        let slots = std::array::from_fn::<_, 3, _>(|_| PresentationSlotId::new());
+        let make = |gradient: &Gradient| {
+            let mut scene = Scene::default();
+            for (index, slot) in slots.iter().enumerate() {
+                scene.insert_primitive(draw(gradient, rect(index as f32 * 16., 16.), *slot));
+            }
+            scene.finish();
+            scene
+        };
+        let gradient = Gradient::new(kind, bw()).unwrap();
+        let initial = make(&gradient);
+        let extent = size(DevicePixels(48), DevicePixels(8));
+        ready(&mut renderer, &initial, &rx);
+        let completed = renderer.render_scene_to_image(&initial, extent).unwrap();
+        let gate = Release(Arc::new(MetalContentTestGate::default()));
+        renderer.set_content_validation_limits(MetalContentLimits {
+            pause_before_node: Some((0, gate.0.clone())),
+            ..Default::default()
+        });
+        let edited = gradient
+            .with_stops(vec![
+                GradientStop::new(0., [0., 1., 0., 1.]),
+                GradientStop::new(1., [0., 1., 0., 1.]),
+            ])
+            .unwrap();
+        let pending = make(&edited);
+        assert_eq!(
+            renderer.render_scene_to_image(&pending, extent).unwrap(),
+            completed,
+            "first pending edit flickered for {kind:?}"
+        );
+        assert!(gate.0.wait_until_entered(Duration::from_secs(5)));
+        for _ in 0..3 {
+            assert_eq!(
+                renderer.render_scene_to_image(&pending, extent).unwrap(),
+                completed,
+                "pending replay flickered for {kind:?}"
+            );
+        }
+        gate.0.release();
+        rx.recv_timeout(Duration::from_secs(20)).unwrap();
+        PlatformHeadlessRenderer::prepare_content_snapshot(&mut renderer, &pending).unwrap();
+        let updated = renderer.render_scene_to_image(&pending, extent).unwrap();
+        assert!(updated.pixels().all(|p| p.0 == [0, 255, 0, 255]));
+        assert_eq!(renderer.content_presentation_stats().execution.readbacks, 0);
+    }
+}

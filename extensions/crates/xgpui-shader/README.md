@@ -197,7 +197,14 @@ MTL_DEBUG_LAYER=1 cargo test \
   -- --test-threads=1 --nocapture
 ```
 
-What to look for: four passing tests and one ignored subprocess helper; independent
+What to look for: five passing tests and one ignored subprocess helper; independent
 pixel references for all four geometries, transparent/hard/32-stop palettes, one
 shared pipeline, cached replay, edit/resize updates, and repeated 512→1→512 draws
 finishing with zero producer readbacks and at most two in-flight command buffers.
+
+For changing sources, retain a `PresentationSlotId` per destination paint role
+and use `ContentDraw::new(gradient.content()).slot(slot)`. Source identity changes
+on edits; the presentation identity stays stable so pending frames can retain the
+last completed image. Anonymous draws have no previous-image history. The native
+gradient suite deliberately pauses producer work to verify all four kinds keep
+their previous pixels visible during updates.

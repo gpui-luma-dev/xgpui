@@ -962,3 +962,12 @@ See the extension and paint-lab READMEs for runnable commands and visual checks.
 
 Next: migrate MeshGradient, then experimental shader producers. D3D11/wgpu
 portable execution remains follow-up work; keep issue #110 open.
+
+
+Analytic presentation follow-up: the paint-lab migration initially recorded
+anonymous content draws, causing pending parameter updates to become transparent.
+Its background, border and path now retain separate presentation slots across
+source replacement. Completed snapshots alone did not catch this; a deterministic
+native acceptance test pauses production and checks unchanged visible pixels on
+pending edit/replay frames for every analytic kind, followed by the new pixels on
+completion. Source identity and destination presentation identity remain separate.

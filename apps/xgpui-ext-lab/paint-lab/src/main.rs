@@ -207,6 +207,7 @@ impl Control {
 struct Lab {
     mesh: Arc<MeshGradient>,
     analytic: Arc<Gradient>,
+    presentation_slots: [gpui::content::PresentationSlotId; 3],
     mesh_points: Vec<xgpui_shader::ControlPoint>,
     mesh_selected: usize,
     mesh_tangents: Vec<[editor::MeshTangent; 2]>,
@@ -810,7 +811,12 @@ impl Render for Lab {
             .into_iter()
             .enumerate()
         {
-            let p = paint.clone();
+            // Identity belongs to the destination paint role, not the changing
+            // source snapshot. Preserve completed pixels while an edit is pending.
+            let p = match paint.clone() {
+                Paint::Content(draw) => draw.slot(self.presentation_slots[index]).into(),
+                paint => paint,
+            };
             let mut tile = painted().relative().w(px(320.)).h(px(240.));
             match index {
                 0 => {
@@ -962,6 +968,9 @@ fn main() -> Result<()> {
                         )
                         .unwrap(),
                     ),
+                    presentation_slots: std::array::from_fn(|_| {
+                        gpui::content::PresentationSlotId::new()
+                    }),
                     mesh_points: grid(0.).unwrap().points().to_vec(),
                     mesh_selected: 0,
                     mesh_tangents: editor::mesh_tangents(grid(0.).unwrap().points()),
