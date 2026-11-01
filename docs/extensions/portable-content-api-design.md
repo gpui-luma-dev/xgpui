@@ -1,13 +1,15 @@
 # Portable content API and execution lifecycle
 
-Status: proposed design, 2026-11-01. No API in this document is implemented.
+Status: proposed full design, 2026-11-01. The CPU foundation described below is
+implemented; backend execution and application integration remain pending.
 Issue: [#110](https://github.com/gpui-luma-dev/xgpui/issues/110).
 Baseline regression: [#111](https://github.com/gpui-luma-dev/xgpui/pull/111).
 
 This specification replaces producer-owned GPU preparation with immutable content
 descriptions and framework-owned execution. Correctness and functionality take
 priority over source compatibility. Rust declarations below specify the proposed
-surface; examples illustrate it and are not executable against today's SDK.
+surface; full-pipeline examples illustrate the target and are not yet executable
+against today's SDK.
 
 ## Decisions
 
@@ -45,6 +47,43 @@ Existing behavior is documented in [paint contracts](paint-contract-hardening.md
 [public API inventory](gpui-public-api.md), [portable paints](portable-paints.md),
 and [media images](media-images.md). Those documents continue to describe the
 current implementation until migration; this proposal does not redefine it.
+
+## CPU foundation checkpoint
+
+`gpui::content` now provides immutable `Content`/`ContentSource`, checked image and
+buffer descriptors, builder-scoped references, CPU solid/upload/copy operations,
+structural realization keys, and a dependency-first validated graph. Checked
+`ImageExtent` and descriptor constructors/accessors replace freely writable
+descriptor fields in the conceptual declarations below. A solid can be rebuilt
+inline without losing structural equivalence; no device cache is implemented yet.
+
+The reference `ExecutionPlan` accepts executor-supplied allocation charges,
+including padding, and rejects an infeasible serial working set. Its tracker
+enforces planned admission order, live-byte and unsubmitted-recording allowances,
+submission/completion/discard ordering, invalidation, and last-reader retirement.
+`SubmissionLease` retains output/input owners independently of tracker teardown;
+an executor must install it in the native completion callback before submission.
+Owner types can be thread-safe `Arc` or thread-affine `Rc`. `PresentationEpoch`
+rejects stale and cross-window generation tokens.
+
+This is CPU-only infrastructure, not a connected renderer or the fix for #110.
+It currently materializes every planned node. Shader/render/compute bindings,
+asset readiness, external imports, draw mapping/slots, device-wide admission,
+platform presentation, native completion services, and backend lowering remain
+implementation work. Buffer operations validate and describe data; their GPU
+consumers arrive with render/compute integration.
+
+Run the deterministic integration suite from the repository root:
+
+```sh
+cargo test --manifest-path gpui/crates/gpui/Cargo.toml \
+  --test portable_content --features gpui_platform/runtime_shaders
+```
+
+The focused integration target avoids an existing unrelated property-test macro
+failure in the library unit-test target. Tests use fake completion notifications
+and do not claim native GPU validation. The Metal baseline regression remains
+unchanged and is still expected to reproduce the deadlock.
 
 ## Public types and construction
 
@@ -630,7 +669,7 @@ timeouts for driver/queue stalls.
 6. Publish API docs and backend capability reports only after validation. Update
    issue #110 with measured coverage and remaining limitations.
 
-Framework implementation is outside this design-only change. Exact default
+Backend implementation follows the CPU foundation checkpoint above. Exact default
 budgets, initial optional capability coverage, and internal worker integration
 are implementation measurements to record in follow-up work; public semantics
 above must not change merely to match one backend's convenient execution model.

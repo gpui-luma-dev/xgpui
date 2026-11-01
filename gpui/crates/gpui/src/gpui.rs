@@ -14,6 +14,7 @@ mod asset_cache;
 mod assets;
 mod bounds_tree;
 mod color;
+pub mod content;
 /// The default colors used by GPUI.
 pub mod colors;
 #[cfg(feature = "profiler")]
