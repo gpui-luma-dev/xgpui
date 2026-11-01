@@ -1,7 +1,7 @@
 //! Portable, CPU-only content descriptions and execution accounting.
 //!
 //! This is the foundation of the portable content API. Graphs currently support
-//! solids, immutable source images, image copies, and typed buffer data. Backend
+//! solids, immutable source images, copies, and typed render/compute pass graphs.
 //! Portable programs are parsed, validated and reflected without native GPU access.
 //! Backend execution, assets, and external imports are not connected yet; this
 //! module does not change the existing `CustomContent` rendering path.
@@ -9,12 +9,14 @@
 mod descriptors;
 mod graph;
 mod lifecycle;
+mod passes;
 mod program;
 mod uniforms;
 
 pub use descriptors::*;
 pub use graph::*;
 pub use lifecycle::*;
+pub use passes::*;
 pub use program::*;
 pub use uniforms::*;
 

@@ -1,3 +1,4 @@
+use super::passes::PassKey;
 use super::*;
 use std::{
     collections::{HashMap, HashSet},
@@ -61,14 +62,33 @@ impl ContentSource for Solid {
 /// A temporary image output, valid only in the builder that issued it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ImageRef {
-    graph: u64,
-    node: usize,
+    pub(super) graph: u64,
+    pub(super) node: usize,
+    pub(super) output: usize,
 }
 /// A temporary buffer output, valid only in the builder that issued it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct BufferRef {
-    graph: u64,
-    node: usize,
+    pub(super) graph: u64,
+    pub(super) node: usize,
+    pub(super) output: usize,
+}
+/// A selected output of one validated graph operation. Multiple outputs share
+/// a single execution/submission; selecting one never duplicates its dispatch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ResourceId {
+    pub(super) node: usize,
+    pub(super) output: usize,
+}
+impl ResourceId {
+    /// Operation index in dependency-first order.
+    pub fn node(self) -> usize {
+        self.node
+    }
+    /// Output index within that operation.
+    pub fn output(self) -> usize {
+        self.output
+    }
 }
 /// An immutable, explicitly bounded part of a buffer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -90,6 +110,16 @@ pub struct ContentCapabilities {
     pub max_buffer_bytes: u64,
     /// Supported internal texture formats (separate from presentation support).
     pub image_formats: Vec<PixelFormat>,
+    /// Available compute execution limits; `None` means compute is unsupported.
+    pub compute: Option<ComputeLimits>,
+    /// Storage image formats supported by the executor.
+    pub storage_image_formats: Vec<PixelFormat>,
+    /// Sampled image formats for which linear filtering is available.
+    pub filterable_image_formats: Vec<PixelFormat>,
+    /// Formats supported as render attachments.
+    pub renderable_image_formats: Vec<PixelFormat>,
+    /// Program binding and mesh interface limits.
+    pub bindings: BindingLimits,
 }
 impl Default for ContentCapabilities {
     fn default() -> Self {
@@ -102,6 +132,21 @@ impl Default for ContentCapabilities {
                 PixelFormat::Rgba16Float,
                 PixelFormat::R8,
             ],
+            compute: None,
+            storage_image_formats: Vec::new(),
+            filterable_image_formats: vec![
+                PixelFormat::Rgba8,
+                PixelFormat::Bgra8,
+                PixelFormat::Rgba16Float,
+                PixelFormat::R8,
+            ],
+            renderable_image_formats: vec![
+                PixelFormat::Rgba8,
+                PixelFormat::Bgra8,
+                PixelFormat::Rgba16Float,
+                PixelFormat::R8,
+            ],
+            bindings: BindingLimits::default(),
         }
     }
 }
@@ -161,8 +206,8 @@ pub enum ContentOperation {
     UploadImage(Arc<[u8]>),
     /// Copy a whole image with unchanged interpretation and layout.
     CopyImage {
-        /// Source node index.
-        source: usize,
+        /// Selected source image output.
+        source: ResourceId,
     },
     /// Immutable typed buffer upload.
     UploadBuffer(Arc<[u8]>),
@@ -170,37 +215,49 @@ pub enum ContentOperation {
     ZeroBuffer,
     /// Copy a checked source range into a fresh immutable buffer.
     CopyBuffer {
-        /// Source node index.
-        source: usize,
+        /// Selected source buffer output.
+        source: ResourceId,
         /// First source byte.
         offset: u64,
     },
+    /// Validated render pass with typed resource and geometry bindings.
+    Render(ResolvedRenderPass),
+    /// One validated dispatch producing all of its named fresh outputs.
+    Compute(ResolvedComputePass),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-enum RecipeOperation {
+pub(super) enum RecipeOperation {
     Solid(ColorValue),
     UploadImage(Arc<[u8]>),
     CopyImage,
     UploadBuffer(Arc<[u8]>),
     ZeroBuffer,
     CopyBuffer { offset: u64 },
+    Pass(PassKey),
 }
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct Recipe {
-    descriptor: ResourceDescriptor,
+    outputs: Vec<ResourceDescriptor>,
     operation: RecipeOperation,
-    inputs: Vec<RealizationKey>,
+    inputs: Vec<(RealizationKey, usize)>,
 }
 /// Collision-checked structural realization key; includes owned dependency recipes.
 /// Device generation and executor policy must be added by a device cache.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RealizationKey(Arc<Recipe>);
+/// Structural identity of one selected output, not just its producing operation.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct OutputKey {
+    operation: RealizationKey,
+    output: usize,
+}
 
 /// A validated operation with immutable payload and explicit resource dependencies.
 #[derive(Clone, Debug)]
 pub struct ContentNode {
-    descriptor: ResourceDescriptor,
+    outputs: Vec<ResourceDescriptor>,
+    byte_len: u64,
     operation: ContentOperation,
     dependencies: Vec<usize>,
     key: RealizationKey,
@@ -208,8 +265,12 @@ pub struct ContentNode {
 }
 impl ContentNode {
     /// Logical result storage and interpretation.
-    pub fn descriptor(&self) -> &ResourceDescriptor {
-        &self.descriptor
+    pub fn outputs(&self) -> &[ResourceDescriptor] {
+        &self.outputs
+    }
+    /// Total unpadded output storage of this operation, checked for overflow.
+    pub fn byte_len(&self) -> u64 {
+        self.byte_len
     }
     /// CPU operation to lower on the executor.
     pub fn operation(&self) -> &ContentOperation {
@@ -219,9 +280,17 @@ impl ContentNode {
     pub fn dependencies(&self) -> &[usize] {
         &self.dependencies
     }
-    /// Portable structural identity; labels and native handles are excluded.
-    pub fn realization_key(&self) -> &RealizationKey {
+    /// Whole-operation structural identity. Cache individual resources with
+    /// `output_key` so equally described outputs of one dispatch cannot alias.
+    pub fn operation_key(&self) -> &RealizationKey {
         &self.key
+    }
+    /// Collision-checked key for a particular output, including its selector.
+    pub fn output_key(&self, output: usize) -> Option<OutputKey> {
+        self.outputs.get(output).map(|_| OutputKey {
+            operation: self.key.clone(),
+            output,
+        })
     }
 }
 
@@ -229,7 +298,7 @@ impl ContentNode {
 #[derive(Debug)]
 pub struct ContentGraph {
     nodes: Vec<ContentNode>,
-    roots: Vec<usize>,
+    roots: Vec<ResourceId>,
     payload_bytes: u64,
 }
 impl ContentGraph {
@@ -258,11 +327,15 @@ impl ContentGraph {
         };
         let mut outputs = Vec::new();
         for root in roots {
-            outputs.push(builder.source(&root.content, &root.request)?.node);
+            let image = builder.source(&root.content, &root.request)?;
+            outputs.push(ResourceId {
+                node: image.node,
+                output: image.output,
+            });
         }
         builder.healthy()?;
         let mut needed = vec![false; builder.nodes.len()];
-        let mut stack = outputs.clone();
+        let mut stack: Vec<_> = outputs.iter().map(|id| id.node).collect();
         while let Some(id) = stack.pop() {
             if !needed[id] {
                 needed[id] = true;
@@ -282,9 +355,17 @@ impl ContentGraph {
             }
             match &mut node.operation {
                 ContentOperation::CopyImage { source }
-                | ContentOperation::CopyBuffer { source, .. } => *source = remap[*source],
+                | ContentOperation::CopyBuffer { source, .. } => source.node = remap[source.node],
                 ContentOperation::UploadImage(bytes) | ContentOperation::UploadBuffer(bytes) => {
                     payload_bytes += bytes.len() as u64
+                }
+                ContentOperation::Render(pass) => {
+                    pass.remap(&remap);
+                    payload_bytes += pass.payload_bytes();
+                }
+                ContentOperation::Compute(pass) => {
+                    pass.remap(&remap);
+                    payload_bytes += pass.payload_bytes();
                 }
                 _ => {}
             }
@@ -292,7 +373,13 @@ impl ContentGraph {
         }
         Ok(Self {
             nodes,
-            roots: outputs.into_iter().map(|id| remap[id]).collect(),
+            roots: outputs
+                .into_iter()
+                .map(|id| ResourceId {
+                    node: remap[id.node],
+                    output: id.output,
+                })
+                .collect(),
             payload_bytes,
         })
     }
@@ -301,7 +388,7 @@ impl ContentGraph {
         &self.nodes
     }
     /// One output node per requested root, including duplicate uses.
-    pub fn roots(&self) -> &[usize] {
+    pub fn roots(&self) -> &[ResourceId] {
         &self.roots
     }
     /// Retained upload payload bytes, counted once per unique operation.
@@ -323,10 +410,13 @@ pub struct ContentBuilder {
     payload_bytes: u64,
 }
 impl ContentBuilder {
-    fn healthy(&self) -> Result<()> {
+    pub(super) fn graph_identity(&self) -> u64 {
+        self.id
+    }
+    pub(super) fn healthy(&self) -> Result<()> {
         self.poison.clone().map_or(Ok(()), Err)
     }
-    fn checked<T>(&mut self, result: Result<T>) -> Result<T> {
+    pub(super) fn checked<T>(&mut self, result: Result<T>) -> Result<T> {
         if let Err(error) = &result {
             self.poison.get_or_insert_with(|| error.clone());
         }
@@ -364,15 +454,19 @@ impl ContentBuilder {
         self.described.insert(key, result);
         Ok(result)
     }
-    fn image_node(&mut self, image: ImageRef) -> Result<usize> {
+    pub(super) fn image_node(&mut self, image: ImageRef) -> Result<ResourceId> {
         self.healthy()?;
         let valid = image.graph == self.id
             && self
                 .nodes
                 .get(image.node)
-                .is_some_and(|n| matches!(n.descriptor, ResourceDescriptor::Image(_)));
+                .and_then(|n| n.outputs.get(image.output))
+                .is_some_and(|d| matches!(d, ResourceDescriptor::Image(_)));
         self.checked(if valid {
-            Ok(image.node)
+            Ok(ResourceId {
+                node: image.node,
+                output: image.output,
+            })
         } else {
             Err(error(
                 ContentErrorKind::InvalidReference,
@@ -380,15 +474,19 @@ impl ContentBuilder {
             ))
         })
     }
-    fn buffer_node(&mut self, buffer: BufferRef) -> Result<usize> {
+    pub(super) fn buffer_node(&mut self, buffer: BufferRef) -> Result<ResourceId> {
         self.healthy()?;
         let valid = buffer.graph == self.id
             && self
                 .nodes
                 .get(buffer.node)
-                .is_some_and(|n| matches!(n.descriptor, ResourceDescriptor::Buffer(_)));
+                .and_then(|n| n.outputs.get(buffer.output))
+                .is_some_and(|d| matches!(d, ResourceDescriptor::Buffer(_)));
         self.checked(if valid {
-            Ok(buffer.node)
+            Ok(ResourceId {
+                node: buffer.node,
+                output: buffer.output,
+            })
         } else {
             Err(error(
                 ContentErrorKind::InvalidReference,
@@ -401,18 +499,29 @@ impl ContentBuilder {
         descriptor: ResourceDescriptor,
         operation: ContentOperation,
         recipe: RecipeOperation,
-        dependencies: Vec<usize>,
+        inputs: Vec<ResourceId>,
+        payload: u64,
+    ) -> Result<usize> {
+        self.add_outputs(vec![descriptor], operation, recipe, inputs, payload)
+    }
+    pub(super) fn add_outputs(
+        &mut self,
+        outputs: Vec<ResourceDescriptor>,
+        operation: ContentOperation,
+        recipe: RecipeOperation,
+        inputs: Vec<ResourceId>,
         payload: u64,
     ) -> Result<usize> {
         self.healthy()?;
-        let supported = match &descriptor {
-            ResourceDescriptor::Image(d) => {
-                d.extent().width() <= self.capabilities.max_image_dimension
-                    && d.extent().height() <= self.capabilities.max_image_dimension
-                    && self.capabilities.image_formats.contains(&d.format())
-            }
-            ResourceDescriptor::Buffer(d) => d.byte_len() <= self.capabilities.max_buffer_bytes,
-        };
+        let supported = !outputs.is_empty()
+            && outputs.iter().all(|descriptor| match descriptor {
+                ResourceDescriptor::Image(d) => {
+                    d.extent().width() <= self.capabilities.max_image_dimension
+                        && d.extent().height() <= self.capabilities.max_image_dimension
+                        && self.capabilities.image_formats.contains(&d.format())
+                }
+                ResourceDescriptor::Buffer(d) => d.byte_len() <= self.capabilities.max_buffer_bytes,
+            });
         if !supported {
             return self.checked(Err(error(
                 ContentErrorKind::UnsupportedCapability,
@@ -420,16 +529,19 @@ impl ContentBuilder {
             )));
         }
         let key = RealizationKey(Arc::new(Recipe {
-            descriptor: descriptor.clone(),
+            outputs: outputs.clone(),
             operation: recipe,
-            inputs: dependencies
+            inputs: inputs
                 .iter()
-                .map(|id| self.nodes[*id].key.clone())
+                .map(|id| (self.nodes[id.node].key.clone(), id.output))
                 .collect(),
         }));
         if let Some(index) = self.keys.get(&key) {
             return Ok(*index);
         }
+        let mut dependencies: Vec<_> = inputs.iter().map(|id| id.node).collect();
+        dependencies.sort_unstable();
+        dependencies.dedup();
         let depth = dependencies
             .iter()
             .map(|id| self.nodes[*id].depth)
@@ -450,9 +562,20 @@ impl ContentBuilder {
             )));
         }
         let index = self.nodes.len();
+        let byte_len = outputs
+            .iter()
+            .try_fold(0u64, |sum, d| sum.checked_add(d.byte_len()))
+            .ok_or_else(|| {
+                error(
+                    ContentErrorKind::ResourceLimit,
+                    "operation output storage overflow",
+                )
+            });
+        let byte_len = self.checked(byte_len)?;
         self.payload_bytes += payload;
         self.nodes.push(ContentNode {
-            descriptor,
+            outputs,
+            byte_len,
             operation,
             dependencies,
             key: key.clone(),
@@ -485,6 +608,7 @@ impl ContentBuilder {
         Ok(ImageRef {
             graph: self.id,
             node,
+            output: 0,
         })
     }
     /// Describe an immutable upload. Payload concatenates all tightly packed mips.
@@ -512,12 +636,13 @@ impl ContentBuilder {
         Ok(ImageRef {
             graph: self.id,
             node,
+            output: 0,
         })
     }
     /// Copy an entire image into a fresh logical version, without implicit conversion.
     pub fn copy_image(&mut self, source: ImageRef) -> Result<ImageRef> {
         let source = self.image_node(source)?;
-        let descriptor = self.nodes[source].descriptor.clone();
+        let descriptor = self.nodes[source.node].outputs[source.output].clone();
         let node = self.add(
             descriptor,
             ContentOperation::CopyImage { source },
@@ -528,12 +653,13 @@ impl ContentBuilder {
         Ok(ImageRef {
             graph: self.id,
             node,
+            output: 0,
         })
     }
     /// Retrieve a checked source descriptor without assuming destination-sized output.
     pub fn image_descriptor(&mut self, image: ImageRef) -> Result<&ImageDescriptor> {
         let node = self.image_node(image)?;
-        match &self.nodes[node].descriptor {
+        match &self.nodes[node.node].outputs[node.output] {
             ResourceDescriptor::Image(d) => Ok(d),
             _ => unreachable!(),
         }
@@ -562,6 +688,7 @@ impl ContentBuilder {
         Ok(BufferRef {
             graph: self.id,
             node,
+            output: 0,
         })
     }
     /// Describe initialized zero storage without constructing a CPU zero array.
@@ -576,12 +703,13 @@ impl ContentBuilder {
         Ok(BufferRef {
             graph: self.id,
             node,
+            output: 0,
         })
     }
     /// Validate slice bounds/alignment/declared usage. Errors poison the attempt.
     pub fn validate_buffer_slice(&mut self, slice: BufferSlice, usage: BufferUsage) -> Result<()> {
         let node = self.buffer_node(slice.buffer)?;
-        let ResourceDescriptor::Buffer(d) = &self.nodes[node].descriptor else {
+        let ResourceDescriptor::Buffer(d) = &self.nodes[node.node].outputs[node.output] else {
             unreachable!()
         };
         let valid = !usage.is_empty()
@@ -615,7 +743,7 @@ impl ContentBuilder {
     ) -> Result<BufferRef> {
         self.validate_buffer_slice(source, BufferUsage::COPY_SOURCE)?;
         let index = self.buffer_node(source.buffer)?;
-        let ResourceDescriptor::Buffer(d) = &self.nodes[index].descriptor else {
+        let ResourceDescriptor::Buffer(d) = &self.nodes[index.node].outputs[index.output] else {
             unreachable!()
         };
         if source.byte_len != destination.byte_len()
@@ -642,6 +770,15 @@ impl ContentBuilder {
         Ok(BufferRef {
             graph: self.id,
             node,
+            output: 0,
         })
+    }
+    /// Inspect a validated buffer output, including a named compute result.
+    pub fn buffer_descriptor(&mut self, buffer: BufferRef) -> Result<&BufferDescriptor> {
+        let id = self.buffer_node(buffer)?;
+        match &self.nodes[id.node].outputs[id.output] {
+            ResourceDescriptor::Buffer(d) => Ok(d),
+            _ => unreachable!(),
+        }
     }
 }

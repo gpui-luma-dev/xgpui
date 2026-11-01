@@ -166,6 +166,14 @@ pub struct VertexInput {
     /// Required scalar type and lane count.
     pub ty: ShaderValueType,
 }
+/// An image/sampler pair actually used by selected stages, including helper calls.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SamplingPair {
+    /// Image resource name.
+    pub image: Arc<str>,
+    /// Sampler resource name.
+    pub sampler: Arc<str>,
+}
 /// Executor-reported compute limits. Construct from capabilities, not backend names.
 #[derive(Clone, Copy, Debug)]
 pub struct ComputeLimits {
@@ -204,6 +212,7 @@ struct ProgramData {
     vertex_inputs: Vec<VertexInput>,
     workgroup_size: Option<[u32; 3]>,
     workgroup_bytes: u64,
+    sampling_pairs: Vec<SamplingPair>,
 }
 /// Immutable validated WGSL and reflected interface. Equal reconstructed programs
 /// compare structurally; there is no caller-controlled numeric program identity.
@@ -297,6 +306,10 @@ impl PortableProgram {
     /// Resources used by selected stages, sorted by binding address.
     pub fn bindings(&self) -> &[ProgramBinding] {
         &self.0.bindings
+    }
+    /// Reflected pairings used for filtering/mip compatibility validation.
+    pub fn sampling_pairs(&self) -> &[SamplingPair] {
+        &self.0.sampling_pairs
     }
     /// Named used resource; unused globals are deliberately not required bindings.
     pub fn binding(&self, name: &str) -> Option<&ProgramBinding> {
@@ -522,12 +535,32 @@ impl PortableProgram {
                 "selected stages use distinct globals at the same binding address",
             ));
         }
+        let mut sampling_pairs = Vec::new();
+        for (entry, _) in &entries {
+            for pair in &info.get_entry_point(*entry).sampling_set {
+                sampling_pairs.push(SamplingPair {
+                    image: module.global_variables[pair.image]
+                        .name
+                        .as_deref()
+                        .unwrap()
+                        .into(),
+                    sampler: module.global_variables[pair.sampler]
+                        .name
+                        .as_deref()
+                        .unwrap()
+                        .into(),
+                });
+            }
+        }
+        sampling_pairs.sort();
+        sampling_pairs.dedup();
         Ok(Self(Arc::new(ProgramData {
             key,
             bindings,
             vertex_inputs,
             workgroup_size,
             workgroup_bytes,
+            sampling_pairs,
         })))
     }
 }

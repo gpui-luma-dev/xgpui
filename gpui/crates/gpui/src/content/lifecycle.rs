@@ -46,7 +46,7 @@ impl ExecutionPlan {
         }
         let mut consumers = vec![Vec::new(); graph.nodes().len()];
         for (id, node) in graph.nodes().iter().enumerate() {
-            if allocation_bytes[id] < node.descriptor().byte_len() {
+            if allocation_bytes[id] < node.byte_len() {
                 return Err(ContentError::new(
                     ContentErrorKind::InvalidDescriptor,
                     "native allocation charge undercounts logical storage",
@@ -56,7 +56,7 @@ impl ExecutionPlan {
                 consumers[*dependency].push(id);
             }
         }
-        let roots: HashSet<_> = graph.roots().iter().copied().collect();
+        let roots: HashSet<_> = graph.roots().iter().map(|id| id.node()).collect();
         let mut remaining: Vec<_> = consumers.iter().map(Vec::len).collect();
         let mut live = 0u64;
         let mut peak_bytes = 0;

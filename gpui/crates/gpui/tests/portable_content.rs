@@ -62,11 +62,7 @@ fn chain(copies: usize) -> Content {
 }
 fn tracker(roots: &[ContentRoot], bytes: u64, recordings: usize) -> ExecutionTracker {
     let graph = graph(roots);
-    let charges = graph
-        .nodes()
-        .iter()
-        .map(|node| node.descriptor().byte_len())
-        .collect();
+    let charges = graph.nodes().iter().map(ContentNode::byte_len).collect();
     ExecutionPlan::new(
         graph,
         charges,
@@ -133,7 +129,8 @@ fn canonical_colors_and_inline_values_share_collision_checked_realizations() {
     assert_eq!(a.id(), a.clone().id());
     let g = graph(&[root(a), root(b.labeled("another label"))]);
     assert_eq!(g.nodes().len(), 1);
-    assert_eq!(g.roots(), &[0, 0]);
+    assert_eq!(g.roots().len(), 2);
+    assert_eq!(g.roots()[0], g.roots()[1]);
     #[derive(Default)]
     struct ConstantHash;
     impl Hasher for ConstantHash {
@@ -144,32 +141,23 @@ fn canonical_colors_and_inline_values_share_collision_checked_realizations() {
     }
     let other = graph(&[root(Content::solid(red()))]);
     let mut map = HashMap::<_, _, BuildHasherDefault<ConstantHash>>::default();
-    map.insert(g.nodes()[0].realization_key().clone(), "green");
-    map.insert(other.nodes()[0].realization_key().clone(), "red");
+    map.insert(g.nodes()[0].operation_key().clone(), "green");
+    map.insert(other.nodes()[0].operation_key().clone(), "red");
     assert_eq!(map.len(), 2);
-    assert_eq!(map[g.nodes()[0].realization_key()], "green");
+    assert_eq!(map[g.nodes()[0].operation_key()], "green");
 }
 
 #[test]
 fn structural_keys_include_extent_and_dependency_recipe_across_graphs() {
     let a = graph(&[root(chain(1))]);
     let b = graph(&[root(chain(1))]);
-    assert_eq!(
-        a.nodes()[1].realization_key(),
-        b.nodes()[1].realization_key()
-    );
-    assert_ne!(
-        a.nodes()[0].realization_key(),
-        a.nodes()[1].realization_key()
-    );
+    assert_eq!(a.nodes()[1].operation_key(), b.nodes()[1].operation_key());
+    assert_ne!(a.nodes()[0].operation_key(), a.nodes()[1].operation_key());
     let mut larger = root(chain(1));
     larger.request =
         ContentRequest::new(size(px(8.), px(4.)), ImageExtent::new(8, 4).unwrap(), 1.).unwrap();
     let c = graph(&[larger]);
-    assert_ne!(
-        a.nodes()[1].realization_key(),
-        c.nodes()[1].realization_key()
-    );
+    assert_ne!(a.nodes()[1].operation_key(), c.nodes()[1].operation_key());
 }
 
 #[test]
@@ -271,7 +259,7 @@ fn uploads_are_source_sized_and_payloads_are_deduplicated() {
     let content = source(move |cx, _| cx.upload_image(descriptor.clone(), Arc::from([255u8; 8])));
     let g = graph(&[root(content.clone()), root(content)]);
     assert_eq!(g.payload_bytes(), 8);
-    let ResourceDescriptor::Image(output) = g.nodes()[0].descriptor() else {
+    let ResourceDescriptor::Image(output) = &g.nodes()[0].outputs()[0] else {
         panic!()
     };
     assert_eq!(output.extent(), ImageExtent::new(2, 1).unwrap());
@@ -299,10 +287,10 @@ fn unused_operations_are_pruned_and_copy_dependencies_are_remapped() {
     let g = graph(&[root(content)]);
     assert_eq!(g.nodes().len(), 2);
     assert_eq!(g.nodes()[1].dependencies(), &[0]);
-    assert!(matches!(
-        g.nodes()[1].operation(),
-        ContentOperation::CopyImage { source: 0 }
-    ));
+    let ContentOperation::CopyImage { source } = g.nodes()[1].operation() else {
+        panic!()
+    };
+    assert_eq!((source.node(), source.output()), (0, 0));
 }
 
 #[test]
