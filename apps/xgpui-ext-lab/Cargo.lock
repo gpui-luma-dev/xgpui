@@ -6375,6 +6375,7 @@ dependencies = [
  "libc",
  "log",
  "lyon",
+ "naga",
  "num_cpus",
  "objc2-core-foundation",
  "objc2-core-video",

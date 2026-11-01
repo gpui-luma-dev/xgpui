@@ -2,16 +2,21 @@
 //!
 //! This is the foundation of the portable content API. Graphs currently support
 //! solids, immutable source images, image copies, and typed buffer data. Backend
-//! execution, shaders, assets, and external imports are not connected yet; this
+//! Portable programs are parsed, validated and reflected without native GPU access.
+//! Backend execution, assets, and external imports are not connected yet; this
 //! module does not change the existing `CustomContent` rendering path.
 
 mod descriptors;
 mod graph;
 mod lifecycle;
+mod program;
+mod uniforms;
 
 pub use descriptors::*;
 pub use graph::*;
 pub use lifecycle::*;
+pub use program::*;
+pub use uniforms::*;
 
 /// A structured failure while describing, planning, or tracking content.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,6 +42,8 @@ pub enum ContentErrorKind {
     UnsupportedCapability,
     /// A lifecycle transition violates dependency or ownership ordering.
     InvalidTransition,
+    /// Shader syntax, semantics, or selected stage interfaces are invalid.
+    ShaderValidation,
 }
 
 impl ContentError {

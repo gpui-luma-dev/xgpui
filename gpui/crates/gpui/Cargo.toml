@@ -80,6 +80,7 @@ image = { version = "0.25.1", default-features = false, features = [
 inventory = { version = "0.3.19" }
 itertools = { version = "0.14.0" }
 log = { version = "0.4", default-features = false, features = ["std"] }
+naga = { version = "30.0.1", features = ["wgsl-in"] }
 num_cpus = "1.13"
 parking = "2.0.0"
 parking_lot = { version = "0.12.1" }

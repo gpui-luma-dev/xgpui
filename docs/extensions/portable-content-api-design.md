@@ -66,8 +66,18 @@ an executor must install it in the native completion callback before submission.
 Owner types can be thread-safe `Arc` or thread-affine `Rc`. `PresentationEpoch`
 rejects stale and cross-window generation tokens.
 
+`PortableProgram` now parses and validates WGSL with Naga, links selected
+vertex/fragment interfaces, reflects used resource bindings (including helper
+function use), and records image interpretation contracts. It supports generated
+fullscreen vertices, mesh vertex-input reflection, compute workgroup/dispatch
+validation, storage buffer runtime tails, and storage-image format/access
+reflection. Programs have structural equality and are worker-safe CPU artifacts.
+`UniformValues` packs f32/i32/u32 scalars and vectors and f32 matrices through
+reflected offsets, with finite-value checks and initialized padding. Source WGSL
+validation does not prove actual pixel color/alpha meaning or native compilation.
+
 This is CPU-only infrastructure, not a connected renderer or the fix for #110.
-It currently materializes every planned node. Shader/render/compute bindings,
+It currently materializes every planned node. Render/compute graph bindings,
 asset readiness, external imports, draw mapping/slots, device-wide admission,
 platform presentation, native completion services, and backend lowering remain
 implementation work. Buffer operations validate and describe data; their GPU
@@ -77,13 +87,28 @@ Run the deterministic integration suite from the repository root:
 
 ```sh
 cargo test --manifest-path gpui/crates/gpui/Cargo.toml \
-  --test portable_content --features gpui_platform/runtime_shaders
+  --test portable_content --test portable_content_programs \
+  --features gpui_platform/runtime_shaders
 ```
 
 The focused integration target avoids an existing unrelated property-test macro
 failure in the library unit-test target. Tests use fake completion notifications
 and do not claim native GPU validation. The Metal baseline regression remains
 unchanged and is still expected to reproduce the deadlock.
+
+What to look for at this checkpoint: both test targets pass (22 graph/lifecycle
+tests and 17 program/uniform tests). No window opens and no native GPU access is
+required. Matrix tests cover all nine 2–4-column/row combinations; shader tests
+reject mismatched stages, conflicting resource addresses, wrong/missing image
+contracts, invalid uniforms, and unavailable/excessive compute dispatch. Existing
+apps should render as before because the new artifacts are not wired into draws.
+
+Current explicit program limits: one vec4<f32> color target, no fragment depth
+output, read-only render storage, ordinary samplers, non-arrayed single-sample
+floating-point 2D images, and top-level scalar/vector/matrix uniform members.
+Nested uniform structs/arrays, specialization overrides, comparison/depth samplers,
+and additional image/output kinds return errors instead of silent reinterpretation.
+These are initial implementation boundaries, not permanent API design exclusions.
 
 ## Public types and construction
 
