@@ -87,7 +87,10 @@ impl Worker {
         stats: &mut WgpuContentStats,
     ) -> Result<Arc<Pipeline>> {
         if let Some(pipeline) = self.pipelines.get(&key) {
-            return Ok(pipeline.clone());
+            let pipeline = pipeline.clone();
+            self.pipeline_order.retain(|cached| cached != &key);
+            self.pipeline_order.push_back(key);
+            return Ok(pipeline);
         }
         let program = &key.program;
         let count = program
@@ -265,13 +268,16 @@ impl Worker {
         };
         stats.pipeline_compilations += 1;
         if self.pipelines.len() >= self.options.pipeline_cache_entries {
-            self.pipelines.clear();
+            if let Some(oldest) = self.pipeline_order.pop_front() {
+                self.pipelines.remove(&oldest);
+            }
         }
         let pipeline = Arc::new(Pipeline {
             state,
             layouts,
             program: key.program.clone(),
         });
+        self.pipeline_order.push_back(key.clone());
         self.pipelines.insert(key, pipeline.clone());
         Ok(pipeline)
     }

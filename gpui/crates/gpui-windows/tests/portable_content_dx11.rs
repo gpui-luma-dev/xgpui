@@ -477,7 +477,7 @@ fn native_compute_generated_mesh_and_indices_use_vertex_buffers() {
 #[test]
 fn native_unaligned_buffer_copy_is_gpu_ordered_and_preserves_index_bytes() {
     let ex = executor();
-    let f = frame(
+    let g = graph(
         &ex,
         vec![source(|cx, _| {
             let out = mesh_outputs(cx, false, false)?;
@@ -503,7 +503,15 @@ fn native_unaligned_buffer_copy_is_gpu_ordered_and_preserves_index_bytes() {
             ))
         })],
     );
-    red_triangle(&f.images[0]);
+    for iteration in 0..3 {
+        let f = ex
+            .submit(g.clone(), Default::default())
+            .unwrap()
+            .wait_for_readback(Duration::from_secs(20))
+            .unwrap();
+        red_triangle(&f.images[0]);
+        assert_eq!(f.stats.byte_copy_compilations, usize::from(iteration == 0));
+    }
 }
 
 #[test]
@@ -901,4 +909,49 @@ fn native_num_workgroups_reports_dispatch_dimensions() {
         })],
     );
     all_rgba8(&f.images[0], [191, 128, 64, 255]);
+}
+
+#[test]
+fn hot_pipeline_survives_a_cold_pipeline_cache_miss() {
+    let ex = Dx11ContentExecutor::new(Dx11ContentOptions {
+        pipeline_cache_entries: 2,
+        queue_capacity: 1,
+        ..Default::default()
+    })
+    .unwrap();
+    let color = |red: f32| {
+        source(move |cx, _| {
+            let p = PortableProgram::fullscreen(
+                format!(
+                    "@fragment fn paint()->@location(0)vec4<f32>{{return vec4({red},0.,0.,1.);}}"
+                ),
+                "paint",
+                srgb(),
+                ImageContracts::new(),
+            )?;
+            cx.render(RenderPass::fullscreen(&p, target()))
+        })
+    };
+    let a = graph(&ex, vec![color(0.125)]);
+    let b = graph(&ex, vec![color(0.25)]);
+    let c = graph(&ex, vec![color(0.5)]);
+    for (g, red, compilations) in [
+        (a.clone(), 32, 1),
+        (b.clone(), 64, 1),
+        (a.clone(), 32, 0),
+        (c, 128, 1),
+        (a, 32, 0),
+        (b, 64, 1),
+    ] {
+        let f = ex
+            .submit(g, Default::default())
+            .unwrap()
+            .wait_for_readback(Duration::from_secs(20))
+            .unwrap();
+        all_rgba8(&f.images[0], [red, 0, 0, 255]);
+        assert_eq!(
+            f.stats.pipeline_compilations, compilations,
+            "hot pipelines must survive a cache miss for an unrelated program"
+        );
+    }
 }

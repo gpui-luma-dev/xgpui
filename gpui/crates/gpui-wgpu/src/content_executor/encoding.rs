@@ -181,6 +181,7 @@ impl Worker {
             )
         }) {
             self.pipelines.clear();
+            self.pipeline_order.clear();
             self.byte_copy = None;
         }
         result

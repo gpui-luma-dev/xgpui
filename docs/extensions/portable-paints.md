@@ -85,3 +85,10 @@ executor with native runtime acceptance pending. Browser runtime results are rec
 
 [Design and lifecycle](portable-content-api-design.md) ·
 [Native Metal](native-metal-paints.md) · [Native D3D11](native-dx11-paints.md)
+
+
+Pipeline reuse acceptance includes `hot_pipeline_survives_a_cold_pipeline_cache_miss`:
+with two cache entries, introducing a cold third program must preserve the recently
+used program without recompilation. Every generation also checks its rendered
+color. The cache evicts one least-recently-used entry; active graphs retain their
+own pipeline references. This test is included in the graph command above.

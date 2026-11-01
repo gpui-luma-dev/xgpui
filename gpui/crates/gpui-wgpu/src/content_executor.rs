@@ -208,6 +208,7 @@ struct Worker {
     options: WgpuContentOptions,
     capabilities: c::ContentCapabilities,
     pipelines: HashMap<PipelineKey, Arc<Pipeline>>,
+    pipeline_order: VecDeque<PipelineKey>,
     exported: Arc<AtomicU64>,
     byte_copy: Option<(wgpu::ComputePipeline, wgpu::BindGroupLayout)>,
 }
@@ -248,6 +249,7 @@ impl WgpuContentExecutor {
             options: options.clone(),
             capabilities: capabilities.clone(),
             pipelines: HashMap::new(),
+            pipeline_order: VecDeque::new(),
             byte_copy: None,
             exported: exported.clone(),
         };

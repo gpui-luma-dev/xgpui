@@ -74,7 +74,7 @@ cargo run --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Car
 cargo run --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features portable-shaders -- --portable-shader
 ```
 
-The graph suite should report **17 passed and one ignored subprocess helper**;
+The graph suite should report **18 passed and one ignored subprocess helper**;
 the helper is exercised by the bounded 512-root parent test. The producer suite
 should report **three passed**. Graphics Tools/debug-layer installations enable
 the existing debug-device setup in debug builds. Neither suite substitutes wgpu
@@ -116,3 +116,13 @@ Windows VM is marked invalid. Passing cross-checks is not a GPU runtime claim.
 
 [Portable design and lifecycle](portable-content-api-design.md) ·
 [wgpu](portable-paints.md) · [Metal](native-metal-paints.md)
+
+
+## Shader and pipeline reuse checks
+
+The graph suite also verifies that a hot pipeline survives an unrelated miss in
+a two-entry cache. `native_unaligned_buffer_copy_is_gpu_ordered_and_preserves_index_bytes`
+replays three times and asserts byte-copy helper compilations of 1, 0, 0, with
+correct triangle pixels each time. The helper is private to its worker/device;
+cache eviction removes one least-recently-used user pipeline at a time. Windows
+runtime execution of these checks remains pending.

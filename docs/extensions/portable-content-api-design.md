@@ -1173,3 +1173,33 @@ window without another click. Repeat density switches and resize/replace rapidly
 In paint-lab, drag conic angle continuously and animate mesh/User WGSL; pixels must
 keep advancing without blank flashes or waiting for input release. Repeatedly
 open/close windows during updates to check callback and subscription teardown.
+
+
+### Review corrections: reusable shaders and selective pipeline eviction
+
+The D3D11 byte-copy helper is compiled/created lazily once per worker/device and
+reused across unaligned copies and generations. Failed creation is not cached;
+a new device starts a new cache. Per-job `byte_copy_compilations` reports actual
+helper compilations. The unaligned-copy acceptance fixture replays three times,
+verifies the triangle's index bytes/pixels and requires compilation counts 1, 0, 0.
+
+wgpu and D3D11 pipeline caches now evict only the least recently used entry when
+full. Cache hits refresh recency; graph-owned Arc references still protect active
+pipelines. The wgpu driver-validation failure path clears both cache and recency
+state. A two-entry acceptance test alternates hot and cold shader programs: a
+third program must not force recompilation of the recently used program, and all
+rendered colors must remain correct.
+
+Validation: all 16 wgpu graph tests pass on native wgpu/Metal, including the dense
+subprocess helper. Windows library/tests cross-check with the new cache and
+unaligned-copy regressions, and the browser Wasm build cross-check passes; D3D11
+runtime acceptance remains pending. The X11
+cross-check stops in fontconfig's build script because the host has no configured
+Linux pkg-config/sysroot; Linux runtime acceptance is also pending.
+
+Run `hot_pipeline_survives_a_cold_pipeline_cache_miss` through the wgpu graph
+integration test and, on Windows, through `portable_content_dx11`. Run
+`native_unaligned_buffer_copy_is_gpu_ordered_and_preserves_index_bytes` on Windows
+for helper reuse. Expect passing pixel assertions, no extra hot-pipeline
+compilation, and exactly one helper compilation across repeated copies. These
+checks prove reuse and output correctness, not native Windows frame-time gains.

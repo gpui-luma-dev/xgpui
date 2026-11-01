@@ -301,6 +301,7 @@ impl Worker {
                 "D3D11 content canceled before execution",
             ));
         }
+        let byte_copy_before = self.byte_copy_compilations.load(Ordering::Relaxed);
         let mut stats = Dx11ContentStats {
             worker_thread: Some("dx11-portable-content".into()),
             ..Default::default()
@@ -450,6 +451,8 @@ impl Worker {
             });
         }
         let mut stats = run.stats;
+        stats.byte_copy_compilations =
+            (self.byte_copy_compilations.load(Ordering::Relaxed) - byte_copy_before) as usize;
         drop(run.resources);
         drop(run.tracker);
         let mut images = vec![];
@@ -563,13 +566,22 @@ impl Worker {
             }
             return Ok(());
         }
-        let code=crate::custom_draw::compile("ByteAddressBuffer src:register(t0); RWByteAddressBuffer dst:register(u0); cbuffer Params:register(b0){uint offset;uint len;uint2 pad;} [numthreads(64,1,1)] void copy_bytes(uint3 id:SV_DispatchThreadID){uint start=id.x*4;if(start>=len)return;uint word=0;for(uint i=0;i<4;i++){if(start+i<len){uint at=offset+start+i;word|=((src.Load((at/4)*4)>>((at%4)*8))&255)<<(i*8);}}dst.Store(start,word);}","copy_bytes","cs_5_0").map_err(execution)?;
-        let mut shader = None;
-        unsafe {
-            self.device
-                .CreateComputeShader(&code, None, Some(&mut shader))
-                .map_err(allocation)?;
-        }
+        let shader = {
+            let mut cached = self.byte_copy_shader.lock().unwrap();
+            if cached.is_none() {
+                let code=crate::custom_draw::compile("ByteAddressBuffer src:register(t0); RWByteAddressBuffer dst:register(u0); cbuffer Params:register(b0){uint offset;uint len;uint2 pad;} [numthreads(64,1,1)] void copy_bytes(uint3 id:SV_DispatchThreadID){uint start=id.x*4;if(start>=len)return;uint word=0;for(uint i=0;i<4;i++){if(start+i<len){uint at=offset+start+i;word|=((src.Load((at/4)*4)>>((at%4)*8))&255)<<(i*8);}}dst.Store(start,word);}","copy_bytes","cs_5_0").map_err(execution)?;
+                let mut shader = None;
+                unsafe {
+                    self.device
+                        .CreateComputeShader(&code, None, Some(&mut shader))
+                        .map_err(allocation)?;
+                }
+                let shader = shader.ok_or_else(|| allocation("missing byte copy shader"))?;
+                self.byte_copy_compilations.fetch_add(1, Ordering::Relaxed);
+                *cached = Some(shader);
+            }
+            cached.as_ref().unwrap().clone()
+        };
         let mut desc = D3D11_BUFFER_DESC::default();
         unsafe {
             src.GetDesc(&mut desc);
@@ -586,7 +598,7 @@ impl Worker {
             .collect::<Vec<_>>();
         let params = buffer(&self.device, 16, true, Some(&values))?;
         unsafe {
-            self.deferred.CSSetShader(shader.as_ref(), None);
+            self.deferred.CSSetShader(&shader, None);
             self.deferred.CSSetShaderResources(0, Some(&[Some(view)]));
             self.deferred
                 .CSSetUnorderedAccessViews(0, 1, Some([Some(output)].as_ptr()), None);

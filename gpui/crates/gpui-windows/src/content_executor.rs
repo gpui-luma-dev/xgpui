@@ -75,6 +75,7 @@ pub struct Dx11ContentStats {
     pub submissions: usize,
     pub max_in_flight: usize,
     pub pipeline_compilations: usize,
+    pub byte_copy_compilations: usize,
     pub peak_reserved_bytes: u64,
     pub readbacks: usize,
     pub worker_thread: Option<String>,
@@ -215,6 +216,8 @@ impl GpuImage {
 }
 struct Worker {
     recording_failed: AtomicBool,
+    byte_copy_shader: Mutex<Option<ID3D11ComputeShader>>,
+    byte_copy_compilations: AtomicU64,
     quarantine: Mutex<Vec<encoding::Flight>>,
     sampling: Arc<Mutex<Vec<(ID3D11Query, Vec<GpuImage>)>>>,
     device: ID3D11Device,
@@ -222,6 +225,7 @@ struct Worker {
     deferred: ID3D11DeviceContext,
     options: Dx11ContentOptions,
     pipelines: HashMap<PipelineKey, Arc<Pipeline>>,
+    pipeline_order: VecDeque<PipelineKey>,
     exported: Arc<AtomicU64>,
 }
 pub struct Dx11ContentExecutor {
@@ -266,6 +270,8 @@ impl Dx11ContentExecutor {
         let sampling = Arc::new(Mutex::new(Vec::new()));
         let worker = Worker {
             recording_failed: AtomicBool::new(false),
+            byte_copy_shader: Mutex::new(None),
+            byte_copy_compilations: AtomicU64::new(0),
             sampling: sampling.clone(),
             quarantine: Mutex::new(Vec::new()),
             device,
@@ -273,6 +279,7 @@ impl Dx11ContentExecutor {
             deferred: deferred.ok_or_else(|| execution("missing portable context"))?,
             options: options.clone(),
             pipelines: HashMap::new(),
+            pipeline_order: VecDeque::new(),
             exported: exported.clone(),
         };
         let (sender, receiver) = std::sync::mpsc::sync_channel::<Request>(options.pending_jobs);

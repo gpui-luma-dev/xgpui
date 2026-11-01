@@ -85,7 +85,10 @@ impl Worker {
         stats: &mut Dx11ContentStats,
     ) -> Result<Arc<Pipeline>> {
         if let Some(p) = self.pipelines.get(&key) {
-            return Ok(p.clone());
+            let pipeline = p.clone();
+            self.pipeline_order.retain(|cached| cached != &key);
+            self.pipeline_order.push_back(key);
+            return Ok(pipeline);
         }
         for binding in key.program.bindings() {
             if matches!(
@@ -195,8 +198,11 @@ impl Worker {
         }
         let p = Arc::new(p);
         if self.pipelines.len() >= self.options.pipeline_cache_entries {
-            self.pipelines.clear();
+            if let Some(oldest) = self.pipeline_order.pop_front() {
+                self.pipelines.remove(&oldest);
+            }
         }
+        self.pipeline_order.push_back(key.clone());
         self.pipelines.insert(key, p.clone());
         stats.pipeline_compilations += 1;
         Ok(p)
