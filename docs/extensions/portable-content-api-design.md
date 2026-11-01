@@ -1099,3 +1099,16 @@ Chromium without warning/error console messages; interactive animation and edits
 remain manual acceptance. Linux cross-check stopped in the Wayland C dependency
 because this macOS environment lacks a Linux C sysroot; Linux and Windows native
 runtime acceptance are not claimed.
+
+
+### Browser animation admission correction
+
+Continuous browser frames could cancel an unfinished multi-output graph before
+its later mesh/WGSL outputs ran. wgpu presentation now lets its one running
+graph finish, harvests completed slot history, then admits the latest requested
+description. Newer inputs coalesce without adding jobs or restarting the running
+graph; scene removal still cancels it. A deterministic gate regression changes
+inputs twelve times while execution is paused and requires one unchanged request
+count, completion of the admitted pixels, then the latest generation. The browser
+animated cards are first in the gallery so their motion is visible beside the
+controls.

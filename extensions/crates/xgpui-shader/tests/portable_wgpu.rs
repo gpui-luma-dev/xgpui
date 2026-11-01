@@ -140,6 +140,16 @@ fn wgpu_compositor_presents_completed_content_without_producer_readback() {
         .render_scene_to_image(&blue, size(DevicePixels(16), DevicePixels(8)))
         .unwrap();
     assert!(blue_gate.wait_until_entered(Duration::from_secs(20)));
+    // Input continues while execution is paused. The admitted generation must
+    // finish rather than restart at node zero for every newer frame.
+    let requests = renderer.content_presentation_stats().requests;
+    for i in 0..12 {
+        let newer = make([i as f32 / 12., 0.2, 0.8, 1.]);
+        renderer
+            .render_scene_to_image(&newer, size(DevicePixels(16), DevicePixels(8)))
+            .unwrap();
+        assert_eq!(renderer.content_presentation_stats().requests, requests);
+    }
     blue_gate.release();
     rx.recv_timeout(Duration::from_secs(20)).unwrap();
     let yellow_gate = Arc::new(WgpuContentTestGate::default());

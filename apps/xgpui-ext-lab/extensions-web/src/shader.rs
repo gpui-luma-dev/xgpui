@@ -233,7 +233,7 @@ impl Render for ShaderDemo {
             .bg(rgb(0x111827)).text_color(rgb(0xeff4fc)).font_family("IBM Plex Sans")
             .flex().flex_col().gap_4()
             .child(div().text_xl().child("Portable shader content · WebAssembly"))
-            .child("Rounded backgrounds, borders and paths share each paint. Resize the browser to test caching and clipping.")
+            .child("Animate the mesh and WGSL cards below. Other cards are static references. Each paint is shared by its background, border and path.")
             .child(div().flex().gap_3()
                 .child(div().id("animate").p_2().bg(rgb(0x374151)).cursor_pointer()
                     .child(if self.animated { "Pause animation" } else { "Animate mesh + WGSL" })
@@ -248,8 +248,8 @@ impl Render for ShaderDemo {
                         cx.notify();
                     }))))
             .child(div().flex().flex_wrap().gap_4()
-                .children(self.paints.iter().enumerate().map(|(index,(label,paint))|card(label,paint.clone(),opacity,self.slots[index])))
                 .child(card("Hermite mesh", self.mesh_paint.clone(), opacity,self.slots[self.paints.len()]))
-                .child(card("Portable WGSL", self.wash.clone(), opacity,self.slots[self.paints.len()+1])))
+                .child(card("Portable WGSL", self.wash.clone(), opacity,self.slots[self.paints.len()+1]))
+                .children(self.paints.iter().enumerate().map(|(index,(label,paint))|card(label,paint.clone(),opacity,self.slots[index]))))
     }
 }
