@@ -1,0 +1,106 @@
+{
+  "scope": "Local render-callback intervals during bounded camera sweeps; not isolated GPU time or confirmed displayed FPS",
+  "inactive_window_throttle_disabled": true,
+  "platform": "macos-aarch64",
+  "viewport_logical": [
+    1100.0,
+    634.0
+  ],
+  "scale_factor": 2.0,
+  "moving_samples": 510,
+  "moving_frames_without_usable_front": 3,
+  "moving_frames_with_exposed_guard_band": 5,
+  "coverage_by_stage_missing_exposed": [
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      3
+    ],
+    [
+      0,
+      0
+    ],
+    [
+      3,
+      0
+    ],
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      0,
+      0
+    ]
+  ],
+  "moving_mean_ms": 16.50826830196079,
+  "moving_p95_ms": 17.667416,
+  "moving_max_ms": 17.818625,
+  "completed_views": [
+    {
+      "stage": "startup",
+      "elapsed_ms": 198.613,
+      "zoom": 1.0,
+      "gpu": true,
+      "dimensions": [
+        1600,
+        922
+      ]
+    },
+    {
+      "stage": "gpu-detail",
+      "elapsed_ms": 182.531958,
+      "zoom": 32.0,
+      "gpu": true,
+      "dimensions": [
+        1600,
+        922
+      ]
+    },
+    {
+      "stage": "minimum-zoom",
+      "elapsed_ms": 184.357125,
+      "zoom": 0.01,
+      "gpu": true,
+      "dimensions": [
+        1600,
+        922
+      ]
+    },
+    {
+      "stage": "maximum-zoom",
+      "elapsed_ms": 583.338125,
+      "zoom": 10000000000.0,
+      "gpu": false,
+      "dimensions": [
+        960,
+        553
+      ]
+    },
+    {
+      "stage": "reset",
+      "elapsed_ms": 200.11916699999998,
+      "zoom": 1.0,
+      "gpu": true,
+      "dimensions": [
+        1600,
+        922
+      ]
+    }
+  ]
+}

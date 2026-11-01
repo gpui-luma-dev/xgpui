@@ -127,38 +127,108 @@ controlled hardware benchmark.
 RFC coverage, API boundaries, limitations, and the next implementation plan are
 recorded in [`docs/extensions/canvas.md`](../../../docs/extensions/canvas.md).
 
-## CPU Mandelbrot image example
+## Coherent-frame Mandelbrot explorer
 
 Press **F** to switch between cards and Mandelbrot, or start directly with:
 
 ```sh
 just canvas-lab --mandelbrot
+MTL_HUD_ENABLED=1 just canvas-lab --mandelbrot
 ```
 
-Drag with the left button or scroll to pan; pinch zooms at the pointer. **R**
-resets the camera. **M** enables/disables the current-view preview, which starts
-hidden in Mandelbrot mode to avoid readback stalls. The whole-scene card
-minimap is unavailable in this mode; switching content resets the camera.
+Left drag pans; two-finger scrolling or the mouse wheel zooms around the pointer.
+Pinch is disabled in Mandelbrot mode. **Reset view (R)** restores the startup
+position and 100% zoom. **M** enables the optional readback-based live preview;
+it starts hidden to avoid its separate performance cost. Card controls are unchanged.
 
-The fractal uses f64 CPU escape-time calculations on a background executor and
-uploads ordinary BGRA images through GPUI's image painter. No custom fractal
-shader is involved. World-aligned 256×256 tiles are cached across camera changes;
-coarser coverage appears first, followed by full-detail tiles nearest the view
-center. Cached finer detail stays on top rather than being replaced by coarse
-frames. One-texel gutters prevent texture filtering seams. The cache retains up
-to 384 tiles (about 98 MiB of CPU pixels, plus GPU storage).
+The native explorer displays one complete, immutable viewport image. Camera
+changes immediately reproject that image, including an overscan guard band (1.5× viewport span for GPU frames; 3× for CPU
+previews and 1.25× for CPU detail).
+Its successor prepares offscreen with zero sampling opacity, then replaces the
+front image only when ready. No world tiles, tile boundaries or partial detail
+passes are presented. Large pans/zoom jumps can exhaust the guard band; newly
+exposed areas retain the background until a complete replacement is ready.
 
-Obsolete work is cancelled at row boundaries, and generation checks reject stale
-completions. The iteration budget increases with tile zoom from 256 to at most
-2,048. Mandelbrot supports 0.01–10 billion times zoom through the camera's explicit
-`zoom_at_with_limits` API; the card scene retains its 0.01–64 default. This is
-finite f64 exploration, not arbitrary-precision infinite zoom. Deep boundary
-regions can still take time to refine, and iteration caps can classify unresolved
-points as interior. The optional live preview still has its separate GPU readback
-cost. This is not a CPU/GPU benchmark.
+GPU navigation uses one steady source resolution, capped at 1,920 pixels on the
+longest side, with the same sampling density during movement and at rest. It does
+not switch between a blocky GPU preview and a sharp final pass.
 
-Capture a refined native frame and exit:
+Deep CPU navigation uses a 128-pixel preview only when a replacement is needed.
+A sharper completed image is retained and reprojected while it still covers the
+view and has better sampling density. After 140 ms without a camera change, a
+960-pixel detail frame is requested and blended in over 180 ms in linear light.
+Refinement keeps the same iteration budget and palette. These are source-resolution
+caps including overscan, not a full physical-pixel-resolution guarantee.
+Only one successor is prepared at a time; obsolete detail is cancelled/rejected.
+A CPU preview may finish across input events to avoid starvation, but is accepted
+only if it remains near the current view. There is no queue of intermediate camera
+states. Deep CPU views can still look softer while moving; their calculation is
+not a deep-zoom GPU renderer.
+
+On native Metal with accepted wide SDR, shallow views (up to 64×, subject to a
+coordinate precision check) use a cached compute pipeline writing linear P3
+RGBA16F textures directly on the host GPU. No CPU pixel generation, image upload
+or pixel readback is involved in that route. Only the host submits commands;
+preparation never waits for GPU completion. The front frame changes after a
+nonblocking completion check. The header reports the current route and dimensions.
+
+Deep views retain f64 CPU escape calculations on a background executor, using up
+to four disjoint row workers and publishing only after all rows finish. Native
+Metal uploads the resulting tagged linear-P3 float frame directly on the host
+queue, avoiding the media staging lifecycle for small interactive frames. Other
+hosts retain the xgpui-media upload/preview route. Other native backends and
+unaccepted wide-SDR hosts use this route with the explicit sRGB preview where
+needed. Runtime validation of the redesigned path is currently macOS arm64 only.
+GPU perturbation/deep-zoom GPU arithmetic is not implemented. Force the CPU route
+for comparison with `just canvas-lab --mandelbrot --mandelbrot-cpu`.
+
+The palette is authored in Display P3, with saturated bands outside sRGB.
+Presentation is wide SDR, not HDR, and does not establish physical display
+coverage or calibration. The 0.01–10 billion× range remains finite f64 exploration;
+the iteration budget grows with zoom and caps at 2,048. Unresolved points at the
+limit are colored as interior. Deep regions can take longer to refine even when
+camera presentation remains responsive. The browser companion retains its
+separate bounded CPU-slice implementation.
+
+Capture a refined native frame or reproduce a specific view:
 
 ```sh
 just canvas-lab --mandelbrot --mandelbrot-capture /tmp/mandelbrot.png
+just canvas-lab --mandelbrot --mandelbrot-zoom 1e10 \
+  --mandelbrot-center -73.0931661111453 39.547771261599 \
+  --mandelbrot-capture /tmp/mandelbrot-deep.png
 ```
+
+Run a bounded native camera sweep through zoom-in, zoom-out, maximum zoom and
+reset, saving settled captures plus frame-callback timing JSON:
+
+```sh
+just canvas-lab --mandelbrot --mandelbrot-check /tmp/mandelbrot-check
+```
+
+The bounded sweep disables the normal inactive-window frame throttle so focus
+changes do not contaminate timings. Ordinary interactive launches retain that
+throttle. The report measures local render-callback intervals during movement, not confirmed
+displayed FPS or isolated GPU time. It does not assert every fractal location
+fits a particular frame budget. Native Metal tests compare computed pixels with
+the f64 CPU reference at stable interior/exterior points; boundary precision is
+not implied by those samples.
+
+The initial whole-frame checkpoint (before steady-resolution navigation) is recorded in
+`bench/macos-arm64-coherent-frames.json`: 510 moving callback intervals averaged
+16.5 ms, with a 17.7 ms p95; the sampled maximum-zoom view settled in 583 ms.
+The aggressive sweep recorded five frames with exposed guard-band edges and
+three without a usable front during the abrupt minimum-to-deep-view jump.
+These are local observations, not a universal 60 FPS or zero-gap guarantee.
+That checkpoint passed the default release build, eight regression tests, card
+input smoke and its bounded Mandelbrot sweep. The steady-resolution revision adds
+sharp-frame retention and blend tests plus an ignored manual GPU timing probe.
+
+The steady-resolution checkpoint is recorded in
+`bench/macos-arm64-steady-navigation.json`: moving callbacks averaged 16.5 ms
+(p95 18.5 ms), and the sampled maximum-zoom frame plus its blend completed in
+767 ms. The rapid deep zoom-out still exposed guard-band edges in some frames;
+this revision prioritizes stable sharpness rather than claiming every rapid
+camera sweep has complete coverage. Ten regression tests passed. The manual
+GPU timing probe sampled 0.9–1.8 ms at the steady GPU resolution for 1×/32×/64×
+views; those samples do not establish a universal GPU budget.
