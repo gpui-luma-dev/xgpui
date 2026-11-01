@@ -56,7 +56,6 @@ fn recorded(
     widths: Edges<Pixels>,
     radii: Corners<Pixels>,
     native: bool,
-    probe: Option<&Arc<dyn CustomContent>>,
 ) -> (Vec<Quad>, f32, usize) {
     let mut cx = TestAppContext::single();
     let window = cx.open_window(size(px(160.), px(120.)), |_, _| QuadView {
@@ -72,7 +71,7 @@ fn recorded(
         (
             window.painted_quads(),
             window.scale_factor(),
-            probe.map_or(0, Arc::strong_count),
+            window.painted_custom_draws().len(),
         )
     })
     .unwrap()
@@ -98,7 +97,6 @@ fn invisible_native_fills_and_borders_record_no_quads() {
                         Edges::all(px(width)),
                         Corners::all(px(radius)),
                         false,
-                        None,
                     );
                     assert!(
                         quads.is_empty(),
@@ -120,7 +118,6 @@ fn visible_fill_records_one_quad_without_an_invisible_border() {
                 Edges::all(px(width)),
                 Corners::all(px(16.)),
                 false,
-                None,
             );
             assert_eq!(quads.len(), 1, "width={width}");
             assert!(!quads[0].background.is_transparent());
@@ -137,7 +134,6 @@ fn visible_border_does_not_acquire_transparent_fill_strips() {
             Edges::all(px(8.)),
             Corners::all(px(16.)),
             false,
-            None,
         );
         assert_eq!(
             quads.len(),
@@ -154,7 +150,7 @@ fn visible_border_does_not_acquire_transparent_fill_strips() {
 
 #[::core::prelude::v1::test]
 fn zero_width_borders_skip_native_and_custom_sources_without_losing_fill() {
-    let custom = solid_source([0., 0., 0., 0.]).unwrap();
+    let custom = SolidColor::new([0.; 4]).unwrap().content();
     for border in [
         Paint::from(white()),
         Paint::from(linear_gradient(
@@ -170,11 +166,10 @@ fn zero_width_borders_skip_native_and_custom_sources_without_losing_fill() {
             Edges::default(),
             Corners::all(px(16.)),
             false,
-            Some(&custom),
         );
         assert_eq!(quads.len(), 1);
-        // At most the test's Arc and the view's material; no retained custom scene record.
-        assert!(retained <= 2, "zero-width border retained a producer");
+        // No producer draw is retained for an invisible border.
+        assert_eq!(retained, 0, "zero-width border retained a producer");
     }
     for width in [0., 8.] {
         let (quads, _, retained) = recorded(
@@ -183,14 +178,13 @@ fn zero_width_borders_skip_native_and_custom_sources_without_losing_fill() {
             Edges::all(px(width)),
             Corners::all(px(16.)),
             false,
-            Some(&custom),
         );
         assert!(
             quads.is_empty(),
             "custom fill acquired invisible native border strips"
         );
         assert_eq!(
-            retained, 3,
+            retained, 1,
             "custom fill must remain recorded even with zero alpha"
         );
     }
@@ -200,10 +194,9 @@ fn zero_width_borders_skip_native_and_custom_sources_without_losing_fill() {
         Edges::all(px(8.)),
         Corners::default(),
         false,
-        Some(&custom),
     );
     assert_eq!(
-        retained, 3,
+        retained, 1,
         "custom border alpha is unknown; do not skip it"
     );
 }
@@ -229,9 +222,9 @@ fn visible_border_pixels(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<
             for fill in [Paint::from(transparent_black()), Paint::from(rgb(0x123456))] {
                 for border in [white(), white().opacity(0.35)] {
                     let (actual, scale, _) =
-                        recorded(fill.clone(), border.into(), widths, radii, false, None);
+                        recorded(fill.clone(), border.into(), widths, radii, false);
                     let (reference, _, _) =
-                        recorded(fill.clone(), border.into(), widths, radii, true, None);
+                        recorded(fill.clone(), border.into(), widths, radii, true);
                     assert!(!actual.is_empty());
                     let scene = |quads: Vec<Quad>| {
                         let mut scene = Scene::default();

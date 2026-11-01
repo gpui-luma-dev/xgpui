@@ -81,12 +81,17 @@ wgpu-test:
 wgpu-headless *args:
     cargo run {{options}} --features wgpu -- --headless --wgpu "$@"
 
-# Experimental user WGSL: identical source and parameters on native backend and wgpu.
+# Procedural content uses the shared portable executor (currently Metal).
+[macos]
 portable-test:
-    cargo test {{options}} --features wgpu,portable-shaders
+    MTL_DEBUG_LAYER=1 cargo test --offline --manifest-path extensions/crates/xgpui-shader/Cargo.toml --test portable_shader_paint --features portable-shaders,gpui-apple/runtime_shaders -- --test-threads=1 --nocapture
+
+portable-ui *args:
+    cargo run {{options}} --features portable-shaders -- --portable-shader "$@"
 
 portable-headless *args:
     cargo run {{options}} --features portable-shaders -- --headless --portable-shader "$@"
 
+# Diagnostic: returns UnsupportedCapability until the portable wgpu executor exists.
 portable-wgpu *args:
     cargo run {{options}} --features wgpu,portable-shaders -- --headless --wgpu --portable-shader "$@"

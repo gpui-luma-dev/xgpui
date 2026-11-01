@@ -20,7 +20,7 @@ native = []
 web = ["xgpui-color/icc"]
 native-window-tests = ["native"]
 portable-shaders = ["xgpui-shader/portable-shaders"]
-wgpu = ["xgpui-media/wgpu", "xgpui-shader/wgpu"]
+wgpu = ["xgpui-media/wgpu"]
 runtime-shaders = ["gpui_platform/runtime_shaders"]
 
 [dependencies]
@@ -32,7 +32,7 @@ xgpui-gamut = { path = "../../extensions/crates/xgpui-gamut", version = "=0.2.2"
 xgpui-media = { path = "../../extensions/crates/xgpui-media", version = "=0.4.0", package = "xgpui-media" }
 xgpui-svg = { path = "../../extensions/crates/xgpui-svg", version = "=0.2.2", package = "xgpui-svg" }
 xgpui-parley = { path = "../../extensions/crates/xgpui-parley", version = "=0.2.2", package = "xgpui-parley" }
-xgpui-shader = { path = "../../extensions/crates/xgpui-shader", version = "=0.3.0", features = ["portable-shaders", "wgpu"] , package = "xgpui-shader" }
+xgpui-shader = { path = "../../extensions/crates/xgpui-shader", version = "=0.3.0", features = ["portable-shaders"] , package = "xgpui-shader" }
 gpui-wgpu = { package = "xgpui-wgpu", path = "../../gpui/crates/gpui-wgpu", version = "=1.0.2" }
 image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "webp"] }
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }

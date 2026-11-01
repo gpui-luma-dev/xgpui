@@ -1095,3 +1095,39 @@ fn instance_stream_capacity_includes_the_first_instance_offset() {
         }
     }
 }
+
+#[test]
+fn declared_uniform_layout_validates_unused_parameters_without_execution_bindings() {
+    let program=PortableProgram::fullscreen(
+        "struct Parameters { count:u32, transform:mat2x2<f32> } @group(0) @binding(0) var<uniform> parameters:Parameters; @fragment fn fragment()->@location(0) vec4<f32>{return vec4(1.);}",
+        "fragment",ImageInterpretation{color:ColorEncoding::Srgb,alpha:AlphaMode::Straight},ImageContracts::new()).unwrap();
+    assert!(program.bindings().is_empty());
+    let layout = program.uniform_layout("parameters").unwrap();
+    assert_eq!(layout.fields().len(), 2);
+    assert!(layout.pack(&UniformValues::new()).is_err());
+    assert!(
+        layout
+            .pack(&UniformValues::new().uints("count", [1]).matrix(
+                "transform",
+                2,
+                2,
+                [1., 0., 0., 1.]
+            ))
+            .is_ok()
+    );
+    assert_eq!(
+        program.uniform_layout("missing").unwrap_err().kind,
+        ContentErrorKind::InvalidDescriptor
+    );
+    let unused_unsupported=PortableProgram::fullscreen(
+        "struct Parameters { data:array<vec4<f32>,2> } @group(0) @binding(0) var<uniform> parameters:Parameters; @fragment fn fragment()->@location(0) vec4<f32>{return vec4(1.);}",
+        "fragment",ImageInterpretation{color:ColorEncoding::Srgb,alpha:AlphaMode::Straight},ImageContracts::new()).unwrap();
+    assert!(unused_unsupported.bindings().is_empty());
+    assert_eq!(
+        unused_unsupported
+            .uniform_layout("parameters")
+            .unwrap_err()
+            .kind,
+        ContentErrorKind::UnsupportedCapability
+    );
+}

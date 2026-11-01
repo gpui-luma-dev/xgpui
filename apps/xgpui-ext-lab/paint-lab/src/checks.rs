@@ -143,7 +143,7 @@ pub fn run(
         #[cfg(feature = "portable-shaders")]
         {
             let program = crate::portable::program()?;
-            Arc::new(crate::portable::paint(&program, 0.15, 1.)?)
+            gpui::content::ContentDraw::new(crate::portable::paint(&program, 0.15, 1.)?.content()).into_scene_content()
         }
         #[cfg(not(feature = "portable-shaders"))]
         {
@@ -327,9 +327,11 @@ fn native_extension_paints_match_native_geometry() -> Result<()> {
 
 #[cfg(all(test, feature = "wgpu"))]
 #[::core::prelude::v1::test]
-fn wgpu_extension_paints_match_native_geometry() -> Result<()> {
+fn wgpu_extension_content_reports_missing_executor() -> Result<()> {
     let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new()?;
-    verify(&mut renderer)
+    let error=verify(&mut renderer).unwrap_err();
+    ensure!(error.downcast_ref::<gpui::content::ContentError>().is_some_and(|e|e.kind==gpui::content::ContentErrorKind::UnsupportedCapability), "expected missing portable executor, got {error}");
+    Ok(())
 }
 
 #[cfg(all(test, feature = "wgpu"))]

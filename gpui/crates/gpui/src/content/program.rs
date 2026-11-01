@@ -209,6 +209,7 @@ struct ProgramKey {
 struct ProgramData {
     key: ProgramKey,
     bindings: Vec<ProgramBinding>,
+    uniform_layouts: BTreeMap<Arc<str>, Result<UniformLayout>>,
     vertex_inputs: Vec<VertexInput>,
     workgroup_size: Option<[u32; 3]>,
     workgroup_bytes: u64,
@@ -314,6 +315,22 @@ impl PortableProgram {
     /// Named used resource; unused globals are deliberately not required bindings.
     pub fn binding(&self, name: &str) -> Option<&ProgramBinding> {
         self.bindings().iter().find(|b| b.name() == name)
+    }
+    /// Layout of a declared uniform, including declarations unused by the selected
+    /// entry points. Unused declarations never become required execution bindings.
+    /// This validates parameter snapshots even when a compiler removes their use.
+    pub fn uniform_layout(&self, name: &str) -> Result<&UniformLayout> {
+        self.0
+            .uniform_layouts
+            .get(name)
+            .ok_or_else(|| {
+                ContentError::new(
+                    ContentErrorKind::InvalidDescriptor,
+                    "unknown uniform declaration",
+                )
+            })?
+            .as_ref()
+            .map_err(Clone::clone)
     }
     /// Reflected mesh vertex inputs, excluding builtin vertex/instance indices.
     pub fn vertex_inputs(&self) -> &[VertexInput] {
@@ -463,6 +480,19 @@ impl PortableProgram {
                 )
             }
         };
+        let uniform_layouts = module
+            .global_variables
+            .iter()
+            .filter(|(_, global)| global.space == AddressSpace::Uniform)
+            .filter_map(|(_, global)| {
+                global.name.as_deref().map(|name| {
+                    (
+                        Arc::from(name),
+                        reflect_uniform(&module, &layouter, global.ty),
+                    )
+                })
+            })
+            .collect();
         let mut bindings = Vec::new();
         let mut workgroup_bytes = 0u64;
         let mut image_names = Vec::new();
@@ -557,6 +587,7 @@ impl PortableProgram {
         Ok(Self(Arc::new(ProgramData {
             key,
             bindings,
+            uniform_layouts,
             vertex_inputs,
             workgroup_size,
             workgroup_bytes,

@@ -1,4 +1,3 @@
-mod gradient_preview;
 #[cfg(target_feature = "atomics")]
 compile_error!(
     "extensions-web must be built without atomics; browser GPU handles stay on one thread"

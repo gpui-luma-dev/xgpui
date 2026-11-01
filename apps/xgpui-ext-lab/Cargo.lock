@@ -6659,18 +6659,11 @@ dependencies = [
  "anyhow",
  "bytemuck",
  "naga",
- "objc2 0.6.5",
- "objc2-foundation 0.3.2",
- "objc2-metal 0.3.2",
  "refineable-gpui-unofficial",
  "serde",
  "unicode-bidi",
  "unicode-segmentation",
- "windows 0.62.2",
  "xgpui",
- "xgpui-apple",
- "xgpui-wgpu",
- "xgpui-windows",
 ]
 
 [[package]]

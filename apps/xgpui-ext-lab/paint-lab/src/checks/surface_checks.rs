@@ -1,8 +1,8 @@
 use super::*;
 
 struct SurfaceView {
-    background: Arc<dyn CustomContent>,
-    border: Arc<dyn CustomContent>,
+    background: Paint,
+    border: Paint,
     children: bool,
     opacity: f32,
 }
@@ -40,8 +40,8 @@ impl Render for SurfaceView {
 #[::core::prelude::v1::test]
 fn extension_container_keeps_native_layout_clipping_and_opacity() {
     let mut cx = TestAppContext::single();
-    let background = solid_source([1., 0., 0., 0.5]).unwrap();
-    let border = solid_source([0., 0., 1., 1.]).unwrap();
+    let background: Paint = SolidColor::new([1., 0., 0., 0.5]).unwrap().content().into();
+    let border: Paint = SolidColor::new([0., 0., 1., 1.]).unwrap().content().into();
     let window = cx.open_window(size(px(160.), px(120.)), |_, _| SurfaceView {
         background: background.clone(),
         border: border.clone(),
@@ -74,10 +74,11 @@ fn extension_container_keeps_native_layout_clipping_and_opacity() {
     })
     .unwrap();
     // Scene retention is the public producer lifetime contract. Both decoration
-    // callbacks must retain more than the test and view owners, rather than losing
-    // zero-size canvases.
-    assert!(Arc::strong_count(&background) > 2);
-    assert!(Arc::strong_count(&border) > 2);
+    // callbacks must record their portable decorations, rather than losing zero-size canvases.
+    cx.update_window(window.into(), |_, window, _| {
+        assert!(window.painted_custom_draws().len() >= 2);
+    })
+    .unwrap();
 }
 
 #[::core::prelude::v1::test]

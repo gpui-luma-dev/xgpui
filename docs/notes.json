@@ -75,7 +75,7 @@
     "short": "xgpui-shader",
     "group": "Extensions",
     "role": "Opt-in gradients, mesh paints, portable WGSL and selectable kinetic typography.",
-    "surface": "painted(), Paint, WindowPaintExt; SolidColor, Gradient and MeshGradient are CPU-only ContentSources with host-owned portable realization (currently Metal). Experimental shader producers and typography::SelectableText. Ordinary programs retain sRGB semantics; new_linear_p3 opts into native wide-SDR output.",
+    "surface": "painted(), Paint, WindowPaintExt; SolidColor, Gradient, MeshGradient and procedural ShaderPaint are CPU-only ContentSources with host-owned portable realization (currently Metal). ShaderProgram uses core UniformValues; typography::SelectableText. Ordinary programs retain sRGB semantics; new_linear_p3 opts into native wide-SDR output.",
     "review": "Keep effect descriptions in the extension; the portable content host owns native allocation, execution and caching. Wide-gamut presentation is a separate backend capability.",
     "entry": "src/lib.rs"
   },

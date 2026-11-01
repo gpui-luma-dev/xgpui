@@ -368,69 +368,6 @@ fn dense_gradient_worker() {
     }
 }
 
-// Validate the browser demo's generated source through the real shader parser,
-// including native pipeline creation and the maximum supported stop count.
-#[path = "../../../../apps/xgpui-ext-lab/extensions-web/src/gradient_preview.rs"]
-mod gradient_preview;
-#[test]
-fn browser_preview_accepts_every_kind_and_32_stops() {
-    let stops = (0..32)
-        .map(|i| {
-            GradientStop::new(
-                i as f32 / 31.,
-                [i as f32 / 31., 0.3, 1. - i as f32 / 31., 1.],
-            )
-        })
-        .collect();
-    let base = Gradient::linear(45., stops).unwrap();
-    let mut renderer = MetalHeadlessRenderer::new();
-    let rx = wake(&mut renderer);
-    for kind in [
-        GradientKind::Linear { angle: 45. },
-        GradientKind::Radial {
-            center: [0.5; 2],
-            radius: [0.5; 2],
-        },
-        GradientKind::Conic {
-            center: [0.5; 2],
-            angle: 45.,
-        },
-        GradientKind::Diamond {
-            center: [0.5; 2],
-            radius: [0.5; 2],
-            angle: 45.,
-        },
-    ] {
-        let gradient = base.with_kind(kind).unwrap();
-        let xgpui_shader::Paint::Custom(content) = gradient_preview::paint(&gradient) else {
-            panic!("preview must use shader paint")
-        };
-        let mut legacy = Scene::default();
-        let mut primitive = draw(&gradient, rect(0., 32.), PresentationSlotId::new());
-        primitive.content = content;
-        legacy.insert_primitive(primitive);
-        legacy.finish();
-        let mut portable = Scene::default();
-        portable.insert_primitive(draw(&gradient, rect(0., 32.), PresentationSlotId::new()));
-        portable.finish();
-        let extent = size(DevicePixels(32), DevicePixels(8));
-        let actual = renderer.render_scene_to_image(&legacy, extent).unwrap();
-        ready(&mut renderer, &portable, &rx);
-        let expected = renderer.render_scene_to_image(&portable, extent).unwrap();
-        assert!(
-            actual
-                .as_raw()
-                .iter()
-                .zip(expected.as_raw())
-                .all(|(a, b)| a.abs_diff(*b) <= 2),
-            "preview differs for {kind:?}: first {:?} expected {:?}, center {:?} expected {:?}",
-            actual.get_pixel(0, 0),
-            expected.get_pixel(0, 0),
-            actual.get_pixel(16, 4),
-            expected.get_pixel(16, 4)
-        );
-    }
-}
 
 #[test]
 fn parameter_edits_keep_completed_pixels_visible_while_gpu_work_is_pending() {

@@ -102,7 +102,7 @@ for its supported Unicode subset and editing limits.
 | Feature | Purpose |
 | --- | --- |
 | `portable-shaders` | Brushes, layer effects, typed instanced shaders and portable shader paints. |
-| `wgpu` | Optional wgpu backend adapters. |
+| `wgpu` | Opt-in native/wgpu comparison tests; no producer backend selection. |
 
 Backend support varies by API; consult the guides for Metal, D3D11 and wgpu
 coverage. From the repository root:
@@ -148,12 +148,12 @@ Input and graph output are straight-alpha encoded-sRGB; materialized storage is
 RGBA8. `content()` and clones retain source identity. `Content::new(solid)` also
 works inside portable graphs. Native allocation, structural output sharing,
 replay, resize, and completion belong to the host. Producer-side `preparations()`
-and `cached_texture_info()` diagnostics are removed. Experimental shader paints retain their current execution path until their migration.
+and `cached_texture_info()` diagnostics are removed. Procedural shader paints now also use portable content.
 
 Portable execution currently supports Metal. D3D11/wgpu portable execution remains
 pending; unsupported hosts report an explicit capability error. Use ordinary
 native colors or `Brush::solid` for existing main-pass UI solids on those hosts.
-The browser demo uses an explicit native solid reference. No application-side
+The browser color demo uses native sRGB samples. No application-side
 Metal/D3D11/wgpu branches are required by the portable source API.
 
 From the repository root on macOS:
@@ -186,9 +186,8 @@ pipelines, resource sharing, asynchronous completion and replay caching.
 Producer preparation/pipeline counters and native adapters have been removed.
 
 Execution currently requires the Metal portable executor; other hosts return
-UnsupportedCapability. The browser lab keeps its analytic previews through an
-app-local adapter to the public experimental shader-paint API until portable wgpu
-execution is implemented.
+UnsupportedCapability. The browser producer page reports pending portable wgpu execution; no separate
+analytic producer adapter is retained.
 
 ```sh
 MTL_DEBUG_LAYER=1 cargo test \
@@ -197,7 +196,7 @@ MTL_DEBUG_LAYER=1 cargo test \
   -- --test-threads=1 --nocapture
 ```
 
-What to look for: seven passing tests and one ignored subprocess helper; independent
+What to look for: six passing tests and one ignored subprocess helper; independent
 pixel references for all four geometries, transparent/hard/32-stop palettes, one
 shared pipeline, cached replay, edit/resize updates, and repeated 512→1→512 draws
 finishing with zero producer readbacks and at most two in-flight command buffers.
@@ -251,3 +250,27 @@ CPU raster pixels must match regular, curved, inset and folded meshes; pending
 edits keep prior pixels visible; all 60 continuous edits advance. Repeated
 512→1→512 workloads must finish, replay without new jobs and report zero producer
 readbacks. Stream timings cover producer updates, not visible frame pacing.
+
+
+## Portable procedural WGSL
+
+`shader_paint::ShaderProgram` and ShaderPaint are CPU-only portable producers.
+Use core `gpui::content::UniformValues` for reflected scalar/vector, integer and
+matrix parameters. ShaderPaint retains content identity on clone and exposes
+`content()` and owned Content/Paint conversions. Loops, derivatives and discard
+use portable WGSL validation. Logical PaintInput coordinates, source clamping and
+straight-alpha encoded-sRGB RGBA8 output are preserved.
+
+Removed: ShaderParameters, Shader/shader compatibility aliases, Paint::Custom
+and Arc<CustomContent> paint conversions, all shader-paint native adapters and
+backend caches. Native backend crates are now test dependencies only. Paint
+accepts native backgrounds or portable content. Use a distinct retained ContentDraw
+slot per changing destination. The source API does not select a backend.
+
+See [procedural shader paints](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/portable-wgsl-v1.md)
+for the current API, source contract and native acceptance command. Expect five
+passing tests plus an ignored subprocess helper, zero producer readbacks, correct
+integer/matrix/derivative/discard pixels and all 60 continuous generations advancing.
+Execution currently supports Metal. The browser's producer page reports pending
+portable wgpu execution; its sample swatches/direct brushes remain available.
+The temporary browser-only gradient shader adapter has been removed.

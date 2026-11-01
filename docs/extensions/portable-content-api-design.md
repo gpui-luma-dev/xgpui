@@ -1019,3 +1019,39 @@ Next: migrate experimental ShaderProgram/ShaderPaint producers and their demos,
 remove their superseded adapters and aliases, then complete portable execution on
 D3D11/wgpu. Backward compatibility is not a constraint on that final API. Keep
 issue #110 open until the remaining lifecycle/backend work is complete.
+
+
+### Procedural ShaderProgram/ShaderPaint migration checkpoint
+
+Procedural shader paints now describe a portable fullscreen pass with reflected
+geometry and core UniformValues. ShaderProgram is CPU-only; paint() creates a
+validated immutable ContentSource snapshot. Clones keep identity, edits replace
+snapshots, and stable presentation slots retain completed images during updates.
+User PaintInput logical/raster semantics, output clamping and straight-alpha sRGB
+RGBA8 remain intact. Integer/matrix parameters, loops, derivatives and discard
+follow shared core packing/WGSL validation rather than a duplicate restricted API.
+
+PortableProgram::uniform_layout also reflects declared unused uniforms, without
+making them execution bindings. Parameter validation therefore remains consistent
+when a compiler eliminates all reads. Unsupported unused layouts are reported on
+explicit reflection, preserving ordinary programs' selected-stage binding rules.
+
+Removed: ShaderParameters, Shader/shader aliases, Paint::Custom/Arc conversions,
+all shader-paint Metal/D3D11/wgpu adapters/caches and native production dependencies
+from xgpui-shader. Native backgrounds and portable ContentDraw are the extension
+paint surface. Core external/video CustomContent hooks remain separate framework
+facilities. Main-pass instanced shaders are a current rendering workload used by
+brushes/text, not a legacy offscreen producer interface.
+
+The native lab has an interactive User WGSL mode: angle drives progress and the
+selected stop drives tint/alpha. The browser producer page explicitly awaits the
+portable wgpu executor; native sRGB swatches and direct brush editors remain.
+The browser-only gradient shader adapter is removed rather than kept for compatibility.
+Native acceptance verifies source pixels, typed parameters, unused bindings,
+logical/raster independence, pending frames, pipeline reuse, 60 continuous updates
+and bounded 512→1→512 workloads with zero producer readbacks. See the procedural
+paint guide for commands and visual checks.
+
+Next: implement portable execution/presentation on wgpu and D3D11, then close the
+remaining issue-110 lifecycle/backend acceptance gaps. No superseded shader paint
+API or compatibility adapter is part of the final design; keep issue #110 open.

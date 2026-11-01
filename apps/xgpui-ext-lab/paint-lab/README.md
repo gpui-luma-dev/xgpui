@@ -97,13 +97,27 @@ Wgpu-specific experimental shader/coverage fixtures remain testable separately.
 
 ## Experimental user-authored WGSL
 
-`just portable-test` exercises one user shader through native Metal and wgpu.
-`just portable-headless --frames 2 --png /tmp/portable-metal.png` and
-`just portable-wgpu --frames 2 --png /tmp/portable-wgpu.png` render the same shader
-into the three paint sites. The app authoring example in `src/portable.rs` contains
-no OS/backend branches or binding declarations. The interactive editor continues
-to edit built-in gradients; the user WGSL experiment is headless only.
-See [the experimental shader-paint contract](../../../docs/extensions/portable-wgsl-v1.md).
+Procedural ShaderProgram/ShaderPaint now use the portable content host. Select
+**User WGSL** or launch with --portable-shader. Angle drives progress; selected
+stop RGB/alpha drives tint/transparency. The source uses core UniformValues and
+contains no backend branches or binding declarations. Its native adapters and the
+Shader/shader compatibility aliases have been removed. Execution currently needs
+Metal; --wgpu reports UnsupportedCapability until portable wgpu execution exists.
+
+```sh
+cargo run --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab \
+  --features runtime-shaders,portable-shaders -- --portable-shader
+MTL_DEBUG_LAYER=1 cargo run --manifest-path apps/xgpui-ext-lab/Cargo.toml \
+  --bin paint-lab --features runtime-shaders,portable-shaders -- \
+  --headless --portable-shader --frames 3 --png /tmp/paint-portable-wgsl.png
+```
+
+What to look for: continuously scrub angle and tint/alpha, animate/pause, change
+clip/opacity and resize. The background, border and path should remain aligned
+and update smoothly without flashing or waiting for mouse release. Headless
+checks cover logical/raster independence, clipping/alpha, unused uniforms and
+immutable snapshots. See [procedural paints](../../../docs/extensions/portable-wgsl-v1.md)
+for direct native pixel, pending-frame and dense/continuous acceptance commands.
 
 ## Pastel waves
 

@@ -2,7 +2,9 @@
 use crate::{Paint, WindowPaintExt};
 use gpui::*;
 use refineable::Refineable;
-use std::{cell::Cell, rc::Rc, sync::Arc};
+use std::{cell::Cell, rc::Rc};
+#[cfg(feature = "portable-shaders")]
+use std::sync::Arc;
 
 enum SurfacePaint {
     Paint(Paint),
@@ -56,12 +58,6 @@ pub fn painted() -> Painted {
         #[cfg(feature = "portable-shaders")]
         layer_effect: None,
     }
-}
-/// Compatibility name for the original shader element.
-pub type Shader = Painted;
-/// Place a reusable producer in an extension-owned styled container.
-pub fn shader(content: Arc<dyn CustomContent>) -> Shader {
-    painted().bg_paint(content)
 }
 impl Painted {
     /// Isolate this bounded surface and its children, then apply a group effect.
@@ -244,13 +240,6 @@ impl IntoElement for Painted {
                                 .to_pixels(window.rem_size())
                                 .clamp_radii_for_quad_size(bounds.size);
                             match background {
-                                SurfacePaint::Paint(Paint::Custom(content)) => window.paint_custom(
-                                    CustomGeometry::RoundedRect {
-                                        bounds,
-                                        corner_radii: radii,
-                                    },
-                                    content,
-                                ),
                                 SurfacePaint::Paint(Paint::Content(draw)) => window.paint_content(
                                     CustomGeometry::RoundedRect {
                                         bounds,

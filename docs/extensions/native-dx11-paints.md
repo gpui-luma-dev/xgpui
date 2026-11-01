@@ -2,11 +2,11 @@
 
 Windows · feature level ≥ 11.0 · `xgpui-shader` · no app-side OS branches.
 
-Migration status: SolidColor, Gradient and MeshGradient now use portable
+Migration status: SolidColor, Gradient, MeshGradient and ShaderPaint now use portable
 ContentSource descriptions. Their D3D11 producer adapters have been removed;
 portable D3D11 execution is pending, so these sources return UnsupportedCapability
 on Windows for now. Metal is the current executor. The low-level recording API
-below remains transitional infrastructure for experimental shader paints.
+below is core external-content infrastructure, not a shader-paint alternative.
 
 ## Portable source API (D3D11 executor pending)
 

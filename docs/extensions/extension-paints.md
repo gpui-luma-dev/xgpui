@@ -45,8 +45,7 @@ painted().bg_paint(ContentDraw::new(solid.content()).slot(slot));
 
 It keeps straight-alpha encoded-sRGB semantics and materializes RGBA8 through the
 host executor. Producer-owned preparation caches/counters are gone. Native UI
-colors remain native. Gradient and MeshGradient also use portable content;
-experimental shader paints are the next migration. Portable execution currently supports
+colors remain native. Gradient, MeshGradient and procedural ShaderPaint also use portable content. Portable execution currently supports
 Metal; other hosts return an explicit unsupported-capability error. See the
 [portable content lifecycle](portable-content-api-design.md) and the shader
 extension README for snapshot readiness and native acceptance commands.

@@ -76,8 +76,8 @@ struct Options {
     /// Use the portable wgpu renderer for headless checks (requires feature wgpu).
     #[arg(long, requires = "headless")]
     wgpu: bool,
-    /// Render the experimental user WGSL paint (requires feature portable-shaders).
-    #[arg(long, requires = "headless")]
+    /// Render the portable user WGSL paint, interactively or headless.
+    #[arg(long)]
     portable_shader: bool,
     #[arg(long, value_enum, default_value_t=Effect::Radial)]
     effect: Effect,
@@ -207,6 +207,9 @@ impl Control {
 struct Lab {
     mesh: Arc<MeshGradient>,
     analytic: Arc<Gradient>,
+    user_shader: bool,
+    #[cfg(feature = "portable-shaders")]
+    procedural: portable::LivePaint,
     presentation_slots: [gpui::content::PresentationSlotId; 3],
     mesh_points: Vec<xgpui_shader::ControlPoint>,
     mesh_selected: usize,
@@ -275,7 +278,9 @@ impl Lab {
             self.updated = Instant::now();
             return;
         }
-        if self.effect == Effect::Mesh {
+        if self.user_shader {
+            self.settings_mut().angle = (self.settings().angle + self.time * 36.).rem_euclid(360.);
+        } else if self.effect == Effect::Mesh {
             self.mesh_points = self.displayed_mesh();
         } else {
             let effect = self.effect;
@@ -310,7 +315,8 @@ impl Lab {
             Control::Blue => self.color()[2],
             Control::Alpha => self.color()[3],
             Control::Angle => {
-                if !self.playing {
+                if self.user_shader { (s.angle+self.time*36.).rem_euclid(360.) }
+                else if !self.playing {
                     s.angle
                 } else {
                     match s.kind(self.effect, self.time) {
@@ -801,6 +807,11 @@ impl Render for Lab {
         }
         let paint = if self.native {
             Paint::Native(white().into())
+        } else if self.user_shader {
+            #[cfg(feature = "portable-shaders")]
+            { let progress=(self.settings().angle/360.+self.time*0.1).rem_euclid(1.);let color=self.color();self.procedural.update(progress,color);self.procedural.paint.content().into() }
+            #[cfg(not(feature = "portable-shaders"))]
+            { unreachable!("portable-shaders feature required") }
         } else if self.effect == Effect::Mesh {
             self.mesh.content().into()
         } else {
@@ -885,16 +896,19 @@ impl Render for Lab {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.freeze();
                         this.effect = effect;
+                        this.user_shader = false;
                         this.native = false;
                         cx.notify();
                     })),
             );
         }
+        #[cfg(feature = "portable-shaders")]
+        { choices=choices.child(button("user-wgsl","User WGSL").on_click(cx.listener(|this,_,_,cx|{this.freeze();this.effect=Effect::Linear;this.user_shader=true;this.native=false;cx.notify();}))); }
         div().id("paint-lab").size_full().flex().flex_col().gap_4().p_6().bg(rgb(if self.light_background {0xf4f5f7}else{0x151922})).text_color(rgb(if self.light_background {0x202633}else{0xffffff}))
             .on_mouse_move(cx.listener(|this,event:&MouseMoveEvent,_,cx|{if event.pressed_button!=Some(MouseButton::Left) {this.dragging=None;}else if let Some(control)=this.dragging {this.scrub(control,event.position.x);cx.notify();}}))
             .on_mouse_up(MouseButton::Left,cx.listener(|this,_,_,_|this.dragging=None))
             .on_mouse_up_out(MouseButton::Left,cx.listener(|this,_,_,_|this.dragging=None))
-            .child(div().text_2xl().child("Paint lab · gradient editor"))
+            .child(div().text_2xl().child(if self.user_shader {"Paint lab · user WGSL — angle: progress; selected stop: tint/alpha"}else{"Paint lab · gradient editor"}))
             .child(div().flex().flex_wrap().gap_4().items_center().child(choices)
                 .child(button("play",if self.playing {"Pause"}else{"Animate"}).on_click(cx.listener(|this,_,_,cx|{if this.playing {this.freeze();}else{this.updated=Instant::now();this.playing=true;}cx.notify();})))
                 .child(button("native",if self.native {"Native white"}else{"Gradient paint"}).on_click(cx.listener(|this,_,_,cx|{this.native = !this.native;cx.notify();})))
@@ -910,7 +924,9 @@ impl Render for Lab {
     }
 }
 fn main() -> Result<()> {
-    let options = Options::parse();
+    let mut options = Options::parse();
+    ensure!(!options.portable_shader || cfg!(feature="portable-shaders"), "--portable-shader requires the portable-shaders feature");
+    if options.portable_shader && !options.headless {options.effect=Effect::Linear;}
     ensure!(
         (1..=10000).contains(&options.frames),
         "frames must be 1..=10000"
@@ -968,6 +984,9 @@ fn main() -> Result<()> {
                         )
                         .unwrap(),
                     ),
+                    user_shader: options.portable_shader,
+                    #[cfg(feature = "portable-shaders")]
+                    procedural: portable::LivePaint::new(),
                     presentation_slots: std::array::from_fn(|_| {
                         gpui::content::PresentationSlotId::new()
                     }),

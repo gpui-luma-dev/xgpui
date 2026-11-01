@@ -1,9 +1,11 @@
 # Portable wgpu paints
 
-`xgpui-shader/wgpu` · legacy producer adapters. SolidColor, Gradient and MeshGradient
-now use the portable content API; its wgpu executor remains pending. Metal is the
-current portable executor. The browser lab keeps analytic shader previews locally and labels its portable
-mesh producer preview unavailable until portable wgpu execution exists.
+SolidColor, Gradient, MeshGradient and procedural ShaderPaint use portable content;
+Metal is the current executor and portable wgpu execution remains pending. The
+extension-owned wgpu producer adapters are removed. The browser producer page
+reports pending execution; native color samples and direct brushes remain.
+The low-level recording API below describes core external-content infrastructure,
+not an alternate xgpui-shader producer API.
 
 ## Use
 

@@ -10,9 +10,6 @@ use std::sync::Arc;
 pub enum Paint {
     /// An existing GPUI background.
     Native(Background),
-    /// Runtime-only producer; serialization returns an error.
-    #[serde(skip)]
-    Custom(std::sync::Arc<dyn CustomContent>),
     /// Portable immutable GPU source and presentation policy; runtime-only.
     #[serde(skip)]
     Content(ContentDraw),
@@ -21,7 +18,6 @@ impl PartialEq for Paint {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Native(a), Self::Native(b)) => a == b,
-            (Self::Custom(a), Self::Custom(b)) => std::sync::Arc::ptr_eq(a, b),
             (Self::Content(a), Self::Content(b)) => {
                 a.content.id() == b.content.id() && a.presentation == b.presentation
             }
@@ -54,17 +50,6 @@ impl From<gpui::Rgba> for Paint {
         Self::Native(value.into())
     }
 }
-impl<T: CustomContent> From<std::sync::Arc<T>> for Paint {
-    fn from(value: std::sync::Arc<T>) -> Self {
-        Self::Custom(value)
-    }
-}
-impl From<std::sync::Arc<dyn CustomContent>> for Paint {
-    fn from(value: std::sync::Arc<dyn CustomContent>) -> Self {
-        Self::Custom(value)
-    }
-}
-
 /// Extension convenience methods; native GPUI paint methods keep their original API.
 pub trait WindowPaintExt {
     fn paint_path_with_paint(&mut self, path: Path<Pixels>, paint: impl Into<Paint>);
@@ -79,7 +64,6 @@ impl WindowPaintExt for Window {
     fn paint_path_with_paint(&mut self, path: Path<Pixels>, paint: impl Into<Paint>) {
         match paint.into() {
             Paint::Native(color) => self.paint_path(path, color),
-            Paint::Custom(content) => self.paint_custom(CustomGeometry::Path(path), content),
             Paint::Content(draw) => self.paint_content(CustomGeometry::Path(path), draw),
         }
     }
@@ -103,13 +87,6 @@ impl WindowPaintExt for Window {
                 },
                 draw,
             ),
-            Paint::Custom(content) => self.paint_custom(
-                CustomGeometry::RoundedRect {
-                    bounds: quad.bounds,
-                    corner_radii: quad.corner_radii,
-                },
-                content,
-            ),
         }
         // Border dispatch must not emit native strips or prepare an adapter when
         // no border can be visible. Custom source alpha remains unknown.
@@ -130,12 +107,11 @@ impl WindowPaintExt for Window {
                 }
             }
             Paint::Native(_) => {}
-            Paint::Custom(content) => self.paint_custom(CustomGeometry::Border(quad), content),
             Paint::Content(draw) => self.paint_content(CustomGeometry::Border(quad), draw),
         }
     }
 }
-// Compatibility with the backend's existing native-background preparation adapter.
+// Native background border sampling uses the core native-paint recording hook.
 #[derive(Debug)]
 struct NativePaintSource(Background);
 impl CustomContent for NativePaintSource {

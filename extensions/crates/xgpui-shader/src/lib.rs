@@ -11,20 +11,14 @@ pub use gradient::{Gradient, GradientKind, GradientStop};
 mod paint;
 pub use paint::{Paint, WindowPaintExt};
 mod surface;
-pub use surface::{Painted, PaintedElement, Shader, painted, shader};
+pub use surface::{Painted, PaintedElement, painted};
 
-#[cfg(feature = "wgpu")]
-mod wgpu;
 
 /// Experimental shader paints with reflected parameters and declarative paint integration.
 #[cfg(feature = "portable-shaders")]
 pub mod shader_paint;
 
-#[cfg(target_os = "windows")]
-mod dx11;
 
-#[cfg(any(target_os = "windows", test))]
-mod hlsl;
 
 
 /// Experimental typed shaders drawn directly in the host render pass.

@@ -284,8 +284,8 @@ its signature and native style fields are unchanged.
 
 ```rust
 use xgpui_shader::{
-    Paint, Painted, Shader, WindowPaintExt,
-    painted, shader,
+    Paint, Painted, WindowPaintExt,
+    painted,
     Gradient, GradientKind, GradientStop,
     MeshGradient, MeshGrid, ControlPoint, SolidColor,
 };
@@ -295,7 +295,8 @@ window.paint_path_with_paint(path, mesh.content());  // WindowPaintExt trait.
 // window.paint_quad_with_paints(...)             // Same extension trait.
 
 // With the portable-shaders feature:
-use xgpui_shader::shader_paint::{ShaderProgram, ShaderParameters};
+use gpui::content::UniformValues;
+use xgpui_shader::shader_paint::ShaderProgram;
 ```
 
 `xgpui_gamut::WideColor` and `xgpui_parley::ParleyTextSystem`, `FaceRegistry`,
@@ -602,3 +603,12 @@ window pending/previous-result presentation policy.
 `preparations` and `cached_texture_info` are removed; the host owns realization and
 cache accounting. See [portable content](portable-content-api-design.md) for the
 current Metal executor and remaining backend work.
+
+
+Procedural ShaderProgram/ShaderPaint now use portable ContentSource realization.
+ShaderProgram::paint accepts core UniformValues, including integer/vector and
+matrix fields. ShaderPaint exposes content()/Content/Paint conversions. Removed:
+ShaderParameters, Paint::Custom/Arc conversions, Shader/shader compatibility aliases,
+and shader-paint Metal/D3D11/wgpu adapters. PortableProgram::uniform_layout exposes
+declared uniform reflection even when unused, without making it a binding.
+Window::painted_custom_draws is a test-support recording inspection hook.
