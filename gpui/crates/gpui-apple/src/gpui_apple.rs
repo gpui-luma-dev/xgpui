@@ -6,6 +6,8 @@
 //! while leaving application lifecycle, windowing, and input to each platform backend.
 
 pub mod custom_draw;
+#[cfg(target_os = "macos")]
+pub mod content_executor;
 mod dispatcher;
 pub mod keychain;
 pub mod metal;

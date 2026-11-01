@@ -222,6 +222,11 @@ impl<Owner: Clone> ExecutionTracker<Owner> {
     pub fn live_bytes(&self) -> u64 {
         self.live_bytes
     }
+    /// Whether an operation's resource charge is still retained. Executors use
+    /// this to retire their resource table alongside completion accounting.
+    pub fn has_reservation(&self, id: usize) -> Result<bool> {
+        Ok(self.node(id)?.reserved)
+    }
     /// Current unsubmitted operation recordings.
     pub fn recording_nodes(&self) -> usize {
         self.recording_nodes

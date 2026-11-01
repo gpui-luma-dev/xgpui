@@ -61,6 +61,8 @@ image = { version = "0.25.1", default-features = false, features = [
     "webp"] }
 libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
+naga = { version = "30.0.1", features = ["wgsl-in", "msl-out"] }
+naga-types = "30.0.1"
 mach2 = { version = "0.6" }
 objc2 = { version = "0.6" }
 objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFData", "CFDictionary", "CFString", "CFNumber", "CFBase"] }

@@ -7326,6 +7326,8 @@ dependencies = [
  "libc",
  "log",
  "mach2",
+ "naga",
+ "naga-types",
  "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-core-graphics",

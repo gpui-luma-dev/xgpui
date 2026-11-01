@@ -5019,6 +5019,8 @@ dependencies = [
  "libc",
  "log",
  "mach2",
+ "naga",
+ "naga-types",
  "objc2",
  "objc2-core-foundation",
  "objc2-core-graphics",

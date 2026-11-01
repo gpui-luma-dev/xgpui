@@ -46,6 +46,14 @@ pub enum ContentErrorKind {
     InvalidTransition,
     /// Shader syntax, semantics, or selected stage interfaces are invalid.
     ShaderValidation,
+    /// Native allocation failed before publishing an output.
+    AllocationFailure,
+    /// Backend compilation, submission, or GPU execution failed.
+    ExecutionFailure,
+    /// A request was canceled; submitted work still retires safely.
+    Cancelled,
+    /// A caller deadline expired; this does not terminate driver execution.
+    Timeout,
 }
 
 impl ContentError {
