@@ -10,6 +10,7 @@ use std::{
 type Signature = Vec<(u64, c::ContentRequest)>;
 struct Pending {
     keys: Vec<c::OutputKey>,
+    presentation_slots: Vec<Option<c::PresentationSlotId>>,
     job: MetalGpuJob,
 }
 /// The worker and exported-output budget are shared by every window on a device.
@@ -205,16 +206,6 @@ impl ContentPresenter {
                     .collect()
             })
             .unwrap_or_default();
-        // Compare collision-checked output recipes, so recreating an equivalent
-        // source cannot cancel useful work. Changed recipes cancel subscriptions
-        // before publication; submitted native work still retires on the worker.
-        if self
-            .pending
-            .as_ref()
-            .is_some_and(|pending| pending.keys != keys)
-        {
-            self.pending = None;
-        }
         if let Some(pending) = &self.pending
             && let Some(result) = pending.job.take()
         {
@@ -223,12 +214,42 @@ impl ContentPresenter {
                 Ok(frame) => {
                     self.stats = frame.stats;
                     self.completions += 1;
-                    for (key, image) in pending.keys.into_iter().zip(frame.images) {
+                    // Consume completed work before a newer input can cancel it.
+                    // Its destinations may retain these pixels while the newest
+                    // generation runs, even if no frame displayed this result yet.
+                    for ((key, slot), image) in pending
+                        .keys
+                        .into_iter()
+                        .zip(pending.presentation_slots)
+                        .zip(frame.images)
+                    {
+                        if !wide
+                            && matches!(
+                                image.descriptor.interpretation().color,
+                                c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
+                            )
+                        {
+                            continue;
+                        }
+                        if let Some(slot) = slot.filter(|slot| slots.contains(slot)) {
+                            self.slots.insert(slot, key.clone());
+                        }
                         self.cache.insert(key, image);
                     }
                 }
-                Err(error) => self.fail(signature.clone(), error),
+                Err(error) if pending.keys == keys => self.fail(signature.clone(), error),
+                Err(_) => {} // A failure of a replaced request is not the new request's failure.
             }
+        }
+        // Compare collision-checked output recipes, so recreating an equivalent
+        // source cannot cancel useful work. Cancel unfinished changed recipes
+        // after harvesting completed results; submitted work still retires safely.
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|pending| pending.keys != keys)
+        {
+            self.pending = None;
         }
         // Evict unused outputs before asking the shared device service for more
         // memory. Slot history and native sampling submissions keep their leases.
@@ -247,6 +268,10 @@ impl ContentPresenter {
                     self.requests += 1;
                     self.pending = Some(Pending {
                         keys: keys.clone(),
+                        presentation_slots: active
+                            .iter()
+                            .map(|draw| draw.draw.presentation.slot)
+                            .collect(),
                         job,
                     });
                 }

@@ -505,3 +505,150 @@ fn parameter_edits_keep_completed_pixels_visible_while_gpu_work_is_pending() {
         assert_eq!(renderer.content_presentation_stats().execution.readbacks, 0);
     }
 }
+
+#[test]
+fn conic_edits_present_completed_work_before_accepting_the_next_angle() {
+    struct Release(Arc<MetalContentTestGate>);
+    impl Drop for Release {
+        fn drop(&mut self) {
+            self.0.release();
+        }
+    }
+    let mut renderer = MetalHeadlessRenderer::new();
+    let rx = wake(&mut renderer);
+    let slot = PresentationSlotId::new();
+    let stops = bw();
+    let make = |angle| {
+        let gradient = Gradient::conic([0.5; 2], angle, stops.clone()).unwrap();
+        let mut scene = Scene::default();
+        scene.insert_primitive(draw(&gradient, rect(0., 32.), slot));
+        scene.finish();
+        scene
+    };
+    let extent = size(DevicePixels(32), DevicePixels(8));
+    let initial = make(0.);
+    ready(&mut renderer, &initial, &rx);
+    let first = renderer.render_scene_to_image(&initial, extent).unwrap();
+    let next = make(45.);
+    assert_eq!(
+        renderer.render_scene_to_image(&next, extent).unwrap(),
+        first
+    );
+    rx.recv_timeout(Duration::from_secs(20)).unwrap(); // completed, not yet presented
+    let gate = Release(Arc::new(MetalContentTestGate::default()));
+    renderer.set_content_validation_limits(MetalContentLimits {
+        pause_before_node: Some((0, gate.0.clone())),
+        ..Default::default()
+    });
+    let newest = make(90.);
+    let image = renderer.render_scene_to_image(&newest, extent).unwrap();
+    for (x, y, pixel) in image.enumerate_pixels() {
+        let expected = reference(
+            GradientKind::Conic {
+                center: [0.5; 2],
+                angle: 45.,
+            },
+            &stops,
+            32,
+            8,
+            x,
+            y,
+        );
+        assert!(
+            pixel
+                .0
+                .into_iter()
+                .zip(expected)
+                .all(|(a, b)| a.abs_diff(b) <= 2),
+            "completed angle discarded on new input: ({x},{y}) {:?} != {expected:?}",
+            pixel.0
+        );
+    }
+    assert!(gate.0.wait_until_entered(Duration::from_secs(5)));
+    gate.0.release();
+    rx.recv_timeout(Duration::from_secs(20)).unwrap();
+    PlatformHeadlessRenderer::prepare_content_snapshot(&mut renderer, &newest).unwrap();
+    let image = renderer.render_scene_to_image(&newest, extent).unwrap();
+    for (x, y, pixel) in image.enumerate_pixels() {
+        let expected = reference(
+            GradientKind::Conic {
+                center: [0.5; 2],
+                angle: 90.,
+            },
+            &stops,
+            32,
+            8,
+            x,
+            y,
+        );
+        assert!(
+            pixel
+                .0
+                .into_iter()
+                .zip(expected)
+                .all(|(a, b)| a.abs_diff(b) <= 2)
+        );
+    }
+    assert_eq!(renderer.content_presentation_stats().execution.readbacks, 0);
+}
+
+#[test]
+fn continuous_conic_input_advances_completed_generations() {
+    let mut renderer = MetalHeadlessRenderer::new();
+    let rx = wake(&mut renderer);
+    let slots = std::array::from_fn::<_, 3, _>(|_| PresentationSlotId::new());
+    let base = Gradient::conic([0.5; 2], 0., bw()).unwrap();
+    let start = std::time::Instant::now();
+    let mut last = Scene::default();
+    let mut samples = Vec::new();
+    for frame in 0..60 {
+        let began = std::time::Instant::now();
+        let gradient = base
+            .with_kind(GradientKind::Conic {
+                center: [0.5; 2],
+                angle: frame as f32 * 3.,
+            })
+            .unwrap();
+        let mut scene = Scene::default();
+        for (index, slot) in slots.iter().enumerate() {
+            // Three different extents model separately realized paint roles.
+            let mut primitive = draw(
+                &gradient,
+                rect(index as f32 * 340., 320. - index as f32),
+                *slot,
+            );
+            primitive.bounds.size.height = ScaledPixels(240.);
+            primitive.content_mask.bounds = primitive.bounds;
+            scene.insert_primitive(primitive);
+        }
+        scene.finish();
+        let pending =
+            PlatformHeadlessRenderer::prepare_content_snapshot(&mut renderer, &scene).unwrap_err();
+        assert_eq!(
+            pending.downcast_ref::<ContentError>().unwrap().kind,
+            ContentErrorKind::Pending
+        );
+        assert_eq!(
+            renderer.content_presentation_stats().completions,
+            frame,
+            "new input discarded the last completed generation"
+        );
+        rx.recv_timeout(Duration::from_secs(20)).unwrap();
+        samples.push(began.elapsed().as_secs_f64() * 1000.);
+        last = scene;
+    }
+    PlatformHeadlessRenderer::prepare_content_snapshot(&mut renderer, &last).unwrap();
+    let stats = renderer.content_presentation_stats();
+    assert_eq!(stats.completions, 60);
+    assert_eq!(stats.requests, 60);
+    assert_eq!(stats.execution.readbacks, 0);
+    assert_eq!(stats.execution.pipeline_compilations, 0);
+    assert!(stats.execution.max_in_flight <= 2);
+    samples.sort_by(f64::total_cmp);
+    eprintln!(
+        "conic stream: 60/60 completed, 3 extents, total_ms={:.2}, median_ms={:.2}, p95_ms={:.2}, producer_readbacks=0",
+        start.elapsed().as_secs_f64() * 1000.,
+        samples[30],
+        samples[57]
+    );
+}

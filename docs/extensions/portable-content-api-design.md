@@ -971,3 +971,17 @@ source replacement. Completed snapshots alone did not catch this; a deterministi
 native acceptance test pauses production and checks unchanged visible pixels on
 pending edit/replay frames for every analytic kind, followed by the new pixels on
 completion. Source identity and destination presentation identity remain separate.
+
+
+Continuous-edit scheduling correction: polling and harvesting completed work must
+precede canceling a replaced request. A completed result can become the active
+destination slot's retained history even when the next input arrives before its
+redraw. Otherwise sustained input discards useful completed frames and visibly
+stalls. Results canceled while unfinished remain excluded, removed slots cannot
+regain history, and incompatible wide results cannot enter an SDR fallback.
+Strict snapshots still return Pending until the requested generation is ready.
+A conic pixel test verifies the intermediate completed angle appears during the
+next pending angle, then the newest angle appears after completion. A 60-update,
+three-extent test verifies every completed generation advances without producer
+readback. Existing supersession, failure, slot removal and strict snapshot tests
+remain required. This changes host scheduling, not the portable producer API.
