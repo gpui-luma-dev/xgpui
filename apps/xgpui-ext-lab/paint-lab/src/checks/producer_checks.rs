@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 use gpui::*;
 use std::sync::Arc;
 use xgpui_shader::SolidColor;
-mod mesh_checks;
+pub(super) mod mesh_checks;
 use super::ready_image;
 
 fn producer(color: [f32; 4]) -> Arc<dyn gpui::CustomContent> {

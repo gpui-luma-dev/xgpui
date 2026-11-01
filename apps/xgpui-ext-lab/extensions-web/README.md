@@ -216,8 +216,8 @@ For cross-gallery navigation, use the documentation preview at
 Open `?demo=hermite` (Automatic), `?demo=hermite&backend=webgpu` or
 `?demo=hermite&backend=webgl`. Select a mesh point, drag the position/tangent
 sliders or use their −/+ controls, switch 2×2/3×3 grids and presets, or reset.
-Legacy and direct previews share paint-lab's `hermite_editor.rs` editing model.
-Rejected direct geometry displays its reason while legacy rendering stays current.
+Portable mesh and direct brush previews share paint-lab's `hermite_editor.rs` editing model.
+Rejected direct geometry displays its reason while portable rendering stays current.
 The same field is also shown on borders and text.
 
 ## Typography acceptance
@@ -342,3 +342,15 @@ Run the calculation tests without native lab binaries:
 ```sh
 cargo test --offline --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --no-default-features --features web --test color-tasks
 ```
+
+
+## Portable producer acceptance
+
+The Shader, Color and Hermite producer pages now use the framework's portable
+wgpu executor. Open `?demo=shader&backend=webgpu`, `?demo=color&backend=webgpu`
+and `?demo=hermite&backend=webgpu` after rebuilding. Test animation/opacity,
+color changes and mesh edits, then scroll and resize. Look for current pixels
+without transparency flashes and matching rounded/background/border/path coverage.
+WebGL2 does not supply storage/compute for these graphs; use WebGPU for this
+acceptance. The source API is identical to native Metal, with no browser producer
+adapters. See [lifecycle and native wgpu tests](../../../docs/extensions/portable-paints.md).

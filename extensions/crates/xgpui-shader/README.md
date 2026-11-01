@@ -150,11 +150,10 @@ works inside portable graphs. Native allocation, structural output sharing,
 replay, resize, and completion belong to the host. Producer-side `preparations()`
 and `cached_texture_info()` diagnostics are removed. Procedural shader paints now also use portable content.
 
-Portable execution currently supports Metal. D3D11/wgpu portable execution remains
-pending; unsupported hosts report an explicit capability error. Use ordinary
-native colors or `Brush::solid` for existing main-pass UI solids on those hosts.
-The browser color demo uses native sRGB samples. No application-side
-Metal/D3D11/wgpu branches are required by the portable source API.
+Portable execution supports Metal and wgpu. D3D11 execution remains pending.
+The browser demos use the real portable producers on WebGPU; WebGL2 reports
+capability errors for storage/compute graphs. No application backend branches
+are required. See [wgpu execution and acceptance](../../../docs/extensions/portable-paints.md).
 
 From the repository root on macOS:
 
@@ -185,9 +184,8 @@ reflected uniforms and an immutable 1024-byte stop buffer; the host owns native
 pipelines, resource sharing, asynchronous completion and replay caching.
 Producer preparation/pipeline counters and native adapters have been removed.
 
-Execution currently requires the Metal portable executor; other hosts return
-UnsupportedCapability. The browser producer page reports pending portable wgpu execution; no separate
-analytic producer adapter is retained.
+Execution uses the host Metal or wgpu executor. The browser WebGPU producer
+page uses this same source; no separate analytic producer adapter is retained.
 
 ```sh
 MTL_DEBUG_LAYER=1 cargo test \
@@ -234,9 +232,8 @@ cached texture inspection, and Metal/D3D11/wgpu mesh adapters have been removed.
 The 64 MiB geometry limit counts 48-byte controls and 32-byte expanded triangle
 vertices. `evaluated_vertices` counts unique patch-local samples; `buffer_bytes`
 reports those two payloads. Intermediate coefficient/sample buffers are eliminated.
-Portable execution currently requires Metal. The browser mesh producer preview
-is explicitly unavailable until portable wgpu execution exists; its direct brush
-editor remains available.
+Portable execution supports Metal and wgpu. The browser WebGPU Hermite editor
+shows this portable mesh alongside its direct brush preview.
 
 ```sh
 MTL_DEBUG_LAYER=1 cargo test \
@@ -271,6 +268,6 @@ See [procedural shader paints](https://github.com/gpui-luma-dev/xgpui/blob/main/
 for the current API, source contract and native acceptance command. Expect five
 passing tests plus an ignored subprocess helper, zero producer readbacks, correct
 integer/matrix/derivative/discard pixels and all 60 continuous generations advancing.
-Execution currently supports Metal. The browser's producer page reports pending
-portable wgpu execution; its sample swatches/direct brushes remain available.
+Execution supports Metal and wgpu. The browser WebGPU producer page renders
+this same procedural source with stable presentation slots.
 The temporary browser-only gradient shader adapter has been removed.

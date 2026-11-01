@@ -1959,6 +1959,38 @@ impl PlatformWindow for WaylandWindow {
 
     fn on_request_frame(&self, callback: Box<dyn FnMut(RequestFrameOptions)>) {
         self.0.callbacks.borrow_mut().request_frame = Some(callback);
+        let (sender, mut receiver) = futures::channel::mpsc::channel::<()>(1);
+        let sender = std::sync::Mutex::new(sender);
+        let executor = self.borrow().globals.executor.clone();
+        if let Some(renderer) = self.0.state.borrow_mut().renderer.as_mut() {
+            renderer.set_content_redraw(Arc::new(move || {
+                let _ = sender.lock().unwrap().try_send(());
+            }));
+        }
+        let state = Rc::downgrade(&self.0.state);
+        let callbacks = Rc::downgrade(&self.0.callbacks);
+        let frame_loop = self.0.frame_loop.clone();
+        let frame_ping = self.0.frame_ping.clone();
+        let scheduled_frame_at = self.0.scheduled_frame_at.clone();
+        executor
+            .spawn(async move {
+                use futures::StreamExt;
+                while receiver.next().await.is_some() {
+                    let (Some(state), Some(callbacks)) = (state.upgrade(), callbacks.upgrade())
+                    else {
+                        break;
+                    };
+                    WaylandWindowStatePtr {
+                        state,
+                        callbacks,
+                        frame_loop: frame_loop.clone(),
+                        frame_ping: frame_ping.clone(),
+                        scheduled_frame_at: scheduled_frame_at.clone(),
+                    }
+                    .request_redraw();
+                }
+            })
+            .detach();
     }
 
     fn on_input(&self, callback: Box<dyn FnMut(PlatformInput) -> gpui::DispatchEventResult>) {

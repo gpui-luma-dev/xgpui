@@ -1,7 +1,8 @@
 # Portable content API and execution lifecycle
 
-Status: proposed full design, 2026-11-01. The CPU foundation described below is
-implemented; backend execution and application integration remain pending.
+Status: design with staged implementation, 2026-11-01. CPU contracts, Metal and
+wgpu execution/presentation and portable producer migration are implemented.
+D3D11 execution and the later external-image integrations remain pending.
 Issue: [#110](https://github.com/gpui-luma-dev/xgpui/issues/110).
 Baseline regression: [#111](https://github.com/gpui-luma-dev/xgpui/pull/111).
 
@@ -1055,3 +1056,46 @@ paint guide for commands and visual checks.
 Next: implement portable execution/presentation on wgpu and D3D11, then close the
 remaining issue-110 lifecycle/backend acceptance gaps. No superseded shader paint
 API or compatibility adapter is part of the final design; keep issue #110 open.
+
+
+## Implementation: wgpu execution and presentation
+
+The framework now lowers portable graphs on wgpu: initialized solids/uploads,
+image and bounded buffer copies (including unaligned byte copies), reflected
+render/compute bindings, fullscreen and indexed/instanced meshes, multi-output
+compute, load/blend and mip readback. Native jobs run on one serial worker;
+browser jobs run asynchronously on the owning event loop and use nonblocking
+polls/timers. Error scopes are popped synchronously before any yield, preventing
+browser tasks from capturing another job's errors. No GPU handles cross browser
+thread-affinity boundaries.
+
+The per-device/queue service admits a bounded submission window (default two),
+retains graph and sampling leases through GPU completion, and charges retained
+exports against subsequent admission. wgpu hides allocation sizes: padded image
+payloads are reserved in 64 KiB granules and buffers in 4 KiB granules. Pipeline
+variants, pending requests and validation staging have independent bounds. These
+reservations bound host-owned graph resources, not physical driver allocation.
+
+Presentation consumes completed textures directly, schedules redraws on browser
+and Linux window loops and retains slot history during continuous updates.
+Headless validation reports Pending until its exact generation is complete.
+Browser Shader, Color and Hermite producer previews use the same portable APIs.
+The browser execution target for storage/compute producers is WebGPU; WebGL2
+capability errors remain explicit. The wgpu compositor currently accepts sRGB,
+linear-sRGB and coverage; wide P3/Rec.2020 presentation is explicitly unsupported.
+Offscreen FP16 execution/readback remains available.
+
+Validation and manual acceptance: [portable wgpu paints](portable-paints.md).
+D3D11 execution/presentation is the next backend step; no producer-native or
+compatibility APIs were added.
+
+Runtime validation on macOS/wgpu-Metal: 15 graph acceptance tests plus a
+512-root subprocess, 26 paint-lab tests and three producer/presentation tests.
+The latter cover six color/alpha/coverage interpretations, 60 consecutive slot
+updates, completed-before-replacement ordering, strict snapshots, duplicate slots,
+zero producer readbacks and resource release after scene removal. Browser debug
+build and WebGPU initial Shader/Color/Hermite rendering were checked in in-app
+Chromium without warning/error console messages; interactive animation and edits
+remain manual acceptance. Linux cross-check stopped in the Wayland C dependency
+because this macOS environment lacks a Linux C sysroot; Linux and Windows native
+runtime acceptance are not claimed.

@@ -286,9 +286,9 @@ impl Render for HermiteDemo {
                 .child(button("reset-all","Reset all points").on_click(cx.listener(|s,_,_,cx| {s.mesh.load_preset(s.mesh.preset);cx.notify();})))
                 .child(button("background","Swap light / dark").on_click(cx.listener(|s,_,_,cx| {s.light = !s.light;cx.notify();}))))
             .child(points).child(controls)
-            .child("Angles are clockwise from right; lengths use normalized mesh coordinates. White marker = selected point; gold/cyan lines = U/V tangents at ¼ length. The direct brush preview uses these edited points.")
+            .child("Angles are clockwise from right; lengths use normalized mesh coordinates. White marker = selected point; gold/cyan lines = U/V tangents at ¼ length. Both previews use the same edited points.")
             .child(div().flex().flex_wrap().gap_4()
-                .child(div().flex().flex_col().gap_2().child("Portable mesh · current edit").child(painted().w(px(320.)).h(px(210.)).child("Portable mesh execution awaits the wgpu executor")))
+                .child(div().flex().flex_col().gap_2().child("Portable mesh · current edit").child(painted().w(px(320.)).h(px(210.)).bg_paint(gpui::content::ContentDraw::new(self.mesh.tessellated.content()).slot(self.mesh.presentation_slot))))
                 .child(div().flex().flex_col().gap_2().child("Direct brush · point markers").child(preview)));
         if let Ok(brush) = &self.mesh.brush {
             root = root

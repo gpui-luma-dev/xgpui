@@ -230,6 +230,25 @@ impl WebWindow {
             raf_function: RefCell::new(None),
         });
 
+        // GPU completion only signals this bounded channel. Window state and
+        // browser handles remain on their owning event-loop thread.
+        let (sender, receiver) = async_channel::bounded::<()>(1);
+        inner
+            .state
+            .borrow_mut()
+            .renderer
+            .set_content_redraw(Arc::new(move || {
+                let _ = sender.try_send(());
+            }));
+        let content_window = Rc::downgrade(&inner);
+        wasm_bindgen_futures::spawn_local(async move {
+            while receiver.recv().await.is_ok() {
+                let Some(inner) = content_window.upgrade() else {
+                    break;
+                };
+                inner.wake_frame_loop();
+            }
+        });
         let raf_closure = inner.create_raf_closure();
         inner.wake_frame_loop();
 
@@ -455,12 +474,13 @@ impl WebWindowInner {
             // (e.g. views invalidated during draw) schedule the next request
             // instead of being swallowed.
             this.raf_id.set(None);
+            let content_completed = this.state.borrow_mut().renderer.needs_redraw();
             this.with_callback(
                 |callbacks| &mut callbacks.request_frame,
                 |callback| {
                     callback(RequestFrameOptions {
-                        require_presentation: false,
-                        force_render: false,
+                        require_presentation: content_completed,
+                        force_render: content_completed,
                         signal_at: None,
                         signal_source: FrameRequestSource::NativeCallback,
                     })

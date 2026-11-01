@@ -1699,6 +1699,36 @@ impl PlatformWindow for X11Window {
 
     fn on_request_frame(&self, callback: Box<dyn FnMut(RequestFrameOptions)>) {
         self.0.callbacks.borrow_mut().request_frame = Some(callback);
+        let (sender, mut receiver) = futures::channel::mpsc::channel::<()>(1);
+        let sender = std::sync::Mutex::new(sender);
+        let executor = self.0.state.borrow().executor.clone();
+        if let Some(renderer) = self.0.state.borrow_mut().renderer.as_mut() {
+            renderer.set_content_redraw(Arc::new(move || {
+                let _ = sender.lock().unwrap().try_send(());
+            }));
+        }
+        let state = Rc::downgrade(&self.0.state);
+        let callbacks = Rc::downgrade(&self.0.callbacks);
+        executor
+            .spawn(async move {
+                use futures::StreamExt;
+                while receiver.next().await.is_some() {
+                    let (Some(_state), Some(callbacks)) = (state.upgrade(), callbacks.upgrade())
+                    else {
+                        break;
+                    };
+                    let callback = callbacks.borrow_mut().request_frame.take();
+                    if let Some(mut callback) = callback {
+                        callback(RequestFrameOptions {
+                            force_render: true,
+                            require_presentation: true,
+                            ..Default::default()
+                        });
+                        callbacks.borrow_mut().request_frame = Some(callback);
+                    }
+                }
+            })
+            .detach();
     }
 
     fn on_input(&self, callback: Box<dyn FnMut(PlatformInput) -> gpui::DispatchEventResult>) {

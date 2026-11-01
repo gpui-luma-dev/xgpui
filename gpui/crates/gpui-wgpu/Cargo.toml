@@ -69,7 +69,10 @@ wgpu = { version = "30.0.1", default-features = false, features = ["std", "metal
 wgpu = { version = "30.0.1", default-features = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
+wasm-bindgen-futures = "0.4"
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["HtmlCanvasElement", "Window"] }
 wgpu = { version = "30.0.1", default-features = false, features = ["webgl"] }
 
 [dev-dependencies]

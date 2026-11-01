@@ -1,97 +1,86 @@
 # Portable wgpu paints
 
-SolidColor, Gradient, MeshGradient and procedural ShaderPaint use portable content;
-Metal is the current executor and portable wgpu execution remains pending. The
-extension-owned wgpu producer adapters are removed. The browser producer page
-reports pending execution; native color samples and direct brushes remain.
-The low-level recording API below describes core external-content infrastructure,
-not an alternate xgpui-shader producer API.
-
-## Use
-
-```toml
-# App under apps/:
-[dependencies]
-xgpui-shader = { path = "../../extensions/crates/xgpui-shader", features = ["wgpu"] }
-```
+SolidColor, Gradient, MeshGradient and procedural ShaderPaint describe portable
+content. Metal and wgpu execute those graphs inside the framework; producers and
+applications use the same API on both. D3D11 execution remains to be implemented.
 
 ```rust
-use gpui::{prelude::*, *};
-use std::sync::Arc;
-use xgpui_shader::{painted, MeshGradient, MeshGrid, WindowPaintExt};
+use gpui::{prelude::*, *, content::{ContentDraw, PresentationSlotId}};
+use xgpui_shader::{painted, MeshGradient, MeshGrid};
 
-let paint = Arc::new(MeshGradient::new(MeshGrid::regular(2, 2, vec![
+let paint = MeshGradient::new(MeshGrid::regular(2, 2, vec![
     [1., 0., 0.], [0., 1., 0.], [0., 0., 1.], [1.; 3],
-])?, 18)?);
-painted().w(px(320.0)).h(px(240.0)).bg_paint(paint.content());
-window.paint_path_with_paint(path, paint.content());
+])?, 18)?;
+let slot = PresentationSlotId::new(); // retain per changing destination
+painted().w(px(320.0)).h(px(240.0))
+    .bg_paint(ContentDraw::new(paint.content()).slot(slot));
 ```
 
-## Producer API
+The `wgpu` feature on xgpui-shader enables comparison tests; it does not choose a
+producer backend. Procedural shaders require `portable-shaders`.
 
-`gpui_wgpu::custom_draw` — signature summary:
+## Execution and presentation
 
-```rust
-pub struct WgpuCustomContext {
-    pub device: Arc<wgpu::Device>,
-    // Private recording state.
-}
-impl WgpuCustomContext {
-    pub fn cache_key(&self) -> usize;
-    pub fn create_output(&self, extent: Size<DevicePixels>) -> Result<WgpuCustomOutput>;
-    pub fn record<T>(
-        &self,
-        encode: impl FnOnce(&mut wgpu::CommandEncoder) -> Result<T>,
-    ) -> Result<T>;
-    pub fn can_reuse(&self, output: &WgpuCustomOutput) -> bool;
-}
-pub struct WgpuCustomOutput { /* private fields; Clone */ }
-impl WgpuCustomOutput {
-    pub fn texture(&self) -> &wgpu::Texture;
-}
-```
+The host lowers solids, image/buffer uploads and copies, fullscreen/mesh render
+passes and multi-output compute passes to wgpu. Resources are initialized before
+use; graph dependencies use queue ordering. A serial worker on native hosts and
+an asynchronous task on the browser's owning event loop admit at most two
+submissions at once. Browser work yields without waiting for the GPU.
 
-## Contract
+Completed GPU textures go directly to the compositor. Stable presentation slots
+retain the previous image during parameter changes, and completion schedules a
+new frame. Normal window drawing performs no producer readback or GPU wait.
+Strict headless snapshots report `Pending` until their exact generation is ready.
+Scene removal releases subscriptions and cached outputs; submission leases retain
+resources until execution and compositor sampling complete. Workers are shared
+per device/queue, including the exported-image budget.
 
-```text
-producer    reusable cache hit OR allocate → record → return output
-host        validate → stage → submit accepted batch → compose
-failure     discard unsubmitted batch → frame error
-reuse       same recording / accepted batch / submitted queue
+Default limits are eight waiting jobs, 64 cached pipeline variants, 128 MiB of
+charged GPU resources and 64 MiB of packed validation readback. Readback staging
+headroom and retained exports count against GPU admission. wgpu hides driver
+allocation sizes: textures are charged in 64 KiB granules after row padding,
+buffers in 4 KiB granules. These are bounded host reservations, not measured
+physical VRAM. Pipeline/driver bookkeeping and ordinary compositor coverage
+allocations are separate from graph resource reservations.
 
-output      RGBA8Unorm · straight alpha · encoded-sRGB SDR
-mapping     full unclipped bounds; logical size ≠ raster extent
-coverage    analytic rounded rect; native border/path mask red channel
-cache key   queue + extent (+ logical size for WGSL)
-cache       64 MiB live output; separate 64 MiB coverage
-mesh        portable content requires the pending wgpu executor
-```
-
-No producer submission/GPU wait. Cache budgets exclude in-flight retention.
-[Recording details](paint-contract-hardening.md#implemented-discardable-recording-transactions).
+sRGB, linear-sRGB and coverage images compose with explicit alpha metadata.
+Wide P3/Rec.2020 presentation returns `UnsupportedCapability` on the current sRGB
+wgpu compositor. Offscreen FP16 graphs can still execute and be read back for
+validation. Device capabilities also gate storage buffers, compute and storage
+textures. Use WebGPU for the browser Gradient/MeshGradient demos; WebGL2 lacks
+the required storage/compute capabilities and receives a typed capability error.
 
 ## Checks
 
+From the repository root:
+
 ```sh
 just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-test
-# Mesh execution currently returns UnsupportedCapability until the portable wgpu executor exists.
+cargo run --offline --config .cargo/validation.toml \
+  --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab \
+  --features runtime-shaders,portable-shaders,wgpu -- \
+  --headless --wgpu --portable-shader --frames 60 --png /tmp/paint-wgpu.png
 
-# One headless backend/device per process; unavailable backend → error.
-WGPU_BACKEND=metal just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-test
-WGPU_BACKEND=vulkan just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-test
-# Windows PowerShell: $env:WGPU_BACKEND = "dx12"
-
-cargo test --config .cargo/validation.toml \
+cargo test --offline --config .cargo/validation.toml \
   --manifest-path gpui/crates/gpui-wgpu/Cargo.toml \
-  --features test-support --lib wgpu_custom --target-dir target
+  --features test-support --test portable_content_wgpu --target-dir target \
+  -- --test-threads=1
+
+bash apps/xgpui-ext-lab/extensions-web/build.sh --offline
+python3 apps/xgpui-ext-lab/extensions-web/serve.py
 ```
 
-Before the portable source migration, macOS wgpu/Metal mesh parity was exercised.
-Current portable mesh runtime acceptance is Metal-only; wgpu asserts its explicit
-unsupported capability. Legacy transaction and direct shader/brush tests remain. SPIR-V/HLSL generation passes; Vulkan/DX12 runtime acceptance
-remains outstanding. Software/readback timing is not hardware GPU timing.
+Open `http://localhost:8081/?demo=shader&backend=webgpu`, then the color and
+Hermite demos. Animate mesh/WGSL, change opacity, edit mesh points, scroll and
+resize. Look for advancing images without flashing to transparent, smooth
+parameter updates, correct rounded/border/path coverage and transparency.
+Headless checks must pass and write a PNG with the three painted shapes.
+Graph acceptance checks include pixel-exact operations, queue limit one,
+failure/cancellation recovery and a 512-root subprocess with a timeout.
 
-[Native D3D11](native-dx11-paints.md) · [WGSL](portable-wgsl-v1.md)
+Native runtime acceptance is exercised with wgpu on Metal. Linux/Vulkan and
+Windows/DX12 runtime acceptance remain platform QA tasks; D3D11 is a separate
+executor. Browser runtime results are recorded in the design's implementation log.
 
-Backend workflows, focused diagnostics, caching, and cold/warm measurement are
-documented in [Paint GPU validation](paint-validation.md).
+[Design and lifecycle](portable-content-api-design.md) ·
+[Native Metal](native-metal-paints.md) · [Native D3D11](native-dx11-paints.md)

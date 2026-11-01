@@ -668,6 +668,7 @@ pub(crate) fn extent(draw: &CustomDraw) -> Result<Size<DevicePixels>> {
 pub(crate) struct PreparedDraw {
     pub bind_group: wgpu::BindGroup,
     pub uniform_offset: u32,
+    pub portable_image: Option<crate::content_executor::GpuImage>,
 }
 
 const UNIFORM_BYTES: u64 = 144;
@@ -743,6 +744,7 @@ pub(crate) struct CustomCompositor {
     pub pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    pub transparent: wgpu::Texture,
     uniforms: UniformArena,
     pub masks: CoverageCache<wgpu::Texture>,
     pub mask_bytes: usize,
@@ -836,6 +838,20 @@ impl CustomCompositor {
             pipeline,
             layout,
             sampler,
+            transparent: device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("portable pending transparency"),
+                size: wgpu::Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            }),
             uniforms: UniformArena::new(device),
             masks: Default::default(),
             mask_bytes: 0,
@@ -847,6 +863,7 @@ impl CustomCompositor {
     pub(crate) fn upload_uniforms(&self, queue: &wgpu::Queue) {
         self.uniforms.upload(queue);
     }
+    #[cfg(test)]
     pub fn prepare(
         &mut self,
         device: &wgpu::Device,
@@ -856,6 +873,18 @@ impl CustomCompositor {
         native: bool,
         viewport: Size<DevicePixels>,
     ) -> PreparedDraw {
+        self.prepare_with_interpretation(device, draw, source, mask, native, viewport, None)
+    }
+    pub(crate) fn prepare_with_interpretation(
+        &mut self,
+        device: &wgpu::Device,
+        draw: &CustomDraw,
+        source: &wgpu::Texture,
+        mask: Option<&wgpu::Texture>,
+        native: bool,
+        viewport: Size<DevicePixels>,
+        interpretation: Option<gpui::content::ImageInterpretation>,
+    ) -> PreparedDraw {
         let adjustments = draw.content.image_linear_adjustments();
         let transform = adjustments
             .map(|v| v.rows())
@@ -863,7 +892,7 @@ impl CustomCompositor {
         let vignette = adjustments
             .map(|v| v.vignette())
             .unwrap_or([0., 0., 1., 1.]);
-        let linear = [
+        let mut linear = [
             if adjustments.is_some() { 1. } else { 0. },
             draw.content.image_color_mode().shader_value(),
             if adjustments.is_some_and(|v| v.is_p3()) {
@@ -873,6 +902,21 @@ impl CustomCompositor {
             },
             0.,
         ];
+        if let Some(value) = interpretation {
+            use gpui::content::{AlphaMode as A, ColorEncoding as C};
+            linear[2] = match value.alpha {
+                A::Opaque => 0.,
+                A::Straight => 1.,
+                A::Premultiplied => 2.,
+            };
+            linear[3] = match value.color {
+                C::Srgb => 1.,
+                C::LinearSrgb => 2.,
+                C::LinearP3 => 3.,
+                C::LinearRec2020 => 4.,
+                C::Coverage => 5.,
+            };
+        }
         let params: [[f32; 4]; 9] = [
             [
                 draw.bounds.origin.x.0,
@@ -939,6 +983,7 @@ impl CustomCompositor {
         PreparedDraw {
             bind_group,
             uniform_offset,
+            portable_image: None,
         }
     }
 }

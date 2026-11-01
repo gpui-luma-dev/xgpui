@@ -143,7 +143,8 @@ pub fn run(
         #[cfg(feature = "portable-shaders")]
         {
             let program = crate::portable::program()?;
-            gpui::content::ContentDraw::new(crate::portable::paint(&program, 0.15, 1.)?.content()).into_scene_content()
+            gpui::content::ContentDraw::new(crate::portable::paint(&program, 0.15, 1.)?.content())
+                .into_scene_content()
         }
         #[cfg(not(feature = "portable-shaders"))]
         {
@@ -158,9 +159,11 @@ pub fn run(
     let start = Instant::now();
     let mut image = None;
     for _ in 0..frames {
-        image = Some(
-            ready_image(renderer.as_mut(), &scene, size(DevicePixels(1024), DevicePixels(320)))?,
-        );
+        image = Some(ready_image(
+            renderer.as_mut(),
+            &scene,
+            size(DevicePixels(1024), DevicePixels(320)),
+        )?);
     }
     if let Some(png) = png {
         image.unwrap().save(png)?;
@@ -327,20 +330,14 @@ fn native_extension_paints_match_native_geometry() -> Result<()> {
 
 #[cfg(all(test, feature = "wgpu"))]
 #[::core::prelude::v1::test]
-fn wgpu_extension_content_reports_missing_executor() -> Result<()> {
+fn wgpu_extension_paints_match_native_geometry() -> Result<()> {
     let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new()?;
-    let error=verify(&mut renderer).unwrap_err();
-    ensure!(error.downcast_ref::<gpui::content::ContentError>().is_some_and(|e|e.kind==gpui::content::ContentErrorKind::UnsupportedCapability), "expected missing portable executor, got {error}");
-    Ok(())
+    verify(&mut renderer)
 }
 
 #[cfg(all(test, feature = "wgpu"))]
 #[::core::prelude::v1::test]
-fn wgpu_mesh_reports_portable_execution_unavailable() -> Result<()> {
+fn wgpu_mesh_matches_cpu_and_preserves_snapshots() -> Result<()> {
     let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new()?;
-    let mesh = MeshGradient::new(grid(0.)?, 18)?;
-    let scene = demo_scene(gpui::content::ContentDraw::new(mesh.content()).into_scene_content());
-    let error = renderer.prepare_content_snapshot(&scene).unwrap_err();
-    ensure!(error.downcast_ref::<gpui::content::ContentError>().is_some_and(|e| e.kind == gpui::content::ContentErrorKind::UnsupportedCapability), "expected explicit unavailable portable executor");
-    Ok(())
+    producer_checks::mesh_checks::verify_mesh(&mut renderer)
 }

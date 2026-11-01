@@ -91,9 +91,9 @@ for architecture, compatibility impact, coordinate semantics and remaining work.
 
 ## Portable headless backend
 
-The wgpu portable executor is pending. Mesh, analytic Gradient and SolidColor
-now require portable execution; `--wgpu` returns UnsupportedCapability for them.
-Wgpu-specific experimental shader/coverage fixtures remain testable separately.
+The wgpu portable executor runs MeshGradient, analytic Gradient, SolidColor and
+procedural ShaderPaint. Use `--headless --wgpu`; it validates exact-generation
+pixels before readback. See [wgpu checks](../../../docs/extensions/portable-paints.md).
 
 ## Experimental user-authored WGSL
 
@@ -101,8 +101,8 @@ Procedural ShaderProgram/ShaderPaint now use the portable content host. Select
 **User WGSL** or launch with --portable-shader. Angle drives progress; selected
 stop RGB/alpha drives tint/transparency. The source uses core UniformValues and
 contains no backend branches or binding declarations. Its native adapters and the
-Shader/shader compatibility aliases have been removed. Execution currently needs
-Metal; --wgpu reports UnsupportedCapability until portable wgpu execution exists.
+Shader/shader compatibility aliases have been removed. Metal and wgpu execute
+the same source; use --headless --wgpu for the latter.
 
 ```sh
 cargo run --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab \
@@ -166,7 +166,7 @@ What to look for: a successful JSON report covering native coverage, alpha, clip
 mapping, replay, resize and source sharing; the saved image contains all three
 painted shapes. Meshes now also use portable content. The complete
 headless checks currently require Metal for their portable solid portions;
-`--wgpu` reports unsupported portable execution until that executor is migrated.
+`--headless --wgpu` validates the same portable producers on wgpu.
 Wgpu-specific legacy brush/cache tests remain available and use native fixtures.
 
 For direct solid pixels/host-cache acceptance, run the shader extension's

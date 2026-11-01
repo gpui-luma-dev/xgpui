@@ -1,8 +1,8 @@
 # Portable procedural shader paints
 
 `xgpui-shader/portable-shaders` supplies a CPU-only procedural paint convenience
-API over GPUI portable content. The host owns backend execution; Metal is the
-current executor. D3D11/wgpu execution is pending and returns UnsupportedCapability.
+API over GPUI portable content. The host owns backend execution on Metal and
+wgpu. D3D11 execution remains pending.
 The historical guide filename does not name a separate or compatibility API.
 
 ## Source contract
@@ -118,5 +118,5 @@ progress; the selected stop's RGB/alpha drives tint/transparency. Drag continuou
 animate/pause, change opacity/clip and resize. All three shapes should update
 without flashes, sticking or catching up after mouse release. Source is in
 `apps/xgpui-ext-lab/paint-lab/src/portable.rs` and `src/shaders/portable-wash.wgsl`.
-The browser producer page reports pending wgpu execution; its native sample-swatch
-and direct brush editors remain available. No browser-only producer adapter remains.
+The browser WebGPU producer page renders the same source. See
+[wgpu acceptance](portable-paints.md) for build commands and capabilities.

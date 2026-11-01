@@ -37,6 +37,17 @@ fn rec2020_to_p3(c: vec3<f32>) -> vec3<f32> {
     var coverage = clamp(0.5 - distance,0.,1.);
     if (u32(p.viewport.w) & 1u) != 0u { coverage = textureSample(shape_mask,paint_sampler,in.uv).r; }
     var color = textureSample(image,paint_sampler,in.uv);
+    if p.linear.w>0.5 {
+        if p.linear.w>4.5 {color=vec4(1.,1.,1.,color.r);}
+        else {
+            if p.linear.z<0.5 {color.a=1.;}
+            if p.linear.z>1.5 {if color.a>0. {color=vec4(color.rgb/color.a,color.a);}else{color=vec4(0.);}}
+            if p.linear.w>3.5 {color=vec4(rec2020_to_p3(color.rgb),color.a);}
+            if p.linear.w>2.5 {color=vec4(p3_to_srgb(color.rgb),color.a);}
+            if p.linear.w>1.5 {let c=clamp(color.rgb,vec3(0.),vec3(1.));color=vec4(encode_srgb(c.r),encode_srgb(c.g),encode_srgb(c.b),color.a);}
+        }
+        return vec4(color.rgb,color.a*coverage*p.viewport.z);
+    }
     if p.linear.y > 2.5 { color = vec4(rec2020_to_p3(color.rgb), color.a); }
     if p.viewport.w > 1.5 && color.a > 0. { color = vec4(color.rgb / color.a, color.a); }
     let processing = p.linear.x > 0.5 || p.linear.y > 0.5;

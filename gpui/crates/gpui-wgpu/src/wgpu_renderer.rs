@@ -1,3 +1,6 @@
+mod content;
+#[cfg(any(test, feature = "test-support"))]
+pub use content::ContentPresentationStats;
 #[path = "surface_frame.rs"]
 mod surface_frame;
 use crate::{CompositorGpuHint, DeviceErrorState, WgpuAtlas, WgpuContext};
@@ -215,6 +218,8 @@ impl WgpuResources {
 struct WgpuRendererCore {
     resources: WgpuResources,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
+    content_presenter: content::ContentPresenter,
+    content_subframe_depth: usize,
     shaders: ShaderRenderer,
     backdrops: Option<crate::backdrop::Backdrops>,
     surface_frame: Option<surface_frame::SurfaceFrame>,
@@ -268,6 +273,7 @@ pub struct WgpuRenderer {
     observed_error_generation: u64,
     last_surface_error: Option<String>,
     needs_redraw: bool,
+    content_redraw: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl WgpuRenderer {
@@ -492,6 +498,7 @@ impl WgpuRenderer {
             observed_error_generation: 0,
             last_surface_error: None,
             needs_redraw: false,
+            content_redraw: Arc::new(|| {}),
         })
     }
 }
@@ -1335,6 +1342,9 @@ impl WgpuRendererCore {
 
         Self {
             custom_compositor: None,
+            content_presenter: content::ContentPresenter::new(&device, &queue)
+                .expect("initialize portable wgpu content service"),
+            content_subframe_depth: 0,
             shaders: ShaderRenderer::default(),
             backdrops: None,
             surface_frame: None,
@@ -1414,12 +1424,50 @@ impl WgpuRendererCore {
         resources.path_msaa_view = path_msaa_view;
     }
 
+    fn portable_requests(
+        &self,
+        scene: &Scene,
+    ) -> Result<Vec<Option<gpui::content::ContentDrawRequest>>> {
+        scene
+            .custom_draws
+            .iter()
+            .map(|draw| {
+                let request = gpui::PreparationRequest::new(
+                    draw.bounds.size.map(|d| gpui::px(d.0)),
+                    crate::custom_draw::extent(draw)?,
+                    1.,
+                )?;
+                draw.content
+                    .portable_content(&request)
+                    .map_err(anyhow::Error::from)
+            })
+            .collect()
+    }
+    fn render_native_subframe(
+        &mut self,
+        scene: &Scene,
+        target: &wgpu::TextureView,
+        size: Size<DevicePixels>,
+        premultiplied: bool,
+        clear: wgpu::Color,
+    ) -> Result<wgpu::SubmissionIndex> {
+        self.content_subframe_depth += 1;
+        let result = self.render_frame(scene, target, size, premultiplied, clear);
+        self.content_subframe_depth -= 1;
+        result
+    }
     fn prepare_custom_draws(
         &mut self,
         scene: &Scene,
         viewport: Size<DevicePixels>,
     ) -> Result<Vec<crate::custom_draw::PreparedDraw>> {
         use crate::custom_draw::*;
+        let requests = self.portable_requests(scene)?;
+        let portable = if self.content_subframe_depth == 0 {
+            self.content_presenter.update(&requests, false)?
+        } else {
+            vec![None; requests.len()]
+        };
         if scene.custom_draws.is_empty() {
             return Ok(Vec::new());
         }
@@ -1436,7 +1484,7 @@ impl WgpuRendererCore {
             compositor.begin_uniforms(&device, scene.custom_draws.len())?;
             let mut prepared = Vec::with_capacity(scene.custom_draws.len());
             let preparation_frame = gpui::PreparationFrame::default();
-            for draw in &scene.custom_draws {
+            for (draw_index, draw) in scene.custom_draws.iter().enumerate() {
                 let prepared_draw = batch.prepare(|context| {
                     let extent = extent(draw)?;
                     anyhow::ensure!(
@@ -1452,43 +1500,58 @@ impl WgpuRendererCore {
                         extent,
                         1.,
                     )?;
-                    let output =
-                        draw.content
-                            .prepare_in_frame(context, &request, &preparation_frame)?;
-                    let native = output.is::<Background>();
-                    let texture = if native {
-                        let background = *output.downcast::<Background>().unwrap();
-                        let texture = new_texture(&device, extent, self.target_format)?;
-                        let bounds = Bounds::new(
-                            gpui::point(ScaledPixels(0.), ScaledPixels(0.)),
-                            gpui::size(
-                                ScaledPixels(extent.width.0 as f32),
-                                ScaledPixels(extent.height.0 as f32),
-                            ),
-                        );
-                        let mut native_scene = Scene::default();
-                        native_scene.insert_primitive(gpui::Quad {
-                            bounds,
-                            content_mask: gpui::ContentMask { bounds },
-                            background,
-                            ..Default::default()
-                        });
-                        native_scene.finish();
-                        self.render_frame(
-                            &native_scene,
-                            &texture.create_view(&Default::default()),
-                            extent,
+                    let gpu = portable[draw_index].clone();
+                    let (texture, native) = if requests[draw_index].is_some() {
+                        (
+                            if let Some(image) = &gpu {
+                                image.texture().clone()
+                            } else {
+                                compositor.transparent.clone()
+                            },
                             false,
-                            wgpu::Color::TRANSPARENT,
-                        )?;
-                        texture
+                        )
                     } else {
-                        output
-                            .downcast::<WgpuCustomOutput>()
-                            .map_err(|_| anyhow::anyhow!("producer returned a non-wgpu output"))?
-                            .validate(context, extent)?
-                            .texture()
-                            .clone()
+                        let output =
+                            draw.content
+                                .prepare_in_frame(context, &request, &preparation_frame)?;
+                        let native = output.is::<Background>();
+                        let texture = if native {
+                            let background = *output.downcast::<Background>().unwrap();
+                            let texture = new_texture(&device, extent, self.target_format)?;
+                            let bounds = Bounds::new(
+                                gpui::point(ScaledPixels(0.), ScaledPixels(0.)),
+                                gpui::size(
+                                    ScaledPixels(extent.width.0 as f32),
+                                    ScaledPixels(extent.height.0 as f32),
+                                ),
+                            );
+                            let mut native_scene = Scene::default();
+                            native_scene.insert_primitive(gpui::Quad {
+                                bounds,
+                                content_mask: gpui::ContentMask { bounds },
+                                background,
+                                ..Default::default()
+                            });
+                            native_scene.finish();
+                            self.render_native_subframe(
+                                &native_scene,
+                                &texture.create_view(&Default::default()),
+                                extent,
+                                false,
+                                wgpu::Color::TRANSPARENT,
+                            )?;
+                            texture
+                        } else {
+                            output
+                                .downcast::<WgpuCustomOutput>()
+                                .map_err(|_| {
+                                    anyhow::anyhow!("producer returned a non-wgpu output")
+                                })?
+                                .validate(context, extent)?
+                                .texture()
+                                .clone()
+                        };
+                        (texture, native)
                     };
                     anyhow::ensure!(
                         draw.content.image_color_mode() == gpui::ImageColorMode::EncodedSrgb
@@ -1502,7 +1565,7 @@ impl WgpuRendererCore {
                         } else {
                             let mask = new_texture(&device, extent, self.target_format)?;
                             let mask_scene = coverage_scene(draw, extent)?;
-                            self.render_frame(
+                            self.render_native_subframe(
                                 &mask_scene,
                                 &mask.create_view(&Default::default()),
                                 extent,
@@ -1524,16 +1587,17 @@ impl WgpuRendererCore {
                     } else {
                         None
                     };
-                    Ok(
-                        compositor.prepare(
-                            &device,
-                            draw,
-                            &texture,
-                            mask.as_ref(),
-                            native,
-                            viewport,
-                        ),
-                    )
+                    let mut prepared = compositor.prepare_with_interpretation(
+                        &device,
+                        draw,
+                        &texture,
+                        mask.as_ref(),
+                        native,
+                        viewport,
+                        gpu.as_ref().map(|image| image.descriptor.interpretation()),
+                    );
+                    prepared.portable_image = gpu;
+                    Ok(prepared)
                 })?;
                 prepared.push(prepared_draw);
             }
@@ -1978,6 +2042,13 @@ impl WgpuRendererCore {
             .iter()
             .map(|d| d.content.clone())
             .collect::<Vec<_>>();
+        crate::content_executor::retain_sampling(
+            &self.resources().queue,
+            custom_draws
+                .iter()
+                .filter_map(|draw| draw.portable_image.clone())
+                .collect(),
+        );
         if !content.is_empty() {
             self.resources()
                 .queue
@@ -2562,6 +2633,15 @@ impl WgpuRenderer {
         self.state = RendererState::Released;
     }
 
+    /// Called when a portable producer completes. Platform owners schedule a
+    /// coalesced frame on the window thread; the callback must not draw inline.
+    pub fn set_content_redraw(&mut self, wake: Arc<dyn Fn() + Send + Sync>) {
+        self.content_redraw = wake.clone();
+        if let Some(core) = self.core_mut() {
+            core.content_presenter.set_wake(wake);
+        }
+    }
+
     /// Returns true if the GPU device was lost and recovery is needed.
     pub fn device_lost(&self) -> bool {
         self.device_errors.device_lost()
@@ -2570,7 +2650,10 @@ impl WgpuRenderer {
     /// Returns true if a redraw is needed because GPU state was cleared.
     /// Calling this method clears the flag.
     pub fn needs_redraw(&mut self) -> bool {
-        std::mem::take(&mut self.needs_redraw)
+        let completed = self
+            .core()
+            .is_some_and(|core| core.content_presenter.take_redraw());
+        std::mem::take(&mut self.needs_redraw) | completed
     }
 
     /// Recovers from a lost GPU device by recreating the renderer with a new context.
@@ -2638,6 +2721,7 @@ impl WgpuRenderer {
         self.atlas.handle_device_lost(context);
 
         let is_bgr = self.is_bgr;
+        let content_redraw = self.content_redraw.clone();
         *self = Self::new_internal(
             Some(gpu_context.clone()),
             context,
@@ -2647,6 +2731,7 @@ impl WgpuRenderer {
             self.atlas.clone(),
         )?;
         self.set_subpixel_layout(is_bgr);
+        self.set_content_redraw(content_redraw);
 
         log::info!("GPU recovery complete");
         Ok(())
@@ -2712,6 +2797,20 @@ impl WgpuHeadlessRenderer {
         })
     }
 
+    pub fn set_content_redraw(&mut self, wake: Arc<dyn Fn() + Send + Sync>) {
+        self.core.content_presenter.set_wake(wake);
+    }
+    #[cfg(feature = "test-support")]
+    pub fn content_presentation_stats(&self) -> ContentPresentationStats {
+        self.core.content_presenter.snapshot()
+    }
+    #[cfg(feature = "test-support")]
+    pub fn set_content_validation_limits(
+        &mut self,
+        limits: crate::content_executor::WgpuContentLimits,
+    ) {
+        self.core.content_presenter.limits = limits;
+    }
     fn ensure_render_target(&mut self, size: Size<DevicePixels>) -> anyhow::Result<()> {
         anyhow::ensure!(
             size.width.0 > 0 && size.height.0 > 0,
@@ -2936,6 +3035,11 @@ impl WgpuHeadlessRenderer {
     any(test, feature = "bench-support", feature = "test-support")
 ))]
 impl gpui::PlatformHeadlessRenderer for WgpuHeadlessRenderer {
+    fn prepare_content_snapshot(&mut self, scene: &Scene) -> anyhow::Result<()> {
+        let requests = self.core.portable_requests(scene)?;
+        self.core.content_presenter.update(&requests, false)?;
+        self.core.content_presenter.require_ready()
+    }
     fn render_scene_to_image(
         &mut self,
         scene: &Scene,
