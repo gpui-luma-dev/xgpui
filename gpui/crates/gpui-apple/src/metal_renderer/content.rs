@@ -78,6 +78,20 @@ impl ContentPresenter {
             execution: self.stats.clone(),
         }
     }
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn require_ready(&self) -> Result<()> {
+        if let Some((_, error)) = &self.failed {
+            return Err(error.clone().into());
+        }
+        if self.pending.is_some() {
+            return Err(c::ContentError::new(
+                c::ContentErrorKind::Pending,
+                "requested portable content is pending; retry the snapshot asynchronously",
+            )
+            .into());
+        }
+        Ok(())
+    }
     pub fn set_wake(&mut self, wake: Arc<dyn Fn() + Send + Sync>) {
         self.wake = wake;
     }

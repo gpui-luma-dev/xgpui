@@ -1,4 +1,4 @@
-//! Opt-in wide SDR content producers. Window presentation remains a host concern.
+//! Portable wide SDR content. Window presentation remains a host concern.
 //! Colors are explicitly linear Display P3/D65; native GPUI colors remain sRGB.
 /// Shared CPU color math, also available independently as `xgpui-color`.
 pub use xgpui_color as color;
@@ -6,109 +6,161 @@ pub use xgpui_color as color;
 #[cfg(feature = "instanced")]
 pub mod instanced;
 
-use anyhow::{Result, ensure};
-use gpui::{CustomContent, DevicePixels, Size};
-use std::any::Any;
+use gpui::content::{
+    AlphaMode, ColorEncoding, ColorValue, Content, ContentBuilder, ContentError, ContentRequest,
+    ContentSource, ImageInterpretation, ImageRef,
+};
 
-#[cfg(test)]
-static PRODUCER_ALLOCATIONS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
-
-#[cfg(target_os = "windows")]
-mod dx11;
-#[cfg(target_os = "macos")]
-mod metal;
-
-/// Immutable bounded-SDR color in linear Display P3/D65, with straight input alpha.
-/// Prepared textures store associated RGB/alpha and require a wide-capable host.
-///
-/// Native Metal and D3D11 window presentation accept this output when the host
-/// has enabled `WideGamutSdr`. Windows native execution/display validation remains
-/// outstanding. Other backends return an explicit preparation error.
-/// Preparation allocates a texture; output caching/pooling is not provided yet.
-#[derive(Debug)]
+/// Immutable bounded-SDR color with straight linear Display P3/D65 input.
+/// The portable graph stores premultiplied linear P3 in RGBA16Float. The host
+/// owns allocation, execution, caching and completion; the producer has no native
+/// device or queue. Presentation requires a wide-capable window/executor.
+#[derive(Clone, Debug)]
 pub struct WideColor {
     rgba: [f32; 4],
+    value: ColorValue,
+    content: Content,
 }
 impl WideColor {
-    /// Construct from finite straight linear P3 RGB and alpha in 0..=1.
-    /// This does not decode sRGB, load an image profile or enable a window mode.
-    pub fn linear_p3(rgba: [f32; 4]) -> Result<Self> {
-        ensure!(
-            rgba.iter().all(|c| c.is_finite() && (0. ..=1.).contains(c)),
-            "linear P3 SDR channels must be finite and in 0..=1"
-        );
-        Ok(Self { rgba })
+    /// Validate straight linear P3 RGB/alpha in 0..=1, then associate once in
+    /// linear space. Does not decode sRGB or change the window's color mode.
+    pub fn linear_p3(rgba: [f32; 4]) -> Result<Self, ContentError> {
+        // Validate the unassociated channels before multiplying: transparent
+        // invalid RGB must not disappear into an otherwise valid zero payload.
+        ColorValue::linear_p3(rgba)?;
+        let [r, g, b, a] = rgba;
+        let value = ColorValue::new(
+            [r * a, g * a, b * a, a],
+            ImageInterpretation {
+                color: ColorEncoding::LinearP3,
+                alpha: AlphaMode::Premultiplied,
+            },
+        )?;
+        let content = Content::solid(value.clone());
+        Ok(Self {
+            rgba,
+            value,
+            content,
+        })
+    }
+    /// Original straight linear P3 channels, also used by the instanced painter.
+    pub fn rgba(&self) -> [f32; 4] {
+        self.rgba
+    }
+    /// Retain this immutable portable source identity across draws and clones.
+    /// Use with `ContentDraw`/`Window::paint_content` or a portable paint adapter.
+    pub fn content(&self) -> Content {
+        self.content.clone()
     }
 }
-impl CustomContent for WideColor {
-    fn prepare(&self, backend: &dyn Any, extent: Size<DevicePixels>) -> Result<Box<dyn Any>> {
-        validate_extent(extent)?;
-        #[cfg(target_os = "macos")]
-        {
-            self.prepare_metal(backend, extent)
-        }
-        #[cfg(target_os = "windows")]
-        {
-            self.prepare_dx11(backend, extent)
-        }
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        {
-            let _ = backend;
-            anyhow::bail!("WideColor requires native Metal or D3D11 preparation")
-        }
+impl ContentSource for WideColor {
+    fn describe(
+        &self,
+        cx: &mut ContentBuilder,
+        request: &ContentRequest,
+    ) -> Result<ImageRef, ContentError> {
+        cx.solid(request.extent(), self.value.clone())
     }
 }
-fn validate_extent(extent: Size<DevicePixels>) -> Result<()> {
-    ensure!(
-        (1..=16384).contains(&extent.width.0) && (1..=16384).contains(&extent.height.0),
-        "invalid wide color extent"
-    );
-    ensure!(
-        extent.width.0 as u64 * extent.height.0 as u64 * 8 <= 64 * 1024 * 1024,
-        "wide color exceeds 64 MiB"
-    );
-    Ok(())
+impl From<WideColor> for Content {
+    fn from(value: WideColor) -> Self {
+        value.content
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::size;
+    use gpui::{content::*, px, size};
     #[test]
-    fn rejects_invalid_color_channels() {
-        for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -0.01, 1.01] {
-            for i in 0..4 {
-                let mut rgba = [0.5; 4];
-                rgba[i] = bad;
-                assert!(WideColor::linear_p3(rgba).is_err());
+    fn rejects_invalid_straight_channels_including_transparent_colors() {
+        for alpha in [0., 0.5, 1.] {
+            for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -0.01, 1.01] {
+                for i in 0..4 {
+                    let mut rgba = [0.5, 0.5, 0.5, alpha];
+                    rgba[i] = bad;
+                    assert_eq!(
+                        WideColor::linear_p3(rgba).unwrap_err().kind,
+                        ContentErrorKind::InvalidDescriptor
+                    );
+                }
             }
         }
-        assert!(WideColor::linear_p3([0.; 4]).is_ok());
-        assert!(WideColor::linear_p3([1.; 4]).is_ok());
     }
     #[test]
-    fn checks_float16_budget_and_extent_before_backend_work() {
-        for (w, h) in [(0, 1), (-1, 1), (1, 0), (16385, 1), (4096, 2049)] {
-            assert!(validate_extent(size(DevicePixels(w), DevicePixels(h))).is_err());
+    fn describes_associated_fp16_p3_and_shares_equivalent_outputs() {
+        for alpha in [0., 0.5, 1.] {
+            let color = WideColor::linear_p3([1., 0.5, 0.25, alpha]).unwrap();
+            let request =
+                ContentRequest::new(size(px(3.), px(5.)), ImageExtent::new(6, 10).unwrap(), 2.)
+                    .unwrap();
+            let roots = [color.content(), Content::new(color.clone())].map(|content| ContentRoot {
+                content,
+                request: request.clone(),
+            });
+            let graph = ContentGraph::describe(
+                &roots,
+                ContentCapabilities::default(),
+                GraphLimits::default(),
+            )
+            .unwrap();
+            assert_eq!(graph.nodes().len(), 1);
+            assert_eq!(graph.roots()[0], graph.roots()[1]);
+            let node = &graph.nodes()[0];
+            let ResourceDescriptor::Image(descriptor) = &node.outputs()[0] else {
+                panic!("image output")
+            };
+            assert_eq!(descriptor.format(), PixelFormat::Rgba16Float);
+            assert_eq!(descriptor.extent(), request.extent());
+            assert_eq!(
+                descriptor.interpretation(),
+                ImageInterpretation {
+                    color: ColorEncoding::LinearP3,
+                    alpha: AlphaMode::Premultiplied
+                }
+            );
+            let ContentOperation::Solid(value) = node.operation() else {
+                panic!("portable solid")
+            };
+            assert_eq!(value.rgba(), [alpha, alpha * 0.5, alpha * 0.25, alpha]);
         }
-        assert!(validate_extent(size(DevicePixels(4096), DevicePixels(2048))).is_ok());
-        let color = WideColor::linear_p3([1., 0., 0., 0.5]).unwrap();
-        assert!(
-            color
-                .prepare(&(), size(DevicePixels(0), DevicePixels(1)))
-                .unwrap_err()
-                .to_string()
-                .contains("extent")
-        );
     }
     #[test]
-    fn rejects_unknown_backend_without_reinterpreting_color() {
+    fn clones_retain_content_identity_and_changed_colors_get_new_snapshots() {
         let color = WideColor::linear_p3([1., 0., 0., 0.5]).unwrap();
-        assert!(
-            color
-                .prepare(&(), size(DevicePixels(8), DevicePixels(8)))
-                .is_err()
+        assert_eq!(color.clone().content().id(), color.content().id());
+        let consumed: Content = color.clone().into();
+        assert_eq!(consumed.id(), color.content().id());
+        assert_ne!(
+            WideColor::linear_p3([0., 1., 0., 0.5])
+                .unwrap()
+                .content()
+                .id(),
+            color.content().id()
+        );
+        assert_eq!(color.rgba(), [1., 0., 0., 0.5]);
+    }
+    #[test]
+    fn executor_limits_replace_native_producer_extent_rules() {
+        let color = WideColor::linear_p3([1.; 4]).unwrap();
+        let root = ContentRoot {
+            content: color.content(),
+            request: ContentRequest::new(
+                size(px(20.), px(20.)),
+                ImageExtent::new(20, 20).unwrap(),
+                1.,
+            )
+            .unwrap(),
+        };
+        let caps = ContentCapabilities {
+            max_image_dimension: 16,
+            ..Default::default()
+        };
+        assert_eq!(
+            ContentGraph::describe(&[root], caps, GraphLimits::default())
+                .unwrap_err()
+                .kind,
+            ContentErrorKind::UnsupportedCapability
         );
     }
 }

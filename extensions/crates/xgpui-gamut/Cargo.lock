@@ -4236,8 +4236,6 @@ version = "0.2.2"
 dependencies = [
  "anyhow",
  "bytemuck",
- "objc2-metal",
- "parking_lot",
  "xgpui",
  "xgpui-apple",
  "xgpui-color",

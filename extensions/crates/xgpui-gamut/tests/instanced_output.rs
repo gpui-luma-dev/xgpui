@@ -1,7 +1,10 @@
 //! Cross-extension parity belongs to the gamut integration, not shader internals.
-#![cfg(any(target_os = "macos", target_os = "windows"))]
+#![cfg(target_os = "macos")]
 use gpui::{Bounds, ContentMask, Primitive, Quad, ScaledPixels, Scene, ShaderDraw, point, size};
-use std::sync::Arc;
+use std::{
+    sync::{Arc, mpsc},
+    time::Duration,
+};
 use xgpui_shader::instanced::{
     ShaderProgram,
     presets::{EffectInstance, ROUNDED_BOX},
@@ -36,15 +39,16 @@ fn draw(program: &ShaderProgram<EffectInstance>, x: f32, color: [f32; 4]) -> Sha
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[test]
-fn wide_instances_match_typed_producers_and_reject_default_mode() {
+fn wide_instances_match_portable_content_and_reject_default_mode() {
     use gpui::{CustomDraw, DevicePixels, PlatformHeadlessRenderer, WindowColorMode};
     let wide = ShaderProgram::<EffectInstance>::new_linear_p3("struct Parameters { color: vec4<f32>, effect: vec4<f32>, } fn shade(input: ShaderInput, p: Parameters) -> vec4<f32> { return p.color; }").unwrap();
     #[cfg(target_os = "macos")]
     let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
-    #[cfg(target_os = "windows")]
-    let mut renderer = gpui_windows::Dx11HeadlessRenderer::new().unwrap();
+    let (done, ready) = mpsc::channel();
+    renderer.set_content_redraw(Arc::new(move || {
+        let _ = done.send(());
+    }));
     let make_scene = |instanced: bool, alpha: f32, opacity: f32| {
         let mut scene = Scene::default();
         // Non-black legacy backdrop, ordinary shader, wide content, then native UI.
@@ -73,9 +77,12 @@ fn wide_instances_match_typed_producers_and_reject_default_mode() {
                     content_mask: d.content_mask,
                     corner_radii: Default::default(),
                     opacity,
-                    content: Arc::new(
-                        xgpui_gamut::WideColor::linear_p3(color.map(|v| v.clamp(0., 1.))).unwrap(),
-                    ),
+                    content: gpui::content::ContentDraw::new(
+                        xgpui_gamut::WideColor::linear_p3(color.map(|v| v.clamp(0., 1.)))
+                            .unwrap()
+                            .content(),
+                    )
+                    .into_scene_content(),
                     coverage: None,
                 });
             }
@@ -105,9 +112,13 @@ fn wide_instances_match_typed_producers_and_reject_default_mode() {
             replay.replay(0..scene.len(), &scene);
             replay.finish();
             let actual = renderer.render_scene_to_image(&replay, extent).unwrap();
-            let expected = renderer
-                .render_scene_to_image(&make_scene(false, alpha, opacity), extent)
-                .unwrap();
+            let portable = make_scene(false, alpha, opacity);
+            renderer.render_scene(&portable, extent).unwrap();
+            if renderer.content_presentation_stats().pending {
+                ready.recv_timeout(Duration::from_secs(20)).unwrap();
+            }
+            let expected = renderer.render_scene_to_image(&portable, extent).unwrap();
+            assert_eq!(renderer.content_presentation_stats().execution.readbacks, 0);
             for (a, b) in actual.pixels().zip(expected.pixels()) {
                 for i in 0..4 {
                     assert!(

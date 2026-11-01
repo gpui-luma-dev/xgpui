@@ -55,6 +55,8 @@ pub enum ContentErrorKind {
     ExecutionFailure,
     /// A request was canceled; submitted work still retires safely.
     Cancelled,
+    /// A strict snapshot is not ready; retry asynchronously after native completion.
+    Pending,
     /// A caller deadline expired; this does not terminate driver execution.
     Timeout,
 }

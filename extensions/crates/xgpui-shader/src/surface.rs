@@ -251,6 +251,13 @@ impl IntoElement for Painted {
                                     },
                                     content,
                                 ),
+                                SurfacePaint::Paint(Paint::Content(draw)) => window.paint_content(
+                                    CustomGeometry::RoundedRect {
+                                        bounds,
+                                        corner_radii: radii,
+                                    },
+                                    draw,
+                                ),
                                 #[cfg(feature = "portable-shaders")]
                                 SurfacePaint::Brush(brush) => brush
                                     .paint_background(window, bounds, radii)

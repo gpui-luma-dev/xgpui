@@ -352,24 +352,26 @@ opacity against CPU-derived expected pixels. A scene test verifies 5,000 instanc
 form one ordered shader run with no custom producer draws.
 
 Run `gamut-lab --instanced` for solids, or `gamut-lab --instanced --gradient` for
-OkLab gradients. Omit the flags to compare the existing offscreen producer path.
+OkLab gradients. Omit the flags to compare the portable WideColor path (currently Metal).
 `--sdr` retains the solid sRGB baseline. Captures are clipped sRGB previews.
 
 A manual allocation/timing test is available:
 
 ```sh
-cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-gamut/Cargo.toml --features instanced --lib compare_producer_allocations_and_frame_readback -- --ignored --nocapture --test-threads=1
+cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-gamut/Cargo.toml --features instanced --lib compare_portable_replay_and_frame_readback -- --ignored --nocapture --test-threads=1
 ```
 
-This test counts actual producer texture allocations, warms the renderer, and
-reports three-frame averages at 512×512 for 1 and 16 8×8 solid fills on both
-paths, plus 1,000 instanced fills. The larger legacy preparation run stalled on
-this Metal host, so the baseline is capped rather than assigned a timing.
-Producer pass/fill draw counts follow the recorded path; timing includes CPU
-encoding, GPU completion and readback, not isolated GPU timestamps. Run it alone
-so the test-only allocation counter is scoped. Physical display measurements and
-native Windows execution remain separate acceptance work.
+This test warms portable content and the renderer, then reports three-frame
+averages at 512×512 for 1, 16 and 1,000 solid fills on both portable and instanced
+paths. Warm portable replay must submit no new producer jobs and perform no
+producer readback. Equal solid recipes may share a realization; this is a cache
+check, not a distinct-output stress test. The issue-110 regression separately
+forces hundreds of distinct outputs. Timing includes encoding, GPU completion and
+final compositor readback, not isolated GPU timestamps. Native Windows portable
+execution remains pending; its separate instanced path is unchanged.
 
+The following table is a historical measurement of the removed legacy producer,
+not the current portable path:
 
 Local debug measurement on Apple M4 Max, 512×512 target, three measured frames
 after warmup (milliseconds include encode, completion and readback):

@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .bg_brush(fill)
             .child("isolated package consumer"),
     );
-    black_box(xgpui_gamut::WideColor::linear_p3([0.2, 0.5, 0.8, 1.])?);
+    black_box(xgpui_gamut::WideColor::linear_p3([0.2, 0.5, 0.8, 1.])?.content());
     let _ = black_box(xgpui_media::ImageFilter::new().brightness(1.1));
     let adobe = xgpui_media::pipeline::ImageColor::ADOBE_RGB_1998;
     black_box(xgpui_media::pipeline::rgba16f_data_with_mapping(

@@ -2887,6 +2887,8 @@ impl Window {
     /// Renders the current frame's scene to a texture and returns the pixel data as an RGBA image.
     /// This does not present the frame to screen - useful for visual testing where we want
     /// to capture what would be rendered without displaying it or requiring the window to be visible.
+    /// Portable sources must be ready: a typed `content::ContentErrorKind::Pending`
+    /// asks the caller to yield and retry, rather than capturing a pending fallback.
     #[cfg(any(test, feature = "test-support"))]
     pub fn render_to_image(&self) -> anyhow::Result<image::RgbaImage> {
         self.platform_window
@@ -2895,7 +2897,9 @@ impl Window {
 
     /// Synchronously re-render the last painted scene and read its associated
     /// extended linear-P3 FP16 composition, before display color management.
-    /// Metal WideGamutSdr only. This waits for GPU completion; use on demand.
+    /// Metal WideGamutSdr only. This waits for compositor completion; use on demand.
+    /// Pending portable producers return `content::ContentErrorKind::Pending`;
+    /// yield and retry to capture the requested generation.
     #[cfg(any(test, feature = "test-support"))]
     pub fn render_to_linear_p3(&self) -> anyhow::Result<crate::LinearP3Image> {
         self.platform_window

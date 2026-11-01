@@ -174,7 +174,8 @@ recovery, and awaitable completion after dropping the executor handle. No window
 opens. To also enable Apple's native API validation, prefix the command with
 `MTL_DEBUG_LAYER=1`; the suite must still pass without validation errors. Both
 normal and validation-enabled runs passed on the development machine. The original
-legacy-producer regression still needs migration; keep #110 open.
+WideColor regression is now migrated as described below; keep #110 open for the
+remaining legacy producer work.
 
 ### GPU-only window presentation checkpoint
 
@@ -234,7 +235,7 @@ MTL_DEBUG_LAYER=1 cargo test --locked \
   -- --test-threads=1 --nocapture
 ```
 
-What to look for: **11 passed, 0 failed, 1 ignored**. The parent launches the ignored
+What to look for: **12 passed, 0 failed, 1 ignored**. The parent launches the ignored
 dense helper in a subprocess with a 45-second deadline. Dense progress reports
 verified final pixels, `producer_readbacks=0`, and `max_in_flight <= 2` through three
 512 → 1 → 512 cycles with replay. Only the final compositor validation target is
@@ -258,7 +259,7 @@ recent generation wins, and opacity/clip apply once. Cmd-Q exits. Initial displa
 keyboard replacement, dense/sparse switching, opacity, and clipping were checked
 in a real macOS window under Metal API validation.
 
-Verification note: the 66 CPU tests, 15 native executor tests, 11 compositor tests,
+Verification note: the 66 CPU tests, 15 native executor tests, 12 compositor tests,
 production runtime-shader build, and interactive app build pass. Clippy passes
 with the existing `approx_constant` lint allowance; existing unrelated warnings
 remain. The optional standalone bench-support check is blocked by the pre-existing
@@ -869,3 +870,33 @@ Backend implementation follows the CPU foundation checkpoint above. Exact defaul
 budgets, initial optional capability coverage, and internal worker integration
 are implementation measurements to record in follow-up work; public semantics
 above must not change merely to match one backend's convenient execution model.
+
+### First legacy producer migration: WideColor
+
+`WideColor` is now a pure ContentSource with `content()`/`From<WideColor> for Content`.
+It validates straight input before association, describes a premultiplied linear-P3
+FP16 solid, and preserves source identity across clones. The Metal/D3D11 preparation
+implementations and normal backend dependencies have been removed. The shader
+extension's Paint::Content arm accepts Content or ContentDraw and records portable
+fill, border, and path draws through Window::paint_content. The gamut lab and native
+comparison tests now use that path. Instanced wide fills/gradients remain separate.
+
+The original issue-110 app now awaits the requested producer generation outside
+UI drawing, checks exact FP16 red/green pixels and cached replay, and enforces zero
+producer readback. In addition to the original equal-color scene it runs distinct
+natural extents to force hundreds of separate operations despite solid deduplication.
+The parent bounds child lifetime and treats typed execution errors as failures.
+Both control and dense cases must finish with PASS. See its README for commands.
+
+Strict real-window snapshots first prepare/promote portable content and return a
+typed Pending error until ready, before compositor readback. They propagate producer
+errors instead of accepting the previous/transparent window fallback as a successful
+snapshot. The gamut lab retries after yielding, with a deadline. This does not add
+blocking producer waits to UI drawing. Native capture verified the migrated surfaces
+and sRGB overlays; the portable compositor suite includes a deterministic Pending
+snapshot test.
+
+Portable WideColor now requires a backend with portable execution (currently Metal).
+Windows users can use the separate instanced painter while the D3D11 portable
+executor is implemented. Other legacy producer families remain migration work;
+issue #110 stays open pending that work and user review.

@@ -39,7 +39,7 @@ pub enum ContentErrorPresentation {
     FailFrame,
 }
 /// Presentation policy, independent of source identity and graph realization.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ContentPresentation {
     /// Stable paint identity; duplicate slots in one scene are rejected.
     pub slot: Option<PresentationSlotId>,

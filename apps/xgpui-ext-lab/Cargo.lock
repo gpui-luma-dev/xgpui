@@ -6515,12 +6515,9 @@ version = "0.2.2"
 dependencies = [
  "anyhow",
  "bytemuck",
- "objc2-metal 0.3.2",
  "xgpui",
- "xgpui-apple",
  "xgpui-color",
  "xgpui-shader",
- "xgpui-windows",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 //! Wide SDR content surfaces and native sRGB controls.
 use anyhow::{Result, ensure};
 use clap::Parser;
-use gpui::{prelude::*, *};
+use gpui::{content::{Content, ContentDraw, PresentationSlotId}, prelude::*, *};
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use xgpui_shader::{SolidColor, painted};
 mod checks;
@@ -35,6 +35,9 @@ struct Options {
     ui_png: Option<std::path::PathBuf>,
 }
 struct Lab {
+    // Semantic roles: red surface, green surface; independent of traversal order.
+    wide_sources: [Content; 2],
+    slots: [PresentationSlotId; 2],
     wide: bool,
     overlay: bool,
     opacity: f32,
@@ -44,14 +47,16 @@ struct Lab {
     gradient: bool,
 }
 impl Lab {
-    fn source(&self, color: [f64; 4]) -> Arc<dyn CustomContent> {
+    fn source(&self, role: usize, color: [f64; 4]) -> xgpui_shader::Paint {
         if self.wide {
-            Arc::new(WideColor::linear_p3(color.map(|v| v as f32)).unwrap())
+            ContentDraw::new(self.wide_sources[role].clone())
+                .slot(self.slots[role])
+                .into()
         } else {
-            Arc::new(SolidColor::new(color.map(|v| v as f32)).unwrap())
+            Arc::new(SolidColor::new(color.map(|v| v as f32)).unwrap()).into()
         }
     }
-    fn surface(&self, x: f32, y: f32, w: f32, h: f32, color: [f64; 4]) -> AnyElement {
+    fn surface(&self, role: usize, x: f32, y: f32, w: f32, h: f32, color: [f64; 4]) -> AnyElement {
         if self.wide {
             if let Some(painter) = self.painter.clone() {
                 let gradient = if self.gradient {
@@ -113,7 +118,7 @@ impl Lab {
             .h(px(h))
             .rounded_2xl()
             .opacity(self.opacity)
-            .bg_paint(self.source(color))
+            .bg_paint(self.source(role, color))
             .into_any_element()
     }
     fn button(
@@ -158,8 +163,8 @@ impl Render for Lab {
             .h(px(640.))
             .overflow_hidden()
             .bg(rgb(if self.dark { 0x101010 } else { 0xf0f0f0 }));
-        let red = self.surface(70., 70., 560., 400., [1., 0., 0., 1.]);
-        let green = self.surface(390., 260., 470., 300., [0., 1., 0., 1.]);
+        let red = self.surface(0, 70., 70., 560., 400., [1., 0., 0., 1.]);
+        let green = self.surface(1, 390., 260., 470., 300., [0., 1., 0., 1.]);
         let mid = div()
             .absolute()
             .left(px(210.))
@@ -179,9 +184,9 @@ impl Render for Lab {
             canvas = canvas.child(mid);
         }
         let second = if self.reverse {
-            self.surface(70., 70., 560., 400., [1., 0., 0., 1.])
+            self.surface(0, 70., 70., 560., 400., [1., 0., 0., 1.])
         } else {
-            self.surface(390., 260., 470., 300., [0., 1., 0., 1.])
+            self.surface(1, 390., 260., 470., 300., [0., 1., 0., 1.])
         };
         canvas = canvas.child(second);
         if self.overlay {
@@ -298,6 +303,9 @@ fn main() -> Result<()> {
                         .expect("color presentation negotiation");
                     window.set_window_title("XGPUI Gamut Lab — wide SDR");
                     cx.new(|_| Lab {
+                        wide_sources: [[1., 0., 0., 1.], [0., 1., 0., 1.]]
+                            .map(|color| WideColor::linear_p3(color).unwrap().content()),
+                        slots: [PresentationSlotId::new(), PresentationSlotId::new()],
                         wide: !options.sdr,
                         overlay: true,
                         opacity: 1.,

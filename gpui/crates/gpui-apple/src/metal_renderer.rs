@@ -661,6 +661,36 @@ impl MetalRenderer {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    fn portable_requests(
+        &self,
+        scene: &Scene,
+    ) -> Result<Vec<Option<gpui::content::ContentDrawRequest>>> {
+        scene
+            .custom_draws
+            .iter()
+            .map(|draw| {
+                let extent = crate::custom_draw::CustomCompositor::extent(draw)?;
+                let request = gpui::PreparationRequest::new(
+                    draw.bounds.size.map(|d| gpui::px(d.0)),
+                    extent,
+                    1.,
+                )?;
+                draw.content
+                    .portable_content(&request)
+                    .map_err(anyhow::Error::from)
+            })
+            .collect()
+    }
+
+    #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+    fn prepare_content_snapshot(&mut self, scene: &Scene) -> Result<()> {
+        let requests = self.portable_requests(scene)?;
+        self.content_presenter
+            .update(&requests, self.wide_sdr.is_some())?;
+        self.content_presenter.require_ready()
+    }
+
     fn render_frame(
         &mut self,
         scene: &Scene,
@@ -702,28 +732,16 @@ impl MetalRenderer {
             "linear P3 shaders require a native wide-SDR compositor"
         );
         #[cfg(target_os = "macos")]
-        let portable_requests: Vec<_> = scene
-            .custom_draws
-            .iter()
-            .map(|draw| {
-                let extent = crate::custom_draw::CustomCompositor::extent(draw)?;
-                let request = gpui::PreparationRequest::new(
-                    draw.bounds.size.map(|d| gpui::px(d.0)),
-                    extent,
-                    1.,
-                )?;
-                draw.content
-                    .portable_content(&request)
-                    .map_err(anyhow::Error::from)
-            })
-            .collect::<Result<_>>()?;
+        let portable_requests = if is_window_scene {
+            self.portable_requests(scene)?
+        } else {
+            vec![None; scene.custom_draws.len()]
+        };
         #[cfg(target_os = "macos")]
         let portable_images = if is_window_scene {
             self.content_presenter
                 .update(&portable_requests, self.wide_sdr.is_some())?
         } else {
-            // Coverage/native-paint subscenes cannot remove the parent scene's
-            // subscriptions, history or output cache.
             vec![None; portable_requests.len()]
         };
         let custom_outputs = if scene.custom_draws.is_empty() {
@@ -974,6 +992,8 @@ impl MetalRenderer {
             .layer
             .clone()
             .ok_or_else(|| anyhow::anyhow!("render_to_image requires a layer-backed renderer"))?;
+        #[cfg(target_os = "macos")]
+        self.prepare_content_snapshot(scene)?;
         let viewport_size = layer.drawableSize();
         let viewport_size: Size<DevicePixels> = size(
             (viewport_size.width.ceil() as i32).into(),
@@ -1001,6 +1021,7 @@ impl MetalRenderer {
     /// Validation-only readback of the composition before display color management.
     #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
     pub fn render_to_linear_p3(&mut self, scene: &Scene) -> Result<gpui::LinearP3Image> {
+        self.prepare_content_snapshot(scene)?;
         let layer = self
             .layer
             .as_ref()
@@ -2599,6 +2620,12 @@ impl MetalHeadlessRenderer {
     #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
     pub fn content_presentation_stats(&self) -> ContentPresentationStats {
         self.renderer.content_presenter.snapshot()
+    }
+    /// Start/promote portable content for a strict validation snapshot. Returns
+    /// a typed Pending error while producing; never blocks on worker completion.
+    #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+    pub fn prepare_content_snapshot(&mut self, scene: &Scene) -> Result<()> {
+        self.renderer.prepare_content_snapshot(scene)
     }
     /// Wake a headless driver when a producer job finishes; no polling is needed.
     #[cfg(target_os = "macos")]

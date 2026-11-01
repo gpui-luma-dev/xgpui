@@ -42,24 +42,27 @@ use xgpui_shader::painted;
 window.set_color_mode(WindowColorMode::WideGamutSdr)?;
 
 // Linear Display P3/D65, straight input alpha; producer stores associated alpha.
-let red = Arc::new(WideColor::linear_p3([1.0, 0.0, 0.0, 0.5])?);
+let red = WideColor::linear_p3([1.0, 0.0, 0.0, 0.5])?;
 painted().w(px(320.0)).h(px(240.0))
-    .bg_paint(red)
+    .bg_paint(red.content())
     .child(div().p_4().child("Normal sRGB controls"));
 ```
 
 The default `xgpui-gamut` producer is usable without `xgpui-shader`;
 `xgpui-shader` supplies optional `painted()` ergonomics here. Enabling gamut's
 `instanced` feature adds a shader dependency for `WidePainter`/`WideGradient`.
-Shared CPU math lives in the standalone `xgpui-color` crate. `WideColor` retains
-its texture preparation path; instanced fills avoid producer textures/passes.
+Shared CPU math lives in `xgpui-color`. `WideColor` now describes a portable
+premultiplied P3 solid; `content()` retains its immutable source identity. The host
+owns texture realization, caching and asynchronous completion. Its native
+Metal/D3D11 preparation code is removed; portable execution currently supports
+Metal, while the separate instanced path continues to support Metal/D3D11.
 See [wide fills and gradients](instanced-wgsl-v2.md#reusable-wide-fills-and-gradients).
 
 | Capability | Owner | Status |
 | --- | --- | --- |
 | Window mode and cached status | `gpui` | Public, opt-in |
 | Typed P3 output and ordered compositor | `gpui-apple` / `gpui-macos`, `gpui-windows` | Metal + native D3D11 |
-| Reusable producer | `xgpui-gamut::WideColor` | Metal + typed D3D11 preparation |
+| Reusable producer | `xgpui-gamut::WideColor` | CPU-only portable graph; Metal execution, D3D11 portable executor pending |
 | Test/control app | `apps/xgpui-ext-lab/gamut-lab` | Uses `xgpui-gamut` |
 
 Independent of the [paint/shader extension](extension-paints.md). Enabling this
@@ -117,8 +120,14 @@ cannot promise identical physical output everywhere.
 
 ## Metal backend contract
 
-`WideColor` implements the existing `CustomContent` protocol. Its Metal adapter
-uses the typed constructor below; custom producers can use the same contract.
+`WideColor` implements `ContentSource`, with no native handles or submission.
+Use `ContentDraw` and `Window::paint_content` (or `painted().bg_paint(color.content())`).
+Portable content reaches the compositor only after native completion; pending
+slots can retain their last valid image. Strict window snapshots return a typed
+`ContentErrorKind::Pending` and must be retried asynchronously with a deadline.
+
+The constructor below remains a legacy backend SPI for specialized native
+producers. The migrated `WideColor` does not use it.
 
 ```rust
 use gpui_apple::custom_draw::{MetalCustomContext, MetalWideSdrOutput};
@@ -369,8 +378,11 @@ checks preserve complete window-option literals and unchanged platform defaults.
 // Existing GPUI API; no new window options, color types or scene variants.
 window.set_color_mode(WindowColorMode::WideGamutSdr)?;
 let status = window.color_status(); // cached; does not query DXGI
-let patch = Arc::new(WideColor::linear_p3([1.0, 0.0, 0.0, 0.5])?);
-painted().bg_paint(patch).child(div().child("Native sRGB controls"));
+// The portable WideColor executor for D3D11 is pending. The existing instanced
+// API remains available; call paint_color during painting, after mode setup:
+let painter = WidePainter::new()?;
+let patch = WideColor::linear_p3([1.0, 0.0, 0.0, 0.5])?;
+painter.paint_color(window, bounds, px(16.0), &patch)?;
 
 // Disable before requesting transparency, blur or a Mica backdrop:
 window.set_color_mode(WindowColorMode::Default)?;

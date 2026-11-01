@@ -560,3 +560,22 @@ fn coverage_subscenes_preserve_parent_subscriptions_and_slot_history() {
     read(&mut renderer, &border);
     assert_eq!(renderer.content_presentation_stats().requests, 1);
 }
+#[test]
+fn strict_snapshot_preparation_reports_pending_instead_of_accepting_a_fallback() {
+    let mut renderer = MetalHeadlessRenderer::new();
+    let rx = wake(&mut renderer);
+    let gate = pause(&mut renderer);
+    let scene = scene(ContentDraw::new(solid([1., 0., 0., 1.])));
+    let error = renderer.prepare_content_snapshot(&scene).unwrap_err();
+    assert_eq!(
+        error.downcast_ref::<ContentError>().unwrap().kind,
+        ContentErrorKind::Pending
+    );
+    assert!(gate.0.wait_until_entered(Duration::from_secs(5)));
+    assert_eq!(renderer.content_presentation_stats().execution.readbacks, 0);
+    gate.0.release();
+    completed(&rx);
+    renderer.prepare_content_snapshot(&scene).unwrap();
+    pixels(&read(&mut renderer, &scene), [255, 0, 0, 255]);
+    assert_eq!(renderer.content_presentation_stats().requests, 1);
+}

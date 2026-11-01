@@ -1,4 +1,5 @@
 //! Extension-owned paint values and convenience dispatch; GPUI only records geometry.
+use gpui::content::{Content, ContentDraw};
 use gpui::{
     Background, CustomContent, CustomGeometry, DevicePixels, Edges, Hsla, PaintQuad, Path, Pixels,
     Size, Window,
@@ -12,14 +13,30 @@ pub enum Paint {
     /// Runtime-only producer; serialization returns an error.
     #[serde(skip)]
     Custom(std::sync::Arc<dyn CustomContent>),
+    /// Portable immutable GPU source and presentation policy; runtime-only.
+    #[serde(skip)]
+    Content(ContentDraw),
 }
 impl PartialEq for Paint {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Native(a), Self::Native(b)) => a == b,
             (Self::Custom(a), Self::Custom(b)) => std::sync::Arc::ptr_eq(a, b),
+            (Self::Content(a), Self::Content(b)) => {
+                a.content.id() == b.content.id() && a.presentation == b.presentation
+            }
             _ => false,
         }
+    }
+}
+impl From<Content> for Paint {
+    fn from(content: Content) -> Self {
+        Self::Content(ContentDraw::new(content))
+    }
+}
+impl From<ContentDraw> for Paint {
+    fn from(draw: ContentDraw) -> Self {
+        Self::Content(draw)
     }
 }
 impl From<Background> for Paint {
@@ -63,6 +80,7 @@ impl WindowPaintExt for Window {
         match paint.into() {
             Paint::Native(color) => self.paint_path(path, color),
             Paint::Custom(content) => self.paint_custom(CustomGeometry::Path(path), content),
+            Paint::Content(draw) => self.paint_content(CustomGeometry::Path(path), draw),
         }
     }
     fn paint_quad_with_paints(
@@ -78,6 +96,13 @@ impl WindowPaintExt for Window {
                 self.paint_quad(quad.clone());
             }
             Paint::Native(_) => {}
+            Paint::Content(draw) => self.paint_content(
+                CustomGeometry::RoundedRect {
+                    bounds: quad.bounds,
+                    corner_radii: quad.corner_radii,
+                },
+                draw,
+            ),
             Paint::Custom(content) => self.paint_custom(
                 CustomGeometry::RoundedRect {
                     bounds: quad.bounds,
@@ -106,6 +131,7 @@ impl WindowPaintExt for Window {
             }
             Paint::Native(_) => {}
             Paint::Custom(content) => self.paint_custom(CustomGeometry::Border(quad), content),
+            Paint::Content(draw) => self.paint_content(CustomGeometry::Border(quad), draw),
         }
     }
 }

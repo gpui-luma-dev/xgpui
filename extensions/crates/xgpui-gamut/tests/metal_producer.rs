@@ -4,14 +4,21 @@ use gpui::{
     Bounds, ContentMask, Corners, CustomDraw, DevicePixels, Quad, ScaledPixels, Scene,
     WindowColorMode, point, rgb, size,
 };
-use gpui_apple::metal_renderer::MetalRenderer;
-use parking_lot::Mutex;
-use std::sync::Arc;
+use gpui::{PlatformHeadlessRenderer, content::ContentDraw};
+use gpui_apple::metal_renderer::MetalHeadlessRenderer;
+use std::{
+    sync::{Arc, mpsc},
+    time::Duration,
+};
 use xgpui_gamut::WideColor;
 
 #[test]
 fn extension_producer_preserves_p3_association_over_native_ui() -> anyhow::Result<()> {
-    let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+    let mut renderer = MetalHeadlessRenderer::new();
+    let (done, ready) = mpsc::channel();
+    renderer.set_content_redraw(Arc::new(move || {
+        let _ = done.send(());
+    }));
     renderer.set_color_mode(WindowColorMode::WideGamutSdr)?;
     let bounds = Bounds::new(
         point(ScaledPixels(0.), ScaledPixels(0.)),
@@ -38,12 +45,21 @@ fn extension_producer_preserves_p3_association_over_native_ui() -> anyhow::Resul
                 content_mask: ContentMask { bounds },
                 corner_radii: Corners::all(ScaledPixels(radius)),
                 opacity,
-                content: Arc::new(WideColor::linear_p3([1., 0., 0., alpha])?),
+                content: ContentDraw::new(WideColor::linear_p3([1., 0., 0., alpha])?.content())
+                    .into_scene_content(),
                 coverage: None,
             });
             scene.finish();
+            renderer.render_scene(&scene, size(DevicePixels(8), DevicePixels(8)))?;
+            if renderer.content_presentation_stats().pending {
+                ready.recv_timeout(Duration::from_secs(20))?;
+            }
             let image =
                 renderer.render_scene_to_image(&scene, size(DevicePixels(8), DevicePixels(8)))?;
+            let stats = renderer.content_presentation_stats();
+            assert!(!stats.pending);
+            assert!(stats.last_error.is_none());
+            assert_eq!(stats.execution.readbacks, 0);
             let mut edge_samples = 0;
             for (x, y, pixel) in image.enumerate_pixels() {
                 let qx = (x as f32 + 0.5 - 4.).abs() - 4. + radius;

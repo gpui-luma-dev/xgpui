@@ -31,8 +31,9 @@ MTL_DEBUG_LAYER=1 cargo test --locked \
   -- --test-threads=1 --nocapture
 ```
 
-Expect **11 passed, 0 failed, 1 ignored**. The ignored helper runs through the dense
+Expect **12 passed, 0 failed, 1 ignored**. The ignored helper runs through the dense
 subprocess test. Dense logs must show verified pixels, `producer_readbacks=0`, and
 `max_in_flight <= 2`. Tests read only the final compositor validation target.
-The original `metal-producer-regression` app still covers legacy producers; this
-new portable path does not automatically migrate them or close issue #110.
+The original `metal-producer-regression` app now covers migrated WideColor and a
+distinct-output stress case. Other producer families still need migration;
+issue #110 remains open.

@@ -175,20 +175,18 @@ fn native_gradients_match_cpu_mapping_alpha_hue_clip_and_rounding() {
 }
 
 /// Measurements include encoding, GPU completion and readback; not GPU timestamps.
-/// Run alone with --ignored --nocapture --test-threads=1 so allocation counters are scoped.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+/// Run alone with --ignored --nocapture --test-threads=1 to compare warm replay.
+#[cfg(target_os = "macos")]
 #[test]
 #[ignore = "manual native performance comparison"]
-fn compare_producer_allocations_and_frame_readback() {
+fn compare_portable_replay_and_frame_readback() {
     use gpui::{CustomDraw, DevicePixels, PlatformHeadlessRenderer, WindowColorMode};
     use std::{
-        sync::{Arc, atomic::Ordering},
+        sync::{Arc, mpsc},
         time::Instant,
     };
     #[cfg(target_os = "macos")]
     let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
-    #[cfg(target_os = "windows")]
-    let mut renderer = gpui_windows::Dx11HeadlessRenderer::new().unwrap();
     #[cfg(target_os = "macos")]
     println!(
         "GPU: {}",
@@ -211,11 +209,6 @@ fn compare_producer_allocations_and_frame_readback() {
     let extent = size(DevicePixels(512), DevicePixels(512));
     for count in [1, 16, 1000] {
         for instanced in [false, true] {
-            // Large legacy scenes can exhaust pending command-buffer capacity
-            // before the host submits prepared producers. Keep that baseline bounded.
-            if !instanced && count > 16 {
-                continue;
-            }
             let mut scene = Scene::default();
             for i in 0..count {
                 let mut d = draw(&painter, parameters);
@@ -239,30 +232,40 @@ fn compare_producer_allocations_and_frame_readback() {
                         content_mask: d.content_mask,
                         corner_radii: Default::default(),
                         opacity: 1.,
-                        content: Arc::new(WideColor::linear_p3(color).unwrap()),
+                        content: gpui::content::ContentDraw::new(
+                            WideColor::linear_p3(color).unwrap().content(),
+                        )
+                        .into_scene_content(),
                         coverage: None,
                     });
                 }
             }
             scene.finish();
+            let (done, ready) = mpsc::channel();
+            renderer.set_content_redraw(Arc::new(move || {
+                let _ = done.send(());
+            }));
+            renderer.render_scene(&scene, extent).unwrap();
+            if renderer.content_presentation_stats().pending {
+                ready
+                    .recv_timeout(std::time::Duration::from_secs(20))
+                    .unwrap();
+            }
             renderer.render_scene_to_image(&scene, extent).unwrap(); // warm pipelines/targets
-            crate::PRODUCER_ALLOCATIONS.store(0, Ordering::Relaxed);
+            let requests = renderer.content_presentation_stats().requests;
             let start = Instant::now();
             for _ in 0..3 {
                 renderer.render_scene_to_image(&scene, extent).unwrap();
             }
             let elapsed = start.elapsed().as_secs_f64() * 1000. / 3.;
-            let allocations = crate::PRODUCER_ALLOCATIONS.load(Ordering::Relaxed);
-            assert_eq!(allocations, if instanced { 0 } else { count * 3 });
+            let stats = renderer.content_presentation_stats();
+            assert_eq!(
+                stats.requests, requests,
+                "warm replay must not resubmit portable producers"
+            );
+            assert_eq!(stats.execution.readbacks, 0);
             println!(
-                "count={count} instanced={instanced} producer_textures/frame={} producer_passes/frame={} fill_draws/frame={} frame_encode_complete_readback_ms={elapsed:.3}",
-                allocations / 3,
-                if instanced { 0 } else { count },
-                if instanced {
-                    scene.batches().count()
-                } else {
-                    count
-                }
+                "count={count} instanced={instanced} producer_submissions/frame=0 cached_replay=true frame_encode_complete_readback_ms={elapsed:.3}"
             );
         }
     }
