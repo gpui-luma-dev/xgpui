@@ -241,14 +241,11 @@ impl ContentPresenter {
                 Err(_) => {} // A failure of a replaced request is not the new request's failure.
             }
         }
-        // Compare collision-checked output recipes, so recreating an equivalent
-        // source cannot cancel useful work. Cancel unfinished changed recipes
-        // after harvesting completed results; submitted work still retires safely.
-        if self
-            .pending
-            .as_ref()
-            .is_some_and(|pending| pending.keys != keys)
-        {
+        // Let the single admitted graph finish while newer inputs coalesce.
+        // Restarting it on each edit can indefinitely starve later outputs.
+        // Completed slot history is harvested above before the latest graph
+        // is admitted. Removing the scene still cancels unfinished work.
+        if active.is_empty() {
             self.pending = None;
         }
         // Evict unused outputs before asking the shared device service for more

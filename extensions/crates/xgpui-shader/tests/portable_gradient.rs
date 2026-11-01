@@ -368,7 +368,6 @@ fn dense_gradient_worker() {
     }
 }
 
-
 #[test]
 fn parameter_edits_keep_completed_pixels_visible_while_gpu_work_is_pending() {
     struct Release(Arc<MetalContentTestGate>);
@@ -502,6 +501,18 @@ fn conic_edits_present_completed_work_before_accepting_the_next_angle() {
         );
     }
     assert!(gate.0.wait_until_entered(Duration::from_secs(5)));
+    // Keep editing while the admitted graph cannot finish. It must not be
+    // canceled/restarted for each newer input, or no generation can advance.
+    let requests = renderer.content_presentation_stats().requests;
+    for angle in 100..112 {
+        let changing = make(angle as f32);
+        assert_eq!(
+            renderer.render_scene_to_image(&changing, extent).unwrap(),
+            image
+        );
+        assert_eq!(renderer.content_presentation_stats().requests, requests);
+    }
+
     gate.0.release();
     rx.recv_timeout(Duration::from_secs(20)).unwrap();
     PlatformHeadlessRenderer::prepare_content_snapshot(&mut renderer, &newest).unwrap();

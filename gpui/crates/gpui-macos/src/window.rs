@@ -706,6 +706,7 @@ struct MacWindowState {
     renderer: renderer::Renderer,
     color_status: gpui::WindowColorStatus,
     color_profile_dirty: bool,
+    content_redraw_pending: bool,
     request_frame_callback: Option<Box<dyn FnMut(RequestFrameOptions)>>,
     event_callback: Option<Box<dyn FnMut(PlatformInput) -> gpui::DispatchEventResult>>,
     activate_callback: Option<Box<dyn FnMut(bool)>>,
@@ -1266,6 +1267,7 @@ impl MacWindow {
                     None,
                 ),
                 color_profile_dirty: true,
+                content_redraw_pending: false,
                 request_frame_callback: None,
                 event_callback: None,
                 activate_callback: None,
@@ -1328,14 +1330,9 @@ impl MacWindow {
                     if lock.closed.load(Ordering::Acquire) {
                         return;
                     }
-                    if let Some(mut callback) = lock.request_frame_callback.take() {
-                        drop(lock);
-                        callback(RequestFrameOptions {
-                            require_presentation: true,
-                            ..Default::default()
-                        });
-                        window.lock().request_frame_callback = Some(callback);
-                    }
+                    // The display link consumes this flag on its next paced
+                    // frame. Completion never invokes or takes the callback.
+                    lock.content_redraw_pending = true;
                 });
             }));
             let mut window = Self(state, marker);
@@ -3887,13 +3884,18 @@ extern "C" fn step(view: *mut c_void) {
                 (None, FrameRequestSource::NativeCallback),
                 |(at, source)| (Some(at), source),
             );
+        let content_ready = std::mem::take(&mut lock.content_redraw_pending);
         drop(lock);
         callback(RequestFrameOptions {
+            require_presentation: content_ready,
             signal_at,
             signal_source,
             ..Default::default()
         });
-        window_state.lock().request_frame_callback = Some(callback);
+        let mut lock = window_state.lock();
+        if lock.request_frame_callback.is_none() && !lock.closed.load(Ordering::Acquire) {
+            lock.request_frame_callback = Some(callback);
+        }
     }
 }
 

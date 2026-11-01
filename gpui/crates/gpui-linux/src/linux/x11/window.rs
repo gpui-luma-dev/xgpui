@@ -285,6 +285,7 @@ pub struct X11WindowState {
     visibility: WindowVisibility,
     hovered: bool,
     force_render_after_recovery: bool,
+    content_redraw_pending: bool,
     fullscreen: bool,
     client_side_decorations_supported: bool,
     decorations: WindowDecorations,
@@ -844,6 +845,7 @@ impl X11WindowState {
                 visibility: WindowVisibility::Hidden,
                 hovered: false,
                 force_render_after_recovery: false,
+                content_redraw_pending: false,
                 fullscreen: false,
                 maximized_vertical: false,
                 maximized_horizontal: false,
@@ -1183,13 +1185,18 @@ impl X11WindowStatePtr {
 
     pub fn refresh(&self, mut request_frame_options: RequestFrameOptions) {
         let callback = self.callbacks.borrow_mut().request_frame.take();
-        if let Some(mut fun) = callback {
-            // Expose events can present a frame before the refresh timer runs,
-            // so every frame request must rebuild stale atlas references after recovery.
+        if let Some(mut callback) = callback {
+            let mut state = self.state.borrow_mut();
+            let content_ready = std::mem::take(&mut state.content_redraw_pending);
+            request_frame_options.require_presentation |= content_ready;
             request_frame_options.force_render |=
-                std::mem::take(&mut self.state.borrow_mut().force_render_after_recovery);
-            fun(request_frame_options);
-            self.callbacks.borrow_mut().request_frame = Some(fun);
+                content_ready | std::mem::take(&mut state.force_render_after_recovery);
+            drop(state);
+            callback(request_frame_options);
+            let mut callbacks = self.callbacks.borrow_mut();
+            if callbacks.request_frame.is_none() {
+                callbacks.request_frame = Some(callback);
+            }
         }
     }
 
@@ -1708,24 +1715,15 @@ impl PlatformWindow for X11Window {
             }));
         }
         let state = Rc::downgrade(&self.0.state);
-        let callbacks = Rc::downgrade(&self.0.callbacks);
         executor
             .spawn(async move {
                 use futures::StreamExt;
                 while receiver.next().await.is_some() {
-                    let (Some(_state), Some(callbacks)) = (state.upgrade(), callbacks.upgrade())
-                    else {
+                    let Some(state) = state.upgrade() else {
                         break;
                     };
-                    let callback = callbacks.borrow_mut().request_frame.take();
-                    if let Some(mut callback) = callback {
-                        callback(RequestFrameOptions {
-                            force_render: true,
-                            require_presentation: true,
-                            ..Default::default()
-                        });
-                        callbacks.borrow_mut().request_frame = Some(callback);
-                    }
+                    // The existing refresh timer delivers the next paced frame.
+                    state.borrow_mut().content_redraw_pending = true;
                 }
             })
             .detach();

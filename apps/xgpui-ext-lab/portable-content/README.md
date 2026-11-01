@@ -44,3 +44,11 @@ variable or runtime-shaders feature. The grid uses native D3D11 portable executi
 and GPU-only presentation. Apply the same 512 → 1 → 512, replace, opacity, clip
 and resize checks above. [Windows acceptance commands](../../../docs/extensions/native-dx11-paints.md)
 include the native pixel/lifecycle suites; Windows runtime results remain pending.
+
+
+Completion redraws now follow the normal macOS display link or X11 refresh loop.
+After replacing colors, stop all input: the completed grid must appear without
+another click. Repeat density switches, resize/replacement and close during
+pending updates. Metal must keep advancing admitted generations while newer
+inputs coalesce. The gate regression is part of the shader crate's
+`portable_gradient` integration test (features `portable-shaders,gpui-apple/runtime_shaders`).

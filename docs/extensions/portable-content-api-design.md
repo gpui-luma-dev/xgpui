@@ -1145,3 +1145,31 @@ and three producer/presentation tests. They are not claimed as run: the local
 Windows VM is invalid. See [Windows commands and what to look for](native-dx11-paints.md).
 Next: run Windows runtime acceptance, resolve any native findings, then review
 remaining issue #110 acceptance before considering closure.
+
+
+### Review corrections: progress and paced completion redraws
+
+Metal now preserves its one admitted generation while newer descriptions coalesce,
+matching the wgpu/D3D11 progress policy. A gate regression holds GPU execution
+while twelve newer conic edits arrive: the admitted request is unchanged, its
+pixels finish, and slot history remains valid with zero producer readbacks.
+
+macOS completion marks pending presentation state and leaves callback delivery
+to the next display-link frame. X11 completion marks its window state and the
+normal refresh loop consumes it. A missing/in-progress callback cannot consume
+that pending state, and normal callback restoration does not overwrite a newly
+registered callback. GPU completion no longer takes or invokes either platform's
+frame callback. Wayland and browser scheduling are unchanged.
+
+Validation: six Metal gradient tests pass, including the bounded dense subprocess
+and all 60 continuous generations. The macOS platform checks and both native demo
+builds pass. Manual native-window acceptance confirms startup, idle warm/cool
+replacement and 512 → 1 → 512 updates. These are functional checks, not a
+frame-time benchmark. X11 native runtime acceptance remains a Linux task.
+
+To test, launch `portable-content` with the repository's normal native cargo
+command. Replace colors and then leave input idle: completion must update the
+window without another click. Repeat density switches and resize/replace rapidly.
+In paint-lab, drag conic angle continuously and animate mesh/User WGSL; pixels must
+keep advancing without blank flashes or waiting for input release. Repeatedly
+open/close windows during updates to check callback and subscription teardown.
