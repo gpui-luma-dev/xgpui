@@ -8,8 +8,8 @@ GPUI continues to own layout, input and scene composition.
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui", version = "1.0.0" }
-xgpui-shader = { version = "0.2.1", features = ["portable-shaders"] }
+gpui = { package = "xgpui", version = "1.2.0" }
+xgpui-shader = { version = "0.3.0", features = ["portable-shaders"] }
 ```
 
 ## Brushes and gradients
@@ -130,3 +130,43 @@ for additions, affected public types and migration requirements.
 
 This extension uses its own `0.2.0` version, separate from xgpui framework
 `1.0.0` and the upstream GPUI baseline.
+
+## Portable SolidColor
+
+`SolidColor` is now a CPU-only `ContentSource`, available without a backend feature:
+
+```rust,ignore
+use gpui::content::{ContentDraw, PresentationSlotId};
+use xgpui_shader::{SolidColor, painted};
+
+let solid = SolidColor::new([0.15, 0.65, 0.9, 0.75])?;
+let slot = PresentationSlotId::new(); // retain per logical paint role
+painted().bg_paint(ContentDraw::new(solid.content()).slot(slot));
+```
+
+Input and graph output are straight-alpha encoded-sRGB; materialized storage is
+RGBA8. `content()` and clones retain source identity. `Content::new(solid)` also
+works inside portable graphs. Native allocation, structural output sharing,
+replay, resize, and completion belong to the host. Producer-side `preparations()`
+and `cached_texture_info()` diagnostics are removed. Gradients, meshes and
+experimental shader paints retain their current execution paths for now.
+
+Portable execution currently supports Metal. D3D11/wgpu portable execution remains
+pending; unsupported hosts report an explicit capability error. Use ordinary
+native colors or `Brush::solid` for existing main-pass UI solids on those hosts.
+The browser demo uses an explicit native solid reference. No application-side
+Metal/D3D11/wgpu branches are required by the portable source API.
+
+From the repository root on macOS:
+
+```sh
+MTL_DEBUG_LAYER=1 cargo test \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
+  --test portable_solid --features gpui-apple/runtime_shaders \
+  -- --test-threads=1 --nocapture
+```
+
+What to look for: **4 passed**, correct straight-alpha/opacity/rounded clip pixels,
+one shared realization for equal source requests, cached replay without new jobs,
+a new realization after resize, `producer readbacks == 0`, and typed Pending or
+UnsupportedCapability results rather than successful fallback snapshots.

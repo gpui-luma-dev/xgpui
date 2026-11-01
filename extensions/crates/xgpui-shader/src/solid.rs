@@ -1,162 +1,116 @@
-use anyhow::{Result, bail, ensure};
-use gpui::{CustomContent, DevicePixels, Size};
-#[cfg(target_os = "macos")]
-use gpui_apple::custom_draw::MetalCustomContext;
-#[cfg(target_os = "macos")]
-use gpui_apple::metal::*;
-use std::{
-    any::Any,
-    sync::atomic::{AtomicUsize, Ordering},
+//! Portable immutable encoded-sRGB solids; the host owns native realization.
+use gpui::content::{
+    ColorValue, Content, ContentBuilder, ContentError, ContentRequest, ContentSource, ImageRef,
 };
 
-/// Immutable straight-alpha encoded-sRGB color with a per-device/extent cache.
-/// Clearing an offscreen attachment is deliberately the smallest GPU producer:
-/// it proves integration without mixing shader math into the first milestone.
+/// Immutable straight-alpha encoded-sRGB color. No device, command buffer or
+/// output cache belongs to the producer; cloned snapshots retain content identity.
+#[derive(Clone, Debug)]
 pub struct SolidColor {
-    rgba: [f32; 4],
-    #[cfg(target_os = "macos")]
-    cache: crate::metal_cache::OutputCache,
-    #[cfg(feature = "wgpu")]
-    wgpu: crate::wgpu::PaintCache,
-    #[cfg(target_os = "windows")]
-    pub(super) dx11: crate::dx11::PaintCache,
-    preparations: AtomicUsize,
-}
-impl std::fmt::Debug for SolidColor {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SolidColor")
-            .field("rgba", &self.rgba)
-            .finish_non_exhaustive()
-    }
+    value: ColorValue,
+    content: Content,
 }
 impl SolidColor {
-    /// Create a snapshot from finite straight-alpha encoded-sRGB channels in 0..=1.
-    pub fn new(rgba: [f32; 4]) -> Result<Self> {
-        ensure!(
-            rgba.iter()
-                .all(|v| v.is_finite() && (0.0..=1.0).contains(v)),
-            "solid color channels must be finite and in 0..=1"
-        );
-        Ok(Self {
-            rgba,
-            #[cfg(target_os = "macos")]
-            cache: crate::metal_cache::OutputCache::default(),
-            #[cfg(feature = "wgpu")]
-            wgpu: crate::wgpu::PaintCache::default(),
-            #[cfg(target_os = "windows")]
-            dx11: crate::dx11::PaintCache::default(),
-            preparations: AtomicUsize::new(0),
-        })
+    /// Validate finite straight-alpha encoded-sRGB channels in 0..=1.
+    pub fn new(rgba: [f32; 4]) -> Result<Self, ContentError> {
+        let value = ColorValue::srgb(rgba)?;
+        let content = Content::solid(value.clone());
+        Ok(Self { value, content })
     }
-    /// Number of texture generations (cache hits do not increment this).
-    pub fn preparations(&self) -> usize {
-        self.preparations.load(Ordering::Relaxed)
+    /// Original straight-alpha encoded-sRGB channels (canonical zero).
+    pub fn rgba(&self) -> [f32; 4] {
+        self.value.rgba()
+    }
+    /// Retained portable source for ContentDraw or painted().bg_paint(...).
+    pub fn content(&self) -> Content {
+        self.content.clone()
     }
 }
-#[cfg(target_os = "macos")]
-impl SolidColor {
-    fn prepare_metal(&self, backend: &dyn Any, size: Size<DevicePixels>) -> Result<Box<dyn Any>> {
-        let Some(context) = backend.downcast_ref::<MetalCustomContext>() else {
-            bail!("SolidColor requires the Metal backend");
-        };
-        let (output, generated) = self.cache.prepare(context, size, || {
-            let descriptor = TextureDescriptor::new();
-            descriptor.setTextureType(MTLTextureType::Type2D);
-            descriptor.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
-            unsafe { descriptor.setWidth(size.width.0 as usize) };
-            unsafe { descriptor.setHeight(size.height.0 as usize) };
-            descriptor.setStorageMode(MTLStorageMode::Private);
-            descriptor.setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-            let texture = context
-                .device
-                .newTextureWithDescriptor(&descriptor)
-                .expect("Metal texture allocation failed");
-            let pass = RenderPassDescriptor::new();
-            let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
-            attachment.setTexture(Some(&texture));
-            attachment.setLoadAction(MTLLoadAction::Clear);
-            attachment.setStoreAction(MTLStoreAction::Store);
-            let c = self.rgba;
-            attachment.setClearColor(MTLClearColor {
-                red: c[0] as f64,
-                green: c[1] as f64,
-                blue: c[2] as f64,
-                alpha: c[3] as f64,
-            });
-            let command = context
-                .queue
-                .commandBuffer()
-                .expect("Metal command buffer allocation failed")
-                .to_owned();
-            command
-                .renderCommandEncoderWithDescriptor(&pass)
-                .expect("Metal render encoder allocation failed")
-                .endEncoding();
-            Ok((texture, command))
-        })?;
-        if generated {
-            self.preparations.fetch_add(1, Ordering::Relaxed);
-        }
-        Ok(Box::new(output))
+impl ContentSource for SolidColor {
+    fn describe(
+        &self,
+        cx: &mut ContentBuilder,
+        request: &ContentRequest,
+    ) -> Result<ImageRef, ContentError> {
+        cx.solid(request.extent(), self.value.clone())
     }
 }
-
-#[cfg(target_os = "macos")]
-impl SolidColor {
-    /// Device name and total bytes in live cached BGRA8 textures, if prepared.
-    /// This excludes driver allocations, in-flight old outputs, and GPUI targets.
-    pub fn cached_texture_info(&self) -> Option<(String, u64)> {
-        self.cache.texture_info()
+impl From<SolidColor> for Content {
+    fn from(value: SolidColor) -> Self {
+        value.content
     }
 }
-
-impl CustomContent for SolidColor {
-    fn prepare(&self, backend: &dyn Any, size: Size<DevicePixels>) -> Result<Box<dyn Any>> {
-        #[cfg(target_os = "macos")]
-        if backend.is::<MetalCustomContext>() {
-            return self.prepare_metal(backend, size);
-        }
-        #[cfg(target_os = "windows")]
-        if let Some(context) =
-            backend.downcast_ref::<gpui_windows::custom_draw::Dx11CustomContext>()
-        {
-            let (output, generated) = self.dx11.clear(context, size, self.rgba)?;
-            if generated {
-                self.preparations.fetch_add(1, Ordering::Relaxed);
-            }
-            return Ok(Box::new(output));
-        }
-        #[cfg(feature = "wgpu")]
-        if let Some(context) = backend.downcast_ref::<gpui_wgpu::custom_draw::WgpuCustomContext>() {
-            let (output, generated) = self.wgpu.clear(context, size, self.rgba)?;
-            if generated {
-                self.preparations.fetch_add(1, Ordering::Relaxed);
-            }
-            return Ok(Box::new(output));
-        }
-        bail!("SolidColor does not support this backend")
+impl From<SolidColor> for crate::Paint {
+    fn from(value: SolidColor) -> Self {
+        value.content.into()
     }
 }
-
-#[cfg(target_os = "windows")]
-impl SolidColor {
-    pub fn cached_texture_info(&self) -> Option<(String, u64)> {
-        self.dx11.texture_info()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{content::*, px, size};
     #[test]
-    fn invalid_channels_and_unsupported_backend_are_errors() {
-        assert!(SolidColor::new([f32::NAN, 0., 0., 1.]).is_err());
-        assert!(SolidColor::new([1.1, 0., 0., 1.]).is_err());
-        let solid = SolidColor::new([1., 0., 0., 1.]).unwrap();
-        assert!(
-            solid
-                .prepare(&(), gpui::size(DevicePixels(16), DevicePixels(16)))
-                .is_err()
+    fn validates_all_straight_channels_even_when_transparent() {
+        for alpha in [0., 0.5, 1.] {
+            for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -0.01, 1.01] {
+                for channel in 0..4 {
+                    let mut rgba = [0.25, 0.5, 0.75, alpha];
+                    rgba[channel] = bad;
+                    assert_eq!(
+                        SolidColor::new(rgba).unwrap_err().kind,
+                        ContentErrorKind::InvalidDescriptor
+                    );
+                }
+            }
+        }
+    }
+    #[test]
+    fn declares_rgba8_srgb_straight_alpha_and_shares_equal_recipes() {
+        let solid = SolidColor::new([0.2, 0.4, 0.6, 0.5]).unwrap();
+        let request =
+            ContentRequest::new(size(px(3.), px(5.)), ImageExtent::new(6, 10).unwrap(), 2.)
+                .unwrap();
+        let roots = [solid.content(), Content::new(solid.clone())].map(|content| ContentRoot {
+            content,
+            request: request.clone(),
+        });
+        let graph = ContentGraph::describe(
+            &roots,
+            ContentCapabilities::default(),
+            GraphLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(graph.nodes().len(), 1);
+        assert_eq!(graph.roots()[0], graph.roots()[1]);
+        let ResourceDescriptor::Image(d) = &graph.nodes()[0].outputs()[0] else {
+            panic!("image")
+        };
+        assert_eq!(d.format(), PixelFormat::Rgba8);
+        assert_eq!(d.extent(), request.extent());
+        assert_eq!(
+            d.interpretation(),
+            ImageInterpretation {
+                color: ColorEncoding::Srgb,
+                alpha: AlphaMode::Straight
+            }
+        );
+        let ContentOperation::Solid(value) = graph.nodes()[0].operation() else {
+            panic!("solid")
+        };
+        assert_eq!(value.rgba(), [0.2, 0.4, 0.6, 0.5]);
+    }
+    #[test]
+    fn snapshots_keep_identity_and_canonicalize_signed_zero() {
+        let solid = SolidColor::new([-0., 0.5, 1., 0.]).unwrap();
+        assert_eq!(solid.rgba()[0].to_bits(), 0);
+        assert_eq!(solid.content().id(), solid.clone().content().id());
+        let consumed: Content = solid.clone().into();
+        assert_eq!(consumed.id(), solid.content().id());
+        let paint: crate::Paint = solid.clone().into();
+        assert!(matches!(paint, crate::Paint::Content(_)));
+        assert_ne!(
+            solid.content().id(),
+            SolidColor::new([1.; 4]).unwrap().content().id()
         );
     }
 }

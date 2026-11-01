@@ -30,6 +30,27 @@ xgpui-shader = { path = "../../extensions/crates/xgpui-shader" }
 # Add "wgpu" for the optional wgpu renderer.
 ```
 
+## Portable solids
+
+`SolidColor` now implements the portable ContentSource API. Retain its content
+snapshot and, when replacement should preserve previous pixels, a presentation slot:
+
+```rust
+use gpui::content::{ContentDraw, PresentationSlotId};
+use xgpui_shader::{SolidColor, painted};
+let solid = SolidColor::new([0.2, 0.5, 0.8, 0.75])?;
+let slot = PresentationSlotId::new();
+painted().bg_paint(ContentDraw::new(solid.content()).slot(slot));
+```
+
+It keeps straight-alpha encoded-sRGB semantics and materializes RGBA8 through the
+host executor. Producer-owned preparation caches/counters are gone. Native UI
+colors remain native; gradients, meshes and experimental shader paints retain
+their existing paths until their migrations. Portable execution currently supports
+Metal; other hosts return an explicit unsupported-capability error. See the
+[portable content lifecycle](portable-content-api-design.md) and the shader
+extension README for snapshot readiness and native acceptance commands.
+
 ## Paint a rounded container
 
 ```rust

@@ -189,23 +189,3 @@ fn constant_buffer(device: &ID3D11Device, bytes: &[u8]) -> Result<ID3D11Buffer> 
     }
     buffer.context("missing uniform buffer")
 }
-
-pub(super) fn clear(
-    context: &Dx11CustomContext,
-    output: &Dx11CustomOutput,
-    rgba: [f32; 4],
-) -> Result<()> {
-    let mut rtv = None;
-    unsafe {
-        context
-            .device
-            .CreateRenderTargetView(output.texture(), None, Some(&mut rtv))?;
-    }
-    let rtv = rtv.context("missing extension render target")?;
-    context.record(|deferred| {
-        unsafe {
-            deferred.ClearRenderTargetView(&rtv, &rgba);
-        }
-        Ok(())
-    })
-}

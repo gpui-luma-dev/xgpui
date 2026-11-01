@@ -2,7 +2,7 @@ use gpui::{prelude::*, *};
 use std::sync::Arc;
 use web_time::Instant;
 use xgpui_shader::{
-    Gradient, GradientStop, MeshGradient, MeshGrid, Paint, SolidColor, WindowPaintExt, painted,
+    Gradient, GradientStop, MeshGradient, MeshGrid, Paint, WindowPaintExt, painted,
     shader_paint::{ShaderParameters, ShaderProgram},
 };
 
@@ -28,8 +28,13 @@ impl ShaderDemo {
         };
         let paints = vec![
             (
-                "Solid",
-                Arc::new(SolidColor::new([0.15, 0.65, 0.9, 0.75]).unwrap()).into(),
+                "Solid (native)",
+                Paint::from(gpui::Rgba {
+                    r: 0.15,
+                    g: 0.65,
+                    b: 0.9,
+                    a: 0.75,
+                }),
             ),
             (
                 "Linear",

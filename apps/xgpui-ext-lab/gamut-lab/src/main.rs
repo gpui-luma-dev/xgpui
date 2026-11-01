@@ -2,7 +2,7 @@
 use anyhow::{Result, ensure};
 use clap::Parser;
 use gpui::{content::{Content, ContentDraw, PresentationSlotId}, prelude::*, *};
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc};
 use xgpui_shader::{SolidColor, painted};
 mod checks;
 use xgpui_gamut::{
@@ -37,6 +37,7 @@ struct Options {
 struct Lab {
     // Semantic roles: red surface, green surface; independent of traversal order.
     wide_sources: [Content; 2],
+    sdr_sources: [Content; 2],
     slots: [PresentationSlotId; 2],
     wide: bool,
     overlay: bool,
@@ -47,13 +48,15 @@ struct Lab {
     gradient: bool,
 }
 impl Lab {
-    fn source(&self, role: usize, color: [f64; 4]) -> xgpui_shader::Paint {
+    fn source(&self, role: usize) -> xgpui_shader::Paint {
         if self.wide {
             ContentDraw::new(self.wide_sources[role].clone())
                 .slot(self.slots[role])
                 .into()
         } else {
-            Arc::new(SolidColor::new(color.map(|v| v as f32)).unwrap()).into()
+            ContentDraw::new(self.sdr_sources[role].clone())
+                .slot(self.slots[role])
+                .into()
         }
     }
     fn surface(&self, role: usize, x: f32, y: f32, w: f32, h: f32, color: [f64; 4]) -> AnyElement {
@@ -118,7 +121,7 @@ impl Lab {
             .h(px(h))
             .rounded_2xl()
             .opacity(self.opacity)
-            .bg_paint(self.source(role, color))
+            .bg_paint(self.source(role))
             .into_any_element()
     }
     fn button(
@@ -305,6 +308,8 @@ fn main() -> Result<()> {
                     cx.new(|_| Lab {
                         wide_sources: [[1., 0., 0., 1.], [0., 1., 0., 1.]]
                             .map(|color| WideColor::linear_p3(color).unwrap().content()),
+                        sdr_sources: [[1., 0., 0., 1.], [0., 1., 0., 1.]]
+                            .map(|color| SolidColor::new(color).unwrap().content()),
                         slots: [PresentationSlotId::new(), PresentationSlotId::new()],
                         wide: !options.sdr,
                         overlay: true,

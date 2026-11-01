@@ -4,7 +4,6 @@ use std::sync::Mutex;
 #[derive(Debug)]
 struct RequestProbe {
     requests: Arc<Mutex<Vec<PreparationRequest>>>,
-    source: SolidColor,
 }
 
 impl CustomContent for RequestProbe {
@@ -22,8 +21,8 @@ impl CustomContent for RequestProbe {
         request: &PreparationRequest,
     ) -> Result<Box<dyn std::any::Any>> {
         self.requests.lock().unwrap().push(*request);
-        // SolidColor is an unchanged legacy producer.
-        self.source.prepare_with_request(backend, request)
+        let _ = backend;
+        Ok(Box::new(Background::from(rgb(0xff0000))))
     }
 }
 
@@ -33,7 +32,6 @@ fn native_preparation_request_preserves_unclipped_source() -> Result<()> {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let probe = Arc::new(RequestProbe {
         requests: requests.clone(),
-        source: SolidColor::new([1., 0., 0., 1.])?,
     });
     let bounds = rect(10.25, 20.5, 100.3, 50.7);
     let mut draw = record(bounds, probe, None);
@@ -79,7 +77,7 @@ impl CustomContent for RejectPreparation {
 
 fn preparation_error_still_fails_frame(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
     let extent = size(DevicePixels(1024), DevicePixels(320));
-    let source = Arc::new(SolidColor::new([1., 0., 0., 1.])?);
+    let source = Arc::new(NativeRed);
     let bounds = rect(40., 30., 320., 240.);
     let healthy = record(bounds, source, None);
     let mut failing = base();
@@ -120,4 +118,16 @@ fn native_preparation_error_still_fails_frame_and_legacy_producer_recovers() -> 
 fn wgpu_preparation_error_still_fails_frame_and_legacy_producer_recovers() -> Result<()> {
     let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new()?;
     preparation_error_still_fails_frame(&mut renderer)
+}
+
+#[derive(Debug)]
+struct NativeRed;
+impl CustomContent for NativeRed {
+    fn prepare(
+        &self,
+        _: &dyn std::any::Any,
+        _: Size<DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        Ok(Box::new(Background::from(rgb(0xff0000))))
+    }
 }

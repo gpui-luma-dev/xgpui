@@ -1,7 +1,6 @@
 use super::*;
-use crate::{Gradient, GradientStop, MeshGradient, MeshGrid, SolidColor};
+use crate::{Gradient, GradientStop, MeshGradient, MeshGrid};
 use gpui::{CustomContent, size};
-use gpui_apple::metal::*;
 use std::sync::Arc;
 
 fn context() -> MetalCustomContext {
@@ -174,7 +173,6 @@ struct Probe {
     generations: Box<dyn Fn() -> usize>,
 }
 fn producers() -> Vec<Probe> {
-    let solid = Arc::new(SolidColor::new([1., 0., 0., 1.]).unwrap());
     let gradient = Arc::new(
         Gradient::linear(
             45.,
@@ -189,11 +187,6 @@ fn producers() -> Vec<Probe> {
         MeshGradient::new(MeshGrid::regular(2, 2, vec![[1., 0., 0.]; 4]).unwrap(), 18).unwrap(),
     );
     vec![
-        Probe {
-            name: "solid",
-            producer: solid.clone(),
-            generations: Box::new(move || solid.preparations()),
-        },
         Probe {
             name: "gradient",
             producer: gradient.clone(),
@@ -220,7 +213,7 @@ fn output(
 }
 
 #[test]
-fn all_producers_reuse_alternating_sizes_and_preserve_pending_commands() {
+fn legacy_producers_reuse_alternating_sizes_and_preserve_pending_commands() {
     let ctx = context();
     for probe in producers() {
         let a = output(&probe, &ctx, extent(320, 240));
@@ -242,7 +235,7 @@ fn all_producers_reuse_alternating_sizes_and_preserve_pending_commands() {
 }
 
 #[test]
-fn all_producers_separate_queues_on_the_same_device() {
+fn legacy_producers_separate_queues_on_the_same_device() {
     let a = context();
     let b = MetalCustomContext {
         device: a.device.clone(),

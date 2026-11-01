@@ -16,6 +16,35 @@ mod uniform_checks;
 use super::*;
 use std::time::Instant;
 
+/// Strict headless validation only. Window drawing never blocks on this loop.
+fn ready_image(
+    renderer: &mut dyn PlatformHeadlessRenderer,
+    scene: &Scene,
+    extent: Size<DevicePixels>,
+) -> Result<image::RgbaImage> {
+    let start = Instant::now();
+    loop {
+        match renderer.prepare_content_snapshot(scene) {
+            Ok(()) => return renderer.render_scene_to_image(scene, extent),
+            Err(error)
+                if error
+                    .downcast_ref::<gpui::content::ContentError>()
+                    .is_some_and(|e| e.kind == gpui::content::ContentErrorKind::Pending) =>
+            {
+                ensure!(
+                    start.elapsed() < std::time::Duration::from_secs(20),
+                    "portable content snapshot timed out"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+fn solid_source(rgba: [f32; 4]) -> Result<Arc<dyn CustomContent>> {
+    Ok(gpui::content::ContentDraw::new(SolidColor::new(rgba)?.content()).into_scene_content())
+}
+
 fn rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<ScaledPixels> {
     Bounds::new(
         point(ScaledPixels(x), ScaledPixels(y)),
@@ -152,7 +181,7 @@ fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
     for stroke in [false, true] {
         let mut native = base();
         let mut custom = base();
-        let white_source = Arc::new(SolidColor::new([1., 1., 1., 1.])?);
+        let white_source = solid_source([1., 1., 1., 1.])?;
         let bounds = rect(40., 30., 320., 240.);
         let CustomCoverage::Border { widths, style } = border() else {
             unreachable!()
@@ -181,7 +210,7 @@ fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
         native.finish();
         custom.finish();
         let expected = renderer.render_scene_to_image(&native, extent)?;
-        let actual = renderer.render_scene_to_image(&custom, extent)?;
+        let actual = ready_image(renderer, &custom, extent)?;
         let mut mismatches = 0;
         for (a, b) in expected.pixels().zip(actual.pixels()) {
             if a.0.iter().zip(b.0).any(|(a, b)| a.abs_diff(b) > 3) {
@@ -193,20 +222,16 @@ fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
             mismatches == 0,
             "native/custom coverage differs at {mismatches} pixels (stroke={stroke})"
         );
-        ensure!(
-            white_source.preparations() == 1,
-            "source not shared across coverage types"
-        );
         let mut replay = Scene::default();
         replay.replay(0..custom.len(), &custom);
         replay.finish();
         ensure!(
-            renderer.render_scene_to_image(&replay, extent)?.as_raw() == actual.as_raw(),
+            ready_image(renderer, &replay, extent)?.as_raw() == actual.as_raw(),
             "paint replay differs"
         );
     }
     // Straight source alpha and inherited opacity multiply once through all masks.
-    let half = Arc::new(SolidColor::new([1., 1., 1., 0.5])?);
+    let half = solid_source([1., 1., 1., 0.5])?;
     let mut scene = demo_scene(half);
     // Modify retained records and their replay operations consistently by rebuilding.
     let mut translucent = base();
@@ -215,7 +240,7 @@ fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
         translucent.insert_primitive(draw.clone());
     }
     translucent.finish();
-    let image = renderer.render_scene_to_image(&translucent, extent)?;
+    let image = ready_image(renderer, &translucent, extent)?;
     for (x, y) in [(160, 140), (400, 27), (840, 150)] {
         ensure!(
             image.get_pixel(x, y).0[0].abs_diff(64) <= 3,

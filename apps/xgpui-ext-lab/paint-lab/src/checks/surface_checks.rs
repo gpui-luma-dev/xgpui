@@ -1,8 +1,8 @@
 use super::*;
 
 struct SurfaceView {
-    background: Arc<SolidColor>,
-    border: Arc<SolidColor>,
+    background: Arc<dyn CustomContent>,
+    border: Arc<dyn CustomContent>,
     children: bool,
     opacity: f32,
 }
@@ -40,8 +40,8 @@ impl Render for SurfaceView {
 #[::core::prelude::v1::test]
 fn extension_container_keeps_native_layout_clipping_and_opacity() {
     let mut cx = TestAppContext::single();
-    let background = Arc::new(SolidColor::new([1., 0., 0., 0.5]).unwrap());
-    let border = Arc::new(SolidColor::new([0., 0., 1., 1.]).unwrap());
+    let background = solid_source([1., 0., 0., 0.5]).unwrap();
+    let border = solid_source([0., 0., 1., 1.]).unwrap();
     let window = cx.open_window(size(px(160.), px(120.)), |_, _| SurfaceView {
         background: background.clone(),
         border: border.clone(),

@@ -533,7 +533,7 @@ fn backdrop_cache_keys_include_prior_boundaries_and_reject_live_external_content
         content_mask: d.content_mask,
         corner_radii: Corners::default(),
         opacity: 1.,
-        content: std::sync::Arc::new(crate::SolidColor::new([1.; 4]).unwrap()),
+        content: std::sync::Arc::new(NativeTestColor([1.; 4])),
         coverage: None,
     });
     live.insert_primitive(Primitive::Backdrop(d));
@@ -552,11 +552,7 @@ fn backdrop_cache_refreshes_live_producers_and_chained_filters() {
             backend: &dyn std::any::Any,
             size: gpui::Size<DevicePixels>,
         ) -> Result<Box<dyn std::any::Any>> {
-            gpui::CustomContent::prepare(
-                &crate::SolidColor::new(*self.0.lock().unwrap())?,
-                backend,
-                size,
-            )
+            gpui::CustomContent::prepare(&NativeTestColor(*self.0.lock().unwrap()), backend, size)
         }
     }
     let extent = size(DevicePixels(96), DevicePixels(64));
@@ -623,5 +619,19 @@ fn backdrop_cache_refreshes_live_producers_and_chained_filters() {
             before.captures + 2,
             "upstream filter changes invalidate downstream filtered pixels"
         );
+    }
+}
+
+// Explicit legacy-protocol fixture. Production SolidColor is a portable source.
+#[derive(Debug)]
+struct NativeTestColor([f32; 4]);
+impl gpui::CustomContent for NativeTestColor {
+    fn prepare(
+        &self,
+        _: &dyn std::any::Any,
+        _: gpui::Size<DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        let [r, g, b, a] = self.0;
+        Ok(Box::new(gpui::Background::from(gpui::Rgba { r, g, b, a })))
     }
 }

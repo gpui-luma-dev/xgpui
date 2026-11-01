@@ -77,47 +77,6 @@ impl PaintCache {
         outputs.insert(key, output.clone());
         Ok(())
     }
-    pub fn clear(
-        &self,
-        ctx: &WgpuCustomContext,
-        size: Size<DevicePixels>,
-        rgba: [f32; 4],
-    ) -> Result<(WgpuCustomOutput, bool)> {
-        let key = OutputKey {
-            queue: ctx.cache_key(),
-            width: size.width.0,
-            height: size.height.0,
-            logical: None,
-        };
-        if let Some(output) = self.cached(ctx, &key)? {
-            return Ok((output, false));
-        }
-        let output = ctx.create_output(size)?;
-        let view = output.texture().create_view(&Default::default());
-        ctx.record(|encoder| {
-            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("solid_paint"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    depth_slice: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: rgba[0] as f64,
-                            g: rgba[1] as f64,
-                            b: rgba[2] as f64,
-                            a: rgba[3] as f64,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                ..Default::default()
-            });
-            Ok(())
-        })?;
-        self.store(key, &output)?;
-        Ok((output, true))
-    }
     fn render(
         &self,
         ctx: &WgpuCustomContext,

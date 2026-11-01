@@ -56,7 +56,7 @@ fn recorded(
     widths: Edges<Pixels>,
     radii: Corners<Pixels>,
     native: bool,
-    probe: Option<&Arc<SolidColor>>,
+    probe: Option<&Arc<dyn CustomContent>>,
 ) -> (Vec<Quad>, f32, usize) {
     let mut cx = TestAppContext::single();
     let window = cx.open_window(size(px(160.), px(120.)), |_, _| QuadView {
@@ -154,7 +154,7 @@ fn visible_border_does_not_acquire_transparent_fill_strips() {
 
 #[::core::prelude::v1::test]
 fn zero_width_borders_skip_native_and_custom_sources_without_losing_fill() {
-    let custom = Arc::new(SolidColor::new([0., 0., 0., 0.]).unwrap());
+    let custom = solid_source([0., 0., 0., 0.]).unwrap();
     for border in [
         Paint::from(white()),
         Paint::from(linear_gradient(

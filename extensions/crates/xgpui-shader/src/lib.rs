@@ -4,9 +4,7 @@ mod mesh;
 #[cfg(any(target_os = "macos", target_os = "windows", feature = "wgpu"))]
 pub use mesh::{ControlPoint, MeshGradient, MeshGrid, MeshStats};
 
-#[cfg(any(target_os = "macos", target_os = "windows", feature = "wgpu"))]
 mod solid;
-#[cfg(any(target_os = "macos", target_os = "windows", feature = "wgpu"))]
 pub use solid::SolidColor;
 
 #[cfg(any(target_os = "macos", target_os = "windows", feature = "wgpu"))]

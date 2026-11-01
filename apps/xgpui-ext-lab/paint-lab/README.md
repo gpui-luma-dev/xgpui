@@ -136,3 +136,29 @@ The pastel waves demo was visually inspired by
 on PNGTree. Credit for the reference artwork belongs to its original creator.
 The demo recreates the visual style with procedural Rust geometry and shaders;
 the reference image is not bundled or used as a texture.
+
+## Portable solid migration checks
+
+The shared white/half-alpha sources in native coverage checks now use portable
+`SolidColor` content. Strict validation calls the backend-neutral
+`PlatformHeadlessRenderer::prepare_content_snapshot`; pending generations are
+retried with a deadline outside UI drawing. Protocol-specific request/uniform
+checks use explicit legacy Background fixtures so those tests remain independent
+of the production SolidColor implementation. Cache assertions for the migrated
+producer live in the extension's `portable_solid` acceptance target.
+
+```sh
+MTL_DEBUG_LAYER=1 cargo run --manifest-path apps/xgpui-ext-lab/Cargo.toml \
+  --bin paint-lab --features runtime-shaders,portable-shaders -- \
+  --headless --frames 3 --png /tmp/paint-portable-solids.png
+```
+
+What to look for: a successful JSON report covering native coverage, alpha, clip
+mapping, replay, resize and source sharing; the saved image contains all three
+painted shapes. Gradients and meshes still use their existing paths. The complete
+headless checks currently require Metal for their portable solid portions;
+`--wgpu` reports unsupported portable execution until that executor is migrated.
+Wgpu-specific legacy brush/cache tests remain available and use native fixtures.
+
+For direct solid pixels/host-cache acceptance, run the shader extension's
+`--test portable_solid` target (see its README); expect four passing tests.

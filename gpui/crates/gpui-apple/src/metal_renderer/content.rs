@@ -78,7 +78,7 @@ impl ContentPresenter {
             execution: self.stats.clone(),
         }
     }
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
     pub fn require_ready(&self) -> Result<()> {
         if let Some((_, error)) = &self.failed {
             return Err(error.clone().into());

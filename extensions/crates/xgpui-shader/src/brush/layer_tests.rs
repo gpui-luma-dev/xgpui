@@ -306,7 +306,7 @@ fn group_draws_native_paths_brushes_and_external_content_in_order() {
             size: gpui::Size<DevicePixels>,
         ) -> Result<Box<dyn std::any::Any>> {
             let rgba = *self.0.lock().unwrap();
-            gpui::CustomContent::prepare(&crate::SolidColor::new(rgba)?, backend, size)
+            gpui::CustomContent::prepare(&NativeTestColor(rgba), backend, size)
         }
     }
     for mut renderer in renderers() {
@@ -720,3 +720,17 @@ mod effect_cleanup_tests;
 #[cfg(target_os = "macos")]
 #[path = "wide_capture_tests.rs"]
 mod wide_capture_tests;
+
+// Explicit legacy-protocol fixture. Production SolidColor is a portable source.
+#[derive(Debug)]
+struct NativeTestColor([f32; 4]);
+impl gpui::CustomContent for NativeTestColor {
+    fn prepare(
+        &self,
+        _: &dyn std::any::Any,
+        _: gpui::Size<DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        let [r, g, b, a] = self.0;
+        Ok(Box::new(gpui::Background::from(gpui::Rgba { r, g, b, a })))
+    }
+}

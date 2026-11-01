@@ -86,14 +86,6 @@ impl PaintCache {
         outputs.insert(key, output.clone());
         Ok((output, true))
     }
-    pub fn clear(
-        &self,
-        ctx: &Dx11CustomContext,
-        extent: Size<DevicePixels>,
-        rgba: [f32; 4],
-    ) -> Result<(Dx11CustomOutput, bool)> {
-        self.output(ctx, extent, None, |o| pipeline::clear(ctx, o, rgba))
-    }
     fn render(
         &self,
         ctx: &Dx11CustomContext,

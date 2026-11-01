@@ -4,9 +4,10 @@ use gpui::*;
 use std::sync::Arc;
 use xgpui_shader::SolidColor;
 mod mesh_checks;
+use super::ready_image;
 
-fn producer(color: [f32; 4]) -> Arc<SolidColor> {
-    Arc::new(SolidColor::new(color).unwrap())
+fn producer(color: [f32; 4]) -> Arc<dyn gpui::CustomContent> {
+    gpui::content::ContentDraw::new(SolidColor::new(color).unwrap().content()).into_scene_content()
 }
 fn draw(
     bounds: Bounds<Pixels>,
@@ -55,7 +56,7 @@ fn verify(renderer: &mut dyn gpui::PlatformHeadlessRenderer) -> Result<()> {
     let length = scene.len();
     scene.finish();
     let extent = size(DevicePixels(128), DevicePixels(96));
-    let image = renderer.render_scene_to_image(&scene, extent)?;
+    let image = ready_image(renderer, &scene, extent)?;
     let sample = |x, y| image.get_pixel(x, y).0;
     ensure!(sample(20, 40) == [0, 0, 0, 255], "inherited clip failed");
     ensure!(sample(94, 17) == [0, 0, 0, 255], "rounded corner failed");
@@ -71,12 +72,8 @@ fn verify(renderer: &mut dyn gpui::PlatformHeadlessRenderer) -> Result<()> {
     let mut replay = Scene::default();
     replay.replay(0..length, &scene);
     replay.finish();
-    let replayed = renderer.render_scene_to_image(&replay, extent)?;
+    let replayed = ready_image(renderer, &replay, extent)?;
     ensure!(image == replayed, "scene replay changed output");
-    ensure!(
-        red.preparations() == 1,
-        "static producer did not reuse its texture"
-    );
     drop(scene);
     drop(replay);
     let mut empty = Scene::default();
@@ -90,42 +87,30 @@ fn verify(renderer: &mut dyn gpui::PlatformHeadlessRenderer) -> Result<()> {
             == [0, 0, 0, 255],
         "removed content persisted"
     );
-    // Two first-use records share an unsubmitted producer command. The host
-    // must submit it exactly once, and both outputs must be initialized.
+    // Two first-use records share a portable recipe. Both must be initialized
+    // after strict readiness; host cache accounting is checked in native tests.
     let shared = producer([0., 1., 0., 0.5]);
     let mut multiple = Scene::default();
     multiple.insert_primitive(quad(bounds, 0x000000));
     multiple.insert_primitive(draw(rect(0., 0., 48., 48.), bounds, 1., shared.clone()));
     multiple.insert_primitive(draw(rect(64., 0., 48., 48.), bounds, 1., shared.clone()));
     multiple.finish();
-    let image = renderer.render_scene_to_image(&multiple, extent)?;
+    let image = ready_image(renderer, &multiple, extent)?;
     ensure!(
         image.get_pixel(24, 24).0[1].abs_diff(128) <= 2
             && image.get_pixel(88, 24).0[1].abs_diff(128) <= 2,
         "shared first-use/straight alpha failed"
     );
-    ensure!(shared.preparations() == 1, "shared output was regenerated");
     // Resize the producer and destination; this creates a new immutable output.
     let mut resized = Scene::default();
     resized.insert_primitive(quad(bounds, 0x000000));
     resized.insert_primitive(draw(rect(0., 0., 65., 33.), bounds, 1., shared.clone()));
     resized.finish();
     ensure!(
-        renderer
-            .render_scene_to_image(&resized, extent)?
-            .get_pixel(30, 16)
-            .0[1]
-            .abs_diff(128)
-            <= 2,
+        ready_image(renderer, &resized, extent)?.get_pixel(30, 16).0[1].abs_diff(128) <= 2,
         "resize output failed"
     );
-    ensure!(
-        shared.preparations() == 2,
-        "resize did not regenerate output"
-    );
-    // A later bad producer aborts preparation before any commands are submitted.
-    // Metal retains the pending command; D3D11 abandons the failed batch.
-    // Both must recover correct pixels, then cache the submitted output.
+    // A legacy preparation failure must not poison portable content recovery.
     let pending = producer([0., 0., 1., 1.]);
     let mut failed = Scene::default();
     failed.insert_primitive(draw(rect(0., 0., 48., 48.), bounds, 1., pending.clone()));
@@ -140,31 +125,17 @@ fn verify(renderer: &mut dyn gpui::PlatformHeadlessRenderer) -> Result<()> {
         renderer.render_scene_to_image(&failed, extent).is_err(),
         "invalid output was accepted"
     );
-    ensure!(
-        pending.preparations() == 1,
-        "failed frame did not prepare once"
-    );
     let mut retry = Scene::default();
     retry.insert_primitive(draw(rect(0., 0., 48., 48.), bounds, 1., pending.clone()));
     retry.finish();
-    let recovered = renderer.render_scene_to_image(&retry, extent)?;
+    let recovered = ready_image(renderer, &retry, extent)?;
     ensure!(
         recovered.get_pixel(24, 24).0[2] == 255,
         "aborted preparation poisoned cache"
     );
-    let expected_preparations = if cfg!(target_os = "macos") { 1 } else { 2 };
     ensure!(
-        pending.preparations() == expected_preparations,
-        "unexpected retry preparation count: {} (expected {expected_preparations})",
-        pending.preparations()
-    );
-    ensure!(
-        renderer.render_scene_to_image(&retry, extent)? == recovered,
+        ready_image(renderer, &retry, extent)? == recovered,
         "submitted retry output changed pixels"
-    );
-    ensure!(
-        pending.preparations() == expected_preparations,
-        "submitted retry output was unnecessarily rebuilt"
     );
     let mut clipped = Scene::default();
     clipped.insert_primitive(draw(

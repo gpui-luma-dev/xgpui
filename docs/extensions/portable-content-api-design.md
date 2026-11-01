@@ -900,3 +900,38 @@ Portable WideColor now requires a backend with portable execution (currently Met
 Windows users can use the separate instanced painter while the D3D11 portable
 executor is implemented. Other legacy producer families remain migration work;
 issue #110 stays open pending that work and user review.
+
+### SolidColor migration checkpoint
+
+`xgpui-shader::SolidColor` now follows the same CPU-only source model as WideColor.
+Its input/output contract stays straight-alpha encoded-sRGB, with RGBA8 storage.
+`content()`, `From<SolidColor> for Content`, and `From<SolidColor> for Paint` retain
+immutable identity. It is available on all targets without a wgpu feature. The
+Metal preparation/cache, D3D11/wgpu clear adapters, allocation counters and cached
+texture inspection have been removed from this producer. Other producer families
+continue to use their existing adapters until migrated separately.
+
+`PlatformHeadlessRenderer::prepare_content_snapshot` is now a backend-neutral,
+nonblocking validation entry point. Metal starts/promotes portable work; pending
+requests return typed Pending, and unsupported executors explicitly reject portable
+records before drawing. Callers yield/retry with a deadline outside UI drawing,
+then capture the requested generation. This does not make fallback display pixels
+a successful strict snapshot or add a worker wait to the window render path.
+
+The paint lab now validates portable solids through that contract. Its legacy
+preparation/uniform probes and shader backdrop/layer tests use explicit native
+Background fixtures, preserving their protocol coverage without reintroducing
+producer-owned GPU work. The gamut lab's sRGB reference uses retained SolidColor
+content and stable semantic slots. The browser demo uses a native solid reference
+until its portable executor exists; other browser effects remain unchanged.
+
+Native SolidColor acceptance covers encoded-sRGB alpha/opacity and 8-bit rounding,
+rounded corners, clip, scene order, equal-source realization sharing, replay,
+resize, zero producer readbacks, and deterministic Pending/UnsupportedCapability
+results. Run the command in the shader extension README and expect four tests.
+The 125-test shader library suite, 20 paint-lab tests, native paint/gamut captures,
+and wasm browser-demo compilation passed during this checkpoint.
+
+Next: migrate analytic gradients, then mesh and experimental shader producers.
+Metal is the current portable execution backend; D3D11/wgpu execution and the
+remaining presentation features remain follow-up work. Keep issue #110 open.

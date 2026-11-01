@@ -1448,6 +1448,31 @@ pub struct LinearP3Image {
 /// A renderer for headless windows that can produce real rendered output.
 #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
 pub trait PlatformHeadlessRenderer {
+    /// Start/promote portable content for a strict validation snapshot. Returns
+    /// `ContentErrorKind::Pending` until ready; callers must yield/retry with a
+    /// deadline outside UI drawing. Backends without portable execution reject
+    /// portable sources explicitly. Legacy-only scenes need no preparation here.
+    fn prepare_content_snapshot(&mut self, scene: &Scene) -> Result<()> {
+        for draw in &scene.custom_draws {
+            let request = crate::PreparationRequest::new(
+                draw.bounds.size.map(|d| crate::px(d.0)),
+                crate::size(
+                    crate::DevicePixels(draw.bounds.size.width.0.ceil() as i32),
+                    crate::DevicePixels(draw.bounds.size.height.0.ceil() as i32),
+                ),
+                1.,
+            )?;
+            if draw.content.portable_content(&request)?.is_some() {
+                return Err(crate::content::ContentError::new(
+                    crate::content::ContentErrorKind::UnsupportedCapability,
+                    "this renderer has no portable content executor",
+                )
+                .into());
+            }
+        }
+        Ok(())
+    }
+
     /// Render a scene and return the result as an RGBA image.
     fn render_scene_to_image(
         &mut self,

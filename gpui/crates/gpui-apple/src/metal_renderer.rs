@@ -683,7 +683,10 @@ impl MetalRenderer {
             .collect()
     }
 
-    #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+    #[cfg(all(
+        target_os = "macos",
+        any(test, feature = "test-support", feature = "bench-support")
+    ))]
     fn prepare_content_snapshot(&mut self, scene: &Scene) -> Result<()> {
         let requests = self.portable_requests(scene)?;
         self.content_presenter
@@ -2774,6 +2777,11 @@ impl MetalHeadlessRenderer {
 
 #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
 impl gpui::PlatformHeadlessRenderer for MetalHeadlessRenderer {
+    #[cfg(target_os = "macos")]
+    fn prepare_content_snapshot(&mut self, scene: &Scene) -> Result<()> {
+        self.renderer.prepare_content_snapshot(scene)
+    }
+
     fn render_scene_to_image(
         &mut self,
         scene: &Scene,

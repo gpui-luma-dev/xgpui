@@ -585,3 +585,20 @@ Start with [color tasks](color-workflows.md) for practical integration. `PixelCo
 `RgbDefinition` supports reference-white adaptation and independent channel curves. `from_relative_xyz_matrix` preserves relative colorants whose sum differs from the declared XYZ reference white. The optional `xgpui-color/icc` parser constructs definitions from a bounded RGB matrix/TRC subset; it does not add image-file decoding or a general ICC transform engine. See [pixels + metadata](pixels-and-metadata.md) and [ICC scope](icc-profiles.md).
 
 The Metal test-support API `Window::render_to_linear_p3` reads FP16 composition values before OS display mapping. The ordinary 8-bit screenshot remains an sRGB preview. [Color labs](color-labs.md) separates CPU conversion, GPU composition, browser preview and physical display claims.
+
+## ADDED portable headless snapshot preparation
+
+`PlatformHeadlessRenderer::prepare_content_snapshot(&Scene)` is a nonblocking
+validation method. Metal schedules/promotes the requested portable generation and
+returns typed `ContentErrorKind::Pending` until it is ready. Callers yield/retry
+with a deadline outside UI drawing, then read the compositor validation target.
+The default implementation explicitly rejects portable records on executors that
+have not implemented the API; legacy-only scenes require no preparation here.
+Existing trait implementations need no new required method. This does not change
+window pending/previous-result presentation policy.
+
+`SolidColor` now implements ContentSource and exposes `content()`/Content/Paint
+conversions, replacing its CustomContent/native-cache implementation. Source-side
+`preparations` and `cached_texture_info` are removed; the host owns realization and
+cache accounting. See [portable content](portable-content-api-design.md) for the
+current Metal executor and remaining backend work.
