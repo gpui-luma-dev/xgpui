@@ -935,3 +935,30 @@ and wasm browser-demo compilation passed during this checkpoint.
 Next: migrate analytic gradients, then mesh and experimental shader producers.
 Metal is the current portable execution backend; D3D11/wgpu execution and the
 remaining presentation features remain follow-up work. Keep issue #110 open.
+
+
+### Analytic gradient migration checkpoint
+
+`Gradient` is now a CPU-only `ContentSource` with retained `content()` and owned
+conversions into `Content`/`Paint`. Clones share identity; kind/stop edits create
+new immutable snapshots. A single portable fullscreen WGSL program handles all
+four geometries using reflected scalar/vector uniforms and a fixed, initialized
+1024-byte readonly storage table for up to 32 stops. Geometry, duplicate-stop
+hard edges, endpoint clamping and premultiplied encoded-sRGB interpolation remain
+unchanged; output is straight-alpha RGBA8 sRGB.
+
+Producer-owned Metal, D3D11 and wgpu gradient adapters and cache diagnostics have
+been removed. Native paint-lab presentation and strict captures now use portable
+content. Its browser preview uses an app-local public shader-paint adapter until
+portable wgpu execution exists, without exposing native contexts in Gradient.
+Unsupported portable executors continue to return typed capability errors.
+
+Native acceptance compares independent pixel references, checks pipeline reuse,
+structural stop-buffer/output sharing, immutable edits and resize, and bounds a
+512→1→512 stress child process while verifying cached replay, zero producer
+readbacks and at most two command buffers in flight. Paint-lab retains geometry,
+hard-stop, transparent interpolation and background/border/path coverage checks.
+See the extension and paint-lab READMEs for runnable commands and visual checks.
+
+Next: migrate MeshGradient, then experimental shader producers. D3D11/wgpu
+portable execution remains follow-up work; keep issue #110 open.

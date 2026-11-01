@@ -56,11 +56,10 @@ extension README for snapshot readiness and native acceptance commands.
 ```rust
 use anyhow::Result;
 use gpui::{prelude::*, *};
-use std::sync::Arc;
 use xgpui_shader::{painted, Gradient, GradientStop};
 
 fn gradient_panel() -> Result<impl IntoElement> {
-    let gradient = Arc::new(Gradient::radial(
+    let gradient = Gradient::radial(
         [0.5, 0.5],       // Center, normalized to the full outer bounds.
         [0.5, 0.5],       // Ellipse radii as fractions of width/height.
         vec![
@@ -68,13 +67,13 @@ fn gradient_panel() -> Result<impl IntoElement> {
             GradientStop::new(0.4, [1.0, 0.7, 0.1, 1.0]),
             GradientStop::new(1.0, [0.1, 0.3, 1.0, 1.0]),
         ],
-    )?);
+    )?;
 
     Ok(painted()
         .w(px(320.0)).h(px(240.0))
         .rounded_lg().border_8()
-        .bg_paint(gradient.clone())
-        .border_paint(gradient)
+        .bg_paint(gradient.content())
+        .border_paint(gradient.content())
         .overflow_hidden()
         .child(div().p_4().child("Native GPUI children")))
 }
@@ -89,21 +88,21 @@ custom materials do not participate in native hover/theme refinements.
 Put `.id()`, `.on_click()` and `.hover()` on a native `div()`:
 
 ```rust
-fn clickable_panel(material: Arc<Gradient>) -> impl IntoElement {
+fn clickable_panel(material: Gradient) -> impl IntoElement {
     div()
         .id("paint-card")
         .on_click(|_, _, _| println!("Card clicked"))
         .hover(|s| s.opacity(0.85))
         .child(painted()
             .w(px(320.0)).h(px(240.0))
-            .bg_paint(material))
+            .bg_paint(material.content()))
 }
 
 // Or put interaction on native children inside the painted container.
-fn panel_with_action(material: Arc<Gradient>) -> impl IntoElement {
+fn panel_with_action(material: Gradient) -> impl IntoElement {
     painted()
         .w(px(320.0)).h(px(240.0))
-        .bg_paint(material)
+        .bg_paint(material.content())
         .child(div()
             .id("apply")
             .on_click(|_, _, _| println!("Apply clicked"))
@@ -134,6 +133,7 @@ Duplicate offsets create hard edges. Output is SDR, not HDR/P3.
 ## Create and update a mesh
 
 ```rust
+use std::sync::Arc;
 use xgpui_shader::{MeshGradient, MeshGrid};
 
 let grid = MeshGrid::regular(2, 2, vec![

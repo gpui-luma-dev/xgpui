@@ -152,14 +152,14 @@ pub fn run(
     } else if effect == Effect::Mesh {
         mesh.clone()
     } else {
-        analytic.clone()
+        gpui::content::ContentDraw::new(analytic.content()).into_scene_content()
     };
     let scene = demo_scene(content);
     let start = Instant::now();
     let mut image = None;
     for _ in 0..frames {
         image = Some(
-            renderer.render_scene_to_image(&scene, size(DevicePixels(1024), DevicePixels(320)))?,
+            ready_image(renderer.as_mut(), &scene, size(DevicePixels(1024), DevicePixels(320)))?,
         );
     }
     if let Some(png) = png {
@@ -167,7 +167,7 @@ pub fn run(
     }
     println!(
         "{}",
-        serde_json::json!({"frames":frames,"cpu_wall_readback_ms":start.elapsed().as_secs_f64()*1000.,"effect":if portable_shader {"Portable WGSL"}else{effect.label()},"source_generations":if portable_shader {None}else if effect==Effect::Mesh {Some(mesh.preparations())}else{Some(analytic.preparations())},"pipeline_compilations":if portable_shader {None}else if effect==Effect::Mesh {Some(mesh.pipeline_compilations())}else{Some(analytic.pipeline_compilations())},"checks":"native coverage, alpha, clip mapping, replay, resize, source sharing","timing_scope":"CPU wall including GPU wait and readback; not GPU-only time or FPS"})
+        serde_json::json!({"frames":frames,"cpu_wall_readback_ms":start.elapsed().as_secs_f64()*1000.,"effect":if portable_shader {"Portable WGSL"}else{effect.label()},"source_generations":if portable_shader {None}else if effect==Effect::Mesh {Some(mesh.preparations())}else{None::<usize>},"pipeline_compilations":if portable_shader {None}else if effect==Effect::Mesh {Some(mesh.pipeline_compilations())}else{None::<usize>},"checks":"native coverage, alpha, clip mapping, replay, resize, source sharing","timing_scope":"CPU wall including GPU wait and readback; not GPU-only time or FPS"})
     );
     Ok(())
 }

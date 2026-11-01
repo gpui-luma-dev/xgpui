@@ -52,17 +52,13 @@ mod tests {
     use super::*;
     #[test]
     fn builtin_hlsl_exports_both_stages_with_explicit_constant_bindings() -> Result<()> {
-        for source in [
-            include_str!("wgpu/mesh.wgsl"),
-            include_str!("wgpu/gradient.wgsl"),
-        ] {
-            let (hlsl, vertex, fragment) = compile_wgsl(source)?;
-            assert!(hlsl.contains(&format!("{vertex}(")));
-            assert!(hlsl.contains(&format!("{fragment}(")));
-            assert!(hlsl.contains("register(b0)"));
-            assert!(hlsl.contains("SV_VertexID"));
-            assert!(!hlsl.contains("register(t0)"));
-        }
+        let source = include_str!("wgpu/mesh.wgsl");
+        let (hlsl, vertex, fragment) = compile_wgsl(source)?;
+        assert!(hlsl.contains(&format!("{vertex}(")));
+        assert!(hlsl.contains(&format!("{fragment}(")));
+        assert!(hlsl.contains("register(b0)"));
+        assert!(hlsl.contains("SV_VertexID"));
+        assert!(!hlsl.contains("register(t0)"));
         Ok(())
     }
 }

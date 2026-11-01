@@ -148,8 +148,7 @@ Input and graph output are straight-alpha encoded-sRGB; materialized storage is
 RGBA8. `content()` and clones retain source identity. `Content::new(solid)` also
 works inside portable graphs. Native allocation, structural output sharing,
 replay, resize, and completion belong to the host. Producer-side `preparations()`
-and `cached_texture_info()` diagnostics are removed. Gradients, meshes and
-experimental shader paints retain their current execution paths for now.
+and `cached_texture_info()` diagnostics are removed. Meshes and experimental shader paints retain their current execution paths for now.
 
 Portable execution currently supports Metal. D3D11/wgpu portable execution remains
 pending; unsupported hosts report an explicit capability error. Use ordinary
@@ -170,3 +169,35 @@ What to look for: **4 passed**, correct straight-alpha/opacity/rounded clip pixe
 one shared realization for equal source requests, cached replay without new jobs,
 a new realization after resize, `producer readbacks == 0`, and typed Pending or
 UnsupportedCapability results rather than successful fallback snapshots.
+
+
+## Portable analytic gradients
+
+`Gradient` is a CPU-only `ContentSource` on all targets. Use `gradient.content()`
+with `painted().bg_paint(...)`, border paints, paths, or `ContentDraw`. Owned
+`Gradient` also converts directly into `Content` or `Paint`. Clones retain identity;
+`with_kind` and `with_stops` create immutable snapshots with new identities.
+
+Linear, radial, conic and diamond geometry, 2–32 sorted stops, duplicate-offset
+hard edges, endpoint clamping and premultiplied encoded-sRGB interpolation are
+preserved. Output is straight-alpha RGBA8 sRGB. One shared WGSL program uses
+reflected uniforms and an immutable 1024-byte stop buffer; the host owns native
+pipelines, resource sharing, asynchronous completion and replay caching.
+Producer preparation/pipeline counters and native adapters have been removed.
+
+Execution currently requires the Metal portable executor; other hosts return
+UnsupportedCapability. The browser lab keeps its analytic previews through an
+app-local adapter to the public experimental shader-paint API until portable wgpu
+execution is implemented.
+
+```sh
+MTL_DEBUG_LAYER=1 cargo test \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
+  --test portable_gradient --features portable-shaders,wgpu,gpui-apple/runtime_shaders \
+  -- --test-threads=1 --nocapture
+```
+
+What to look for: four passing tests and one ignored subprocess helper; independent
+pixel references for all four geometries, transparent/hard/32-stop palettes, one
+shared pipeline, cached replay, edit/resize updates, and repeated 512→1→512 draws
+finishing with zero producer readbacks and at most two in-flight command buffers.

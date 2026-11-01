@@ -8,13 +8,20 @@ fn render(
 ) -> Result<Vec<u8>> {
     let bounds = rect(0., 0., width as f32, height as f32);
     let mut scene = base();
-    let mut draw = record(bounds, gradient, None);
+    let mut draw = record(
+        bounds,
+        gpui::content::ContentDraw::new(gradient.content()).into_scene_content(),
+        None,
+    );
     draw.corner_radii = Corners::default();
     scene.insert_primitive(draw);
     scene.finish();
-    Ok(renderer
-        .render_scene_to_image(&scene, size(DevicePixels(width), DevicePixels(height)))?
-        .into_raw())
+    Ok(ready_image(
+        renderer,
+        &scene,
+        size(DevicePixels(width), DevicePixels(height)),
+    )?
+    .into_raw())
 }
 fn pixel(bytes: &[u8], width: usize, x: usize, y: usize) -> [u8; 4] {
     bytes[(y * width + x) * 4..(y * width + x) * 4 + 4]
@@ -113,24 +120,7 @@ pub(super) fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> 
             render(renderer, gradient.clone(), 257, 129)? == bytes,
             "cached gradient changed"
         );
-        ensure!(gradient.preparations() == 1, "static gradient regenerated");
-        ensure!(
-            gradient
-                .prepare(&(), size(DevicePixels(10), DevicePixels(10)))
-                .is_err(),
-            "unsupported backend accepted"
-        );
-        ensure!(
-            gradient
-                .prepare(&(), size(DevicePixels(0), DevicePixels(10)))
-                .is_err(),
-            "invalid extent accepted"
-        );
     }
-    ensure!(
-        base_gradient.pipeline_compilations() == 1,
-        "related kinds recompiled pipelines"
-    );
     let hard = Arc::new(base_gradient.with_stops(vec![
         GradientStop::new(0., [1., 0., 0., 1.]),
         GradientStop::new(0.5, [1., 0., 0., 1.]),
@@ -158,10 +148,6 @@ pub(super) fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> 
     assert_pixel(&bytes, 128, 64, [0.5, 0., 0., 1.])?; // Premultiplied interpolation avoids a blue fringe.
     let original = render(renderer, base_gradient.clone(), 257, 129)?;
     render(renderer, base_gradient.clone(), 129, 65)?;
-    ensure!(
-        base_gradient.preparations() == 2,
-        "resize did not regenerate gradient"
-    );
     let snapshot = Arc::new(base_gradient.with_kind(GradientKind::Radial {
         center: [0.5; 2],
         radius: [0.5; 2],
@@ -179,9 +165,13 @@ pub(super) fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> 
         Effect::Diamond,
     ] {
         let producer = Arc::new(Gradient::new(effect.kind(0.).unwrap(), gradient_stops())?);
-        let scene = demo_scene(producer.clone());
-        let image =
-            renderer.render_scene_to_image(&scene, size(DevicePixels(1024), DevicePixels(320)))?;
+        let scene =
+            demo_scene(gpui::content::ContentDraw::new(producer.content()).into_scene_content());
+        let image = ready_image(
+            renderer,
+            &scene,
+            size(DevicePixels(1024), DevicePixels(320)),
+        )?;
         ensure!(
             image.get_pixel(160, 140).0[0..3] != [0, 0, 0],
             "empty gradient background"
@@ -193,10 +183,6 @@ pub(super) fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> 
         ensure!(
             image.get_pixel(840, 150).0[0..3] != [0, 0, 0],
             "empty gradient path"
-        );
-        ensure!(
-            producer.preparations() == 1,
-            "gradient not shared across shape types"
         );
     }
     Ok(())

@@ -1,11 +1,46 @@
+use crate::gradient_preview;
 use gpui::{prelude::*, *};
 use std::sync::Arc;
 use web_time::Instant;
+use xgpui_shader::Gradient as PortableGradient;
 use xgpui_shader::{
-    Gradient, GradientStop, MeshGradient, MeshGrid, Paint, WindowPaintExt, painted,
+    GradientStop, MeshGradient, MeshGrid, Paint, WindowPaintExt, painted,
     shader_paint::{ShaderParameters, ShaderProgram},
 };
 
+struct Gradient(PortableGradient);
+impl Gradient {
+    fn linear(angle: f32, stops: Vec<GradientStop>) -> Result<Self, gpui::content::ContentError> {
+        PortableGradient::linear(angle, stops).map(Self)
+    }
+    fn radial(
+        center: [f32; 2],
+        radius: [f32; 2],
+        stops: Vec<GradientStop>,
+    ) -> Result<Self, gpui::content::ContentError> {
+        PortableGradient::radial(center, radius, stops).map(Self)
+    }
+    fn conic(
+        center: [f32; 2],
+        angle: f32,
+        stops: Vec<GradientStop>,
+    ) -> Result<Self, gpui::content::ContentError> {
+        PortableGradient::conic(center, angle, stops).map(Self)
+    }
+    fn diamond(
+        center: [f32; 2],
+        radius: [f32; 2],
+        angle: f32,
+        stops: Vec<GradientStop>,
+    ) -> Result<Self, gpui::content::ContentError> {
+        PortableGradient::diamond(center, radius, angle, stops).map(Self)
+    }
+}
+impl From<Gradient> for Paint {
+    fn from(value: Gradient) -> Self {
+        gradient_preview::paint(&value.0)
+    }
+}
 pub struct ShaderDemo {
     paints: Vec<(&'static str, Paint)>,
     mesh: Arc<MeshGradient>,
@@ -36,75 +71,72 @@ impl ShaderDemo {
                     a: 0.75,
                 }),
             ),
-            (
-                "Linear",
-                Arc::new(Gradient::linear(55.0, stops()).unwrap()).into(),
-            ),
+            ("Linear", Gradient::linear(55.0, stops()).unwrap().into()),
             (
                 "Radial",
-                Arc::new(Gradient::radial([0.5, 0.5], [0.5, 0.5], stops()).unwrap()).into(),
+                Gradient::radial([0.5, 0.5], [0.5, 0.5], stops())
+                    .unwrap()
+                    .into(),
             ),
             (
                 "Conic",
-                Arc::new(Gradient::conic([0.5, 0.5], 0.0, stops()).unwrap()).into(),
+                Gradient::conic([0.5, 0.5], 0.0, stops()).unwrap().into(),
             ),
             (
                 "Diamond",
-                Arc::new(Gradient::diamond([0.5, 0.5], [0.5, 0.5], 30.0, stops()).unwrap()).into(),
+                Gradient::diamond([0.5, 0.5], [0.5, 0.5], 30.0, stops())
+                    .unwrap()
+                    .into(),
             ),
             (
                 "Linear · hard stops",
-                Arc::new(
-                    Gradient::linear(
-                        90.0,
-                        vec![
-                            GradientStop::new(0.0, [0.95, 0.15, 0.35, 1.0]),
-                            GradientStop::new(0.5, [0.95, 0.15, 0.35, 1.0]),
-                            GradientStop::new(0.5, [0.1, 0.35, 0.95, 1.0]),
-                            GradientStop::new(1.0, [0.1, 0.35, 0.95, 1.0]),
-                        ],
-                    )
-                    .unwrap(),
+                Gradient::linear(
+                    90.0,
+                    vec![
+                        GradientStop::new(0.0, [0.95, 0.15, 0.35, 1.0]),
+                        GradientStop::new(0.5, [0.95, 0.15, 0.35, 1.0]),
+                        GradientStop::new(0.5, [0.1, 0.35, 0.95, 1.0]),
+                        GradientStop::new(1.0, [0.1, 0.35, 0.95, 1.0]),
+                    ],
                 )
+                .unwrap()
                 .into(),
             ),
             (
                 "Radial · elliptical",
-                Arc::new(Gradient::radial([0.5, 0.5], [0.65, 0.25], stops()).unwrap()).into(),
+                Gradient::radial([0.5, 0.5], [0.65, 0.25], stops())
+                    .unwrap()
+                    .into(),
             ),
             (
                 "Radial · off-center fade",
-                Arc::new(
-                    Gradient::radial(
-                        [0.2, 0.25],
-                        [0.8, 0.8],
-                        vec![
-                            GradientStop::new(0.0, [1.0, 0.85, 0.25, 1.0]),
-                            GradientStop::new(0.55, [0.95, 0.15, 0.35, 0.8]),
-                            GradientStop::new(1.0, [0.1, 0.35, 0.95, 0.0]),
-                        ],
-                    )
-                    .unwrap(),
+                Gradient::radial(
+                    [0.2, 0.25],
+                    [0.8, 0.8],
+                    vec![
+                        GradientStop::new(0.0, [1.0, 0.85, 0.25, 1.0]),
+                        GradientStop::new(0.55, [0.95, 0.15, 0.35, 0.8]),
+                        GradientStop::new(1.0, [0.1, 0.35, 0.95, 0.0]),
+                    ],
                 )
+                .unwrap()
                 .into(),
             ),
             (
                 "Conic · rainbow",
-                Arc::new(
-                    Gradient::conic(
-                        [0.5, 0.5],
-                        30.0,
-                        vec![
-                            GradientStop::new(0.0, [1.0, 0.1, 0.2, 1.0]),
-                            GradientStop::new(0.2, [1.0, 0.8, 0.1, 1.0]),
-                            GradientStop::new(0.4, [0.1, 0.85, 0.3, 1.0]),
-                            GradientStop::new(0.6, [0.1, 0.65, 1.0, 1.0]),
-                            GradientStop::new(0.8, [0.65, 0.15, 0.95, 1.0]),
-                            GradientStop::new(1.0, [1.0, 0.1, 0.2, 1.0]),
-                        ],
-                    )
-                    .unwrap(),
+                Gradient::conic(
+                    [0.5, 0.5],
+                    30.0,
+                    vec![
+                        GradientStop::new(0.0, [1.0, 0.1, 0.2, 1.0]),
+                        GradientStop::new(0.2, [1.0, 0.8, 0.1, 1.0]),
+                        GradientStop::new(0.4, [0.1, 0.85, 0.3, 1.0]),
+                        GradientStop::new(0.6, [0.1, 0.65, 1.0, 1.0]),
+                        GradientStop::new(0.8, [0.65, 0.15, 0.95, 1.0]),
+                        GradientStop::new(1.0, [1.0, 0.1, 0.2, 1.0]),
+                    ],
                 )
+                .unwrap()
                 .into(),
             ),
         ];
@@ -220,7 +252,7 @@ impl Render for ShaderDemo {
         div().id("shader-demo").size_full().overflow_y_scroll().p_4()
             .bg(rgb(0x111827)).text_color(rgb(0xeff4fc)).font_family("IBM Plex Sans")
             .flex().flex_col().gap_4()
-            .child(div().text_xl().child("Shader paints · WebAssembly"))
+            .child(div().text_xl().child("Shader previews · WebAssembly"))
             .child("Rounded backgrounds, borders and paths share each paint. Resize the browser to test caching and clipping.")
             .child(div().flex().gap_3()
                 .child(div().id("animate").p_2().bg(rgb(0x374151)).cursor_pointer()

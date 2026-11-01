@@ -29,7 +29,8 @@ this sequence without mesh-specific changes in GPUI.
 
 ## Mesh producer
 
-`MeshGradient` implements the same `CustomContent` protocol as `SolidColor`.
+`MeshGradient` still implements the legacy `CustomContent` protocol; SolidColor
+and analytic Gradient have moved to portable `ContentSource` snapshots.
 The Metal implementation lives in `extensions/crates/xgpui-shader/src/mesh/`; attribution is in `extensions/crates/xgpui-shader/LICENSE-MeshGradient`.
 
 ```rust
@@ -82,10 +83,10 @@ Real-GPU tests compare against an independent CPU Hermite basis evaluator for
 replay, resize/opacity, old snapshot preservation, shared pipeline compilation,
 minimum subdivisions, shared first-use output, and aborted-frame retry.
 
-## Analytic gradients (Metal)
+## Portable analytic gradients
 
-Linear, elliptical radial, conic and diamond paints use the same `CustomContent`
-contract as the mesh. No additional GPUI changes are needed. For example:
+Linear, elliptical radial, conic and diamond paints are CPU-only `ContentSource`
+snapshots. The host owns portable execution (currently Metal). For example:
 
 ```rust
 use gpui::{prelude::*, *};
@@ -97,10 +98,10 @@ let stops = vec![
     GradientStop::new(0.4, [1.0, 0.7, 0.1, 1.0]),
     GradientStop::new(1.0, [0.1, 0.3, 1.0, 1.0]),
 ];
-let radial = Arc::new(Gradient::radial([0.5, 0.5], [0.5, 0.5], stops)?);
-painted().bg_paint(radial.clone());
-painted().border_8().border_paint(radial.clone());
-window.paint_path_with_paint(path, radial.clone());
+let radial = Gradient::radial([0.5, 0.5], [0.5, 0.5], stops)?;
+painted().bg_paint(radial.content());
+painted().border_8().border_paint(radial.content());
+window.paint_path_with_paint(path, radial.content());
 ```
 
 Constructors: `Gradient::linear(angle, stops)`,
@@ -108,8 +109,8 @@ Constructors: `Gradient::linear(angle, stops)`,
 `Gradient::conic(center, angle, stops)`, and
 `Gradient::diamond(center, radius, angle, stops)`. `Gradient::new(kind, stops)`
 also accepts a `GradientKind`; `with_kind` and `with_stops` make immutable
-snapshots sharing a pipeline cache. `preparations()` counts generated textures;
-`pipeline_compilations()` counts compilations shared by related snapshots.
+snapshots. Clones retain identity. Native caching, completion and diagnostics belong
+to the host; producer preparation/pipeline counters have been removed.
 
 - 2–32 stops, sorted offsets in 0..=1; duplicates create hard edges. The last
   stop at a duplicate offset wins. Values outside the first/last stops clamp.
@@ -124,10 +125,9 @@ snapshots sharing a pipeline cache. `preparations()` counts generated textures;
   first angle is chosen deterministically; differing endpoint colors create a seam.
 - Diamond sampling uses Manhattan distance after rotation in bounds-normalized
   axes; zero degrees is unrotated. Radial sampling uses elliptical distance.
-- Each generated output uses one full-target render draw into BGRA8Unorm,
-  followed by GPUI's normal custom paint composition. Static output is cached by
-  queue and extent; each texture is capped at 64 MiB. Animation still allocates
-  immutable output textures; resource pooling remains later work.
+- Each output uses a portable fullscreen pass into RGBA8 sRGB/straight-alpha,
+  followed by native composition. The host shares structural realizations and owns
+  asynchronous GPU execution, cache budgets and in-flight retention.
 
 Run `just linear`, `just radial`, `just conic`, `just diamond` or `just mesh` in
 `apps/xgpui-ext-lab/paint-lab/`. Every type can paint the same
@@ -137,7 +137,7 @@ runs GPU checks and a deterministic static workload.
 ## Built-in Metal output cache
 
 ```text
-SolidColor / Gradient / MeshGradient
+MeshGradient (legacy)
   key: queue identity + exact extent
   budget: 64 MiB live textures / snapshot
   eviction: individual LRU entries

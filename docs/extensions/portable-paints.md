@@ -1,6 +1,8 @@
 # Portable wgpu paints
 
-`xgpui-shader/wgpu` · paint-lab headless path · native window renderers unchanged.
+`xgpui-shader/wgpu` · legacy producer adapters. SolidColor and analytic Gradient
+now use the portable content API; its wgpu executor remains pending. Metal is the
+current portable executor. The browser lab keeps analytic shader previews locally.
 
 ## Use
 
@@ -13,12 +15,11 @@ xgpui-shader = { path = "../../extensions/crates/xgpui-shader", features = ["wgp
 ```rust
 use gpui::{prelude::*, *};
 use std::sync::Arc;
-use xgpui_shader::{painted, Gradient, GradientStop, WindowPaintExt};
+use xgpui_shader::{painted, MeshGradient, MeshGrid, WindowPaintExt};
 
-let paint = Arc::new(Gradient::linear(45.0, vec![
-    GradientStop::new(0.0, [1.0, 0.2, 0.3, 1.0]),
-    GradientStop::new(1.0, [0.1, 0.3, 1.0, 0.5]),
-])?);
+let paint = Arc::new(MeshGradient::new(MeshGrid::regular(2, 2, vec![
+    [1., 0., 0.], [0., 1., 0.], [0., 0., 1.], [1.; 3],
+])?, 18)?);
 painted().w(px(320.0)).h(px(240.0)).bg_paint(paint.clone());
 window.paint_path_with_paint(path, paint.clone());
 ```

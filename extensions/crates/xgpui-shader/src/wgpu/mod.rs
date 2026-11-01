@@ -253,22 +253,6 @@ impl PaintCache {
     }
 }
 
-pub(crate) fn gradient(
-    paint: &crate::Gradient,
-    ctx: &WgpuCustomContext,
-    extent: Size<DevicePixels>,
-) -> Result<Box<dyn std::any::Any>> {
-    let params = crate::effect_params::gradient(paint, extent);
-    let (output, generated) =
-        paint
-            .wgpu
-            .render(ctx, extent, include_str!("gradient.wgsl"), &params, 6)?;
-    if generated {
-        paint.preparations.fetch_add(1, Ordering::Relaxed);
-    }
-    Ok(Box::new(output))
-}
-
 pub(crate) fn mesh(
     paint: &crate::MeshGradient,
     ctx: &WgpuCustomContext,

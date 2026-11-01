@@ -1,5 +1,5 @@
 use super::*;
-use crate::{Gradient, GradientStop, MeshGradient, MeshGrid};
+use crate::{MeshGradient, MeshGrid};
 use gpui::{CustomContent, size};
 use std::sync::Arc;
 
@@ -173,31 +173,14 @@ struct Probe {
     generations: Box<dyn Fn() -> usize>,
 }
 fn producers() -> Vec<Probe> {
-    let gradient = Arc::new(
-        Gradient::linear(
-            45.,
-            vec![
-                GradientStop::new(0., [1., 0., 0., 1.]),
-                GradientStop::new(1., [0., 0., 1., 1.]),
-            ],
-        )
-        .unwrap(),
-    );
     let mesh = Arc::new(
         MeshGradient::new(MeshGrid::regular(2, 2, vec![[1., 0., 0.]; 4]).unwrap(), 18).unwrap(),
     );
-    vec![
-        Probe {
-            name: "gradient",
-            producer: gradient.clone(),
-            generations: Box::new(move || gradient.preparations()),
-        },
-        Probe {
-            name: "mesh",
-            producer: mesh.clone(),
-            generations: Box::new(move || mesh.preparations()),
-        },
-    ]
+    vec![Probe {
+        name: "mesh",
+        producer: mesh.clone(),
+        generations: Box::new(move || mesh.preparations()),
+    }]
 }
 fn output(
     probe: &Probe,

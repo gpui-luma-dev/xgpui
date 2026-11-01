@@ -155,10 +155,32 @@ MTL_DEBUG_LAYER=1 cargo run --manifest-path apps/xgpui-ext-lab/Cargo.toml \
 
 What to look for: a successful JSON report covering native coverage, alpha, clip
 mapping, replay, resize and source sharing; the saved image contains all three
-painted shapes. Gradients and meshes still use their existing paths. The complete
+painted shapes. Meshes still use their existing path. The complete
 headless checks currently require Metal for their portable solid portions;
 `--wgpu` reports unsupported portable execution until that executor is migrated.
 Wgpu-specific legacy brush/cache tests remain available and use native fixtures.
 
 For direct solid pixels/host-cache acceptance, run the shader extension's
 `--test portable_solid` target (see its README); expect four passing tests.
+
+
+## Portable analytic gradient checks
+
+Native analytic gradients now use retained portable content and strict snapshot
+readiness, including background, border and path coverage. Analytic producer
+counters in JSON are null: allocation and pipeline caching now belong to the host.
+The extension's `portable_gradient` test target checks those host statistics.
+
+```sh
+cargo run --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab \
+  --features runtime-shaders,portable-shaders
+MTL_DEBUG_LAYER=1 cargo run --manifest-path apps/xgpui-ext-lab/Cargo.toml \
+  --bin paint-lab --features runtime-shaders,portable-shaders -- \
+  --headless --frames 3 --png /tmp/paint-portable-gradients.png
+```
+
+What to look for: switch among linear, radial, conic and diamond; edit colors,
+angles and stops; resize repeatedly. All three painted shapes should update,
+with correct clipped edges and transparent interpolation, without freezes or stale
+textures. The headless command must finish successfully with its geometry,
+hard-stop, alpha, replay, resize and coverage checks passing.

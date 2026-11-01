@@ -803,7 +803,7 @@ impl Render for Lab {
         } else if self.effect == Effect::Mesh {
             self.mesh.clone().into()
         } else {
-            self.analytic.clone().into()
+            self.analytic.content().into()
         };
         let mut cards = div().flex().flex_wrap().gap_4();
         for (index, label) in ["Rounded background", "Dashed border", "Curved path fill"]

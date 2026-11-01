@@ -1,10 +1,7 @@
 struct Stop { color: vec4<f32>, offset: vec4<f32> }
-struct Params { size_kind_count: vec4<f32>, center_radius: vec4<f32>, direction: vec4<f32>, stops: array<Stop,32> }
+struct Params { size_kind_count: vec4<f32>, center_radius: vec4<f32>, direction: vec4<f32> }
 @group(0) @binding(0) var<uniform> p: Params;
-@vertex fn paint_vertex(@builtin(vertex_index) id: u32) -> @builtin(position) vec4<f32> {
-    let vertices = array<vec2<f32>,6>(vec2(-1.,-1.),vec2(1.,-1.),vec2(-1.,1.),vec2(-1.,1.),vec2(1.,-1.),vec2(1.,1.));
-    return vec4(vertices[id],0.,1.);
-}
+@group(0) @binding(1) var<storage, read> stops: array<Stop,32>;
 @fragment fn paint_fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let size = p.size_kind_count.xy;
     let uv = position.xy / size;
@@ -21,17 +18,17 @@ struct Params { size_kind_count: vec4<f32>, center_radius: vec4<f32>, direction:
         ratio = abs(rotated.x)+abs(rotated.y);
     }
     let count = u32(p.size_kind_count.w);
-    if ratio < p.stops[0].offset.x { return p.stops[0].color; }
+    if ratio < stops[0].offset.x { return stops[0].color; }
     for (var i=1u; i<count; i++) {
-        if ratio < p.stops[i].offset.x {
-            let t = (ratio-p.stops[i-1u].offset.x)/(p.stops[i].offset.x-p.stops[i-1u].offset.x);
-            let a = p.stops[i-1u].color;
-            let b = p.stops[i].color;
+        if ratio < stops[i].offset.x {
+            let t = (ratio-stops[i-1u].offset.x)/(stops[i].offset.x-stops[i-1u].offset.x);
+            let a = stops[i-1u].color;
+            let b = stops[i].color;
             let alpha = mix(a.a,b.a,t);
             let premultiplied = mix(a.rgb*a.a,b.rgb*b.a,t);
             if alpha > 0. { return vec4(premultiplied/alpha,alpha); }
             return vec4(0.);
         }
     }
-    return p.stops[count-1u].color;
+    return stops[count-1u].color;
 }

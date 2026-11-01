@@ -1,11 +1,17 @@
-//! Analytic multi-stop paints. Geometry and GPU code stay outside GPUI.
-use anyhow::{Result, ensure};
-#[cfg(target_os = "macos")]
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-#[cfg(target_os = "macos")]
-mod metal;
-
+//! Portable analytic gradients. Native execution and caches belong to the host.
+use anyhow::ensure;
+use gpui::content::*;
+use std::sync::{Arc, OnceLock};
+type Result<T> = std::result::Result<T, ContentError>;
+fn invalid(message: &str) -> ContentError {
+    ContentError::new(ContentErrorKind::InvalidDescriptor, message)
+}
+fn interpretation() -> ImageInterpretation {
+    ImageInterpretation {
+        color: ColorEncoding::Srgb,
+        alpha: AlphaMode::Straight,
+    }
+}
 /// A stop in normalized gradient space, with straight-alpha encoded-sRGB RGBA.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GradientStop {
@@ -42,7 +48,7 @@ pub enum GradientKind {
     },
 }
 impl GradientKind {
-    fn validate(self) -> Result<()> {
+    fn validate(self) -> anyhow::Result<()> {
         let (center, radius, angle) = match self {
             Self::Linear { angle } => ([0.5; 2], [0.5; 2], angle),
             Self::Radial { center, radius } => (center, radius, 0.),
@@ -70,67 +76,62 @@ impl GradientKind {
     }
 }
 
-/// Immutable paint with 2..=32 sorted stops. Duplicate offsets form hard
-/// edges (the last stop at an offset wins). Outside stops, endpoint colors clamp.
-/// Colors interpolate in premultiplied encoded sRGB, then output straight alpha.
-/// Related snapshots share their compiled pipeline; static output is cached.
+/// Immutable analytic paint with 2..=32 sorted stops. Duplicate offsets form
+/// hard edges (the last stop at an offset wins); endpoint colors clamp outside.
+/// RGB interpolates in premultiplied encoded sRGB and returns straight alpha.
+/// Clones retain source identity; edits create new immutable content snapshots.
+#[derive(Clone, Debug)]
 pub struct Gradient {
-    kind: GradientKind,
-    stops: Vec<GradientStop>,
-    #[cfg(target_os = "macos")]
-    pipelines: Arc<metal::PipelineCache>,
-    #[cfg(feature = "wgpu")]
-    pub(super) wgpu: crate::wgpu::PaintCache,
-    #[cfg(target_os = "windows")]
-    pub(super) dx11: crate::dx11::PaintCache,
-    #[cfg(target_os = "macos")]
-    output: crate::metal_cache::OutputCache,
-    pub(super) preparations: AtomicUsize,
+    source: Source,
+    content: Content,
 }
-impl std::fmt::Debug for Gradient {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Gradient")
-            .field("kind", &self.kind)
-            .field("stops", &self.stops)
-            .finish_non_exhaustive()
-    }
+#[derive(Clone, Debug)]
+struct Source {
+    kind: GradientKind,
+    stops: Arc<[GradientStop]>,
+    bytes: Arc<[u8]>,
+    program: PortableProgram,
 }
 impl Gradient {
     pub fn new(kind: GradientKind, stops: Vec<GradientStop>) -> Result<Self> {
-        kind.validate()?;
-        ensure!(
-            (2..=32).contains(&stops.len()),
-            "gradient needs 2..=32 stops"
-        );
-        for stop in &stops {
-            ensure!(
-                stop.offset.is_finite() && (0. ..=1.).contains(&stop.offset),
-                "stop offset must be in 0..=1"
-            );
-            ensure!(
-                stop.color
-                    .iter()
-                    .all(|v| v.is_finite() && (0. ..=1.).contains(v)),
-                "stop RGBA must be finite and in 0..=1"
-            );
+        kind.validate().map_err(|e| invalid(&e.to_string()))?;
+        validate_stops(&stops)?;
+        static PROGRAM: OnceLock<Result<PortableProgram>> = OnceLock::new();
+        let program = PROGRAM
+            .get_or_init(|| {
+                PortableProgram::fullscreen(
+                    include_str!("gradient.wgsl"),
+                    "paint_fragment",
+                    interpretation(),
+                    ImageContracts::new(),
+                )
+            })
+            .clone()?;
+        // An explicitly initialized fixed-size storage table avoids backend ABI
+        // assumptions and leaves scalar/vector uniform packing to reflection.
+        let mut bytes = vec![0u8; 32 * 32];
+        for (index, stop) in stops.iter().enumerate() {
+            for (word, value) in stop
+                .color
+                .into_iter()
+                .chain([stop.offset, 0., 0., 0.])
+                .enumerate()
+            {
+                let value = if value == 0. { 0. } else { value };
+                bytes[index * 32 + word * 4..index * 32 + word * 4 + 4]
+                    .copy_from_slice(&value.to_le_bytes());
+            }
         }
-        ensure!(
-            stops.windows(2).all(|s| s[0].offset <= s[1].offset),
-            "stops must be sorted"
-        );
-        Ok(Self {
+        Self::from_source(Source {
             kind,
-            stops,
-            #[cfg(target_os = "macos")]
-            pipelines: Arc::default(),
-            #[cfg(target_os = "macos")]
-            output: crate::metal_cache::OutputCache::default(),
-            #[cfg(feature = "wgpu")]
-            wgpu: crate::wgpu::PaintCache::default(),
-            #[cfg(target_os = "windows")]
-            dx11: crate::dx11::PaintCache::default(),
-            preparations: AtomicUsize::new(0),
+            stops: stops.into(),
+            bytes: bytes.into(),
+            program,
         })
+    }
+    fn from_source(source: Source) -> Result<Self> {
+        let content = Content::new(source.clone());
+        Ok(Self { source, content })
     }
     pub fn linear(angle: f32, stops: Vec<GradientStop>) -> Result<Self> {
         Self::new(GradientKind::Linear { angle }, stops)
@@ -157,87 +158,116 @@ impl Gradient {
         )
     }
     pub fn kind(&self) -> GradientKind {
-        self.kind
+        self.source.kind
     }
     pub fn stops(&self) -> &[GradientStop] {
-        &self.stops
+        &self.source.stops
+    }
+    /// Retain immutable portable content for paints, scene records or dependencies.
+    pub fn content(&self) -> Content {
+        self.content.clone()
     }
     pub fn with_kind(&self, kind: GradientKind) -> Result<Self> {
-        kind.validate()?;
-        Ok(Self {
+        kind.validate().map_err(|e| invalid(&e.to_string()))?;
+        Self::from_source(Source {
             kind,
-            stops: self.stops.clone(),
-            #[cfg(target_os = "macos")]
-            pipelines: self.pipelines.clone(),
-            #[cfg(target_os = "macos")]
-            output: crate::metal_cache::OutputCache::default(),
-            #[cfg(feature = "wgpu")]
-            wgpu: self.wgpu.snapshot(),
-            #[cfg(target_os = "windows")]
-            dx11: self.dx11.snapshot(),
-            preparations: AtomicUsize::new(0),
+            ..self.source.clone()
         })
     }
     pub fn with_stops(&self, stops: Vec<GradientStop>) -> Result<Self> {
-        let mut snapshot = Self::new(self.kind, stops)?;
-        #[cfg(target_os = "macos")]
-        {
-            snapshot.pipelines = self.pipelines.clone();
-        }
-        #[cfg(feature = "wgpu")]
-        {
-            snapshot.wgpu = self.wgpu.snapshot();
-        }
-        #[cfg(target_os = "windows")]
-        {
-            snapshot.dx11 = self.dx11.snapshot();
-        }
-        Ok(snapshot)
-    }
-    pub fn preparations(&self) -> usize {
-        self.preparations.load(Ordering::Relaxed)
-    }
-    pub fn pipeline_compilations(&self) -> usize {
-        let mut count = 0;
-        #[cfg(target_os = "macos")]
-        {
-            count += self.pipelines.compilations.load(Ordering::Relaxed);
-        }
-        #[cfg(feature = "wgpu")]
-        {
-            count += self.wgpu.compilations();
-        }
-        #[cfg(target_os = "windows")]
-        {
-            count += self.dx11.compilations();
-        }
-        count
+        Self::new(self.kind(), stops)
     }
 }
-impl gpui::CustomContent for Gradient {
-    fn prepare(
-        &self,
-        backend: &dyn std::any::Any,
-        extent: gpui::Size<gpui::DevicePixels>,
-    ) -> Result<Box<dyn std::any::Any>> {
-        #[cfg(target_os = "macos")]
-        if backend.is::<gpui_apple::custom_draw::MetalCustomContext>() {
-            return self.prepare_metal(backend, extent);
+fn validate_stops(stops: &[GradientStop]) -> Result<()> {
+    if !(2..=32).contains(&stops.len()) {
+        return Err(invalid("gradient needs 2..=32 stops"));
+    }
+    for stop in stops {
+        if !stop.offset.is_finite() || !(0. ..=1.).contains(&stop.offset) {
+            return Err(invalid("stop offset must be in 0..=1"));
         }
-        #[cfg(target_os = "windows")]
-        if let Some(context) =
-            backend.downcast_ref::<gpui_windows::custom_draw::Dx11CustomContext>()
+        if stop
+            .color
+            .iter()
+            .any(|v| !v.is_finite() || !(0. ..=1.).contains(v))
         {
-            return crate::dx11::gradient(self, context, extent);
+            return Err(invalid("stop RGBA must be finite and in 0..=1"));
         }
-        #[cfg(feature = "wgpu")]
-        if let Some(context) = backend.downcast_ref::<gpui_wgpu::custom_draw::WgpuCustomContext>() {
-            return crate::wgpu::gradient(self, context, extent);
-        }
-        anyhow::bail!("Gradient does not support this backend")
+    }
+    if stops.windows(2).any(|s| s[0].offset > s[1].offset) {
+        return Err(invalid("stops must be sorted"));
+    }
+    Ok(())
+}
+impl ContentSource for Source {
+    fn describe(&self, cx: &mut ContentBuilder, request: &ContentRequest) -> Result<ImageRef> {
+        let (kind, center, radius, angle) = match self.kind {
+            GradientKind::Linear { angle } => (0., [0.5; 2], [0.5; 2], angle),
+            GradientKind::Radial { center, radius } => (1., center, radius, 0.),
+            GradientKind::Conic { center, angle } => (2., center, [0.5; 2], angle),
+            GradientKind::Diamond {
+                center,
+                radius,
+                angle,
+            } => (3., center, radius, angle),
+        };
+        let radians = angle.rem_euclid(360.).to_radians();
+        let direction = if kind == 0. {
+            [radians.sin(), -radians.cos(), radians, 0.]
+        } else {
+            [radians.cos(), radians.sin(), radians, 0.]
+        };
+        let buffer = cx.upload_buffer(
+            BufferDescriptor::new(1024, BufferLayout::new(32, 16)?, BufferUsage::STORAGE)?,
+            self.bytes.clone(),
+        )?;
+        let uniforms = UniformValues::new()
+            .vec4(
+                "size_kind_count",
+                [
+                    request.extent().width() as f32,
+                    request.extent().height() as f32,
+                    kind,
+                    self.stops.len() as f32,
+                ],
+            )
+            .vec4(
+                "center_radius",
+                [center[0], center[1], radius[0], radius[1]],
+            )
+            .vec4("direction", direction);
+        cx.render(
+            RenderPass::fullscreen(
+                &self.program,
+                ImageDescriptor::new(request.extent(), PixelFormat::Rgba8, interpretation(), 1)?,
+            )
+            .uniform("p", uniforms)
+            .storage_buffer(
+                "stops",
+                BufferSlice {
+                    buffer,
+                    offset: 0,
+                    byte_len: 1024,
+                },
+            ),
+        )
     }
 }
-
+impl ContentSource for Gradient {
+    fn describe(&self, cx: &mut ContentBuilder, request: &ContentRequest) -> Result<ImageRef> {
+        self.source.describe(cx, request)
+    }
+}
+impl From<Gradient> for Content {
+    fn from(value: Gradient) -> Self {
+        value.content
+    }
+}
+impl From<Gradient> for crate::Paint {
+    fn from(value: Gradient) -> Self {
+        value.content.into()
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,5 +299,58 @@ mod tests {
                 })
                 .is_err()
         );
+    }
+    #[test]
+    fn immutable_snapshots_share_identity_and_stop_uploads() {
+        let base = Gradient::linear(
+            0.,
+            vec![
+                GradientStop::new(0., [1.; 4]),
+                GradientStop::new(1., [0.; 4]),
+            ],
+        )
+        .unwrap();
+        assert_eq!(base.content().id(), base.clone().content().id());
+        let edited = base.with_kind(GradientKind::Linear { angle: 90. }).unwrap();
+        assert_ne!(base.content().id(), edited.content().id());
+        assert_eq!(base.kind(), GradientKind::Linear { angle: 0. });
+        assert!(Arc::ptr_eq(&base.source.bytes, &edited.source.bytes));
+        assert_eq!(base.source.bytes.len(), 1024);
+        assert!(base.source.bytes[64..].iter().all(|b| *b == 0));
+        let request = ContentRequest::new(
+            gpui::size(gpui::px(8.), gpui::px(8.)),
+            ImageExtent::new(8, 8).unwrap(),
+            1.,
+        )
+        .unwrap();
+        let graph = ContentGraph::describe(
+            &[
+                ContentRoot {
+                    content: base.content(),
+                    request: request.clone(),
+                },
+                ContentRoot {
+                    content: edited.content(),
+                    request,
+                },
+            ],
+            ContentCapabilities::default(),
+            GraphLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(graph.nodes().len(), 3); // one shared stop upload, two renders
+        assert_eq!(
+            graph
+                .nodes()
+                .iter()
+                .filter(|n| matches!(n.operation(), ContentOperation::UploadBuffer(_)))
+                .count(),
+            1
+        );
+        let next = base
+            .with_stops(vec![GradientStop::new(0., [0.; 4]); 2])
+            .unwrap();
+        assert_ne!(base.content().id(), next.content().id());
+        assert_eq!(base.stops()[0].color, [1.; 4]);
     }
 }

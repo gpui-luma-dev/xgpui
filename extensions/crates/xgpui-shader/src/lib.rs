@@ -7,9 +7,7 @@ pub use mesh::{ControlPoint, MeshGradient, MeshGrid, MeshStats};
 mod solid;
 pub use solid::SolidColor;
 
-#[cfg(any(target_os = "macos", target_os = "windows", feature = "wgpu"))]
 mod gradient;
-#[cfg(any(target_os = "macos", target_os = "windows", feature = "wgpu"))]
 pub use gradient::{Gradient, GradientKind, GradientStop};
 
 mod paint;

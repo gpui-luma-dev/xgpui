@@ -1,6 +1,5 @@
 use crate::color_samples::{self, PRESETS};
 use gpui::{prelude::*, *};
-use std::sync::Arc;
 use xgpui_color::GamutMapping;
 use xgpui_shader::{Gradient, GradientStop, Paint, painted};
 struct Row {
@@ -39,7 +38,7 @@ impl ColorDemo {
                     .collect();
                 Row {
                     label: row.label,
-                    paint: Arc::new(Gradient::linear(90., stops).unwrap()).into(),
+                    paint: crate::gradient_preview::paint(&Gradient::linear(90., stops).unwrap()),
                     outside: row.outside,
                 }
             })
