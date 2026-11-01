@@ -1,4 +1,7 @@
 mod color_presentation;
+mod content;
+#[cfg(any(test, feature = "test-support"))]
+pub use content::ContentPresentationStats;
 mod wide_sdr;
 
 use std::{
@@ -47,6 +50,9 @@ pub(crate) struct DirectXRenderer {
     globals: DirectXGlobalElements,
     pipelines: DirectXRenderPipelines,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
+    content_presenter: content::ContentPresenter,
+    content_sampling: Vec<crate::content_executor::GpuImage>,
+    content_subframe_depth: usize,
     custom_retirement: Vec<(ID3D11Query, Vec<Arc<dyn gpui::CustomContent>>)>,
     shaders: Option<crate::custom_draw::ShaderRenderer>,
     backdrops: Option<crate::custom_draw::Backdrops>,
@@ -197,6 +203,8 @@ impl DirectXRenderer {
             Some(composition)
         };
 
+        let content_presenter =
+            content::ContentPresenter::new(&devices.device, &devices.device_context, hwnd)?;
         Ok(DirectXRenderer {
             hwnd,
             atlas,
@@ -205,6 +213,9 @@ impl DirectXRenderer {
             globals,
             pipelines,
             custom_compositor: None,
+            content_presenter,
+            content_sampling: Vec::new(),
+            content_subframe_depth: 0,
             custom_retirement: Vec::new(),
             backdrops: None,
             shaders: None,
@@ -362,6 +373,8 @@ impl DirectXRenderer {
                 .device_context
                 .OMSetRenderTargets(Some(slice::from_ref(&resources.render_target_view)), None);
         }
+        self.content_presenter =
+            content::ContentPresenter::new(&devices.device, &devices.device_context, self.hwnd)?;
         self.devices = Some(devices);
         self.resources = Some(resources);
         self.globals = globals;
@@ -448,12 +461,16 @@ impl DirectXRenderer {
         } else {
             None
         };
+        let parent_sampling = std::mem::take(&mut self.content_sampling);
         let result = self.render_inner(scene, background);
+        let sampling = std::mem::replace(&mut self.content_sampling, parent_sampling);
         if let Some((query, content)) = fence {
             if let Some(devices) = &self.devices {
                 unsafe {
                     devices.device_context.End(&query);
                 }
+                self.content_presenter
+                    .retain_sampling(query.clone(), sampling);
                 self.custom_retirement.push((query, content));
             }
         }
@@ -714,11 +731,39 @@ impl DirectXRenderer {
         }
     }
 
+    fn portable_requests(
+        &self,
+        scene: &Scene,
+    ) -> Result<Vec<Option<gpui::content::ContentDrawRequest>>> {
+        scene
+            .custom_draws
+            .iter()
+            .map(|draw| {
+                let request = gpui::PreparationRequest::new(
+                    draw.bounds.size.map(|v| px(v.0)),
+                    crate::custom_draw::extent(draw)?,
+                    1.,
+                )?;
+                draw.content
+                    .portable_content(&request)
+                    .map_err(anyhow::Error::from)
+            })
+            .collect()
+    }
     fn prepare_custom_draws(
         &mut self,
         scene: &Scene,
     ) -> Result<Vec<crate::custom_draw::PreparedDraw>> {
         use crate::custom_draw::*;
+        let requests = self.portable_requests(scene)?;
+        let portable = if self.content_subframe_depth == 0 {
+            self.content_presenter
+                .update(&requests, self.wide_sdr.is_some())?
+        } else {
+            vec![None; requests.len()]
+        };
+        self.content_sampling
+            .extend(portable.iter().flatten().cloned());
         if scene.custom_draws.is_empty() {
             return Ok(Vec::new());
         }
@@ -732,58 +777,79 @@ impl DirectXRenderer {
         let result = (|| {
             let mut prepared = Vec::with_capacity(scene.custom_draws.len());
             let preparation_frame = gpui::PreparationFrame::default();
-            for draw in &scene.custom_draws {
+            for (draw_index, draw) in scene.custom_draws.iter().enumerate() {
                 let prepared_draw = batch.prepare(|context| {
                     let extent = extent(draw)?;
                     let request =
                         PreparationRequest::new(draw.bounds.size.map(|v| px(v.0)), extent, 1.)?;
-                    let output =
-                        draw.content
-                            .prepare_in_frame(context, &request, &preparation_frame)?;
-                    let native = output.is::<Background>();
-                    let typed_wide = output.is::<Dx11WideSdrOutput>();
-                    let wide = typed_wide
-                        || matches!(
-                            draw.content.image_color_mode(),
-                            gpui::ImageColorMode::LinearP3Wide
-                                | gpui::ImageColorMode::LinearRec2020Wide
-                        );
-                    anyhow::ensure!(
-                        !wide || self.wide_sdr.is_some(),
-                        "wide image requires WideGamutSdr presentation"
-                    );
-                    let source = if typed_wide {
-                        anyhow::ensure!(
-                            self.wide_sdr.is_some(),
-                            "wide output requires WideGamutSdr presentation"
-                        );
-                        output
-                            .downcast::<Dx11WideSdrOutput>()
-                            .unwrap()
-                            .validate(context, extent)?
-                    } else if native {
-                        let background = *output.downcast::<Background>().unwrap();
-                        let bounds = Bounds::new(
-                            point(ScaledPixels(0.), ScaledPixels(0.)),
-                            size(
-                                ScaledPixels(extent.width.0 as f32),
-                                ScaledPixels(extent.height.0 as f32),
-                            ),
-                        );
-                        let mut scene = Scene::default();
-                        scene.insert_primitive(Quad {
-                            bounds,
-                            content_mask: ContentMask { bounds },
-                            background,
-                            ..Default::default()
+                    let gpu = portable[draw_index].as_ref();
+                    let interpretation = gpu.map(|image| image.descriptor.interpretation());
+                    let (source, native, wide) = if requests[draw_index].is_some() {
+                        let source = if let Some(image) = gpu {
+                            TextureBundle::from_portable(&devices.device, image)?
+                        } else {
+                            compositor.transparent.clone()
+                        };
+                        let wide = interpretation.is_some_and(|i| {
+                            matches!(
+                                i.color,
+                                gpui::content::ColorEncoding::LinearP3
+                                    | gpui::content::ColorEncoding::LinearRec2020
+                            )
                         });
-                        scene.finish();
-                        self.render_custom_mask(&scene, extent)?
+                        (source, false, wide)
                     } else {
-                        output
-                            .downcast::<Dx11CustomOutput>()
-                            .map_err(|_| anyhow::anyhow!("producer returned a non-DirectX output"))?
-                            .validate(context, extent)?
+                        let output =
+                            draw.content
+                                .prepare_in_frame(context, &request, &preparation_frame)?;
+                        let native = output.is::<Background>();
+                        let typed_wide = output.is::<Dx11WideSdrOutput>();
+                        let wide = typed_wide
+                            || matches!(
+                                draw.content.image_color_mode(),
+                                gpui::ImageColorMode::LinearP3Wide
+                                    | gpui::ImageColorMode::LinearRec2020Wide
+                            );
+                        anyhow::ensure!(
+                            !wide || self.wide_sdr.is_some(),
+                            "wide image requires WideGamutSdr presentation"
+                        );
+                        let source = if typed_wide {
+                            anyhow::ensure!(
+                                self.wide_sdr.is_some(),
+                                "wide output requires WideGamutSdr presentation"
+                            );
+                            output
+                                .downcast::<Dx11WideSdrOutput>()
+                                .unwrap()
+                                .validate(context, extent)?
+                        } else if native {
+                            let background = *output.downcast::<Background>().unwrap();
+                            let bounds = Bounds::new(
+                                point(ScaledPixels(0.), ScaledPixels(0.)),
+                                size(
+                                    ScaledPixels(extent.width.0 as f32),
+                                    ScaledPixels(extent.height.0 as f32),
+                                ),
+                            );
+                            let mut scene = Scene::default();
+                            scene.insert_primitive(Quad {
+                                bounds,
+                                content_mask: ContentMask { bounds },
+                                background,
+                                ..Default::default()
+                            });
+                            scene.finish();
+                            self.render_custom_mask(&scene, extent)?
+                        } else {
+                            output
+                                .downcast::<Dx11CustomOutput>()
+                                .map_err(|_| {
+                                    anyhow::anyhow!("producer returned a non-DirectX output")
+                                })?
+                                .validate(context, extent)?
+                        };
+                        (source, native, wide)
                     };
                     if draw.content.image_color_mode() != gpui::ImageColorMode::EncodedSrgb {
                         let mut description = D3D11_TEXTURE2D_DESC::default();
@@ -818,6 +884,7 @@ impl DirectXRenderer {
                         None
                     };
                     Ok(PreparedDraw {
+                        portable: interpretation,
                         source,
                         coverage,
                         native,
@@ -864,7 +931,9 @@ impl DirectXRenderer {
         });
         let wide = self.wide_sdr.take();
         let effects = self.backdrops.take();
+        self.content_subframe_depth += 1;
         let result = self.render(scene, WindowBackgroundAppearance::Transparent);
+        self.content_subframe_depth -= 1;
         self.backdrops = effects;
         self.wide_sdr = wide;
         unsafe {
@@ -2601,6 +2670,20 @@ mod dxgi {
 pub struct Dx11HeadlessRenderer(DirectXRenderer);
 #[cfg(any(test, feature = "test-support"))]
 impl Dx11HeadlessRenderer {
+    pub fn set_content_redraw(&mut self, wake: Arc<dyn Fn() + Send + Sync>) {
+        self.0.content_presenter.set_wake(wake);
+    }
+    pub fn content_presentation_stats(&self) -> ContentPresentationStats {
+        self.0.content_presenter.snapshot()
+    }
+    #[cfg(feature = "test-support")]
+    pub fn set_content_validation_limits(
+        &mut self,
+        limits: crate::content_executor::Dx11ContentLimits,
+    ) {
+        self.0.content_presenter.limits = limits;
+    }
+
     /// Bytes in retained subtree textures, excluding driver/in-flight references.
     pub fn layer_texture_bytes(&self) -> u64 {
         self.0
@@ -2675,6 +2758,11 @@ impl Dx11HeadlessRenderer {
         let resources = DirectXResources::offscreen(&devices, 1, 1)?;
         let globals = DirectXGlobalElements::new(&devices.device)?;
         let pipelines = DirectXRenderPipelines::new(&devices.device)?;
+        let content_presenter = content::ContentPresenter::new(
+            &devices.device,
+            &devices.device_context,
+            HWND::default(),
+        )?;
         Ok(Self(DirectXRenderer {
             hwnd: HWND::default(),
             atlas,
@@ -2683,6 +2771,9 @@ impl Dx11HeadlessRenderer {
             globals,
             pipelines,
             custom_compositor: None,
+            content_presenter,
+            content_sampling: Vec::new(),
+            content_subframe_depth: 0,
             custom_retirement: Vec::new(),
             backdrops: None,
             shaders: None,
@@ -2699,6 +2790,14 @@ impl Dx11HeadlessRenderer {
 }
 #[cfg(any(test, feature = "test-support"))]
 impl PlatformHeadlessRenderer for Dx11HeadlessRenderer {
+    fn prepare_content_snapshot(&mut self, scene: &Scene) -> Result<()> {
+        let requests = self.0.portable_requests(scene)?;
+        self.0
+            .content_presenter
+            .update(&requests, self.0.wide_sdr.is_some())?;
+        self.0.content_presenter.require_ready()
+    }
+
     fn render_scene_to_image(
         &mut self,
         scene: &Scene,

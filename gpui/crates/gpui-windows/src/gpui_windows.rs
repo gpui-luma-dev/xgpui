@@ -1,6 +1,7 @@
 #![cfg(target_os = "windows")]
 
 mod clipboard;
+pub mod content_executor;
 pub mod custom_draw;
 mod destination_list;
 mod dialog;
@@ -44,4 +45,4 @@ pub use platform::WindowsPlatform;
 pub(crate) use windows::Win32::Foundation::HWND;
 
 #[cfg(any(test, feature = "test-support"))]
-pub use directx_renderer::Dx11HeadlessRenderer;
+pub use directx_renderer::{ContentPresentationStats, Dx11HeadlessRenderer};

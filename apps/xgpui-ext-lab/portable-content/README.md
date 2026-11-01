@@ -37,3 +37,10 @@ subprocess test. Dense logs must show verified pixels, `producer_readbacks=0`, a
 The original `metal-producer-regression` app now covers migrated WideColor and a
 distinct-output stress case. Other producer families still need migration;
 issue #110 remains open.
+
+
+On Windows, run the same `cargo run` command without the Metal environment
+variable or runtime-shaders feature. The grid uses native D3D11 portable execution
+and GPU-only presentation. Apply the same 512 → 1 → 512, replace, opacity, clip
+and resize checks above. [Windows acceptance commands](../../../docs/extensions/native-dx11-paints.md)
+include the native pixel/lifecycle suites; Windows runtime results remain pending.

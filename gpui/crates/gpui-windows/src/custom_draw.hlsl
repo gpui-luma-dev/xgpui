@@ -55,6 +55,20 @@ float4 custom_fragment(Vertex input) : SV_Target {
     if ((uint(viewport.w) & 1) != 0) coverage = shape_mask.Sample(paint_sampler, input.uv).r;
 
     float4 color = image.Sample(paint_sampler, input.uv);
+    if(color_flags.w>0.5) {
+        if(color_flags.w>4.5) color=float4(1,1,1,color.r);
+        else {
+            if(color_flags.z<0.5) color.a=1;
+            if(color_flags.z>1.5) color=color.a>0?float4(color.rgb/color.a,color.a):float4(0,0,0,0);
+            if((uint(viewport.w)&4)!=0) {
+                if(color_flags.w>3.5) color.rgb=rec2020_to_p3(color.rgb);
+                color.rgb=p3_to_srgb(color.rgb);
+                return float4(color.rgb*color.a,color.a)*(coverage*viewport.z);
+            }
+            if(color_flags.w>1.5) {float3 c=clamp(color.rgb,0.,1.);color.rgb=float3(encode_srgb(c.r),encode_srgb(c.g),encode_srgb(c.b));}
+        }
+        return float4(color.rgb,color.a*coverage*viewport.z);
+    }
     if (color_flags.y > 2.5) color.rgb = rec2020_to_p3(color.rgb);
     if ((uint(viewport.w) & 4) != 0) {
         if (color_flags.y > 1.5 && color_flags.x > .5) {

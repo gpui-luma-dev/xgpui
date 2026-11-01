@@ -7515,6 +7515,7 @@ dependencies = [
  "image",
  "itertools 0.14.0",
  "log",
+ "naga",
  "parking_lot",
  "rand 0.9.5",
  "raw-window-handle",

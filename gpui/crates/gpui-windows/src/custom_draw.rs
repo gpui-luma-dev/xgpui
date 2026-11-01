@@ -416,6 +416,70 @@ pub(crate) struct TextureBundle {
     pub rtv: ID3D11RenderTargetView,
     pub extent: Size<DevicePixels>,
 }
+impl TextureBundle {
+    pub(crate) fn from_portable(
+        device: &ID3D11Device,
+        image: &crate::content_executor::GpuImage,
+    ) -> Result<Self> {
+        Self::from_texture(
+            device,
+            image.texture().clone(),
+            size(
+                DevicePixels(image.descriptor.extent().width() as i32),
+                DevicePixels(image.descriptor.extent().height() as i32),
+            ),
+        )
+    }
+    fn from_texture(
+        device: &ID3D11Device,
+        texture: ID3D11Texture2D,
+        extent: Size<DevicePixels>,
+    ) -> Result<Self> {
+        let (mut srv, mut rtv) = (None, None);
+        unsafe {
+            device.CreateShaderResourceView(&texture, None, Some(&mut srv))?;
+            device.CreateRenderTargetView(&texture, None, Some(&mut rtv))?;
+        }
+        Ok(Self {
+            _dxgi_lease: None,
+            texture,
+            srv: srv.context("missing portable sampled view")?,
+            rtv: rtv.context("missing portable render view")?,
+            extent,
+        })
+    }
+    fn transparent(device: &ID3D11Device) -> Result<Self> {
+        let desc = D3D11_TEXTURE2D_DESC {
+            Width: 1,
+            Height: 1,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+            ..Default::default()
+        };
+        let data = [0u8; 4];
+        let initial = D3D11_SUBRESOURCE_DATA {
+            pSysMem: data.as_ptr().cast(),
+            SysMemPitch: 4,
+            ..Default::default()
+        };
+        let mut texture = None;
+        unsafe {
+            device.CreateTexture2D(&desc, Some(&initial), Some(&mut texture))?;
+        }
+        Self::from_texture(
+            device,
+            texture.context("missing transparent fallback")?,
+            size(DevicePixels(1), DevicePixels(1)),
+        )
+    }
+}
 pub(crate) fn allocate_texture(
     device: &ID3D11Device,
     extent: Size<DevicePixels>,
@@ -633,12 +697,14 @@ fn dynamic_uniform_buffer(device: &ID3D11Device) -> Result<ID3D11Buffer> {
 }
 
 pub(crate) struct PreparedDraw {
+    pub portable: Option<gpui::content::ImageInterpretation>,
     pub source: TextureBundle,
     pub coverage: Option<TextureBundle>,
     pub native: bool,
     pub wide: bool,
 }
 pub(crate) struct CustomCompositor {
+    pub transparent: TextureBundle,
     pipeline: CompositorPipeline,
     blend: ID3D11BlendState,
     wide_blend: ID3D11BlendState,
@@ -689,6 +755,7 @@ impl CustomCompositor {
             device.CreateBlendState(&desc, Some(&mut wide_blend))?;
         }
         Ok(Self {
+            transparent: TextureBundle::transparent(device)?,
             pipeline,
             wide_blend: wide_blend.unwrap(),
             blend: blend.unwrap(),
@@ -731,7 +798,7 @@ impl CustomCompositor {
             let vignette = adjustments
                 .map(|v| v.vignette())
                 .unwrap_or([0., 0., 1., 1.]);
-            let color_flags = [
+            let mut color_flags = [
                 if adjustments.is_some() { 1. } else { 0. },
                 draw.content.image_color_mode().shader_value(),
                 if adjustments.is_some_and(|v| v.is_p3()) {
@@ -741,6 +808,21 @@ impl CustomCompositor {
                 },
                 0.,
             ];
+            if let Some(interpretation) = output.portable {
+                use gpui::content::{AlphaMode, ColorEncoding};
+                color_flags[3] = match interpretation.color {
+                    ColorEncoding::Srgb => 1.,
+                    ColorEncoding::LinearSrgb => 2.,
+                    ColorEncoding::LinearP3 => 3.,
+                    ColorEncoding::LinearRec2020 => 4.,
+                    ColorEncoding::Coverage => 5.,
+                };
+                color_flags[2] = match interpretation.alpha {
+                    AlphaMode::Opaque => 0.,
+                    AlphaMode::Straight => 1.,
+                    AlphaMode::Premultiplied => 2.,
+                };
+            }
             let params: [[f32; 4]; 9] = [
                 [
                     draw.bounds.origin.x.0,

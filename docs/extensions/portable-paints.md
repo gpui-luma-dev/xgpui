@@ -2,7 +2,8 @@
 
 SolidColor, Gradient, MeshGradient and procedural ShaderPaint describe portable
 content. Metal and wgpu execute those graphs inside the framework; producers and
-applications use the same API on both. D3D11 execution remains to be implemented.
+applications use the same API on both. D3D11 is implemented and Windows-cross-checked;
+its GPU runtime acceptance remains pending. See [D3D11 checks](native-dx11-paints.md).
 
 ```rust
 use gpui::{prelude::*, *, content::{ContentDraw, PresentationSlotId}};
@@ -80,7 +81,7 @@ failure/cancellation recovery and a 512-root subprocess with a timeout.
 
 Native runtime acceptance is exercised with wgpu on Metal. Linux/Vulkan and
 Windows/DX12 runtime acceptance remain platform QA tasks; D3D11 is a separate
-executor. Browser runtime results are recorded in the design's implementation log.
+executor with native runtime acceptance pending. Browser runtime results are recorded in the design's implementation log.
 
 [Design and lifecycle](portable-content-api-design.md) ·
 [Native Metal](native-metal-paints.md) · [Native D3D11](native-dx11-paints.md)

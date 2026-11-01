@@ -150,7 +150,8 @@ works inside portable graphs. Native allocation, structural output sharing,
 replay, resize, and completion belong to the host. Producer-side `preparations()`
 and `cached_texture_info()` diagnostics are removed. Procedural shader paints now also use portable content.
 
-Portable execution supports Metal and wgpu. D3D11 execution remains pending.
+Portable execution is implemented on Metal, wgpu and D3D11. D3D11 is Windows-
+cross-checked; its native GPU acceptance remains pending. See [Windows checks](../../../docs/extensions/native-dx11-paints.md).
 The browser demos use the real portable producers on WebGPU; WebGL2 reports
 capability errors for storage/compute graphs. No application backend branches
 are required. See [wgpu execution and acceptance](../../../docs/extensions/portable-paints.md).

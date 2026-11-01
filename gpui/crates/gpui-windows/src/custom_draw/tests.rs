@@ -137,6 +137,7 @@ fn dx11_custom_composition_preserves_alpha_clip_and_immediate_state() -> Result<
         extent,
         &[draw],
         &[PreparedDraw {
+            portable: None,
             source: source.validate(&ctx, extent)?,
             coverage: None,
             native: false,
@@ -371,6 +372,7 @@ fn dx11_custom_uniform_buffer_reuses_storage_and_preserves_queued_draw_values() 
             .collect();
         let outputs: Vec<_> = (0..count)
             .map(|_| PreparedDraw {
+                portable: None,
                 source: source.clone(),
                 coverage: None,
                 native: false,
@@ -603,6 +605,7 @@ fn dxgi_shared_snapshot_holds_key_until_last_prepared_reference() -> Result<()> 
     };
     let compositor = CustomCompositor::new(&consumer.device)?;
     let prepared = PreparedDraw {
+        portable: None,
         source,
         coverage: None,
         native: false,

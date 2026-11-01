@@ -216,3 +216,16 @@ presets, resize, and toggle clipping/opacity. Background, dashed border and curv
 path must stay aligned with the same mesh field. The offscreen comparison must
 update alongside the direct brush where the direct brush accepts the geometry;
 folds remain supported by the tessellated producer. Headless validation must pass.
+
+
+## D3D11 portable execution acceptance
+
+On Windows, the native app and headless renderer now use the D3D11 portable
+executor. Run `cargo run --config .cargo/validation.toml --manifest-path
+apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features portable-shaders --
+--portable-shader` from the repository root (one command line). Test all gradient
+kinds, mesh and User WGSL while animating, dragging parameters, changing opacity/
+clip and resizing. Look for advancing images, correct shape coverage and no blank
+pending frames. Native Windows runtime acceptance is still required; the backend
+and app have been cross-checked, not GPU-tested here. See [full commands and
+acceptance](../../../docs/extensions/native-dx11-paints.md).

@@ -2,7 +2,8 @@
 
 Status: design with staged implementation, 2026-11-01. CPU contracts, Metal and
 wgpu execution/presentation and portable producer migration are implemented.
-D3D11 execution and the later external-image integrations remain pending.
+D3D11 execution/presentation are implemented and cross-checked; Windows GPU
+runtime acceptance and the later external-image integrations remain pending.
 Issue: [#110](https://github.com/gpui-luma-dev/xgpui/issues/110).
 Baseline regression: [#111](https://github.com/gpui-luma-dev/xgpui/pull/111).
 
@@ -1112,3 +1113,35 @@ inputs twelve times while execution is paused and requires one unchanged request
 count, completion of the admitted pixels, then the latest generation. The browser
 animated cards are first in the gallery so their motion is visible beside the
 controls.
+
+
+## Implementation: D3D11 execution and presentation
+
+D3D11 now executes the portable graphs behind the same public ContentSource API.
+One per-device/context worker owns deferred recording and a bounded submission
+window. Immediate-context protection and state-restoring command lists preserve
+window rendering. Event queries retire submitted prefixes and sampling leases;
+timeouts quarantine owners until retirement rather than reusing their budget.
+
+The backend covers initialized image/buffer uploads and copies, unaligned GPU
+byte copies, reflected render/compute pipelines, mip chains, multiple outputs,
+load/blend, bounded vertex/index streams and private constants for portable draw
+and dispatch builtins. HLSL shader model 5 compilation belongs to the host. Naga's
+individual sampler aliases are lowered to direct D3D11 sampler registers.
+
+The presenter consumes GPU textures directly, coalesces newer inputs behind its
+one running graph and posts completion redraws to the native window. Stable-slot
+history, exact snapshots, shared export budgets, sampling retirement, recursive
+coverage rendering and device recovery use the same lifecycle contract. Color,
+alpha and coverage metadata are explicit; the existing wide-SDR compositor
+accepts linear P3/Rec.2020. No application backend branches or producer adapters
+were added. Ordinary UI rendering remains available on older feature levels;
+portable execution there reports UnsupportedCapability.
+
+Validation: four host HLSL tests pass; Windows cross-checks cover library/unit/
+integration tests, producer acceptance and paint-lab/portable-content binaries.
+Native GPU acceptance is supplied as 17 graph tests plus a subprocess helper,
+and three producer/presentation tests. They are not claimed as run: the local
+Windows VM is invalid. See [Windows commands and what to look for](native-dx11-paints.md).
+Next: run Windows runtime acceptance, resolve any native findings, then review
+remaining issue #110 acceptance before considering closure.

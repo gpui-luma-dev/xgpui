@@ -2,7 +2,8 @@
 
 `xgpui-shader/portable-shaders` supplies a CPU-only procedural paint convenience
 API over GPUI portable content. The host owns backend execution on Metal and
-wgpu. D3D11 execution remains pending.
+wgpu, and D3D11. The D3D11 implementation is cross-checked; native Windows GPU
+acceptance remains pending. See [Windows tests](native-dx11-paints.md).
 The historical guide filename does not name a separate or compatibility API.
 
 ## Source contract
