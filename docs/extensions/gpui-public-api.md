@@ -290,8 +290,8 @@ use xgpui_shader::{
     MeshGradient, MeshGrid, ControlPoint, SolidColor,
 };
 
-painted().bg_paint(mesh.clone()).border_paint(mesh.clone());
-window.paint_path_with_paint(path, mesh.clone());  // WindowPaintExt trait.
+painted().bg_paint(mesh.content()).border_paint(mesh.content());
+window.paint_path_with_paint(path, mesh.content());  // WindowPaintExt trait.
 // window.paint_quad_with_paints(...)             // Same extension trait.
 
 // With the portable-shaders feature:
@@ -597,8 +597,8 @@ have not implemented the API; legacy-only scenes require no preparation here.
 Existing trait implementations need no new required method. This does not change
 window pending/previous-result presentation policy.
 
-`SolidColor` now implements ContentSource and exposes `content()`/Content/Paint
-conversions, replacing its CustomContent/native-cache implementation. Source-side
+`SolidColor`, `Gradient` and `MeshGradient` now implement ContentSource and expose
+`content()`/Content/Paint conversions, replacing CustomContent/native-cache implementations. Source-side
 `preparations` and `cached_texture_info` are removed; the host owns realization and
 cache accounting. See [portable content](portable-content-api-design.md) for the
 current Metal executor and remaining backend work.

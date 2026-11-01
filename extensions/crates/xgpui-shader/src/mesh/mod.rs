@@ -1,12 +1,8 @@
 //! Hermite mesh gradient adapted from patskovn/MeshGradient (MIT).
 //! See LICENSE-MeshGradient for the upstream notice and README for changes.
 use anyhow::{Result, ensure};
-#[cfg(target_os = "macos")]
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-#[cfg(target_os = "macos")]
-mod metal;
-
+use gpui::content::*;
+use std::sync::{Arc, OnceLock};
 /// A normalized top-left-origin control point. Tangents are derivatives over a
 /// single patch, not a global grid. RGB channels are encoded SDR sRGB; mesh
 /// color is opaque and element opacity is applied by the GPUI compositor.
@@ -104,6 +100,7 @@ impl MeshGrid {
 #[derive(Clone, Copy, Debug)]
 pub struct MeshStats {
     pub patches: u32,
+    /// Unique patch-local samples; the compute pass expands these into triangles.
     pub evaluated_vertices: u32,
     pub triangles: u32,
     pub buffer_bytes: u64,
@@ -117,10 +114,7 @@ impl MeshStats {
         let patches = (grid.width - 1) * (grid.height - 1);
         let evaluated_vertices = patches * samples * samples;
         let triangles = patches * (samples - 1) * (samples - 1) * 2;
-        let buffer_bytes = grid.points.len() as u64 * 48
-            + patches as u64 * 320
-            + evaluated_vertices as u64 * 32
-            + triangles as u64 * 3 * 32;
+        let buffer_bytes = grid.points.len() as u64 * 48 + triangles as u64 * 3 * 32;
         ensure!(
             buffer_bytes <= 64 * 1024 * 1024,
             "mesh geometry exceeds the 64 MiB per-generation budget"
@@ -134,142 +128,185 @@ impl MeshStats {
     }
 }
 
-/// Immutable mesh snapshot. New parameter snapshots share compiled pipelines
-/// through `with_grid` / `with_subdivisions`. Keep static snapshots in app state.
+/// Immutable CPU-only Hermite mesh source. Clones retain identity; edits create
+/// new snapshots. Native execution, pipelines and output caching belong to GPUI.
+#[derive(Clone, Debug)]
 pub struct MeshGradient {
+    source: Source,
+    content: Content,
+}
+#[derive(Clone, Debug)]
+struct Source {
     grid: MeshGrid,
     samples: u32,
     stats: MeshStats,
-    #[cfg(target_os = "macos")]
-    pipelines: Arc<metal::PipelineCache>,
-    #[cfg(feature = "wgpu")]
-    pub(super) wgpu: crate::wgpu::PaintCache,
-    #[cfg(target_os = "windows")]
-    pub(super) dx11: crate::dx11::PaintCache,
-    #[cfg(target_os = "macos")]
-    output: crate::metal_cache::OutputCache,
-    pub(super) preparations: AtomicUsize,
+    controls: Arc<[u8]>,
+    programs: Programs,
 }
-impl std::fmt::Debug for MeshGradient {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MeshGradient")
-            .field("grid", &self.grid)
-            .field("samples", &self.samples)
-            .finish_non_exhaustive()
+#[derive(Clone, Debug)]
+struct Programs {
+    compute: PortableProgram,
+    render: PortableProgram,
+}
+fn interpretation() -> ImageInterpretation {
+    ImageInterpretation {
+        color: ColorEncoding::Srgb,
+        alpha: AlphaMode::Straight,
     }
 }
 impl MeshGradient {
     pub fn new(grid: MeshGrid, subdivisions: u32) -> Result<Self> {
         let stats = MeshStats::new(&grid, subdivisions)?;
-        Ok(Self {
+        static PROGRAMS: OnceLock<std::result::Result<Programs, ContentError>> = OnceLock::new();
+        let programs = PROGRAMS
+            .get_or_init(|| {
+                Ok(Programs {
+                    compute: PortableProgram::compute(
+                        include_str!("tessellate.wgsl"),
+                        "tessellate",
+                        ImageContracts::new(),
+                    )?,
+                    render: PortableProgram::render(
+                        include_str!("render.wgsl"),
+                        "mesh_vertex",
+                        "mesh_fragment",
+                        interpretation(),
+                        ImageContracts::new(),
+                    )?,
+                })
+            })
+            .clone()?;
+        let mut controls = Vec::with_capacity(grid.points.len() * 48);
+        for point in &grid.points {
+            for value in [
+                point.position[0],
+                point.position[1],
+                point.u_tangent[0],
+                point.u_tangent[1],
+                point.v_tangent[0],
+                point.v_tangent[1],
+                0.,
+                0.,
+                point.color[0],
+                point.color[1],
+                point.color[2],
+                1.,
+            ] {
+                controls.extend_from_slice(&(if value == 0. { 0f32 } else { value }).to_le_bytes());
+            }
+        }
+        let source = Source {
             grid,
             samples: subdivisions,
             stats,
-            #[cfg(target_os = "macos")]
-            pipelines: Arc::new(metal::PipelineCache::default()),
-            #[cfg(target_os = "macos")]
-            output: crate::metal_cache::OutputCache::default(),
-            #[cfg(feature = "wgpu")]
-            wgpu: crate::wgpu::PaintCache::default(),
-            #[cfg(target_os = "windows")]
-            dx11: crate::dx11::PaintCache::default(),
-            preparations: AtomicUsize::new(0),
-        })
+            controls: controls.into(),
+            programs,
+        };
+        let content = Content::new(source.clone());
+        Ok(Self { source, content })
     }
     pub fn with_grid(&self, grid: MeshGrid) -> Result<Self> {
-        let mut next = Self::new(grid, self.samples)?;
-        #[cfg(target_os = "macos")]
-        {
-            next.pipelines = self.pipelines.clone();
-        }
-        #[cfg(feature = "wgpu")]
-        {
-            next.wgpu = self.wgpu.snapshot();
-        }
-        #[cfg(target_os = "windows")]
-        {
-            next.dx11 = self.dx11.snapshot();
-        }
-        Ok(next)
+        Self::new(grid, self.source.samples)
     }
     pub fn with_subdivisions(&self, subdivisions: u32) -> Result<Self> {
-        let mut next = Self::new(self.grid.clone(), subdivisions)?;
-        #[cfg(target_os = "macos")]
-        {
-            next.pipelines = self.pipelines.clone();
-        }
-        #[cfg(feature = "wgpu")]
-        {
-            next.wgpu = self.wgpu.snapshot();
-        }
-        #[cfg(target_os = "windows")]
-        {
-            next.dx11 = self.dx11.snapshot();
-        }
-        Ok(next)
+        Self::new(self.source.grid.clone(), subdivisions)
     }
     pub fn grid(&self) -> &MeshGrid {
-        &self.grid
+        &self.source.grid
     }
     pub fn subdivisions(&self) -> u32 {
-        self.samples
+        self.source.samples
     }
     pub fn stats(&self) -> MeshStats {
-        self.stats
+        self.source.stats
     }
-    pub fn preparations(&self) -> usize {
-        self.preparations.load(Ordering::Relaxed)
-    }
-    pub fn pipeline_compilations(&self) -> usize {
-        let mut count = 0;
-        #[cfg(target_os = "macos")]
-        {
-            count += self.pipelines.compilations.load(Ordering::Relaxed);
-        }
-        #[cfg(feature = "wgpu")]
-        {
-            count += self.wgpu.compilations();
-        }
-        #[cfg(target_os = "windows")]
-        {
-            count += self.dx11.compilations();
-        }
-        count
-    }
-    #[cfg(target_os = "macos")]
-    pub fn cached_texture_info(&self) -> Option<(String, u64)> {
-        self.output.texture_info()
+    pub fn content(&self) -> Content {
+        self.content.clone()
     }
 }
-
-impl gpui::CustomContent for MeshGradient {
-    fn prepare(
+impl ContentSource for Source {
+    fn describe(
         &self,
-        backend: &dyn std::any::Any,
-        extent: gpui::Size<gpui::DevicePixels>,
-    ) -> Result<Box<dyn std::any::Any>> {
-        #[cfg(target_os = "macos")]
-        if backend.is::<gpui_apple::custom_draw::MetalCustomContext>() {
-            return self.prepare_metal(backend, extent);
-        }
-        #[cfg(target_os = "windows")]
-        if let Some(context) =
-            backend.downcast_ref::<gpui_windows::custom_draw::Dx11CustomContext>()
-        {
-            return crate::dx11::mesh(self, context, extent);
-        }
-        #[cfg(feature = "wgpu")]
-        if let Some(context) = backend.downcast_ref::<gpui_wgpu::custom_draw::WgpuCustomContext>() {
-            return crate::wgpu::mesh(self, context, extent);
-        }
-        anyhow::bail!("MeshGradient does not support this backend")
+        cx: &mut ContentBuilder,
+        request: &ContentRequest,
+    ) -> std::result::Result<ImageRef, ContentError> {
+        let controls = cx.upload_buffer(
+            BufferDescriptor::new(
+                self.controls.len() as u64,
+                BufferLayout::new(48, 16)?,
+                BufferUsage::STORAGE,
+            )?,
+            self.controls.clone(),
+        )?;
+        let count = self.stats.triangles * 3;
+        let bytes = u64::from(count) * 32;
+        let vertices = cx
+            .compute(
+                ComputePass::new(&self.programs.compute, [count.div_ceil(64), 1, 1])
+                    .uniform(
+                        "p",
+                        UniformValues::new().uints(
+                            "grid",
+                            [
+                                self.grid.width,
+                                self.grid.height,
+                                self.samples,
+                                self.stats.patches,
+                            ],
+                        ),
+                    )
+                    .storage_buffer(
+                        "points",
+                        BufferSlice {
+                            buffer: controls,
+                            offset: 0,
+                            byte_len: self.controls.len() as u64,
+                        },
+                    )
+                    .write_buffer(
+                        "vertices",
+                        BufferDescriptor::new(
+                            bytes,
+                            BufferLayout::new(32, 16)?,
+                            BufferUsage::STORAGE,
+                        )?,
+                    ),
+            )?
+            .buffer("vertices")?;
+        cx.render(
+            RenderPass::mesh(
+                &self.programs.render,
+                ImageDescriptor::new(request.extent(), PixelFormat::Rgba8, interpretation(), 1)?,
+                count,
+            )
+            .storage_buffer(
+                "vertices",
+                BufferSlice {
+                    buffer: vertices,
+                    offset: 0,
+                    byte_len: bytes,
+                },
+            ),
+        )
     }
 }
-
-#[cfg(target_os = "windows")]
-impl MeshGradient {
-    pub fn cached_texture_info(&self) -> Option<(String, u64)> {
-        self.dx11.texture_info()
+impl ContentSource for MeshGradient {
+    fn describe(
+        &self,
+        cx: &mut ContentBuilder,
+        request: &ContentRequest,
+    ) -> std::result::Result<ImageRef, ContentError> {
+        self.source.describe(cx, request)
+    }
+}
+impl From<MeshGradient> for Content {
+    fn from(mesh: MeshGradient) -> Self {
+        mesh.content
+    }
+}
+impl From<MeshGradient> for crate::Paint {
+    fn from(mesh: MeshGradient) -> Self {
+        mesh.content.into()
     }
 }
 
@@ -296,5 +333,51 @@ mod tests {
         let mut points = grid.points.clone();
         points[0].position[0] = f32::INFINITY;
         assert!(MeshGrid::new(3, 2, points).is_err());
+    }
+    #[test]
+    fn portable_snapshots_share_geometry_across_output_extents() {
+        let mesh =
+            MeshGradient::new(MeshGrid::regular(3, 2, vec![[0.4; 3]; 6]).unwrap(), 8).unwrap();
+        assert_eq!(mesh.content().id(), mesh.clone().content().id());
+        let edited = mesh.with_subdivisions(16).unwrap();
+        assert_ne!(mesh.content().id(), edited.content().id());
+        assert_eq!(mesh.subdivisions(), 8);
+        assert_eq!(mesh.source.controls.len(), 6 * 48);
+        let roots = [(32, 16), (64, 32)].map(|(w, h)| ContentRoot {
+            content: mesh.content(),
+            request: ContentRequest::new(
+                gpui::size(gpui::px(w as f32), gpui::px(h as f32)),
+                ImageExtent::new(w, h).unwrap(),
+                1.,
+            )
+            .unwrap(),
+        });
+        let graph = ContentGraph::describe(
+            &roots,
+            ContentCapabilities {
+                compute: Some(ComputeLimits {
+                    max_workgroup_size: [64; 3],
+                    max_workgroup_invocations: 256,
+                    max_dispatch: [65535; 3],
+                    max_workgroup_memory_bytes: 16384,
+                }),
+                ..ContentCapabilities::default()
+            },
+            GraphLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(graph.nodes().len(), 4); // shared upload + compute, two render outputs
+        assert_eq!(
+            graph
+                .nodes()
+                .iter()
+                .filter(|n| matches!(n.operation(), ContentOperation::Compute(_)))
+                .count(),
+            1
+        );
+        assert_eq!(
+            mesh.stats().buffer_bytes,
+            6 * 48 + u64::from(mesh.stats().triangles) * 3 * 32
+        );
     }
 }

@@ -101,12 +101,15 @@ fn renderers() -> Vec<Box<dyn gpui::PlatformHeadlessRenderer>> {
     }
     result
 }
-#[cfg(feature = "wgpu")]
+#[cfg(all(feature = "wgpu", target_os = "macos"))]
 #[test]
-fn hermite_patch_pixels_match_tessellated_legacy_geometry_and_color() {
+fn hermite_patch_pixels_match_tessellated_geometry_and_color() {
     use gpui::{CustomDraw, DevicePixels, Quad};
     use std::sync::Arc;
-    for mut renderer in renderers() {
+    for mut renderer in [
+        Box::new(gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+            as Box<dyn gpui::PlatformHeadlessRenderer>,
+    ] {
         for kind in 0..4 {
             let p = points(kind);
             let brush = Brush::hermite_patch(p).unwrap();
@@ -142,7 +145,7 @@ fn hermite_patch_pixels_match_tessellated_legacy_geometry_and_color() {
                     content_mask: ContentMask { bounds: full },
                     corner_radii: Default::default(),
                     opacity: 0.5,
-                    content: legacy.clone(),
+                    content: gpui::content::ContentDraw::new(legacy.content()).into_scene_content(),
                     coverage: None,
                 });
                 reference.finish();
@@ -155,6 +158,7 @@ fn hermite_patch_pixels_match_tessellated_legacy_geometry_and_color() {
                     DevicePixels((120. * scale) as i32),
                     DevicePixels((80. * scale) as i32),
                 );
+                portable_ready(renderer.as_mut(), &reference);
                 let expected = renderer.render_scene_to_image(&reference, extent).unwrap();
                 let image = renderer.render_scene_to_image(&actual, extent).unwrap();
                 for y in 18..39 {
@@ -307,12 +311,15 @@ fn multi_patch_validates_dimensions_shared_geometry_and_restores_noise() {
     p[4].u_tangent = [-0.5, 0.];
     assert!(Brush::hermite_mesh(3, 3, p).is_err());
 }
-#[cfg(feature = "wgpu")]
+#[cfg(all(feature = "wgpu", target_os = "macos"))]
 #[test]
-fn multi_patch_dense_pixels_match_legacy_across_moved_joins() {
+fn multi_patch_dense_pixels_match_tessellated_across_moved_joins() {
     use gpui::{CustomDraw, DevicePixels};
     use std::sync::Arc;
-    for mut renderer in renderers() {
+    for mut renderer in [
+        Box::new(gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+            as Box<dyn gpui::PlatformHeadlessRenderer>,
+    ] {
         for (w, h, moved) in [(3, 3, false), (3, 3, true), (2, 3, false), (3, 2, false)] {
             let p = grid_points(w, h, moved);
             let brush = Brush::hermite_mesh(w, h, p.clone()).unwrap();
@@ -345,7 +352,7 @@ fn multi_patch_dense_pixels_match_legacy_across_moved_joins() {
                     content_mask: ContentMask { bounds: full },
                     corner_radii: Default::default(),
                     opacity: 0.5,
-                    content: legacy.clone(),
+                    content: gpui::content::ContentDraw::new(legacy.content()).into_scene_content(),
                     coverage: None,
                 });
                 expected.finish();
@@ -358,6 +365,7 @@ fn multi_patch_dense_pixels_match_legacy_across_moved_joins() {
                     DevicePixels((120. * scale) as i32),
                     DevicePixels((80. * scale) as i32),
                 );
+                portable_ready(renderer.as_mut(), &expected);
                 let reference = renderer.render_scene_to_image(&expected, extent).unwrap();
                 let image = renderer.render_scene_to_image(&actual, extent).unwrap();
                 for y in (16. * scale) as u32..(43. * scale) as u32 {

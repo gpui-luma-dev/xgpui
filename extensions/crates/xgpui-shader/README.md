@@ -148,7 +148,7 @@ Input and graph output are straight-alpha encoded-sRGB; materialized storage is
 RGBA8. `content()` and clones retain source identity. `Content::new(solid)` also
 works inside portable graphs. Native allocation, structural output sharing,
 replay, resize, and completion belong to the host. Producer-side `preparations()`
-and `cached_texture_info()` diagnostics are removed. Meshes and experimental shader paints retain their current execution paths for now.
+and `cached_texture_info()` diagnostics are removed. Experimental shader paints retain their current execution path until their migration.
 
 Portable execution currently supports Metal. D3D11/wgpu portable execution remains
 pending; unsupported hosts report an explicit capability error. Use ordinary
@@ -215,3 +215,39 @@ before unfinished replaced jobs are canceled; strict snapshots still require the
 requested generation. A 60-update stream over three 320×240-class extents checks
 that every completed generation advances, and prints median/p95 producer-update
 time without readback. These timings exclude visible compositor/frame pacing.
+
+
+## Portable MeshGradient
+
+`MeshGradient` is a CPU-only `ContentSource`, available on every target. Its
+`content()` and owned Content/Paint conversions follow the same retained source
+model as Gradient; use a stable `ContentDraw` slot for each changing paint role.
+Clones retain identity; `with_grid` and `with_subdivisions` create new snapshots.
+
+A shared portable compute program tessellates the validated Hermite grid into
+triangle vertices, then a portable render program draws RGBA8 sRGB/straight-alpha
+output. Opaque Hermite RGB, patch-local subdivision, folds/overlap order, gaps,
+transparent outside regions, destination opacity and coverage are preserved.
+Different output extents share computed geometry. The host owns all native
+resources, pipelines, execution and cache statistics; mesh preparation counters,
+cached texture inspection, and Metal/D3D11/wgpu mesh adapters have been removed.
+
+The 64 MiB geometry limit counts 48-byte controls and 32-byte expanded triangle
+vertices. `evaluated_vertices` counts unique patch-local samples; `buffer_bytes`
+reports those two payloads. Intermediate coefficient/sample buffers are eliminated.
+Portable execution currently requires Metal. The browser mesh producer preview
+is explicitly unavailable until portable wgpu execution exists; its direct brush
+editor remains available.
+
+```sh
+MTL_DEBUG_LAYER=1 cargo test \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
+  --test portable_mesh --features portable-shaders,wgpu,gpui-apple/runtime_shaders \
+  -- --test-threads=1 --nocapture
+```
+
+What to look for: four passing tests and one ignored subprocess helper. Independent
+CPU raster pixels must match regular, curved, inset and folded meshes; pending
+edits keep prior pixels visible; all 60 continuous edits advance. Repeated
+512→1→512 workloads must finish, replay without new jobs and report zero producer
+readbacks. Stream timings cover producer updates, not visible frame pacing.

@@ -985,3 +985,37 @@ next pending angle, then the newest angle appears after completion. A 60-update,
 three-extent test verifies every completed generation advances without producer
 readback. Existing supersession, failure, slot removal and strict snapshot tests
 remain required. This changes host scheduling, not the portable producer API.
+
+
+### MeshGradient migration checkpoint
+
+MeshGradient now produces a CPU-only portable graph: immutable 48-byte controls,
+one guarded WGSL tessellation dispatch expanding 32-byte triangle vertices, then
+one portable mesh render pass. The Hermite basis, patch-local subdivisions,
+triangle replacement order, folds, gaps, opaque encoded-sRGB RGB and transparent
+outside regions remain intact. Output is RGBA8 sRGB/straight alpha. The host shares
+geometry across output extents and owns native pipelines, caches, completion and
+in-flight retention. Producer preparation/cache counters and Metal/D3D11/wgpu mesh
+adapters, including the now-unused built-in Metal output cache, are removed.
+
+MeshGrid retains 2..=16 points per axis and 2..=64 samples per patch edge. Geometry
+budgeting counts the actual control and expanded triangle payloads (64 MiB cap);
+intermediate coefficient/sample allocations are eliminated. MeshStats still
+reports unique sample and triangle counts. Clones retain Content identity; edits
+create immutable snapshots. Main paint-lab roles and Hermite comparison retain
+presentation slots across parameter changes. The browser demo explicitly labels
+its mesh producer preview unavailable until portable wgpu execution is implemented;
+no replacement native mesh adapter is kept for compatibility.
+
+Native acceptance compares independent CPU triangle rasterization for regular,
+curved, inset and folded grids, and covers pending/replay/edit/resize behavior,
+shared geometry/pipelines, 60 completed continuous updates and bounded 512→1→512
+workloads with zero producer readbacks. The paint lab retains CPU Hermite samples,
+clip/opacity and background/border/path coverage and failed-frame retry checks.
+Portable reference comparisons run on Metal; wgpu tests explicitly assert the
+missing executor rather than treating fallback pixels as successful output.
+
+Next: migrate experimental ShaderProgram/ShaderPaint producers and their demos,
+remove their superseded adapters and aliases, then complete portable execution on
+D3D11/wgpu. Backward compatibility is not a constraint on that final API. Keep
+issue #110 open until the remaining lifecycle/backend work is complete.

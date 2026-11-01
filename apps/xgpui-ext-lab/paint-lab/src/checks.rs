@@ -150,7 +150,7 @@ pub fn run(
             anyhow::bail!("rebuild with --features portable-shaders");
         }
     } else if effect == Effect::Mesh {
-        mesh.clone()
+        gpui::content::ContentDraw::new(mesh.content()).into_scene_content()
     } else {
         gpui::content::ContentDraw::new(analytic.content()).into_scene_content()
     };
@@ -167,7 +167,7 @@ pub fn run(
     }
     println!(
         "{}",
-        serde_json::json!({"frames":frames,"cpu_wall_readback_ms":start.elapsed().as_secs_f64()*1000.,"effect":if portable_shader {"Portable WGSL"}else{effect.label()},"source_generations":if portable_shader {None}else if effect==Effect::Mesh {Some(mesh.preparations())}else{None::<usize>},"pipeline_compilations":if portable_shader {None}else if effect==Effect::Mesh {Some(mesh.pipeline_compilations())}else{None::<usize>},"checks":"native coverage, alpha, clip mapping, replay, resize, source sharing","timing_scope":"CPU wall including GPU wait and readback; not GPU-only time or FPS"})
+        serde_json::json!({"frames":frames,"cpu_wall_readback_ms":start.elapsed().as_secs_f64()*1000.,"effect":if portable_shader {"Portable WGSL"}else{effect.label()},"source_generations":None::<usize>,"pipeline_compilations":None::<usize>,"checks":"native coverage, alpha, clip mapping, replay, resize, source sharing","timing_scope":"CPU wall including GPU wait and readback; not GPU-only time or FPS"})
     );
     Ok(())
 }
@@ -282,8 +282,8 @@ fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
     }
     // A nonuniform source must sample the same coordinates after clipping.
     let mesh = Arc::new(MeshGradient::new(grid(0.)?, 18)?);
-    let full = demo_scene(mesh.clone());
-    let expected = renderer.render_scene_to_image(&full, extent)?;
+    let full = demo_scene(gpui::content::ContentDraw::new(mesh.content()).into_scene_content());
+    let expected = ready_image(renderer, &full, extent)?;
     let mut clipped = base();
     for draw in &full.custom_draws {
         let mut draw = draw.clone();
@@ -291,7 +291,7 @@ fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
         clipped.insert_primitive(draw);
     }
     clipped.finish();
-    let actual = renderer.render_scene_to_image(&clipped, extent)?;
+    let actual = ready_image(renderer, &clipped, extent)?;
     for (x, y) in [(150, 130), (350 + 100, 27), (820, 150)] {
         ensure!(
             expected.get_pixel(x, y) == actual.get_pixel(x, y),
@@ -299,21 +299,16 @@ fn verify(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
         );
     }
     ensure!(actual.get_pixel(40, 130).0 == [0, 0, 0, 255], "clip leaked");
-    ensure!(mesh.preparations() == 1, "clip regenerated source");
     let mut resized = base();
     resized.insert_primitive(record(
         rect(20., 20., 160., 120.),
-        mesh.clone(),
+        gpui::content::ContentDraw::new(mesh.content()).into_scene_content(),
         Some(border()),
     ));
     resized.finish();
-    renderer.render_scene_to_image(&resized, extent)?;
-    ensure!(
-        mesh.preparations() == 2,
-        "resize failed to regenerate source"
-    );
+    ready_image(renderer, &resized, extent)?;
     // Runtime paints fail serialization explicitly; native paints round-trip.
-    let paint = Paint::Custom(mesh);
+    let paint: Paint = mesh.content().into();
     ensure!(
         serde_json::to_string(&paint).is_err(),
         "runtime paint serialized silently"
@@ -337,36 +332,13 @@ fn wgpu_extension_paints_match_native_geometry() -> Result<()> {
     verify(&mut renderer)
 }
 
-#[cfg(all(
-    test,
-    feature = "wgpu",
-    any(target_os = "macos", target_os = "windows")
-))]
+#[cfg(all(test, feature = "wgpu"))]
 #[::core::prelude::v1::test]
-fn wgpu_mesh_matches_native_interior_samples() -> Result<()> {
-    let mut metal = gpui_platform::current_headless_renderer()?.expect("native renderer");
-    let mut portable = gpui_wgpu::WgpuHeadlessRenderer::new()?;
-    for time in [0., 0.35, 0.8] {
-        let mesh = Arc::new(MeshGradient::new(grid(time)?, 18)?);
-        let bounds = rect(0., 0., 160., 120.);
-        let mut scene = base();
-        let mut draw = record(bounds, mesh, None);
-        draw.corner_radii = Corners::default();
-        scene.insert_primitive(draw);
-        scene.finish();
-        let extent = size(DevicePixels(160), DevicePixels(120));
-        let expected = metal.render_scene_to_image(&scene, extent)?;
-        let actual = portable.render_scene_to_image(&scene, extent)?;
-        for y in (12..108).step_by(12) {
-            for x in (16..144).step_by(16) {
-                let expected = expected.get_pixel(x, y).0;
-                let actual = actual.get_pixel(x, y).0;
-                ensure!(
-                    actual.iter().zip(expected).all(|(a, b)| a.abs_diff(b) <= 3),
-                    "mesh parity at t={time}, {x},{y}: {actual:?} vs {expected:?}"
-                );
-            }
-        }
-    }
+fn wgpu_mesh_reports_portable_execution_unavailable() -> Result<()> {
+    let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new()?;
+    let mesh = MeshGradient::new(grid(0.)?, 18)?;
+    let scene = demo_scene(gpui::content::ContentDraw::new(mesh.content()).into_scene_content());
+    let error = renderer.prepare_content_snapshot(&scene).unwrap_err();
+    ensure!(error.downcast_ref::<gpui::content::ContentError>().is_some_and(|e| e.kind == gpui::content::ContentErrorKind::UnsupportedCapability), "expected explicit unavailable portable executor");
     Ok(())
 }

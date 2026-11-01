@@ -1,4 +1,4 @@
-//! Fixed main-pass brush examples, independent of the legacy paint editor.
+//! Fixed main-pass brush examples, independent of the tessellated paint editor.
 use gpui::{prelude::*, *};
 use xgpui_shader::{BlendMode, Brush, BrushPoint, BrushStop, LayerEffect, Noise, painted};
 
@@ -916,7 +916,7 @@ fn hermite_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoElem
         .child("Angles are clockwise from right; lengths use normalized mesh space. 3×3 mode shares points and selection with the main Mesh editor.");
     if let Err(error) = &editor.brush {
         demo = demo.child(div().max_w(px(900.)).p_3().bg(rgb(0x6c2630)).text_color(white())
-            .child(format!("Outside the direct brush limit: {error}. The legacy preview continues to show this edit.")));
+            .child(format!("Outside the direct brush limit: {error}. The tessellated preview continues to show this edit.")));
     }
     demo = demo.child(
         div()
@@ -928,13 +928,13 @@ fn hermite_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoElem
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child("Existing mesh · offscreen tessellation")
+                    .child("Portable mesh · offscreen tessellation")
                     .child(
                         div().bg(rgb(0x45454f)).child(
                             painted()
                                 .w(px(288.))
                                 .h(px(176.))
-                                .bg_paint(editor.legacy.clone()),
+                                .bg_paint(gpui::content::ContentDraw::new(editor.tessellated.content()).slot(editor.presentation_slot)),
                         ),
                     ),
             )

@@ -6,10 +6,7 @@ mod pipeline;
 use pipeline::ShaderPipeline;
 use std::{
     collections::HashMap,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::{Arc, Mutex},
 };
 use windows::Win32::Graphics::Direct3D11::ID3D11Device;
 
@@ -27,32 +24,14 @@ struct OutputKey {
 #[derive(Default)]
 pub(crate) struct PaintCache {
     pipeline: Arc<Mutex<Option<CachedPipeline>>>,
-    compilations: Arc<AtomicUsize>,
     outputs: Mutex<HashMap<OutputKey, Dx11CustomOutput>>,
 }
 impl PaintCache {
     pub fn snapshot(&self) -> Self {
         Self {
             pipeline: self.pipeline.clone(),
-            compilations: self.compilations.clone(),
             outputs: Mutex::default(),
         }
-    }
-    pub fn compilations(&self) -> usize {
-        self.compilations.load(Ordering::Relaxed)
-    }
-    pub fn texture_info(&self) -> Option<(String, u64)> {
-        let outputs = self.outputs.lock().ok()?;
-        if outputs.is_empty() {
-            return None;
-        }
-        Some((
-            "DirectX 11".into(),
-            outputs
-                .keys()
-                .map(|key| key.width as u64 * key.height as u64 * 4)
-                .sum(),
-        ))
     }
     fn output(
         &self,
@@ -124,7 +103,6 @@ impl PaintCache {
                     device: ctx.device.clone(),
                     pipeline: Arc::new(pipeline),
                 });
-                self.compilations.fetch_add(1, Ordering::Relaxed);
             }
             pipeline::clear(ctx, output, [0.; 4])?;
             cached
@@ -134,23 +112,4 @@ impl PaintCache {
                 .render(ctx, output, uniforms, vertices)
         })
     }
-}
-
-pub(crate) fn mesh(
-    paint: &crate::MeshGradient,
-    ctx: &Dx11CustomContext,
-    extent: Size<DevicePixels>,
-) -> Result<Box<dyn std::any::Any>> {
-    let params = crate::effect_params::mesh(paint);
-    let (output, generated) = paint.dx11.render(
-        ctx,
-        extent,
-        include_str!("wgpu/mesh.wgsl"),
-        &params,
-        paint.stats().triangles * 3,
-    )?;
-    if generated {
-        paint.preparations.fetch_add(1, Ordering::Relaxed);
-    }
-    Ok(Box::new(output))
 }

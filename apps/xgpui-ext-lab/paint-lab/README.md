@@ -75,10 +75,10 @@ time or FPS. Coverage is cached separately from the producer with a 64 MiB cap.
 ```rust
 use xgpui_shader::{painted, MeshGradient, WindowPaintExt};
 
-let mesh = Arc::new(MeshGradient::new(grid, 18)?);
-painted().rounded_lg().bg_paint(mesh.clone());
-painted().border_8().border_paint(mesh.clone());
-window.paint_path_with_paint(path, mesh.clone());
+let mesh = MeshGradient::new(grid, 18)?;
+painted().rounded_lg().bg_paint(mesh.content());
+painted().border_8().border_paint(mesh.content());
+window.paint_path_with_paint(path, mesh.content());
 ```
 
 `painted()` is an explicit extension container. Materials are set when building
@@ -91,14 +91,9 @@ for architecture, compatibility impact, coordinate semantics and remaining work.
 
 ## Portable headless backend
 
-With the opt-in `wgpu` feature, `just wgpu-test` runs the same coverage and gradient
-reference checks through wgpu. `just wgpu-headless --effect mesh --frames 60`
-renders the portable mesh; add `--png /tmp/wgpu-mesh.png` for a capture.
-`WGPU_BACKEND=vulkan` or `dx12` forces a platform backend; on this Mac the local
-portable tests use wgpu/Metal. Interactive windows use native Metal on macOS and D3D11 on Windows.
-See [portable paint status](../../../docs/extensions/portable-paints.md)
-for validation limits. The [native Windows D3D11 adapter](../../../docs/extensions/native-dx11-paints.md)
-uses the same app API; native headless checks use WARP on Windows.
+The wgpu portable executor is pending. Mesh, analytic Gradient and SolidColor
+now require portable execution; `--wgpu` returns UnsupportedCapability for them.
+Wgpu-specific experimental shader/coverage fixtures remain testable separately.
 
 ## Experimental user-authored WGSL
 
@@ -155,7 +150,7 @@ MTL_DEBUG_LAYER=1 cargo run --manifest-path apps/xgpui-ext-lab/Cargo.toml \
 
 What to look for: a successful JSON report covering native coverage, alpha, clip
 mapping, replay, resize and source sharing; the saved image contains all three
-painted shapes. Meshes still use their existing path. The complete
+painted shapes. Meshes now also use portable content. The complete
 headless checks currently require Metal for their portable solid portions;
 `--wgpu` reports unsupported portable execution until that executor is migrated.
 Wgpu-specific legacy brush/cache tests remain available and use native fixtures.
@@ -184,3 +179,26 @@ angles and stops; resize repeatedly. All three painted shapes should update,
 with correct clipped edges and transparent interpolation, without freezes or stale
 textures. The headless command must finish successfully with its geometry,
 hard-stop, alpha, replay, resize and coverage checks passing.
+
+
+## Portable mesh validation
+
+The main mesh editor and the offscreen Hermite comparison now use portable content
+with retained presentation slots. Producer counters in JSON are null for meshes
+and analytic gradients; native resource diagnostics live on the host.
+
+```sh
+cargo run --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab \
+  --features runtime-shaders,portable-shaders -- --effect mesh
+MTL_DEBUG_LAYER=1 cargo run --manifest-path apps/xgpui-ext-lab/Cargo.toml \
+  --bin paint-lab --features runtime-shaders,portable-shaders -- \
+  --headless --effect mesh --frames 3 --png /tmp/paint-portable-mesh.png
+```
+
+What to look for: continuously drag point position and U/V angle/length controls;
+colors and geometry should follow smoothly, without flashes or waiting for mouse
+release. Animate/pause, move between points, change the Hermite editor grid and
+presets, resize, and toggle clipping/opacity. Background, dashed border and curved
+path must stay aligned with the same mesh field. The offscreen comparison must
+update alongside the direct brush where the direct brush accepts the geometry;
+folds remain supported by the tessellated producer. Headless validation must pass.

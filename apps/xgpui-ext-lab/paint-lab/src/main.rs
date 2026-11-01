@@ -407,7 +407,7 @@ impl Lab {
     #[cfg(feature = "portable-shaders")]
     fn publish_hermite_edit(&mut self) {
         if self.hermite.side == 3 {
-            self.mesh_points = self.hermite.legacy_points();
+            self.mesh_points = self.hermite.tessellated_points();
             self.mesh_tangents = self.hermite.tangents.clone();
             self.mesh_selected = self.hermite.selected;
         }
@@ -772,7 +772,7 @@ impl Render for Lab {
                 } else {
                     self.mesh_points.clone()
                 };
-                self.hermite.import_legacy(&points, &self.mesh_tangents);
+                self.hermite.import_tessellated(&points, &self.mesh_tangents);
                 self.hermite.selected = self.mesh_selected;
             }
             self.hermite.refresh();
@@ -802,7 +802,7 @@ impl Render for Lab {
         let paint = if self.native {
             Paint::Native(white().into())
         } else if self.effect == Effect::Mesh {
-            self.mesh.clone().into()
+            self.mesh.content().into()
         } else {
             self.analytic.content().into()
         };

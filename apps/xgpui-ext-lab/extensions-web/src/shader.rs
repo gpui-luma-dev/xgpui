@@ -1,10 +1,9 @@
 use crate::gradient_preview;
 use gpui::{prelude::*, *};
-use std::sync::Arc;
 use web_time::Instant;
 use xgpui_shader::Gradient as PortableGradient;
 use xgpui_shader::{
-    GradientStop, MeshGradient, MeshGrid, Paint, WindowPaintExt, painted,
+    GradientStop, Paint, WindowPaintExt, painted,
     shader_paint::{ShaderParameters, ShaderProgram},
 };
 
@@ -43,8 +42,6 @@ impl From<Gradient> for Paint {
 }
 pub struct ShaderDemo {
     paints: Vec<(&'static str, Paint)>,
-    mesh: Arc<MeshGradient>,
-    mesh_paint: Paint,
     wash: Paint,
     program: ShaderProgram,
     started: Instant,
@@ -140,13 +137,10 @@ impl ShaderDemo {
                 .into(),
             ),
         ];
-        let mesh = Arc::new(MeshGradient::new(Self::grid(0.0), 18).unwrap());
         let program = ShaderProgram::new(include_str!("wash.wgsl")).unwrap();
         let wash = program.paint(Self::parameters(0.0)).unwrap().into();
         Self {
             paints,
-            mesh_paint: mesh.clone().into(),
-            mesh,
             program,
             wash,
             started: Instant::now(),
@@ -160,28 +154,6 @@ impl ShaderDemo {
             .float("progress", t.sin() * 0.35)
             .vec3("tint", [0.95, 0.15, 0.35])
             .float("alpha", 0.85)
-    }
-
-    fn grid(t: f32) -> MeshGrid {
-        let base = MeshGrid::regular(
-            3,
-            3,
-            vec![
-                [1.0, 0.1, 0.2],
-                [1.0, 0.8, 0.1],
-                [0.2, 0.4, 1.0],
-                [0.6, 0.1, 0.8],
-                [0.1, 0.8, 0.6],
-                [0.1, 0.3, 0.8],
-                [1.0, 0.4, 0.1],
-                [0.3, 0.8, 0.9],
-                [0.6, 0.2, 0.8],
-            ],
-        )
-        .unwrap();
-        let mut points = base.points().to_vec();
-        points[4].position = [0.5 + 0.2 * t.sin(), 0.5 + 0.18 * (t * 0.7).sin()];
-        MeshGrid::new(3, 3, points).unwrap()
     }
 }
 
@@ -244,7 +216,6 @@ impl Render for ShaderDemo {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.animated {
             let t = self.started.elapsed().as_secs_f32();
-            self.mesh_paint = Arc::new(self.mesh.with_grid(Self::grid(t)).unwrap()).into();
             self.wash = self.program.paint(Self::parameters(t)).unwrap().into();
             window.request_animation_frame();
         }
@@ -269,7 +240,7 @@ impl Render for ShaderDemo {
                     }))))
             .child(div().flex().flex_wrap().gap_4()
                 .children(self.paints.iter().map(|(label, paint)| card(label, paint.clone(), opacity)))
-                .child(card("Hermite mesh", self.mesh_paint.clone(), opacity))
+                .child(div().w(px(320.)).h(px(210.)).child("Portable mesh preview awaits the wgpu executor"))
                 .child(card("Portable WGSL", self.wash.clone(), opacity)))
     }
 }

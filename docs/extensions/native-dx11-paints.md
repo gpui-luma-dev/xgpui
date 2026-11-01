@@ -2,7 +2,13 @@
 
 Windows · feature level ≥ 11.0 · `xgpui-shader` · no app-side OS branches.
 
-## Use
+Migration status: SolidColor, Gradient and MeshGradient now use portable
+ContentSource descriptions. Their D3D11 producer adapters have been removed;
+portable D3D11 execution is pending, so these sources return UnsupportedCapability
+on Windows for now. Metal is the current executor. The low-level recording API
+below remains transitional infrastructure for experimental shader paints.
+
+## Portable source API (D3D11 executor pending)
 
 ```rust
 use gpui::{prelude::*, *};
@@ -14,7 +20,7 @@ let grid = MeshGrid::regular(2, 2, vec![
     [0.2, 0.3, 1.0], [0.1, 0.9, 0.7],
 ])?;
 let mesh = Arc::new(MeshGradient::new(grid, 18)?);
-painted().w(px(960.0)).h(px(640.0)).bg_paint(mesh);
+painted().w(px(960.0)).h(px(640.0)).bg_paint(mesh.content());
 ```
 
 ## Producer API
@@ -64,7 +70,8 @@ recovery    reject old device/context caches
 ```powershell
 cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib dx11_custom
 cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features wgpu,portable-shaders
-cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab -- --headless --effect mesh --frames 3 --png native-dx11-mesh.png
+# Mesh execution currently returns UnsupportedCapability on D3D11.
+# Run mesh acceptance on Metal; restore native D3D11 acceptance with its portable executor.
 cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab
 ```
 

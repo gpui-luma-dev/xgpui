@@ -1,8 +1,9 @@
 # Portable wgpu paints
 
-`xgpui-shader/wgpu` · legacy producer adapters. SolidColor and analytic Gradient
+`xgpui-shader/wgpu` · legacy producer adapters. SolidColor, Gradient and MeshGradient
 now use the portable content API; its wgpu executor remains pending. Metal is the
-current portable executor. The browser lab keeps analytic shader previews locally.
+current portable executor. The browser lab keeps analytic shader previews locally and labels its portable
+mesh producer preview unavailable until portable wgpu execution exists.
 
 ## Use
 
@@ -20,8 +21,8 @@ use xgpui_shader::{painted, MeshGradient, MeshGrid, WindowPaintExt};
 let paint = Arc::new(MeshGradient::new(MeshGrid::regular(2, 2, vec![
     [1., 0., 0.], [0., 1., 0.], [0., 0., 1.], [1.; 3],
 ])?, 18)?);
-painted().w(px(320.0)).h(px(240.0)).bg_paint(paint.clone());
-window.paint_path_with_paint(path, paint.clone());
+painted().w(px(320.0)).h(px(240.0)).bg_paint(paint.content());
+window.paint_path_with_paint(path, paint.content());
 ```
 
 ## Producer API
@@ -61,7 +62,7 @@ mapping     full unclipped bounds; logical size ≠ raster extent
 coverage    analytic rounded rect; native border/path mask red channel
 cache key   queue + extent (+ logical size for WGSL)
 cache       64 MiB live output; separate 64 MiB coverage
-mesh        Hermite vertex shader; no compute/storage buffers
+mesh        portable content requires the pending wgpu executor
 ```
 
 No producer submission/GPU wait. Cache budgets exclude in-flight retention.
@@ -71,7 +72,7 @@ No producer submission/GPU wait. Cache budgets exclude in-flight retention.
 
 ```sh
 just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-test
-just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-headless --effect mesh --frames 60 --png /tmp/wgpu-mesh.png
+# Mesh execution currently returns UnsupportedCapability until the portable wgpu executor exists.
 
 # One headless backend/device per process; unavailable backend → error.
 WGPU_BACKEND=metal just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-test
@@ -83,8 +84,9 @@ cargo test --config .cargo/validation.toml \
   --features test-support --lib wgpu_custom --target-dir target
 ```
 
-Executed: macOS wgpu/Metal pixels, geometry, mesh parity, replay/cache and
-transaction tests. SPIR-V/HLSL generation passes; Vulkan/DX12 runtime acceptance
+Before the portable source migration, macOS wgpu/Metal mesh parity was exercised.
+Current portable mesh runtime acceptance is Metal-only; wgpu asserts its explicit
+unsupported capability. Legacy transaction and direct shader/brush tests remain. SPIR-V/HLSL generation passes; Vulkan/DX12 runtime acceptance
 remains outstanding. Software/readback timing is not hardware GPU timing.
 
 [Native D3D11](native-dx11-paints.md) · [WGSL](portable-wgsl-v1.md)

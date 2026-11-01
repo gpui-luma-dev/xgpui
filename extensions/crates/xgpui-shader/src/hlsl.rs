@@ -52,7 +52,7 @@ mod tests {
     use super::*;
     #[test]
     fn builtin_hlsl_exports_both_stages_with_explicit_constant_bindings() -> Result<()> {
-        let source = include_str!("wgpu/mesh.wgsl");
+        let source = "struct Params { color: vec4<f32> } @group(0) @binding(0) var<uniform> p: Params; @vertex fn v(@builtin(vertex_index) id: u32)->@builtin(position) vec4<f32>{ return vec4(f32(id),0.,0.,1.); } @fragment fn f()->@location(0) vec4<f32>{return p.color;}";
         let (hlsl, vertex, fragment) = compile_wgsl(source)?;
         assert!(hlsl.contains(&format!("{vertex}(")));
         assert!(hlsl.contains(&format!("{fragment}(")));

@@ -38,12 +38,8 @@ fn reference(grid: &MeshGrid, x: u32, y: u32, u: f32, v: f32) -> ([f32; 2], [f32
     });
     (position, color)
 }
-// Metal retains unsubmitted producer commands; wgpu/D3D11 discard abandoned
-// batches and regenerate output. Pipeline compilations must remain cached.
-pub fn verify_mesh(
-    renderer: &mut dyn gpui::PlatformHeadlessRenderer,
-    expected_retry_preparations: usize,
-) -> Result<()> {
+// Portable execution uses strict readiness; native caching is tested in portable_mesh.
+pub fn verify_mesh(renderer: &mut dyn gpui::PlatformHeadlessRenderer) -> Result<()> {
     let extent = size(DevicePixels(257), DevicePixels(193));
     let bounds = rect(0., 0., 257., 193.);
     for (width, height) in [(2, 2), (3, 2), (3, 3)] {
@@ -67,12 +63,17 @@ pub fn verify_mesh(
         let mesh = Arc::new(MeshGradient::new(grid.clone(), 32)?);
         let mut scene = Scene::default();
         scene.insert_primitive(quad(bounds, 0));
-        let mut record = draw(bounds, bounds, 1., mesh.clone());
+        let mut record = draw(
+            bounds,
+            bounds,
+            1.,
+            gpui::content::ContentDraw::new(mesh.content()).into_scene_content(),
+        );
         record.corner_radii = Corners::default();
         scene.insert_primitive(record);
         let length = scene.len();
         scene.finish();
-        let image = renderer.render_scene_to_image(&scene, extent)?;
+        let image = ready_image(renderer, &scene, extent)?;
         ensure!(
             image.pixels().all(|p| p.0[..3].iter().any(|c| *c > 20)),
             "mesh has coverage holes at {width}x{height}"
@@ -102,12 +103,8 @@ pub fn verify_mesh(
         replay.replay(0..length, &scene);
         replay.finish();
         ensure!(
-            renderer.render_scene_to_image(&replay, extent)? == image,
+            ready_image(renderer, &replay, extent)? == image,
             "mesh replay differs"
-        );
-        ensure!(
-            mesh.preparations() == 1 && mesh.pipeline_compilations() == 1,
-            "mesh static cache failed"
         );
         // New parameter snapshot and extent reuse pipelines but not mutable output.
         let mut changed = grid.points().to_vec();
@@ -120,20 +117,21 @@ pub fn verify_mesh(
         );
         let mut resized = Scene::default();
         resized.insert_primitive(quad(bounds, 0));
-        resized.insert_primitive(draw(rect(0., 0., 65., 33.), bounds, 0.5, next.clone()));
+        resized.insert_primitive(draw(
+            rect(0., 0., 65., 33.),
+            bounds,
+            0.5,
+            gpui::content::ContentDraw::new(next.content()).into_scene_content(),
+        ));
         resized.finish();
-        let result = renderer.render_scene_to_image(&resized, extent)?;
+        let result = ready_image(renderer, &resized, extent)?;
         ensure!(
             result.get_pixel(30, 16).0[1].abs_diff(102) <= 2,
             "mesh snapshot/resize/opacity failed"
         );
-        ensure!(
-            next.pipeline_compilations() == 1,
-            "mesh snapshot recompiled pipelines"
-        );
         // Old scene still has its original immutable output.
         ensure!(
-            renderer.render_scene_to_image(&scene, extent)? == image,
+            ready_image(renderer, &scene, extent)? == image,
             "mesh snapshot mutated older output"
         );
     }
@@ -143,8 +141,18 @@ pub fn verify_mesh(
         2,
     )?);
     let mut failed = Scene::default();
-    failed.insert_primitive(draw(rect(0., 0., 48., 48.), bounds, 1., mesh.clone()));
-    failed.insert_primitive(draw(rect(64., 0., 48., 48.), bounds, 1., mesh.clone()));
+    failed.insert_primitive(draw(
+        rect(0., 0., 48., 48.),
+        bounds,
+        1.,
+        gpui::content::ContentDraw::new(mesh.content()).into_scene_content(),
+    ));
+    failed.insert_primitive(draw(
+        rect(64., 0., 48., 48.),
+        bounds,
+        1.,
+        gpui::content::ContentDraw::new(mesh.content()).into_scene_content(),
+    ));
     failed.insert_primitive(draw(
         rect(128., 0., 48., 48.),
         bounds,
@@ -156,32 +164,18 @@ pub fn verify_mesh(
         renderer.render_scene_to_image(&failed, extent).is_err(),
         "bad producer should abort mesh frame"
     );
-    ensure!(
-        mesh.preparations() == 1 && mesh.pipeline_compilations() == 1,
-        "failed batch did not share mesh resources"
-    );
     let mut retry = Scene::default();
     retry.replay(0..2, &failed);
     retry.finish();
-    let image = renderer.render_scene_to_image(&retry, extent)?;
+    let image = ready_image(renderer, &retry, extent)?;
     ensure!(
         image.get_pixel(24, 24).0[1].abs_diff(204) <= 2
             && image.get_pixel(88, 24).0[1].abs_diff(204) <= 2,
         "pending mesh outputs did not initialize on retry"
     );
     ensure!(
-        mesh.preparations() == expected_retry_preparations && mesh.pipeline_compilations() == 1,
-        "unexpected mesh retry resources: {} preparations (expected {expected_retry_preparations}), {} pipeline compilations",
-        mesh.preparations(),
-        mesh.pipeline_compilations()
-    );
-    ensure!(
-        renderer.render_scene_to_image(&retry, extent)? == image,
+        ready_image(renderer, &retry, extent)? == image,
         "submitted mesh retry changed pixels"
-    );
-    ensure!(
-        mesh.preparations() == expected_retry_preparations && mesh.pipeline_compilations() == 1,
-        "submitted mesh retry rebuilt resources"
     );
     Ok(())
 }

@@ -7,10 +7,7 @@ use gpui_wgpu::{
 };
 use std::{
     collections::HashMap,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::{Arc, Mutex},
 };
 use wgpu::util::DeviceExt;
 
@@ -38,19 +35,14 @@ pub(crate) struct DrawRequest<'a> {
 #[derive(Default)]
 pub(crate) struct PaintCache {
     pipeline: Arc<Mutex<Option<CachedPipeline>>>,
-    compilations: Arc<AtomicUsize>,
     outputs: Mutex<HashMap<OutputKey, WgpuCustomOutput>>,
 }
 impl PaintCache {
     pub fn snapshot(&self) -> Self {
         Self {
             pipeline: self.pipeline.clone(),
-            compilations: self.compilations.clone(),
             outputs: Mutex::default(),
         }
-    }
-    pub fn compilations(&self) -> usize {
-        self.compilations.load(Ordering::Relaxed)
     }
     fn cached(&self, ctx: &WgpuCustomContext, key: &OutputKey) -> Result<Option<WgpuCustomOutput>> {
         Ok(self
@@ -76,25 +68,6 @@ impl PaintCache {
         }
         outputs.insert(key, output.clone());
         Ok(())
-    }
-    fn render(
-        &self,
-        ctx: &WgpuCustomContext,
-        size: Size<DevicePixels>,
-        shader: &str,
-        params: &[[f32; 4]],
-        vertices: u32,
-    ) -> Result<(WgpuCustomOutput, bool)> {
-        self.render_draw(
-            ctx,
-            DrawRequest {
-                extent: size,
-                source: shader,
-                uniforms: &[bytemuck::cast_slice(params)],
-                vertices,
-                logical: None,
-            },
-        )
     }
     pub(crate) fn render_draw(
         &self,
@@ -199,7 +172,6 @@ impl PaintCache {
                     device: ctx.device.clone(),
                     pipeline,
                 });
-                self.compilations.fetch_add(1, Ordering::Relaxed);
             }
             cached.as_ref().unwrap().pipeline.clone()
         };
@@ -251,25 +223,6 @@ impl PaintCache {
         self.store(key, &output)?;
         Ok((output, true))
     }
-}
-
-pub(crate) fn mesh(
-    paint: &crate::MeshGradient,
-    ctx: &WgpuCustomContext,
-    extent: Size<DevicePixels>,
-) -> Result<Box<dyn std::any::Any>> {
-    let params = crate::effect_params::mesh(paint);
-    let (output, generated) = paint.wgpu.render(
-        ctx,
-        extent,
-        include_str!("mesh.wgsl"),
-        &params,
-        paint.stats().triangles * 3,
-    )?;
-    if generated {
-        paint.preparations.fetch_add(1, Ordering::Relaxed);
-    }
-    Ok(Box::new(output))
 }
 
 #[cfg(test)]

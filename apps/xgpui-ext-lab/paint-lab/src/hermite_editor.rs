@@ -1,4 +1,4 @@
-//! Live controls for the shared-point direct/legacy Hermite comparison.
+//! Live controls for the shared-point direct/tessellated Hermite comparison.
 use super::{Control, editor::MeshTangent};
 use std::sync::Arc;
 use xgpui_shader::{Brush, BrushMeshPoint, ControlPoint, MeshGradient, MeshGrid};
@@ -11,7 +11,8 @@ pub(super) struct HermiteEditor {
     pub preset: u8,
     pub edited: bool,
     pub dirty: bool,
-    pub legacy: Arc<MeshGradient>,
+    pub tessellated: Arc<MeshGradient>,
+    pub presentation_slot: gpui::content::PresentationSlotId,
     pub brush: Result<Brush, String>,
 }
 impl HermiteEditor {
@@ -29,7 +30,7 @@ impl HermiteEditor {
                 ]
             })
             .collect();
-        let legacy =
+        let tessellated =
             Arc::new(MeshGradient::new(grid(&points, side), 64).expect("bounded editor mesh"));
         let brush = Brush::hermite_mesh(side, side, points.clone()).map_err(|e| e.to_string());
         Self {
@@ -40,7 +41,8 @@ impl HermiteEditor {
             preset,
             edited: false,
             dirty: false,
-            legacy,
+            tessellated,
+            presentation_slot: gpui::content::PresentationSlotId::new(),
             brush,
         }
     }
@@ -49,10 +51,12 @@ impl HermiteEditor {
     }
     pub fn set_side(&mut self, side: u32) {
         let selected = self.selected.min((side * side - 1) as usize);
+        let slot = self.presentation_slot;
         *self = Self::with_side(self.preset.min(3), side);
+        self.presentation_slot = slot;
         self.selected = selected;
     }
-    pub fn import_legacy(&mut self, points: &[ControlPoint], tangents: &[[MeshTangent; 2]]) {
+    pub fn import_tessellated(&mut self, points: &[ControlPoint], tangents: &[[MeshTangent; 2]]) {
         let incoming: Vec<_> = points
             .iter()
             .map(|p| {
@@ -71,7 +75,7 @@ impl HermiteEditor {
         }
         self.tangents = tangents.to_vec();
     }
-    pub fn legacy_points(&self) -> Vec<ControlPoint> {
+    pub fn tessellated_points(&self) -> Vec<ControlPoint> {
         self.points
             .iter()
             .map(|p| ControlPoint {
@@ -84,7 +88,9 @@ impl HermiteEditor {
     }
     pub fn load_preset(&mut self, preset: u8) {
         let selected = self.selected;
+        let slot = self.presentation_slot;
         *self = Self::with_side(preset, self.side);
+        self.presentation_slot = slot;
         self.selected = selected;
     }
     pub fn reset_selected(&mut self) {
@@ -146,8 +152,8 @@ impl HermiteEditor {
         if !self.dirty {
             return;
         }
-        self.legacy = Arc::new(
-            self.legacy
+        self.tessellated = Arc::new(
+            self.tessellated
                 .with_grid(grid(&self.points, self.side))
                 .expect("bounded editor mesh"),
         );
@@ -232,16 +238,16 @@ fn preset_points(kind: u8, side: u32) -> Vec<BrushMeshPoint> {
 mod tests {
     use super::*;
     #[test]
-    fn rejected_edits_keep_legacy_current_and_recover_without_a_stale_direct_brush() {
+    fn rejected_edits_keep_tessellated_current_and_recover_without_a_stale_direct_brush() {
         let mut editor = HermiteEditor::new(0);
         editor.set(Control::HermiteUAngle, 180.);
         editor.refresh();
         assert!(editor.brush.is_err());
-        assert_eq!(editor.legacy.grid().points()[0].u_tangent, [-1., 0.]);
+        assert_eq!(editor.tessellated.grid().points()[0].u_tangent, [-1., 0.]);
         editor.set(Control::HermiteUAngle, 0.);
         editor.refresh();
         assert!(editor.brush.is_ok());
-        assert_eq!(editor.legacy.grid().points()[0].u_tangent, [1., 0.]);
+        assert_eq!(editor.tessellated.grid().points()[0].u_tangent, [1., 0.]);
     }
     #[test]
     fn zero_length_preserves_direction_and_selected_reset_preserves_other_edits() {
@@ -264,11 +270,14 @@ mod tests {
         assert_eq!(editor.points, preset_points(3, 2));
     }
     #[test]
-    fn three_by_three_presets_and_legacy_roundtrip_keep_shared_points() {
+    fn three_by_three_presets_and_tessellated_roundtrip_keep_shared_points() {
         let mut editor = HermiteEditor::new(0);
+        let slot = editor.presentation_slot;
         editor.set_side(3);
+        assert_eq!(editor.presentation_slot, slot);
         for preset in 0..editor.preset_count() {
             editor.load_preset(preset);
+            assert_eq!(editor.presentation_slot, slot);
             assert!(
                 editor.brush.is_ok(),
                 "preset {preset}: {:?}",
@@ -280,14 +289,14 @@ mod tests {
         editor.set(Control::HermiteX, 0.525);
         editor.refresh();
         assert!(editor.brush.is_ok());
-        let points = editor.legacy_points();
+        let points = editor.tessellated_points();
         assert_eq!(points[4].position, editor.points[4].position);
         let mut imported = HermiteEditor::new(0);
         imported.set_side(3);
-        imported.import_legacy(&points, &editor.tangents);
+        imported.import_tessellated(&points, &editor.tangents);
         imported.refresh();
         assert_eq!(imported.points, editor.points);
-        assert_eq!(imported.legacy.grid().points(), points.as_slice());
+        assert_eq!(imported.tessellated.grid().points(), points.as_slice());
         assert!(imported.brush.is_ok());
         editor.set_side(2);
         assert!(editor.selected < 4);

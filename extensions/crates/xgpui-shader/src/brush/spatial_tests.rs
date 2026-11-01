@@ -370,7 +370,7 @@ fn spatial_text_uses_the_same_color_field_and_existing_atlas() {
     }
 }
 
-#[cfg(feature = "wgpu")]
+#[cfg(all(feature = "wgpu", target_os = "macos"))]
 #[test]
 fn regular_mesh_matches_the_existing_hermite_producer() {
     use gpui::{CustomDraw, DevicePixels, Quad};
@@ -383,7 +383,10 @@ fn regular_mesh_matches_the_existing_hermite_producer() {
     .unwrap();
     let brush = Brush::from_mesh_grid(&grid).unwrap();
     let producer = Arc::new(crate::MeshGradient::new(grid, 64).unwrap());
-    for renderer in &mut renderers() {
+    for renderer in &mut [
+        Box::new(gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+            as Box<dyn gpui::PlatformHeadlessRenderer>,
+    ] {
         let mut legacy = Scene::default();
         let full = Bounds::new(point(px(0.), px(0.)), size(px(120.), px(80.))).scale(1.);
         legacy.insert_primitive(Quad {
@@ -398,7 +401,7 @@ fn regular_mesh_matches_the_existing_hermite_producer() {
             content_mask: ContentMask { bounds: full },
             corner_radii: Default::default(),
             opacity: 1.,
-            content: producer.clone(),
+            content: gpui::content::ContentDraw::new(producer.content()).into_scene_content(),
             coverage: None,
         });
         legacy.finish();
@@ -412,6 +415,7 @@ fn regular_mesh_matches_the_existing_hermite_producer() {
         direct.insert_primitive(Primitive::Shader(draw(&brush, &quad(), false, 1.)));
         direct.finish();
         let extent = size(DevicePixels(120), DevicePixels(80));
+        portable_ready(renderer.as_mut(), &legacy);
         let expected = renderer.render_scene_to_image(&legacy, extent).unwrap();
         let actual = renderer.render_scene_to_image(&direct, extent).unwrap();
         for (x, y) in [(24, 24), (40, 30), (60, 36)] {

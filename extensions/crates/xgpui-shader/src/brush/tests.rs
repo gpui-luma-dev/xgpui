@@ -468,3 +468,24 @@ mod hermite_tests;
 
 #[path = "direct_path_tests.rs"]
 mod direct_path_tests;
+
+#[cfg(all(feature = "wgpu", target_os = "macos"))]
+fn portable_ready(renderer: &mut dyn gpui::PlatformHeadlessRenderer, scene: &gpui::Scene) {
+    let start = std::time::Instant::now();
+    loop {
+        match renderer.prepare_content_snapshot(scene) {
+            Ok(()) => break,
+            Err(error) => {
+                assert_eq!(
+                    error
+                        .downcast_ref::<gpui::content::ContentError>()
+                        .unwrap()
+                        .kind,
+                    gpui::content::ContentErrorKind::Pending
+                );
+                assert!(start.elapsed() < std::time::Duration::from_secs(20));
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        }
+    }
+}

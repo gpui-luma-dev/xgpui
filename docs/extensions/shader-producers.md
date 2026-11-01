@@ -3,85 +3,68 @@
 [Paint integration](extension-paints.md) · [GPUI API](gpui-public-api.md) ·
 [Preparation and recording](paint-contract-hardening.md)
 
-## Metal mesh source and pipeline
+## Portable Hermite meshes
 
-Use [patskovn/MeshGradient](https://github.com/patskovn/MeshGradient), reviewed at
-commit [`f16b544`](https://github.com/patskovn/MeshGradient/tree/f16b544336b7bdaf7e3eba4ac6cba50e1160220e),
-as the primary algorithm and Metal source reference. MeshingKit is useful for
-component ergonomics and presets, but wraps Apple's built-in mesh renderer.
+`MeshGradient` is a CPU-only `ContentSource`, like SolidColor and Gradient. Native
+allocation, compilation, scheduling, completion, caching and composition belong
+to the host. Metal is the current portable executor; unsupported hosts return a
+typed capability error. Mesh-specific Metal/D3D11/wgpu producer adapters and
+preparation/cache counters have been removed.
 
-### Mapping into the extension
-
-| Reference stage | Adaptation in xgpui-shader |
-| --- | --- |
-| ControlPoint / Grid | Validated immutable mesh snapshot: dimensions, positions, tangents, RGB colors |
-| shuffleCoefficients compute kernel | Build per-patch Hermite geometry/color coefficient matrices |
-| computeHermitPatchMatrix compute kernel | Evaluate interpolated positions/colors on a subdivided grid |
-| computeMeshTrianglePrimitives compute kernel | Expand evaluated vertices into triangle geometry; consider indexed geometry later |
-| prepareToDrawShader / drawRasterizedMesh | Draw geometry into the extension's offscreen texture |
-| Optional computeNoize | Not implemented |
-| MetalMeshRenderer / SwiftUI wrapper | Replace MTKView, default device, frame loop, and presentation with the retained GPUI element and host-device preparation contract |
-
-The producer records compute and render commands, returns output and commands to
-the host, and never presents or commits them itself. GPUI composites the result
-at scene order with opacity and coverage. The generic integration must support
-this sequence without mesh-specific changes in GPUI.
-
-## Mesh producer
-
-`MeshGradient` still implements the legacy `CustomContent` protocol; SolidColor
-and analytic Gradient have moved to portable `ContentSource` snapshots.
-The Metal implementation lives in `extensions/crates/xgpui-shader/src/mesh/`; attribution is in `extensions/crates/xgpui-shader/LICENSE-MeshGradient`.
+The Hermite algorithm is adapted from [patskovn/MeshGradient](https://github.com/patskovn/MeshGradient),
+revision `f16b544336b7bdaf7e3eba4ac6cba50e1160220e` (MIT). The retained notice is in
+`extensions/crates/xgpui-shader/LICENSE-MeshGradient`. Portable WGSL lives in
+`extensions/crates/xgpui-shader/src/mesh/`.
 
 ```rust
 use gpui::{prelude::*, px};
-use std::sync::Arc;
+use gpui::content::{ContentDraw, PresentationSlotId};
 use xgpui_shader::{MeshGradient, MeshGrid, painted};
 
 let grid = MeshGrid::regular(2, 2, vec![
     [1.0, 0.1, 0.2], [0.2, 0.4, 1.0],
     [1.0, 0.8, 0.1], [0.1, 0.8, 0.6],
 ])?;
-let mesh = Arc::new(MeshGradient::new(grid, 18)?);
-let element = painted().bg_paint(mesh.clone()).w(px(480.0)).h(px(320.0)).rounded_lg();
+let mesh = MeshGradient::new(grid, 18)?;
+let slot = PresentationSlotId::new(); // retain per destination across edits
+let element = painted().bg_paint(ContentDraw::new(mesh.content()).slot(slot))
+    .w(px(480.0)).h(px(320.0)).rounded_lg();
 ```
 
-Keep the Arc for static reuse. To edit/animate, construct a validated grid from
-new control points and use `mesh.with_grid(new_grid)`; this creates an immutable
-snapshot while sharing compiled pipelines. `with_subdivisions` does the same for
-quality changes. Do not call `MeshGradient::new` every animation frame, which
-would discard the shared pipeline cache.
+Retain snapshots in view state. Clones retain content identity. `with_grid` and
+`with_subdivisions` create new immutable snapshots; the host shares native
+pipelines across sources. `content()` is used for backgrounds, borders and paths;
+owned MeshGradient also converts into Content/Paint. Keep a distinct presentation
+slot for each changing paint role, preserving completed pixels during updates.
 
-Public `ControlPoint` values have normalized top-left-origin positions, u/v
-patch tangents, and opaque encoded-sRGB RGB colors. `MeshGrid::regular` initializes
-straight, uniformly spaced geometry. For custom geometry, clone `grid.points()`,
-edit the points, and validate them with `MeshGrid::new(width, height, points)`.
-Positions/tangents can produce folds or gaps; clipping and deterministic triangle
-order are supported, but this API does not repair self-intersecting geometry.
+| Portable graph stage | Behavior |
+| --- | --- |
+| Control upload | Immutable 48-byte records: position/U tangent, V tangent, opaque encoded-sRGB color |
+| Tessellation compute | One guarded WGSL dispatch evaluates the Hermite basis and expands a deterministic triangle list into 32-byte position/color records |
+| Mesh render | Vertex-stage readonly storage reads, one triangle-list draw, RGBA8 sRGB/straight-alpha output cleared transparent |
 
-The adapted patskovn pipeline computes Hermite coefficient matrices, evaluates
-patch-local vertices, expands triangles, then records one triangle-list draw.
-Shared-edge samples are duplicated per patch rather than connected by artificial
-cross-patch cells. Each compute dispatch is guarded; tracked-resource encoder
-boundaries order the stages. The host alone commits the recorded command buffer.
+Patch-local samples and triangle order are preserved. Shared-edge points have the
+same basis; no artificial cross-patch cells connect them. Positions/tangents may
+produce folds, overlap or gaps; later triangles replace earlier ones, outside
+regions stay transparent, and final destination coverage/opacity remains native.
+Colors use Hermite RGB interpolation with zero color tangents, clamped after
+triangle interpolation. No Oklab, wide-gamut output or grain is added.
 
-Rust upload records have explicit 16-byte alignment and float4-sized fields;
-Metal compile-time assertions and unit tests check strides/offsets. Colors use
-the reference's Hermite RGB interpolation with zero color tangents. This is not
-Oklab interpolation or high-gamut output. Grain is not included in this slice.
+Limits remain 2..=16 points per axis, 2..=64 samples per patch edge, finite
+positions/tangents in -16..=16 and RGB in 0..=1. The 64 MiB geometry cap now counts
+control upload plus expanded triangles; coefficient and intermediate sample
+buffers are no longer allocated. `MeshStats::evaluated_vertices` counts unique
+patch-local samples; `buffer_bytes` reports those actual graph buffer payloads.
+Host budgets additionally account for native allocation sizes and in-flight
+retention. Different output extents share the same uploaded controls and computed
+triangles within one graph.
 
-Resource limits: 2..=16 control points per axis; 2..=64 samples per patch edge;
-64 MiB maximum geometry buffers and 64 MiB maximum output texture per generation.
-Finite positions/tangents must be in -16..=16, RGB in 0..=1. Geometry is immutable
-per snapshot, output is cached by queue/extent, and compilation is
-shared per current host queue across related snapshots. Animated generations
-currently allocate fresh buffers/textures; pooling and total in-flight budgets
-remain future performance work.
-
-Real-GPU tests compare against an independent CPU Hermite basis evaluator for
-2x2, rectangular 3x2, and deformed 3x3 grids. They also check complete coverage,
-replay, resize/opacity, old snapshot preservation, shared pipeline compilation,
-minimum subdivisions, shared first-use output, and aborted-frame retry.
+Native acceptance covers independent CPU triangle pixels for regular, curved,
+inset and folded geometry at multiple subdivision levels; pending edits,
+continuous updates, pipeline/cache reuse, resize, and bounded 512→1→512 workloads
+with zero producer readbacks. Paint-lab also checks CPU Hermite samples,
+background/border/path coverage, clipping, opacity, immutable replay and failed
+frame recovery. See the extension and paint-lab READMEs for commands.
 
 ## Portable analytic gradients
 
@@ -90,7 +73,6 @@ snapshots. The host owns portable execution (currently Metal). For example:
 
 ```rust
 use gpui::{prelude::*, *};
-use std::sync::Arc;
 use xgpui_shader::{painted, Gradient, GradientStop, WindowPaintExt};
 
 let stops = vec![
@@ -134,19 +116,12 @@ Run `just linear`, `just radial`, `just conic`, `just diamond` or `just mesh` in
 background, border and path examples. `just headless --effect diamond --frames 30`
 runs GPU checks and a deterministic static workload.
 
-## Built-in Metal output cache
+## Host-owned portable realization
 
-```text
-MeshGradient (legacy)
-  key: queue identity + exact extent
-  budget: 64 MiB live textures / snapshot
-  eviction: individual LRU entries
-  hit before submission: same pending command + texture
-  hit after submission: texture, no new command
-```
-
-No GPUI API changes. Live-cache bytes exclude geometry buffers, in-flight outputs
-and driver allocations. `cached_texture_info()` reports all live cached textures.
+SolidColor, Gradient and MeshGradient use the same portable lifecycle. Producers
+have no native output cache or `cached_texture_info()` API. Native acceptance
+observes host statistics; normal app code retains immutable content and paint
+identities. See [portable content lifecycle](portable-content-api-design.md).
 
 Mesh adaptation: MIT, copyright 2022 Nikita Patskov and others; see the crate’s
 `LICENSE-MeshGradient` for the retained notice.

@@ -170,13 +170,5 @@ fn native_producer_pixels_replay_cache_and_failures() -> Result<()> {
 #[::core::prelude::v1::test]
 fn native_mesh_matches_cpu_and_preserves_snapshots() -> Result<()> {
     let mut renderer = gpui_platform::current_headless_renderer()?.expect("native renderer");
-    mesh_checks::verify_mesh(
-        renderer.as_mut(),
-        if cfg!(target_os = "macos") { 1 } else { 2 },
-    )
-}
-#[cfg(feature = "wgpu")]
-#[::core::prelude::v1::test]
-fn wgpu_mesh_matches_cpu_and_preserves_snapshots() -> Result<()> {
-    mesh_checks::verify_mesh(&mut gpui_wgpu::WgpuHeadlessRenderer::new()?, 2)
+    mesh_checks::verify_mesh(renderer.as_mut())
 }
