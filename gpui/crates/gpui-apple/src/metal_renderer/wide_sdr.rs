@@ -427,6 +427,9 @@ impl Compositor {
             }
             if let PrimitiveBatch::Custom(range) = &batch {
                 for index in range.clone() {
+                    if !outputs[index].0.visible {
+                        continue;
+                    }
                     if self.wide.contains(&index) {
                         self.flush(&command, &mut ui, viewport);
                         let e = new_command_encoder_for_texture(
@@ -440,11 +443,20 @@ impl Compositor {
                             &e,
                             &outputs[index].0.texture,
                             mask,
-                            Self::params(
-                                viewport,
-                                Some(&scene.custom_draws[index]),
-                                if mask.is_some() { -1. } else { 0. },
-                            ),
+                            {
+                                let mut params = Self::params(
+                                    viewport,
+                                    Some(&scene.custom_draws[index]),
+                                    if mask.is_some() { -1. } else { 0. },
+                                );
+                                if let Some(interpretation) = outputs[index].0.interpretation() {
+                                    let portable =
+                                        crate::custom_draw::interpretation_params(interpretation);
+                                    params[8][3] = portable[0];
+                                    params[8][2] = portable[1];
+                                }
+                                params
+                            },
                             false,
                         );
                         e.endEncoding();

@@ -30,6 +30,10 @@ use std::{cell::Cell, ffi::c_void, mem, mem::MaybeUninit, ops::Range, ptr, slice
 
 mod backdrop;
 #[cfg(target_os = "macos")]
+mod content;
+#[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+pub use content::ContentPresentationStats;
+#[cfg(target_os = "macos")]
 mod wide_sdr;
 
 // Exported to metal
@@ -122,6 +126,8 @@ pub struct MetalRenderer {
     #[cfg(target_os = "macos")]
     wide_sdr: Option<wide_sdr::Compositor>,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
+    #[cfg(target_os = "macos")]
+    content_presenter: content::ContentPresenter,
     shader_pipelines: std::collections::HashMap<u64, metal::RenderPipelineState>,
     backdrops: Option<backdrop::Backdrops>,
     device: metal::Device,
@@ -480,6 +486,9 @@ impl MetalRenderer {
             #[cfg(target_os = "macos")]
             wide_sdr: None,
             custom_compositor: None,
+            #[cfg(target_os = "macos")]
+            content_presenter: content::ContentPresenter::new(&device)
+                .expect("initialize portable content service"),
             shader_pipelines: Default::default(),
             backdrops: None,
             device,
@@ -598,6 +607,13 @@ impl MetalRenderer {
         }
     }
 
+    /// Schedule a new presentation when current portable content completes.
+    /// The callback runs on the native worker and must dispatch to the UI thread.
+    #[cfg(target_os = "macos")]
+    pub fn set_content_redraw(&mut self, redraw: Arc<dyn Fn() + Send + Sync>) {
+        self.content_presenter.set_wake(redraw);
+    }
+
     pub fn destroy(&self) {
         // nothing to do
     }
@@ -651,6 +667,16 @@ impl MetalRenderer {
         texture: &metal::TextureRef,
         viewport_size: Size<DevicePixels>,
     ) -> Result<metal::CommandBuffer> {
+        self.render_frame_inner(scene, texture, viewport_size, true)
+    }
+
+    fn render_frame_inner(
+        &mut self,
+        scene: &Scene,
+        texture: &metal::TextureRef,
+        viewport_size: Size<DevicePixels>,
+        is_window_scene: bool,
+    ) -> Result<metal::CommandBuffer> {
         if scene.backdrops.is_empty() && scene.layer_boundaries.is_empty() {
             if let Some(effects) = &mut self.backdrops {
                 effects.clear();
@@ -675,6 +701,31 @@ impl MetalRenderer {
                 .all(|d| d.program.output_encoding() == gpui::ShaderOutputEncoding::EncodedSrgb),
             "linear P3 shaders require a native wide-SDR compositor"
         );
+        #[cfg(target_os = "macos")]
+        let portable_requests: Vec<_> = scene
+            .custom_draws
+            .iter()
+            .map(|draw| {
+                let extent = crate::custom_draw::CustomCompositor::extent(draw)?;
+                let request = gpui::PreparationRequest::new(
+                    draw.bounds.size.map(|d| gpui::px(d.0)),
+                    extent,
+                    1.,
+                )?;
+                draw.content
+                    .portable_content(&request)
+                    .map_err(anyhow::Error::from)
+            })
+            .collect::<Result<_>>()?;
+        #[cfg(target_os = "macos")]
+        let portable_images = if is_window_scene {
+            self.content_presenter
+                .update(&portable_requests, self.wide_sdr.is_some())?
+        } else {
+            // Coverage/native-paint subscenes cannot remove the parent scene's
+            // subscriptions, history or output cache.
+            vec![None; portable_requests.len()]
+        };
         let custom_outputs = if scene.custom_draws.is_empty() {
             Vec::new()
         } else {
@@ -688,7 +739,7 @@ impl MetalRenderer {
             };
             let mut outputs = Vec::new();
             let preparation_frame = gpui::PreparationFrame::default();
-            for draw in &scene.custom_draws {
+            for (draw_index, draw) in scene.custom_draws.iter().enumerate() {
                 let extent = crate::custom_draw::CustomCompositor::extent(draw)?;
                 // Direct scene records use 1x logical geometry. Window records
                 // retain their original logical size/scale in a private adapter.
@@ -697,9 +748,27 @@ impl MetalRenderer {
                     extent,
                     1.,
                 )?;
-                let raw = draw
-                    .content
-                    .prepare_in_frame(&context, &request, &preparation_frame)?;
+                #[cfg(target_os = "macos")]
+                let portable = portable_requests[draw_index].is_some();
+                #[cfg(not(target_os = "macos"))]
+                let portable = false;
+                #[cfg(target_os = "macos")]
+                let gpu_image = portable_images[draw_index].clone();
+                let raw: Box<dyn std::any::Any> = if portable {
+                    #[cfg(target_os = "macos")]
+                    {
+                        Box::new(crate::custom_draw::PreparedMetalOutput::portable(
+                            gpu_image, texture,
+                        ))
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        unreachable!()
+                    }
+                } else {
+                    draw.content
+                        .prepare_in_frame(&context, &request, &preparation_frame)?
+                };
                 let native_source = raw.is::<Background>();
                 let raw = if native_source {
                     let background = *raw.downcast::<Background>().unwrap();
@@ -727,7 +796,16 @@ impl MetalRenderer {
                 } else {
                     raw
                 };
-                let output = if raw.is::<crate::custom_draw::MetalWideSdrOutput>() {
+                let output = if raw.is::<crate::custom_draw::PreparedMetalOutput>() {
+                    let output = *raw
+                        .downcast::<crate::custom_draw::PreparedMetalOutput>()
+                        .unwrap();
+                    #[cfg(target_os = "macos")]
+                    if self.wide_sdr.is_some() && output.gpu.is_some() {
+                        self.wide_sdr.as_mut().unwrap().wide.insert(outputs.len());
+                    }
+                    output
+                } else if raw.is::<crate::custom_draw::MetalWideSdrOutput>() {
                     #[cfg(target_os = "macos")]
                     {
                         anyhow::ensure!(
@@ -849,6 +927,13 @@ impl MetalRenderer {
                 .map(|draw| draw.content.clone())
                 .collect::<Vec<_>>(),
         ));
+        #[cfg(target_os = "macos")]
+        let gpu_lifetimes = Cell::new(Some(
+            custom_outputs
+                .iter()
+                .filter_map(|(output, _, _)| output.gpu.clone())
+                .collect::<Vec<_>>(),
+        ));
         let surface_lifetimes = Cell::new(Some(
             scene
                 .surfaces
@@ -861,6 +946,8 @@ impl MetalRenderer {
         let block = RcBlock::new(
             move |_: ptr::NonNull<ProtocolObject<dyn MTLCommandBuffer>>| {
                 drop(content_lifetimes.take());
+                #[cfg(target_os = "macos")]
+                drop(gpu_lifetimes.take());
                 drop(surface_lifetimes.take());
                 if let Some(instance_buffer) = instance_buffer.take() {
                     instance_buffer_pool.lock().release(instance_buffer);
@@ -1096,7 +1183,7 @@ impl MetalRenderer {
         #[cfg(target_os = "macos")]
         let lab = self.wide_sdr.take();
         let effects = self.backdrops.take();
-        let result = self.render_frame(scene, target, extent);
+        let result = self.render_frame_inner(scene, target, extent, false);
         self.backdrops = effects;
         #[cfg(target_os = "macos")]
         {
@@ -2508,6 +2595,25 @@ impl MetalValidationFrame {
 
 #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
 impl MetalHeadlessRenderer {
+    /// Observe portable producer execution independently from compositor readback.
+    #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+    pub fn content_presentation_stats(&self) -> ContentPresentationStats {
+        self.renderer.content_presenter.snapshot()
+    }
+    /// Wake a headless driver when a producer job finishes; no polling is needed.
+    #[cfg(target_os = "macos")]
+    pub fn set_content_redraw(&mut self, redraw: Arc<dyn Fn() + Send + Sync>) {
+        self.renderer.set_content_redraw(redraw);
+    }
+    /// Configure deterministic native producer admission/failure gates for validation.
+    #[cfg(target_os = "macos")]
+    pub fn set_content_validation_limits(
+        &mut self,
+        limits: crate::content_executor::MetalContentLimits,
+    ) {
+        self.renderer.content_presenter.limits = limits;
+    }
+
     /// Host context for bounded queue gates in native lifecycle tests.
     #[cfg(any(test, feature = "test-support"))]
     pub fn validation_context(&self) -> crate::custom_draw::MetalCustomContext {

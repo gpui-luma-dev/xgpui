@@ -1393,6 +1393,15 @@ impl PreparationRequest {
 /// Backend contexts and outputs use checked type erasure; backend crates define
 /// their concrete types. Implementations must not submit or present GPU work.
 pub trait CustomContent: std::fmt::Debug + Send + Sync + 'static {
+    /// Renderer bridge for portable content. This only extracts CPU data; native
+    /// execution is scheduled asynchronously by the host, never by the producer.
+    fn portable_content(
+        &self,
+        _request: &PreparationRequest,
+    ) -> Result<Option<crate::content::ContentDrawRequest>, crate::content::ContentError> {
+        Ok(None)
+    }
+
     /// Encoded-sRGB RGB affine rows, applied after sampling/unassociation and
     /// before coverage/opacity. Alpha is preserved. Identity keeps legacy output.
     fn image_color_transform(&self) -> [[f32; 4]; 3] {
@@ -1460,6 +1469,21 @@ struct ContentWithPreparationGeometry {
 }
 
 impl CustomContent for ContentWithPreparationGeometry {
+    fn portable_content(
+        &self,
+        request: &PreparationRequest,
+    ) -> Result<Option<crate::content::ContentDrawRequest>, crate::content::ContentError> {
+        let request =
+            PreparationRequest::new(self.logical_size, request.raster_size(), self.scale_factor)
+                .map_err(|e| {
+                    crate::content::ContentError::new(
+                        crate::content::ContentErrorKind::InvalidDescriptor,
+                        e.to_string(),
+                    )
+                })?;
+        self.content.portable_content(&request)
+    }
+
     fn image_source_size(&self) -> Option<Size<crate::DevicePixels>> {
         self.content.image_source_size()
     }

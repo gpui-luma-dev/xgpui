@@ -3,7 +3,8 @@
 //! This is an offscreen backend, not window presentation. Device initialization
 //! and blocking readback waits are intended for setup/validation outside UI draw
 //! callbacks. `submit` and awaiting its job do not block the calling UI thread.
-//! Window integration, external imports, and cross-frame image caches remain separate.
+//! The renderer uses a private completed-texture handoff on its shared device;
+//! CPU readback is only the public headless validation path. External imports remain separate.
 use crate::metal::{self, *};
 use gpui::content as c;
 use std::{
@@ -19,7 +20,9 @@ use std::{
     time::{Duration, Instant},
 };
 mod encoding;
+mod gpu;
 mod pipeline;
+pub(crate) use gpu::*;
 use pipeline::*;
 type Result<T> = std::result::Result<T, c::ContentError>;
 fn failure(kind: c::ContentErrorKind, message: impl Into<String>) -> c::ContentError {
@@ -225,7 +228,7 @@ impl Drop for MetalContentJob {
         self.cancel();
     }
 }
-struct Request {
+struct ReadbackRequest {
     graph: Arc<c::ContentGraph>,
     limits: MetalContentLimits,
     state: Arc<JobState>,
@@ -237,11 +240,16 @@ struct Request {
 pub struct MetalContentExecutor {
     requests: mpsc::SyncSender<Request>,
     capabilities: c::ContentCapabilities,
+    #[cfg(any(test, feature = "test-support"))]
+    exported_bytes: Arc<std::sync::atomic::AtomicU64>,
 }
 impl MetalContentExecutor {
     /// Initialize a dedicated native worker and bounded queue. Initialization may
     /// compile a helper kernel; perform setup outside UI rendering.
     pub fn new(options: MetalContentOptions) -> Result<Self> {
+        Self::on_device(options, None)
+    }
+    pub(crate) fn on_device(options: MetalContentOptions, device: Option<Device>) -> Result<Self> {
         if options.queue_capacity == 0
             || options.pending_jobs == 0
             || options.pipeline_cache_entries == 0
@@ -251,12 +259,15 @@ impl MetalContentExecutor {
                 "Metal queue, pending-job and pipeline limits must be positive",
             ));
         }
+        let exported_bytes = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let worker_budget = exported_bytes.clone();
         let (requests, receiver) = mpsc::sync_channel::<Request>(options.pending_jobs);
         let (ready, startup) = mpsc::sync_channel(1);
         std::thread::Builder::new()
             .name("xgpui-content-metal".into())
             .spawn(move || {
-                let worker = objc2::rc::autoreleasepool(|_| Worker::new(options));
+                let worker =
+                    objc2::rc::autoreleasepool(|_| Worker::new(options, device, worker_budget));
                 let mut worker = match worker {
                     Ok(worker) => worker,
                     Err(error) => {
@@ -266,9 +277,36 @@ impl MetalContentExecutor {
                 };
                 let _ = ready.send(Ok(worker.capabilities.clone()));
                 while let Ok(request) = receiver.recv() {
-                    let result =
-                        worker.execute(request.graph, request.limits, &request.state.cancelled);
-                    request.state.finish(result);
+                    match request {
+                        Request::Readback(request) => {
+                            let result = worker
+                                .execute(
+                                    request.graph,
+                                    request.limits,
+                                    &request.state.cancelled,
+                                    false,
+                                )
+                                .map(|output| MetalContentFrame {
+                                    images: output.images,
+                                    stats: output.stats,
+                                });
+                            request.state.finish(result);
+                        }
+                        Request::Gpu(request) => {
+                            let result = worker
+                                .execute(
+                                    request.graph,
+                                    request.limits,
+                                    &request.state.cancelled,
+                                    true,
+                                )
+                                .map(|output| MetalGpuFrame {
+                                    images: output.gpu,
+                                    stats: output.stats,
+                                });
+                            request.state.finish(result);
+                        }
+                    }
                 }
             })
             .map_err(|e| execution(format!("start Metal worker: {e}")))?;
@@ -278,7 +316,13 @@ impl MetalContentExecutor {
         Ok(Self {
             requests,
             capabilities,
+            #[cfg(any(test, feature = "test-support"))]
+            exported_bytes,
         })
+    }
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn retained_gpu_bytes(&self) -> u64 {
+        self.exported_bytes.load(Ordering::Acquire)
     }
     /// Functional device report for CPU graph validation.
     pub fn capabilities(&self) -> &c::ContentCapabilities {
@@ -300,11 +344,11 @@ impl MetalContentExecutor {
             cancelled: AtomicBool::new(false),
         });
         self.requests
-            .try_send(Request {
+            .try_send(Request::Readback(ReadbackRequest {
                 graph,
                 limits,
                 state: state.clone(),
-            })
+            }))
             .map_err(|e| match e {
                 mpsc::TrySendError::Full(_) => failure(
                     c::ContentErrorKind::ResourceLimit,
@@ -352,15 +396,22 @@ struct Worker {
     options: MetalContentOptions,
     pipelines: HashMap<PipelineKey, std::rc::Rc<Pipeline>>,
     byte_copy: ComputePipelineState,
+    exported_bytes: Arc<std::sync::atomic::AtomicU64>,
 }
 impl Worker {
-    fn new(options: MetalContentOptions) -> Result<Self> {
-        let device = MTLCreateSystemDefaultDevice().ok_or_else(|| {
-            failure(
-                c::ContentErrorKind::UnsupportedCapability,
-                "no native Metal device",
-            )
-        })?;
+    fn new(
+        options: MetalContentOptions,
+        device: Option<Device>,
+        exported_bytes: Arc<std::sync::atomic::AtomicU64>,
+    ) -> Result<Self> {
+        let device = device
+            .or_else(|| MTLCreateSystemDefaultDevice())
+            .ok_or_else(|| {
+                failure(
+                    c::ContentErrorKind::UnsupportedCapability,
+                    "no native Metal device",
+                )
+            })?;
         let queue = device
             .newCommandQueueWithMaxCommandBufferCount(options.queue_capacity)
             .ok_or_else(|| allocation("allocate bounded Metal queue"))?;
@@ -392,6 +443,7 @@ impl Worker {
             options,
             pipelines: HashMap::new(),
             byte_copy,
+            exported_bytes,
         })
     }
 }

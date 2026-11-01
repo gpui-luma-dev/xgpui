@@ -1308,6 +1308,36 @@ impl MacWindow {
                 accesskit_adapter: None,
                 sheet_parent: None,
             }));
+            // Completion never touches AppKit or waits on the UI thread. The
+            // weak subscription expires with the window; coalescing bounds main
+            // queue traffic when several content generations finish together.
+            let content_window = Arc::downgrade(&state);
+            let content_redraw_queued = Arc::new(AtomicBool::new(false));
+            state.lock().renderer.set_content_redraw(Arc::new(move || {
+                if content_redraw_queued.swap(true, Ordering::AcqRel) {
+                    return;
+                }
+                let window = content_window.clone();
+                let queued = content_redraw_queued.clone();
+                DispatchQueue::main().exec_async(move || {
+                    queued.store(false, Ordering::Release);
+                    let Some(window) = window.upgrade() else {
+                        return;
+                    };
+                    let mut lock = window.lock();
+                    if lock.closed.load(Ordering::Acquire) {
+                        return;
+                    }
+                    if let Some(mut callback) = lock.request_frame_callback.take() {
+                        drop(lock);
+                        callback(RequestFrameOptions {
+                            require_presentation: true,
+                            ..Default::default()
+                        });
+                        window.lock().request_frame_callback = Some(callback);
+                    }
+                });
+            }));
             let mut window = Self(state, marker);
 
             (*native_window).set_ivar(

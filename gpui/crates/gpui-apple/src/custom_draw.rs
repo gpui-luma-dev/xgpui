@@ -346,10 +346,53 @@ fn wide_command_pending(status: MTLCommandBufferStatus) -> Result<bool> {
 pub(crate) struct PreparedMetalOutput {
     pub output: MetalCustomOutput,
     nv12: Option<MetalNv12Output>,
+    #[cfg(target_os = "macos")]
+    pub(crate) gpu: Option<crate::content_executor::MetalGpuImage>,
+    pub(crate) visible: bool,
 }
 impl From<MetalCustomOutput> for PreparedMetalOutput {
     fn from(output: MetalCustomOutput) -> Self {
-        Self { output, nv12: None }
+        Self {
+            output,
+            nv12: None,
+            #[cfg(target_os = "macos")]
+            gpu: None,
+            visible: true,
+        }
+    }
+}
+impl PreparedMetalOutput {
+    #[cfg(target_os = "macos")]
+    pub(crate) fn portable(
+        image: Option<crate::content_executor::MetalGpuImage>,
+        unused_target: &TextureRef,
+    ) -> Self {
+        let visible = image.is_some();
+        let texture: Texture = image
+            .as_ref()
+            .map(|image| image.texture().into())
+            .unwrap_or_else(|| unused_target.into());
+        Self {
+            output: MetalCustomOutput {
+                texture,
+                commands: vec![],
+            },
+            nv12: None,
+            gpu: image,
+            visible,
+        }
+    }
+    pub(crate) fn interpretation(&self) -> Option<gpui::content::ImageInterpretation> {
+        #[cfg(target_os = "macos")]
+        {
+            self.gpu
+                .as_ref()
+                .map(|image| image.descriptor.interpretation())
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            None
+        }
     }
 }
 impl std::ops::Deref for PreparedMetalOutput {
@@ -384,6 +427,12 @@ pub(crate) trait MetalSampleSource {
     fn nv12_planes(&self) -> Option<&MetalNv12Output> {
         None
     }
+    fn interpretation(&self) -> Option<gpui::content::ImageInterpretation> {
+        None
+    }
+    fn visible(&self) -> bool {
+        true
+    }
 }
 impl MetalSampleSource for MetalCustomOutput {
     fn color_texture(&self) -> &TextureRef {
@@ -391,6 +440,12 @@ impl MetalSampleSource for MetalCustomOutput {
     }
 }
 impl MetalSampleSource for PreparedMetalOutput {
+    fn interpretation(&self) -> Option<gpui::content::ImageInterpretation> {
+        self.interpretation()
+    }
+    fn visible(&self) -> bool {
+        self.visible
+    }
     fn color_texture(&self) -> &TextureRef {
         &self.output.texture
     }
@@ -590,6 +645,9 @@ impl CustomCompositor {
                 commands: vec![],
             },
             nv12: Some(planes),
+            #[cfg(target_os = "macos")]
+            gpu: None,
+            visible: true,
         })
     }
 
@@ -602,6 +660,9 @@ impl CustomCompositor {
         viewport: Size<DevicePixels>,
         encoder: &RenderCommandEncoderRef,
     ) {
+        if !output.visible() {
+            return;
+        }
         // All fields are float4 to make the Rust/MSL layout unambiguous.
         let adjustments = draw.content.image_linear_adjustments();
         let transform = adjustments
@@ -610,7 +671,7 @@ impl CustomCompositor {
         let vignette = adjustments
             .map(|v| v.vignette())
             .unwrap_or([0., 0., 1., 1.]);
-        let linear = [
+        let mut linear = [
             if adjustments.is_some() { 1. } else { 0. },
             draw.content.image_color_mode().shader_value(),
             if adjustments.is_some_and(|v| v.is_p3()) {
@@ -620,6 +681,11 @@ impl CustomCompositor {
             },
             0.,
         ];
+        if let Some(interpretation) = output.interpretation() {
+            let portable = interpretation_params(interpretation);
+            linear[3] = portable[0];
+            linear[2] = portable[1];
+        }
         let planes = output.nv12_planes();
         let yuv = planes.map(|p| p.rows).unwrap_or([[0.; 4]; 3]);
         let params: [[f32; 4]; 12] = [
@@ -817,4 +883,25 @@ pub(crate) fn coverage_scene(draw: &CustomDraw, extent: Size<DevicePixels>) -> R
     }
     scene.finish();
     Ok(scene)
+}
+
+/// Shader ABI shared by ordinary and wide compositors. Zero keeps legacy behavior.
+pub(crate) fn interpretation_params(value: gpui::content::ImageInterpretation) -> [f32; 4] {
+    use gpui::content::{AlphaMode as A, ColorEncoding as C};
+    [
+        match value.color {
+            C::Srgb => 1.,
+            C::LinearSrgb => 2.,
+            C::LinearP3 => 3.,
+            C::LinearRec2020 => 4.,
+            C::Coverage => 5.,
+        },
+        match value.alpha {
+            A::Opaque => 0.,
+            A::Straight => 1.,
+            A::Premultiplied => 2.,
+        },
+        0.,
+        0.,
+    ]
 }

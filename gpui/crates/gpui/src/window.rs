@@ -5539,6 +5539,17 @@ impl Window {
             }));
     }
 
+    /// Record a portable content draw in scene order. Producers describe GPU work;
+    /// the host schedules it asynchronously and applies geometry/clip/opacity.
+    /// Stable presentation slots retain previous valid output during replacement.
+    pub fn paint_content(
+        &mut self,
+        geometry: crate::CustomGeometry,
+        draw: crate::content::ContentDraw,
+    ) {
+        self.paint_custom(geometry, draw.into_scene_content());
+    }
+
     /// Record independent GPU content using native geometry at the current scene order.
     /// Producers span the full unclipped shape; GPUI applies clip, coverage and opacity.
     pub fn paint_custom(

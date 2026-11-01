@@ -64,15 +64,25 @@ impl Worker {
     pub(super) fn execute(
         &mut self,
         graph: Arc<c::ContentGraph>,
-        limits: MetalContentLimits,
+        mut limits: MetalContentLimits,
         cancelled: &AtomicBool,
-    ) -> Result<MetalContentFrame> {
+        gpu_only: bool,
+    ) -> Result<ExecutionOutput> {
         if cancelled.load(Ordering::Acquire) {
             return Err(failure(
                 c::ContentErrorKind::Cancelled,
                 "content job canceled before execution",
             ));
         }
+        limits.max_gpu_bytes = limits
+            .max_gpu_bytes
+            .checked_sub(self.exported_bytes.load(Ordering::Acquire))
+            .ok_or_else(|| {
+                failure(
+                    c::ContentErrorKind::ResourceLimit,
+                    "retained GPU content exceeds budget",
+                )
+            })?;
         let mut stats = MetalContentStats {
             worker_thread: std::thread::current().name().map(str::to_owned),
             ..Default::default()
@@ -155,7 +165,7 @@ impl Worker {
         }
         let mut readback_bytes = 0u64;
         let mut readback_headroom = 0;
-        for root in graph.roots() {
+        for root in graph.roots().iter().filter(|_| !gpu_only) {
             let c::ResourceDescriptor::Image(d) =
                 &graph.nodes()[root.node()].outputs()[root.output()]
             else {
@@ -189,14 +199,14 @@ impl Worker {
                 charge = charge
                     .checked_add(match d {
                         c::ResourceDescriptor::Image(d) => objc2::rc::autoreleasepool(|_| {
-                            self.device
-                                .heapTextureSizeAndAlignWithDescriptor(&texture_descriptor(
-                                    d,
-                                    usages[id][output],
-                                ))
-                                .size as u64
-                        })
-                        .max(d.byte_len()),
+                            let layout = self.device.heapTextureSizeAndAlignWithDescriptor(
+                                &texture_descriptor(d, usages[id][output]),
+                            );
+                            // Standalone textures can consume whole allocation pages
+                            // even when the heap estimate reports a partial last page.
+                            let alignment = (layout.align as u64).max(16 * 1024);
+                            (layout.size as u64).max(d.byte_len()).div_ceil(alignment) * alignment
+                        }),
                         c::ResourceDescriptor::Buffer(d) => {
                             buffer_charge(&self.device, d.byte_len())?
                         }
@@ -257,7 +267,7 @@ impl Worker {
             stats,
             readback_headroom,
         };
-        let result = run.run(&limits, cancelled);
+        let result = run.run(&limits, cancelled, gpu_only);
         // Even returned errors/cancellation retire the submitted prefix before the
         // next job can spend this worker's device-memory budget.
         let cleanup = run.drain();
@@ -275,10 +285,11 @@ impl Worker {
         debug_assert!(run.tracker.is_quiescent());
         match result {
             Err(error) => Err(error),
-            Ok(images) => {
+            Ok((images, gpu)) => {
                 cleanup?;
-                Ok(MetalContentFrame {
+                Ok(ExecutionOutput {
                     images,
+                    gpu,
                     stats: run.stats,
                 })
             }
@@ -328,13 +339,14 @@ impl Run<'_> {
     }
     fn run(
         &mut self,
-        limits: &MetalContentLimits,
+        _limits: &MetalContentLimits,
         cancelled: &AtomicBool,
-    ) -> Result<Vec<MetalContentImage>> {
+        gpu_only: bool,
+    ) -> Result<(Vec<MetalContentImage>, Vec<MetalGpuImage>)> {
         for id in 0..self.graph.nodes().len() {
             self.poll()?;
             #[cfg(feature = "test-support")]
-            if let Some((node, gate)) = &limits.pause_before_node
+            if let Some((node, gate)) = &_limits.pause_before_node
                 && *node == id
             {
                 gate.arrive();
@@ -346,7 +358,7 @@ impl Run<'_> {
                 ));
             }
             #[cfg(feature = "test-support")]
-            if limits.fail_before_node == Some(id) {
+            if _limits.fail_before_node == Some(id) {
                 return Err(execution("injected failure before content operation"));
             }
             loop {
@@ -361,7 +373,7 @@ impl Run<'_> {
                 }
             }
             #[cfg(feature = "test-support")]
-            if limits.fail_after_admit == Some(id) {
+            if _limits.fail_after_admit == Some(id) {
                 return Err(execution("injected failure after admission"));
             }
             while self.in_flight >= self.worker.options.queue_capacity {
@@ -379,6 +391,41 @@ impl Run<'_> {
             }
         }
         self.drain()?;
+        if gpu_only {
+            let mut images = Vec::new();
+            // Share one byte reservation per distinct allocation, including
+            // duplicate roots. The reservation follows every compositor read.
+            let mut exported = HashMap::new();
+            for root in self.graph.roots() {
+                let image = exported
+                    .entry(*root)
+                    .or_insert_with(|| {
+                        let resource = resource(&self.resources, *root).clone();
+                        let bytes = resource.allocated_bytes();
+                        self.worker
+                            .exported_bytes
+                            .fetch_add(bytes, Ordering::AcqRel);
+                        Arc::new(GpuImageOwner {
+                            resource,
+                            _reservation: ExportReservation {
+                                bytes,
+                                budget: self.worker.exported_bytes.clone(),
+                            },
+                        })
+                    })
+                    .clone();
+                let c::ResourceDescriptor::Image(descriptor) =
+                    &self.graph.nodes()[root.node()].outputs()[root.output()]
+                else {
+                    unreachable!()
+                };
+                images.push(MetalGpuImage {
+                    owner: image,
+                    descriptor: descriptor.clone(),
+                });
+            }
+            return Ok((Vec::new(), images));
+        }
         let mut images = Vec::new();
         for root in self.graph.roots() {
             if cancelled.load(Ordering::Acquire) {
@@ -394,7 +441,7 @@ impl Run<'_> {
             self.stats.readbacks += 1;
             self.stats.max_in_flight = self.stats.max_in_flight.max(1);
         }
-        Ok(images)
+        Ok((images, Vec::new()))
     }
     fn prepare(&self, id: usize) -> Result<Prepared> {
         let node = &self.graph.nodes()[id];

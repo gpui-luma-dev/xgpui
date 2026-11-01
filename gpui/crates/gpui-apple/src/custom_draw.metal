@@ -39,6 +39,21 @@ fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buf
     } else {
         color = image.sample(s, in.uv);
     }
+    if (p.linear.w > 0.5) {
+        // Portable descriptors define association in the stored color domain.
+        if (p.linear.w > 4.5) color = float4(1.0, 1.0, 1.0, color.r);
+        else {
+            if (p.linear.z < 0.5) color.a = 1.0;
+            if (p.linear.z > 1.5) color.rgb = color.a > 0.0 ? color.rgb / color.a : float3(0.0);
+            if (p.linear.w > 3.5) color.rgb = rec2020_to_p3(color.rgb);
+            if (p.linear.w > 2.5) color.rgb = p3_to_srgb(color.rgb);
+            if (p.linear.w > 1.5) {
+                float3 c = clamp(color.rgb, 0.0, 1.0);
+                color.rgb = float3(encode_srgb(c.r), encode_srgb(c.g), encode_srgb(c.b));
+            }
+        }
+        return float4(color.rgb, color.a * coverage * p.viewport.z);
+    }
     if (fmod(floor(p.viewport.w / 2.0), 2.0) > 0.5 && color.a > 0.0) color.rgb /= color.a;
     if (p.linear.y > 2.5) color.rgb = rec2020_to_p3(color.rgb);
     bool processing = p.linear.x > 0.5 || p.linear.y > 0.5;

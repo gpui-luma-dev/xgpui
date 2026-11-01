@@ -3,14 +3,16 @@
 //! This is the foundation of the portable content API. Graphs currently support
 //! solids, immutable source images, copies, and typed render/compute pass graphs.
 //! Portable programs are parsed, validated and reflected without native GPU access.
-//! Backend execution, assets, and external imports are not connected yet; this
-//! module does not change the existing `CustomContent` rendering path.
+//! `Window::paint_content` records portable presentation requests. Native Metal
+//! execution and window compositing live in the Apple backend. Assets and external
+//! imports remain separate; legacy `CustomContent` producers keep their existing path.
 
 mod descriptors;
 mod graph;
 mod lifecycle;
 mod passes;
 mod program;
+mod presentation;
 mod uniforms;
 
 pub use descriptors::*;
@@ -18,6 +20,7 @@ pub use graph::*;
 pub use lifecycle::*;
 pub use passes::*;
 pub use program::*;
+pub use presentation::*;
 pub use uniforms::*;
 
 /// A structured failure while describing, planning, or tracking content.

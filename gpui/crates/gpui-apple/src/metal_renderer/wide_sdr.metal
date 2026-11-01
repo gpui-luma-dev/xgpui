@@ -33,7 +33,18 @@ fragment float4 gamut_fragment(Vertex in [[stage_in]], constant Params &p [[buff
     if(any(xy<p.mask.xy)||any(xy>=p.mask.xy+p.mask.zw)) discard_fragment();
     constexpr sampler s(coord::normalized,address::clamp_to_edge,filter::linear,mip_filter::linear);
     float4 c;
-    if(p.viewport.w > .5) { // Legacy scratch: exact texel read, associated encoded sRGB.
+    if (p.linear.w > .5) {
+        c=image.sample(s,in.uv);
+        if (p.linear.w > 4.5) c=float4(float3(c.r), c.r);
+        else {
+            if (p.linear.z < .5) c.a=1.;
+            float3 rgb=p.linear.z > 1.5 ? (c.a>0. ? c.rgb/c.a : float3(0.)) : c.rgb;
+            if (p.linear.w < 1.5) rgb=decode_srgb(rgb);
+            if (p.linear.w < 2.5) rgb=srgb_to_p3(rgb);
+            else if (p.linear.w > 3.5) rgb=rec2020_to_p3(rgb);
+            c.rgb=rgb*c.a;
+        }
+    } else if(p.viewport.w > .5) { // Legacy scratch: exact texel read, associated encoded sRGB.
         c=image.read(uint2(xy));
         c.rgb=c.a>0 ? srgb_to_p3(decode_srgb(c.rgb/c.a))*c.a : float3(0);
     } else { // Explicit private wide contract: associated linear P3.
