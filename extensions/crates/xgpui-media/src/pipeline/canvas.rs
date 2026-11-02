@@ -189,10 +189,31 @@ impl CanvasSnapshot {
                 // Bound destination geometry without creating a filter boundary:
                 // source viewport sampling retains the full page and its halo.
                 let visible = destination.intersect(&clip);
+                // Preview subtraction can leave subpixel slivers. Match group
+                // geometry snapping before making a source viewport; a collapsed
+                // member has no pixels and must not become a zero-size request.
+                let device_scale = self.view.device_scale as f32;
+                let snapped = |v: gpui::Pixels| (f32::from(v) * device_scale).round();
+                if visible.is_empty()
+                    || snapped(visible.left()) >= snapped(visible.right())
+                    || snapped(visible.top()) >= snapped(visible.bottom())
+                {
+                    return None;
+                }
                 let axis = |start: f32, end: f32, base: f32, size: f32, extent: u32| {
-                    let lo = ((start - base) / size * extent as f32).clamp(0., extent as f32);
-                    let hi = ((end - base) / size * extent as f32).clamp(lo, extent as f32);
-                    (lo, hi - lo)
+                    // Keep the extent separate instead of subtracting rounded
+                    // source edges; a narrow but visible viewport must stay positive.
+                    let factor = f64::from(extent) / f64::from(size);
+                    let lo = ((f64::from(start) - f64::from(base)) * factor)
+                        .clamp(0., f64::from(extent));
+                    let width = ((f64::from(end) - f64::from(start)) * factor)
+                        .clamp(0., f64::from(extent) - lo);
+                    let lo = lo as f32;
+                    let mut width = width.min(f64::from(extent) - f64::from(lo)) as f32;
+                    if f64::from(lo) + f64::from(width) > f64::from(extent) {
+                        width = width.next_down();
+                    }
+                    (lo, width)
                 };
                 let (x, w) = axis(
                     f32::from(visible.left()),
@@ -208,13 +229,13 @@ impl CanvasSnapshot {
                     f32::from(destination.size.height),
                     upload.height,
                 );
-                let crop = ImageCrop::new([x, y], [w, h]).expect("visible page crop");
-                (
+                let crop = ImageCrop::new([x, y], [w, h]).ok()?;
+                Some((
                     visible,
                     clip,
                     page.draw()
                         .mapping(ImageMapping::default().viewport(Some(crop))),
-                )
+                ))
             };
         let mut placements = Vec::new();
         if let Some(preview) = &self.preview {
@@ -228,14 +249,14 @@ impl CanvasSnapshot {
             }
             for clip in holes {
                 if !clip.is_empty() {
-                    placements.push(placement(preview, destination, clip));
+                    placements.extend(placement(preview, destination, clip));
                 }
             }
         }
         for page in &self.pages {
             let (destination, clip) = geometry(page);
             if !clip.is_empty() {
-                placements.push(placement(page, destination, clip));
+                placements.extend(placement(page, destination, clip));
             }
         }
         placements
@@ -1287,6 +1308,71 @@ mod tests {
         drop(graph);
         assert_eq!(usage.lock().unwrap().cpu, 0);
         assert_eq!(usage.lock().unwrap().gpu, 0);
+        Ok(())
+    }
+    #[test]
+    fn fractional_fit_views_build_valid_page_viewports() -> Result<()> {
+        let mut canvas =
+            TileCanvas::new(Arc::new(GeneratedCanvas::new(0)), CanvasOptions::default())?;
+        let snapshot = settled(&mut canvas, view())?;
+        for width in (400..1800).step_by(7) {
+            for scale in [
+                (width as f64 / 12000.).min(380. / 6000.),
+                0.1,
+                1.,
+                64.,
+                1024.,
+            ] {
+                let mut candidate = CanvasSnapshot {
+                    group: snapshot.group.clone(),
+                    source: snapshot.source,
+                    image: snapshot.image,
+                    view: CanvasView {
+                        center: [6000.13, 3000.17],
+                        scale,
+                        viewport: [width as f64, 380.],
+                        device_scale: 2.,
+                    },
+                    preview: snapshot.preview.clone(),
+                    pages: snapshot.pages.clone(),
+                };
+                candidate.group = candidate.build_group(canvas.group_id);
+                let bounds = gpui::Bounds::new(
+                    gpui::point(gpui::px(0.), gpui::px(0.)),
+                    gpui::size(gpui::px(width as f32), gpui::px(380.)),
+                );
+                for (destination, _, draw) in candidate.placements(bounds) {
+                    let page = candidate
+                        .preview
+                        .iter()
+                        .chain(candidate.pages.iter())
+                        .find(|p| p.content.id() == draw.content.id())
+                        .unwrap();
+                    let upload = page.tile.upload();
+                    let descriptor = gpui::content::ImageDescriptor::new(
+                        gpui::content::ImageExtent::new(upload.width, upload.height)?,
+                        gpui::content::PixelFormat::Rgba8,
+                        gpui::content::ImageInterpretation {
+                            color: gpui::content::ColorEncoding::Srgb,
+                            alpha: gpui::content::AlphaMode::Straight,
+                        },
+                        1,
+                    )?;
+                    draw.mapping.resolve(
+                        &descriptor,
+                        [
+                            f32::from(destination.size.width),
+                            f32::from(destination.size.height),
+                        ],
+                    )?;
+                }
+                gpui::content::ContentGroupRequest {
+                    group: candidate.content_group(),
+                    scale_factor: 2.,
+                }
+                .draws()?;
+            }
+        }
         Ok(())
     }
     fn refinement_scene(snapshot: &CanvasSnapshot) -> gpui::Scene {
