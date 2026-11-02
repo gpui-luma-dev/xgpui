@@ -1475,6 +1475,11 @@ pub trait CustomContent: std::fmt::Debug + Send + Sync + 'static {
     fn image_source_size(&self) -> Option<Size<crate::DevicePixels>> {
         None
     }
+    /// Portable image placement. Resolve against the image actually displayed,
+    /// preserving full destination geometry for native coverage and opacity.
+    fn image_mapping(&self) -> Option<crate::content::ImageMapping> {
+        None
+    }
     /// Sampling visibility independent of preparation. Zero permits warming a
     /// source without compositing it over a progressive fallback.
     fn image_sample_opacity(&self) -> f32 {
@@ -1565,6 +1570,9 @@ impl CustomContent for ContentWithPreparationGeometry {
 
     fn image_source_size(&self) -> Option<Size<crate::DevicePixels>> {
         self.content.image_source_size()
+    }
+    fn image_mapping(&self) -> Option<crate::content::ImageMapping> {
+        self.content.image_mapping()
     }
     fn image_sample_opacity(&self) -> f32 {
         self.content.image_sample_opacity()

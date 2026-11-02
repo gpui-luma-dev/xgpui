@@ -683,7 +683,7 @@ pub(crate) fn compile(source: &str, entry: &str, target: &str) -> Result<Vec<u8>
 }
 fn dynamic_uniform_buffer(device: &ID3D11Device) -> Result<ID3D11Buffer> {
     let desc = D3D11_BUFFER_DESC {
-        ByteWidth: 144,
+        ByteWidth: 208,
         Usage: D3D11_USAGE_DYNAMIC,
         BindFlags: D3D11_BIND_CONSTANT_BUFFER.0 as u32,
         CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0 as u32,
@@ -698,6 +698,7 @@ fn dynamic_uniform_buffer(device: &ID3D11Device) -> Result<ID3D11Buffer> {
 
 pub(crate) struct PreparedDraw {
     pub portable: Option<gpui::content::ImageInterpretation>,
+    pub mapping: Option<gpui::content::ResolvedImageMapping>,
     pub source: TextureBundle,
     pub coverage: Option<TextureBundle>,
     pub native: bool,
@@ -709,6 +710,7 @@ pub(crate) struct CustomCompositor {
     blend: ID3D11BlendState,
     wide_blend: ID3D11BlendState,
     sampler: ID3D11SamplerState,
+    image_samplers: std::collections::HashMap<gpui::content::Sampler, ID3D11SamplerState>,
     uniform: ID3D11Buffer,
     #[cfg(test)]
     uniform_creations: usize,
@@ -754,7 +756,41 @@ impl CustomCompositor {
         unsafe {
             device.CreateBlendState(&desc, Some(&mut wide_blend))?;
         }
+        let mut image_samplers = std::collections::HashMap::new();
+        use gpui::content::{AddressMode, FilterMode as F, Sampler};
+        for min in [F::Nearest, F::Linear] {
+            for mag in [F::Nearest, F::Linear] {
+                for mip in [None, Some(F::Nearest), Some(F::Linear)] {
+                    let policy = Sampler {
+                        min_filter: min,
+                        mag_filter: mag,
+                        mip_filter: mip,
+                        address: [AddressMode::Clamp; 2],
+                    };
+                    let bit = |f| u32::from(f == F::Linear);
+                    let mut native = None;
+                    unsafe {
+                        device.CreateSamplerState(
+                            &D3D11_SAMPLER_DESC {
+                                Filter: D3D11_FILTER(
+                                    (bit(min) << 4 | bit(mag) << 2 | bit(mip.unwrap_or(F::Nearest)))
+                                        as i32,
+                                ),
+                                AddressU: D3D11_TEXTURE_ADDRESS_CLAMP,
+                                AddressV: D3D11_TEXTURE_ADDRESS_CLAMP,
+                                AddressW: D3D11_TEXTURE_ADDRESS_CLAMP,
+                                MaxLOD: if mip.is_some() { f32::MAX } else { 0. },
+                                ..Default::default()
+                            },
+                            Some(&mut native),
+                        )?;
+                    }
+                    image_samplers.insert(policy, native.context("allocate image sampler")?);
+                }
+            }
+        }
         Ok(Self {
+            image_samplers,
             transparent: TextureBundle::transparent(device)?,
             pipeline,
             wide_blend: wide_blend.unwrap(),
@@ -791,6 +827,17 @@ impl CustomCompositor {
         }
         let mut wide_blending = false;
         for (draw, output) in draws.iter().zip(outputs) {
+            let source_sampler = output
+                .mapping
+                .map(|m| &self.image_samplers[&m.sampler])
+                .unwrap_or(&self.sampler);
+            unsafe {
+                deferred.PSSetSamplers(1, Some(&[Some(source_sampler.clone())]));
+            }
+            let mut mapped = output.mapping.unwrap_or_default().shader_uniforms();
+            if output.mapping.is_none() {
+                mapped[3][0] = -1.;
+            }
             let adjustments = draw.content.image_linear_adjustments();
             let transform = adjustments
                 .map(|v| v.rows())
@@ -823,7 +870,7 @@ impl CustomCompositor {
                     AlphaMode::Premultiplied => 2.,
                 };
             }
-            let params: [[f32; 4]; 9] = [
+            let params: [[f32; 4]; 13] = [
                 [
                     draw.bounds.origin.x.0,
                     draw.bounds.origin.y.0,
@@ -855,6 +902,10 @@ impl CustomCompositor {
                 transform[2],
                 vignette,
                 color_flags,
+                mapped[0],
+                mapped[1],
+                mapped[2],
+                mapped[3],
             ];
             // Fixed-size stack packing; WRITE_DISCARD preserves earlier draw
             // snapshots through driver renaming, including deferred command lists.
@@ -871,7 +922,7 @@ impl CustomCompositor {
                 std::ptr::copy_nonoverlapping(
                     bytes.as_ptr().cast::<u8>(),
                     mapped.pData.cast(),
-                    144,
+                    208,
                 );
                 deferred.Unmap(&self.uniform, 0);
             }

@@ -671,7 +671,7 @@ pub(crate) struct PreparedDraw {
     pub portable_image: Option<crate::content_executor::GpuImage>,
 }
 
-const UNIFORM_BYTES: u64 = 144;
+const UNIFORM_BYTES: u64 = 208;
 /// Renderer-private arena. Reuse only after previous render commands are submitted;
 /// queue-ordered uploads then preserve reads by still-running previous frames.
 struct UniformArena {
@@ -726,7 +726,7 @@ impl UniformArena {
         self.cursor = 0;
         Ok(())
     }
-    fn write(&mut self, params: &[[f32; 4]; 9]) -> u32 {
+    fn write(&mut self, params: &[[f32; 4]; 13]) -> u32 {
         let offset = self.cursor * self.stride as usize;
         self.cursor += 1;
         self.bytes[offset..offset + UNIFORM_BYTES as usize]
@@ -744,6 +744,7 @@ pub(crate) struct CustomCompositor {
     pub pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    image_samplers: std::collections::HashMap<gpui::content::Sampler, wgpu::Sampler>,
     pub transparent: wgpu::Texture,
     uniforms: UniformArena,
     pub masks: CoverageCache<wgpu::Texture>,
@@ -768,6 +769,12 @@ impl CustomCompositor {
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
@@ -838,6 +845,7 @@ impl CustomCompositor {
             pipeline,
             layout,
             sampler,
+            image_samplers: Default::default(),
             transparent: device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("portable pending transparency"),
                 size: wgpu::Extent3d {
@@ -873,7 +881,7 @@ impl CustomCompositor {
         native: bool,
         viewport: Size<DevicePixels>,
     ) -> PreparedDraw {
-        self.prepare_with_interpretation(device, draw, source, mask, native, viewport, None)
+        self.prepare_with_interpretation(device, draw, source, mask, native, viewport, None, None)
     }
     pub(crate) fn prepare_with_interpretation(
         &mut self,
@@ -884,6 +892,7 @@ impl CustomCompositor {
         native: bool,
         viewport: Size<DevicePixels>,
         interpretation: Option<gpui::content::ImageInterpretation>,
+        mapping: Option<gpui::content::ResolvedImageMapping>,
     ) -> PreparedDraw {
         let adjustments = draw.content.image_linear_adjustments();
         let transform = adjustments
@@ -917,7 +926,11 @@ impl CustomCompositor {
                 C::Coverage => 5.,
             };
         }
-        let params: [[f32; 4]; 9] = [
+        let mut mapped = mapping.unwrap_or_default().shader_uniforms();
+        if mapping.is_none() {
+            mapped[3][0] = -1.;
+        }
+        let params: [[f32; 4]; 13] = [
             [
                 draw.bounds.origin.x.0,
                 draw.bounds.origin.y.0,
@@ -947,6 +960,10 @@ impl CustomCompositor {
             transform[2],
             vignette,
             linear,
+            mapped[0],
+            mapped[1],
+            mapped[2],
+            mapped[3],
         ];
         let uniform_offset = self.uniforms.write(&params);
         let uniform = self.uniforms.buffer.as_ref().expect("uniform arena");
@@ -954,6 +971,38 @@ impl CustomCompositor {
         let mask = mask
             .map(|t| t.create_view(&Default::default()))
             .unwrap_or_else(|| source.clone());
+        let image_sampler = mapping
+            .map(|mapping| {
+                self.image_samplers
+                    .entry(mapping.sampler)
+                    .or_insert_with(|| {
+                        use gpui::content::FilterMode as F;
+                        let filter = |f| {
+                            if f == F::Linear {
+                                wgpu::FilterMode::Linear
+                            } else {
+                                wgpu::FilterMode::Nearest
+                            }
+                        };
+                        device.create_sampler(&wgpu::SamplerDescriptor {
+                            label: Some("portable image sampling"),
+                            min_filter: filter(mapping.sampler.min_filter),
+                            mag_filter: filter(mapping.sampler.mag_filter),
+                            mipmap_filter: if mapping.sampler.mip_filter == Some(F::Linear) {
+                                wgpu::MipmapFilterMode::Linear
+                            } else {
+                                wgpu::MipmapFilterMode::Nearest
+                            },
+                            lod_max_clamp: if mapping.sampler.mip_filter.is_some() {
+                                32.
+                            } else {
+                                0.
+                            },
+                            ..Default::default()
+                        })
+                    }) as &wgpu::Sampler
+            })
+            .unwrap_or(&self.sampler);
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("custom_paint"),
             layout: &self.layout,
@@ -973,6 +1022,10 @@ impl CustomCompositor {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::TextureView(&source),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(image_sampler),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,

@@ -190,7 +190,54 @@ pub struct ResolvedImageMapping {
     /// Explicit source sampling policy; no mip access when mip_filter is None.
     pub sampler: Sampler,
 }
+impl Default for ResolvedImageMapping {
+    fn default() -> Self {
+        Self {
+            destination_origin: [0.; 2],
+            destination_size: [1.; 2],
+            uv_origin: [0.; 2],
+            uv_size: [1.; 2],
+            clamp_min: [0.; 2],
+            clamp_max: [1.; 2],
+            sampler: Sampler::linear_clamp(),
+        }
+    }
+}
 impl ResolvedImageMapping {
+    /// Shared float4 packing for placement, UV transform, crop clamp and mip policy.
+    pub fn shader_uniforms(self) -> [[f32; 4]; 4] {
+        [
+            [
+                self.destination_origin[0],
+                self.destination_origin[1],
+                self.destination_size[0],
+                self.destination_size[1],
+            ],
+            [
+                self.uv_origin[0],
+                self.uv_origin[1],
+                self.uv_size[0],
+                self.uv_size[1],
+            ],
+            [
+                self.clamp_min[0],
+                self.clamp_min[1],
+                self.clamp_max[0],
+                self.clamp_max[1],
+            ],
+            [
+                match self.sampler.mip_filter {
+                    None => 0.,
+                    Some(FilterMode::Nearest) => 1.,
+                    Some(FilterMode::Linear) => 2.,
+                },
+                0.,
+                0.,
+                0.,
+            ],
+        ]
+    }
+
     /// Map a normalized destination point to UV. Letterboxing and points outside
     /// the full destination return None; compositors must output transparency.
     /// Coordinates describe pixel centers; upper placement edges are exclusive.

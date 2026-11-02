@@ -9,7 +9,7 @@ use std::{
 
 #[cfg(not(target_family = "wasm"))]
 use std::sync::OnceLock;
-type Signature = Vec<(u64, c::ContentRequest)>;
+type Signature = Vec<(u64, c::ContentRequest, c::ImageMapping)>;
 struct Pending {
     keys: Vec<c::OutputKey>,
     presentation_slots: Vec<Option<c::PresentationSlotId>>,
@@ -153,6 +153,13 @@ impl ContentPresenter {
         )?))
     }
     fn fail(&mut self, signature: Signature, error: c::ContentError) {
+        if self
+            .failed
+            .as_ref()
+            .is_some_and(|(old, previous)| *old == signature && *previous == error)
+        {
+            return;
+        }
         log::error!("portable content generation failed: {error}");
         self.failed = Some((signature, error));
     }
@@ -204,7 +211,13 @@ impl ContentPresenter {
         self.slots.retain(|slot, _| slots.contains(slot));
         let signature: Signature = active
             .iter()
-            .map(|draw| (draw.draw.content.id(), draw.request.clone()))
+            .map(|draw| {
+                (
+                    draw.draw.content.id(),
+                    draw.request.clone(),
+                    draw.draw.mapping,
+                )
+            })
             .collect();
         if self.dependencies.changed() {
             self.description = None;
@@ -281,6 +294,26 @@ impl ContentPresenter {
                 );
             }
             !unsupported
+        });
+        // Mapping validation belongs to presentation, never to upload identity.
+        // Reject the whole requested group before it can publish an invalid snapshot.
+        let graph = graph.filter(|graph| {
+            for (draw, root) in active.iter().zip(graph.roots()) {
+                let c::ResourceDescriptor::Image(descriptor) =
+                    &graph.nodes()[root.node()].outputs()[root.output()]
+                else {
+                    continue;
+                };
+                let destination = draw.request.logical_size();
+                if let Err(error) = draw.draw.mapping.resolve(
+                    descriptor,
+                    [f32::from(destination.width), f32::from(destination.height)],
+                ) {
+                    self.fail(signature.clone(), error);
+                    return false;
+                }
+            }
+            true
         });
         let keys: Vec<_> = graph
             .as_ref()
@@ -411,17 +444,32 @@ impl ContentPresenter {
             } else {
                 policy.pending == c::PendingPresentation::RetainPrevious
             };
-            output.push(ready.or_else(|| {
-                if retain {
-                    policy
-                        .slot
-                        .and_then(|slot| self.slots.get(&slot))
-                        .and_then(|key| self.cache.get(key))
-                        .cloned()
-                } else {
-                    None
-                }
-            }));
+            output.push(
+                ready
+                    .or_else(|| {
+                        if retain {
+                            policy
+                                .slot
+                                .and_then(|slot| self.slots.get(&slot))
+                                .and_then(|key| self.cache.get(key))
+                                .cloned()
+                        } else {
+                            None
+                        }
+                    })
+                    .filter(|image| {
+                        // A valid crop on the replacement may not fit a retained source.
+                        // Such history is unavailable until compatible pixels are ready.
+                        let destination = draw.request.logical_size();
+                        draw.draw
+                            .mapping
+                            .resolve(
+                                &image.descriptor,
+                                [f32::from(destination.width), f32::from(destination.height)],
+                            )
+                            .is_ok()
+                    }),
+            );
         }
         self.cache
             .retain(|key, _| keys.contains(key) || self.slots.values().any(|old| old == key));

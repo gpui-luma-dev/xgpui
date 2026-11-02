@@ -1625,8 +1625,8 @@ content. Replacing or removing the request drops its subscriptions. Completion
 callbacks only request redraw; they never publish images or restore group epochs.
 
 CPU race/lifetime tests and Metal/wgpu pixel tests cover this integration. D3D11
-has cross-compilation coverage; Windows execution remains outstanding. Source
-mapping controls and migration of ordinary media producers are still next steps.
+has cross-compilation coverage; Windows execution remains outstanding. Mapping
+presentation is implemented below; ordinary media producer migration is next.
 
 #### Checked image mapping contract
 
@@ -1641,15 +1641,36 @@ addressing remain available to graph passes.
 
 Resolution preserves the full destination for compositor coverage, returning a
 normalized inner destination and visible source UV rectangle. Letterboxing is
-transparent before sampling, rather than clamping outside the inner destination.
+transparent outside the inner destination; it never smears clamped edge pixels
+into the letterbox. Source derivatives are computed before this visibility test.
 Base-level sampling clamps to crop texel centers; a crop narrower than one texel
 collapses its filter domain to its center. Cover selects a viewport within the
-crop and does not create new filter boundaries. Mip-aware crop footprint clamping
-must be implemented at the sampled levels when the compositors consume this
-contract; base-level clamp values alone do not isolate a crop in lower mips.
+crop and does not create new filter boundaries. Compositors compute LOD from the
+unclamped source UV derivatives, then clamp to texel centers at the coarsest
+participating mip level (rounded LOD for nearest mip selection, ceiling LOD for
+linear mip selection). Explicit gradients preserve mip selection after clamping.
+A mip whose texel footprint exceeds the crop collapses to the crop center. The
+provided source mip chain remains authoritative: mapping does not regenerate
+crop-specific mip pixels or undo filtering already present in uploaded pixels.
 
 CPU tests cover independent nearest-pixel reference output, fit/alignment on both
 axes, crop bounds and fractional edges, retained source dimensions, invalid
-coordinates, sampler policy, and extreme dimension precision. This layer is not
-yet attached to `ContentDraw`: compositor integration and native pixel validation
-remain the next implementation step, with no current application visual change.
+coordinates, sampler policy, and extreme dimension precision. `ContentDraw` now
+owns an `ImageMapping`, set through `.mapping(...)`; `ContentGroup::push_mapped`
+commits each member's mapping with its image and geometry. Metal (including wide
+linear P3), wgpu, and D3D11 presentation now consume the resolved mapping.
+
+Changing mapping invalidates presentation validation/description caches, while
+structural source keys stay unchanged: valid mapping changes reuse existing GPU
+images and do not submit another upload. Invalid requested mappings use the
+existing presentation error policy, including whole-group retention or rejection.
+If a crop on a pending replacement cannot fit a retained slot image, that history
+is temporarily unavailable and the slot is transparent until compatible pixels
+arrive; this does not mark the pending asset as failed. Atomic groups continue to
+show their complete committed member mappings during CPU or GPU pending work.
+
+Shared native pixel acceptance tests exercise fit/alignment/crop, linear and
+nearest filtering, mip filtering and crop footprints, slot history, paused-GPU
+atomic publication, error policies, clipping, rounded coverage, and opacity.
+Metal adds linear P3 pixel validation. D3D11 tests cross-compile; Windows runtime
+execution remains outstanding. Ordinary media producer migration is next.

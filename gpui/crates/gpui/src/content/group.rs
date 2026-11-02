@@ -31,7 +31,7 @@ impl Default for ContentGroupId {
 pub struct ContentGroup {
     id: ContentGroupId,
     revision: u64,
-    members: Vec<(CustomGeometry, Content)>,
+    members: Vec<(CustomGeometry, Content, ImageMapping)>,
     pending: PendingPresentation,
     on_error: ContentErrorPresentation,
 }
@@ -57,8 +57,18 @@ impl ContentGroup {
     }
     /// Append a member with group-local geometry and an immutable portable source.
     pub fn push(&mut self, geometry: CustomGeometry, content: Content) {
+        self.push_mapped(geometry, content, ImageMapping::default());
+    }
+    /// Append a mapped image member. Mapping is committed with this group's
+    /// geometry and images, and remains unchanged while a replacement is pending.
+    pub fn push_mapped(
+        &mut self,
+        geometry: CustomGeometry,
+        content: Content,
+        mapping: ImageMapping,
+    ) {
         self.revision = next_content_identity();
-        self.members.push((geometry, content));
+        self.members.push((geometry, content, mapping));
     }
     /// Set the policy for the whole group, including first presentation and failures.
     pub fn presentation(
@@ -118,7 +128,7 @@ impl ContentGroupRequest {
         self.group
             .members
             .iter()
-            .map(|(geometry, content)| {
+            .map(|(geometry, content, mapping)| {
                 let (logical, radii, coverage) = match geometry {
                     CustomGeometry::RoundedRect {
                         bounds,
@@ -254,6 +264,7 @@ impl ContentGroupRequest {
                     opacity: 1.,
                     content: crate::scene::content_with_preparation_geometry(
                         ContentDraw::new(content.clone())
+                            .mapping(*mapping)
                             .presentation(ContentPresentation {
                                 pending: PendingPresentation::Transparent,
                                 ..Default::default()

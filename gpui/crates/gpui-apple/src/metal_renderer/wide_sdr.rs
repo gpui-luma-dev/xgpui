@@ -33,6 +33,7 @@ pub(super) fn configure_layer(layer: &metal::MetalLayerRef) -> Result<()> {
 
 pub(super) struct Compositor {
     pub wide: HashSet<usize>,
+    sampler: objc2::rc::Retained<objc2::runtime::ProtocolObject<dyn objc2_metal::MTLSamplerState>>,
     compose: metal::RenderPipelineState,
     preview: metal::RenderPipelineState,
     scratch: Option<metal::Texture>,
@@ -130,7 +131,16 @@ impl Compositor {
                 .newRenderPipelineStateWithDescriptor_error(&d)
                 .map_err(anyhow::Error::msg)
         };
+        let descriptor = objc2_metal::MTLSamplerDescriptor::new();
+        descriptor.setMinFilter(objc2_metal::MTLSamplerMinMagFilter::Linear);
+        descriptor.setMagFilter(objc2_metal::MTLSamplerMinMagFilter::Linear);
+        descriptor.setMipFilter(objc2_metal::MTLSamplerMipFilter::Linear);
+        descriptor.setSAddressMode(objc2_metal::MTLSamplerAddressMode::ClampToEdge);
+        descriptor.setTAddressMode(objc2_metal::MTLSamplerAddressMode::ClampToEdge);
         Ok(Self {
+            sampler: device
+                .newSamplerStateWithDescriptor(&descriptor)
+                .context("wide image sampler")?,
             wide: HashSet::new(),
             compose: pipeline("gamut_fragment", MTLPixelFormat::RGBA16Float, true)?,
             preview: pipeline("gamut_preview", MTLPixelFormat::BGRA8Unorm, false)?,
@@ -169,7 +179,7 @@ impl Compositor {
         viewport: Size<DevicePixels>,
         draw: Option<&gpui::CustomDraw>,
         mode: f32,
-    ) -> [[f32; 4]; 9] {
+    ) -> [[f32; 4]; 13] {
         let base = if let Some(d) = draw {
             [
                 [
@@ -233,6 +243,10 @@ impl Compositor {
                 },
                 0.,
             ],
+            [0., 0., 1., 1.],
+            [0., 0., 1., 1.],
+            [0., 0., 1., 1.],
+            [-1., 0., 0., 0.],
         ]
     }
     fn draw(
@@ -240,9 +254,13 @@ impl Compositor {
         encoder: &metal::RenderCommandEncoderRef,
         image: &metal::TextureRef,
         mask: Option<&metal::TextureRef>,
-        params: [[f32; 4]; 9],
+        params: [[f32; 4]; 13],
         preview: bool,
+        sampler: Option<&objc2::runtime::ProtocolObject<dyn objc2_metal::MTLSamplerState>>,
     ) {
+        unsafe {
+            encoder.setFragmentSamplerState_atIndex(Some(sampler.unwrap_or(&self.sampler)), 0);
+        }
         encoder.setRenderPipelineState(if preview {
             &self.preview
         } else {
@@ -290,6 +308,7 @@ impl Compositor {
                 None,
                 Self::params(viewport, None, 1.),
                 false,
+                None,
             );
             encoder.endEncoding();
         }
@@ -455,9 +474,20 @@ impl Compositor {
                                     params[8][3] = portable[0];
                                     params[8][2] = portable[1];
                                 }
+                                let mapping = outputs[index]
+                                    .0
+                                    .mapping
+                                    .unwrap_or_default()
+                                    .shader_uniforms();
+                                params[9..13].copy_from_slice(&mapping);
                                 params
                             },
                             false,
+                            outputs[index].0.mapping.map(|m| {
+                                renderer.custom_compositor.as_ref().unwrap().image_samplers
+                                    [&m.sampler]
+                                    .as_ref()
+                            }),
                         );
                         e.endEncoding();
                     } else {
@@ -634,6 +664,7 @@ impl Compositor {
                 None,
                 Self::params(viewport, None, 0.),
                 true,
+                None,
             );
             e.endEncoding();
         }

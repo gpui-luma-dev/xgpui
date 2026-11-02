@@ -1598,6 +1598,16 @@ impl WgpuRendererCore {
                         native,
                         viewport,
                         gpu.as_ref().map(|image| image.descriptor.interpretation()),
+                        gpu.as_ref()
+                            .and_then(|image| {
+                                draw.content.image_mapping().map(|mapping| {
+                                    mapping.resolve(
+                                        &image.descriptor,
+                                        [draw.bounds.size.width.0, draw.bounds.size.height.0],
+                                    )
+                                })
+                            })
+                            .transpose()?,
                     );
                     prepared.portable_image = gpu;
                     Ok(prepared)

@@ -1,6 +1,6 @@
 #include <metal_stdlib>
 using namespace metal;
-struct Params { float4 bounds; float4 mask; float4 radii; float4 viewport; float4 color_r; float4 color_g; float4 color_b; float4 yuv_r; float4 yuv_g; float4 yuv_b; float4 vignette; float4 linear; };
+struct Params { float4 bounds; float4 mask; float4 radii; float4 viewport; float4 color_r; float4 color_g; float4 color_b; float4 yuv_r; float4 yuv_g; float4 yuv_b; float4 vignette; float4 linear; float4 placement; float4 source_uv; float4 source_clamp; float4 sampling; };
 struct Vertex { float4 position [[position]]; float2 uv; };
 vertex Vertex custom_vertex(uint id [[vertex_id]], constant Params &p [[buffer(0)]]) {
     const float2 vertices[] = {{0,0},{1,0},{0,1},{0,1},{1,0},{1,1}};
@@ -20,7 +20,7 @@ float3 srgb_to_p3(float3 c) {
 float3 rec2020_to_p3(float3 c) {
     return float3(dot(c,float3(1.343578253,-0.282179671,-0.061398582)),dot(c,float3(-0.065297453,1.075787916,-0.010490463)),dot(c,float3(0.002821787,-0.019598495,1.016776707)));
 }
-fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buffer(0)]], texture2d<float> image [[texture(0)]], texture2d<float> mask [[texture(1)]], texture2d<float> chroma [[texture(2)]]) {
+fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buffer(0)]], texture2d<float> image [[texture(0)]], texture2d<float> mask [[texture(1)]], texture2d<float> chroma [[texture(2)]], sampler image_sampler [[sampler(0)]]) {
     float2 xy = in.position.xy;
     if (any(xy < p.mask.xy) || any(xy >= p.mask.xy + p.mask.zw)) discard_fragment();
     float2 local = in.uv * p.bounds.zw;
@@ -37,7 +37,22 @@ fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buf
         float4 yuv = float4(image.sample(s, in.uv).r, chroma.sample(s, in.uv).rg, 1.0);
         color = float4(clamp(float3(dot(p.yuv_r, yuv), dot(p.yuv_g, yuv), dot(p.yuv_b, yuv)), 0.0, 1.0), 1.0);
     } else {
-        color = image.sample(s, in.uv);
+        float2 mapped = (in.uv - p.placement.xy) / p.placement.zw;
+        float2 raw_uv = p.source_uv.xy + mapped * p.source_uv.zw;
+        float2 dx = dfdx(raw_uv), dy = dfdy(raw_uv);
+        float2 lo = p.source_clamp.xy, hi = p.source_clamp.zw;
+        if (p.sampling.x > 0.5) {
+            float2 dims = float2(image.get_width(), image.get_height());
+            float lod = clamp(log2(max(max(length(dx*dims), length(dy*dims)), 1.0)), 0.0, float(image.get_num_mip_levels()-1));
+            uint level = uint(p.sampling.x > 1.5 ? ceil(lod) : floor(lod+0.5));
+            float2 half_texel = 0.5 / float2(image.get_width(level), image.get_height(level));
+            float2 center = (lo+hi)*0.5;
+            lo = min(lo - 0.5/dims + half_texel, center);
+            hi = max(hi + 0.5/dims - half_texel, center);
+        }
+        float2 uv = clamp(raw_uv, lo, hi);
+        color = image.sample(image_sampler, uv, gradient2d(dx, dy));
+        if (any(mapped < float2(0.0)) || any(mapped >= float2(1.0))) discard_fragment();
     }
     if (p.linear.w > 0.5) {
         // Portable descriptors define association in the stored color domain.

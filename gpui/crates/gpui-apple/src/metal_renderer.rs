@@ -834,7 +834,7 @@ impl MetalRenderer {
                 } else {
                     raw
                 };
-                let output = if raw.is::<crate::custom_draw::PreparedMetalOutput>() {
+                let mut output = if raw.is::<crate::custom_draw::PreparedMetalOutput>() {
                     let output = *raw
                         .downcast::<crate::custom_draw::PreparedMetalOutput>()
                         .unwrap();
@@ -883,6 +883,13 @@ impl MetalRenderer {
                     }
                     output.into()
                 };
+                #[cfg(target_os = "macos")]
+                if let (Some(image), Some(mapping)) = (&output.gpu, draw.content.image_mapping()) {
+                    output.mapping = Some(mapping.resolve(
+                        &image.descriptor,
+                        [draw.bounds.size.width.0, draw.bounds.size.height.0],
+                    )?);
+                }
                 let coverage = if draw.coverage.is_some() {
                     let key = crate::custom_draw::CoverageKey::new(draw)?;
                     if let Some(texture) = self.custom_compositor.as_ref().unwrap().masks.get(&key)

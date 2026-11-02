@@ -49,7 +49,7 @@ pub struct ContentPresentation {
     pub on_error: ContentErrorPresentation,
 }
 /// Immutable portable source and presentation policy. Replays keep their slot.
-/// The full normalized source stretches over unclipped destination geometry;
+/// Image mapping uses the full unclipped destination geometry;
 /// coverage, clipping and element opacity are applied by the compositor.
 #[derive(Clone, Debug)]
 pub struct ContentDraw {
@@ -57,6 +57,8 @@ pub struct ContentDraw {
     pub content: Content,
     /// Window presentation policy.
     pub presentation: ContentPresentation,
+    /// Source fit, crop, alignment, and filtering; independent of realization.
+    pub mapping: ImageMapping,
 }
 impl ContentDraw {
     /// Anonymous draw: initial/pending content is transparent by default.
@@ -64,7 +66,13 @@ impl ContentDraw {
         Self {
             content,
             presentation: ContentPresentation::default(),
+            mapping: ImageMapping::default(),
         }
+    }
+    /// Set source sampling and destination placement without changing source identity.
+    pub fn mapping(mut self, mapping: ImageMapping) -> Self {
+        self.mapping = mapping;
+        self
     }
     /// Associate this draw with a stable logical paint slot.
     pub fn slot(mut self, slot: PresentationSlotId) -> Self {
@@ -91,6 +99,9 @@ pub struct ContentDrawRequest {
     pub request: ContentRequest,
 }
 impl CustomContent for ContentDraw {
+    fn image_mapping(&self) -> Option<ImageMapping> {
+        Some(self.mapping)
+    }
     fn portable_content(
         &self,
         request: &PreparationRequest,
@@ -100,7 +111,7 @@ impl CustomContent for ContentDraw {
             draw: self.clone(),
             request: ContentRequest::new(
                 request.logical_size(),
-                ImageExtent::new(raster.width.0 as u32, raster.height.0 as u32)?,
+                ImageExtent::try_from(raster)?,
                 request.scale_factor(),
             )?,
         }))

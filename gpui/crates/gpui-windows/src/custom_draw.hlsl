@@ -8,10 +8,15 @@ cbuffer Params : register(b0) {
     float4 color_b;
     float4 vignette;
     float4 color_flags;
+    float4 placement;
+    float4 source_uv;
+    float4 source_clamp;
+    float4 sampling;
 }
 Texture2D<float4> image : register(t0);
 Texture2D<float4> shape_mask : register(t1);
 SamplerState paint_sampler : register(s0);
+SamplerState image_sampler : register(s1);
 
 struct Vertex {
     float4 position : SV_Position;
@@ -54,7 +59,25 @@ float4 custom_fragment(Vertex input) : SV_Target {
     // Native geometry supplies exact border/path coverage instead of rounded fill coverage.
     if ((uint(viewport.w) & 1) != 0) coverage = shape_mask.Sample(paint_sampler, input.uv).r;
 
-    float4 color = image.Sample(paint_sampler, input.uv);
+    float2 mapped = (input.uv - placement.xy) / placement.zw;
+    float2 raw_uv = source_uv.xy + mapped * source_uv.zw;
+    float2 dx = ddx(raw_uv), dy = ddy(raw_uv);
+    float2 lo = source_clamp.xy, hi = source_clamp.zw;
+    if (sampling.x > 0.5) {
+        uint width, height, levels;
+        image.GetDimensions(0, width, height, levels);
+        float2 dims = float2(width, height);
+        float lod = clamp(log2(max(max(length(dx*dims), length(dy*dims)), 1.0)), 0.0, float(levels-1));
+        uint level = uint(sampling.x > 1.5 ? ceil(lod) : floor(lod+0.5));
+        uint mip_width, mip_height, unused_levels;
+        image.GetDimensions(level, mip_width, mip_height, unused_levels);
+        float2 half_texel = 0.5 / float2(mip_width, mip_height);
+        float2 center = (lo+hi)*0.5;
+        lo = min(lo - 0.5/dims + half_texel, center);
+        hi = max(hi + 0.5/dims - half_texel, center);
+    }
+    float4 color = image.SampleGrad(image_sampler, clamp(raw_uv, lo, hi), dx, dy);
+    if (any(mapped < float2(0, 0)) || any(mapped >= float2(1, 1))) discard;
     if(color_flags.w>0.5) {
         if(color_flags.w>4.5) color=float4(1,1,1,color.r);
         else {

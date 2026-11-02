@@ -349,6 +349,7 @@ pub(crate) struct PreparedMetalOutput {
     #[cfg(target_os = "macos")]
     pub(crate) gpu: Option<crate::content_executor::MetalGpuImage>,
     pub(crate) visible: bool,
+    pub(crate) mapping: Option<gpui::content::ResolvedImageMapping>,
 }
 impl From<MetalCustomOutput> for PreparedMetalOutput {
     fn from(output: MetalCustomOutput) -> Self {
@@ -358,6 +359,7 @@ impl From<MetalCustomOutput> for PreparedMetalOutput {
             #[cfg(target_os = "macos")]
             gpu: None,
             visible: true,
+            mapping: None,
         }
     }
 }
@@ -380,6 +382,7 @@ impl PreparedMetalOutput {
             nv12: None,
             gpu: image,
             visible,
+            mapping: None,
         }
     }
     pub(crate) fn interpretation(&self) -> Option<gpui::content::ImageInterpretation> {
@@ -423,6 +426,9 @@ impl MetalNv12Output {
     }
 }
 pub(crate) trait MetalSampleSource {
+    fn mapping(&self) -> Option<gpui::content::ResolvedImageMapping> {
+        None
+    }
     fn color_texture(&self) -> &TextureRef;
     fn nv12_planes(&self) -> Option<&MetalNv12Output> {
         None
@@ -440,6 +446,9 @@ impl MetalSampleSource for MetalCustomOutput {
     }
 }
 impl MetalSampleSource for PreparedMetalOutput {
+    fn mapping(&self) -> Option<gpui::content::ResolvedImageMapping> {
+        self.mapping
+    }
     fn interpretation(&self) -> Option<gpui::content::ImageInterpretation> {
         self.interpretation()
     }
@@ -456,6 +465,10 @@ impl MetalSampleSource for PreparedMetalOutput {
 
 pub(crate) struct CustomCompositor {
     pipeline: RenderPipelineState,
+    pub(crate) image_samplers: std::collections::HashMap<
+        gpui::content::Sampler,
+        Retained<ProtocolObject<dyn objc2_metal::MTLSamplerState>>,
+    >,
     pub(crate) masks: CoverageCache<Texture>,
     pub(crate) mask_bytes: usize,
 }
@@ -489,8 +502,51 @@ impl CustomCompositor {
         let pipeline = device
             .newRenderPipelineStateWithDescriptor_error(&descriptor)
             .map_err(anyhow::Error::msg)?;
+        let mut image_samplers = std::collections::HashMap::new();
+        use gpui::content::{AddressMode, FilterMode as F, Sampler};
+        use objc2_metal::{
+            MTLSamplerDescriptor, MTLSamplerMinMagFilter as M, MTLSamplerMipFilter as P,
+        };
+        for min in [F::Nearest, F::Linear] {
+            for mag in [F::Nearest, F::Linear] {
+                for mip in [None, Some(F::Nearest), Some(F::Linear)] {
+                    let sampler = Sampler {
+                        min_filter: min,
+                        mag_filter: mag,
+                        mip_filter: mip,
+                        address: [AddressMode::Clamp; 2],
+                    };
+                    let d = MTLSamplerDescriptor::new();
+                    d.setMinFilter(if min == F::Linear {
+                        M::Linear
+                    } else {
+                        M::Nearest
+                    });
+                    d.setMagFilter(if mag == F::Linear {
+                        M::Linear
+                    } else {
+                        M::Nearest
+                    });
+                    d.setMipFilter(match mip {
+                        None => P::NotMipmapped,
+                        Some(F::Nearest) => P::Nearest,
+                        Some(F::Linear) => P::Linear,
+                    });
+                    d.setSAddressMode(objc2_metal::MTLSamplerAddressMode::ClampToEdge);
+                    d.setTAddressMode(objc2_metal::MTLSamplerAddressMode::ClampToEdge);
+                    d.setLodMaxClamp(if mip.is_some() { f32::MAX } else { 0. });
+                    image_samplers.insert(
+                        sampler,
+                        device
+                            .newSamplerStateWithDescriptor(&d)
+                            .ok_or_else(|| anyhow::anyhow!("allocate image sampler"))?,
+                    );
+                }
+            }
+        }
         Ok(Self {
             pipeline,
+            image_samplers,
             masks: Default::default(),
             mask_bytes: 0,
         })
@@ -648,6 +704,7 @@ impl CustomCompositor {
             #[cfg(target_os = "macos")]
             gpu: None,
             visible: true,
+            mapping: None,
         })
     }
 
@@ -688,7 +745,11 @@ impl CustomCompositor {
         }
         let planes = output.nv12_planes();
         let yuv = planes.map(|p| p.rows).unwrap_or([[0.; 4]; 3]);
-        let params: [[f32; 4]; 12] = [
+        let mut mapped = output.mapping().unwrap_or_default().shader_uniforms();
+        if output.mapping().is_none() {
+            mapped[3][0] = -1.;
+        }
+        let params: [[f32; 4]; 16] = [
             [
                 draw.bounds.origin.x.0,
                 draw.bounds.origin.y.0,
@@ -723,7 +784,21 @@ impl CustomCompositor {
             yuv[2],
             vignette,
             linear,
+            mapped[0],
+            mapped[1],
+            mapped[2],
+            mapped[3],
         ];
+        let sampler = output
+            .mapping()
+            .map(|m| m.sampler)
+            .unwrap_or(gpui::content::Sampler {
+                mip_filter: Some(gpui::content::FilterMode::Linear),
+                ..gpui::content::Sampler::linear_clamp()
+            });
+        unsafe {
+            encoder.setFragmentSamplerState_atIndex(Some(&self.image_samplers[&sampler]), 0);
+        }
         encoder.setRenderPipelineState(&self.pipeline);
         unsafe {
             encoder.setVertexBytes_length_atIndex(
