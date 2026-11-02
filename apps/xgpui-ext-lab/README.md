@@ -38,3 +38,12 @@ by target under this package.
 
 The `native_windows` integration target is opt-in via `native-window-tests` because
 it creates real platform windows. Unit and compatibility recipes do not enable it.
+
+`portable-content` remains the independent-producer/atomic-group lab.
+Its separate [instanced companion](portable-content-instanced/README.md) provides
+the same window controls and a headless JSON performance comparison:
+
+```sh
+cargo run --release --manifest-path apps/xgpui-ext-lab/Cargo.toml \
+  --bin portable-content-instanced --features runtime-shaders
+```

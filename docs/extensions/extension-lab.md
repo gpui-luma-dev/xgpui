@@ -20,6 +20,8 @@ under `extensions/crates/` and do not depend on this package.
 | Color conversions and gradient comparisons | `color-lab` | `just color` |
 | Native and Parley text comparisons | `text-lab` | `just text` |
 | SVG rendering, scaling and scheduling | `svg-lab` | `just svg` |
+| Independent portable producers and atomic presentation | `portable-content` | Cargo command below |
+| Instanced content companion and path comparison | `portable-content-instanced` | Cargo command below |
 | Quad rendering benchmark | `quad-bench` | `just quad-bench` |
 | Color-field rendering benchmark | `color-field-bench` | `just color-field-bench` |
 | Native and browser shader examples | `shader-examples` | `just shaders` |
@@ -80,6 +82,24 @@ requirements and the distinction between framework builds and lab builds.
 These applications run on your desktop, not inside the browser. Run the commands
 from the repository root after following the platform setup in
 [Local Development](../LOCAL_DEVELOPMENT.md).
+
+### Portable and instanced content
+
+Keep the independent-producer lab and its separate instanced performance reference
+available side by side:
+
+```sh
+cargo run --release --manifest-path apps/xgpui-ext-lab/Cargo.toml \
+  --bin portable-content --features runtime-shaders
+cargo run --release --manifest-path apps/xgpui-ext-lab/Cargo.toml \
+  --bin portable-content-instanced --features runtime-shaders
+```
+
+Both have D (512 ↔ 1), R (warm/cool), O (opacity), and C (clip) controls. The
+instanced companion uses one compatible main-pass shader batch for the grid.
+Its `--benchmark` mode compares both paths and exports JSON measurements; see
+[workloads, measurement boundaries and commands](../../apps/xgpui-ext-lab/portable-content-instanced/README.md).
+The original app remains the atomic-group regression workload.
 
 ### Pastel waves
 
