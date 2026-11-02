@@ -1812,3 +1812,70 @@ remain covered. All 85 remaining media tests pass on Metal/wgpu. The exact locke
 lab release build has no Rust unused-code warnings; the shared validation config
 still reports its unused proptest patch for this application's dependency graph.
 Native import/video adapters and core native staging APIs remain separate work.
+
+
+### External-image ownership foundation checkpoint
+
+The core now defines `ExternalImage`, `ExternalImageCompletion`,
+`ExternalImageLease` and cancellable readiness subscriptions. This checkpoint
+implements the CPU ownership/acquisition protocol only. It does not yet add a
+graph import node, native executor imports, a video adapter migration, or a new
+renderable source. Existing native video behavior is unchanged.
+
+Each handle receives a fresh immutable frame identity. Clones share the identity,
+backing owner, descriptor, one terminal acquisition result and one final release
+callback. Reusing a native allocation address never reuses a frame identity.
+The descriptor describes the logical image; native plane layout/conversion and
+producer synchronization obligations remain in adapter-owned backing data.
+An importer must validate the actual native resource before use.
+
+Acquisition transitions from Pending to Ready or Failed exactly once. The sole
+completion endpoint retains the backing independently of consumers. Dropping it
+publishes Cancelled, and must happen only after the adapter operation stops
+accessing its backing. `acquire()` returns typed Pending without waiting and
+cannot yield a lease after failure. For this initial protocol, Ready means
+already-complete or asynchronously CPU-observed producer synchronization that
+allows immutable access across consumers. Enqueueing a wait on one GPU queue does
+not establish this condition. Queue-local dependency handoff still requires an
+explicit executor protocol; adapters must not silently downgrade that contract.
+
+An acquired lease exposes typed adapter data only at the integration boundary.
+Every native import/cache/use must retain the lease; submitted work transfers it
+to native completion ownership, including submitted prefixes of failed work.
+Snapshots intentionally retain ownership too. The final release callback runs
+once, after snapshots, the acquisition endpoint and all use leases retire, while
+the backing is still alive. It must not panic. Thread-affine release adapters
+must dispatch their cleanup and retain the backing until that cleanup ends.
+Failed acquisition also retires through this callback; adapters distinguish
+acquired/unacquired native obligations in their own guarded state.
+
+Subscribe-before-observe and monotonic terminal versions prevent missed readiness
+notifications. Callbacks run outside state locks; consumer subscription removal
+is independent of shared acquisition. Already-detached callbacks can still run,
+so future renderer subscribers must retain the existing weak-owner/epoch checks
+and schedule paced redraws. No automatic result cache is created by this handle.
+
+Seven CPU-only tests cover readiness/access, reentrant notification, release and
+backing order, retired consumers with a live acquisition endpoint, failure and
+abandonment, subscription cancellation, fresh frame identity, and concurrent
+completion/subscription. These tests model lease transfer; they do not prove
+native GPU synchronization. Asset and atomic group lifecycle tests also pass.
+
+Next implementation checkpoints:
+1. Add graph import operations and capability validation, with ephemeral import
+   cache policy and native lease retention through all dependent submissions.
+2. Implement Metal/CoreVideo BGRA import and pixel/lifetime validation, followed
+   by NV12 plane conversion without CPU readback.
+3. Apply the same contract to DXGI and DMA-BUF, returning typed unsupported
+   synchronization errors before sampling when the adapter cannot honor it.
+4. Migrate VideoFrame/VideoView to portable draws and placement transforms, then
+   remove their native CustomContent forwarding path and duplicate image hooks.
+
+Validation for this checkpoint: 7 external-image tests plus 6 asset and 9 atomic
+group lifecycle tests pass. The locked native lab check and browser Wasm check
+pass. A production Windows media check (without test features) exposed a wgpu
+feature-gating defect: the public content executor constructor called device
+helpers available only under test/bench features. Those three native helper
+functions now share the constructor's non-Wasm availability. Both the native
+wgpu production check and Windows media production check pass after that fix.
+This compile correction does not establish Windows native GPU acceptance.

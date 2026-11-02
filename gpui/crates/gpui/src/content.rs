@@ -3,13 +3,14 @@
 //! This is the foundation of the portable content API. Graphs currently support
 //! solids, immutable source images, copies, and typed render/compute pass graphs.
 //! Portable programs are parsed, validated and reflected without native GPU access.
-//! `Window::paint_content` records portable presentation requests. Native Metal
-//! execution and window compositing live in the Apple backend. Assets and external
-//! imports remain separate; legacy `CustomContent` producers keep their existing path.
+//! `Window::paint_content` records portable presentation requests. Native
+//! execution and compositing are implemented by platform backends. External frame
+//! ownership is portable; graph/native import integration remains a separate step.
 
 mod asset;
 mod color_transform;
 mod descriptors;
+mod external;
 mod graph;
 mod group;
 mod group_scene;
@@ -23,6 +24,7 @@ mod uniforms;
 pub use asset::*;
 pub use color_transform::*;
 pub use descriptors::*;
+pub use external::*;
 pub use graph::*;
 pub use group::*;
 pub use group_scene::*;
