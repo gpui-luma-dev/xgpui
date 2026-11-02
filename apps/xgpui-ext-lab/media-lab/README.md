@@ -115,19 +115,22 @@ contract tests on the current host, without a sample file. The initial opt-in
 Linux Vulkan adapter imports dedicated immutable single-plane linear BGRA buffers
 whose producer fence and EXTERNAL/GENERAL release have already completed. It
 records queue ownership acquisition and caches the native source texture. Explicit
-fences, mutable pools, tiled/YUV/foreign-family buffers and a Linux synthetic source
-remain pending. The implementation is cross-checked for Linux; layout tests on
+fences, mutable pools, tiled/YUV/foreign-family buffers and an interactive Linux
+synthetic video GUI remain pending. The implementation is cross-checked for Linux; layout tests on
 macOS do not establish Linux GPU import or pixel correctness.
 
 On a compatible Linux Vulkan host, run:
 
 ```sh
-just --justfile apps/xgpui-ext-lab/media-lab/justfile dma-buf-native-test
+just media-dma-buf-test
 ```
 
 This generates and exports its own four-quadrant GPU surface,
 imports the DMA-BUF and validates rendered pixels, clipping/opacity, cache reuse
-and teardown. It runs in release mode with Khronos validation enabled and saves
+and teardown through the portable executor. It also checks direct graph pixels
+without an output allocation, failure after import and paused cancellation.
+Look for `1 passed; 0 failed` and no Vulkan validation errors. No window opens.
+The exporter must support compatible SAMPLED/TRANSFER_SRC usage. It runs in release mode with Khronos validation enabled and saves
 `media-lab-dma-buf.png` in the system temporary directory. It needs linear BGRA
 DMA-BUF export/import capability and `VK_LAYER_KHRONOS_validation`; unsupported
 hardware/layers cause an explicit failure. No sample video or decoder is needed.
@@ -306,7 +309,7 @@ one GPU pass; direct BGRA imports allocate no new image storage. Neither path
 reads producer pixels back to the CPU. Headless validation reads final targets.
 
 CoreVideo and the macOS video lab now use portable draws. The old CoreVideo
-producer/cache and compositor-side NV12 paths are removed. DXGI also uses the portable executor; DMA-BUF integration remains next.
+producer/cache and compositor-side NV12 paths are removed. DXGI and DMA-BUF also use portable executors.
 Windows runtime testing is still outstanding.
 
 ### Portable DXGI validation (Windows)

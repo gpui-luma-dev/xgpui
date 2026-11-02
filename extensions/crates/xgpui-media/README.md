@@ -232,5 +232,9 @@ preparation or owns queue/output caches. NV12 converts into encoded-sRGB half-fl
 storage to preserve precision before adjustments, without CPU pixel readback.
 DXGI BGRA now uses portable external content on the matching D3D11 device.
 Shader-readable sources need no render-target binding. Keyed snapshots remain
-leased through execution and presentation completion. Only DMA-BUF retains the
-native forwarding path pending executor migration.
+leased through execution and presentation completion. Linux DMA-BUF BGRA also
+uses portable external content, with one cached Vulkan import per device/queue
+and retained ownership through graph execution and presentation. VideoFrame has
+no native forwarding branch. Run `just media-dma-buf-test` on a compatible Linux
+host for generated pixels, synchronization and retirement validation; Linux
+runtime acceptance remains pending.

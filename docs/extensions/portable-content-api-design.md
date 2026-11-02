@@ -2008,3 +2008,39 @@ validation; core external-image/group tests and the browser build pass.
 Run just media-import-test: nine tests on macOS, six on Windows, no visible GUI.
 Remaining work includes DMA-BUF executor migration, Windows/Linux runtime
 acceptance, final API cleanup and the separately tracked performance review (#113).
+
+
+### DMA-BUF portable execution checkpoint
+
+Linux Vulkan DMA-BUF BGRA now enters Content::external through VideoFrame::dma_buf.
+The worker validates source layout/capability/device/queue before encoding. Its
+first import duplicates the FD, aliases external memory and submits the GENERAL
+EXTERNAL-to-host ownership acquire before graph work. A completion callback
+retains texture and source lease even if dependent recording fails. A native
+texture cache binds the immutable snapshot to one device/queue; weak identity
+references avoid retaining host queues through the cache. Imported resources
+retain the portable lease through command retirement and presentation sampling.
+
+Direct import has no output allocation, staging upload or producer readback.
+Sampled reads and copies are supported; storage-image binding fails preflight.
+The unsafe exporter contract now explicitly requires compatible Vulkan SAMPLED
+and TRANSFER_SRC usage. It still requires completed producer fences and
+EXTERNAL/GENERAL release, immutable dedicated storage and matching physical GPU.
+Explicit fences, mutable pools, foreign-family buffers and additional formats
+remain outside this adapter's contract. The old DmaBufFrame CustomContent
+implementation is removed. VideoFrame now owns ContentDraw directly; all native
+video forwarding and duplicate adjustment wrappers are removed.
+
+The generated Linux fixture checks graph pixels/no output allocation, presentation,
+source cache reuse, descriptor/queue rejection, prefix failure, paused cancellation
+and queued sampling teardown with Vulkan validation. Run just media-dma-buf-test
+on compatible Linux hardware: one CLI test, no window. Backend code and fixture
+cross-compile on macOS; the full Linux lab build needs a Linux C sysroot and
+Linux native execution remains pending. Final API cleanup/runtime acceptance and
+the separately tracked performance review (#113) remain.
+
+Checkpoint regression results: 87 media tests, nine Metal import tests with API
+validation, and 17 native wgpu executor tests pass (plus the dense child fixture).
+The browser check and macOS media build pass; normal lab/import builds are
+warning-free. Linux backend library/tests cross-compile, while the full lab
+cross-check stops in Wayland's C shim because this host lacks Linux headers.

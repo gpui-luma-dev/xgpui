@@ -10,50 +10,6 @@ use std::{
     time::Duration,
 };
 
-#[cfg(all(unix, feature = "wgpu"))]
-#[derive(Debug)]
-struct AdjustedFrame {
-    source: Arc<dyn CustomContent>,
-    adjustments: crate::pipeline::ImageAdjustments,
-}
-#[cfg(all(unix, feature = "wgpu"))]
-impl CustomContent for AdjustedFrame {
-    fn image_color_mode(&self) -> gpui::ImageColorMode {
-        self.source.image_color_mode()
-    }
-    fn image_source_size(&self) -> Option<Size<DevicePixels>> {
-        self.source.image_source_size()
-    }
-    fn image_sample_opacity(&self) -> f32 {
-        self.source.image_sample_opacity()
-    }
-    fn image_linear_adjustments(&self) -> Option<gpui::LinearImagePaint> {
-        Some(self.adjustments.paint())
-    }
-    fn prepare(
-        &self,
-        backend: &dyn std::any::Any,
-        size: Size<DevicePixels>,
-    ) -> Result<Box<dyn std::any::Any>> {
-        self.source.prepare(backend, size)
-    }
-    fn prepare_with_request(
-        &self,
-        backend: &dyn std::any::Any,
-        request: &gpui::PreparationRequest,
-    ) -> Result<Box<dyn std::any::Any>> {
-        self.source.prepare_with_request(backend, request)
-    }
-    fn prepare_in_frame(
-        &self,
-        backend: &dyn std::any::Any,
-        request: &gpui::PreparationRequest,
-        frame: &gpui::PreparationFrame,
-    ) -> Result<Box<dyn std::any::Any>> {
-        self.source.prepare_in_frame(backend, request, frame)
-    }
-}
-
 #[derive(Debug)]
 struct FrameSource {
     content: gpui::content::Content,
@@ -75,16 +31,10 @@ impl gpui::content::ContentSource for FrameSource {
         Ok(image)
     }
 }
-#[derive(Clone, Debug)]
-enum FrameContent {
-    Portable(gpui::content::ContentDraw),
-    #[cfg(all(unix, feature = "wgpu"))]
-    Native(Arc<dyn CustomContent>),
-}
 /// Immutable frame pixels/description, independent of decoder and playback clock.
 #[derive(Clone, Debug)]
 pub struct VideoFrame {
-    content: FrameContent,
+    content: gpui::content::ContentDraw,
     size: Size<DevicePixels>,
     timestamp: Duration,
 }
@@ -114,7 +64,7 @@ impl VideoFrame {
             request,
         });
         Ok(Self {
-            content: FrameContent::Portable(draw),
+            content: draw,
             size,
             timestamp,
         })
@@ -129,10 +79,8 @@ impl VideoFrame {
                 DevicePixels(i32::try_from(extent.height()).expect("validated extent")),
             ),
             timestamp,
-            content: FrameContent::Portable(
-                gpui::content::ContentDraw::new(gpui::content::Content::external(image))
-                    .color_output(gpui::content::ContentColorOutput::SrgbPreview),
-            ),
+            content: gpui::content::ContentDraw::new(gpui::content::Content::external(image))
+                .color_output(gpui::content::ContentColorOutput::SrgbPreview),
         }
     }
     #[cfg(target_os = "macos")]
@@ -159,24 +107,21 @@ impl VideoFrame {
         frame: gpui_wgpu::custom_draw::dma_buf::DmaBufFrame,
         timestamp: Duration,
     ) -> Self {
-        Self {
-            size: frame.size(),
-            content: FrameContent::Native(Arc::new(frame)),
+        Self::external(
+            frame
+                .external_image()
+                .expect("validated DMA-BUF descriptor"),
             timestamp,
-        }
+        )
     }
     /// Replace placement adjustments without changing frame/source identity.
     pub fn adjusted(&self, adjustments: crate::pipeline::ImageAdjustments) -> Self {
-        let content = match &self.content {
-            FrameContent::Portable(draw) => FrameContent::Portable(draw.clone().color_transform(
-                gpui::content::ImageColorTransform::linear(adjustments.paint()),
-            )),
-            #[cfg(all(unix, feature = "wgpu"))]
-            FrameContent::Native(source) => FrameContent::Native(Arc::new(AdjustedFrame {
-                source: source.clone(),
-                adjustments,
-            })),
-        };
+        let content =
+            self.content
+                .clone()
+                .color_transform(gpui::content::ImageColorTransform::linear(
+                    adjustments.paint(),
+                ));
         Self {
             content,
             size: self.size,
@@ -192,11 +137,7 @@ impl VideoFrame {
     /// Source-sized scene bridge. UI callers use video/video_frame with a stable
     /// element ID so pending frames retain the placement's previous valid output.
     pub fn content(&self) -> Arc<dyn CustomContent> {
-        match &self.content {
-            FrameContent::Portable(draw) => draw.clone().into_scene_content(),
-            #[cfg(all(unix, feature = "wgpu"))]
-            FrameContent::Native(content) => content.clone(),
-        }
+        self.content.clone().into_scene_content()
     }
     pub fn paint(&self, window: &mut Window, bounds: Bounds<Pixels>, radii: Corners<Pixels>) {
         self.paint_placed(window, bounds, radii, None);
@@ -218,14 +159,11 @@ impl VideoFrame {
             bounds,
             corner_radii: radii,
         };
-        match &self.content {
-            FrameContent::Portable(draw) => {
-                let draw = slot.map_or_else(|| draw.clone(), |slot| draw.clone().slot(slot));
-                window.paint_content(geometry, draw);
-            }
-            #[cfg(all(unix, feature = "wgpu"))]
-            FrameContent::Native(content) => window.paint_custom(geometry, content.clone()),
-        }
+        let draw = slot.map_or_else(
+            || self.content.clone(),
+            |slot| self.content.clone().slot(slot),
+        );
+        window.paint_content(geometry, draw);
     }
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

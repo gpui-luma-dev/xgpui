@@ -71,6 +71,8 @@ pub struct WgpuContentStats {
     pub pipeline_compilations: usize,
     pub peak_reserved_bytes: u64,
     pub readbacks: usize,
+    pub external_imports: usize,
+    pub image_allocations: usize,
     pub worker_thread: Option<String>,
 }
 #[derive(Debug)]
@@ -155,13 +157,24 @@ struct Request {
 }
 #[derive(Debug)]
 enum Resource {
-    Image { texture: wgpu::Texture, charge: u64 },
-    Buffer { buffer: wgpu::Buffer, charge: u64 },
+    Image {
+        texture: wgpu::Texture,
+        charge: u64,
+    },
+    ExternalImage {
+        texture: wgpu::Texture,
+        charge: u64,
+        _lease: c::ExternalImageLease,
+    },
+    Buffer {
+        buffer: wgpu::Buffer,
+        charge: u64,
+    },
 }
 impl Resource {
     fn texture(&self) -> &wgpu::Texture {
         match self {
-            Self::Image { texture, .. } => texture,
+            Self::Image { texture, .. } | Self::ExternalImage { texture, .. } => texture,
             _ => unreachable!(),
         }
     }
@@ -173,7 +186,9 @@ impl Resource {
     }
     fn charge(&self) -> u64 {
         match self {
-            Self::Image { charge, .. } | Self::Buffer { charge, .. } => *charge,
+            Self::Image { charge, .. }
+            | Self::ExternalImage { charge, .. }
+            | Self::Buffer { charge, .. } => *charge,
         }
     }
 }
@@ -424,6 +439,13 @@ fn drive<F: Future<Output = Result<WgpuContentFrame>>>(
 fn capabilities(device: &wgpu::Device) -> c::ContentCapabilities {
     let l = device.limits();
     let mut caps = c::ContentCapabilities::default();
+    #[cfg(all(target_os = "linux", feature = "dma-buf"))]
+    {
+        caps.external_images = device
+            .features()
+            .contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF)
+            && unsafe { device.as_hal::<wgpu::hal::api::Vulkan>() }.is_some();
+    }
     caps.max_image_dimension = l.max_texture_dimension_2d;
     caps.max_buffer_bytes = l.max_buffer_size;
     caps.compute = (l.max_compute_workgroup_size_x > 0

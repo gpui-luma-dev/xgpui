@@ -63,9 +63,17 @@ impl DmaBufLayout {
 struct Inner {
     fd: OwnedFd,
     layout: DmaBufLayout,
-    outputs: Mutex<Vec<WgpuCustomOutput>>,
+    imported: Mutex<Option<Imported>>,
 }
-/// A dedicated immutable DMA-BUF allocation. An import is cached for one host queue.
+#[cfg(target_os = "linux")]
+struct Imported {
+    texture: wgpu::Texture,
+    device: std::sync::Weak<wgpu::Device>,
+    queue: std::sync::Weak<wgpu::Queue>,
+}
+#[cfg(not(target_os = "linux"))]
+struct Imported;
+/// A dedicated immutable DMA-BUF allocation, bound to one portable host queue.
 #[derive(Clone)]
 pub struct DmaBufFrame(Arc<Inner>);
 impl std::fmt::Debug for DmaBufFrame {
@@ -85,7 +93,7 @@ impl DmaBufFrame {
     /// `fd` must be a valid compatible DMA-BUF with exactly this layout, fully
     /// initialized opaque/straight-alpha pixels, and enough backing storage.
     /// The exporter must use the same underlying physical device and compatible
-    /// driver. Producer writes and its EXTERNAL/GENERAL ownership release must already
+    /// driver, with compatible SAMPLED and TRANSFER_SRC image usage. Producer writes and its EXTERNAL/GENERAL ownership release must already
     /// be complete (including any producer fence). Preserve immutable contents
     /// for the allocation's full native lifetime, including imported GPU refs.
     /// No pool-recycle or release-fence signal is provided. Do not publish mutable
@@ -94,7 +102,7 @@ impl DmaBufFrame {
         Self(Arc::new(Inner {
             fd,
             layout,
-            outputs: Mutex::new(Vec::new()),
+            imported: Mutex::new(None),
         }))
     }
     /// Basic host capability only; the driver still validates the specific buffer.
@@ -117,56 +125,132 @@ impl DmaBufFrame {
         self.0.layout.size
     }
     pub fn import_count(&self) -> usize {
-        self.0.outputs.lock().unwrap().len()
+        usize::from(self.0.imported.lock().unwrap().is_some())
     }
 }
-impl gpui::CustomContent for DmaBufFrame {
-    fn prepare(
+impl DmaBufFrame {
+    fn descriptor(
         &self,
-        backend: &dyn std::any::Any,
-        _: Size<DevicePixels>,
-    ) -> Result<Box<dyn std::any::Any>> {
-        let context = backend
-            .downcast_ref::<WgpuCustomContext>()
-            .context("DMA-BUF frames require wgpu Vulkan")?;
+    ) -> std::result::Result<gpui::content::ImageDescriptor, gpui::content::ContentError> {
+        use gpui::content::*;
+        ImageDescriptor::new(
+            ImageExtent::try_from(self.size())?,
+            PixelFormat::Bgra8,
+            ImageInterpretation {
+                color: ColorEncoding::Srgb,
+                alpha: AlphaMode::Straight,
+            },
+            1,
+        )
+    }
+    pub fn external_image(
+        &self,
+    ) -> std::result::Result<gpui::content::ExternalImage, gpui::content::ContentError> {
+        Ok(gpui::content::ExternalImage::ready(
+            self.descriptor()?,
+            Arc::new(self.clone()),
+            || {},
+        ))
+    }
+    pub(crate) fn validate_external(
+        &self,
+        device: &Arc<wgpu::Device>,
+        queue: &Arc<wgpu::Queue>,
+        descriptor: &gpui::content::ImageDescriptor,
+    ) -> std::result::Result<(), gpui::content::ContentError> {
+        use gpui::content::{ContentError, ContentErrorKind};
+        if &self.descriptor()? != descriptor {
+            return Err(ContentError::new(
+                ContentErrorKind::InvalidDescriptor,
+                "DMA-BUF descriptor differs from native layout",
+            ));
+        }
         #[cfg(target_os = "linux")]
         {
-            ensure!(
-                context
-                    .device
-                    .features()
-                    .contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF),
-                "DMA-BUF import capability was not enabled on the host device"
-            );
-            let mut outputs = self.0.outputs.lock().unwrap();
-            if let Some(output) = outputs.iter().find(|output| context.can_reuse(output)) {
-                return Ok(Box::new(output.clone()));
+            if !device
+                .features()
+                .contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF)
+                || unsafe { device.as_hal::<wgpu::hal::api::Vulkan>() }.is_none()
+            {
+                return Err(ContentError::new(
+                    ContentErrorKind::UnsupportedCapability,
+                    "DMA-BUF requires enabled Vulkan external memory support",
+                ));
             }
-            // An abandoned preparation never acquired GPU ownership; discard its
-            // cache entry and import anew. Retained outputs preserve queue identity.
-            outputs.retain(|output| output.recording.state.load(Ordering::Acquire) != ABANDONED);
-            ensure!(
-                outputs.is_empty(),
-                "DMA-BUF snapshot is already bound to another host preparation/queue"
-            );
-            let output = import(context, &self.0.fd, self.0.layout)?;
-            outputs.push(output.clone());
-            Ok(Box::new(output))
+            if let Some(imported) = self.0.imported.lock().unwrap().as_ref() {
+                if !std::sync::Weak::ptr_eq(&Arc::downgrade(device), &imported.device)
+                    || !std::sync::Weak::ptr_eq(&Arc::downgrade(queue), &imported.queue)
+                {
+                    return Err(ContentError::new(
+                        ContentErrorKind::UnsupportedCapability,
+                        "DMA-BUF snapshot is bound to another device/queue",
+                    ));
+                }
+            }
+            Ok(())
         }
         #[cfg(not(target_os = "linux"))]
         {
-            let _ = context;
-            anyhow::bail!("DMA-BUF snapshot import requires Linux Vulkan")
+            let _ = (device, queue);
+            Err(ContentError::new(
+                ContentErrorKind::UnsupportedCapability,
+                "DMA-BUF requires Linux Vulkan",
+            ))
+        }
+    }
+    pub(crate) fn import_external(
+        &self,
+        device: &Arc<wgpu::Device>,
+        queue: &Arc<wgpu::Queue>,
+        descriptor: &gpui::content::ImageDescriptor,
+        lease: &gpui::content::ExternalImageLease,
+    ) -> std::result::Result<wgpu::Texture, gpui::content::ContentError> {
+        self.validate_external(device, queue, descriptor)?;
+        #[cfg(target_os = "linux")]
+        {
+            let mut cached = self.0.imported.lock().unwrap();
+            if let Some(imported) = cached.as_ref() {
+                // Recheck while holding the cache lock: concurrent executors may race.
+                if !std::sync::Weak::ptr_eq(&Arc::downgrade(device), &imported.device)
+                    || !std::sync::Weak::ptr_eq(&Arc::downgrade(queue), &imported.queue)
+                {
+                    return Err(gpui::content::ContentError::new(
+                        gpui::content::ContentErrorKind::UnsupportedCapability,
+                        "DMA-BUF snapshot is bound to another device/queue",
+                    ));
+                }
+                return Ok(imported.texture.clone());
+            }
+            let texture =
+                import(device, queue, &self.0.fd, self.0.layout, lease.clone()).map_err(|e| {
+                    gpui::content::ContentError::new(
+                        gpui::content::ContentErrorKind::ExecutionFailure,
+                        e.to_string(),
+                    )
+                })?;
+            *cached = Some(Imported {
+                texture: texture.clone(),
+                device: Arc::downgrade(device),
+                queue: Arc::downgrade(queue),
+            });
+            Ok(texture)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = lease;
+            unreachable!("validation rejects non-Linux imports")
         }
     }
 }
 
 #[cfg(target_os = "linux")]
 fn import(
-    context: &WgpuCustomContext,
+    device: &Arc<wgpu::Device>,
+    queue: &Arc<wgpu::Queue>,
     fd: &OwnedFd,
     layout: DmaBufLayout,
-) -> Result<WgpuCustomOutput> {
+    lease: gpui::content::ExternalImageLease,
+) -> Result<wgpu::Texture> {
     use ash::vk;
     use wgpu::hal::api::Vulkan;
     let size = wgpu::Extent3d {
@@ -175,8 +259,8 @@ fn import(
         depth_or_array_layers: 1,
     };
     ensure!(
-        size.width <= context.device.limits().max_texture_dimension_2d
-            && size.height <= context.device.limits().max_texture_dimension_2d,
+        size.width <= device.limits().max_texture_dimension_2d
+            && size.height <= device.limits().max_texture_dimension_2d,
         "DMA-BUF dimensions exceed host device limits"
     );
     let hal_desc = wgpu::hal::TextureDescriptor {
@@ -186,14 +270,14 @@ fn import(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Bgra8Unorm,
-        usage: wgpu::TextureUses::RESOURCE,
+        usage: wgpu::TextureUses::RESOURCE | wgpu::TextureUses::COPY_SRC,
         memory_flags: wgpu::hal::MemoryFlags::empty(),
         view_formats: vec![],
     };
     let (hal_texture, raw_device, queue_family) = {
         // SAFETY: only the host device imports this immutable allocation. HAL
         // consumes a duplicate FD on all paths; the frame retains the original.
-        let device = unsafe { context.device.as_hal::<Vulkan>() }
+        let device = unsafe { device.as_hal::<Vulkan>() }
             .context("DMA-BUF import requires Vulkan, not GLES")?;
         let texture = unsafe {
             device.texture_from_dmabuf_fd(
@@ -218,7 +302,7 @@ fn import(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Bgra8Unorm,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     };
     // GENERAL is represented by STORAGE_READ_ONLY in wgpu's state tracker.
@@ -226,18 +310,20 @@ fn import(
     // its normal GENERAL -> shader-read transition at the first sampling use.
     // SAFETY: initialized import from this device, matching descriptor and layout.
     let texture = unsafe {
-        context.device.create_texture_from_hal::<Vulkan>(
+        device.create_texture_from_hal::<Vulkan>(
             hal_texture,
             &desc,
             wgpu::TextureUses::STORAGE_READ_ONLY,
         )
     };
-    context.record(|encoder| {
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("DMA-BUF ownership acquire"),
+    });
+    (|| -> Result<()> {
         let native_texture =
             unsafe { texture.as_hal::<Vulkan>() }.context("missing Vulkan DMA-BUF texture")?;
         // SAFETY: producer has completed its matching EXTERNAL release in GENERAL.
-        // This records on the host-owned preparation encoder without submitting;
-        // the host executes it before sampling. No texture layout is changed here.
+        // The worker submits this acquire before graph work on the same queue. No texture layout is changed here.
         unsafe {
             encoder.as_hal_mut::<Vulkan, _, _>(|encoder| -> Result<()> {
                 let encoder = encoder.context("missing Vulkan preparation encoder")?;
@@ -268,23 +354,13 @@ fn import(
                 Ok(())
             })
         }
-    })?;
-    // Raw HAL barriers do not register resource usage with wgpu's tracker.
-    // Retain the imported texture until the preparation submission completes,
-    // including when the main render fails before any tracked sampling occurs.
-    context
-        .recording
-        .guards
-        .lock()
-        .unwrap()
-        .push(Arc::new(texture.clone()));
-    Ok(WgpuCustomOutput {
-        texture,
-        source_sized: true,
-        key: context.key,
-        _queue: context.queue.clone(),
-        recording: context.recording.clone(),
-    })
+    })()?;
+    // Raw barriers do not register tracked usage. Retain the allocation through
+    // this submission even if a later graph operation fails before sampling.
+    queue.submit([encoder.finish()]);
+    let retained = texture.clone();
+    queue.on_submitted_work_done(move || drop((retained, lease)));
+    Ok(texture)
 }
 
 #[cfg(test)]
@@ -315,5 +391,7 @@ mod tests {
     }
 }
 
-#[cfg(all(test, target_os = "linux"))]
-mod native_tests;
+#[cfg(all(feature = "test-support", target_os = "linux"))]
+#[doc(hidden)]
+#[path = "dma_buf/native_tests.rs"]
+pub mod native_validation;

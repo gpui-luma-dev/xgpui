@@ -55,7 +55,7 @@ dma-buf-layout-test:
 # Linux GPU export/import, rendered PNG and strict Vulkan validation; no video.
 [linux]
 dma-buf-native-test:
-    WGPU_BACKEND=vulkan WGPU_DEBUG=1 WGPU_VALIDATION=1 VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation cargo test --profile {{profile}} --offline --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-wgpu/Cargo.toml --target-dir target --features dma-buf,test-support --lib custom_draw::dma_buf::native_tests::dma_buf_native_generated_snapshot -- --ignored --exact --nocapture --test-threads=1
+    just media-dma-buf-test
 
 # Measure generated-source upload CPU work versus cached rendering, in release.
 upload-bench:

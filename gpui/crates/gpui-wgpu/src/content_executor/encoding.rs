@@ -165,21 +165,17 @@ impl Worker {
         cancelled: &AtomicBool,
         readback: bool,
     ) -> Result<WgpuContentFrame> {
-        if graph
-            .nodes()
-            .iter()
-            .any(|node| matches!(node.operation(), c::ContentOperation::ExternalImage(_)))
-        {
-            return Err(error(
-                c::ContentErrorKind::UnsupportedCapability,
-                "external image imports are unsupported by this executor",
-            ));
-        }
         if cancelled.load(Ordering::Acquire) {
             return Err(error(
                 c::ContentErrorKind::Cancelled,
                 "content request cancelled before execution",
             ));
+        }
+        for node in graph.nodes() {
+            if let c::ContentOperation::ExternalImage(image) = node.operation() {
+                let lease = image.acquire()?;
+                self.validate_external(&lease, image.descriptor())?;
+            }
         }
         let result = self
             .execute_scoped(graph, limits, cancelled, readback)
@@ -195,6 +191,45 @@ impl Worker {
             self.byte_copy = None;
         }
         result
+    }
+
+    fn validate_external(
+        &self,
+        lease: &c::ExternalImageLease,
+        descriptor: &c::ImageDescriptor,
+    ) -> Result<()> {
+        #[cfg(all(unix, feature = "dma-buf"))]
+        if let Some(frame) = lease.backing::<crate::custom_draw::dma_buf::DmaBufFrame>() {
+            return frame.validate_external(&self.device, &self.queue, descriptor);
+        }
+        let _ = (lease, descriptor);
+        Err(unsupported("unsupported wgpu external backing"))
+    }
+    fn import_external(
+        &self,
+        image: &c::ExternalImage,
+        descriptor: &c::ImageDescriptor,
+    ) -> Result<Arc<Resource>> {
+        let lease = image.acquire()?;
+        self.validate_external(&lease, descriptor)?;
+        let texture = self.import_external_texture(&lease, descriptor)?;
+        Ok(Arc::new(Resource::ExternalImage {
+            texture,
+            charge: image_charge(descriptor),
+            _lease: lease,
+        }))
+    }
+    fn import_external_texture(
+        &self,
+        lease: &c::ExternalImageLease,
+        descriptor: &c::ImageDescriptor,
+    ) -> Result<wgpu::Texture> {
+        #[cfg(all(unix, feature = "dma-buf"))]
+        if let Some(frame) = lease.backing::<crate::custom_draw::dma_buf::DmaBufFrame>() {
+            return frame.import_external(&self.device, &self.queue, descriptor, lease);
+        }
+        let _ = (lease, descriptor);
+        Err(unsupported("unsupported wgpu external backing"))
     }
 
     async fn execute_scoped(
@@ -402,6 +437,14 @@ impl Worker {
                 ) {
                     match binding.resource() {
                         c::BoundResource::Image(r) => {
+                            if matches!(
+                                graph.nodes()[r.node()].operation(),
+                                c::ContentOperation::ExternalImage(_)
+                            ) {
+                                return Err(unsupported(
+                                    "external images support sampled reads and copies, not storage binding",
+                                ));
+                            }
                             usages[r.node()][r.output()] |= wgpu::TextureUsages::STORAGE_BINDING
                         }
                         c::BoundResource::Output { output, .. } => {
@@ -766,7 +809,7 @@ impl Run<'_> {
                     Resource::Buffer { buffer, .. } => {
                         Binding::Buffer(buffer.clone(), 0, buffer.size())
                     }
-                    Resource::Image { texture, .. } => {
+                    Resource::Image { texture, .. } | Resource::ExternalImage { texture, .. } => {
                         Binding::Image(texture.create_view(&wgpu::TextureViewDescriptor {
                             mip_level_count: Some(1),
                             ..Default::default()
@@ -839,16 +882,33 @@ impl Run<'_> {
             .iter()
             .enumerate()
             .map(|(index, d)| {
-                self.allocate(
-                    d,
-                    self.usages[id][index],
-                    match node.operation() {
-                        c::ContentOperation::UploadBuffer(data) => Some(data.as_ref()),
-                        _ => None,
-                    },
-                )
+                if let (
+                    c::ContentOperation::ExternalImage(image),
+                    c::ResourceDescriptor::Image(desc),
+                ) = (node.operation(), d)
+                {
+                    self.worker.import_external(image, desc)
+                } else {
+                    Ok(self.allocate(
+                        d,
+                        self.usages[id][index],
+                        match node.operation() {
+                            c::ContentOperation::UploadBuffer(data) => Some(data.as_ref()),
+                            _ => None,
+                        },
+                    ))
+                }
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
+        if matches!(node.operation(), c::ContentOperation::ExternalImage(_)) {
+            self.stats.external_imports += 1;
+        } else {
+            self.stats.image_allocations += node
+                .outputs()
+                .iter()
+                .filter(|d| matches!(d, c::ResourceDescriptor::Image(_)))
+                .count();
+        }
         let mut owners = outputs.clone();
         let mut encoder =
             self.worker
@@ -890,11 +950,7 @@ impl Run<'_> {
                     d,
                 );
             }
-            c::ContentOperation::ExternalImage(_) => {
-                return Err(execution(
-                    "external image imports are unsupported by this executor",
-                ));
-            }
+            c::ContentOperation::ExternalImage(_) => {}
             c::ContentOperation::UploadImage(data) => {
                 let c::ResourceDescriptor::Image(d) = &node.outputs()[0] else {
                     unreachable!()

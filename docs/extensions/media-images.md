@@ -572,7 +572,7 @@ and [NT-handle import API](https://learn.microsoft.com/en-us/windows/win32/api/d
 ## Linux DMA-BUF snapshots — initial Vulkan adapter
 
 With `xgpui-media`'s `wgpu` feature, `DmaBufLayout`, `DmaBufFrame` and
-`VideoFrame::dma_buf` provide an opt-in native snapshot path. This enables
+`VideoFrame::dma_buf` provide an opt-in portable snapshot path. This enables
 `gpui-wgpu/dma-buf`. On Linux, device creation requests wgpu's external DMA-BUF
 capability only when the adapter advertises it. Existing GLES/fallback rendering
 still works; DMA-BUF import reports unsupported instead of uploading CPU pixels.
@@ -597,7 +597,8 @@ multiple planes and premultiplied alpha are excluded.
 
 The unsafe constructor transfers an `OwnedFd`. It must be a real DMA-BUF matching
 the supplied metadata and backed by a compatible allocation on the same physical
-GPU/driver. Producer writes **and its fence** must have completed. This slice
+GPU/driver, compatible with Vulkan `SAMPLED | TRANSFER_SRC` image usage.
+Producer writes **and its fence** must have completed. This slice
 accepts Vulkan exports released to `VK_QUEUE_FAMILY_EXTERNAL` in `GENERAL` layout;
 GBM/EGL allocations requiring `FOREIGN_EXT` ownership are outside this contract.
 It does not import/wait for a sync-file fence, perform a CPU wait, return a release
@@ -605,15 +606,18 @@ fence, or signal that a pool allocation may be recycled. Pixels must stay immuta
 for the allocation's entire native lifetime, including GPU references after the
 Rust frame drops. Use dedicated snapshots; mutable decoder pools are unsupported.
 
-Preparation duplicates the FD and lets Vulkan consume that duplicate, preserving
-the frame's original FD for import retry after an abandoned preparation. It records
-the external queue-family acquire on the host preparation encoder, preserving
-`GENERAL`. A completion guard retains that raw-barrier resource even if the main
-render fails before tracked sampling; wgpu then tracks the normal shader-read layout transition. Existing
-pixels are retained rather than treated as uninitialized storage. One host queue
-owns the cached import. Repeated placements/resizes reuse it; a different queue is
-rejected. No CPU readback, image staging upload, or display-sized copy is performed.
-The imported native memory retains its payload through GPU resource lifetime.
+The portable executor validates the backing/layout before graph submission and
+duplicates the FD for Vulkan import. The frame keeps its original FD. A worker
+submission acquires EXTERNAL ownership while preserving `GENERAL`, ahead of
+dependent work on the same queue. Its completion callback retains both the raw
+texture and portable source lease, including failures before tracked sampling.
+wgpu tracks subsequent sampling/copy transitions. Imported pixels are initialized,
+not cleared. One device/queue owns the cached import; repeated placements and
+resizes reuse it and another queue is rejected. Direct import allocates no output
+image, uploads no pixels and performs no producer readback or display-sized copy.
+Portable image copies/readback are supported; storage-image binding is rejected.
+The old native CustomContent producer/cache is removed. VideoFrame now stores
+portable ContentDraw directly on every platform, with no native forwarding branch.
 
 The Linux implementation and media API are cross-checked from macOS. Release host
 tests validate padded rows/offsets and rejection of invalid dimensions, alignment,
@@ -635,7 +639,7 @@ and [queue-family synchronization rules](https://docs.vulkan.org/spec/latest/cha
 On a compatible Linux Vulkan host, run:
 
 ```sh
-just --justfile apps/xgpui-ext-lab/media-lab/justfile dma-buf-native-test
+just media-dma-buf-test
 ```
 
 This recipe defaults to release and supplies its own raw GPU test image; there is
@@ -655,13 +659,14 @@ queried row/offset metadata reach the importer. GPUI imports that native payload
 and samples it directly. This test-source upload does not change the zero-upload
 presentation path, and the test-only producer wait is not a UI-thread decode loop.
 
-The checks cover abandoned preparation/reimport, retained FD payload after
-exporter teardown, correct channel order and orientation, native corners and
-content mask, opacity, duplicate placements, source reuse after resize, wrong
-backend/queue rejection, and dropping producer snapshots while sampling or raw
-preparation work is queued. A Vulkan debug messenger counts native validation
-errors and fails the test even if pixel checks pass. Completion is checked before
-that messenger is destroyed.
+The checks cover native BGRA graph readback without output allocation, retained
+FD payload after exporter teardown, channel order/orientation, corners, clipping,
+opacity, shared placements and source reuse after resize. They also cover
+descriptor/queue rejection, failure after import, paused cancellation and dropping
+producer snapshots while sampling is queued. A Vulkan debug messenger fails on
+native validation errors even if pixels match. Look for `1 passed; 0 failed`,
+the saved PNG path and no Vulkan validation errors. This is a CLI GPU test,
+with no visible app window. Linux runtime acceptance remains pending.
 
 A successful native run saves `media-lab-dma-buf.png` in the host's temporary
 directory (normally `/tmp/media-lab-dma-buf.png`) and prints its path. It shows a

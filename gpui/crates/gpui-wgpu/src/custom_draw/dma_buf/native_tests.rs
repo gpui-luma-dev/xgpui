@@ -1,10 +1,7 @@
 //! Explicit Linux-only native test. No media file, decoder or GBM dependency.
 use super::*;
 use ash::vk;
-use gpui::{
-    Bounds, ContentMask, Corners, CustomContent, PlatformHeadlessRenderer, ScaledPixels, Scene,
-    point,
-};
+use gpui::{Bounds, ContentMask, Corners, PlatformHeadlessRenderer, ScaledPixels, Scene, point};
 use std::io::Write as _;
 use std::os::fd::FromRawFd;
 use wgpu::hal::api::Vulkan;
@@ -176,7 +173,11 @@ fn generate(host: &crate::WgpuContext) -> Result<(Exporter, DmaBufFrame)> {
         .format(vk::Format::B8G8R8A8_UNORM)
         .ty(vk::ImageType::TYPE_2D)
         .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
-        .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST)
+        .usage(
+            vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::TRANSFER_SRC,
+        )
         .push_next(&mut external_info)
         .push_next(&mut modifier_info);
     let mut external_properties = vk::ExternalImageFormatProperties::default();
@@ -230,7 +231,11 @@ fn generate(host: &crate::WgpuContext) -> Result<(Exporter, DmaBufFrame)> {
         .array_layers(1)
         .samples(vk::SampleCountFlags::TYPE_1)
         .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
-        .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST)
+        .usage(
+            vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::TRANSFER_SRC,
+        )
         .sharing_mode(vk::SharingMode::EXCLUSIVE)
         .initial_layout(vk::ImageLayout::UNDEFINED)
         .push_next(&mut external)
@@ -449,6 +454,7 @@ fn generate(host: &crate::WgpuContext) -> Result<(Exporter, DmaBufFrame)> {
 
 fn scene(frame: &DmaBufFrame) -> Scene {
     let mut scene = Scene::default();
+    let content = gpui::content::Content::external(frame.external_image().unwrap());
     for (x, opacity, clip_width) in [(8., 1., 64.), (88., 0.5, 48.)] {
         let bounds = Bounds::new(
             point(ScaledPixels(x), ScaledPixels(8.)),
@@ -465,7 +471,9 @@ fn scene(frame: &DmaBufFrame) -> Scene {
             },
             corner_radii: Corners::all(ScaledPixels(8.)),
             opacity,
-            content: Arc::new(frame.clone()),
+            content: gpui::content::ContentDraw::new(content.clone())
+                .color_output(gpui::content::ContentColorOutput::SrgbPreview)
+                .into_scene_content(),
             coverage: None,
         });
     }
@@ -482,9 +490,7 @@ fn pixel(image: &image::RgbaImage, x: u32, y: u32, rgb: [u8; 3]) {
     }
 }
 
-#[test]
-#[ignore = "requires Linux Vulkan DMA-BUF export/import; run the dma-buf-native-test recipe"]
-fn dma_buf_native_generated_snapshot() -> Result<()> {
+pub fn validate_generated_snapshot() -> Result<()> {
     let (host, _) = crate::WgpuContext::new_headless()?;
     eprintln!(
         "DMA-BUF native fixture adapter: {:?}",
@@ -494,14 +500,31 @@ fn dma_buf_native_generated_snapshot() -> Result<()> {
     let (exporter, frame) = generate(&host)?;
     drop(exporter); // The exported FD, then Vulkan imports, retain the actual payload.
     assert_eq!(frame.import_count(), 0);
-    {
-        let abandoned = WgpuCustomContext::new(host.device.clone(), &host.queue);
-        let output = frame.prepare(&abandoned, size(DevicePixels(64), DevicePixels(32)))?;
-        drop(output);
-        // No acquire command is submitted; the next preparation must import anew.
-    }
+    let executor = crate::content_executor::WgpuContentExecutor::on_device(
+        host.device.clone(),
+        host.queue.clone(),
+        Default::default(),
+    )?;
+    let result = executor
+        .submit(
+            import_graph(
+                &executor,
+                gpui::content::Content::external(frame.external_image()?),
+            ),
+            Default::default(),
+        )?
+        .wait_for_readback(std::time::Duration::from_secs(10))?;
+    assert_eq!(result.stats.external_imports, 1);
+    assert_eq!(result.stats.image_allocations, 0);
+    assert_eq!(
+        result.images[0].descriptor.extent(),
+        gpui::content::ImageExtent::try_from(frame.size())?
+    );
+    assert_eq!(&result.images[0].levels[0][..4], &[0, 0, 255, 255]);
+    drop(result);
     let mut renderer = crate::WgpuHeadlessRenderer::new()?;
     let scene = scene(&frame);
+    ready(&mut renderer, &scene)?;
     let image =
         renderer.render_scene_to_image(&scene, size(DevicePixels(160), DevicePixels(64)))?;
     pixel(&image, 24, 16, [255, 0, 0]);
@@ -526,10 +549,23 @@ fn dma_buf_native_generated_snapshot() -> Result<()> {
         1,
         "resize must reuse the source texture"
     );
-    let mut foreign = WgpuCustomContext::new(host.device.clone(), &host.queue);
-    foreign.key = foreign.key.wrapping_add(1);
-    assert!(frame.prepare(&foreign, frame.size()).is_err());
-    assert!(frame.prepare(&(), frame.size()).is_err());
+    let foreign_queue = Arc::new((*host.queue).clone());
+    assert!(
+        frame
+            .validate_external(&host.device, &foreign_queue, &frame.descriptor()?)
+            .is_err()
+    );
+    let wrong = gpui::content::ImageDescriptor::new(
+        gpui::content::ImageExtent::new(1, 1)?,
+        gpui::content::PixelFormat::Bgra8,
+        frame.descriptor()?.interpretation(),
+        1,
+    )?;
+    assert!(
+        frame
+            .validate_external(&host.device, &host.queue, &wrong)
+            .is_err()
+    );
     renderer.render_scene(&scene, size(DevicePixels(160), DevicePixels(64)))?;
     drop(scene);
     drop(frame); // Retire all producer snapshots while sampling is queued.
@@ -539,21 +575,60 @@ fn dma_buf_native_generated_snapshot() -> Result<()> {
     })?;
     renderer.render_scene_to_image(&Scene::default(), size(DevicePixels(16), DevicePixels(16)))?;
 
-    // Preparation may submit its raw ownership barrier before a later render
-    // failure. Its completion guard must protect the texture with no scene left.
+    // Failure after import must preserve the raw barrier's native texture until
+    // its submission retires, even with no dependent tracked sampling.
     let (exporter, transient) = generate(&host)?;
     drop(exporter);
-    let preparation = WgpuCustomContext::new(host.device.clone(), &host.queue);
-    let output = transient.prepare(&preparation, transient.size())?;
-    preparation.submit()?;
-    drop(output);
-    drop(preparation);
+    let weak = Arc::downgrade(&transient.0);
+    let graph = import_graph(
+        &executor,
+        gpui::content::Content::new(CopySource(gpui::content::Content::external(
+            transient.external_image()?,
+        ))),
+    );
+    let mut limits = crate::content_executor::WgpuContentLimits::default();
+    limits.fail_before_node = Some(1);
+    let job = executor.submit(graph, limits)?;
     drop(transient);
+    assert_eq!(
+        job.wait_for_readback(std::time::Duration::from_secs(10))
+            .unwrap_err()
+            .kind,
+        gpui::content::ContentErrorKind::ExecutionFailure
+    );
     host.device.poll(wgpu::PollType::Wait {
         submission_index: None,
         timeout: Some(std::time::Duration::from_secs(10)),
     })?;
-    renderer.render_scene_to_image(&Scene::default(), size(DevicePixels(16), DevicePixels(16)))?;
+    assert!(weak.upgrade().is_none());
+
+    let (exporter, paused) = generate(&host)?;
+    drop(exporter);
+    let weak = Arc::downgrade(&paused.0);
+    let gate = Arc::new(crate::content_executor::WgpuContentTestGate::default());
+    let graph = import_graph(
+        &executor,
+        gpui::content::Content::new(CopySource(gpui::content::Content::external(
+            paused.external_image()?,
+        ))),
+    );
+    let mut limits = crate::content_executor::WgpuContentLimits::default();
+    limits.pause_before_node = Some((1, gate.clone()));
+    let job = executor.submit(graph, limits)?;
+    drop(paused);
+    assert!(gate.wait_until_entered(std::time::Duration::from_secs(10)));
+    assert!(weak.upgrade().is_some());
+    drop(job);
+    gate.release();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while weak.upgrade().is_some() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "cancelled import did not retire"
+        );
+        host.device.poll(wgpu::PollType::Poll)?;
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
     drop(renderer);
     host.device.poll(wgpu::PollType::Wait {
         submission_index: None,
@@ -565,4 +640,52 @@ fn dma_buf_native_generated_snapshot() -> Result<()> {
         png.display()
     );
     Ok(())
+}
+
+fn import_graph(
+    executor: &crate::content_executor::WgpuContentExecutor,
+    content: gpui::content::Content,
+) -> Arc<gpui::content::ContentGraph> {
+    use gpui::content::*;
+    Arc::new(
+        ContentGraph::describe(
+            &[ContentRoot {
+                content,
+                request: ContentRequest::new(
+                    size(gpui::px(64.), gpui::px(32.)),
+                    ImageExtent::new(64, 32).unwrap(),
+                    1.,
+                )
+                .unwrap(),
+            }],
+            executor.capabilities().clone(),
+            GraphLimits::default(),
+        )
+        .unwrap(),
+    )
+}
+#[derive(Debug)]
+struct CopySource(gpui::content::Content);
+impl gpui::content::ContentSource for CopySource {
+    fn describe(
+        &self,
+        cx: &mut gpui::content::ContentBuilder,
+        request: &gpui::content::ContentRequest,
+    ) -> std::result::Result<gpui::content::ImageRef, gpui::content::ContentError> {
+        let source = cx.source(&self.0, request)?;
+        cx.copy_image(source)
+    }
+}
+fn ready(renderer: &mut crate::WgpuHeadlessRenderer, scene: &Scene) -> Result<()> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        match renderer.prepare_content_snapshot(scene) {
+            Ok(()) => return Ok(()),
+            Err(e) if std::time::Instant::now() < deadline => {
+                let _ = e;
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            Err(e) => return Err(e),
+        }
+    }
 }

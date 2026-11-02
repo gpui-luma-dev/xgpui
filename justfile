@@ -104,3 +104,8 @@ lab-build *args:
 # Run unit and compatibility tests; native window tests remain opt-in.
 lab-test *args:
     cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bins --test compatibility --target-dir target "$@"
+
+# Linux Vulkan DMA-BUF portable import/presentation and retirement; no window.
+[linux]
+media-dma-buf-test:
+    WGPU_BACKEND=vulkan WGPU_DEBUG=1 WGPU_VALIDATION=1 VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation cargo test {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --test portable-imports native::dma_buf_native_generated_snapshot -- --ignored --exact --nocapture --test-threads=1
