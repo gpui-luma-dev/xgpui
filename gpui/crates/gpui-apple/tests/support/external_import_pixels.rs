@@ -54,11 +54,6 @@ fn bgra_import_is_source_sized_without_upload_or_new_image_storage() {
         .unwrap();
     assert_eq!(frame.stats.external_imports, 1);
     assert_eq!(frame.stats.image_allocations, 0);
-    assert_eq!(
-        native.import_count(),
-        0,
-        "portable executor must not populate the native producer cache"
-    );
     // Direct storage readback stays BGRA; compositor presentation swizzles it.
     assert_eq!(&frame.images[0].levels[0][0..4], &[32, 64, 224, 255]);
 }
@@ -165,8 +160,11 @@ impl ContentSource for CopyExternal {
 }
 #[test]
 fn paused_dependent_copy_pins_external_lease_through_native_retirement() {
-    let native = test_frame(16, 8, 0).unwrap();
+    paused_copy(test_frame(16, 8, 0).unwrap());
+}
+fn paused_copy(native: gpui_apple::custom_draw::core_video::CoreVideoFrame) {
     let descriptor = native.external_image().unwrap().descriptor().clone();
+    let converted = usize::from(descriptor.format() == PixelFormat::Rgba16Float);
     let released = Arc::new(AtomicUsize::new(0));
     let count = released.clone();
     let external = ExternalImage::ready(descriptor, Arc::new(native), move || {
@@ -198,7 +196,8 @@ fn paused_dependent_copy_pins_external_lease_through_native_retirement() {
     gate.0.release();
     let frame = job.wait_for_readback(Duration::from_secs(10)).unwrap();
     assert_eq!(frame.stats.external_imports, 1);
-    assert_eq!(frame.stats.image_allocations, 1);
+    assert_eq!(frame.stats.image_allocations, 1 + converted);
+    assert_eq!(frame.stats.native_conversions, converted);
     let deadline = Instant::now() + Duration::from_secs(5);
     while released.load(Ordering::SeqCst) == 0 {
         assert!(Instant::now() < deadline);
@@ -356,4 +355,76 @@ fn pending_acquisition_defers_import_and_retries_the_same_scene() {
             .external_imports,
         1
     );
+}
+
+#[test]
+fn nv12_full_video_ranges_and_601_709_matrices_match_reference_and_cache_converter() {
+    use gpui_apple::custom_draw::core_video::{Nv12Matrix, test_nv12_frame};
+    let executor = MetalContentExecutor::new(MetalContentOptions::default()).unwrap();
+    for (index, (matrix, video_range)) in [
+        (Nv12Matrix::Bt601, false),
+        (Nv12Matrix::Bt601, true),
+        (Nv12Matrix::Bt709, false),
+        (Nv12Matrix::Bt709, true),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let native = test_nv12_frame(16, 8, 0, matrix, video_range).unwrap();
+        let image = native.external_image().unwrap();
+        assert_eq!(image.descriptor().format(), PixelFormat::Rgba16Float);
+        assert_eq!(image.descriptor().interpretation().alpha, AlphaMode::Opaque);
+        let graph = graph(&executor, Content::external(image));
+        let output = executor
+            .submit(graph, MetalContentLimits::default())
+            .unwrap()
+            .wait_for_readback(Duration::from_secs(10))
+            .unwrap();
+        assert_eq!(output.stats.native_conversions, 1);
+        assert_eq!(output.stats.external_imports, 1);
+        assert_eq!(output.stats.image_allocations, 1);
+        assert_eq!(
+            output.stats.native_conversion_compilations,
+            usize::from(index == 0),
+            "matrix/range changes must reuse the same fixed converter"
+        );
+        assert_eq!(
+            output.images[0].descriptor.extent(),
+            ImageExtent::new(16, 8).unwrap()
+        );
+        for (x, expected) in [
+            (1, [224_u8, 64, 32]),
+            (5, [64, 208, 64]),
+            (9, [32, 64, 224]),
+            (13, [224, 192, 96]),
+        ] {
+            let at = (16 + x) * 8;
+            let bytes = &output.images[0].levels[0];
+            let actual: [u8; 4] = std::array::from_fn(|channel| {
+                let index = at + channel * 2;
+                let bits = u16::from_le_bytes([bytes[index], bytes[index + 1]]);
+                let exponent = (bits >> 10) & 31;
+                let mantissa = bits & 1023;
+                let value = if exponent == 0 {
+                    mantissa as f32 * 2_f32.powi(-24)
+                } else {
+                    (1. + mantissa as f32 / 1024.) * 2_f32.powi(exponent as i32 - 15)
+                };
+                (value * 255.).round() as u8
+            });
+            assert!(
+                actual[..3]
+                    .iter()
+                    .zip(expected)
+                    .all(|(a, e)| a.abs_diff(e) <= 3),
+                "{matrix:?} video={video_range}: {actual:?} != {expected:?}"
+            );
+            assert_eq!(actual[3], 255);
+        }
+    }
+}
+#[test]
+fn paused_nv12_conversion_pins_both_planes_until_dependent_copy_retires() {
+    use gpui_apple::custom_draw::core_video::{Nv12Matrix, test_nv12_frame};
+    paused_copy(test_nv12_frame(16, 8, 0, Nv12Matrix::Bt709, true).unwrap());
 }

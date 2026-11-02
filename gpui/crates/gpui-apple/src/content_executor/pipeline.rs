@@ -359,3 +359,35 @@ pub(super) fn compile_byte_copy(device: &DeviceRef) -> Result<ComputePipelineSta
         .newComputePipelineStateWithFunction_error(&function)
         .map_err(|e| execution(format!("byte-copy pipeline: {e}")))
 }
+
+pub(super) fn compile_nv12(device: &DeviceRef) -> Result<RenderPipelineState> {
+    let source = r#"#include <metal_stdlib>
+using namespace metal;
+struct Nv12Vertex {float4 position [[position]];float2 uv;};
+vertex Nv12Vertex nv12_vertex(uint id [[vertex_id]]) {float2 uv=float2((id<<1)&2,id&2); return {float4(uv*float2(2.,-2.)+float2(-1.,1.),0.,1.),uv};}
+fragment float4 nv12_fragment(Nv12Vertex in [[stage_in]],texture2d<float> y [[texture(0)]],texture2d<float> uv [[texture(1)]],constant float4* rows [[buffer(0)]]) {
+    constexpr sampler s(coord::normalized,address::clamp_to_edge,filter::linear);
+    float4 v=float4(y.sample(s,in.uv).r,uv.sample(s,in.uv).rg,1.);
+    return float4(clamp(float3(dot(rows[0],v),dot(rows[1],v),dot(rows[2],v)),0.,1.),1.);
+}"#;
+    let library = device
+        .newLibraryWithSource_options_error(
+            &NSString::from_str(source),
+            Some(&CompileOptions::new()),
+        )
+        .map_err(|e| execution(format!("NV12 converter: {e}")))?;
+    let vertex = library
+        .newFunctionWithName(&NSString::from_str("nv12_vertex"))
+        .ok_or_else(|| execution("missing NV12 vertex"))?;
+    let fragment = library
+        .newFunctionWithName(&NSString::from_str("nv12_fragment"))
+        .ok_or_else(|| execution("missing NV12 fragment"))?;
+    let descriptor = RenderPipelineDescriptor::new();
+    descriptor.setVertexFunction(Some(&vertex));
+    descriptor.setFragmentFunction(Some(&fragment));
+    unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) }
+        .setPixelFormat(MTLPixelFormat::RGBA16Float);
+    device
+        .newRenderPipelineStateWithDescriptor_error(&descriptor)
+        .map_err(|e| execution(format!("NV12 conversion pipeline: {e}")))
+}

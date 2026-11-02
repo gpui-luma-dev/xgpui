@@ -861,8 +861,6 @@ impl MetalRenderer {
                     }
                     #[cfg(not(target_os = "macos"))]
                     anyhow::bail!("wide-gamut SDR presentation is unsupported")
-                } else if raw.is::<crate::custom_draw::MetalNv12Output>() {
-                    crate::custom_draw::CustomCompositor::validate_nv12(&context, raw)?
                 } else {
                     let output =
                         crate::custom_draw::CustomCompositor::validate(&context, draw, raw)?;
@@ -3077,7 +3075,15 @@ mod tests {
                     content_mask: ContentMask { bounds },
                     corner_radii: Default::default(),
                     opacity: 1.,
-                    content: frame.clone(),
+                    content: gpui::content::ContentDraw::new(gpui::content::Content::external(
+                        gpui::content::ExternalImage::ready(
+                            frame.external_image().unwrap().descriptor().clone(),
+                            frame.clone(),
+                            || {},
+                        ),
+                    ))
+                    .color_output(gpui::content::ContentColorOutput::SrgbPreview)
+                    .into_scene_content(),
                     coverage: None,
                 });
                 scene.finish();
@@ -3085,7 +3091,19 @@ mod tests {
                     MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
                 let extent = size(DevicePixels(32), DevicePixels(18));
                 let target = crate::custom_draw::texture(&renderer.device, extent).unwrap();
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+                while let Err(error) = renderer.prepare_content_snapshot(&scene) {
+                    assert!(
+                        error
+                            .downcast_ref::<gpui::content::ContentError>()
+                            .is_some_and(|e| e.kind == gpui::content::ContentErrorKind::Pending),
+                        "{error}"
+                    );
+                    assert!(std::time::Instant::now() < deadline);
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
                 let command = renderer.render_frame(&scene, &target, extent).unwrap();
+                drop(renderer);
                 drop(scene);
                 drop(frame);
                 assert!(

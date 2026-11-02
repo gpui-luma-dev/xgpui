@@ -143,6 +143,10 @@ pub struct MetalContentStats {
     pub external_imports: usize,
     /// Newly allocated graph output image storage (excludes imported views).
     pub image_allocations: usize,
+    /// Source-sized GPU NV12 conversions encoded.
+    pub native_conversions: usize,
+    /// Fixed NV12 conversion pipelines compiled for this worker on this request.
+    pub native_conversion_compilations: usize,
     /// Root readback command buffers committed.
     pub readbacks: usize,
     /// Largest count of submitted work not yet observed complete.
@@ -367,7 +371,8 @@ impl MetalContentExecutor {
 enum Resource {
     Image(Texture),
     ExternalImage {
-        import: crate::custom_draw::core_video::ExternalBgraImport,
+        texture: Texture,
+        import: crate::custom_draw::core_video::ExternalCoreVideoImport,
         _lease: c::ExternalImageLease,
     },
     Buffer(metal::Buffer),
@@ -381,7 +386,7 @@ impl Resource {
     fn image(&self) -> &TextureRef {
         match self {
             Self::Image(t) => t,
-            Self::ExternalImage { import, .. } => &import.texture,
+            Self::ExternalImage { texture, .. } => texture,
             _ => unreachable!(),
         }
     }
@@ -394,9 +399,7 @@ impl Resource {
     fn allocated_bytes(&self) -> u64 {
         match self {
             Self::Image(t) => MTLResource::allocatedSize(&**t) as u64,
-            Self::ExternalImage { import, .. } => {
-                MTLResource::allocatedSize(&*import.texture) as u64
-            }
+            Self::ExternalImage { texture, .. } => MTLResource::allocatedSize(&**texture) as u64,
             Self::Buffer(b) => MTLResource::allocatedSize(&**b) as u64,
         }
     }
@@ -408,6 +411,7 @@ struct Worker {
     options: MetalContentOptions,
     pipelines: HashMap<PipelineKey, std::rc::Rc<Pipeline>>,
     byte_copy: ComputePipelineState,
+    nv12_pipeline: Option<RenderPipelineState>,
     exported_bytes: Arc<std::sync::atomic::AtomicU64>,
 }
 impl Worker {
@@ -456,6 +460,7 @@ impl Worker {
             options,
             pipelines: HashMap::new(),
             byte_copy,
+            nv12_pipeline: None,
             exported_bytes,
         })
     }

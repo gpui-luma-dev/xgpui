@@ -345,7 +345,6 @@ fn wide_command_pending(status: MTLCommandBufferStatus) -> Result<bool> {
 // Internal presentation wrapper preserves the public MetalCustomOutput shape.
 pub(crate) struct PreparedMetalOutput {
     pub output: MetalCustomOutput,
-    nv12: Option<MetalNv12Output>,
     #[cfg(target_os = "macos")]
     pub(crate) gpu: Option<crate::content_executor::MetalGpuImage>,
     pub(crate) visible: bool,
@@ -357,7 +356,6 @@ impl From<MetalCustomOutput> for PreparedMetalOutput {
     fn from(output: MetalCustomOutput) -> Self {
         Self {
             output,
-            nv12: None,
             #[cfg(target_os = "macos")]
             gpu: None,
             visible: true,
@@ -383,7 +381,6 @@ impl PreparedMetalOutput {
                 texture,
                 commands: vec![],
             },
-            nv12: None,
             gpu: image,
             visible,
             mapping: None,
@@ -410,27 +407,6 @@ impl std::ops::Deref for PreparedMetalOutput {
         &self.output
     }
 }
-#[derive(Clone)]
-pub(crate) struct MetalNv12Output {
-    y: Texture,
-    uv: Texture,
-    rows: [[f32; 4]; 3],
-    queue: CommandQueue,
-}
-impl MetalNv12Output {
-    fn reusable_for(&self, context: &MetalCustomContext) -> Result<Self> {
-        ensure!(
-            self.queue.as_ptr() == context.queue.as_ptr(),
-            "NV12 output belongs to another queue"
-        );
-        ensure!(
-            self.y.device().registryID() == context.device.registryID()
-                && self.uv.device().registryID() == context.device.registryID(),
-            "NV12 planes belong to another device"
-        );
-        Ok(self.clone())
-    }
-}
 pub(crate) trait MetalSampleSource {
     fn color_transform(&self) -> Option<gpui::content::ImageColorTransform> {
         None
@@ -439,9 +415,6 @@ pub(crate) trait MetalSampleSource {
         None
     }
     fn color_texture(&self) -> &TextureRef;
-    fn nv12_planes(&self) -> Option<&MetalNv12Output> {
-        None
-    }
     fn interpretation(&self) -> Option<gpui::content::ImageInterpretation> {
         None
     }
@@ -469,9 +442,6 @@ impl MetalSampleSource for PreparedMetalOutput {
     }
     fn color_texture(&self) -> &TextureRef {
         &self.output.texture
-    }
-    fn nv12_planes(&self) -> Option<&MetalNv12Output> {
-        self.nv12.as_ref()
     }
 }
 
@@ -682,46 +652,6 @@ impl CustomCompositor {
         Ok(output)
     }
 
-    pub(crate) fn validate_nv12(
-        context: &MetalCustomContext,
-        raw: Box<dyn std::any::Any>,
-    ) -> Result<PreparedMetalOutput> {
-        let planes = *raw
-            .downcast::<MetalNv12Output>()
-            .map_err(|_| anyhow::anyhow!("expected native NV12 output"))?;
-        let planes = planes.reusable_for(context)?;
-        for (texture, format) in [
-            (&planes.y, MTLPixelFormat::R8Unorm),
-            (&planes.uv, MTLPixelFormat::RG8Unorm),
-        ] {
-            ensure!(
-                texture.pixelFormat() == format
-                    && texture.textureType() == MTLTextureType::Type2D
-                    && texture.sampleCount() == 1
-                    && texture.usage().contains(MTLTextureUsage::ShaderRead),
-                "invalid NV12 texture view"
-            );
-        }
-        ensure!(
-            planes.y.width() == planes.uv.width() * 2
-                && planes.y.height() == planes.uv.height() * 2,
-            "NV12 plane extents do not match"
-        );
-        Ok(PreparedMetalOutput {
-            output: MetalCustomOutput {
-                texture: planes.y.clone(),
-                commands: vec![],
-            },
-            nv12: Some(planes),
-            #[cfg(target_os = "macos")]
-            gpu: None,
-            visible: true,
-            mapping: None,
-            color_transform: None,
-            color_output: Default::default(),
-        })
-    }
-
     pub fn draw(
         &self,
         draw: &CustomDraw,
@@ -763,8 +693,8 @@ impl CustomCompositor {
             linear[3] = portable[0];
             linear[2] = portable[1];
         }
-        let planes = output.nv12_planes();
-        let yuv = planes.map(|p| p.rows).unwrap_or([[0.; 4]; 3]);
+        // Reserved slots keep the shared compositor uniform layout stable.
+        let reserved = [[0.; 4]; 3];
         let mut mapped = output.mapping().unwrap_or_default().shader_uniforms();
         if output.mapping().is_none() {
             mapped[3][0] = -1.;
@@ -801,16 +731,14 @@ impl CustomCompositor {
                 viewport.width.0 as f32,
                 viewport.height.0 as f32,
                 draw.opacity * draw.content.image_sample_opacity().clamp(0., 1.),
-                (if coverage.is_some() { 1. } else { 0. })
-                    + (if native_source { 2. } else { 0. })
-                    + (if planes.is_some() { 4. } else { 0. }),
+                (if coverage.is_some() { 1. } else { 0. }) + (if native_source { 2. } else { 0. }),
             ],
             transform[0],
             transform[1],
             transform[2],
-            yuv[0],
-            yuv[1],
-            yuv[2],
+            reserved[0],
+            reserved[1],
+            reserved[2],
             vignette,
             linear,
             mapped[0],
@@ -847,16 +775,6 @@ impl CustomCompositor {
         };
         unsafe { encoder.setFragmentTexture_atIndex(Some(output.color_texture()), 0) };
         unsafe { encoder.setFragmentTexture_atIndex(coverage.or(Some(output.color_texture())), 1) };
-        unsafe {
-            encoder.setFragmentTexture_atIndex(
-                Some(
-                    planes
-                        .map(|p| p.uv.as_ref())
-                        .unwrap_or(output.color_texture()),
-                ),
-                2,
-            )
-        };
         unsafe { encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6) };
     }
 }

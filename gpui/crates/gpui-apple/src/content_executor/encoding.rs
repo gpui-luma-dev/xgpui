@@ -84,6 +84,7 @@ impl Worker {
                 )
             })?;
         // Reject incompatible imports before pipeline compilation or submission.
+        let mut needs_nv12 = false;
         for node in graph.nodes() {
             if let c::ContentOperation::ExternalImage(image) = node.operation() {
                 let lease = image.acquire()?;
@@ -96,12 +97,17 @@ impl Worker {
                         )
                     })?;
                 frame.validate_external_descriptor(image.descriptor())?;
+                needs_nv12 |= frame.is_nv12();
             }
         }
         let mut stats = MetalContentStats {
             worker_thread: std::thread::current().name().map(str::to_owned),
             ..Default::default()
         };
+        if needs_nv12 && self.nv12_pipeline.is_none() {
+            self.nv12_pipeline = Some(compile_nv12(&self.device)?);
+            stats.native_conversion_compilations = 1;
+        }
         let mut pipelines = Vec::new();
         let mut variants = HashSet::new();
         for node in graph.nodes() {
@@ -148,6 +154,15 @@ impl Worker {
                 }
             }
             match node.operation() {
+                c::ContentOperation::ExternalImage(image) => {
+                    if image
+                        .acquire()?
+                        .backing::<crate::custom_draw::core_video::CoreVideoFrame>()
+                        .is_some_and(|f| f.is_nv12())
+                    {
+                        usages[id][0] |= MTLTextureUsage::RenderTarget;
+                    }
+                }
                 c::ContentOperation::Solid(_) | c::ContentOperation::Render(_) => {
                     usages[id][0] |= MTLTextureUsage::RenderTarget
                 }
@@ -480,9 +495,21 @@ impl Run<'_> {
                         )
                     })?;
                 let imported = frame
-                    .import_external_bgra(&self.worker.device)
+                    .import_external(&self.worker.device)
                     .map_err(|e| execution(e.to_string()))?;
+                let texture = if imported.rows.is_some() {
+                    let c::ResourceDescriptor::Image(d) = d else {
+                        unreachable!()
+                    };
+                    self.worker
+                        .device
+                        .newTextureWithDescriptor(&texture_descriptor(d, self.usages[id][output]))
+                        .ok_or_else(|| allocation("allocate source-sized NV12 conversion target"))?
+                } else {
+                    imported.texture.clone()
+                };
                 Arc::new(Resource::ExternalImage {
+                    texture,
                     import: imported,
                     _lease: lease,
                 })
@@ -670,6 +697,10 @@ impl Run<'_> {
             c::ContentOperation::ExternalImage(_)
         ) {
             self.stats.external_imports += 1;
+            if matches!(&*prepared.outputs[0],Resource::ExternalImage{import,..} if import.rows.is_some())
+            {
+                self.stats.image_allocations += 1;
+            }
         } else {
             self.stats.image_allocations += self.graph.nodes()[id]
                 .outputs()
@@ -695,9 +726,25 @@ impl Run<'_> {
                 prepared.outputs[0].image(),
                 color.rgba().map(f64::from),
             )?,
-            c::ContentOperation::ExternalImage(_)
-            | c::ContentOperation::UploadBuffer(_)
-            | c::ContentOperation::ZeroBuffer => {} // Fully initialized before publication.
+            c::ContentOperation::ExternalImage(_) => {
+                if let Resource::ExternalImage {
+                    texture, import, ..
+                } = &*prepared.outputs[0]
+                {
+                    if let Some(rows) = import.rows {
+                        convert_nv12(
+                            &command,
+                            self.worker.nv12_pipeline.as_ref().unwrap(),
+                            texture,
+                            &import.texture,
+                            import.chroma.as_ref().unwrap(),
+                            rows,
+                        )?;
+                        self.stats.native_conversions += 1;
+                    }
+                }
+            }
+            c::ContentOperation::UploadBuffer(_) | c::ContentOperation::ZeroBuffer => {} // Fully initialized before publication.
             c::ContentOperation::UploadImage(_) => {
                 let c::ResourceDescriptor::Image(d) = &node.outputs()[0] else {
                     unreachable!()
@@ -1219,6 +1266,45 @@ fn upload_image(
         unsafe {
             encoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_options(staging, mip.offset, mip.row, mip.row * mip.height, MTLSize { width: mip.width, height: mip.height, depth: 1 }, target, 0, level, MTLOrigin { x: 0, y: 0, z: 0 }, MTLBlitOption::empty());
         }
+    }
+    encoder.endEncoding();
+    Ok(())
+}
+
+fn convert_nv12(
+    command: &CommandBufferRef,
+    pipeline: &RenderPipelineStateRef,
+    output: &TextureRef,
+    y: &TextureRef,
+    uv: &TextureRef,
+    rows: [[f32; 4]; 3],
+) -> Result<()> {
+    let descriptor = RenderPassDescriptor::new();
+    let attachment = unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) };
+    attachment.setTexture(Some(output));
+    attachment.setLoadAction(MTLLoadAction::DontCare);
+    attachment.setStoreAction(MTLStoreAction::Store);
+    let encoder = command
+        .renderCommandEncoderWithDescriptor(&descriptor)
+        .ok_or_else(|| allocation("NV12 conversion encoder"))?;
+    encoder.setRenderPipelineState(pipeline);
+    encoder.setViewport(MTLViewport {
+        originX: 0.,
+        originY: 0.,
+        width: output.width() as f64,
+        height: output.height() as f64,
+        znear: 0.,
+        zfar: 1.,
+    });
+    unsafe {
+        encoder.setFragmentTexture_atIndex(Some(y), 0);
+        encoder.setFragmentTexture_atIndex(Some(uv), 1);
+        encoder.setFragmentBytes_length_atIndex(
+            NonNull::new(rows.as_ptr() as *mut std::ffi::c_void).unwrap(),
+            std::mem::size_of_val(&rows),
+            0,
+        );
+        encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 3);
     }
     encoder.endEncoding();
     Ok(())

@@ -159,7 +159,7 @@ use xgpui_media::{VideoStream, video};
 
 let (sender, stream) = VideoStream::channel();
 // Keep stream in the view; give sender to your frame producer.
-let preview = video(stream.clone()).w(px(640.)).h(px(360.));
+let preview = video("preview", stream.clone()).w(px(640.)).h(px(360.));
 ```
 
 ```rust,ignore
@@ -362,7 +362,7 @@ follow-up work outside the GPU surface scope.
 use xgpui_media::{VideoStream, VideoFrame, video};
 let (sender, stream) = VideoStream::channel();
 // Retain stream in your view and move sender to your frame producer.
-let viewport = video(stream.clone()).w(px(640.)).h(px(360.)).rounded(px(16.));
+let viewport = video("preview", stream.clone()).w(px(640.)).h(px(360.)).rounded(px(16.));
 // Producer: sender.publish(frame)?;
 // UI controls: stream.set_playing(false); cx.notify();
 // Resume selects the newest pending frame, rather than playing old frames.
@@ -370,15 +370,17 @@ let viewport = video(stream.clone()).w(px(640.)).h(px(360.)).rounded(px(16.));
 
 The live element requests animation frames while visible, playing and open. Paused,
 closed, empty, fully clipped and zero-opacity viewports request none. The host must
-notify its view after changing presentation state; paused/closed elements do not
-subscribe to background wakeups. Closing/dropping the sender retains the final
+notify its view after changing presentation state. Renderer completion can still
+schedule a final paced redraw while the producer is paused or closed. Closing/dropping the sender retains the final
 frame. Dropping the last stream consumer closes admission and releases channel-held
 snapshots. `snapshot()` observes pending content when playing; `stats()` reports
 published, superseded-before-observation, observed, pending, closed and playing
 state. Observed counts are host snapshots, not GPU completion or presentation
 fences. Multiple stream clones share pause/display state. For consistent duplicate
-placements, capture once in your render and use `video_frame(snapshot.clone())` in
-each viewport. `video_frame` itself does not request redraws.
+placements, capture once in your render and use `video_frame("preview", snapshot.clone())` in
+each viewport, using a distinct stable ID per placement. IDs persist across frame
+replacement and keep independent last-ready presentation slots. `video_frame`
+does not poll the producer; pending GPU completion can request a redraw.
 
 ### macOS BGRA / IOSurface import
 
@@ -403,7 +405,7 @@ proved by a retained reference alone. Premultiplied alpha, orientation transform
 HDR metadata/color management and transfer conversion remain pending. The new
 element also supports explicit SDR NV12 conversion as described below.
 
-### macOS NV12 — direct two-plane sampling
+### macOS NV12 — portable GPU conversion
 
 ```rust,ignore
 use xgpui_media::{CoreVideoFrame, Nv12Matrix, VideoFrame};
@@ -421,22 +423,29 @@ producer and centered chroma. Other chroma locations, 10-bit/P010, BT.2020 and H
 are outside this API. Matrix conversion preserves the source encoded RGB transfer;
 it does not perform [transfer-function ↗](https://en.wikipedia.org/wiki/Transfer_functions_in_imaging), [gamut ↗](https://en.wikipedia.org/wiki/Gamut), primaries or HDR color management.
 
-CoreVideo imports R8 luma and RG8 chroma texture views. The same compositor
-fragment samples both planes and converts YCbCr to encoded SDR RGB before the
-normal image color transform, opacity, clipping and rounded coverage. Conversion
-adds no image staging upload, CPU readback, offscreen conversion target or extra
-render pass. Source planes, CoreVideo wrappers and the immutable producer remain
-retained through GPU completion. Resize and duplicate placements reuse the same
-queue import. The public `MetalCustomOutput` fields and generic producer format
-contract are unchanged; native NV12 uses a separate checked internal output.
+CoreVideo imports R8 luma and RG8 chroma views on the portable Metal worker. A
+cached fullscreen converter applies the explicit matrix/range into one source-sized
+RGBA16Float texture containing encoded sRGB with opaque alpha. Half-float storage
+avoids an 8-bit RGB quantization step before adjustments. This is SDR conversion,
+not HDR or linear-P3 interpretation. The converter is shared across matrix/range
+changes and runs once per realized immutable frame, independent of placement size.
+It adds one GPU conversion pass, no CPU pixel upload/readback and no display-sized
+copy. BGRA remains a direct imported view without a conversion allocation.
+
+Portable color transforms, mapping, coverage and opacity apply during presentation.
+The conversion output is charged to the executor budget; input plane ownership
+remains with the producer lease. Views, cache and backing survive native conversion
+and sampling completion, cancellation and submitted-prefix failure. CoreVideo's
+old native CustomContent preparation, producer cache and compositor-side NV12
+output path are removed. Adjustments and resize reuse the imported/converted source.
 
 Release captures with Metal API validation check BGRA and all four NV12 matrix /
 range combinations. Every mode checks all four color bars, clipping, rounded
 coverage, opacity and source reuse after resize. Fixed quantized midtone vectors
 and neutral black/white endpoints check conversion coefficients/ranges separately
 from the fixture generator. Native lifetime tests cover BGRA and all four NV12
-combinations through sampling completion. The release UI has been exercised for
-format cycling, pause/resume, replacement bursts, opacity, corners, stop and restart.
+combinations through sampling completion. Test the portable GUI for format
+cycling, pause/resume, replacement bursts, opacity, corners, stop and restart.
 
 The existing `paint_surface` path now also accepts BGRA, while its NV12 full-range
 behavior remains covered by a regression. Unsupported formats return an error
@@ -444,12 +453,13 @@ instead of triggering the previous format assertion; error paths end active Meta
 encoders cleanly. Legacy `PaintSurface` fields and `paint_surface` signatures are
 unchanged. Use the new styled element for rounded corners and inherited opacity.
 
-`VideoFrame::new` is an advanced adapter for existing custom producers that return
-source-sized backend outputs. It does not implement DXGI or DMA-BUF import. The
-video lab currently requires macOS Metal. A Windows native constructor is described
-below. Linux has an initial Vulkan DMA-BUF snapshot adapter described below;
-full synchronization/import negotiation remains pending. Windows cross-compilation covers the portable API and initial
-BGRA adapter; the interactive synthetic source remains macOS-only.
+`VideoFrame::new(size, timestamp, portable_content)` now accepts a `Content` or
+configured `ContentDraw`, not an opaque native producer. It uses a fixed natural
+source request and rejects output extents that differ from the declared frame
+size. `VideoFrame::external(image, timestamp)` uses the imported descriptor's size.
+CoreVideo convenience construction remains backend-independent for video callers.
+DXGI and DMA-BUF retain their current forwarding paths until their executor
+integration is complete; Windows/Linux native runtime QA remains outstanding.
 
 ### Native video lab
 
@@ -673,14 +683,14 @@ omit it on a first setup that needs downloads.
 cargo test --release --offline --locked --manifest-path extensions/crates/xgpui-media/Cargo.toml --features wgpu --lib
 ```
 
-On macOS with wgpu enabled this runs 85 tests, including native Metal and wgpu
+On macOS with wgpu enabled this runs 87 tests, including native Metal and wgpu
 pixel checks. Coverage includes loading budgets, cancellation, pixel metadata,
 mips, clipping, opacity, portable upload reuse, CPU-reference color adjustments,
 wide output, tiled halo seams, fractional camera geometry, atomic refinement and
 page leases retained by graphs. Four tests for the deleted producer staging API
 and its private scheduler test were removed with that implementation. Portable
 executor admission/completion tests remain in the backend crates.
-Expected result: `85 passed; 0 failed`. These tests do not open a window.
+Expected result: `87 passed; 0 failed`. These tests do not open a window.
 
 For only CPU loading/mipmap tests, use these filters:
 

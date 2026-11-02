@@ -1930,3 +1930,57 @@ this checkpoint does not add native Windows/Linux import execution.
 Next: native NV12 plane conversion and VideoFrame/VideoView migration to portable
 draws and color transforms, followed by native DXGI/DMA-BUF execution. Existing
 video app behavior remains unchanged until that migration is complete.
+
+
+### Portable NV12 conversion and video checkpoint
+
+The Metal external-image adapter now accepts CoreVideo BGRA and all four supported
+SDR NV12 combinations (BT.601/709, full/video range). NV12 imports R8 and RG8 views
+and runs one source-sized GPU conversion into RGBA16Float encoded sRGB, opaque
+alpha. The half-float output preserves conversion precision before linear
+adjustments; it is not mislabeled linear P3 or HDR. One fixed lazy pipeline per
+worker uses matrix/range uniform rows, so changing the intrinsic conversion does
+not compile another pipeline. BGRA continues to alias its native view directly.
+Output storage is charged at its actual allocation size; input planes remain
+producer-owned and leased. Native conversion and compilation counters distinguish
+conversion work from new image allocation and ordinary producer readback.
+
+CoreVideoFrame no longer implements CustomContent or caches queue-specific
+outputs. Its old compositor NV12 wrapper, validation and sampling branch are
+removed. Native views/caches and the producer lease are owned by the executor
+resource and survive conversion, dependent commands and presentation sampling.
+A native teardown test verifies that an unsubmitted sampling command retains
+BGRA and all four NV12 snapshots even after scene and renderer destruction, and
+releases them after GPU completion.
+
+VideoFrame::new now accepts portable Content/ContentDraw, with a fixed natural
+source request and descriptor-extent validation. VideoFrame::external derives
+size from a portable imported descriptor. CoreVideo convenience construction uses
+that path for BGRA and NV12. Adjusted clones replace the portable placement
+transform and preserve source identity, size and timestamp; no import/conversion
+restarts on parameter edits or resize. DXGI/DMA-BUF still use the internal native
+forwarder until their executors are implemented; this is explicitly remaining
+migration work, not a compatibility layer for CoreVideo.
+
+`video(id, stream)` and `video_frame(id, frame)` require distinct stable placement
+IDs. Element state allocates a persistent PresentationSlotId per placement, so
+asynchronous new frames retain the last-ready image independently in cloned
+viewports. The bounded mailbox still stores one pending and one CPU-observed
+frame. Its observed/displayed counter is not a GPU presentation acknowledgement.
+Paused/closed elements stop polling; outstanding GPU completion may still request
+a paced redraw. The lab uses stable primary/reference IDs and strict readiness
+before headless capture.
+
+Validation includes nine native import/conversion/retirement tests, fixed range
+vectors, both working-color adjustment modes, all five release capture formats,
+and CPU tests for source-size validation and shared frame identity. The macOS
+video GUI now exercises the portable path. Native Windows/Linux adapter execution
+remains subsequent work.
+
+Final checkpoint validation: all 87 media tests and nine native import tests pass
+with Metal API validation. Five release video captures pass their RGB/range/matrix,
+clipping, rounded coverage, opacity and resize assertions. The native sampling
+retirement test passes after dropping scene and renderer before committing the
+sampling command. Normal locked media and import-test builds have no warnings;
+Windows media/test and browser Wasm checks pass. The visible GUI starts without a prepaint panic; interactive format/control
+acceptance remains a user check.

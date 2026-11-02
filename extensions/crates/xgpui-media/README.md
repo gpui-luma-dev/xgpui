@@ -110,12 +110,14 @@ animated-image playback are not included.
 
 ## Video frame presentation
 
-`video(VideoStream)` displays the latest bounded frame; `video_frame` paints an
-immutable snapshot. The stream provides neither a decoder nor a playback clock.
+`video("preview", stream)` displays the latest bounded frame;
+`video_frame("preview", frame)` paints an immutable snapshot. Supply distinct,
+stable IDs for separate placements so pending GPU work retains their previous
+valid frames independently. The stream provides neither a decoder nor a playback clock.
 
 | Native adapter | Frame contract |
 | --- | --- |
-| macOS `CoreVideoFrame` | BGRA IOSurface or opaque NV12, with explicit matrix/range handling. |
+| macOS `CoreVideoFrame` | Portable BGRA import or source-sized GPU NV12 conversion, with explicit matrix/range handling. |
 | Windows `DxgiFrame` | Immutable same-device BGRA surfaces; keyed handles use nonblocking read leases. |
 | Linux `DmaBufFrame` | Immutable linear BGRA Vulkan snapshots with producer synchronization complete. |
 
@@ -220,3 +222,12 @@ let source = xgpui_media::pipeline::PixelColor::Custom {
 };
 let job = loader.load_pixel_buffer(width, height, pixels, source, storage, mapping)?;
 ```
+
+
+CoreVideo and `VideoFrame::new(size, timestamp, portable_content)` now use portable
+content and placement transforms. Generic frames are described at the declared
+source size and reject mismatched output extents. `VideoFrame::external` accepts
+a portable imported image. CoreVideo no longer implements native `CustomContent`
+preparation or owns queue/output caches. NV12 converts into encoded-sRGB half-float
+storage to preserve precision before adjustments, without CPU pixel readback.
+DXGI/DMA-BUF forwarding remains until their native executors are migrated.

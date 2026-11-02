@@ -20,7 +20,7 @@ float3 srgb_to_p3(float3 c) {
 float3 rec2020_to_p3(float3 c) {
     return float3(dot(c,float3(1.343578253,-0.282179671,-0.061398582)),dot(c,float3(-0.065297453,1.075787916,-0.010490463)),dot(c,float3(0.002821787,-0.019598495,1.016776707)));
 }
-fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buffer(0)]], texture2d<float> image [[texture(0)]], texture2d<float> mask [[texture(1)]], texture2d<float> chroma [[texture(2)]], sampler image_sampler [[sampler(0)]]) {
+fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buffer(0)]], texture2d<float> image [[texture(0)]], texture2d<float> mask [[texture(1)]], sampler image_sampler [[sampler(0)]]) {
     float2 xy = in.position.xy;
     if (any(xy < p.mask.xy) || any(xy >= p.mask.xy + p.mask.zw)) discard_fragment();
     float2 local = in.uv * p.bounds.zw;
@@ -35,10 +35,7 @@ fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buf
     float2 mapped = (in.uv - p.placement.xy) / p.placement.zw;
     float2 raw_uv = p.source_uv.xy + mapped * p.source_uv.zw;
     float4 color;
-    if (p.viewport.w >= 4.0) {
-        float4 yuv = float4(image.sample(s, in.uv).r, chroma.sample(s, in.uv).rg, 1.0);
-        color = float4(clamp(float3(dot(p.yuv_r, yuv), dot(p.yuv_g, yuv), dot(p.yuv_b, yuv)), 0.0, 1.0), 1.0);
-    } else {
+    {
         float2 dx = dfdx(raw_uv), dy = dfdy(raw_uv);
         float2 lo = p.source_clamp.xy, hi = p.source_clamp.zw;
         if (p.sampling.x > 0.5) {

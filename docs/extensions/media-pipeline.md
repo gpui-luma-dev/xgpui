@@ -568,10 +568,10 @@ Existing immutable native video frames accept the same linear adjustments:
 use xgpui_media::{video_frame, VideoFrame};
 // `frame` is an application-supplied immutable native snapshot.
 let adjusted = frame.adjusted(adjustments);
-let view = video_frame(frame)
+let view = video_frame("preview", frame)
     .adjustments(adjustments)
     .blur(blur.clone());
-// Or use video(stream).adjustments(adjustments).blur(blur.clone()).
+// Or use video("preview", stream).adjustments(adjustments).blur(blur.clone()).
 ```
 
 `VideoFrame::adjusted` preserves size, timestamp and underlying allocation

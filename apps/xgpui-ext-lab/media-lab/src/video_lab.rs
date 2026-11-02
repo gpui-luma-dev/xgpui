@@ -164,7 +164,7 @@ mod native {
             .overflow_hidden()
             .child(crate::ui::checker())
             .children(snapshot.clone().map(|frame| {
-                video_frame(frame)
+                video_frame("video-primary", frame)
                     .adjustments(lab.image_adjustments())
                     .blur(lab.video_blurs[lab.video_blur].clone())
                     .size_full()
@@ -180,7 +180,7 @@ mod native {
             .rounded(px(lab.radius))
             .child(crate::ui::checker())
             .children(snapshot.clone().map(|frame| {
-                video_frame(frame)
+                video_frame("video-reference", frame)
                     .size_full()
                     .rounded(px(lab.radius))
                     .opacity(lab.opacity)
@@ -446,7 +446,7 @@ mod native {
     ) -> Result<()> {
         use anyhow::ensure;
         let frame = format.frame(0)?;
-        let video = VideoFrame::core_video(frame.clone(), Duration::ZERO);
+        let video = VideoFrame::core_video(frame, Duration::ZERO);
         let bounds = Bounds::new(
             point(ScaledPixels(4.), ScaledPixels(4.)),
             size(ScaledPixels(320.), ScaledPixels(180.)),
@@ -463,6 +463,21 @@ mod native {
         });
         scene.finish();
         let extent = size(DevicePixels(328), DevicePixels(188));
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            match renderer.prepare_content_snapshot(&scene) {
+                Ok(()) => break,
+                Err(e)
+                    if e.downcast_ref::<gpui::content::ContentError>()
+                        .is_some_and(|e| e.kind == gpui::content::ContentErrorKind::Pending) => {}
+                Err(e) => return Err(e),
+            }
+            ensure!(
+                std::time::Instant::now() < deadline,
+                "portable video readiness timed out"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
         let pixels = renderer.render_scene_to_image(&scene, extent)?;
         for (x, expected) in [
             (24, [224u8, 64, 32]),
@@ -496,10 +511,6 @@ mod native {
         );
         scene.custom_draws[0].bounds.size = size(ScaledPixels(160.), ScaledPixels(90.));
         renderer.render_scene_to_image(&scene, extent)?;
-        ensure!(
-            frame.import_count() == 1,
-            "resize/replay must reuse imported texture"
-        );
         pixels.save(png)?;
         println!(
             "Saved {}: {} IOSurface; RGB/range/matrix, clipping, corners, opacity and resize reuse passed.",

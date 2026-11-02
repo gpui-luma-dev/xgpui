@@ -130,10 +130,16 @@ fn image_scene(image: &MediaImage, side: f32, clipped: bool) -> Scene {
     scene.finish();
     scene
 }
-// The remaining page staging contract is tested separately from portable images.
 fn render_ready(
     renderer: &mut dyn PlatformHeadlessRenderer,
     _image: &MediaImage,
+    scene: &Scene,
+    extent: Size<DevicePixels>,
+) -> Result<image::RgbaImage> {
+    render_scene_ready(renderer, scene, extent)
+}
+fn render_scene_ready(
+    renderer: &mut dyn PlatformHeadlessRenderer,
     scene: &Scene,
     extent: Size<DevicePixels>,
 ) -> Result<image::RgbaImage> {
@@ -563,7 +569,16 @@ fn native_surface_adjustments_follow_conversion_preserve_identity_and_import_onc
         });
         scene.finish();
         let extent = size(DevicePixels(320), DevicePixels(180));
-        let baseline = renderer.render_scene_to_image(&scene, extent)?;
+        let baseline = render_scene_ready(&mut renderer, &scene, extent)?;
+        let requests = renderer.content_presentation_stats().requests;
+        assert_eq!(
+            renderer
+                .content_presentation_stats()
+                .execution
+                .native_conversions,
+            usize::from(format > 0)
+        );
+        assert_eq!(renderer.content_presentation_stats().execution.readbacks, 0);
         for working in [ImagePrimaries::Srgb, ImagePrimaries::DisplayP3] {
             for ev in [-1., 0., 1.] {
                 let matrix = ColorMatrix::identity(working)
@@ -575,7 +590,7 @@ fn native_surface_adjustments_follow_conversion_preserve_identity_and_import_onc
                 assert_eq!(adjusted.size(), video.size());
                 scene.custom_draws[0].content = adjusted.content();
                 scene.custom_draws[0].opacity = 0.65;
-                let pixels = renderer.render_scene_to_image(&scene, extent)?;
+                let pixels = render_scene_ready(&mut renderer, &scene, extent)?;
                 for (x, y) in [(24, 24), (104, 24), (184, 24), (264, 24), (160, 100)] {
                     let input = baseline.get_pixel(x, y).0.map(|c| f64::from(c) / 255.);
                     let expected = vignette
@@ -596,9 +611,9 @@ fn native_surface_adjustments_follow_conversion_preserve_identity_and_import_onc
             }
         }
         assert_eq!(
-            native.import_count(),
-            1,
-            "adjustment edits must reuse native imports"
+            renderer.content_presentation_stats().requests,
+            requests,
+            "adjustment edits must reuse the same imported/converted frame"
         );
     }
     Ok(())

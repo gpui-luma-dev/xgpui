@@ -1,12 +1,9 @@
-//! IOSurface-backed BGRA and NV12 snapshots sampled by the host compositor.
+//! Immutable IOSurface BGRA/NV12 snapshots imported by the portable Metal executor.
 use super::*;
 use anyhow::Context as _;
 use objc2_core_foundation::CFRetained;
 use objc2_core_video::*;
-use std::{
-    ptr,
-    sync::{Arc, Mutex},
-};
+use std::{ptr, sync::Arc};
 
 /// Explicit SDR YCbCr coefficients. Range comes from the CoreVideo pixel format.
 /// Chroma is sampled at normalized centered coordinates; no HDR/transfer mapping.
@@ -55,33 +52,13 @@ enum Format {
         video_range: bool,
     },
 }
-enum Output {
-    Bgra(MetalImageOutput),
-    Nv12(MetalNv12Output),
-}
-impl Output {
-    fn reusable(&self, context: &MetalCustomContext) -> Result<Box<dyn std::any::Any>> {
-        match self {
-            Self::Bgra(output) => Ok(Box::new(output.reusable_for(context)?)),
-            Self::Nv12(output) => Ok(Box::new(output.reusable_for(context)?)),
-        }
-    }
-}
-struct Cached {
-    // Fields drop in declaration order. Release Metal handles and CoreVideo
-    // views before their cache: view finalization calls back into that cache.
-    output: Output,
-    _views: Vec<CFRetained<CVMetalTexture>>,
-    _cache: CFRetained<CVMetalTextureCache>,
-}
 struct Inner {
     buffer: CFRetained<CVPixelBuffer>,
     size: Size<DevicePixels>,
     format: Format,
-    outputs: Mutex<Vec<(u64, Cached)>>,
 }
 // SAFETY: construction requires immutable, synchronized pixels and attachments.
-// Native retains are thread-safe; import mutation is serialized. The renderer
+// Native retains are thread-safe; native imports are worker-owned. The renderer
 // retains the producer through sampling completion, including all native views.
 unsafe impl Send for Inner {}
 unsafe impl Sync for Inner {}
@@ -160,7 +137,6 @@ impl CoreVideoFrame {
             buffer,
             format,
             size: gpui::size(DevicePixels(width as i32), DevicePixels(height as i32)),
-            outputs: Mutex::new(vec![]),
         })))
     }
     #[cfg(test)]
@@ -170,43 +146,50 @@ impl CoreVideoFrame {
     pub fn size(&self) -> Size<DevicePixels> {
         self.0.size
     }
-    pub fn import_count(&self) -> usize {
-        self.0.outputs.lock().unwrap().len()
-    }
 }
 // Views must finalize before their cache; the producer lease is retained by
 // the executor resource independently of this native view owner.
-pub(crate) struct ExternalBgraImport {
+pub(crate) struct ExternalCoreVideoImport {
     pub texture: Texture,
-    _view: CFRetained<CVMetalTexture>,
+    pub chroma: Option<Texture>,
+    pub rows: Option<[[f32; 4]; 3]>,
+    _views: Vec<CFRetained<CVMetalTexture>>,
     _cache: CFRetained<CVMetalTextureCache>,
 }
 // SAFETY: immutable native resources are only retained/released across threads.
-unsafe impl Send for ExternalBgraImport {}
-unsafe impl Sync for ExternalBgraImport {}
+unsafe impl Send for ExternalCoreVideoImport {}
+unsafe impl Sync for ExternalCoreVideoImport {}
 impl CoreVideoFrame {
-    /// Portable immutable BGRA source. NV12 plane conversion follows separately.
+    pub(crate) fn is_nv12(&self) -> bool {
+        matches!(self.0.format, Format::Nv12 { .. })
+    }
+    fn external_descriptor(
+        &self,
+    ) -> std::result::Result<gpui::content::ImageDescriptor, gpui::content::ContentError> {
+        use gpui::content::*;
+        let (format, alpha) = if self.is_nv12() {
+            (PixelFormat::Rgba16Float, AlphaMode::Opaque)
+        } else {
+            (PixelFormat::Bgra8, AlphaMode::Straight)
+        };
+        ImageDescriptor::new(
+            ImageExtent::try_from(self.size())?,
+            format,
+            ImageInterpretation {
+                color: ColorEncoding::Srgb,
+                alpha,
+            },
+            1,
+        )
+    }
+    /// Portable immutable BGRA or SDR NV12 frame. NV12 is converted once at its
+    /// source extent into encoded-sRGB half-float storage, preserving conversion
+    /// precision before portable sampling and placement effects.
     pub fn external_image(
         &self,
     ) -> std::result::Result<gpui::content::ExternalImage, gpui::content::ContentError> {
-        use gpui::content::*;
-        if !matches!(self.0.format, Format::Bgra) {
-            return Err(ContentError::new(
-                ContentErrorKind::UnsupportedCapability,
-                "portable CoreVideo import currently requires BGRA",
-            ));
-        }
-        let descriptor = ImageDescriptor::new(
-            ImageExtent::try_from(self.size())?,
-            PixelFormat::Bgra8,
-            ImageInterpretation {
-                color: ColorEncoding::Srgb,
-                alpha: AlphaMode::Straight,
-            },
-            1,
-        )?;
-        Ok(ExternalImage::ready(
-            descriptor,
+        Ok(gpui::content::ExternalImage::ready(
+            self.external_descriptor()?,
             Arc::new(self.clone()),
             || {},
         ))
@@ -215,37 +198,18 @@ impl CoreVideoFrame {
         &self,
         descriptor: &gpui::content::ImageDescriptor,
     ) -> std::result::Result<(), gpui::content::ContentError> {
-        use gpui::content::*;
-        if !matches!(self.0.format, Format::Bgra) {
-            return Err(ContentError::new(
-                ContentErrorKind::UnsupportedCapability,
-                "portable CoreVideo import currently requires BGRA",
-            ));
-        }
-        if descriptor.format() != PixelFormat::Bgra8
-            || descriptor.mip_levels() != 1
-            || descriptor.interpretation()
-                != (ImageInterpretation {
-                    color: ColorEncoding::Srgb,
-                    alpha: AlphaMode::Straight,
-                })
-            || descriptor.extent() != ImageExtent::try_from(self.size())?
-        {
-            return Err(ContentError::new(
-                ContentErrorKind::InvalidDescriptor,
-                "external descriptor differs from CoreVideo BGRA storage",
+        if descriptor != &self.external_descriptor()? {
+            return Err(gpui::content::ContentError::new(
+                gpui::content::ContentErrorKind::InvalidDescriptor,
+                "external descriptor differs from CoreVideo storage",
             ));
         }
         Ok(())
     }
-    pub(crate) fn import_external_bgra(
+    pub(crate) fn import_external(
         &self,
         device: &objc2::runtime::ProtocolObject<dyn objc2_metal::MTLDevice>,
-    ) -> Result<ExternalBgraImport> {
-        ensure!(
-            matches!(self.0.format, Format::Bgra),
-            "portable CoreVideo import requires BGRA"
-        );
+    ) -> Result<ExternalCoreVideoImport> {
         let mut cache = ptr::null_mut();
         let status = unsafe {
             CVMetalTextureCache::create(None, None, device, None, ptr::NonNull::from(&mut cache))
@@ -257,71 +221,7 @@ impl CoreVideoFrame {
         let cache = unsafe {
             CFRetained::from_raw(ptr::NonNull::new(cache).context("null external CoreVideo cache")?)
         };
-        let mut view = ptr::null_mut();
-        let status = unsafe {
-            CVMetalTextureCache::create_texture_from_image(
-                None,
-                &cache,
-                &self.0.buffer,
-                None,
-                objc2_metal::MTLPixelFormat::BGRA8Unorm,
-                self.0.size.width.0 as usize,
-                self.0.size.height.0 as usize,
-                0,
-                ptr::NonNull::from(&mut view),
-            )
-        };
-        ensure!(
-            status == kCVReturnSuccess,
-            "external CoreVideo import failed: {status}"
-        );
-        let view = unsafe {
-            CFRetained::from_raw(ptr::NonNull::new(view).context("null external CoreVideo view")?)
-        };
-        let texture =
-            CVMetalTextureGetTexture(&view).context("external CoreVideo texture missing")?;
-        Ok(ExternalBgraImport {
-            texture,
-            _view: view,
-            _cache: cache,
-        })
-    }
-}
-impl gpui::CustomContent for CoreVideoFrame {
-    fn prepare(
-        &self,
-        backend: &dyn std::any::Any,
-        _: Size<DevicePixels>,
-    ) -> Result<Box<dyn std::any::Any>> {
-        let context = backend
-            .downcast_ref::<MetalCustomContext>()
-            .context("CoreVideo video frames require native Metal")?;
-        let mut outputs = self.0.outputs.lock().unwrap();
-        if let Some((_, cached)) = outputs.iter().find(|(key, _)| *key == context.cache_key()) {
-            return cached.output.reusable(context);
-        }
-        ensure!(
-            outputs.len() < 4,
-            "video snapshot exceeds four queue imports"
-        );
-        let mut cache = ptr::null_mut();
-        let status = unsafe {
-            CVMetalTextureCache::create(
-                None,
-                None,
-                context.objc2_device(),
-                None,
-                ptr::NonNull::from(&mut cache),
-            )
-        };
-        ensure!(
-            status == kCVReturnSuccess,
-            "CoreVideo texture cache creation failed: {status}"
-        );
-        let cache = unsafe {
-            CFRetained::from_raw(ptr::NonNull::new(cache).context("null CoreVideo cache")?)
-        };
-        let mut views = vec![];
+        let mut views = Vec::new();
         let mut plane = |index, format, width, height| -> Result<Texture> {
             let mut view = ptr::null_mut();
             let status = unsafe {
@@ -339,55 +239,49 @@ impl gpui::CustomContent for CoreVideoFrame {
             };
             ensure!(
                 status == kCVReturnSuccess,
-                "CoreVideo plane import failed (IOSurface/Metal compatibility required): {status}"
+                "external CoreVideo plane import failed: {status}"
             );
             let view = unsafe {
-                CFRetained::from_raw(ptr::NonNull::new(view).context("null CoreVideo texture")?)
+                CFRetained::from_raw(
+                    ptr::NonNull::new(view).context("null external CoreVideo view")?,
+                )
             };
             let texture =
-                CVMetalTextureGetTexture(&view).context("CoreVideo returned no Metal texture")?;
-            let texture = texture;
+                CVMetalTextureGetTexture(&view).context("external CoreVideo texture missing")?;
             views.push(view);
             Ok(texture)
         };
         let width = self.0.size.width.0 as usize;
         let height = self.0.size.height.0 as usize;
-        let output = match self.0.format {
-            Format::Bgra => Output::Bgra(MetalImageOutput {
-                output: MetalCustomOutput {
-                    texture: plane(0, objc2_metal::MTLPixelFormat::BGRA8Unorm, width, height)?,
-                    commands: vec![],
-                },
-                queue: context.queue.clone(),
-            }),
+        let (texture, chroma, rows) = match self.0.format {
+            Format::Bgra => (
+                plane(0, objc2_metal::MTLPixelFormat::BGRA8Unorm, width, height)?,
+                None,
+                None,
+            ),
             Format::Nv12 {
                 matrix,
                 video_range,
-            } => Output::Nv12(MetalNv12Output {
-                y: plane(0, objc2_metal::MTLPixelFormat::R8Unorm, width, height)?,
-                uv: plane(
+            } => (
+                plane(0, objc2_metal::MTLPixelFormat::R8Unorm, width, height)?,
+                Some(plane(
                     1,
                     objc2_metal::MTLPixelFormat::RG8Unorm,
                     width / 2,
                     height / 2,
-                )?,
-                rows: matrix.rows(video_range),
-                queue: context.queue.clone(),
-            }),
+                )?),
+                Some(matrix.rows(video_range)),
+            ),
         };
-        let returned = output.reusable(context)?;
-        outputs.push((
-            context.cache_key(),
-            Cached {
-                _cache: cache,
-                _views: views,
-                output,
-            },
-        ));
-        Ok(returned)
+        Ok(ExternalCoreVideoImport {
+            texture,
+            chroma,
+            rows,
+            _views: views,
+            _cache: cache,
+        })
     }
 }
-
 /// Generated offline BGRA/IOSurface test source, not a decoder. Each call owns a
 /// fresh buffer, so earlier frames cannot be overwritten while the GPU samples.
 #[cfg(any(test, feature = "test-support"))]

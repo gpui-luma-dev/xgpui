@@ -282,20 +282,29 @@ the baseline. Check opacity and rounded edges while editing. Use `--adjustments`
 for linear controls and `--float-images` for native wide-color images.
 
 
-### Portable CoreVideo BGRA import validation
+### Portable CoreVideo BGRA/NV12 validation
 
-On macOS run `just media-import-test` from the repository root. This runs seven
-release-mode native GPU tests on the command line; it does not open an app window.
-Look for `7 passed; 0 failed`. Add `MTL_DEBUG_LAYER=1` before the command for Metal
-API validation. Fixtures are generated locally; no video file or decoder is used.
+Run `just media --video` to open the generated video GUI. Format cycles BGRA and
+NV12 full/video range with BT.601/BT.709. After startup, look for consistent color
+bars, a moving marker, responsive exposure/saturation/vignette controls, and no
+checkerboard flashes during frame replacement. Pause holds the visible frame;
+Burst 120 replaces pending frames; Resume should adopt the latest. Check opacity,
+rounded edges and blur in both placements. Their stable element IDs keep separate
+presentation slots while sharing one imported/converted source.
 
-The tests check source-sized direct BGRA import, sampled/adjusted window pixels,
-replay reuse, pending acquisition, descriptor/backing rejection, cancellation,
-release after a paused dependent copy and after a submitted-prefix failure, and
-retirement when a scene is removed. Imported views allocate no new image storage;
-window presentation does not read producer pixels back to the CPU. Headless pixel
-validation does read the final target outside presentation.
+`just media --headless --video --png /tmp/portable-video.png` runs pixel checks and
+writes five captures without opening a window. `just media-import-test` runs nine
+release-mode GPU tests on the command line; look for `9 passed; 0 failed` and no
+warnings. Prefix either command with `MTL_DEBUG_LAYER=1` for Metal API validation.
+Fixtures are generated locally; no decoder or video file is needed.
 
-This step adds the portable graph/native import path for CoreVideo BGRA. The video
-lab still uses its existing native adapters. NV12 conversion and VideoFrame/View
-migration, followed by DXGI and DMA-BUF integration, remain subsequent steps.
+Tests check BGRA direct import, all four NV12 matrix/range combinations, converter
+reuse, source-sized half-float output, placement adjustments, replay, pending
+acquisition, cancellation, descriptor rejection, submitted-prefix cleanup and
+plane ownership through paused dependent work. Source-sized NV12 conversion adds
+one GPU pass; direct BGRA imports allocate no new image storage. Neither path
+reads producer pixels back to the CPU. Headless validation reads final targets.
+
+CoreVideo and the macOS video lab now use portable draws. The old CoreVideo
+producer/cache and compositor-side NV12 paths are removed. DXGI/DMA-BUF executor
+integration remains next; Windows runtime testing is still outstanding.

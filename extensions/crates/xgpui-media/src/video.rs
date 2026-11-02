@@ -10,11 +10,13 @@ use std::{
     time::Duration,
 };
 
+#[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
 #[derive(Debug)]
 struct AdjustedFrame {
     source: Arc<dyn CustomContent>,
     adjustments: crate::pipeline::ImageAdjustments,
 }
+#[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
 impl CustomContent for AdjustedFrame {
     fn image_color_mode(&self) -> gpui::ImageColorMode {
         self.source.image_color_mode()
@@ -52,21 +54,47 @@ impl CustomContent for AdjustedFrame {
     }
 }
 
-/// Immutable producer content. Native producers must return a source-sized
-/// backend output and keep external allocations stable through their lifetime.
+#[derive(Debug)]
+struct FrameSource {
+    content: gpui::content::Content,
+    request: gpui::content::ContentRequest,
+}
+impl gpui::content::ContentSource for FrameSource {
+    fn describe(
+        &self,
+        cx: &mut gpui::content::ContentBuilder,
+        _: &gpui::content::ContentRequest,
+    ) -> std::result::Result<gpui::content::ImageRef, gpui::content::ContentError> {
+        let image = cx.source(&self.content, &self.request)?;
+        if cx.image_descriptor(image)?.extent() != self.request.extent() {
+            return Err(gpui::content::ContentError::new(
+                gpui::content::ContentErrorKind::InvalidDescriptor,
+                "video content differs from its declared source extent",
+            ));
+        }
+        Ok(image)
+    }
+}
+#[derive(Clone, Debug)]
+enum FrameContent {
+    Portable(gpui::content::ContentDraw),
+    #[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
+    Native(Arc<dyn CustomContent>),
+}
+/// Immutable frame pixels/description, independent of decoder and playback clock.
 #[derive(Clone, Debug)]
 pub struct VideoFrame {
-    content: Arc<dyn CustomContent>,
+    content: FrameContent,
     size: Size<DevicePixels>,
     timestamp: Duration,
 }
 impl VideoFrame {
-    /// Advanced backend adapter. Timestamp is source metadata, not a scheduling
-    /// deadline. This channel presents the latest frame without clocking audio.
+    /// Construct a portable frame. Timestamp is source metadata, not a scheduling
+    /// deadline. Content must describe immutable pixels at the supplied source size.
     pub fn new(
         size: Size<DevicePixels>,
         timestamp: Duration,
-        content: Arc<dyn CustomContent>,
+        content: impl Into<gpui::content::ContentDraw>,
     ) -> Result<Self> {
         ensure!(
             size.width.0 > 0
@@ -75,28 +103,55 @@ impl VideoFrame {
                 && size.height.0 <= 16384,
             "video dimensions must be 1..16384"
         );
+        let mut draw = content.into();
+        let request = gpui::content::ContentRequest::new(
+            size.map(|v| gpui::px(v.0 as f32)),
+            gpui::content::ImageExtent::try_from(size)?,
+            1.,
+        )?;
+        draw.content = gpui::content::Content::new(FrameSource {
+            content: draw.content,
+            request,
+        });
         Ok(Self {
-            content,
+            content: FrameContent::Portable(draw),
             size,
             timestamp,
         })
+    }
+    /// Portable imported frame; every placement shares its immutable acquisition
+    /// identity while retaining independent geometry and presentation history.
+    pub fn external(image: gpui::content::ExternalImage, timestamp: Duration) -> Self {
+        let extent = image.descriptor().extent();
+        Self {
+            size: gpui::size(
+                DevicePixels(i32::try_from(extent.width()).expect("validated extent")),
+                DevicePixels(i32::try_from(extent.height()).expect("validated extent")),
+            ),
+            timestamp,
+            content: FrameContent::Portable(
+                gpui::content::ContentDraw::new(gpui::content::Content::external(image))
+                    .color_output(gpui::content::ContentColorOutput::SrgbPreview),
+            ),
+        }
     }
     #[cfg(target_os = "macos")]
     pub fn core_video(
         frame: gpui_apple::custom_draw::core_video::CoreVideoFrame,
         timestamp: Duration,
     ) -> Self {
-        Self {
-            size: frame.size(),
-            content: Arc::new(frame),
+        Self::external(
+            frame
+                .external_image()
+                .expect("validated CoreVideo descriptor"),
             timestamp,
-        }
+        )
     }
     #[cfg(target_os = "windows")]
     pub fn dxgi(frame: gpui_windows::custom_draw::dxgi::DxgiFrame, timestamp: Duration) -> Self {
         Self {
             size: frame.size(),
-            content: Arc::new(frame),
+            content: FrameContent::Native(Arc::new(frame)),
             timestamp,
         }
     }
@@ -107,19 +162,24 @@ impl VideoFrame {
     ) -> Self {
         Self {
             size: frame.size(),
-            content: Arc::new(frame),
+            content: FrameContent::Native(Arc::new(frame)),
             timestamp,
         }
     }
-    /// Replace placement adjustments without changing pixels, timestamp or source ownership.
-    /// Native BGRA/NV12 adapters supply encoded sRGB after their existing range/matrix conversion.
-    /// Application adapters must declare the same SDR contract. No decoder/pool synchronization is added.
+    /// Replace placement adjustments without changing frame/source identity.
     pub fn adjusted(&self, adjustments: crate::pipeline::ImageAdjustments) -> Self {
-        Self {
-            content: Arc::new(AdjustedFrame {
-                source: self.content.clone(),
+        let content = match &self.content {
+            FrameContent::Portable(draw) => FrameContent::Portable(draw.clone().color_transform(
+                gpui::content::ImageColorTransform::linear(adjustments.paint()),
+            )),
+            #[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
+            FrameContent::Native(source) => FrameContent::Native(Arc::new(AdjustedFrame {
+                source: source.clone(),
                 adjustments,
-            }),
+            })),
+        };
+        Self {
+            content,
             size: self.size,
             timestamp: self.timestamp,
         }
@@ -130,25 +190,43 @@ impl VideoFrame {
     pub fn timestamp(&self) -> Duration {
         self.timestamp
     }
-    /// Low-level painting uses source-sized content, native mask, corners and
-    /// inherited opacity. The host supplies layout/aspect-ratio policy.
+    /// Source-sized scene bridge. UI callers use video/video_frame with a stable
+    /// element ID so pending frames retain the placement's previous valid output.
+    pub fn content(&self) -> Arc<dyn CustomContent> {
+        match &self.content {
+            FrameContent::Portable(draw) => draw.clone().into_scene_content(),
+            #[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
+            FrameContent::Native(content) => content.clone(),
+        }
+    }
     pub fn paint(&self, window: &mut Window, bounds: Bounds<Pixels>, radii: Corners<Pixels>) {
+        self.paint_placed(window, bounds, radii, None);
+    }
+    fn paint_placed(
+        &self,
+        window: &mut Window,
+        bounds: Bounds<Pixels>,
+        radii: Corners<Pixels>,
+        slot: Option<gpui::content::PresentationSlotId>,
+    ) {
         if bounds.is_empty()
             || bounds.intersect(&window.content_mask().bounds).is_empty()
             || window.element_opacity() <= 0.
         {
             return;
         }
-        window.paint_custom(
-            CustomGeometry::RoundedRect {
-                bounds,
-                corner_radii: radii,
-            },
-            self.content.clone(),
-        );
-    }
-    pub fn content(&self) -> Arc<dyn CustomContent> {
-        self.content.clone()
+        let geometry = CustomGeometry::RoundedRect {
+            bounds,
+            corner_radii: radii,
+        };
+        match &self.content {
+            FrameContent::Portable(draw) => {
+                let draw = slot.map_or_else(|| draw.clone(), |slot| draw.clone().slot(slot));
+                window.paint_content(geometry, draw);
+            }
+            #[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
+            FrameContent::Native(content) => window.paint_custom(geometry, content.clone()),
+        }
     }
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -156,6 +234,7 @@ pub struct VideoStats {
     pub published: u64,
     /// Pending frames superseded before any presentation snapshot observed them.
     pub replaced: u64,
+    /// CPU snapshots adopted by consumers, not GPU presentation acknowledgements.
     pub displayed: u64,
     pub pending: bool,
     pub closed: bool,
@@ -251,9 +330,12 @@ impl VideoStream {
 }
 /// A styled latest-frame viewport. Explicit bounds stretch the frame; provide
 /// source-aspect dimensions. Live visible elements poll at host animation cadence.
-/// Paused/closed, fully clipped, empty and zero-opacity elements request no frames.
-pub fn video(stream: VideoStream) -> VideoView {
+/// A distinct stable ID per placement preserves its last-ready frame during GPU
+/// work. Paused/closed, fully clipped and zero-opacity elements do not poll the
+/// producer; renderer completion may still schedule a final paced redraw.
+pub fn video(id: impl Into<ElementId>, stream: VideoStream) -> VideoView {
     VideoView {
+        id: id.into(),
         stream: Some(stream),
         frame: None,
         style: StyleRefinement::default(),
@@ -262,9 +344,10 @@ pub fn video(stream: VideoStream) -> VideoView {
     }
 }
 /// Paint one immutable snapshot without requesting live presentation frames.
-/// Hosts can capture one stream snapshot and reuse it across several placements.
-pub fn video_frame(frame: VideoFrame) -> VideoView {
+/// Hosts can reuse a snapshot across placements with distinct stable IDs.
+pub fn video_frame(id: impl Into<ElementId>, frame: VideoFrame) -> VideoView {
     VideoView {
+        id: id.into(),
         stream: None,
         frame: Some(frame),
         style: StyleRefinement::default(),
@@ -273,6 +356,7 @@ pub fn video_frame(frame: VideoFrame) -> VideoView {
     }
 }
 pub struct VideoView {
+    id: ElementId,
     adjustments: Option<crate::pipeline::ImageAdjustments>,
     blur: Option<crate::pipeline::ImageBlur>,
     stream: Option<VideoStream>,
@@ -306,9 +390,9 @@ impl IntoElement for VideoView {
 }
 impl Element for VideoView {
     type RequestLayoutState = Style;
-    type PrepaintState = ();
+    type PrepaintState = gpui::content::PresentationSlotId;
     fn id(&self) -> Option<ElementId> {
-        None
+        Some(self.id.clone())
     }
     fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
         None
@@ -327,13 +411,20 @@ impl Element for VideoView {
     }
     fn prepaint(
         &mut self,
-        _: Option<&GlobalElementId>,
+        global_id: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
         _: Bounds<Pixels>,
         _: &mut Style,
-        _: &mut Window,
+        window: &mut Window,
         _: &mut App,
-    ) {
+    ) -> Self::PrepaintState {
+        window.with_element_state(
+            global_id.expect("video has a stable element ID"),
+            |state: Option<gpui::content::PresentationSlotId>, _| {
+                let slot = state.unwrap_or_default();
+                (slot, slot)
+            },
+        )
     }
     fn paint(
         &mut self,
@@ -341,7 +432,7 @@ impl Element for VideoView {
         _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         style: &mut Style,
-        _: &mut (),
+        slot: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
@@ -368,13 +459,15 @@ impl Element for VideoView {
                     if let Some(blur) = &self.blur {
                         // Fall back to the adjusted unblurred frame for oversized styled views.
                         if blur
-                            .paint(bounds, window, |window| frame.paint(window, bounds, radii))
+                            .paint(bounds, window, |window| {
+                                frame.paint_placed(window, bounds, radii, Some(*slot))
+                            })
                             .is_err()
                         {
-                            frame.paint(window, bounds, radii);
+                            frame.paint_placed(window, bounds, radii, Some(*slot));
                         }
                     } else {
-                        frame.paint(window, bounds, radii);
+                        frame.paint_placed(window, bounds, radii, Some(*slot));
                     }
                 }
                 if self.stream.as_ref().is_some_and(VideoStream::live) {
@@ -390,20 +483,31 @@ mod tests {
     use super::*;
     #[derive(Debug)]
     struct Empty;
-    impl CustomContent for Empty {
-        fn prepare(
+    impl gpui::content::ContentSource for Empty {
+        fn describe(
             &self,
-            _: &dyn std::any::Any,
-            _: Size<DevicePixels>,
-        ) -> Result<Box<dyn std::any::Any>> {
-            anyhow::bail!("test content")
+            cx: &mut gpui::content::ContentBuilder,
+            request: &gpui::content::ContentRequest,
+        ) -> std::result::Result<gpui::content::ImageRef, gpui::content::ContentError> {
+            cx.solid(request.extent(), gpui::content::ColorValue::srgb([1.; 4])?)
+        }
+    }
+    #[derive(Debug)]
+    struct Held(Arc<Empty>);
+    impl gpui::content::ContentSource for Held {
+        fn describe(
+            &self,
+            cx: &mut gpui::content::ContentBuilder,
+            request: &gpui::content::ContentRequest,
+        ) -> std::result::Result<gpui::content::ImageRef, gpui::content::ContentError> {
+            self.0.describe(cx, request)
         }
     }
     fn frame(n: u64) -> VideoFrame {
         VideoFrame::new(
             gpui::size(DevicePixels(16), DevicePixels(9)),
             Duration::from_millis(n),
-            Arc::new(Empty),
+            gpui::content::Content::new(Empty),
         )
         .unwrap()
     }
@@ -455,7 +559,7 @@ mod tests {
             VideoFrame::new(
                 gpui::size(DevicePixels(0), DevicePixels(1)),
                 Duration::ZERO,
-                Arc::new(Empty)
+                gpui::content::Content::new(Empty)
             )
             .is_err()
         );
@@ -470,7 +574,7 @@ mod tests {
                 VideoFrame::new(
                     gpui::size(DevicePixels(16), DevicePixels(9)),
                     Duration::ZERO,
-                    content.clone(),
+                    gpui::content::Content::new(Held(content.clone())),
                 )
                 .unwrap(),
             )
@@ -494,5 +598,84 @@ mod tests {
             sender.publish(frame(3)).is_err(),
             "last consumer closes producer admission"
         );
+    }
+    #[test]
+    fn portable_frames_keep_natural_extent_and_adjustments_keep_source_identity() -> Result<()> {
+        use gpui::content::*;
+        let frame = VideoFrame::new(
+            gpui::size(DevicePixels(16), DevicePixels(9)),
+            Duration::from_millis(17),
+            Content::solid(ColorValue::srgb([1., 0., 0., 1.])?),
+        )?;
+        let adjusted = frame.adjusted(crate::pipeline::ImageAdjustments::new(
+            crate::pipeline::ColorMatrix::identity(crate::pipeline::ImagePrimaries::Srgb)
+                .exposure(1.)?,
+            None,
+        )?);
+        let mut keys = Vec::new();
+        for side in [32, 128] {
+            let request = gpui::PreparationRequest::new(
+                gpui::size(gpui::px(side as f32), gpui::px(side as f32)),
+                gpui::size(DevicePixels(side), DevicePixels(side)),
+                1.,
+            )?;
+            let plain = frame.content().portable_content(&request)?.unwrap();
+            let adjusted = adjusted.content().portable_content(&request)?.unwrap();
+            assert_eq!(plain.draw.content.id(), adjusted.draw.content.id());
+            assert!(adjusted.draw.color_transform.linear_paint().is_some());
+            let graph = ContentGraph::describe(
+                &[ContentRoot {
+                    content: plain.draw.content,
+                    request: plain.request,
+                }],
+                ContentCapabilities::default(),
+                GraphLimits::default(),
+            )?;
+            assert_eq!(graph.nodes()[0].outputs()[0].byte_len(), 16 * 9 * 4);
+            keys.push(graph.nodes()[0].output_key(0).unwrap());
+        }
+        assert_eq!(keys[0], keys[1]);
+        assert_eq!(frame.size(), adjusted.size());
+        assert_eq!(frame.timestamp(), adjusted.timestamp());
+        Ok(())
+    }
+    #[test]
+    fn portable_frame_description_rejects_mismatched_source_pixels() -> Result<()> {
+        use gpui::content::*;
+        let pixels = ImagePixels::new(
+            ImageDescriptor::new(
+                ImageExtent::new(1, 1)?,
+                PixelFormat::Rgba8,
+                ImageInterpretation {
+                    color: ColorEncoding::Srgb,
+                    alpha: AlphaMode::Straight,
+                },
+                1,
+            )?,
+            Arc::from([255; 4]),
+            4,
+        )?;
+        let frame = VideoFrame::new(
+            gpui::size(DevicePixels(16), DevicePixels(9)),
+            Duration::ZERO,
+            Content::image(ImageAsset::ready(pixels)),
+        )?;
+        let request = gpui::PreparationRequest::new(
+            gpui::size(gpui::px(32.), gpui::px(32.)),
+            gpui::size(DevicePixels(32), DevicePixels(32)),
+            1.,
+        )?;
+        let draw = frame.content().portable_content(&request)?.unwrap();
+        let error = ContentGraph::describe(
+            &[ContentRoot {
+                content: draw.draw.content,
+                request: draw.request,
+            }],
+            ContentCapabilities::default(),
+            GraphLimits::default(),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, ContentErrorKind::InvalidDescriptor);
+        Ok(())
     }
 }
