@@ -441,9 +441,13 @@ selection chooses a coarser mip. This preserves a bounded usable view instead of
 pretending the whole source fits on the GPU.
 
 A refinement **replaces** its preview region, including for translucent pixels.
-Unready sources warm up with zero sampling opacity, so their first upload cannot
-double-blend alpha over the preview. Tile content is clipped separately from its
-halo. A provider failure keeps the last usable snapshot and stops retrying that
+Each immutable snapshot is an atomic portable content group. Preview holes,
+refined pixels and their member clips commit together at GPU completion. Until
+then the renderer retains the complete prior snapshot, preventing holes and
+doubled alpha. Tile content is clipped separately from its halo. At deep zoom,
+geometry is bounded to the visible region. `ImageMapping::viewport` selects
+source coordinates without introducing a filter boundary; surrounding page halos
+remain available for sampling. A provider failure keeps the last usable snapshot and stops retrying that
 failed view; a changed view or source can retry.
 
 ```rust,ignore
@@ -469,23 +473,25 @@ values for your provider; a larger filter needs a larger halo.
   page payloads. Idle nonvisible pages are evicted by least-recent use.
 - Eviction removes cache ownership, not other owners. Held snapshots and GPU
   submissions keep their leases; admission waits when those bytes are still busy.
-- Native providers run on admitted workers, followed by existing background GPU
-  staging. Native upload handoff enforces aligned per-frame byte/count limits.
-  Native pooled staging counts idle allocations toward its separate pool cap.
-  Existing large-image benchmark harnesses now allow 33 MiB rather than 32 MiB
-  per frame so their 32 MiB pixel chains also fit aligned rows. Historical
-  benchmark reports retain their original policy and results.
-- Wasm currently generates at most one small page per `advance` on the host
-  thread. Upload admission and in-flight staging are bounded again at preparation.
-  This demo does not measure a browser worker, file I/O or decoder.
+- Native providers run on admitted CPU workers. Every completed page becomes a
+  portable immutable image source. Canvas per-frame byte/count settings bound
+  provider admission/publication; they do not impose native GPU upload limits.
+  Renderer content-executor budgets separately bound GPU allocations and staging.
+- Wasm generates at most one small page per `advance` on the host thread, then
+  uses the same portable page presentation contract. It does not maintain its
+  own backend upload cache or producer GPU-readiness flag.
 - Metal retains source snapshots through command completion. wgpu now retains them
   through queue completion; D3D11 uses event-query retirement. Windows/Linux native
   runtime QA remains pending; cross-compilation is not runtime validation.
 
-`pending_staging_bytes`, `upload_staging_bytes` and `staging_pool_bytes` describe
-different stages. They are not interchangeable. These limits concern page payloads,
-declared scratch and source staging, not process RSS, driver VRAM, render targets,
-provider internals, allocator overhead or tiny transparent helper textures.
+`pending_staging_bytes` is a conservative transfer-size reservation for active
+provider output. `decoded_pages` counts CPU-available visible pages, not GPU
+completion; `CanvasPage::ready` and canvas upload-pool counters are removed.
+Strict headless callers use `prepare_content_snapshot`; interactive completion
+requests renderer-paced redraws. Page leases remain pinned by portable asset
+pixels, including graphs and GPU jobs after a canvas is cancelled or dropped.
+These payload/scratch limits are separate from native executor allocations,
+process RSS, driver VRAM, render targets, and provider internals.
 Keep one canvas/policy owner for the budget domain you intend to bound. A new
 canvas has its own limits; dropping an old one does not instantly revoke GPU use.
 

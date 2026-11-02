@@ -31,7 +31,7 @@ impl Default for ContentGroupId {
 pub struct ContentGroup {
     id: ContentGroupId,
     revision: u64,
-    members: Vec<(CustomGeometry, ContentDraw)>,
+    members: Vec<(CustomGeometry, ContentDraw, Option<Bounds<Pixels>>)>,
     pending: PendingPresentation,
     on_error: ContentErrorPresentation,
 }
@@ -60,7 +60,18 @@ impl ContentGroup {
     /// pending/error policies are rejected when the group is described.
     pub fn push(&mut self, geometry: CustomGeometry, content: impl Into<ContentDraw>) {
         self.revision = next_content_identity();
-        self.members.push((geometry, content.into()));
+        self.members.push((geometry, content.into(), None));
+    }
+    /// Append a member with a group-local rectangular clip. Sampling still uses
+    /// the full geometry, preserving source halos outside the visible region.
+    pub fn push_clipped(
+        &mut self,
+        geometry: CustomGeometry,
+        clip: Bounds<Pixels>,
+        content: impl Into<ContentDraw>,
+    ) {
+        self.revision = next_content_identity();
+        self.members.push((geometry, content.into(), Some(clip)));
     }
     /// Append a mapped image member. Mapping is committed with this group's
     /// geometry and images, and remains unchanged while a replacement is pending.
@@ -125,7 +136,7 @@ impl ContentGroupRequest {
         self.group
             .members
             .iter()
-            .map(|(_, draw)| draw.presentation.color_output)
+            .map(|(_, draw, _)| draw.presentation.color_output)
     }
     /// Validate all members and construct local physical geometry. An invalid
     /// member rejects the complete group; clipped members still participate.
@@ -137,7 +148,7 @@ impl ContentGroupRequest {
         self.group
             .members
             .iter()
-            .map(|(geometry, content)| {
+            .map(|(geometry, content, clip)| {
                 if content.presentation.slot.is_some()
                     || content.presentation.pending != PendingPresentation::default()
                     || content.presentation.on_error != ContentErrorPresentation::default()
@@ -273,10 +284,45 @@ impl ContentGroupRequest {
                     DevicePixels(bounds.size.height.0.ceil() as i32),
                 );
                 let _ = ContentRequest::new(logical.size, ImageExtent::try_from(raster)?, scale)?;
+                let mask = if let Some(clip) = clip {
+                    if ![
+                        clip.origin.x.0,
+                        clip.origin.y.0,
+                        clip.size.width.0,
+                        clip.size.height.0,
+                    ]
+                    .iter()
+                    .all(|v| v.is_finite())
+                        || clip.size.width.0 < 0.
+                        || clip.size.height.0 < 0.
+                    {
+                        return Err(invalid("invalid content group member clip"));
+                    }
+                    let round =
+                        |v: Pixels| ScaledPixels(crate::util::round_to_device_pixel(v.0, scale));
+                    let clip = Bounds::from_corners(
+                        point(round(clip.left()), round(clip.top())),
+                        point(round(clip.right()), round(clip.bottom())),
+                    );
+                    if ![
+                        clip.origin.x.0,
+                        clip.origin.y.0,
+                        clip.size.width.0,
+                        clip.size.height.0,
+                    ]
+                    .iter()
+                    .all(|v| v.is_finite())
+                    {
+                        return Err(invalid("scaled content group clip overflow"));
+                    }
+                    bounds.intersect(&clip)
+                } else {
+                    bounds
+                };
                 Ok(CustomDraw {
                     order: 0,
                     bounds,
-                    content_mask: ContentMask { bounds },
+                    content_mask: ContentMask { bounds: mask },
                     corner_radii: radii.clamp_radii_for_quad_size(logical.size).scale(scale),
                     opacity: 1.,
                     content: crate::scene::content_with_preparation_geometry(

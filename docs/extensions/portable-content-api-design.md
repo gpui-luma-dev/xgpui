@@ -1752,3 +1752,43 @@ pixels; capture happens after strict readiness. The schema-2 benchmark uses six
 1024² sources to fit the executor budget, validates three fresh-renderer waves,
 and reuses uploads across 120 cached color-change frames. Windows media/test code
 and the Wasm lab compile. Native Windows runtime validation remains outstanding.
+
+
+### Tiled-page migration checkpoint
+
+Canvas pages now expose source-sized portable image draws on native and browser
+hosts. Browser backend caches and native page producer preparation are no longer
+used. Source payload owners pin canvas leases through graph/executor lifetime.
+The CPU provider scheduler retains admission, cancellation, generation rejection,
+LRU eviction, and progressive snapshots; it does not report native GPU readiness.
+`decoded_pages` replaces `ready_pages`, and `CanvasPage::ready` plus canvas
+upload/staging-pool statistics are removed.
+
+Each canvas has a stable atomic group identity. Immutable snapshots commit preview
+hole geometry, refined tiles and member clips together; a pending refinement
+retains the prior complete snapshot. `ContentGroup::push_clipped` declares a
+validated group-local rectangular clip independently from sampling geometry.
+Metal and the shared wgpu/D3D11 scene resolver translate and intersect that clip
+with the parent placement instead of replacing it. This preserves page halos
+and avoids doubled translucent preview/refinement pixels. Deep zoom trims page
+geometry to visible bounds and maps an explicit source viewport without a new
+upload or source mutation. `ImageMapping::viewport` is distinct from `crop`: it
+selects visible source coordinates while preserving the crop's filtering domain,
+so halos remain available even at extreme preview magnification.
+
+Canvas per-frame transfer-size/count limits now bound provider admission; native
+GPU budgets belong to content executors. The old unused media staging layer and
+its loader policy API still require removal; they are not a compatibility path
+for canvas presentation. Native external-image/video integration remains separate.
+
+Native tests include alpha-aware odd-edge/halo reference pixels at 1×, 64× and 1024×,
+paused-GPU refinement retaining the exact preview, and stable completed replay on
+Metal and wgpu. Existing CPU tests cover budget leases, cancellation, stale
+results, source replacement and provider failures. Windows GPU execution remains
+unverified on this macOS host.
+
+Validation: all 89 media tests and 41 group/mapping/graph tests pass. Existing
+Metal/wgpu group and mapping suites also pass. The exact `just media` locked
+release build, Wasm lab check and Windows media/test cross-check pass. The browser
+and Windows runtime still require host testing. No backend-specific producer
+branch is required from canvas callers.

@@ -249,11 +249,14 @@ The shared view displays a generated 12,000 × 6,000 source without allocating i
 in full. Fit/1:1, drag, wheel zoom and arrow controls change visible pages; source
 replacement, Cancel/Restart and a 2 MiB cache mode exercise the scheduler.
 
-Watch ready/visible tiles, mip, CPU/GPU reservations, upload staging, native
-staging-pool allocations, eviction and cancellation. Preview timing is CPU
-availability; view timing ends at reusable upload submission. Browser generation
-is one small page per frame on the host thread. These are functional diagnostics,
-not disk/decoder or sustained frame-time benchmarks. Keep 60 Hz as the baseline.
+Watch decoded/visible pages, mip, payload reservations, eviction and cancellation.
+Both timing values describe CPU availability. Renderer-owned portable uploads and
+atomic groups keep the previous complete preview/refinement visible until GPU
+completion. Browser generation is one small page per advance on the host thread.
+These are functional diagnostics, not disk/decoder or frame-time benchmarks.
+Pan/zoom rapidly, toggle the 2 MiB cache, replace the source and cancel/restart:
+look for no internal seams, doubled translucent colors or holes during refinement.
+Try deep zoom and the blur controls; blur should cross page boundaries smoothly.
 
 The [pipeline guide](../../../docs/extensions/media-pipeline.md) documents
 `TileProvider`, `TileCanvas`, code examples, budget scope and pending native

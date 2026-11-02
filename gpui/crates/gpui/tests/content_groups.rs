@@ -292,3 +292,41 @@ fn snapshot_retirement_observes_explicit_output_intent_even_for_narrow_sources()
     });
     assert!(state.select(&ticket).unwrap().is_none());
 }
+
+#[test]
+fn member_clips_preserve_sampling_geometry_and_validate_coordinates() {
+    let mut group = ContentGroup::new(ContentGroupId::new());
+    let bounds = Bounds::new(
+        point(gpui::px(-1.), gpui::px(-1.)),
+        size(gpui::px(10.), gpui::px(10.)),
+    );
+    let clip = Bounds::new(
+        point(gpui::px(0.), gpui::px(0.)),
+        size(gpui::px(8.), gpui::px(8.)),
+    );
+    group.push_clipped(
+        CustomGeometry::RoundedRect {
+            bounds,
+            corner_radii: Corners::default(),
+        },
+        clip,
+        Content::solid(ColorValue::srgb([1.; 4]).unwrap()),
+    );
+    let mut request = ContentGroupRequest {
+        group,
+        scale_factor: 2.,
+    };
+    let draw = request.draws().unwrap().remove(0);
+    assert_eq!(draw.bounds.size.width.0, 20.);
+    assert_eq!(draw.bounds.origin.x.0, -2.);
+    assert_eq!(draw.content_mask.bounds.size.width.0, 16.);
+    request.group.push_clipped(
+        CustomGeometry::RoundedRect {
+            bounds,
+            corner_radii: Corners::default(),
+        },
+        Bounds::new(point(gpui::px(f32::NAN), gpui::px(0.)), clip.size),
+        Content::solid(ColorValue::srgb([1.; 4]).unwrap()),
+    );
+    assert!(request.draws().is_err());
+}

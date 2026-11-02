@@ -678,8 +678,13 @@ fn draw_request(draw: &gpui::CustomDraw) -> Result<Option<c::ContentDrawRequest>
 fn translate_member(member: &mut gpui::CustomDraw, placement: &gpui::CustomDraw) {
     let origin = placement.bounds.origin;
     member.bounds.origin += origin;
+    member.content_mask.bounds.origin += origin;
     member.content_mask = gpui::ContentMask {
-        bounds: placement.content_mask.bounds.intersect(&placement.bounds),
+        bounds: member
+            .content_mask
+            .bounds
+            .intersect(&placement.content_mask.bounds)
+            .intersect(&placement.bounds),
     };
     member.opacity *= placement.opacity;
     if let Some(gpui::CustomCoverage::Path(path)) = &mut member.coverage {

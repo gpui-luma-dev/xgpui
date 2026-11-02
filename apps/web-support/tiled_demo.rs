@@ -126,16 +126,14 @@ impl Render for TiledDemo {
         }
         let snapshot = self.canvas.snapshot();
         let stats = self.canvas.stats();
-        if self.paused
-            && (stats.gpu_bytes > 0 || stats.active_jobs > 0 || stats.upload_staging_bytes > 0)
-        {
+        if self.paused && (stats.gpu_bytes > 0 || stats.active_jobs > 0) {
             window.request_animation_frame();
         }
         if snapshot.as_ref().is_some_and(|s| s.preview.is_some()) && self.preview_ms.is_none() {
             self.preview_ms = Some(self.started.elapsed().as_secs_f64() * 1000.);
         }
         if self.canvas.status() == &ProgressiveStatus::Ready
-            && stats.ready_pages == stats.visible_pages
+            && stats.decoded_pages == stats.visible_pages
             && self.complete_ms.is_none()
         {
             self.complete_ms = Some(self.view_started.elapsed().as_secs_f64() * 1000.);
@@ -149,7 +147,7 @@ impl Render for TiledDemo {
                 ProgressiveStatus::Failed(_) | ProgressiveStatus::Cancelled
             )
             && (self.canvas.status() != &ProgressiveStatus::Ready
-                || stats.ready_pages < stats.visible_pages)
+                || stats.decoded_pages < stats.visible_pages)
         {
             window.request_animation_frame();
         }
@@ -233,15 +231,15 @@ impl Render for TiledDemo {
                     s.blurs=[0.,4.,8.,16.].map(|r|ImageBlur::new(px(r)).unwrap().with_quality(if s.full_quality{LayerBlurQuality::FullResolution}else{LayerBlurQuality::Adaptive}));cx.notify();
                 }))))
             .child("Blur runs once over assembled pages: shared tile edges, transparent outside the viewport. Blur uses a bounded preview (1024 device px including halo). Retained sRGB blur targets are additional to page budgets.")
-            .child(format!("Generation {} · {:?} · zoom {:.1}% · mip {} · ready {}/{} · cached {}",
-                self.generation,self.canvas.status(),scale*100.,stats.mip,stats.ready_pages,stats.visible_pages,stats.cached_pages))
+            .child(format!("Generation {} · {:?} · zoom {:.1}% · mip {} · decoded {}/{} · cached {}",
+                self.generation,self.canvas.status(),scale*100.,stats.mip,stats.decoded_pages,stats.visible_pages,stats.cached_pages))
             .child(canvas)
             .child(format!("Reserved CPU {:.2} MiB · GPU payload {:.2} MiB · pending transfer {:.2} MiB · jobs {}",
                 mib(stats.cpu_bytes),mib(stats.gpu_bytes),mib(stats.pending_staging_bytes),stats.active_jobs))
-            .child(format!("Upload staging {:.2} MiB · native staging pool allocated {:.2} MiB",mib(stats.upload_staging_bytes),mib(stats.staging_pool_bytes)))
+            .child("GPU uploads and atomic page presentation are renderer-owned.")
             .child(format!("Peaks CPU {:.2} / GPU {:.2} MiB · requests {} · evictions {} · cancelled {} · stale {} · failures {}",
                 mib(self.peak_cpu),mib(self.peak_gpu),stats.requests,stats.evictions,stats.cancelled_requests,stats.stale_results,stats.failures))
-            .child(format!("Generated preview CPU-ready: {} · current view submitted: {}",
+            .child(format!("Generated preview CPU-ready: {} · current view CPU-ready: {}",
                 self.preview_ms.map(|v|format!("{v:.1} ms")).unwrap_or_else(||"pending".into()),
                 self.complete_ms.map(|v|format!("{v:.1} ms")).unwrap_or_else(||"refining".into())))
             .child(self.error.clone().unwrap_or_default())

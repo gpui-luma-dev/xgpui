@@ -200,3 +200,37 @@ fn portrait_fit_and_large_integer_source_extents_are_stable() {
             .is_err()
     );
 }
+
+#[test]
+fn viewport_preserves_halo_filter_domain_and_rejects_escape() {
+    let image = ImageDescriptor::new(
+        ImageExtent::new(258, 258).unwrap(),
+        PixelFormat::Rgba8,
+        ImageInterpretation {
+            color: ColorEncoding::Srgb,
+            alpha: AlphaMode::Straight,
+        },
+        1,
+    )
+    .unwrap();
+    let viewport = ImageCrop::new([1., 1.], [256., 256.]).unwrap();
+    let mapped = ImageMapping::default()
+        .viewport(Some(viewport))
+        .resolve(&image, [512., 512.])
+        .unwrap()
+        .shader_uniforms();
+    let cropped = ImageMapping::default()
+        .crop(Some(viewport))
+        .resolve(&image, [512., 512.])
+        .unwrap()
+        .shader_uniforms();
+    assert_eq!(mapped[1], cropped[1]);
+    assert_ne!(
+        mapped[2], cropped[2],
+        "viewport must retain the halo's filter domain"
+    );
+    let invalid = ImageMapping::default()
+        .crop(Some(viewport))
+        .viewport(Some(ImageCrop::new([0., 0.], [1., 1.]).unwrap()));
+    assert!(invalid.resolve(&image, [1., 1.]).is_err());
+}

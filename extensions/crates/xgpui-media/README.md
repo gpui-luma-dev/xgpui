@@ -85,7 +85,9 @@ when adjustments extend an RGBA8 source. `image.wide(...)` selects this intent.
 Alpha is preserved; coverage and opacity apply once after color conversion.
 There is no public per-image GPU upload status/count/retry API. Strict headless
 validation uses `prepare_content_snapshot` and retries typed Pending results.
-Tiled pages retain private staging machinery until their subsequent migration.
+Tiled pages also use portable immutable sources and atomic presentation groups.
+Their provider scheduler reports CPU decoding; GPU readiness is renderer-owned.
+Obsolete media staging infrastructure remains for a separate removal step.
 
 ## Image adjustments
 

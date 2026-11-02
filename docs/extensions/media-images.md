@@ -279,106 +279,20 @@ validation records for integration and review.
   Configured draws can also be members of atomic groups. See the
   [portable presentation API](../../extensions/crates/xgpui-media/README.md#portable-image-presentation).
 
-### Remaining tiled-page staging
+### Portable tiled-page presentation
 
-Filters, linear adjustments and wide images use renderer-owned portable uploads,
-sharing source pixels with ordinary placements. Parameter edits change presentation
-uniforms only. The staging limits below now apply only to the private tiled-page
-path; they do not describe ordinary images or effects.
+Tiled pages now use portable immutable sources and atomic content groups on
+native and browser hosts. Preview regions, refined pixels and clips commit
+together after GPU completion, retaining the prior complete snapshot while
+pending. `ImageMapping::viewport` preserves surrounding halo texels while
+bounding visible geometry at deep zoom.
 
-- `UploadLimits` independently bounds active staging workers and accounted
-  staging reservations. Defaults: two upload workers and 128 MiB staging.
-  Metal/wgpu admission leases survive submission until GPU completion; D3D11
-  currently releases its reservation when submission is observed.
-  A busy image reports `Queued` and retries on later paints without creating an
-  unbounded task queue. A source larger than the entire staging budget reports
-  `Failed` rather than remaining queued forever. Admission is not FIFO.
-- Staging accounting uses each mip's row size rounded up to 256 bytes. This matches
-  Metal/wgpu buffer layouts; D3D11 driver allocation costs may differ. The staging
-  reservation covers preparation and adoption. On Metal/wgpu both the image and
-  GPU completion guard must release it; observing submission drops the image's
-  reference, and the guard keeps it alive until completion. Dropping a pending
-  image or abandoning an unsubmitted recording releases its references safely.
-  A running worker releases its resources on return.
-- Metal/wgpu completion callbacks return exclusive buffers to a loader's
-  queue-bound pool; a worker cannot refill one while the GPU may still copy it.
-  Idle buffers are reusable only at the same total padded size. Idle mismatches
-  are evicted when needed. `staging_pool_stats()` reports allocated/cached bytes,
-  allocations and reuse counts; the current pool's byte capacity equals
-  `max_staging_bytes` and includes borrowed as well as idle buffers.
-- GPU destination textures and driver overhead are not part of staging limits.
-  Queue/device replacement can temporarily retain old in-flight resources along
-  with the new pool. Shared admission still bounds outstanding staging leases;
-  the pool's idle cache has its own capacity. These limits are not a hard total
-  process/VRAM cap. Hidden retained images can hold staging references until
-  painted, polled or dropped. There is no automatic visibility eviction.
-- Queue/device changes invalidate the cache and discard previous-generation worker
-  results. Abandoned wgpu/D3D11 recordings can adopt the same staging resources
-  again; there is no new pixel copy. `retry_upload()` invalidates an upload or
-  retries a failure. Notify the host view after an explicit retry.
-
-## Effect/page backend contract and current limits
-
-Native Metal and DirectX 11; enable feature `wgpu` for the portable renderer.
-The backend contexts expose additive `create_image_output(&ImageTextureData)`
-methods. Existing producer outputs still require the exact requested display
-extent. Image outputs explicitly opt into source-sized textures. Existing scene
-composition applies ordering, clipping, rounded coverage and inherited opacity.
-
-Metal workers allocate private textures, fill exclusive shared staging buffers
-and record uncommitted blits inside an autorelease pool. An upload command's
-completion callback returns its buffer and releases admission ownership. wgpu
-workers fill exclusive mapped buffers; the host records copies and attaches
-resource/admission guards to the recording. Queue completion releases those guards.
-Abandoned wgpu recordings release guards without submission, leaving the staged
-source available for a retry. Mapping a reused wgpu buffer may wait for driver
-progress on the worker (bounded to five seconds), never on the UI preparation path.
-
-D3D11 workers still initialize a one-use CPU staging texture and allocate the
-destination; the renderer records a deferred `CopyResource`. D3D11 does not yet
-pool these textures or claim GPU-completion accounting. Workers never submit or
-execute commands or access its immediate context. Native Windows validation is
-required before adding completion-driven D3D11 reuse.
-
-For wgpu/D3D11, `image_upload_context().stage(data)` remains the unpooled API and
-`adopt_image_upload(staged)` records the handoff. wgpu also offers queue-bound
-`staging_pool` / `stage_with_pool` and completion-guarded adoption. Metal provides
-`stage_image_upload_with_pool`. Existing synchronous convenience APIs remain
-available. `xgpui-media` uses the pools for full Metal/wgpu sources and allocates
-only a tiny placeholder during preparation.
-
-GPU readiness for portable images is renderer-owned. Strict headless callers use
-`prepare_content_snapshot`; typed Pending means retry after completion. There is
-no public per-image upload status or retry method. The remaining page staging
-statistics are not portable renderer metrics.
-
-### Per-frame admission
-
-`MediaLoader::with_upload_policy(media_limits, upload_limits, frame_limits)` adds
-`FrameUploadLimits` independently of decode and staging admission. Defaults are
-at most two newly adopted sources and 64 MiB of unpadded mip payload per scene
-frame. All images sharing a loader share this budget. Cached source draws and the
-1x1 placeholder do not spend it; duplicate placements reuse the first adoption.
-When exhausted, prepared images stay `Staged`, display their placeholder and try
-again next frame. The byte/count counters reset on the next scene preparation.
-
-GPUI's additive `CustomContent::prepare_in_frame` passes a shared
-`PreparationFrame`; its default forwards to the previous request-aware method.
-The window geometry adapter preserves both logical coordinates and this context.
-Direct low-level `prepare` calls get an independent one-call frame; custom
-wrappers should forward `prepare_in_frame` to preserve scene-wide admission.
-
-A source must fit the configured frame byte limit in full. Larger sources report
-`Failed` before worker allocation, rather than being queued forever or silently
-exceeding the cap. Raise the limit or use a smaller source. Chunked mip uploads,
-per-frame time limits, priority/FIFO fairness and GPU timestamp measurement remain
-follow-ups. The release benchmark below measures CPU work and staging reuse. Pooling is a bounded cache, not a fixed two-buffer ring. There is no
-zero-stutter or frame-rate guarantee.
-
-SDR sRGB input only. Embedded [ICC ↗](https://en.wikipedia.org/wiki/ICC_profile), EXIF orientation and HDR interpretation are not
-implemented. Mip generation is alpha-aware; the existing compositor still samples
-straight encoded channels between texels/mip levels. This is not a fully linear,
-[premultiplied ↗](https://en.wikipedia.org/wiki/Alpha_compositing) image-compositing pipeline.
+Canvas provider budgets and `decoded_pages` describe CPU work and retained page
+payloads; native GPU readiness and allocation budgets belong to the renderer.
+Strict headless callers use `prepare_content_snapshot` and retry typed Pending.
+See the [tiled pipeline guide](media-pipeline.md#providers-and-progressive-behavior)
+for lease lifetime, cancellation, and page budget scope. The unused media upload
+policy infrastructure is scheduled for removal, not used for page presentation.
 
 ## Image color filters
 

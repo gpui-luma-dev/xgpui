@@ -47,6 +47,7 @@ pub struct ImageMapping {
     fit: ImageFit,
     alignment: [f32; 2],
     crop: Option<ImageCrop>,
+    viewport: Option<ImageCrop>,
     sampler: Sampler,
 }
 impl Default for ImageMapping {
@@ -61,6 +62,7 @@ impl ImageMapping {
             fit,
             alignment: [0.5; 2],
             crop: None,
+            viewport: None,
             sampler: Sampler::linear_clamp(),
         }
     }
@@ -79,6 +81,14 @@ impl ImageMapping {
     /// Select a base-level source rectangle. None restores the full source.
     pub fn crop(mut self, crop: Option<ImageCrop>) -> Self {
         self.crop = crop;
+        self
+    }
+    /// Select the visible source rectangle within the crop without introducing
+    /// filter boundaries. Unlike `crop`, this preserves surrounding texels for
+    /// interpolation, for example when clipping a zoomed tile with a halo.
+    /// Bounds are validated against the selected crop during resolution.
+    pub fn viewport(mut self, viewport: Option<ImageCrop>) -> Self {
+        self.viewport = viewport;
         self
     }
     /// Explicit filtering policy. Presentation requires clamped addressing so
@@ -112,8 +122,17 @@ impl ImageMapping {
             }
         }
         // f64 prevents intermediate overflow for valid extreme f32 destinations.
-        let mut origin = crop_origin;
-        let mut size = crop_size;
+        let (mut origin, mut size) = self
+            .viewport
+            .map(|v| (v.origin.map(f64::from), v.size.map(f64::from)))
+            .unwrap_or((crop_origin, crop_size));
+        for axis in 0..2 {
+            if origin[axis] < crop_origin[axis]
+                || origin[axis] + size[axis] > crop_origin[axis] + crop_size[axis]
+            {
+                return Err(invalid("source viewport exceeds selected crop"));
+            }
+        }
         let dest = destination.map(f64::from);
         let mut placed_origin = [0.; 2];
         let mut placed_size = dest;

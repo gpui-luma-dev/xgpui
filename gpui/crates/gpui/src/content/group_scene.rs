@@ -216,8 +216,13 @@ impl ContentGroupScene {
 fn place(member: &mut CustomDraw, placement: &CustomDraw) {
     let origin = placement.bounds.origin;
     member.bounds.origin += origin;
+    member.content_mask.bounds.origin += origin;
     member.content_mask = crate::ContentMask {
-        bounds: placement.content_mask.bounds.intersect(&placement.bounds),
+        bounds: member
+            .content_mask
+            .bounds
+            .intersect(&placement.content_mask.bounds)
+            .intersect(&placement.bounds),
     };
     member.opacity *= placement.opacity;
     if let Some(CustomCoverage::Path(path)) = &mut member.coverage {

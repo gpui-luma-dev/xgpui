@@ -1,7 +1,7 @@
 //! Provider-driven immutable pages. No whole-image allocation or codec engine.
 use super::*;
 use anyhow::{Result, ensure};
-use gpui::{CustomContent, ImageTextureData, ImageTextureFormat};
+use gpui::{ImageTextureData, ImageTextureFormat};
 use std::{
     collections::{HashMap, HashSet},
     sync::{
@@ -75,15 +75,14 @@ pub struct CanvasStats {
     pub cpu_bytes: u64,
     /// Conservative reserved payload, including old snapshots/in-flight frames.
     pub gpu_bytes: u64,
-    /// Pending provider output's aligned transfer reservations. Backend staging
-    /// pool statistics are separate (native loader enforces that pool's cap).
+    /// Conservative provider-output transfer reservation; native GPU staging
+    /// and completion are tracked separately by the renderer.
     pub pending_staging_bytes: u64,
-    pub upload_staging_bytes: u64,
-    pub staging_pool_bytes: u64,
     pub active_jobs: u32,
     pub cached_pages: usize,
     pub visible_pages: usize,
-    pub ready_pages: usize,
+    /// CPU-decoded visible pages; not a GPU readiness count.
+    pub decoded_pages: usize,
     pub mip: u32,
     pub evictions: u64,
     pub stale_results: u64,
@@ -124,189 +123,27 @@ impl Drop for Lease {
         u.gpu -= self.bytes;
     }
 }
-#[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-#[derive(Debug)]
-struct BrowserUploads {
-    id: u64,
-    budgets: TileBudgets,
-    staging: Mutex<u64>,
-}
-#[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-static NEXT_BROWSER_UPLOADS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-
-#[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-struct BrowserTransfer {
-    uploads: Arc<BrowserUploads>,
-    bytes: u64,
-    _page: Arc<Lease>,
-}
-#[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-impl Drop for BrowserTransfer {
-    fn drop(&mut self) {
-        *self.uploads.staging.lock().unwrap() -= self.bytes;
-    }
-}
-
 #[derive(Debug)]
 pub struct CanvasPage {
     tile: TileDescriptor,
     _lease: Arc<Lease>,
-    #[cfg(not(target_arch = "wasm32"))]
-    image: crate::MediaImage,
-    #[cfg(target_arch = "wasm32")]
-    data: ImageTextureData,
-    #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-    cached: Mutex<Option<gpui_wgpu::custom_draw::WgpuCustomOutput>>,
-    #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-    placeholder: Mutex<Option<gpui_wgpu::custom_draw::WgpuCustomOutput>>,
-    #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-    uploads: Arc<BrowserUploads>,
+    content: gpui::content::Content,
 }
 impl CanvasPage {
-    #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-    fn prepare_browser(
-        &self,
-        backend: &dyn std::any::Any,
-        frame: &gpui::PreparationFrame,
-    ) -> Result<Box<dyn std::any::Any>> {
-        use gpui_wgpu::custom_draw::WgpuCustomContext;
-        let context = backend
-            .downcast_ref::<WgpuCustomContext>()
-            .ok_or_else(|| anyhow::anyhow!("browser canvas requires wgpu"))?;
-        let mut cached = self.cached.lock().unwrap();
-        if let Some(output) = cached.as_ref().filter(|v| context.can_reuse(v)) {
-            return Ok(Box::new(output.clone()));
-        }
-        let bytes = self.data.staging_byte_len() as u64;
-        let mut staging = self.uploads.staging.lock().unwrap();
-        if bytes <= self.uploads.budgets.staging_bytes.saturating_sub(*staging)
-            && frame.try_reserve_upload(
-                self.uploads.id,
-                self.data.staging_byte_len(),
-                self.uploads.budgets.upload_bytes_per_frame as usize,
-                self.uploads.budgets.uploads_per_frame as usize,
-            )
-        {
-            *staging += bytes;
-            drop(staging);
-            let guard = Arc::new(BrowserTransfer {
-                uploads: self.uploads.clone(),
-                bytes,
-                _page: self._lease.clone(),
-            });
-            let staged = context.image_upload_context().stage(&self.data)?;
-            let output = context.adopt_image_upload_with_guard(&staged, Some(guard))?;
-            *cached = Some(output.clone());
-            return Ok(Box::new(output));
-        }
-        drop(staging);
-        let mut placeholder = self.placeholder.lock().unwrap();
-        if let Some(output) = placeholder.as_ref().filter(|v| context.can_reuse(v)) {
-            return Ok(Box::new(output.clone()));
-        }
-        let data = ImageTextureData::page(
-            1,
-            1,
-            vec![0; self.data.bytes_per_pixel()],
-            self.data.format(),
-        )?;
-        let output = context.create_image_output(&data)?;
-        *placeholder = Some(output.clone());
-        Ok(Box::new(output))
-    }
     pub fn tile(&self) -> TileDescriptor {
         self.tile
     }
-    pub fn ready(&self) -> bool {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.image.page_upload_status() == crate::texture::UploadStatus::Ready
-        }
-        #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-        {
-            self.cached
-                .lock()
-                .unwrap()
-                .as_ref()
-                .is_some_and(|v| v.is_submitted())
-        }
-        #[cfg(all(target_arch = "wasm32", not(feature = "wgpu")))]
-        {
-            false
-        }
-    }
-}
-#[derive(Debug)]
-struct PagePaint(Arc<CanvasPage>, bool);
-impl CustomContent for PagePaint {
-    fn image_source_size(&self) -> Option<gpui::Size<gpui::DevicePixels>> {
-        let r = self.0.tile.upload();
-        Some(gpui::size(
-            gpui::DevicePixels(r.width as i32),
-            gpui::DevicePixels(r.height as i32),
-        ))
-    }
-
-    fn image_sample_opacity(&self) -> f32 {
-        if self.1 { 1. } else { 0. }
-    }
-    fn image_color_mode(&self) -> gpui::ImageColorMode {
-        if self.0.tile.key().image.format == PixelFormat::Rgba16Float {
-            gpui::ImageColorMode::LinearP3Preview
-        } else {
-            gpui::ImageColorMode::EncodedSrgb
-        }
-    }
-    fn prepare(
-        &self,
-        backend: &dyn std::any::Any,
-        size: gpui::Size<gpui::DevicePixels>,
-    ) -> Result<Box<dyn std::any::Any>> {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.0.image.prepare_page_at_size(backend, size)
-        }
-        #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-        {
-            let _ = size;
-            self.0
-                .prepare_browser(backend, &gpui::PreparationFrame::default())
-        }
-        #[cfg(all(target_arch = "wasm32", not(feature = "wgpu")))]
-        {
-            let _ = (backend, size);
-            anyhow::bail!("browser canvas requires wgpu feature")
-        }
-    }
-    fn prepare_in_frame(
-        &self,
-        backend: &dyn std::any::Any,
-        request: &gpui::PreparationRequest,
-        frame: &gpui::PreparationFrame,
-    ) -> Result<Box<dyn std::any::Any>> {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.0.image.prepare_page(backend, request, frame)
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            let _ = request;
-            #[cfg(feature = "wgpu")]
-            {
-                self.0.prepare_browser(backend, frame)
-            }
-            #[cfg(not(feature = "wgpu"))]
-            {
-                let _ = frame;
-                anyhow::bail!("browser canvas requires wgpu")
-            }
-        }
+    /// Immutable source-sized page pixels. GPU readiness belongs to the renderer.
+    pub fn draw(&self) -> gpui::content::ContentDraw {
+        gpui::content::ContentDraw::new(self.content.clone())
+            .color_output(gpui::content::ContentColorOutput::SrgbPreview)
     }
 }
 /// Immutable page-table snapshot. Scene/GPU ownership pins its pages and their
 /// budget leases. Missing/refining pages reveal the retained low-resolution preview.
 #[derive(Debug)]
 pub struct CanvasSnapshot {
+    group: gpui::content::ContentGroup,
     pub source: SourceId,
     pub image: ImageDescriptor,
     pub view: CanvasView,
@@ -316,7 +153,7 @@ pub struct CanvasSnapshot {
 type Placement = (
     gpui::Bounds<gpui::Pixels>,
     gpui::Bounds<gpui::Pixels>,
-    Arc<dyn CustomContent>,
+    gpui::content::ContentDraw,
 );
 impl CanvasSnapshot {
     fn placements(&self, bounds: gpui::Bounds<gpui::Pixels>) -> Vec<Placement> {
@@ -345,62 +182,93 @@ impl CanvasSnapshot {
                 rect(page.tile.content()).intersect(&bounds),
             )
         };
+        let placement =
+            |page: &CanvasPage, destination: Bounds<gpui::Pixels>, clip: Bounds<gpui::Pixels>| {
+                use gpui::content::{ImageCrop, ImageMapping};
+                let upload = page.tile.upload();
+                // Bound destination geometry without creating a filter boundary:
+                // source viewport sampling retains the full page and its halo.
+                let visible = destination.intersect(&clip);
+                let axis = |start: f32, end: f32, base: f32, size: f32, extent: u32| {
+                    let lo = ((start - base) / size * extent as f32).clamp(0., extent as f32);
+                    let hi = ((end - base) / size * extent as f32).clamp(lo, extent as f32);
+                    (lo, hi - lo)
+                };
+                let (x, w) = axis(
+                    f32::from(visible.left()),
+                    f32::from(visible.right()),
+                    f32::from(destination.left()),
+                    f32::from(destination.size.width),
+                    upload.width,
+                );
+                let (y, h) = axis(
+                    f32::from(visible.top()),
+                    f32::from(visible.bottom()),
+                    f32::from(destination.top()),
+                    f32::from(destination.size.height),
+                    upload.height,
+                );
+                let crop = ImageCrop::new([x, y], [w, h]).expect("visible page crop");
+                (
+                    visible,
+                    clip,
+                    page.draw()
+                        .mapping(ImageMapping::default().viewport(Some(crop))),
+                )
+            };
         let mut placements = Vec::new();
         if let Some(preview) = &self.preview {
             let (destination, clip) = geometry(preview);
             let mut holes = vec![clip];
             // Refined translucent tiles REPLACE preview regions. Drawing them
             // over the preview would incorrectly associate alpha twice.
-            for page in self.pages.iter().filter(|p| p.ready()) {
+            for page in self.pages.iter() {
                 let (_, cut) = geometry(page);
                 holes = holes.into_iter().flat_map(|r| subtract(r, cut)).collect();
             }
             for clip in holes {
                 if !clip.is_empty() {
-                    placements.push((
-                        destination,
-                        clip,
-                        Arc::new(PagePaint(preview.clone(), preview.ready()))
-                            as Arc<dyn CustomContent>,
-                    ));
+                    placements.push(placement(preview, destination, clip));
                 }
             }
         }
         for page in &self.pages {
             let (destination, clip) = geometry(page);
             if !clip.is_empty() {
-                placements.push((
-                    destination,
-                    clip,
-                    Arc::new(PagePaint(page.clone(), page.ready())) as Arc<dyn CustomContent>,
-                ));
+                placements.push(placement(page, destination, clip));
             }
         }
         placements
     }
+    /// Atomic portable presentation snapshot; member coordinates are viewport-local.
+    pub fn content_group(&self) -> gpui::content::ContentGroup {
+        self.group.clone()
+    }
     pub fn paint(&self, bounds: gpui::Bounds<gpui::Pixels>, window: &mut gpui::Window) {
-        use gpui::{ContentMask, Corners, CustomGeometry, px};
-        window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            for (destination, clip, content) in self.placements(bounds) {
-                window.with_content_mask(Some(ContentMask { bounds: clip }), |window| {
-                    window.paint_custom(
-                        CustomGeometry::RoundedRect {
-                            bounds: destination,
-                            corner_radii: Corners::all(px(0.)),
-                        },
-                        content,
-                    );
-                });
-            }
+        window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+            window.paint_content_group(bounds, self.content_group());
         });
-        if self
-            .preview
-            .iter()
-            .chain(self.pages.iter())
-            .any(|p| !p.ready())
-        {
-            window.request_animation_frame();
+    }
+    fn build_group(&self, id: gpui::content::ContentGroupId) -> gpui::content::ContentGroup {
+        let mut group = gpui::content::ContentGroup::new(id);
+        let bounds = gpui::Bounds::new(
+            gpui::point(gpui::px(0.), gpui::px(0.)),
+            gpui::size(
+                gpui::px(self.view.viewport[0] as f32),
+                gpui::px(self.view.viewport[1] as f32),
+            ),
+        );
+        for (destination, clip, draw) in self.placements(bounds) {
+            group.push_clipped(
+                gpui::CustomGeometry::RoundedRect {
+                    bounds: destination,
+                    corner_radii: gpui::Corners::default(),
+                },
+                clip,
+                draw,
+            );
         }
+        group
     }
 }
 fn subtract(
@@ -457,8 +325,7 @@ pub struct TileCanvas {
     stopped: bool,
     progressive: ProgressiveImage<CanvasSnapshot>,
     failed: HashSet<TileKey>,
-    #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-    uploads: Arc<BrowserUploads>,
+    group_id: gpui::content::ContentGroupId,
     #[cfg(not(target_arch = "wasm32"))]
     loader: crate::MediaLoader,
 }
@@ -491,24 +358,14 @@ impl TileCanvas {
         let loader = {
             let edge = u64::from(options.layout.edge()) + 2 * u64::from(options.layout.halo());
             let max = (edge * edge * 8).min(gpui::ImageTextureData::MAX_BYTES as u64) as usize;
-            crate::MediaLoader::with_upload_policy(
-                crate::MediaLimits {
-                    max_jobs: options.budgets.decode_jobs as usize,
-                    max_image_bytes: max,
-                    max_resident_bytes: (options.budgets.cpu_bytes as usize)
-                        .saturating_mul(2)
-                        .max(max),
-                    max_encoded_bytes: max,
-                },
-                crate::UploadLimits {
-                    max_jobs: options.budgets.decode_jobs as usize,
-                    max_staging_bytes: options.budgets.staging_bytes as usize,
-                },
-                crate::FrameUploadLimits {
-                    max_uploads: options.budgets.uploads_per_frame as usize,
-                    max_bytes: options.budgets.upload_bytes_per_frame as usize,
-                },
-            )?
+            crate::MediaLoader::new(crate::MediaLimits {
+                max_jobs: options.budgets.decode_jobs as usize,
+                max_image_bytes: max,
+                max_resident_bytes: (options.budgets.cpu_bytes as usize)
+                    .saturating_mul(2)
+                    .max(max),
+                max_encoded_bytes: max,
+            })?
         };
         let canvas = Self {
             provider,
@@ -525,12 +382,7 @@ impl TileCanvas {
             stats: CanvasStats::default(),
             stopped: false,
             failed: HashSet::new(),
-            #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-            uploads: Arc::new(BrowserUploads {
-                id: NEXT_BROWSER_UPLOADS.fetch_add(1, Ordering::Relaxed),
-                budgets: options.budgets,
-                staging: Mutex::new(0),
-            }),
+            group_id: gpui::content::ContentGroupId::new(),
             progressive: ProgressiveImage::new(
                 source,
                 SourceCapabilities {
@@ -759,44 +611,29 @@ impl TileCanvas {
     }
     pub fn stats(&self) -> CanvasStats {
         let u = self.usage.lock().unwrap();
-        #[cfg(not(target_arch = "wasm32"))]
-        let (upload_staging_bytes, staging_pool_bytes) = (
-            self.loader.upload_stats().staging_bytes as u64,
-            self.loader.staging_pool_stats().allocated_bytes as u64,
-        );
-        #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
-        let (upload_staging_bytes, staging_pool_bytes) = (*self.uploads.staging.lock().unwrap(), 0);
-        #[cfg(all(target_arch = "wasm32", not(feature = "wgpu")))]
-        let (upload_staging_bytes, staging_pool_bytes) = (0, 0);
         CanvasStats {
-            upload_staging_bytes,
-            staging_pool_bytes,
             cpu_bytes: u.cpu,
             gpu_bytes: u.gpu,
             pending_staging_bytes: u.staging,
             active_jobs: u.jobs,
             cached_pages: self.cache.len(),
             visible_pages: self.desired.len(),
-            ready_pages: self
+            decoded_pages: self
                 .desired
                 .iter()
                 .filter(|t| {
-                    self.cache.get(&t.key()).is_some_and(|v| v.page.ready())
+                    self.cache.get(&t.key()).is_some()
                         || self
                             .preview
                             .as_ref()
-                            .is_some_and(|p| p.tile.key() == t.key() && p.ready())
+                            .is_some_and(|p| p.tile.key() == t.key())
                 })
                 .count(),
             ..self.stats
         }
     }
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn staging_pool_stats(&self) -> gpui::ImageStagingPoolStats {
-        self.loader.staging_pool_stats()
-    }
-    /// Call once per animation frame. Native upload admission is enforced again
-    /// at host handoff; Wasm generates/uploads at most one small page per call.
+    /// Advance provider decoding once per frame. GPU execution and redraw are
+    /// renderer-owned; per-frame page limits bound CPU publication only.
     pub fn advance(&mut self, view: CanvasView) -> Result<()> {
         view.validate()?;
         if self.stopped {
@@ -842,7 +679,7 @@ impl TileCanvas {
                             Arc::new(CanvasPage {
                                 tile: p.tile,
                                 _lease: p.lease,
-                                image,
+                                content: image.content(),
                             }),
                             p.preview,
                         );
@@ -961,14 +798,10 @@ impl TileCanvas {
                 self.publish_page(
                     Arc::new(CanvasPage {
                         tile,
-                        _lease: lease,
-                        data,
-                        #[cfg(feature = "wgpu")]
-                        cached: Mutex::new(None),
-                        #[cfg(feature = "wgpu")]
-                        placeholder: Mutex::new(None),
-                        #[cfg(feature = "wgpu")]
-                        uploads: self.uploads.clone(),
+                        _lease: lease.clone(),
+                        content: gpui::content::Content::image(gpui::content::ImageAsset::ready(
+                            data.pixels().clone().with_owner(lease.clone()),
+                        )),
                     }),
                     preview,
                 );
@@ -991,13 +824,16 @@ impl TileCanvas {
                             .as_ref()
                             .is_some_and(|p| p.tile.key() == t.key())
                 });
-            let snapshot = Arc::new(CanvasSnapshot {
+            let mut snapshot = CanvasSnapshot {
+                group: gpui::content::ContentGroup::new(self.group_id),
                 source: self.provider.source(),
                 image: self.provider.image(),
                 view,
                 preview: self.preview.clone(),
                 pages,
-            });
+            };
+            snapshot.group = snapshot.build_group(self.group_id);
+            let snapshot = Arc::new(snapshot);
             let event = if complete {
                 SourceEvent::Complete(snapshot)
             } else if self.progressive.snapshot().is_none() {
@@ -1023,6 +859,7 @@ impl Drop for TileCanvas {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::PlatformHeadlessRenderer as _;
     use std::time::{Duration, Instant};
     fn view() -> CanvasView {
         CanvasView {
@@ -1305,6 +1142,22 @@ mod tests {
             device_scale: 1.,
         };
         let snapshot = settled(&mut canvas, v)?;
+        if scale >= 64. {
+            let mut preview = CanvasSnapshot {
+                group: gpui::content::ContentGroup::new(canvas.group_id),
+                source: snapshot.source,
+                image: snapshot.image,
+                view: snapshot.view,
+                preview: snapshot.preview.clone(),
+                pages: vec![],
+            };
+            preview.group = preview.build_group(canvas.group_id);
+            let pixels = ready_pixels(renderer, &refinement_scene(&preview))?;
+            assert!(
+                pixels.get_pixel(253, 100).0[2].abs_diff(50) <= 2,
+                "deep-zoom coarse preview must stay visible with bounded geometry"
+            );
+        }
         let bounds = gpui::Bounds::new(point(px(4.), px(4.)), size(px(500.), px(240.)));
         let mut image = None;
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -1321,39 +1174,36 @@ mod tests {
                 background: gpui::rgb(0).into(),
                 ..Default::default()
             });
-            for (destination, clip, content) in snapshot.placements(bounds) {
-                scene.insert_primitive(CustomDraw {
-                    bounds: destination.map(|v| ScaledPixels(f32::from(v))),
-                    content_mask: ContentMask {
-                        bounds: clip.map(|v| ScaledPixels(f32::from(v))),
-                    },
-                    content,
-                    opacity: 1.,
-                    order: Default::default(),
-                    corner_radii: Default::default(),
-                    coverage: None,
-                });
-            }
+            scene.insert_primitive(CustomDraw {
+                bounds: bounds.map(|v| ScaledPixels(f32::from(v))),
+                content_mask: ContentMask {
+                    bounds: bounds.map(|v| ScaledPixels(f32::from(v))),
+                },
+                content: snapshot.content_group().into_scene_content(),
+                opacity: 1.,
+                order: 0,
+                corner_radii: Default::default(),
+                coverage: None,
+            });
             scene.finish();
-            image = Some(
-                renderer
-                    .render_scene_to_image(&scene, size(DevicePixels(508), DevicePixels(248)))?,
-            );
-            if canvas.stats().ready_pages == canvas.stats().visible_pages {
-                // render one more frame after upload readiness
-                if snapshot.pages.iter().all(|p| p.ready())
-                    && scene
-                        .custom_draws
-                        .iter()
-                        .all(|d| d.content.image_sample_opacity() > 0.)
-                {
+            match renderer.prepare_content_snapshot(&scene) {
+                Ok(()) => {
+                    image = Some(renderer.render_scene_to_image(
+                        &scene,
+                        size(DevicePixels(508), DevicePixels(248)),
+                    )?);
                     break;
                 }
+                Err(error)
+                    if error
+                        .downcast_ref::<gpui::content::ContentError>()
+                        .is_some_and(|e| e.kind == gpui::content::ContentErrorKind::Pending) => {}
+                Err(error) => return Err(error),
             }
             std::thread::sleep(Duration::from_millis(1));
         }
         let image = image.unwrap();
-        assert!(snapshot.pages.iter().all(|p| p.ready()));
+        assert_eq!(canvas.stats().decoded_pages, canvas.stats().visible_pages);
         // Includes the x=256 tile boundary and clipped odd bottom/right pages.
         for (x, y) in [
             (20, 20),
@@ -1385,13 +1235,214 @@ mod tests {
     fn metal_tiled_halos_clipping_and_transparency_match_reference() -> Result<()> {
         let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
         gpu_canvas(&mut renderer, 1.)?;
-        gpu_canvas(&mut renderer, 64.)
+        gpu_canvas(&mut renderer, 64.)?;
+        gpu_canvas(&mut renderer, 1024.)
     }
     #[cfg(feature = "wgpu")]
     #[test]
     fn wgpu_tiled_halos_clipping_and_transparency_match_reference() -> Result<()> {
         let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new()?;
         gpu_canvas(&mut renderer, 1.)?;
-        gpu_canvas(&mut renderer, 64.)
+        gpu_canvas(&mut renderer, 64.)?;
+        gpu_canvas(&mut renderer, 1024.)
+    }
+    #[test]
+    fn portable_graph_retains_page_lease_after_canvas_and_snapshot_drop() -> Result<()> {
+        use gpui::content::{
+            ContentCapabilities, ContentGraph, ContentRequest, ContentRoot, GraphLimits,
+            ImageExtent,
+        };
+        let mut canvas = TileCanvas::new(Arc::new(Gradient), CanvasOptions::default())?;
+        let snapshot = settled(
+            &mut canvas,
+            CanvasView {
+                center: [256., 128.],
+                scale: 1.,
+                viewport: [500., 240.],
+                device_scale: 1.,
+            },
+        )?;
+        let usage = canvas.usage.clone();
+        let page = &snapshot.pages[0];
+        let bytes = page.tile.payload_bytes();
+        let graph = ContentGraph::describe(
+            &[ContentRoot {
+                content: page.draw().content,
+                request: ContentRequest::new(
+                    gpui::size(gpui::px(10.), gpui::px(10.)),
+                    ImageExtent::new(10, 10)?,
+                    1.,
+                )?,
+            }],
+            ContentCapabilities::default(),
+            GraphLimits::default(),
+        )?;
+        drop(snapshot);
+        drop(canvas);
+        assert_eq!(
+            usage.lock().unwrap().cpu,
+            bytes,
+            "graph-held pixels must retain canvas admission"
+        );
+        drop(graph);
+        assert_eq!(usage.lock().unwrap().cpu, 0);
+        assert_eq!(usage.lock().unwrap().gpu, 0);
+        Ok(())
+    }
+    fn refinement_scene(snapshot: &CanvasSnapshot) -> gpui::Scene {
+        use gpui::*;
+        let mut scene = Scene::default();
+        let bounds = Bounds::new(
+            point(ScaledPixels(4.), ScaledPixels(4.)),
+            size(ScaledPixels(500.), ScaledPixels(240.)),
+        );
+        let bg = Bounds::new(
+            point(ScaledPixels(0.), ScaledPixels(0.)),
+            size(ScaledPixels(508.), ScaledPixels(248.)),
+        );
+        scene.insert_primitive(Quad {
+            bounds: bg,
+            content_mask: ContentMask { bounds: bg },
+            background: rgb(0).into(),
+            ..Default::default()
+        });
+        scene.insert_primitive(CustomDraw {
+            order: 0,
+            bounds,
+            content_mask: ContentMask { bounds },
+            corner_radii: Default::default(),
+            opacity: 1.,
+            coverage: None,
+            content: snapshot.content_group().into_scene_content(),
+        });
+        scene.finish();
+        scene
+    }
+    fn ready_pixels(
+        renderer: &mut dyn gpui::PlatformHeadlessRenderer,
+        scene: &gpui::Scene,
+    ) -> Result<image::RgbaImage> {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            match renderer.prepare_content_snapshot(scene) {
+                Ok(()) => {
+                    return renderer.render_scene_to_image(
+                        scene,
+                        gpui::size(gpui::DevicePixels(508), gpui::DevicePixels(248)),
+                    );
+                }
+                Err(e)
+                    if e.downcast_ref::<gpui::content::ContentError>()
+                        .is_some_and(|e| e.kind == gpui::content::ContentErrorKind::Pending) => {}
+                Err(e) => return Err(e),
+            }
+            ensure!(Instant::now() < deadline, "page GPU readiness timed out");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+    fn refinement_setup(
+        renderer: &mut dyn gpui::PlatformHeadlessRenderer,
+    ) -> Result<(gpui::Scene, image::RgbaImage)> {
+        let mut canvas = TileCanvas::new(Arc::new(Gradient), CanvasOptions::default())?;
+        let snapshot = settled(
+            &mut canvas,
+            CanvasView {
+                center: [256., 128.],
+                scale: 1.,
+                viewport: [500., 240.],
+                device_scale: 1.,
+            },
+        )?;
+        let mut preview = CanvasSnapshot {
+            group: gpui::content::ContentGroup::new(canvas.group_id),
+            source: snapshot.source,
+            image: snapshot.image,
+            view: snapshot.view,
+            preview: snapshot.preview.clone(),
+            pages: vec![],
+        };
+        preview.group = preview.build_group(canvas.group_id);
+        let pixels = ready_pixels(renderer, &refinement_scene(&preview))?;
+        assert!(
+            pixels.get_pixel(253, 100).0[2] > 40,
+            "preview must be visible"
+        );
+        Ok((refinement_scene(&snapshot), pixels))
+    }
+    fn assert_pending_refinement(
+        renderer: &mut dyn gpui::PlatformHeadlessRenderer,
+        scene: &gpui::Scene,
+        previous: &image::RgbaImage,
+    ) -> Result<()> {
+        let err = renderer.prepare_content_snapshot(scene).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<gpui::content::ContentError>()
+                .unwrap()
+                .kind,
+            gpui::content::ContentErrorKind::Pending
+        );
+        let actual = renderer.render_scene_to_image(
+            scene,
+            gpui::size(gpui::DevicePixels(508), gpui::DevicePixels(248)),
+        )?;
+        assert_eq!(
+            &actual, previous,
+            "pending refinement must retain the complete preview, including translucent regions"
+        );
+        Ok(())
+    }
+    macro_rules! paused_refinement {
+        ($renderer:expr,$limits:ty,$gate:ty) => {{
+            let mut renderer = $renderer;
+            let (scene, previous) = refinement_setup(&mut renderer)?;
+            struct Release(Arc<$gate>);
+            impl Drop for Release {
+                fn drop(&mut self) {
+                    self.0.release();
+                }
+            }
+            let gate = Release(Arc::new(<$gate>::default()));
+            let mut limits = <$limits>::default();
+            limits.pause_before_node = Some((0, gate.0.clone()));
+            renderer.set_content_validation_limits(limits);
+            assert!(renderer.prepare_content_snapshot(&scene).is_err());
+            assert!(gate.0.wait_until_entered(Duration::from_secs(5)));
+            assert_pending_refinement(&mut renderer, &scene, &previous)?;
+            gate.0.release();
+            let pixels = ready_pixels(&mut renderer, &scene)?;
+            for x in [252, 253, 254, 255, 256] {
+                assert!(
+                    pixels.get_pixel(x, 100).0[2].abs_diff(50) <= 2,
+                    "refinement must replace preview alpha once at tile boundaries"
+                );
+            }
+            let jobs = renderer.content_presentation_stats().requests;
+            let replay = ready_pixels(&mut renderer, &scene)?;
+            assert_eq!(
+                renderer.content_presentation_stats().requests,
+                jobs,
+                "replay must reuse page GPU realizations"
+            );
+            assert_eq!(pixels, replay);
+            Ok(())
+        }};
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn metal_paused_refinement_retains_preview_without_alpha_overlap() -> Result<()> {
+        paused_refinement!(
+            gpui_apple::metal_renderer::MetalHeadlessRenderer::new(),
+            gpui_apple::content_executor::MetalContentLimits,
+            gpui_apple::content_executor::MetalContentTestGate
+        )
+    }
+    #[cfg(feature = "wgpu")]
+    #[test]
+    fn wgpu_paused_refinement_retains_preview_without_alpha_overlap() -> Result<()> {
+        paused_refinement!(
+            gpui_wgpu::WgpuHeadlessRenderer::new()?,
+            gpui_wgpu::content_executor::WgpuContentLimits,
+            gpui_wgpu::content_executor::WgpuContentTestGate
+        )
     }
 }
