@@ -399,14 +399,18 @@ No dependencies or system software are installed automatically.
 ### Browser prerequisites
 
 In addition to the toolchain required by `just web-build` (including the pinned
-wasm-bindgen CLI), install Node.js on PATH and the optional test-only Python
-browser dependency. Follow the [Playwright library setup](https://playwright.dev/python/docs/library):
+wasm-bindgen CLI), install the optional test-only Python browser dependency. The
+runner uses Playwright from the active interpreter or automatically discovers
+`target/test-browser`. It prefers Node.js on PATH and otherwise uses the Node
+runtime bundled with that Playwright installation. No global Node installation,
+virtual-environment activation or Just interpreter override is required. Exact
+selected executable paths are retained in the command logs/reports. Follow the [Playwright library setup](https://playwright.dev/python/docs/library):
 
 ```sh
 python3 -m venv target/test-browser
 target/test-browser/bin/python -m pip install -r scripts/browser-test-requirements.txt
 target/test-browser/bin/python -m playwright install chromium
-just python=target/test-browser/bin/python test-web
+just test-web
 ```
 
 On Windows use `python` and `target/test-browser/Scripts/python.exe` for the

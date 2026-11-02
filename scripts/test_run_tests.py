@@ -119,6 +119,28 @@ class RunnerTests(unittest.TestCase):
             photos = [case for case in cases if "italy" in case[0]]
             self.assertEqual(photos, [("extensions-italy-dom", "/examples/extensions/?demo=italy", "dom")])
 
+    def test_browser_runtime_finds_local_venv_without_global_node(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            interpreter = root / "target/test-browser/bin/python"
+            interpreter.parent.mkdir(parents=True)
+            interpreter.touch()
+            bundled_node = str(root / "driver/node")
+            with patch.object(runner.shutil, "which", return_value=None), patch.object(
+                    runner, "probe_browser_runtime", side_effect=lambda path:
+                    {"node": bundled_node} if path == interpreter else None):
+                self.assertEqual(runner.browser_runtime(root), (str(interpreter), bundled_node))
+
+    def test_browser_runtime_prefers_active_python_and_node_on_path(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner.shutil, "which", return_value="/installed/node"), patch.object(
+                runner, "probe_browser_runtime", return_value={"node": "/bundled/node"}):
+            self.assertEqual(runner.browser_runtime(Path(directory)), (sys.executable, "/installed/node"))
+
+    def test_missing_browser_runtime_does_not_claim_a_discovered_installation(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner.shutil, "which", return_value=None), patch.object(
+                runner, "probe_browser_runtime", return_value=None):
+            self.assertEqual(runner.browser_runtime(Path(directory)), (sys.executable, "node"))
+
 
 if __name__ == "__main__":
     unittest.main()

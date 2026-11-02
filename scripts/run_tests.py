@@ -155,16 +155,50 @@ def ui_plan(profile, output, host):
     return checks
 
 
+def probe_browser_runtime(interpreter):
+    """Read package metadata in that interpreter; do not install or activate anything."""
+    code = """import importlib.util,json,pathlib,os
+spec=importlib.util.find_spec('playwright')
+if spec is None or spec.origin is None:
+    raise SystemExit(2)
+node=pathlib.Path(spec.origin).parent/'driver'/('node.exe' if os.name=='nt' else 'node')
+print(json.dumps({'node':str(node) if node.is_file() else None}))
+"""
+    try:
+        result = subprocess.run([str(interpreter), "-c", code], capture_output=True,
+                                text=True, timeout=5)
+        if result.returncode == 0:
+            return json.loads(result.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return None
+
+
+def browser_runtime(root=ROOT):
+    """Prefer the active environment, then the documented local test venv."""
+    node = shutil.which("node")
+    candidates = [Path(sys.executable), root / "target/test-browser/bin/python",
+                  root / "target/test-browser/Scripts/python.exe"]
+    for interpreter in candidates:
+        if interpreter.is_file():
+            runtime = probe_browser_runtime(interpreter)
+            if runtime is not None:
+                return str(interpreter), node or runtime.get("node") or "node"
+    # Existing missing-prerequisite handling gives setup guidance and exit 2.
+    return sys.executable, node or "node"
+
+
 def web_plan(profile, output, host):
+    browser_python, node = browser_runtime()
     return [
         Check("web-color-tests", cargo("test", LAB, profile, "--no-default-features", "--features", "web",
                                       "--test", "color-tasks", "--test", "italy-photo")),
         Check("docs-generate", ["cargo", "run", "--locked", "--manifest-path", "tools/crate-roadmap/Cargo.toml", "--", str(ROOT)]),
-        Check("docs-verify", ["node", "docs/verify.mjs"]),
-        Check("docs-code-examples", ["node", "--test", "docs/code-examples.test.mjs"]),
+        Check("docs-verify", [node, "docs/verify.mjs"]),
+        Check("docs-code-examples", [node, "--test", "docs/code-examples.test.mjs"]),
         Check("web-build", ["just", "web-build"]),
         Check("web-stage", [sys.executable, "scripts/stage_website.py"], requires=["web-build", "docs-generate"]),
-        Check("browser-smoke", [sys.executable, "scripts/browser_smoke.py", "--output", str(output / "browser")], requires=["web-stage"]),
+        Check("browser-smoke", [browser_python, "scripts/browser_smoke.py", "--output", str(output / "browser")], requires=["web-stage"]),
     ]
 
 
