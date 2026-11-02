@@ -6,7 +6,6 @@ pub use filter::{FilteredImage, ImageFilter};
 use pipeline::ImageAdjustments;
 mod mipmaps;
 mod texture;
-mod upload;
 mod video;
 #[cfg(target_os = "macos")]
 pub use gpui_apple::custom_draw::core_video::{CoreVideoFrame, Nv12Matrix};
@@ -18,7 +17,6 @@ pub use video::{VideoFrame, VideoSender, VideoStats, VideoStream, VideoView, vid
 
 pub use loader::{ImageJob, LoadStatus, MediaLimits, MediaLoader};
 pub use texture::MediaImage;
-pub use upload::{FrameUploadLimits, UploadLimits, UploadStats};
 
 use gpui::{
     App, Bounds, Corners, CustomGeometry, Element, ElementId, GlobalElementId, InspectorElementId,

@@ -132,12 +132,6 @@ fn check_ordinary(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
             "portable mipmapped image: {pixel:?}"
         );
     }
-    assert_eq!(
-        image.page_upload_count(),
-        0,
-        "ordinary images must not start page staging workers"
-    );
-    assert_eq!(loader.upload_stats().staging_bytes, 0);
     Ok(())
 }
 fn check_wide_preview(
@@ -195,7 +189,6 @@ fn check_wide_preview(
         grouped_pixels.get_pixel(6, 6).0[0].abs_diff(expected_red) <= 2,
         "group must preserve explicit preview output"
     );
-    assert_eq!(image.page_upload_count(), 0);
     Ok(())
 }
 #[cfg(target_os = "macos")]
@@ -418,11 +411,6 @@ fn exercise_effect_changes(renderer: &mut dyn PlatformHeadlessRenderer) -> Resul
         descriptions.load(Ordering::SeqCst),
         1,
         "parameter-only changes must not rebuild or rehash the source graph"
-    );
-    assert_eq!(
-        image.page_upload_count(),
-        0,
-        "effects must never start page staging workers"
     );
     Ok(())
 }

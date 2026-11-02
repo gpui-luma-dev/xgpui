@@ -1,5 +1,4 @@
-use crate::upload::UploadScheduler;
-use crate::{FrameUploadLimits, MediaImage, UploadLimits, UploadStats, mipmaps};
+use crate::{MediaImage, mipmaps};
 use anyhow::{Context, Result, ensure};
 use std::{
     io::{Cursor, Read},
@@ -36,7 +35,6 @@ struct Usage {
     bytes: usize,
 }
 struct Pool {
-    uploads: Arc<UploadScheduler>,
     limits: MediaLimits,
     usage: Mutex<Usage>,
 }
@@ -56,11 +54,6 @@ pub(crate) struct Reservation {
     pool: Arc<Pool>,
     _guard: Option<Arc<dyn Send + Sync>>,
     bytes: usize,
-}
-impl Reservation {
-    pub(crate) fn uploads(&self) -> Arc<UploadScheduler> {
-        self.pool.uploads.clone()
-    }
 }
 impl Drop for Reservation {
     fn drop(&mut self) {
@@ -115,18 +108,6 @@ impl Drop for ImageJob {
 }
 impl MediaLoader {
     pub fn new(limits: MediaLimits) -> Result<Self> {
-        Self::with_upload_limits(limits, UploadLimits::default())
-    }
-    /// Configure independent decode/payload and background-staging admission.
-    pub fn with_upload_limits(limits: MediaLimits, uploads: UploadLimits) -> Result<Self> {
-        Self::with_upload_policy(limits, uploads, FrameUploadLimits::default())
-    }
-    /// Configure decode, staging, and per-frame copy admission independently.
-    pub fn with_upload_policy(
-        limits: MediaLimits,
-        uploads: UploadLimits,
-        frames: FrameUploadLimits,
-    ) -> Result<Self> {
         ensure!(
             limits.max_jobs > 0
                 && limits.max_image_bytes > 0
@@ -137,20 +118,9 @@ impl MediaLoader {
             "invalid media limits"
         );
         Ok(Self(Arc::new(Pool {
-            uploads: UploadScheduler::with_frame_limits(uploads, frames)?,
             limits,
             usage: Mutex::new(Usage::default()),
         })))
-    }
-    /// Active workers and staging reservations for the remaining effect/page
-    /// path. Ordinary image uploads use renderer-owned content executor budgets.
-    pub fn upload_stats(&self) -> UploadStats {
-        self.0.uploads.stats()
-    }
-    /// Current queue's Metal/wgpu idle-cache allocation and reuse evidence.
-    /// D3D11 staging is not pooled yet and reports zero cache statistics.
-    pub fn staging_pool_stats(&self) -> gpui::ImageStagingPoolStats {
-        self.0.uploads.pool_stats()
     }
     /// Decode PNG/JPEG/WebP's first frame on a background worker and prepare a
     /// full mip chain. Input is interpreted as SDR sRGB; ICC/HDR conversion and

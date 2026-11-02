@@ -1792,3 +1792,23 @@ Metal/wgpu group and mapping suites also pass. The exact `just media` locked
 release build, Wasm lab check and Windows media/test cross-check pass. The browser
 and Windows runtime still require host testing. No backend-specific producer
 branch is required from canvas callers.
+
+
+### Remove obsolete media staging checkpoint
+
+The media producer staging implementation (`upload.rs`, backend/queue caches,
+worker threads, placeholders, submission polling and retry generations) is deleted.
+`MediaLoader` now accepts only `MediaLimits` for CPU decode/payload admission.
+`UploadLimits`, `FrameUploadLimits`, `UploadStats`, `with_upload_limits`,
+`with_upload_policy`, `upload_stats` and `staging_pool_stats` are removed; no
+compatibility shim remains. MediaImage retains packed CPU data, source metadata
+and a portable source whose pixel owner keeps the loader reservation charged.
+It has no producer GPU state or duplicate native image-metadata hooks.
+
+Tests for the removed private scheduler/producer handoff path were deleted with
+that code. Portable source-description/upload reuse, GPU completion, atomic
+refinement, crop precision, color reference pixels and graph-held page leases
+remain covered. All 85 remaining media tests pass on Metal/wgpu. The exact locked
+lab release build has no Rust unused-code warnings; the shared validation config
+still reports its unused proptest patch for this application's dependency graph.
+Native import/video adapters and core native staging APIs remain separate work.

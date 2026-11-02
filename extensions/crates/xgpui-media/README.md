@@ -87,7 +87,9 @@ There is no public per-image GPU upload status/count/retry API. Strict headless
 validation uses `prepare_content_snapshot` and retries typed Pending results.
 Tiled pages also use portable immutable sources and atomic presentation groups.
 Their provider scheduler reports CPU decoding; GPU readiness is renderer-owned.
-Obsolete media staging infrastructure remains for a separate removal step.
+The obsolete media staging layer and loader upload-policy API have been removed.
+Use `MediaLoader::new(MediaLimits)` for CPU admission; portable renderers own GPU
+allocation, upload scheduling, completion and retained presentation.
 
 ## Image adjustments
 

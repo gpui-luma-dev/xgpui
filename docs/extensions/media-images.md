@@ -132,25 +132,21 @@ embedded color profiles, EXIF orientation and [HDR ↗](https://en.wikipedia.org
 
 ## Set a loading budget for a scrolling gallery
 
-Share a loader across related images. If loading competes with scrolling, you can
-limit how many new sources the renderer adopts in each scene:
+Share a loader across related images and configure CPU decode/payload admission:
 
 ```rust,ignore
-use xgpui_media::{FrameUploadLimits, MediaLimits, UploadLimits};
-
-let loader = MediaLoader::with_upload_policy(
-    MediaLimits::default(),
-    UploadLimits::default(),
-    FrameUploadLimits { max_uploads: 1, ..Default::default() },
-)?;
+use xgpui_media::{MediaLoader, MediaLimits};
+let loader = MediaLoader::new(MediaLimits {
+    max_jobs: 1,
+    ..MediaLimits::default()
+})?;
 ```
 
-This example permits one new source per scene. Cached images still draw normally.
-The default frame byte limit is 64 MiB; an image's full mip chain must fit that
-limit. An oversized source reports an error, so resize it or raise the byte limit.
 A busy loader rejects new decode requests; keep a small application queue and
-retry as slots become available. This is not a promise that every frame will meet
-its timing budget on every machine.
+retry as slots become available. GPU upload scheduling, allocation limits and
+completion belong to the portable renderer. The old `with_upload_policy`,
+`with_upload_limits`, upload counters and per-image retry/status API are removed.
+This CPU limit does not promise a frame-time budget.
 
 ## Show frames from a camera or capture source
 
@@ -291,8 +287,7 @@ Canvas provider budgets and `decoded_pages` describe CPU work and retained page
 payloads; native GPU readiness and allocation budgets belong to the renderer.
 Strict headless callers use `prepare_content_snapshot` and retry typed Pending.
 See the [tiled pipeline guide](media-pipeline.md#providers-and-progressive-behavior)
-for lease lifetime, cancellation, and page budget scope. The unused media upload
-policy infrastructure is scheduled for removal, not used for page presentation.
+for lease lifetime, cancellation, and page budget scope. The obsolete media upload-policy layer has been removed.
 
 ## Image color filters
 
@@ -678,14 +673,14 @@ omit it on a first setup that needs downloads.
 cargo test --release --offline --locked --manifest-path extensions/crates/xgpui-media/Cargo.toml --features wgpu --lib
 ```
 
-On macOS this runs sixteen tests, including both native Metal and wgpu pixel checks.
-The tests generate temporary checkerboard PNGs, decode and mipmap them, render at
-multiple sizes, and assert pixel values. They also check clipping, rounded corners,
-opacity, native scene order, texture reuse, loader budgets, cancellation and errors.
-Upload tests verify the first-paint placeholder, bounded worker/staging admission,
-queued progress after handoff, failure/retry status, different pixels after
-buffer refill, and independent frame count/byte admission.
-Expected result: `16 passed; 0 failed`. The suite does not open a window.
+On macOS with wgpu enabled this runs 85 tests, including native Metal and wgpu
+pixel checks. Coverage includes loading budgets, cancellation, pixel metadata,
+mips, clipping, opacity, portable upload reuse, CPU-reference color adjustments,
+wide output, tiled halo seams, fractional camera geometry, atomic refinement and
+page leases retained by graphs. Four tests for the deleted producer staging API
+and its private scheduler test were removed with that implementation. Portable
+executor admission/completion tests remain in the backend crates.
+Expected result: `85 passed; 0 failed`. These tests do not open a window.
 
 For only CPU loading/mipmap tests, use these filters:
 
@@ -840,34 +835,17 @@ Metal on macOS; the portable recipe enables wgpu. Debug builds are rejected.
 For custom output paths, invoke the lab with `--headless --upload-bench
 --bench-report PATH --png PATH` (plus `--wgpu` / `--features wgpu` for portable).
 
-The workload uses six deterministic noisy 2048×2048 PNGs with solid center markers,
-full mip chains (about 128 MiB retained source payload), and twelve placements in
-a 900×600 scene. It warms the pipeline/target with a small source, decodes/mips
-all full sources before timing, then stages three waves by invalidating each
-source cache between waves. Admission allows two upload workers, 64 MiB staging,
-and one source / 32 MiB payload per scene frame. The scene is paced at roughly
-60 Hz. A final 120-frame phase renders the same full-source scene from cache.
-
-The JSON stores every frame's `render_scene` CPU wall duration and summed source
-preparation duration, plus nearest-rank p50/p95/p99/max and sample counts. It also
-records decode/mip wall time separately, observed newly submitted sources and
-staging peaks, pool allocations/reuses, per-source upload counts, backend/build
-metadata and interpretation caveats. Assertions check per-frame admission, drain
-and timeout behavior, all source submissions, reuse bounds and both placements'
-final colors. Final render-target readback validates pixels outside timing.
-
-These timings exclude PNG generation, pipeline warmup, decode/mips, pacing sleep
-and final readback. They are **not GPU timestamps, whole-window frame times or a
-zero-stutter guarantee**. Driver backpressure can affect CPU time; instrumentation
-and background system load also matter. Upload-phase samples include placeholder,
-staging and adoption frames, so compare sample counts and raw frames rather than
-assuming each sample is an upload duration. Observed staging drain includes frame
-pacing/polling and backend lifetime semantics; `Ready` alone means host-submitted.
-Source/staging accounting is not a total process-memory or VRAM measurement.
+The current schema-2 workload uses six deterministic 1024² sources, three fresh
+renderer waves and 120 cached frames alternating color adjustments. Decode/mips
+happen before timing. The report stores strict-snapshot CPU time, render-submit
+CPU time and readiness wall time (including polling), with final PNG pixel checks
+outside timed samples. It does not report producer counters, staging pools or
+GPU timestamps. Driver/device pools can outlive fresh renderers. This corpus and
+schema are not directly comparable with the historical schema-1 results below.
 
 ### Recorded macOS observations — 2026-10-26
 
-These are single observations from the default release workload, not performance
+These are historical schema-1 observations from the former release workload, not performance
 thresholds. No atlas comparison or window event/layout/animation workload is
 included. The wgpu API used by this harness does not expose the adapter name.
 

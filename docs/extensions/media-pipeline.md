@@ -257,9 +257,9 @@ explicitly rejects Adobe RGB working matrices because the GPU currently supports
 only sRGB/P3; convert the input to canonical P3 and choose either supported
 working space for placement. See the [wider-gamut design](color-math.md#preserve-both-source-gamuts).
 
-`load_rgba16f` uses the same worker admission, cancellation, payload reservation,
-background staging pool, per-frame transfer limits and immutable source cache as
-ordinary images. The full chain still has a **64 MiB** payload cap; RGBA16F costs
+`load_rgba16f` uses the same CPU worker admission, cancellation and payload
+reservation as ordinary images. Portable renderer executors own GPU upload
+scheduling and completion; the loader has no backend cache or upload policy. The full chain still has a **64 MiB** payload cap; RGBA16F costs
 8 bytes/pixel before mip overhead and staging padding. Caller-supplied f32 arrays
 cost 16 bytes/pixel and must fit `max_encoded_bytes` (also the supplied-input cap).
 Conversion scratch and driver overhead are additional; these are not RSS/VRAM caps.
