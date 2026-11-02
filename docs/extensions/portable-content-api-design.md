@@ -1627,3 +1627,29 @@ callbacks only request redraw; they never publish images or restore group epochs
 CPU race/lifetime tests and Metal/wgpu pixel tests cover this integration. D3D11
 has cross-compilation coverage; Windows execution remains outstanding. Source
 mapping controls and migration of ordinary media producers are still next steps.
+
+#### Checked image mapping contract
+
+The shared CPU mapping layer now exposes `ImageFit`, checked `ImageCrop`,
+`ImageMapping`, and `ResolvedImageMapping`. Default mapping is centered stretch
+with linear clamp sampling and no mip access. Alignment is normalized (zero
+left/top, one right/bottom). Contain aligns unused destination space; cover aligns
+excess source space. Source crops use base-level pixel edge coordinates, support
+fractional edges, and are validated against the descriptor being displayed at
+resolution time. Presentation samplers require clamp addressing; repeat and mirror
+addressing remain available to graph passes.
+
+Resolution preserves the full destination for compositor coverage, returning a
+normalized inner destination and visible source UV rectangle. Letterboxing is
+transparent before sampling, rather than clamping outside the inner destination.
+Base-level sampling clamps to crop texel centers; a crop narrower than one texel
+collapses its filter domain to its center. Cover selects a viewport within the
+crop and does not create new filter boundaries. Mip-aware crop footprint clamping
+must be implemented at the sampled levels when the compositors consume this
+contract; base-level clamp values alone do not isolate a crop in lower mips.
+
+CPU tests cover independent nearest-pixel reference output, fit/alignment on both
+axes, crop bounds and fractional edges, retained source dimensions, invalid
+coordinates, sampler policy, and extreme dimension precision. This layer is not
+yet attached to `ContentDraw`: compositor integration and native pixel validation
+remain the next implementation step, with no current application visual change.
