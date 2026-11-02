@@ -96,3 +96,65 @@ fn builtin_draw_offsets_and_dispatch_counts_use_sm5_constants() {
         .unwrap();
     assert!(t.source.contains("_NagaConstants.first_vertex"));
 }
+
+#[test]
+fn stage_specific_samplers_keep_global_registers_and_renamed_identifiers() {
+    let p = PortableProgram::render(
+        r#"
+        @group(0) @binding(0) var image: texture_2d<f32>;
+        @group(0) @binding(1) var linear: sampler;
+        @group(0) @binding(2) var point: sampler;
+        struct V { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> }
+        @vertex fn vertex_main(@builtin(vertex_index) index: u32) -> V {
+            let c = textureSampleLevel(image, linear, vec2(0.5), 0.0);
+            return V(vec4(f32(index) + c.x, 0.0, 0.0, 1.0), vec2(0.5));
+        }
+        @fragment fn fragment_main(v: V) -> @location(0) vec4<f32> {
+            return textureSample(image, point, v.uv);
+        }
+        "#,
+        "vertex_main",
+        "fragment_main",
+        srgb(),
+        ImageContracts::new().image("image", srgb()),
+    )
+    .unwrap();
+    for (stage, entry, original, register, method) in [
+        (
+            naga::ShaderStage::Vertex,
+            "vertex_main",
+            "linear",
+            0,
+            "SampleLevel",
+        ),
+        (
+            naga::ShaderStage::Fragment,
+            "fragment_main",
+            "point",
+            1,
+            "Sample",
+        ),
+    ] {
+        let t = translation::translate(&p, stage, entry).unwrap();
+        assert!(matches!(t.slots[original], translation::Slot::Sampler(r) if r == register));
+        let declaration = t
+            .source
+            .lines()
+            .find(|line| {
+                line.starts_with("SamplerState ")
+                    && line.contains(&format!("register(s{register})"))
+            })
+            .expect("stage sampler must use its module-wide assigned register");
+        let generated = declaration.split_whitespace().nth(1).unwrap();
+        assert_ne!(
+            generated, original,
+            "fixture must exercise HLSL identifier renaming"
+        );
+        assert!(
+            t.source.contains(&format!(".{method}({generated},")),
+            "{}",
+            t.source
+        );
+        assert!(!t.source.contains("nagaSamplerHeap["));
+    }
+}

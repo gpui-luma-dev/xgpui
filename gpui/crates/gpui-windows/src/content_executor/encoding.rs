@@ -30,6 +30,7 @@ fn charge(d: &c::ResourceDescriptor) -> u64 {
 }
 fn buffer(
     device: &ID3D11Device,
+    ctx: &ID3D11DeviceContext,
     bytes: u64,
     uniform: bool,
     data: Option<&[u8]>,
@@ -39,10 +40,17 @@ fn buffer(
     } else {
         padded(bytes)
     };
-    let mut initial = vec![0; len as usize];
-    if let Some(data) = data {
-        initial[..data.len()].copy_from_slice(data);
-    }
+    // Upload directly when aligned. A padded upload needs a CPU copy to define
+    // its tail; no-data storage buffers are cleared on the recording context.
+    let padded_data = data.filter(|data| data.len() != len as usize).map(|data| {
+        let mut bytes = vec![0; len as usize];
+        bytes[..data.len()].copy_from_slice(data);
+        bytes
+    });
+    let initial = data.map(|data| D3D11_SUBRESOURCE_DATA {
+        pSysMem: padded_data.as_deref().unwrap_or(data).as_ptr().cast(),
+        ..Default::default()
+    });
     let desc = D3D11_BUFFER_DESC {
         ByteWidth: len as u32,
         Usage: D3D11_USAGE_DEFAULT,
@@ -61,63 +69,53 @@ fn buffer(
         },
         ..Default::default()
     };
-    let initial = D3D11_SUBRESOURCE_DATA {
-        pSysMem: initial.as_ptr().cast(),
-        ..Default::default()
-    };
     let mut result = None;
     unsafe {
         device
-            .CreateBuffer(&desc, Some(&initial), Some(&mut result))
+            .CreateBuffer(
+                &desc,
+                initial.as_ref().map(|data| data as *const _),
+                Some(&mut result),
+            )
             .map_err(allocation)?;
     }
-    Ok(Arc::new(Resource::Buffer {
+    let resource = Arc::new(Resource::Buffer {
         buffer: result.ok_or_else(|| allocation("missing portable buffer"))?,
         charge: buffer_charge(len),
-    }))
+    });
+    if data.is_none() {
+        // All no-data callers create storage/raw buffers, never uniforms.
+        unsafe {
+            ctx.ClearUnorderedAccessViewUint(&uav(device, &resource)?, &[0; 4]);
+        }
+    }
+    Ok(resource)
 }
+
 fn image(
     device: &ID3D11Device,
+    ctx: &ID3D11DeviceContext,
     d: &c::ImageDescriptor,
     storage: bool,
     upload: Option<&[u8]>,
 ) -> Result<Arc<Resource>> {
-    let mut levels = vec![];
-    let mut offset = 0;
-    for l in 0..d.mip_levels() {
-        let w = (d.extent().width() >> l).max(1);
-        let h = (d.extent().height() >> l).max(1);
-        let len = (w * h) as usize * d.format().bytes_per_pixel() as usize;
-        let mut bytes = vec![0; len];
-        if let Some(upload) = upload {
-            bytes.copy_from_slice(&upload[offset..offset + len]);
-        } else if d.interpretation().alpha == c::AlphaMode::Opaque {
-            match d.format() {
-                c::PixelFormat::Rgba8 | c::PixelFormat::Bgra8 => {
-                    for p in bytes.chunks_exact_mut(4) {
-                        p[3] = 255;
-                    }
-                }
-                c::PixelFormat::Rgba16Float => {
-                    for p in bytes.chunks_exact_mut(8) {
-                        p[6..].copy_from_slice(&0x3c00u16.to_le_bytes());
-                    }
-                }
-                _ => {}
-            }
+    // D3D copies the caller's packed mip data during creation; avoid a second
+    // CPU image and initialize no-data textures explicitly on the GPU below.
+    let mut initial = vec![];
+    if let Some(upload) = upload {
+        let mut offset = 0;
+        for l in 0..d.mip_levels() {
+            let w = (d.extent().width() >> l).max(1);
+            let h = (d.extent().height() >> l).max(1);
+            let row = w * d.format().bytes_per_pixel() as u32;
+            initial.push(D3D11_SUBRESOURCE_DATA {
+                pSysMem: upload[offset..].as_ptr().cast(),
+                SysMemPitch: row,
+                ..Default::default()
+            });
+            offset += row as usize * h as usize;
         }
-        levels.push(bytes);
-        offset += len;
     }
-    let initial: Vec<_> = levels
-        .iter()
-        .enumerate()
-        .map(|(l, data)| D3D11_SUBRESOURCE_DATA {
-            pSysMem: data.as_ptr().cast(),
-            SysMemPitch: (d.extent().width() >> l).max(1) * d.format().bytes_per_pixel() as u32,
-            ..Default::default()
-        })
-        .collect();
     let desc = D3D11_TEXTURE2D_DESC {
         Width: d.extent().width(),
         Height: d.extent().height(),
@@ -141,14 +139,27 @@ fn image(
     let mut t = None;
     unsafe {
         device
-            .CreateTexture2D(&desc, Some(initial.as_ptr()), Some(&mut t))
+            .CreateTexture2D(&desc, upload.map(|_| initial.as_ptr()), Some(&mut t))
             .map_err(allocation)?;
     }
-    Ok(Arc::new(Resource::Image {
+    let resource = Arc::new(Resource::Image {
         texture: t.ok_or_else(|| allocation("missing portable texture"))?,
         charge: image_charge(d),
-    }))
+    });
+    if upload.is_none() {
+        let alpha = f32::from(d.interpretation().alpha == c::AlphaMode::Opaque);
+        for mip in 0..d.mip_levels() {
+            unsafe {
+                ctx.ClearRenderTargetView(
+                    &rtv(device, resource.texture(), mip)?,
+                    &[0., 0., 0., alpha],
+                );
+            }
+        }
+    }
+    Ok(resource)
 }
+
 fn rtv(device: &ID3D11Device, t: &ID3D11Texture2D, mip: u32) -> Result<ID3D11RenderTargetView> {
     let mut view = None;
     let desc = D3D11_RENDER_TARGET_VIEW_DESC {
@@ -596,7 +607,7 @@ impl Worker {
             .into_iter()
             .flat_map(u32::to_le_bytes)
             .collect::<Vec<_>>();
-        let params = buffer(&self.device, 16, true, Some(&values))?;
+        let params = buffer(&self.device, &self.deferred, 16, true, Some(&values))?;
         unsafe {
             self.deferred.CSSetShader(&shader, None);
             self.deferred.CSSetShaderResources(0, Some(&[Some(view)]));
@@ -717,7 +728,7 @@ impl Run<'_> {
             unsafe {
                 match (slot, binding.resource()) {
                     (Slot::Uniform(i), c::BoundResource::Uniform(bytes)) => {
-                        let b = buffer(d, bytes.len() as u64, true, Some(bytes))?;
+                        let b = buffer(d, ctx, bytes.len() as u64, true, Some(bytes))?;
                         let values = [Some(b.buffer().clone())];
                         ctx.VSSetConstantBuffers(*i, Some(&values));
                         ctx.PSSetConstantBuffers(*i, Some(&values));
@@ -773,6 +784,7 @@ impl Run<'_> {
             .map(|desc| match desc {
                 c::ResourceDescriptor::Image(desc) => image(
                     d,
+                    ctx,
                     desc,
                     matches!(node.operation(), c::ContentOperation::Compute(_)),
                     match node.operation() {
@@ -782,6 +794,7 @@ impl Run<'_> {
                 ),
                 c::ResourceDescriptor::Buffer(desc) => buffer(
                     d,
+                    ctx,
                     desc.byte_len(),
                     false,
                     match node.operation() {
@@ -852,7 +865,7 @@ impl Run<'_> {
                     .into_iter()
                     .flat_map(u32::to_le_bytes)
                     .collect::<Vec<_>>();
-                let params = buffer(d, 16, true, Some(&params))?;
+                let params = buffer(d, ctx, 16, true, Some(&params))?;
                 unsafe {
                     ctx.CSSetConstantBuffers(13, Some(&[Some(params.buffer().clone())]));
                 }
@@ -911,7 +924,7 @@ impl Run<'_> {
                     .into_iter()
                     .flat_map(u32::to_le_bytes)
                     .collect::<Vec<_>>();
-                let params = buffer(d, 16, true, Some(&params))?;
+                let params = buffer(d, ctx, 16, true, Some(&params))?;
                 unsafe {
                     ctx.VSSetConstantBuffers(13, Some(&[Some(params.buffer().clone())]));
                 }
@@ -934,7 +947,7 @@ impl Run<'_> {
                                 instances.end
                             };
                             let len = u64::from(count) * u64::from(v.layout.stride);
-                            let bounded = buffer(d, len, false, None)?;
+                            let bounded = buffer(d, ctx, len, false, None)?;
                             worker.copy_buffer(
                                 resource(&self.resources, v.buffer.source).buffer(),
                                 v.buffer.offset,
@@ -954,7 +967,7 @@ impl Run<'_> {
                             owners.push(bounded);
                         }
                         if let Some((b, format)) = index {
-                            let bounded = buffer(d, b.byte_len, false, None)?;
+                            let bounded = buffer(d, ctx, b.byte_len, false, None)?;
                             worker.copy_buffer(
                                 resource(&self.resources, b.source).buffer(),
                                 b.offset,

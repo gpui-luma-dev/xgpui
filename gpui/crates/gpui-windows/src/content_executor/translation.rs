@@ -155,7 +155,10 @@ pub fn translate(
 
 // Naga 30 emits DX12 sampler heaps even for SM5. Portable programs permit
 // individual ordinary samplers, so lower those generated static aliases to
-// direct D3D11 sampler registers. No user WGSL or application API is rewritten.
+// direct D3D11 sampler registers. The generated index is BindTarget.register
+// from options.binding_map, not a stage-local index. Keep Naga's emitted alias
+// name: it may differ from the WGSL name after identifier sanitization.
+// No user WGSL or application API is rewritten.
 fn direct_samplers(source: &str) -> Result<String> {
     let mut buffers = std::collections::HashSet::new();
     let mut lines = vec![];

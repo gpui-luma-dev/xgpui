@@ -885,17 +885,33 @@ impl Run<'_> {
                     unreachable!()
                 };
                 let layout = mip_layout(d);
-                let mut padded = vec![0; image_charge(d) as usize];
-                let mut at = 0;
-                for (offset, _, h, row, packed) in &layout {
-                    for y in 0..*h {
-                        let start = (*offset + u64::from(y) * u64::from(*row)) as usize;
-                        padded[start..start + *packed as usize]
-                            .copy_from_slice(&data[at..at + *packed as usize]);
-                        at += *packed as usize;
+                let staging_buffer = self.worker.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("portable image upload"),
+                    size: image_charge(d),
+                    usage: wgpu::BufferUsages::COPY_SRC,
+                    mapped_at_creation: true,
+                });
+                {
+                    let mut mapped = staging_buffer
+                        .slice(..)
+                        .get_mapped_range_mut()
+                        .map_err(|error| execution(error.to_string()))?;
+                    let mut at = 0;
+                    for (offset, _, h, row, packed) in &layout {
+                        for y in 0..*h {
+                            let start = (*offset + u64::from(y) * u64::from(*row)) as usize;
+                            mapped
+                                .slice(start..start + *packed as usize)
+                                .copy_from_slice(&data[at..at + *packed as usize]);
+                            at += *packed as usize;
+                        }
                     }
                 }
-                let staging = buffer(&self.worker.device, &padded, wgpu::BufferUsages::COPY_SRC);
+                staging_buffer.unmap();
+                let staging = Arc::new(Resource::Buffer {
+                    buffer: staging_buffer,
+                    charge: image_charge(d),
+                });
                 for (level, (offset, w, h, row, _)) in layout.iter().enumerate() {
                     encoder.copy_buffer_to_texture(
                         wgpu::TexelCopyBufferInfo {

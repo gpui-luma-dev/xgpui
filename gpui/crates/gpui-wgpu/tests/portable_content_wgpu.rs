@@ -881,3 +881,59 @@ fn hot_pipeline_survives_a_cold_pipeline_cache_miss() {
         );
     }
 }
+
+#[test]
+fn native_partial_writes_preserve_zero_buffers_and_default_alpha() {
+    let ex = executor();
+    for alpha in [AlphaMode::Straight, AlphaMode::Opaque] {
+        let interpretation = ImageInterpretation {
+            color: ColorEncoding::Srgb,
+            alpha,
+        };
+        let content = source(move |cx, _| {
+            let fill = PortableProgram::compute(
+                "@group(0) @binding(0) var<storage,read_write> values: array<u32>; @compute @workgroup_size(1) fn main() { values[0] = 1u; }",
+                "main",
+                ImageContracts::new(),
+            )?;
+            let values = cx
+                .compute(
+                    ComputePass::new(&fill, [1, 1, 1])
+                        .write_buffer("values", buffer(16, 4, BufferUsage::STORAGE)),
+                )?
+                .buffer("values")?;
+            let check = PortableProgram::compute(
+                "@group(0) @binding(0) var<storage,read> values: array<u32>; @group(0) @binding(1) var output: texture_storage_2d<rgba8unorm,write>; @compute @workgroup_size(1) fn main() { let valid = values[0] == 1u && values[1] == 0u && values[2] == 0u && values[3] == 0u; textureStore(output, vec2(0), vec4(select(0.0,1.0,valid),0.0,0.0,1.0)); }",
+                "main",
+                ImageContracts::new().image("output", interpretation),
+            )?;
+            cx.compute(
+                ComputePass::new(&check, [1, 1, 1])
+                    .storage_buffer(
+                        "values",
+                        BufferSlice {
+                            buffer: values,
+                            offset: 0,
+                            byte_len: 16,
+                        },
+                    )
+                    .write_image(
+                        "output",
+                        ImageDescriptor::new(extent(), PixelFormat::Rgba8, interpretation, 1)?,
+                    ),
+            )?
+            .image("output")
+        });
+        let f = frame(&ex, vec![content]);
+        for (mip, bytes) in f.images[0].levels.iter().enumerate() {
+            for (index, pixel) in bytes.chunks_exact(4).enumerate() {
+                let expected = if mip == 0 && index == 0 {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 0, 0, if alpha == AlphaMode::Opaque { 255 } else { 0 }]
+                };
+                assert_eq!(pixel, expected, "alpha={alpha:?} mip={mip} pixel={index}");
+            }
+        }
+    }
+}
