@@ -114,7 +114,80 @@ fn pending_replacement_replay_and_slot_removal_have_no_producer_readback() {
     completed(&rx);
 }
 #[test]
-fn superseded_generation_never_replaces_the_current_slot() {
+fn collapsing_512_tiles_stretches_retained_texture_before_replacement_completes() {
+    let mut renderer = MetalHeadlessRenderer::new();
+    let rx = wake(&mut renderer);
+    let slots: Vec<_> = (0..512).map(|_| PresentationSlotId::new()).collect();
+    let source = solid([1., 0., 0., 1.]);
+    let extent = size(DevicePixels(64), DevicePixels(32));
+    let full = Bounds::new(
+        point(ScaledPixels(0.), ScaledPixels(0.)),
+        size(ScaledPixels(64.), ScaledPixels(32.)),
+    );
+    let make_scene = |dense: bool| {
+        let mut scene = Scene::default();
+        scene.insert_primitive(Quad {
+            bounds: full,
+            content_mask: ContentMask { bounds: full },
+            background: black().into(),
+            ..Default::default()
+        });
+        for (index, slot) in slots.iter().enumerate().take(if dense { 512 } else { 1 }) {
+            let bounds = if dense {
+                Bounds::new(
+                    point(
+                        ScaledPixels((index % 32) as f32 * 2.),
+                        ScaledPixels((index / 32) as f32 * 2.),
+                    ),
+                    size(ScaledPixels(1.), ScaledPixels(1.)),
+                )
+            } else {
+                full
+            };
+            scene.insert_primitive(CustomDraw {
+                order: 0,
+                bounds,
+                content_mask: ContentMask { bounds: full },
+                corner_radii: Default::default(),
+                opacity: 1.,
+                content: ContentDraw::new(source.clone())
+                    .slot(*slot)
+                    .into_scene_content(),
+                coverage: None,
+            });
+        }
+        scene.finish();
+        scene
+    };
+    let dense = make_scene(true);
+    renderer.render_scene(&dense, extent).unwrap();
+    completed(&rx);
+    let image = renderer.render_scene_to_image(&dense, extent).unwrap();
+    assert_eq!(image.get_pixel(0, 0).0, [255, 0, 0, 255]);
+    assert_eq!(image.get_pixel(1, 1).0, [0, 0, 0, 255]);
+
+    let gate = pause(&mut renderer);
+    let single = make_scene(false);
+    // Hold the full-sized replacement indefinitely. Every composed pixel must
+    // already use the new bounds while sampling the retained 1x1 texture.
+    let image = renderer.render_scene_to_image(&single, extent).unwrap();
+    assert!(gate.0.wait_until_entered(Duration::from_secs(5)));
+    pixels(&image, [255, 0, 0, 255]);
+    pixels(
+        &renderer.render_scene_to_image(&single, extent).unwrap(),
+        [255, 0, 0, 255],
+    );
+    assert_eq!(renderer.content_presentation_stats().retained_slots, 1);
+    gate.0.release();
+    completed(&rx);
+    pixels(
+        &renderer.render_scene_to_image(&single, extent).unwrap(),
+        [255, 0, 0, 255],
+    );
+    assert_eq!(renderer.content_presentation_stats().execution.readbacks, 0);
+}
+#[test]
+fn admitted_generation_progresses_before_latest_slot_replacement() {
     let mut renderer = MetalHeadlessRenderer::new();
     let rx = wake(&mut renderer);
     let slot = PresentationSlotId::new();
@@ -127,8 +200,12 @@ fn superseded_generation_never_replaces_the_current_slot() {
     pixels(&read(&mut renderer, &blue), [0, 0, 0, 255]);
     gate.0.release();
     completed(&rx);
+    // The progress policy preserves the admitted generation while newer inputs
+    // coalesce. Harvest its red pixels, then admit and complete the latest blue.
+    pixels(&read(&mut renderer, &blue), [255, 0, 0, 255]);
+    completed(&rx);
     pixels(&read(&mut renderer, &blue), [0, 0, 255, 255]);
-    assert_eq!(renderer.content_presentation_stats().completions, 1);
+    assert_eq!(renderer.content_presentation_stats().completions, 2);
 }
 #[test]
 fn failed_generation_retains_or_clears_and_duplicate_slots_are_rejected() {

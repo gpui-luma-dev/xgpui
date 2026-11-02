@@ -688,6 +688,13 @@ impl MetalRenderer {
         any(test, feature = "test-support", feature = "bench-support")
     ))]
     fn prepare_content_snapshot(&mut self, scene: &Scene) -> Result<()> {
+        if self
+            .content_presenter
+            .resolve_scene(scene, None, self.wide_sdr.is_some())?
+            .is_some()
+        {
+            return self.content_presenter.require_ready();
+        }
         let requests = self.portable_requests(scene)?;
         self.content_presenter
             .update(&requests, self.wide_sdr.is_some())?;
@@ -710,6 +717,16 @@ impl MetalRenderer {
         viewport_size: Size<DevicePixels>,
         is_window_scene: bool,
     ) -> Result<metal::CommandBuffer> {
+        #[cfg(target_os = "macos")]
+        if is_window_scene
+            && let Some(resolved) = self.content_presenter.resolve_scene(
+                scene,
+                Some(texture),
+                self.wide_sdr.is_some(),
+            )?
+        {
+            return self.render_frame_inner(&resolved, texture, viewport_size, false);
+        }
         if scene.backdrops.is_empty() && scene.layer_boundaries.is_empty() {
             if let Some(effects) = &mut self.backdrops {
                 effects.clear();

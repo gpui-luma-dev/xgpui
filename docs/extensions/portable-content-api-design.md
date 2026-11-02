@@ -1203,3 +1203,232 @@ integration test and, on Windows, through `portable_content_dx11`. Run
 for helper reuse. Expect passing pixel assertions, no extra hot-pipeline
 compilation, and exactly one helper compilation across repeated copies. These
 checks prove reuse and output correctness, not native Windows frame-time gains.
+
+### Review corrections: sampler identity and defined resource initialization
+
+Naga 30's generated sampler-index expression contains the assigned
+`Options::binding_map` / `BindTarget::register`. It is not an entry-point-local
+sampler ordinal. The D3D11 lowering therefore continues to parse that register
+and retain Naga's emitted identifier. Looking up the generated alias in the map
+of original WGSL names would break identifier sanitization. A host translation
+regression uses separate vertex/fragment samplers named `linear` and `point`:
+both names are renamed by Naga, and the selected stages must still sample with
+module-wide s0 and s1 respectively. All five host HLSL tests pass.
+
+D3D11 no-data buffers now use `CreateBuffer(..., None, ...)` followed by a raw
+UAV zero clear on the recording context. No-data images use
+`CreateTexture2D(..., None, ...)` followed by render-target clears for every mip.
+The initial color is black with alpha one for opaque descriptors and zero for
+other alpha modes. These clears precede partial writes and explicit initial-source
+copies in the same ordered command stream. Packed image mip uploads and aligned
+buffer uploads borrow the supplied bytes during resource creation; only padded
+buffer uploads require a CPU copy. Uniform alignment padding remains initialized.
+
+wgpu image uploads now fill mapped-at-creation staging buffers directly using
+the padded mip/row layout, eliminating the extra zero-filled heap image. The
+staging owner remains held through submission completion as before.
+
+Validation: the existing 16 wgpu GPU tests pass, including packed mip uploads,
+BGRA channel order, source-sized sampling and unaligned buffer copies. An added
+partial-write regression passes separately on wgpu: only one storage-buffer word
+and one image pixel are written; all other words must be zero and image pixels
+must preserve transparent/opaque default alpha. The same fixture cross-compiles
+for D3D11; Windows GPU acceptance remains pending. The browser Wasm check passes.
+
+How to test: run `portable_content_hlsl` on any host. On Windows, run
+`native_partial_writes_preserve_zero_buffers_and_default_alpha` and
+`native_mip_upload_sampling_and_each_readback_level_are_defined` in
+`portable_content_dx11`; run their equivalents in `portable_content_wgpu` on
+native wgpu. Look for passing register/pixel assertions, preserved mip contents,
+and no undefined untouched pixels. These checks establish correctness, not a
+measured performance improvement.
+
+### Atomic content groups: presentation contract (Metal implemented)
+
+Metal implements this contract as described in the checkpoint below; wgpu/D3D11
+atomic-group support remains pending. The per-slot contract continues to govern
+independent draws. A stable slot preserves one image, not a set of scene primitives. It cannot express an atomic 512-to-1 membership/layout
+change. In particular, expansion currently presents the one surviving slot while
+511 reintroduced slots have no history. A Metal pixel regression confirms that
+collapse already stretches a retained 1x1 image across the new destination while
+the replacement is paused; the group-level paused-GPU tests below now cover both
+density transitions.
+Release performance does not change either contract.
+
+The additional portable surface is:
+
+```rust
+// Allocate once per logical group; history is scoped to the window.
+let mut group = ContentGroup::new(self.group_id); // ContentGroupId
+for cell in cells {
+    // Geometry is local to the group's bounds. Content is an immutable source;
+    // members do not carry independent slots or fallback policies.
+    group.push(cell.geometry, cell.content.clone());
+}
+window.paint_content_group(bounds, group);
+```
+
+`ContentGroupId::new()` allocates a stable identity. `ContentGroup::new(id)` starts
+an owned CPU description. `push(CustomGeometry, Content)` appends an ordered
+member. `presentation(PendingPresentation, ContentErrorPresentation)` sets the
+whole group's policy, defaulting to retain previous / report and retain previous.
+`Window::paint_content_group(Bounds<Pixels>, ContentGroup)` records one contiguous
+scene boundary. It does not expose a backend, native handle, or execution queue.
+An invalid member rejects the group description rather than silently dropping
+that member. Duplicate group IDs in a window scene are errors. Nested groups and
+arbitrary non-content window painting inside a group are outside this addition.
+
+The logical and rendered state are distinct:
+
+- Requested: ordered immutable sources, local geometry, and derived logical/raster
+  requests at the current scale. Membership and geometry are part of the group
+  generation, even when their image realization keys are already cached.
+- Committed: one complete ordered set of geometry records and GPU image leases.
+  There is at most one retained committed snapshot per active group.
+- Admitted: the bounded generation currently executing. New descriptions coalesce
+  behind it without cancelling it on every edit. Existing device budgets and
+  submission leases continue to apply.
+
+A new group with no committed snapshot is transparent until all its members are
+ready. During replacement, retain-previous presents the complete committed
+snapshot. Removing 511 members cannot become visible independently of changing
+the remaining member's geometry. Adding 511 members cannot publish a partial
+set. Publication switches member count, local geometry, and images together at a
+frame boundary. Cached images can satisfy a new generation immediately, provided
+the entire generation is ready. This is a presentation transaction; producer
+submission remains bounded and incremental.
+
+A completed admitted generation may become the next committed snapshot while a
+newer request is pending, preserving progress under continuous edits. Publication
+is monotonic within the group's lifetime; it never rolls back to a generation
+older than the committed snapshot. Replacing a group's requested description does
+not mix newer geometry with older images. A failure reports against its own
+requested generation and applies the whole group's policy. `FailFrame` propagates
+the error; retain keeps the complete previous snapshot; transparent hides the
+whole group. An obsolete failure must not overwrite a newer generation's status.
+
+Group bounds provide a current placement origin and clip. Committed geometry is
+stored in group-local coordinates: scrolling or moving the group moves its
+retained snapshot, while a pending resize retains the previous local layout
+inside the current clip. Current outer element opacity and clipping still apply;
+member geometry/coverage and member images belong to the committed snapshot.
+A window scale or color-mode change is a generation change and must be validated
+before reuse; a retained image cannot bypass an incompatible color policy.
+
+An explicitly empty group clears its committed snapshot immediately. Removing
+the group retires its history and invalidates its publication epoch. Reintroducing
+the same ID starts without history; late completions from its earlier lifetime
+cannot resurrect it. A removed group's pending CPU work may be cancelled, while
+already submitted GPU uses retain their owners until completion. Closing a window
+or replacing its device retires the corresponding group state.
+
+The implementation retains and replays native member draws; it does not replace
+512 independent producers/draws with one procedural shader, keep invisible draws
+active to manufacture history, or require a full-window intermediate image. The
+renderer must retain geometry and GPU leases together, then expand the selected
+snapshot at the recorded group boundary. A shared CPU selection/state machine
+must define the same behavior for Metal, wgpu and D3D11. Any retained/pending image
+bytes remain charged to the shared device budget. If the old snapshot plus a
+feasible replacement cannot fit, report the admission failure under the group
+policy rather than publishing half a group or waiting forever.
+
+Acceptance before claiming the density problem fixed:
+
+1. Pause producer execution deterministically after committing 512 tiles, request
+   one large tile, and read every composed frame. Only the old complete grid is
+   allowed until the large tile can publish; no lone small tile is allowed.
+2. Repeat from one large tile to 512. Until all 512 are ready, only the complete
+   large tile is allowed; then all 512 appear together.
+3. While paused, redraw unrelated UI, move/resize/clip/fade the group, and replace
+   its sources rapidly. Outer UI must remain responsive, the retained snapshot
+   must obey the current outer clip/opacity, and completed generations must make
+   progress without mixing membership, geometry, or images.
+4. Test cached-only geometry changes, malformed members, execution failures,
+   explicit transparency, duplicate IDs, empty groups, removal/reintroduction,
+   window/device teardown and memory pressure. Check stale completion rejection
+   and release after the final GPU sampling lease.
+5. Exercise both keyboard and mouse toggles in the native window, with debug and
+   release builds. Assert zero producer readbacks and preserve the original
+   independent 512-draw workload. Repeat the same pixel/state cases on wgpu and
+   D3D11, recording platform runtime checks separately from cross-compilation.
+
+### Metal atomic-group implementation checkpoint
+
+The `ContentGroupId` / `ContentGroup` / `Window::paint_content_group` surface above
+is now implemented. Its CPU-only `ContentGroupState<T>` handles generation
+selection, monotonic publication, whole-group fallback/error policy, duplicate
+IDs, empty groups and removal epochs. GPU-independent integration tests exercise
+that state and exact logical/raster scale derivation. Fully clipped or zero-opacity
+group boundaries remain in the scene, so temporary hiding does not retire history.
+
+Metal describes every requested member through the existing bounded graph
+executor. Each admitted graph retains the corresponding group generation tokens
+and immutable member descriptions. Completion publishes only complete image sets
+into live group epochs. Cached complete generations can publish geometry changes
+without another GPU job. Newer requests coalesce while admitted work finishes;
+a completed intermediate generation can make progress with its own complete
+layout. Color-mode changes retry capability validation and discard incompatible
+wide-gamut snapshots. Existing device-wide exported-image reservations also charge
+the committed group images while their replacements run.
+
+For composition, Metal expands the selected snapshot into ordinary independent
+native draws at the original group boundary. A render-only scene snapshot preserves
+unrelated draw orders, explicit layers, paths, backdrop/capture boundaries and
+primitive identities. Retained geometry stays local to the group; current placement,
+clip and outer opacity are applied when composing it. Rounded rectangles, border
+coverage and path coverage use the normal native mask path. Native image owners
+remain leased through each sampling command's completion. No group-sized GPU
+intermediate or producer CPU readback is introduced.
+
+`portable-content` now records its 512 independent sources/draws in one atomic
+group. Density toggles change membership and geometry together. The independent
+per-slot API continues to use its existing stretching policy; the baseline collapse
+pixel test still covers that separate behavior. Its admitted-generation test now
+matches the earlier progress/coalescing policy rather than assuming cancellation.
+
+Validation: nine bounded Metal GPU tests cover paused 512 → 1 and 1 → 512 transitions,
+first presentation, unrelated UI redraw, rapid replacement/progress, placement,
+clipping/opacity, foreground ordering, cached geometry, hidden groups, duplicate
+IDs, malformed members and error policies, empty/removal epochs, memory-pressure
+failure and recovery, native shape coverage, and wide-color policy changes.
+Five GPU-independent group tests and the existing thirteen Metal presentation tests
+pass. The 512-member graph executes 1,024 operations and reports zero producer
+readbacks. Each GPU case runs in a subprocess with a 45-second timeout. Native
+mouse density switches and keyboard replacement/clip/opacity controls were also
+exercised in the updated demo. Windows and Wasm builds cross-check the shared API;
+atomic-group execution on wgpu/D3D11 is the next implementation step and currently
+returns the portable unsupported-capability error.
+
+From the repository root, run the deterministic GPU suite on macOS:
+
+```sh
+cargo test --offline --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-apple/Cargo.toml \
+  --features test-support,runtime_shaders \
+  --test portable_content_groups -- --test-threads=1
+```
+
+The CPU state suite is:
+
+```sh
+cargo test --offline --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui/Cargo.toml \
+  --features test-support,gpui_platform/runtime_shaders --test content_groups
+```
+
+For manual acceptance:
+
+```sh
+cargo run --manifest-path apps/xgpui-ext-lab/Cargo.toml \
+  --bin portable-content --features runtime-shaders
+```
+
+Click the density control or press D repeatedly, with pauses and in rapid bursts.
+Expect the complete old grid to remain until one large tile is ready; on expansion,
+expect the complete large tile to remain until all 512 tiles are ready. No lone
+small tile or partial grid should appear. Press R for warm/cool replacement, O for
+opacity and C for clipping, and resize while work is pending. Controls should
+remain responsive and the retained group should obey the current outer clip and
+opacity. A pending resize retains the previous local layout within the current
+clip before the new layout publishes. Debug and `--release` use the same publication
+contract; this checkpoint is not a frame-time benchmark.

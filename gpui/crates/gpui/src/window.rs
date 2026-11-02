@@ -5560,6 +5560,29 @@ impl Window {
         self.paint_custom(geometry, draw.into_scene_content());
     }
 
+    /// Record an atomic group of portable draws. Member geometry is local to
+    /// `bounds`; its complete previous layout remains visible while replacing it.
+    pub fn paint_content_group(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        group: crate::content::ContentGroup,
+    ) {
+        self.invalidator.debug_assert_paint();
+        self.next_frame.scene.insert_primitive(crate::CustomDraw {
+            order: 0,
+            bounds: self.snap_bounds(bounds),
+            content_mask: self.snapped_content_mask(),
+            corner_radii: Corners::default(),
+            opacity: self.element_opacity(),
+            coverage: None,
+            content: crate::scene::content_with_preparation_geometry(
+                group.into_scene_content(),
+                bounds.size,
+                self.scale_factor(),
+            ),
+        });
+    }
+
     /// Record independent GPU content using native geometry at the current scene order.
     /// Producers span the full unclipped shape; GPUI applies clip, coverage and opacity.
     pub fn paint_custom(

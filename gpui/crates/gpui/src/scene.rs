@@ -96,11 +96,7 @@ impl Scene {
     }
 
     pub fn insert_primitive(&mut self, primitive: impl Into<Primitive>) {
-        static NEXT_COMMAND: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        self.insert_retained_primitive(
-            primitive.into(),
-            NEXT_COMMAND.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-        );
+        self.insert_retained_primitive(primitive.into(), next_scene_command());
     }
 
     fn insert_retained_primitive(&mut self, mut primitive: Primitive, identity: u64) {
@@ -108,9 +104,16 @@ impl Scene {
             .bounds()
             .intersect(&primitive.content_mask().bounds);
 
-        if clipped_bounds.is_empty() {
+        let group =
+            matches!(&primitive, Primitive::Custom(draw) if draw.content.is_content_group());
+        if clipped_bounds.is_empty() && !group {
             return;
         }
+        let clipped_bounds = if group {
+            *primitive.bounds()
+        } else {
+            clipped_bounds
+        };
 
         // A backdrop is a global pass barrier, including inside a native layer
         // whose children would otherwise share a draw order.
@@ -194,6 +197,49 @@ impl Scene {
                 PaintOperation::EndLayer => self.pop_layer(),
             }
         }
+    }
+
+    /// Replay scene order with custom primitives replaced at their paint boundary.
+    /// The result is a render-only snapshot; do not append paint commands to it.
+    /// Renderers use this to expand an atomically selected content group. Other
+    /// primitive identities and explicit capture/backdrop boundaries are preserved.
+    pub fn resolve_custom_draws(
+        &self,
+        mut resolve: impl FnMut(&CustomDraw) -> anyhow::Result<Vec<CustomDraw>>,
+    ) -> anyhow::Result<Scene> {
+        // This is a render-only snapshot. Preserve assigned orders, path IDs,
+        // capture boundaries and all unrelated primitive data exactly. Rebuilding
+        // the bounds tree would reorder children of an existing explicit layer.
+        let mut scene = Scene {
+            shadows: self.shadows.clone(),
+            quads: self.quads.clone(),
+            paths: self.paths.clone(),
+            underlines: self.underlines.clone(),
+            monochrome_sprites: self.monochrome_sprites.clone(),
+            subpixel_sprites: self.subpixel_sprites.clone(),
+            polychrome_sprites: self.polychrome_sprites.clone(),
+            surfaces: self.surfaces.clone(),
+            shader_draws: self.shader_draws.clone(),
+            backdrops: self.backdrops.clone(),
+            layer_boundaries: self.layer_boundaries.clone(),
+            ..Default::default()
+        };
+        for operation in &self.paint_operations {
+            if let PaintOperation::Primitive(Primitive::Custom(draw), _) = operation {
+                for mut member in resolve(draw)? {
+                    member.order = draw.order;
+                    scene.custom_draws.push(member.clone());
+                    scene.paint_operations.push(PaintOperation::Primitive(
+                        Primitive::Custom(member),
+                        next_scene_command(),
+                    ));
+                }
+            } else {
+                scene.paint_operations.push(operation.clone());
+            }
+        }
+        scene.finish();
+        Ok(scene)
     }
 
     /// Begin an explicit captured subtree. End with the returned description.
@@ -479,6 +525,7 @@ pub(crate) enum PrimitiveKind {
     LayerBoundary,
 }
 
+#[derive(Clone)]
 pub(crate) enum PaintOperation {
     Primitive(Primitive, u64),
     StartLayer(Bounds<ScaledPixels>),
@@ -1402,6 +1449,20 @@ pub trait CustomContent: std::fmt::Debug + Send + Sync + 'static {
         Ok(None)
     }
 
+    /// Retain this scene boundary even when fully clipped or faded. Atomic group
+    /// history is retired by removal, not by temporarily hiding its placement.
+    fn is_content_group(&self) -> bool {
+        false
+    }
+
+    /// CPU-only bridge for an atomic set of portable content draws.
+    fn portable_group(
+        &self,
+        _request: &PreparationRequest,
+    ) -> Result<Option<crate::content::ContentGroupRequest>, crate::content::ContentError> {
+        Ok(None)
+    }
+
     /// Encoded-sRGB RGB affine rows, applied after sampling/unassociation and
     /// before coverage/opacity. Alpha is preserved. Identity keeps legacy output.
     fn image_color_transform(&self) -> [[f32; 4]; 3] {
@@ -1482,6 +1543,24 @@ impl CustomContent for ContentWithPreparationGeometry {
                     )
                 })?;
         self.content.portable_content(&request)
+    }
+
+    fn is_content_group(&self) -> bool {
+        self.content.is_content_group()
+    }
+    fn portable_group(
+        &self,
+        request: &PreparationRequest,
+    ) -> Result<Option<crate::content::ContentGroupRequest>, crate::content::ContentError> {
+        let request =
+            PreparationRequest::new(self.logical_size, request.raster_size(), self.scale_factor)
+                .map_err(|e| {
+                    crate::content::ContentError::new(
+                        crate::content::ContentErrorKind::InvalidDescriptor,
+                        e.to_string(),
+                    )
+                })?;
+        self.content.portable_group(&request)
     }
 
     fn image_source_size(&self) -> Option<Size<crate::DevicePixels>> {
@@ -1796,4 +1875,9 @@ pub trait GlyphBrush: std::fmt::Debug + Send + Sync + 'static {
         brush_bounds: Bounds<Pixels>,
         opacity: f32,
     ) -> anyhow::Result<()>;
+}
+
+fn next_scene_command() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }

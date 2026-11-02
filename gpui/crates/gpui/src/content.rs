@@ -9,18 +9,20 @@
 
 mod descriptors;
 mod graph;
+mod group;
 mod lifecycle;
 mod passes;
-mod program;
 mod presentation;
+mod program;
 mod uniforms;
 
 pub use descriptors::*;
 pub use graph::*;
+pub use group::*;
 pub use lifecycle::*;
 pub use passes::*;
-pub use program::*;
 pub use presentation::*;
+pub use program::*;
 pub use uniforms::*;
 
 /// A structured failure while describing, planning, or tracking content.

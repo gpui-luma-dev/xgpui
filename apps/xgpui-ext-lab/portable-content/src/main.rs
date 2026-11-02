@@ -27,7 +27,7 @@ actions!(
 );
 struct Demo {
     focus: FocusHandle,
-    slots: Vec<PresentationSlotId>,
+    group: ContentGroupId,
     sources: Vec<Content>,
     cool: bool,
     dense: bool,
@@ -38,7 +38,7 @@ impl Demo {
     fn new(cx: &mut Context<Self>) -> Self {
         Self {
             focus: cx.focus_handle(),
-            slots: (0..512).map(|_| PresentationSlotId::new()).collect(),
+            group: ContentGroupId::new(),
             sources: (0..512)
                 .map(|index| Content::new(CellSource { index, cool: false }))
                 .collect(),
@@ -62,14 +62,13 @@ impl Demo {
 }
 impl Render for Demo {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let draws: Vec<_> = self
+        let sources: Vec<_> = self
             .sources
             .iter()
-            .cloned()
-            .zip(self.slots.iter().copied())
             .take(if self.dense { 512 } else { 1 })
-            .map(|(source, slot)| ContentDraw::new(source).slot(slot))
+            .cloned()
             .collect();
+        let group_id = self.group;
         let dense = self.dense;
         let faded = self.faded;
         let clipped = self.clipped;
@@ -85,24 +84,26 @@ impl Render for Demo {
                     bounds.size.map(|value| value * 0.8),
                 );
                 let paint = |window: &mut Window| {
-                    for (index, draw) in draws.into_iter().enumerate() {
+                    let mut group = ContentGroup::new(group_id);
+                    for (index, source) in sources.into_iter().enumerate() {
                         let width = bounds.size.width / columns as f32;
                         let height = bounds.size.height / rows as f32;
                         let cell = Bounds::new(
                             point(
-                                bounds.origin.x + width * (index % columns) as f32,
-                                bounds.origin.y + height * (index / columns) as f32,
+                                width * (index % columns) as f32,
+                                height * (index / columns) as f32,
                             ),
                             size(width - px(2.), height - px(2.)),
                         );
-                        window.paint_content(
+                        group.push(
                             CustomGeometry::RoundedRect {
                                 bounds: cell,
                                 corner_radii: Corners::all(px(4.)),
                             },
-                            draw,
+                            source,
                         );
                     }
+                    window.paint_content_group(bounds, group);
                 };
                 let paint = |window: &mut Window| {
                     if faded {
@@ -191,7 +192,7 @@ impl Render for Demo {
                     ),
             )
             .child(div().text_color(rgb(0xaabbcc)).child(
-                "Portable GPU content · resize and replace · completed textures stay on the GPU",
+                "Portable GPU content · resize and replace · atomic groups · completed textures stay on the GPU",
             ))
             .child(content)
     }

@@ -12,6 +12,7 @@ struct Pending {
     keys: Vec<c::OutputKey>,
     presentation_slots: Vec<Option<c::PresentationSlotId>>,
     job: MetalGpuJob,
+    groups: Vec<c::ContentGroupTicket>,
 }
 /// The worker and exported-output budget are shared by every window on a device.
 /// Weak registry entries do not keep unused devices/workers alive.
@@ -47,6 +48,7 @@ pub(super) struct ContentPresenter {
     requests: usize,
     completions: usize,
     wide: Option<bool>,
+    groups: c::ContentGroupState<MetalGpuImage>,
 }
 impl ContentPresenter {
     pub fn new(device: &metal::Device) -> Result<Self> {
@@ -63,6 +65,7 @@ impl ContentPresenter {
             requests: 0,
             completions: 0,
             wide: None,
+            groups: Default::default(),
         })
     }
     #[cfg(any(test, feature = "test-support"))]
@@ -74,8 +77,13 @@ impl ContentPresenter {
             completions: self.completions,
             cached_images: self.cache.len(),
             retained_slots: self.slots.len(),
+            committed_groups: self.groups.committed_count(),
             pending: self.pending.is_some(),
-            last_error: self.failed.as_ref().map(|(_, e)| e.clone()),
+            last_error: self
+                .failed
+                .as_ref()
+                .map(|(_, e)| e.clone())
+                .or_else(|| self.groups.last_error().cloned()),
             execution: self.stats.clone(),
         }
     }
@@ -91,8 +99,117 @@ impl ContentPresenter {
             )
             .into());
         }
+        self.groups.require_ready()?;
         Ok(())
     }
+
+    /// Describe current members before selection, then replay complete committed
+    /// snapshots as native image draws. No group-wide intermediate is allocated.
+    pub fn resolve_scene(
+        &mut self,
+        scene: &Scene,
+        target: Option<&metal::TextureRef>,
+        wide: bool,
+    ) -> Result<Option<Scene>> {
+        if !scene
+            .custom_draws
+            .iter()
+            .any(|draw| draw.content.is_content_group())
+        {
+            return Ok(None);
+        }
+        let mut requests = Vec::new();
+        let mut group_requests = Vec::new();
+        let mut entries = Vec::new();
+        let mut invalid = Vec::new();
+        let mut roots = 0;
+        for draw in &scene.custom_draws {
+            let index = requests.len();
+            let prep = gpui::PreparationRequest::new(
+                draw.bounds.size.map(|d| gpui::px(d.0)),
+                size(
+                    DevicePixels(draw.bounds.size.width.0.ceil() as i32),
+                    DevicePixels(draw.bounds.size.height.0.ceil() as i32),
+                ),
+                1.,
+            )?;
+            if let Some(group) = draw.content.portable_group(&prep)? {
+                let start = roots;
+                let group_index = group_requests.len();
+                match group.draws() {
+                    Ok(members) => {
+                        for member in members {
+                            let request = draw_request(&member)?;
+                            anyhow::ensure!(request.is_some(), "group member must be portable");
+                            requests.push(request);
+                            roots += 1;
+                        }
+                    }
+                    Err(error) => invalid.push((group_index, error)),
+                }
+                group_requests.push((group, start..roots));
+                entries.push((draw, Some(group_index), index));
+            } else {
+                let request = draw_request(draw)?;
+                roots += usize::from(request.is_some());
+                requests.push(request);
+                entries.push((draw, None, index));
+            }
+        }
+        let tickets = self.groups.observe(&group_requests)?;
+        let images = self.update_grouped(&requests, wide, &tickets)?;
+        // Geometry errors reject the group, not individual members. Apply these
+        // after harvesting GPU work so an old success cannot erase a new failure.
+        for (index, error) in invalid {
+            if self.groups.fail(&tickets[index], error.clone()) {
+                log::error!("portable content group failed: {error}");
+            }
+        }
+        let Some(target) = target else {
+            return Ok(Some(Scene::default()));
+        };
+        let mut replacements = HashMap::new();
+        for (draw, group_index, index) in entries {
+            let selected = if let Some(group_index) = group_index {
+                let mut selected = Vec::new();
+                if let Some(snapshot) = self.groups.select(&tickets[group_index])? {
+                    let mut request = snapshot.request.clone();
+                    request.scale_factor = group_requests[group_index].0.scale_factor;
+                    for (mut member, image) in request.draws()?.into_iter().zip(&snapshot.images) {
+                        translate_member(&mut member, draw);
+                        member.content = Arc::new(ResolvedContent::new(
+                            Some(image.clone()),
+                            target,
+                            member.content.clone(),
+                        ));
+                        selected.push(member);
+                    }
+                }
+                selected
+            } else {
+                let mut member = draw.clone();
+                if requests[index].is_some() {
+                    member.content = Arc::new(ResolvedContent::new(
+                        images[index].clone(),
+                        target,
+                        member.content.clone(),
+                    ));
+                }
+                vec![member]
+            };
+            replacements
+                .entry(draw_identity(draw))
+                .or_insert_with(std::collections::VecDeque::new)
+                .push_back(selected);
+        }
+        Ok(Some(scene.resolve_custom_draws(|draw| {
+            replacements
+                .get_mut(&draw_identity(draw))
+                .and_then(|queue| queue.pop_front())
+                .ok_or_else(|| anyhow::anyhow!("missing resolved content boundary"))
+        })?))
+    }
+
     pub fn set_wake(&mut self, wake: Arc<dyn Fn() + Send + Sync>) {
         self.wake = wake;
     }
@@ -105,9 +222,19 @@ impl ContentPresenter {
         draws: &[Option<c::ContentDrawRequest>],
         wide: bool,
     ) -> Result<Vec<Option<MetalGpuImage>>> {
+        self.groups.observe(&[])?;
+        self.update_grouped(draws, wide, &[])
+    }
+    fn update_grouped(
+        &mut self,
+        draws: &[Option<c::ContentDrawRequest>],
+        wide: bool,
+        groups: &[c::ContentGroupTicket],
+    ) -> Result<Vec<Option<MetalGpuImage>>> {
         if self.wide != Some(wide) {
             self.wide = Some(wide);
             self.failed = None;
+            self.groups.clear_errors();
             self.cache.retain(|_, image| {
                 wide || !matches!(
                     image.descriptor.interpretation().color,
@@ -115,6 +242,12 @@ impl ContentPresenter {
                 )
             });
             self.slots.retain(|_, key| self.cache.contains_key(key));
+            self.groups.retain_images(|image| {
+                wide || !matches!(
+                    image.descriptor.interpretation().color,
+                    c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
+                )
+            });
         }
         let active: Vec<_> = draws.iter().flatten().collect();
         let mut slots = HashSet::new();
@@ -214,6 +347,19 @@ impl ContentPresenter {
                 Ok(frame) => {
                     self.stats = frame.stats;
                     self.completions += 1;
+                    for ticket in &pending.groups {
+                        let images = &frame.images[ticket.roots.clone()];
+                        if wide
+                            || images.iter().all(|image| {
+                                !matches!(
+                                    image.descriptor.interpretation().color,
+                                    c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
+                                )
+                            })
+                        {
+                            self.groups.publish(ticket, images.to_vec());
+                        }
+                    }
                     // Consume completed work before a newer input can cancel it.
                     // Its destinations may retain these pixels while the newest
                     // generation runs, even if no frame displayed this result yet.
@@ -264,6 +410,7 @@ impl ContentPresenter {
                 Ok(job) => {
                     self.requests += 1;
                     self.pending = Some(Pending {
+                        groups: groups.to_vec(),
                         keys: keys.clone(),
                         presentation_slots: active
                             .iter()
@@ -273,6 +420,17 @@ impl ContentPresenter {
                     });
                 }
                 Err(error) => self.fail(signature.clone(), error),
+            }
+        }
+        for ticket in groups {
+            if let Some((_, error)) = &self.failed {
+                self.groups.fail(ticket, error.clone());
+            } else if let Some(images) = keys.get(ticket.roots.clone()).and_then(|keys| {
+                keys.iter()
+                    .map(|key| self.cache.get(key).cloned())
+                    .collect::<Option<Vec<_>>>()
+            }) {
+                self.groups.publish(ticket, images);
             }
         }
         let mut next_key = keys.iter();
@@ -333,10 +491,109 @@ pub struct ContentPresentationStats {
     pub cached_images: usize,
     /// Stable slots with prior valid results.
     pub retained_slots: usize,
+    /// Complete atomic groups whose native images and geometry are retained.
+    pub committed_groups: usize,
     /// Whether a generation is still pending.
     pub pending: bool,
     /// Failure of the current generation, reported once.
     pub last_error: Option<c::ContentError>,
     /// Last successful producer job, excluding compositor validation readback.
     pub execution: MetalContentStats,
+}
+
+fn draw_identity(draw: &gpui::CustomDraw) -> (usize, u32, [u32; 4]) {
+    (
+        Arc::as_ptr(&draw.content) as *const () as usize,
+        draw.order,
+        [
+            draw.bounds.origin.x.0.to_bits(),
+            draw.bounds.origin.y.0.to_bits(),
+            draw.bounds.size.width.0.to_bits(),
+            draw.bounds.size.height.0.to_bits(),
+        ],
+    )
+}
+fn draw_request(draw: &gpui::CustomDraw) -> Result<Option<c::ContentDrawRequest>> {
+    let request = gpui::PreparationRequest::new(
+        draw.bounds.size.map(|d| gpui::px(d.0)),
+        crate::custom_draw::CustomCompositor::extent(draw)?,
+        1.,
+    )?;
+    Ok(draw.content.portable_content(&request)?)
+}
+fn translate_member(member: &mut gpui::CustomDraw, placement: &gpui::CustomDraw) {
+    let origin = placement.bounds.origin;
+    member.bounds.origin += origin;
+    member.content_mask = gpui::ContentMask {
+        bounds: placement.content_mask.bounds.intersect(&placement.bounds),
+    };
+    member.opacity *= placement.opacity;
+    if let Some(gpui::CustomCoverage::Path(path)) = &mut member.coverage {
+        let path = Arc::make_mut(path);
+        path.bounds.origin += origin;
+        path.content_mask = member.content_mask;
+        for vertex in &mut path.vertices {
+            vertex.xy_position += origin;
+            vertex.content_mask = member.content_mask;
+        }
+    }
+}
+// SAFETY: these retained Metal handles are only cloned/released here. Image
+// pixels are immutable and leased through sampling completion; the unused target
+// is never sampled (invisible output). This wrapper never records or mutates GPU work.
+unsafe impl Send for ResolvedContent {}
+unsafe impl Sync for ResolvedContent {}
+struct ResolvedContent {
+    image: Option<MetalGpuImage>,
+    unused: Option<metal::Texture>,
+    source: Arc<dyn gpui::CustomContent>,
+}
+impl ResolvedContent {
+    fn new(
+        image: Option<MetalGpuImage>,
+        target: &metal::TextureRef,
+        source: Arc<dyn gpui::CustomContent>,
+    ) -> Self {
+        let unused = image.is_none().then(|| target.into());
+        Self {
+            image,
+            unused,
+            source,
+        }
+    }
+}
+impl std::fmt::Debug for ResolvedContent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ResolvedMetalContent")
+    }
+}
+impl gpui::CustomContent for ResolvedContent {
+    fn image_color_transform(&self) -> [[f32; 4]; 3] {
+        self.source.image_color_transform()
+    }
+    fn image_source_size(&self) -> Option<Size<DevicePixels>> {
+        self.source.image_source_size()
+    }
+    fn image_sample_opacity(&self) -> f32 {
+        self.source.image_sample_opacity()
+    }
+    fn image_color_mode(&self) -> gpui::ImageColorMode {
+        self.source.image_color_mode()
+    }
+    fn image_linear_adjustments(&self) -> Option<gpui::LinearImagePaint> {
+        self.source.image_linear_adjustments()
+    }
+    fn prepare(
+        &self,
+        _: &dyn std::any::Any,
+        _: Size<DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        Ok(Box::new(crate::custom_draw::PreparedMetalOutput::portable(
+            self.image.clone(),
+            self.image
+                .as_ref()
+                .map(|image| image.texture())
+                .unwrap_or_else(|| self.unused.as_ref().unwrap()),
+        )))
+    }
 }
