@@ -800,9 +800,12 @@ impl DirectXRenderer {
                     let interpretation = gpu.map(|image| image.descriptor.interpretation());
                     let (source, native, wide) = if requests[draw_index].is_some() {
                         let source = if let Some(image) = gpu {
-                            TextureBundle::from_portable(&devices.device, image)?
+                            crate::custom_draw::SampledTexture::from_portable(
+                                &devices.device,
+                                image,
+                            )?
                         } else {
-                            compositor.transparent.clone()
+                            compositor.transparent.clone().into()
                         };
                         let wide = gpu.is_some()
                             && requests[draw_index]
@@ -878,7 +881,7 @@ impl DirectXRenderer {
                                 })?
                                 .validate(context, extent)?
                         };
-                        (source, native, wide)
+                        (source.into(), native, wide)
                     };
                     if requests[draw_index].is_none()
                         && draw.content.image_color_mode() != gpui::ImageColorMode::EncodedSrgb
@@ -2717,6 +2720,15 @@ mod dxgi {
 pub struct Dx11HeadlessRenderer(DirectXRenderer);
 #[cfg(any(test, feature = "test-support"))]
 impl Dx11HeadlessRenderer {
+    /// Consumer device for native import validation fixtures.
+    pub fn native_device(&self) -> Result<ID3D11Device> {
+        self.0
+            .devices
+            .as_ref()
+            .map(|d| d.device.clone())
+            .context("headless D3D11 device unavailable")
+    }
+
     pub fn set_content_redraw(&mut self, wake: Arc<dyn Fn() + Send + Sync>) {
         self.0.content_presenter.set_wake(wake);
     }

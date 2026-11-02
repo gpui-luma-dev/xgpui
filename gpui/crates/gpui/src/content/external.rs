@@ -147,6 +147,14 @@ impl ExternalImage {
 /// created here. The executor decides cache admission and retirement explicitly.
 #[derive(Clone)]
 pub struct ExternalImageLease(Arc<Inner>);
+impl std::fmt::Debug for ExternalImageLease {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExternalImageLease")
+            .field("id", &self.id())
+            .field("descriptor", self.descriptor())
+            .finish_non_exhaustive()
+    }
+}
 impl ExternalImageLease {
     /// Frame identity for native cache validation.
     pub fn id(&self) -> u64 {

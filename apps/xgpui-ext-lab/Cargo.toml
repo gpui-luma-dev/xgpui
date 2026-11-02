@@ -171,3 +171,7 @@ required-features = ["web"]
 name = "portable-imports"
 path = "media-lab/tests/portable_imports.rs"
 required-features = ["native"]
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+gpui-windows = { package = "xgpui-windows", path = "../../gpui/crates/gpui-windows", version = "=1.0.2", features = ["test-support"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Security"] }

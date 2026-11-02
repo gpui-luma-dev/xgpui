@@ -214,6 +214,12 @@ fn uav(device: &ID3D11Device, r: &Resource) -> Result<ID3D11UnorderedAccessView>
     let mut view = None;
     unsafe {
         match r {
+            Resource::ExternalImage { .. } => {
+                return Err(error(
+                    c::ContentErrorKind::InvalidDescriptor,
+                    "external images are read-only",
+                ));
+            }
             Resource::Image { texture, .. } => device
                 .CreateUnorderedAccessView(texture, None, Some(&mut view))
                 .map_err(allocation)?,
@@ -290,16 +296,6 @@ impl Worker {
         cancelled: &AtomicBool,
         readback: bool,
     ) -> Result<Dx11ContentFrame> {
-        if graph
-            .nodes()
-            .iter()
-            .any(|node| matches!(node.operation(), c::ContentOperation::ExternalImage(_)))
-        {
-            return Err(error(
-                c::ContentErrorKind::UnsupportedCapability,
-                "external image imports are unsupported by this executor",
-            ));
-        }
         if unsafe { self.device.GetFeatureLevel() }.0 < D3D_FEATURE_LEVEL_11_0.0 {
             return Err(error(
                 c::ContentErrorKind::UnsupportedCapability,
@@ -321,6 +317,21 @@ impl Worker {
                 c::ContentErrorKind::Cancelled,
                 "D3D11 content canceled before execution",
             ));
+        }
+        // Validate every adapter/device/descriptor before recording any prefix.
+        for node in graph.nodes() {
+            if let c::ContentOperation::ExternalImage(image) = node.operation() {
+                let lease = image.acquire()?;
+                let frame = lease
+                    .backing::<crate::custom_draw::dxgi::DxgiFrame>()
+                    .ok_or_else(|| {
+                        error(
+                            c::ContentErrorKind::UnsupportedCapability,
+                            "unsupported D3D11 external backing",
+                        )
+                    })?;
+                frame.import_external(&self.device, image.descriptor())?;
+            }
         }
         let byte_copy_before = self.byte_copy_compilations.load(Ordering::Relaxed);
         let mut stats = Dx11ContentStats {
@@ -792,6 +803,28 @@ impl Run<'_> {
             .outputs()
             .iter()
             .map(|desc| match desc {
+                c::ResourceDescriptor::Image(desc)
+                    if matches!(node.operation(), c::ContentOperation::ExternalImage(_)) =>
+                {
+                    let c::ContentOperation::ExternalImage(external) = node.operation() else {
+                        unreachable!()
+                    };
+                    let lease = external.acquire()?;
+                    let frame = lease
+                        .backing::<crate::custom_draw::dxgi::DxgiFrame>()
+                        .ok_or_else(|| {
+                            error(
+                                c::ContentErrorKind::UnsupportedCapability,
+                                "unsupported D3D11 external backing",
+                            )
+                        })?;
+                    let texture = frame.import_external(d, desc)?;
+                    Ok(Arc::new(Resource::ExternalImage {
+                        texture,
+                        charge: charge(&c::ResourceDescriptor::Image(desc.clone())),
+                        _lease: lease,
+                    }))
+                }
                 c::ResourceDescriptor::Image(desc) => image(
                     d,
                     ctx,
@@ -814,6 +847,15 @@ impl Run<'_> {
                 ),
             })
             .collect::<Result<Vec<_>>>()?;
+        if matches!(node.operation(), c::ContentOperation::ExternalImage(_)) {
+            self.stats.external_imports += 1;
+        } else {
+            self.stats.image_allocations += node
+                .outputs()
+                .iter()
+                .filter(|d| matches!(d, c::ResourceDescriptor::Image(_)))
+                .count();
+        }
         match node.operation() {
             c::ContentOperation::Solid(color) => {
                 let c::ResourceDescriptor::Image(desc) = &node.outputs()[0] else {
@@ -828,11 +870,7 @@ impl Run<'_> {
                     }
                 }
             }
-            c::ContentOperation::ExternalImage(_) => {
-                return Err(execution(
-                    "external image imports are unsupported by this executor",
-                ));
-            }
+            c::ContentOperation::ExternalImage(_) => {}
             c::ContentOperation::UploadImage(_)
             | c::ContentOperation::UploadBuffer(_)
             | c::ContentOperation::ZeroBuffer => {}

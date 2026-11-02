@@ -1984,3 +1984,27 @@ retirement test passes after dropping scene and renderer before committing the
 sampling command. Normal locked media and import-test builds have no warnings;
 Windows media/test and browser Wasm checks pass. The visible GUI starts without a prepaint panic; interactive format/control
 acceptance remains a user check.
+
+
+### DXGI portable execution checkpoint
+
+DXGI BGRA snapshots now enter Content::external through VideoFrame::dxgi.
+The D3D11 executor validates descriptor and device before encoding, acquires
+a source lease and aliases the native texture. Direct import allocates no output
+image and performs no upload, copy or producer readback. Sampling views require
+only shader-resource binding, not a render-target bind. The former DXGI
+CustomContent producer and compositor lease field are removed.
+
+Keyed ownership stays attached to portable resources through dependent command
+completion, cancellation, submitted-prefix failure and presentation sampling.
+Producer access resumes only after all snapshot/cache owners and GPU uses retire.
+Shared-handle acquisition remains a zero-timeout producer integration operation.
+The public on_device executor entry validates the device/immediate-context pair.
+
+Six Windows WARP fixtures cross-compile, covering native pixels, rejection,
+adjusted presentation and keyed retirement under paused work and teardown.
+Windows runtime acceptance is pending. Nine macOS import tests pass with Metal
+validation; core external-image/group tests and the browser build pass.
+Run just media-import-test: nine tests on macOS, six on Windows, no visible GUI.
+Remaining work includes DMA-BUF executor migration, Windows/Linux runtime
+acceptance, final API cleanup and the separately tracked performance review (#113).

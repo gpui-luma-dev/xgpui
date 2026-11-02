@@ -458,7 +458,7 @@ configured `ContentDraw`, not an opaque native producer. It uses a fixed natural
 source request and rejects output extents that differ from the declared frame
 size. `VideoFrame::external(image, timestamp)` uses the imported descriptor's size.
 CoreVideo convenience construction remains backend-independent for video callers.
-DXGI and DMA-BUF retain their current forwarding paths until their executor
+DMA-BUF retains its current forwarding path until its executor
 integration is complete; Windows/Linux native runtime QA remains outstanding.
 
 ### Native video lab
@@ -504,7 +504,7 @@ channel and styled video element. Import creates native views and samples the
 original texture, without CPU readback, staging upload or a display-sized copy.
 
 The unsafe `DxgiFrame::from_bgra` constructor accepts only dedicated BGRA8 UNORM,
-default-usage, shader-readable render targets with one mip, one array slice and no
+default-usage, shader-readable textures with one mip, one array slice and no
 multisampling. Preparation rejects a texture from another device. Producer writes
 must be synchronized before presentation; pixels must remain immutable throughout
 the native resource lifetime, including references held by queued D3D11 commands.
@@ -536,9 +536,9 @@ snapshot and retry later; it never waits for the producer. Only exact `S_OK`
 grants ownership. DXGI timeout is distinct from abandoned ownership, which returns
 an error requiring surface recreation. Producer and consumer keys must differ.
 
-A successful frame owns a shared read lease. Frame clones and prepared compositor
-outputs keep that lease alive. The last reference releases with `release_key`
-after referring command lists have been submitted or discarded; DXGI provides
+A successful frame owns a shared read lease. Frame clones, portable graph resources and presentation sampling
+keep that lease alive. The last reference releases with `release_key`
+after referring GPU work completes or is discarded; DXGI provides
 the GPU ownership handoff. The producer may write again only after acquiring that
 key. Merely dropping the producer's published frame handle is not sufficient:
 the video channel's last displayed snapshot may still hold it. Use multiple shared
@@ -547,15 +547,23 @@ currently displayed allocation. All native aliases must obey this protocol.
 A failed release is logged; a lost/abandoned device or resource must be recreated.
 This API supplies snapshots, not a decoder, media clock or generic mutable surface.
 
-The Windows-only shared-surface regression uses separate WARP devices, tests busy
-acquisition and borrowed-handle closure, verifies clones/prepared outputs delay
-producer access, renders the shared pixels through the compositor, then checks
-producer-key handoff and captured color. The tests compile from macOS but have
-not yet been executed on Windows. On a Windows SDK host, run in release mode:
+The portable Windows regression suite uses WARP devices, including a separate
+producer device for keyed shared surfaces. It covers busy acquisition, borrowed
+handle closure, read-only texture import, adjusted presentation, cancellation,
+submitted-prefix failure and teardown retirement. It cross-compiles on macOS;
+Windows execution remains pending. On Windows, run:
 
 ```sh
-just --justfile apps/xgpui-ext-lab/media-lab/justfile dxgi-test
+just media-import-test
 ```
+
+This is a command-line GPU test suite, with six expected passes and no window.
+`VideoFrame::dxgi` now constructs portable external content; the old DXGI
+CustomContent implementation is removed. The executor aliases the native texture
+and presentation creates only a sampling view, with no output image allocation,
+upload, copy or producer readback. Descriptor and device mismatch are rejected
+before submission. `Dx11ContentExecutor::on_device` supports integration with a
+matching device and immediate context; deferred or foreign contexts are rejected.
 
 See Microsoft's [AcquireSync contract](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgikeyedmutex-acquiresync),
 [ReleaseSync contract](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgikeyedmutex-releasesync)

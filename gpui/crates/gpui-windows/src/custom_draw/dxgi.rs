@@ -1,4 +1,4 @@
-//! Retained BGRA snapshots, including nonblocking keyed NT-handle import.
+//! Portable immutable BGRA snapshots with nonblocking keyed NT-handle acquisition.
 use super::*;
 use std::os::windows::io::{AsRawHandle, BorrowedHandle};
 use windows::Win32::{
@@ -7,22 +7,22 @@ use windows::Win32::{
 };
 
 #[derive(Debug)]
-pub(super) struct KeyedLease {
+struct KeyedLease {
     mutex: IDXGIKeyedMutex,
     release_key: u64,
 }
 impl Drop for KeyedLease {
     fn drop(&mut self) {
-        // All compositor command lists referencing this lease have been executed
-        // or discarded. ReleaseSync supplies DXGI's GPU ownership handoff.
+        // All portable GPU uses have completed or been discarded, and all
+        // snapshot/cache owners have retired. ReleaseSync supplies the handoff.
         if let Err(error) = unsafe { self.mutex.ReleaseSync(self.release_key) } {
             log::error!("DXGI snapshot ownership release failed: {error}");
         }
     }
 }
 
-/// A dedicated BGRA8 texture snapshot, sampled directly by the D3D11 compositor.
-/// Supports one renderable, shader-readable 2D surface. Keyed NT-handle imports
+/// A dedicated BGRA8 texture snapshot, imported directly by the portable D3D11 executor.
+/// Supports one shader-readable default-usage 2D surface. Keyed NT-handle imports
 /// retain exclusive read ownership until all frame/output clones are dropped.
 /// Array slices and YUV planes are not supported.
 #[derive(Clone, Debug)]
@@ -58,10 +58,10 @@ impl DxgiFrame {
             desc.ArraySize == 1 && desc.MipLevels == 1 && desc.SampleDesc.Count == 1,
             "DXGI frame requires one non-multisampled mip and array slice"
         );
-        let required = (D3D11_BIND_SHADER_RESOURCE.0 | D3D11_BIND_RENDER_TARGET.0) as u32;
+        let required = D3D11_BIND_SHADER_RESOURCE.0 as u32;
         ensure!(
             desc.BindFlags & required == required && desc.Usage == D3D11_USAGE_DEFAULT,
-            "DXGI frame requires a default-usage shader-readable render target"
+            "DXGI frame requires a default-usage shader-readable texture"
         );
         ensure!(
             keyed || desc.MiscFlags & (D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX.0 as u32) == 0,
@@ -125,39 +125,53 @@ impl DxgiFrame {
         self.extent
     }
 }
-impl gpui::CustomContent for DxgiFrame {
-    fn prepare(
+impl DxgiFrame {
+    fn external_descriptor(
         &self,
-        backend: &dyn std::any::Any,
-        _: Size<DevicePixels>,
-    ) -> Result<Box<dyn std::any::Any>> {
-        let context = backend
-            .downcast_ref::<Dx11CustomContext>()
-            .context("DXGI frames require native Direct3D11")?;
-        ensure!(
-            unsafe { self.texture.GetDevice()? }.as_raw() == context.device.as_raw(),
-            "DXGI frame belongs to another device; use try_from_shared_bgra on the host device"
-        );
-        let (mut srv, mut rtv) = (None, None);
-        unsafe {
-            context
-                .device
-                .CreateShaderResourceView(&self.texture, None, Some(&mut srv))?;
-            context
-                .device
-                .CreateRenderTargetView(&self.texture, None, Some(&mut rtv))?;
-        }
-        Ok(Box::new(Dx11CustomOutput {
-            bundle: TextureBundle {
-                texture: self.texture.clone(),
-                srv: srv.context("missing DXGI shader view")?,
-                rtv: rtv.context("missing DXGI target view")?,
-                extent: self.extent,
-                _dxgi_lease: self.lease.clone(),
+    ) -> std::result::Result<gpui::content::ImageDescriptor, gpui::content::ContentError> {
+        use gpui::content::*;
+        ImageDescriptor::new(
+            ImageExtent::try_from(self.size())?,
+            PixelFormat::Bgra8,
+            ImageInterpretation {
+                color: ColorEncoding::Srgb,
+                alpha: AlphaMode::Straight,
             },
-            source_sized: true,
-            owner: context.owner.clone(),
-            recording: context.recording.clone(),
-        }))
+            1,
+        )
+    }
+    /// Portable immutable frame. Already-acquired keyed snapshots retain their
+    /// read lease through every graph, presentation and GPU completion owner.
+    pub fn external_image(
+        &self,
+    ) -> std::result::Result<gpui::content::ExternalImage, gpui::content::ContentError> {
+        Ok(gpui::content::ExternalImage::ready(
+            self.external_descriptor()?,
+            Arc::new(self.clone()),
+            || {},
+        ))
+    }
+    pub(crate) fn import_external(
+        &self,
+        device: &ID3D11Device,
+        descriptor: &gpui::content::ImageDescriptor,
+    ) -> std::result::Result<ID3D11Texture2D, gpui::content::ContentError> {
+        use gpui::content::*;
+        let owner = unsafe { self.texture.GetDevice() }
+            .map_err(|e| ContentError::new(ContentErrorKind::ExecutionFailure, e.to_string()))?;
+        if owner.as_raw() != device.as_raw() {
+            return Err(ContentError::new(
+                ContentErrorKind::UnsupportedCapability,
+                "DXGI frame belongs to another device; open the shared handle on the consumer device",
+            ));
+        }
+        let expected = self.external_descriptor()?;
+        if descriptor != &expected {
+            return Err(ContentError::new(
+                ContentErrorKind::InvalidDescriptor,
+                "external descriptor differs from DXGI BGRA storage",
+            ));
+        }
+        Ok(self.texture.clone())
     }
 }

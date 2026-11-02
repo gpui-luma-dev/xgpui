@@ -409,27 +409,42 @@ impl Dx11CustomOutput {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TextureBundle {
-    // Keep shared-surface ownership through command-list submission/discard.
-    _dxgi_lease: Option<Arc<dxgi::KeyedLease>>,
     pub texture: ID3D11Texture2D,
     pub srv: ID3D11ShaderResourceView,
     pub rtv: ID3D11RenderTargetView,
     pub extent: Size<DevicePixels>,
 }
-impl TextureBundle {
+/// A shader-readable source; borrowed decoder textures need no render-target view.
+#[derive(Clone, Debug)]
+pub(crate) struct SampledTexture {
+    pub texture: ID3D11Texture2D,
+    pub srv: ID3D11ShaderResourceView,
+}
+impl From<TextureBundle> for SampledTexture {
+    fn from(bundle: TextureBundle) -> Self {
+        Self {
+            texture: bundle.texture,
+            srv: bundle.srv,
+        }
+    }
+}
+impl SampledTexture {
     pub(crate) fn from_portable(
         device: &ID3D11Device,
         image: &crate::content_executor::GpuImage,
     ) -> Result<Self> {
-        Self::from_texture(
-            device,
-            image.texture().clone(),
-            size(
-                DevicePixels(image.descriptor.extent().width() as i32),
-                DevicePixels(image.descriptor.extent().height() as i32),
-            ),
-        )
+        let texture = image.texture().clone();
+        let mut srv = None;
+        unsafe {
+            device.CreateShaderResourceView(&texture, None, Some(&mut srv))?;
+        }
+        Ok(Self {
+            texture,
+            srv: srv.context("missing portable sampled view")?,
+        })
     }
+}
+impl TextureBundle {
     fn from_texture(
         device: &ID3D11Device,
         texture: ID3D11Texture2D,
@@ -441,7 +456,6 @@ impl TextureBundle {
             device.CreateRenderTargetView(&texture, None, Some(&mut rtv))?;
         }
         Ok(Self {
-            _dxgi_lease: None,
             texture,
             srv: srv.context("missing portable sampled view")?,
             rtv: rtv.context("missing portable render view")?,
@@ -554,7 +568,6 @@ fn allocate_texture_mips(
         device.CreateRenderTargetView(texture, None, Some(&mut rtv))?;
     }
     Ok(TextureBundle {
-        _dxgi_lease: None,
         texture: texture.unwrap(),
         srv: srv.unwrap(),
         rtv: rtv.unwrap(),
@@ -700,7 +713,7 @@ pub(crate) struct PreparedDraw {
     pub portable: Option<gpui::content::ImageInterpretation>,
     pub color_transform: Option<gpui::content::ImageColorTransform>,
     pub mapping: Option<gpui::content::ResolvedImageMapping>,
-    pub source: TextureBundle,
+    pub source: SampledTexture,
     pub coverage: Option<TextureBundle>,
     pub native: bool,
     pub wide: bool,
@@ -942,7 +955,11 @@ impl CustomCompositor {
                 );
                 deferred.Unmap(&self.uniform, 0);
             }
-            let mask = output.coverage.as_ref().unwrap_or(&output.source);
+            let mask = output
+                .coverage
+                .as_ref()
+                .map(|mask| &mask.srv)
+                .unwrap_or(&output.source.srv);
             unsafe {
                 if wide_blending != output.wide {
                     deferred.OMSetBlendState(
@@ -960,7 +977,7 @@ impl CustomCompositor {
                 deferred.PSSetConstantBuffers(0, Some(&[Some(self.uniform.clone())]));
                 deferred.PSSetShaderResources(
                     0,
-                    Some(&[Some(output.source.srv.clone()), Some(mask.srv.clone())]),
+                    Some(&[Some(output.source.srv.clone()), Some(mask.clone())]),
                 );
                 deferred.Draw(6, 0);
             }

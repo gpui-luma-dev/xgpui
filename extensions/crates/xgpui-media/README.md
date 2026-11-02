@@ -230,4 +230,7 @@ source size and reject mismatched output extents. `VideoFrame::external` accepts
 a portable imported image. CoreVideo no longer implements native `CustomContent`
 preparation or owns queue/output caches. NV12 converts into encoded-sRGB half-float
 storage to preserve precision before adjustments, without CPU pixel readback.
-DXGI/DMA-BUF forwarding remains until their native executors are migrated.
+DXGI BGRA now uses portable external content on the matching D3D11 device.
+Shader-readable sources need no render-target binding. Keyed snapshots remain
+leased through execution and presentation completion. Only DMA-BUF retains the
+native forwarding path pending executor migration.

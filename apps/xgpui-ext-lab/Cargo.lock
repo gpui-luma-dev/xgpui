@@ -6495,6 +6495,7 @@ dependencies = [
  "web-sys",
  "web-time",
  "wgpu",
+ "windows 0.62.2",
  "xgpui",
  "xgpui-apple",
  "xgpui-canvas",
@@ -6507,6 +6508,7 @@ dependencies = [
  "xgpui-svg",
  "xgpui-web",
  "xgpui-wgpu",
+ "xgpui-windows",
 ]
 
 [[package]]

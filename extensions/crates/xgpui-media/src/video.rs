@@ -10,13 +10,13 @@ use std::{
     time::Duration,
 };
 
-#[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
+#[cfg(all(unix, feature = "wgpu"))]
 #[derive(Debug)]
 struct AdjustedFrame {
     source: Arc<dyn CustomContent>,
     adjustments: crate::pipeline::ImageAdjustments,
 }
-#[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
+#[cfg(all(unix, feature = "wgpu"))]
 impl CustomContent for AdjustedFrame {
     fn image_color_mode(&self) -> gpui::ImageColorMode {
         self.source.image_color_mode()
@@ -78,7 +78,7 @@ impl gpui::content::ContentSource for FrameSource {
 #[derive(Clone, Debug)]
 enum FrameContent {
     Portable(gpui::content::ContentDraw),
-    #[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
+    #[cfg(all(unix, feature = "wgpu"))]
     Native(Arc<dyn CustomContent>),
 }
 /// Immutable frame pixels/description, independent of decoder and playback clock.
@@ -149,11 +149,10 @@ impl VideoFrame {
     }
     #[cfg(target_os = "windows")]
     pub fn dxgi(frame: gpui_windows::custom_draw::dxgi::DxgiFrame, timestamp: Duration) -> Self {
-        Self {
-            size: frame.size(),
-            content: FrameContent::Native(Arc::new(frame)),
+        Self::external(
+            frame.external_image().expect("validated DXGI descriptor"),
             timestamp,
-        }
+        )
     }
     #[cfg(all(unix, feature = "wgpu"))]
     pub fn dma_buf(
@@ -172,7 +171,7 @@ impl VideoFrame {
             FrameContent::Portable(draw) => FrameContent::Portable(draw.clone().color_transform(
                 gpui::content::ImageColorTransform::linear(adjustments.paint()),
             )),
-            #[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
+            #[cfg(all(unix, feature = "wgpu"))]
             FrameContent::Native(source) => FrameContent::Native(Arc::new(AdjustedFrame {
                 source: source.clone(),
                 adjustments,
@@ -195,7 +194,7 @@ impl VideoFrame {
     pub fn content(&self) -> Arc<dyn CustomContent> {
         match &self.content {
             FrameContent::Portable(draw) => draw.clone().into_scene_content(),
-            #[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
+            #[cfg(all(unix, feature = "wgpu"))]
             FrameContent::Native(content) => content.clone(),
         }
     }
@@ -224,7 +223,7 @@ impl VideoFrame {
                 let draw = slot.map_or_else(|| draw.clone(), |slot| draw.clone().slot(slot));
                 window.paint_content(geometry, draw);
             }
-            #[cfg(any(target_os = "windows", all(unix, feature = "wgpu")))]
+            #[cfg(all(unix, feature = "wgpu"))]
             FrameContent::Native(content) => window.paint_custom(geometry, content.clone()),
         }
     }

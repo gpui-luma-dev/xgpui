@@ -306,5 +306,15 @@ one GPU pass; direct BGRA imports allocate no new image storage. Neither path
 reads producer pixels back to the CPU. Headless validation reads final targets.
 
 CoreVideo and the macOS video lab now use portable draws. The old CoreVideo
-producer/cache and compositor-side NV12 paths are removed. DXGI/DMA-BUF executor
-integration remains next; Windows runtime testing is still outstanding.
+producer/cache and compositor-side NV12 paths are removed. DXGI also uses the portable executor; DMA-BUF integration remains next.
+Windows runtime testing is still outstanding.
+
+### Portable DXGI validation (Windows)
+
+Run `just media-import-test` on Windows. This runs six release-mode WARP GPU
+tests on the command line and opens no window. Look for `6 passed; 0 failed`.
+The fixtures check shader-readable BGRA textures without render-target binding,
+source extent and pixels, device/descriptor rejection, adjusted presentation,
+keyed ownership through paused cancellation and prefix failure, and renderer
+teardown. Direct imports allocate no output image and perform no producer
+readback. These tests cross-compile on macOS; Windows execution is pending.

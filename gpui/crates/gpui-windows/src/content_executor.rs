@@ -77,6 +77,10 @@ pub struct Dx11ContentStats {
     pub pipeline_compilations: usize,
     pub byte_copy_compilations: usize,
     pub peak_reserved_bytes: u64,
+    /// Native external images aliased without an upload or output allocation.
+    pub external_imports: usize,
+    /// Newly allocated graph image storage (not borrowed external textures).
+    pub image_allocations: usize,
     pub readbacks: usize,
     pub worker_thread: Option<String>,
 }
@@ -115,6 +119,11 @@ pub struct Dx11ContentJob {
     state: Arc<State>,
 }
 impl Dx11ContentJob {
+    /// Cancel unstarted work without waiting; submitted prefixes retire normally.
+    pub fn cancel(&self) {
+        self.state.cancelled.store(true, Ordering::Release);
+    }
+
     pub(crate) fn take(&self) -> Option<Result<Dx11ContentFrame>> {
         self.state.result.lock().unwrap().take()
     }
@@ -161,6 +170,11 @@ struct Request {
 }
 #[derive(Debug)]
 enum Resource {
+    ExternalImage {
+        texture: ID3D11Texture2D,
+        charge: u64,
+        _lease: c::ExternalImageLease,
+    },
     Image {
         texture: ID3D11Texture2D,
         charge: u64,
@@ -173,7 +187,7 @@ enum Resource {
 impl Resource {
     fn texture(&self) -> &ID3D11Texture2D {
         match self {
-            Self::Image { texture, .. } => texture,
+            Self::Image { texture, .. } | Self::ExternalImage { texture, .. } => texture,
             _ => unreachable!(),
         }
     }
@@ -185,7 +199,9 @@ impl Resource {
     }
     fn charge(&self) -> u64 {
         match self {
-            Self::Image { charge, .. } | Self::Buffer { charge, .. } => *charge,
+            Self::Image { charge, .. }
+            | Self::ExternalImage { charge, .. }
+            | Self::Buffer { charge, .. } => *charge,
         }
     }
 }
@@ -239,7 +255,10 @@ impl Dx11ContentExecutor {
         let devices = crate::DirectXDevices::new().map_err(execution)?;
         Self::on_device(devices.device, devices.device_context, options)
     }
-    pub(crate) fn on_device(
+    /// Attach the executor to the consumer's device and immediate context.
+    /// The runtime context lock protects query/command-list operations; host
+    /// pipelines are restored when portable command lists are executed.
+    pub fn on_device(
         device: ID3D11Device,
         context: ID3D11DeviceContext,
         options: Dx11ContentOptions,
@@ -251,6 +270,14 @@ impl Dx11ContentExecutor {
             return Err(error(
                 c::ContentErrorKind::InvalidDescriptor,
                 "content queue/pipeline limits must be positive",
+            ));
+        }
+        if unsafe { context.GetDevice() }.map_err(execution)?.as_raw() != device.as_raw()
+            || unsafe { context.GetType() } != D3D11_DEVICE_CONTEXT_IMMEDIATE
+        {
+            return Err(error(
+                c::ContentErrorKind::InvalidDescriptor,
+                "portable executor requires the matching immediate context",
             ));
         }
         // ExecuteCommandList(..., true) saves/restores UI pipeline state atomically.
@@ -372,6 +399,7 @@ impl Dx11ContentExecutor {
 fn capabilities(device: &ID3D11Device) -> c::ContentCapabilities {
     let feature_level_11 = unsafe { device.GetFeatureLevel() }.0 >= D3D_FEATURE_LEVEL_11_0.0;
     let mut caps = c::ContentCapabilities::default();
+    caps.external_images = feature_level_11;
     caps.max_image_dimension = 16384;
     caps.max_buffer_bytes = 128 * 1024 * 1024;
     caps.compute = Some(c::ComputeLimits {
