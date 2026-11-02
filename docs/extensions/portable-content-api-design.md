@@ -1710,3 +1710,45 @@ wide effects, tiled pages, and external imports are subsequent migrations; their
 existing preparation machinery remains only for those not-yet-migrated producers.
 The eventual removal of that API remains part of this effort. Mixing ordinary
 and effect placements can temporarily retain separate native realizations.
+
+
+### Filter and adjustment migration checkpoint
+
+`ContentDraw::color_transform(ImageColorTransform)` is the canonical placement
+contract on Metal, wgpu and D3D11. Encoded sRGB affine rows clamp after the combined
+transform; linear transforms decode source metadata, convert to linear sRGB/P3,
+apply affine rows and a source-space vignette, then convert to output. Cropping
+keeps the original source-space vignette coordinates. Alpha is unchanged, and
+coverage/element opacity apply once. Invalid source/transform combinations fail
+validation rather than silently changing interpretation.
+
+`ContentColorOutput::WideSdr` explicitly requires wide output even for RGBA8
+sources. Extended adjustment values survive into native wide presentation. A
+window mode change retires incompatible retained and in-flight atomic snapshots,
+including snapshots backed by narrow source pixels.
+
+Source-description signatures exclude placement mapping, color transform and
+output intent. Those properties remain in presentation validation signatures:
+parameter edits reuse source description, hashing and GPU upload while still
+validating the current placement. Atomic groups commit transforms with pixels.
+Portable-only CustomContent wrappers need no duplicate native image hooks.
+
+Media ordinary, filtered, adjusted and wide placements now share this path;
+MediaImageView exposes mapping and stable placement slots. Public per-image
+upload status/count/retry were removed. Only tiled pages retain private media
+staging; page and external-image integration remain next. Earlier migration
+checkpoints above describe historical state, not the current effect path.
+
+Native Metal/wgpu pixel tests compare encoded/linear effects against CPU reference
+values, including cropped vignettes, opacity, wide RGBA8 output, one-description /
+one-upload reuse and paused-GPU wide-to-SDR atomic rejection. Windows is compile
+validated; native Windows GPU acceptance remains outstanding.
+
+Validation checkpoint: 46 core tests and all 86 media tests pass. Metal mapping
+(12), presentation (15 plus its isolated helper), and atomic groups (9), plus
+wgpu mapping (11) and atomic groups (11) pass with native GPU execution. The release
+lab's default, vivid and linear-adjustment contact sheets contain checked visible
+pixels; capture happens after strict readiness. The schema-2 benchmark uses six
+1024² sources to fit the executor budget, validates three fresh-renderer waves,
+and reuses uploads across 120 cached color-change frames. Windows media/test code
+and the Wasm lab compile. Native Windows runtime validation remains outstanding.

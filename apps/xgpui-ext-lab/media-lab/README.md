@@ -141,20 +141,15 @@ just --justfile apps/xgpui-ext-lab/media-lab/justfile upload-bench
 just --justfile apps/xgpui-ext-lab/media-lab/justfile upload-wgpu-bench
 ```
 
-This generates six 2048² noisy PNGs with marker colors, warms the pipeline, then
-measures three upload waves and 120 cached frames for the same twelve-placement
-scene. Two upload workers share 64 MiB staging, with one source / 32 MiB per-frame
-admission. All sources, duplicate placements, upload counts and pool accounting
-are checked. The JSON contains raw CPU samples, nearest-rank summaries, sampled
-resource peaks and pool allocations/reuses. The matching PNG verifies final pixels.
-Native outputs are `/tmp/media-upload-bench.json` and `.png`; portable outputs use
-`media-upload-bench-wgpu`. No personal image/video is needed.
-
-Decode/mip wall time is reported separately from timed rendering. Generation,
-warmup, pacing sleep and final readback are excluded. CPU `render_scene` and
-source-preparation time are not GPU time, whole-window frame time or proof of
-zero stutter. Background load is uncontrolled. See the media guide for full
-interpretation and versioned macOS observations; do not use those as thresholds.
+This generates six 1024² noisy PNGs, warms the pipeline, then measures three
+portable upload waves using fresh renderers and 120 cached effect frames. Source
+decode/mips happen before timing. Schema 2 reports CPU snapshot/render samples and
+asynchronous readiness wall time, including polling waits. Final PNG pixels are
+checked outside timed samples. Driver/device pools may survive fresh renderers.
+There are no producer upload counts, staging-pool metrics or GPU timestamps.
+The smaller corpus fits the portable executor working-set budget. Schema 1
+reports are not directly comparable. Native outputs are
+`/tmp/media-upload-bench.json` and `.png`; wgpu outputs use `media-upload-bench-wgpu`.
 
 ## Visible-window cadence run
 
@@ -170,7 +165,7 @@ window remains available for manual testing afterward. JSON retains every measur
 render-start interval, including gaps over 250 ms, and records p50/p95/max and counts
 over 25/50 ms. Burst-trigger work is included; only the warmup boundary is skipped.
 A 60-second timeout or source failures are recorded in `errors`; check that it is
-empty and `completed_sources` is 12. Minimized/occluded windows invalidate a cadence
+empty and `decoded_sources` is 12. Minimized/occluded windows invalidate a cadence
 comparison. Reduced motion suppresses the sweep; frame requests still run.
 
 These are observed UI render-start intervals, not GPU durations, presentation
@@ -191,15 +186,14 @@ uses release mode and generates its own four 3072×2048 PNGs before timing.
 No sample files are needed. After warming all sources, a native scrolling feed
 with 24 cards moves at 1200 points/second, reversing at its ends. It measures five
 seconds of cached baseline, 30 seconds of sustained file decode/mip/upload
-replacement, drains pending work, then measures five seconds of cached scrolling.
-The same four source slots and card geometry are used throughout. Each full mip
-chain is 33,554,428 bytes, just under the 32 MiB per-scene limit. At most one new
-source is adopted per scene. A single replacement job starts at most every 350 ms;
-the previous source remains visible until the replacement is host-submitted.
+replacement, allows a one-second settling interval, then measures five seconds of cached scrolling.
+The same four source slots and card geometry are used throughout. A single replacement job starts at most every 350 ms; stable presentation slots
+retain previous pixels until renderer completion. Identical reloaded pixels can
+reuse structural GPU identity; this does not force a fresh upload every time.
 
 The JSON at `/tmp/media-scroll-60hz.json` retains every measured render-start
-interval and reports p50/p95/max, gaps above 33.333/50 ms, completed replacements,
-errors, observed scroll travel and sampled upload reservations. A provisional
+interval and reports p50/p95/max, gaps above 33.333/50 ms, decoded replacements,
+errors and observed scroll travel. Decode completion is not GPU readiness. A provisional
 60 Hz check requires p95 ≤20 ms in all phases, loading p95 no more than 2 ms above
 baseline, at most 1% of intervals above 33.333 ms, none above 50 ms, at least 30
 replacements, over 1000 points of scroll travel, and no errors. These are explicit
@@ -226,7 +220,7 @@ Run `just media --adjustments` from the repository root. Both panels share one
 source upload: original on the left, linear-sRGB matrix/vignette on the right.
 Cycle EV exposure, contrast around 0.18, saturation and vignette, then animate,
 reset, zoom/pan and check alpha/opacity/corners. The upload count stays at one.
-The mode toggle returns to the legacy encoded-sRGB filters/atlas comparison.
+The mode toggle returns to the encoded-sRGB filters/atlas comparison.
 Use `--headless --png /tmp/media-adjustments.png` to capture generated samples;
 add `--wgpu` when built with the app's `wgpu` feature to capture that backend.
 RGBA16F/P3 uploads are available in Phase 3 below. Progressive/tiled images are available in Phase 4 below. Playback remains #40.
@@ -276,3 +270,10 @@ reused, but custom media captures refresh each paint. Native `just media --video
 also offers exposure, saturation, vignette and blur on generated BGRA/NV12
 surfaces. Native imports are not available in Wasm; test portable blur via
 `?demo=media-tiles&backend=webgpu` and `?demo=media-tiles&backend=webgl`.
+
+
+Filters and adjustments now use portable placement transforms and share the source
+upload with ordinary views. Check rapid filter changes, exposure, saturation and
+vignette for responsive edits without placeholder flashes; reset should restore
+the baseline. Check opacity and rounded edges while editing. Use `--adjustments`
+for linear controls and `--float-images` for native wide-color images.

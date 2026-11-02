@@ -7,11 +7,13 @@ use std::{
     sync::{OnceLock, Weak},
 };
 
+type SourceSignature = Vec<(u64, c::ContentRequest)>;
 type Signature = Vec<(
     u64,
     c::ContentRequest,
     c::ImageMapping,
     c::ContentColorOutput,
+    c::ImageColorTransform,
 )>;
 struct Pending {
     color_outputs: Vec<c::ContentColorOutput>,
@@ -49,7 +51,7 @@ pub(super) struct ContentPresenter {
     slots: HashMap<c::PresentationSlotId, c::OutputKey>,
     failed: Option<(Signature, c::ContentError)>,
     dependencies: c::ContentDependencies,
-    description: Option<(Signature, Arc<c::ContentGraph>)>,
+    description: Option<(SourceSignature, Arc<c::ContentGraph>)>,
     pub stats: MetalContentStats,
     pub limits: MetalContentLimits,
     requests: usize,
@@ -189,6 +191,7 @@ impl ContentPresenter {
                             Some(image.clone()),
                             target,
                             member.content.clone(),
+                            draw_request(&member)?.expect("portable group member").draw,
                         ));
                         selected.push(member);
                     }
@@ -201,6 +204,9 @@ impl ContentPresenter {
                         images[index].clone(),
                         target,
                         member.content.clone(),
+                        draw_request(&member)?
+                            .expect("portable independent draw")
+                            .draw,
                     ));
                 }
                 vec![member]
@@ -257,11 +263,18 @@ impl ContentPresenter {
                 )
             });
             self.slots.retain(|_, key| self.cache.contains_key(key));
-            self.groups.retain_images(|image| {
-                wide || !matches!(
-                    image.descriptor.interpretation().color,
-                    c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
-                )
+            self.groups.retain_snapshots(|request, images| {
+                images
+                    .iter()
+                    .zip(request.color_outputs())
+                    .all(|(image, output)| {
+                        wide || (output != c::ContentColorOutput::WideSdr
+                            && (output == c::ContentColorOutput::SrgbPreview
+                                || !matches!(
+                                    image.descriptor.interpretation().color,
+                                    c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
+                                )))
+                    })
             });
         }
         let active: Vec<_> = draws.iter().flatten().collect();
@@ -286,8 +299,13 @@ impl ContentPresenter {
                     draw.request.clone(),
                     draw.draw.mapping,
                     draw.draw.presentation.color_output,
+                    draw.draw.color_transform,
                 )
             })
+            .collect();
+        let source_signature: SourceSignature = active
+            .iter()
+            .map(|draw| (draw.draw.content.id(), draw.request.clone()))
             .collect();
         if self.dependencies.changed() {
             self.description = None;
@@ -296,6 +314,19 @@ impl ContentPresenter {
         }
         if self.failed.as_ref().is_some_and(|(s, _)| *s != signature) {
             self.failed = None;
+        }
+        if !wide
+            && active
+                .iter()
+                .any(|draw| draw.draw.presentation.color_output == c::ContentColorOutput::WideSdr)
+        {
+            self.fail(
+                signature.clone(),
+                c::ContentError::new(
+                    c::ContentErrorKind::UnsupportedCapability,
+                    "explicit wide content requires an accepted wide SDR output",
+                ),
+            );
         }
         let roots: Vec<_> = active
             .iter()
@@ -307,7 +338,7 @@ impl ContentPresenter {
         if self
             .description
             .as_ref()
-            .is_some_and(|(old, _)| *old != signature)
+            .is_some_and(|(old, _)| *old != source_signature)
         {
             self.description = None;
             self.dependencies = c::ContentDependencies::default();
@@ -330,7 +361,7 @@ impl ContentPresenter {
             match result {
                 Ok(graph) => {
                     let graph = Arc::new(graph);
-                    self.description = Some((signature.clone(), graph.clone()));
+                    self.description = Some((source_signature.clone(), graph.clone()));
                     Some(graph)
                 }
                 Err(error) => {
@@ -349,11 +380,13 @@ impl ContentPresenter {
                     else {
                         unreachable!()
                     };
-                    draw.draw.presentation.color_output != c::ContentColorOutput::SrgbPreview
-                        && matches!(
-                            d.interpretation().color,
-                            c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
-                        )
+                    draw.draw.presentation.color_output == c::ContentColorOutput::WideSdr
+                        || (draw.draw.presentation.color_output
+                            != c::ContentColorOutput::SrgbPreview
+                            && matches!(
+                                d.interpretation().color,
+                                c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
+                            ))
                 });
             if unsupported && self.failed.is_none() {
                 self.fail(
@@ -375,6 +408,14 @@ impl ContentPresenter {
                 else {
                     continue;
                 };
+                if let Err(error) = draw.draw.color_transform.validate(
+                    descriptor,
+                    wide && draw.draw.presentation.color_output
+                        != c::ContentColorOutput::SrgbPreview,
+                ) {
+                    self.fail(signature.clone(), error);
+                    return false;
+                }
                 let destination = draw.request.logical_size();
                 if let Err(error) = draw.draw.mapping.resolve(
                     descriptor,
@@ -411,12 +452,13 @@ impl ContentPresenter {
                                 .iter()
                                 .zip(&pending.color_outputs[ticket.roots.clone()])
                                 .all(|(image, output)| {
-                                    *output == c::ContentColorOutput::SrgbPreview
-                                        || !matches!(
-                                            image.descriptor.interpretation().color,
-                                            c::ColorEncoding::LinearP3
-                                                | c::ColorEncoding::LinearRec2020
-                                        )
+                                    *output != c::ContentColorOutput::WideSdr
+                                        && (*output == c::ContentColorOutput::SrgbPreview
+                                            || !matches!(
+                                                image.descriptor.interpretation().color,
+                                                c::ColorEncoding::LinearP3
+                                                    | c::ColorEncoding::LinearRec2020
+                                            ))
                                 })
                         {
                             self.groups.publish(ticket, images.to_vec());
@@ -433,11 +475,13 @@ impl ContentPresenter {
                         .zip(frame.images)
                     {
                         if !wide
-                            && output != c::ContentColorOutput::SrgbPreview
-                            && matches!(
-                                image.descriptor.interpretation().color,
-                                c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
-                            )
+                            && (output == c::ContentColorOutput::WideSdr
+                                || (output != c::ContentColorOutput::SrgbPreview
+                                    && matches!(
+                                        image.descriptor.interpretation().color,
+                                        c::ColorEncoding::LinearP3
+                                            | c::ColorEncoding::LinearRec2020
+                                    )))
                         {
                             continue;
                         }
@@ -540,12 +584,29 @@ impl ContentPresenter {
                     })
                     .filter(|image| {
                         if !wide
+                            && draw.draw.presentation.color_output == c::ContentColorOutput::WideSdr
+                        {
+                            return false;
+                        }
+                        if !wide
                             && draw.draw.presentation.color_output
                                 != c::ContentColorOutput::SrgbPreview
                             && matches!(
                                 image.descriptor.interpretation().color,
                                 c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
                             )
+                        {
+                            return false;
+                        }
+                        if draw
+                            .draw
+                            .color_transform
+                            .validate(
+                                &image.descriptor,
+                                wide && draw.draw.presentation.color_output
+                                    != c::ContentColorOutput::SrgbPreview,
+                            )
+                            .is_err()
                         {
                             return false;
                         }
@@ -637,6 +698,7 @@ fn translate_member(member: &mut gpui::CustomDraw, placement: &gpui::CustomDraw)
 unsafe impl Send for ResolvedContent {}
 unsafe impl Sync for ResolvedContent {}
 struct ResolvedContent {
+    draw: c::ContentDraw,
     image: Option<MetalGpuImage>,
     unused: Option<metal::Texture>,
     source: Arc<dyn gpui::CustomContent>,
@@ -646,9 +708,11 @@ impl ResolvedContent {
         image: Option<MetalGpuImage>,
         target: &metal::TextureRef,
         source: Arc<dyn gpui::CustomContent>,
+        draw: c::ContentDraw,
     ) -> Self {
         let unused = image.is_none().then(|| target.into());
         Self {
+            draw,
             image,
             unused,
             source,
@@ -662,13 +726,13 @@ impl std::fmt::Debug for ResolvedContent {
 }
 impl gpui::CustomContent for ResolvedContent {
     fn image_color_output(&self) -> c::ContentColorOutput {
-        self.source.image_color_output()
+        self.draw.presentation.color_output
     }
     fn image_mapping(&self) -> Option<c::ImageMapping> {
-        self.source.image_mapping()
+        Some(self.draw.mapping)
     }
     fn image_color_transform(&self) -> [[f32; 4]; 3] {
-        self.source.image_color_transform()
+        self.draw.color_transform.encoded_rows()
     }
     fn image_source_size(&self) -> Option<Size<DevicePixels>> {
         self.source.image_source_size()
@@ -680,19 +744,22 @@ impl gpui::CustomContent for ResolvedContent {
         self.source.image_color_mode()
     }
     fn image_linear_adjustments(&self) -> Option<gpui::LinearImagePaint> {
-        self.source.image_linear_adjustments()
+        self.draw.color_transform.linear_paint()
     }
     fn prepare(
         &self,
         _: &dyn std::any::Any,
         _: Size<DevicePixels>,
     ) -> Result<Box<dyn std::any::Any>> {
-        Ok(Box::new(crate::custom_draw::PreparedMetalOutput::portable(
+        let mut output = crate::custom_draw::PreparedMetalOutput::portable(
             self.image.clone(),
             self.image
                 .as_ref()
                 .map(|image| image.texture())
                 .unwrap_or_else(|| self.unused.as_ref().unwrap()),
-        )))
+        );
+        output.color_transform = Some(self.draw.color_transform);
+        output.color_output = self.draw.presentation.color_output;
+        Ok(Box::new(output))
     }
 }

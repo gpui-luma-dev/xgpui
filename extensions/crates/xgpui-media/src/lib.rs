@@ -17,7 +17,7 @@ pub use gpui_windows::custom_draw::dxgi::DxgiFrame;
 pub use video::{VideoFrame, VideoSender, VideoStats, VideoStream, VideoView, video, video_frame};
 
 pub use loader::{ImageJob, LoadStatus, MediaLimits, MediaLoader};
-pub use texture::{MediaImage, UploadStatus};
+pub use texture::MediaImage;
 pub use upload::{FrameUploadLimits, UploadLimits, UploadStats};
 
 use gpui::{
@@ -87,12 +87,6 @@ impl MediaImage {
         {
             return;
         }
-        if !matches!(
-            self.upload_status(),
-            UploadStatus::Ready | UploadStatus::Failed(_)
-        ) {
-            window.request_animation_frame();
-        }
         window.paint_custom(
             CustomGeometry::RoundedRect {
                 bounds,
@@ -112,6 +106,8 @@ pub fn image_view(image: MediaImage) -> MediaImageView {
         filter: None,
         adjustments: None,
         wide: false,
+        mapping: None,
+        slot: None,
         style: StyleRefinement::default(),
     }
 }
@@ -121,18 +117,32 @@ pub struct MediaImageView {
     filter: Option<ImageFilter>,
     adjustments: Option<ImageAdjustments>,
     wide: bool,
+    mapping: Option<gpui::content::ImageMapping>,
+    slot: Option<gpui::content::PresentationSlotId>,
     style: StyleRefinement,
 }
 impl MediaImageView {
+    /// Select source fit, alignment, crop and sampling for any image placement.
+    pub fn mapping(mut self, mapping: gpui::content::ImageMapping) -> Self {
+        self.mapping = Some(mapping);
+        self
+    }
+    /// Keep this paint role's previous GPU output during source replacement.
+    /// Allocate the slot once per placement; sharing a source does not share slots.
+    pub fn slot(mut self, slot: gpui::content::PresentationSlotId) -> Self {
+        self.slot = Some(slot);
+        self
+    }
+
     /// Opt into native linear-P3 presentation. The renderer also requires an
     /// accepted WideGamutSdr window; unsupported hosts return an explicit error.
     pub fn wide_gamut(mut self) -> anyhow::Result<Self> {
-        self.image.wide(None)?;
-        anyhow::ensure!(
-            self.filter
-                .is_none_or(|filter| filter == ImageFilter::new()),
-            "wide images require linear ImageAdjustments"
-        );
+        self.image.wide(self.adjustments)?;
+        if self.adjustments.is_none()
+            && let Some(filter) = self.filter
+        {
+            self.image.filtered(filter).draw()?;
+        }
         self.wide = true;
         Ok(self)
     }
@@ -209,21 +219,48 @@ impl Element for MediaImageView {
             .clamp_radii_for_quad_size(bounds.size);
         window.with_element_opacity(style.opacity, |window| {
             style.paint(bounds, window, cx, |window, _| {
-                if self.wide {
-                    self.image.paint_content(window, bounds, radii, || {
-                        Arc::new(
-                            self.image
-                                .wide(self.adjustments)
-                                .expect("validated wide image"),
-                        )
-                    });
+                use gpui::content::*;
+                let draw = if self.wide {
+                    let draw = self.image.draw().color_output(ContentColorOutput::WideSdr);
+                    if let Some(adjustment) = self.adjustments {
+                        Ok(draw.color_transform(ImageColorTransform::linear(adjustment.paint())))
+                    } else if let Some(filter) = self.filter {
+                        self.image
+                            .filtered(filter)
+                            .draw()
+                            .map(|draw| draw.color_output(ContentColorOutput::WideSdr))
+                    } else {
+                        Ok(draw)
+                    }
                 } else if let Some(adjustments) = self.adjustments {
-                    self.image
-                        .paint_adjusted(window, bounds, radii, adjustments);
+                    Ok(self.image.adjusted(adjustments).draw())
                 } else if let Some(filter) = self.filter {
-                    self.image.paint_filtered(window, bounds, radii, filter);
+                    self.image.filtered(filter).draw()
                 } else {
-                    self.image.paint(window, bounds, radii);
+                    Ok(self.image.draw())
+                };
+                match draw {
+                    Ok(mut draw) => {
+                        if let Some(mapping) = self.mapping {
+                            draw = draw.mapping(mapping);
+                        }
+                        if let Some(slot) = self.slot {
+                            draw = draw.slot(slot);
+                        }
+                        window.paint_content(
+                            CustomGeometry::RoundedRect {
+                                bounds,
+                                corner_radii: radii,
+                            },
+                            draw,
+                        );
+                    }
+                    Err(_) => self.image.paint_filtered(
+                        window,
+                        bounds,
+                        radii,
+                        self.filter.unwrap_or_default(),
+                    ),
                 }
             });
         });

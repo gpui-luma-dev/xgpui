@@ -275,16 +275,40 @@ impl Lab {
             )
     }
     fn diagnostics(&self) -> Div {
-        let usage = self.loader.upload_stats();
-        let pool = self.loader.staging_pool_stats();
-        div().flex().flex_col().flex_1().p_4().bg(rgb(PANEL)).border_1().border_color(rgb(LINE)).rounded_lg()
+        let bytes = self
+            .primary
+            .image
+            .iter()
+            .chain(self.burst.iter().filter_map(|s| s.image.as_ref()))
+            .map(|image| image.payload_bytes())
+            .sum();
+        div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .p_4()
+            .bg(rgb(PANEL))
+            .border_1()
+            .border_color(rgb(LINE))
+            .rounded_lg()
             .child(eyebrow("PIPELINE / LIVE"))
-            .child(metric("Effect staging workers",format!("{} / 2",usage.active_jobs)))
-            .child(metric("Effect staging reservations",mib(usage.staging_bytes)))
-            .child(metric("Effect pool allocated / idle",format!("{} / {}",mib(pool.allocated_bytes),mib(pool.cached_bytes))))
-            .child(metric("Effect buffer allocations / reuse",format!("{} / {}",pool.allocations,pool.reuses)))
-            .child(metric("Redraw interval p95",self.p95().map(|v|format!("{v:.1} ms")).unwrap_or_else(||"—".into())))
-            .child(div().mt_2().text_xs().text_color(rgb(MUTED)).child("Redraw intervals include UI work; they are not GPU timings. Native atlas memory is excluded."))
+            .child(metric("Decoded source bytes", mib(bytes)))
+            .child(metric("Image uploads", "Renderer-owned"))
+            .child(metric(
+                "Filters / adjustments",
+                "Shared source · draw uniforms",
+            ))
+            .child(metric(
+                "Redraw interval p95",
+                self.p95()
+                    .map(|v| format!("{v:.1} ms"))
+                    .unwrap_or_else(|| "—".into()),
+            ))
+            .child(
+                div().mt_2().text_xs().text_color(rgb(MUTED)).child(
+                    "Decoded bytes are CPU mip payloads. Redraw intervals are not GPU timings.",
+                ),
+            )
     }
     fn stress(&self) -> Div {
         let decoded = self
@@ -610,43 +634,6 @@ impl Render for Lab {
                                 cx.notify();
                             }),
                         ),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(
-                        button(
-                            "count-budget",
-                            format!("Effects: {} / frame", self.count_limit),
-                            false,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            let count = match this.count_limit {
-                                1 => 2,
-                                2 => 4,
-                                _ => 1,
-                            };
-                            this.policy(count, this.byte_limit);
-                            cx.notify();
-                        })),
-                    )
-                    .child(
-                        button(
-                            "byte-budget",
-                            format!("Effects: {} / frame", mib(self.byte_limit)),
-                            false,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            let bytes = match this.byte_limit {
-                                16777216 => 33554432,
-                                33554432 => 67108864,
-                                _ => 16777216,
-                            };
-                            this.policy(this.count_limit, bytes);
-                            cx.notify();
-                        })),
                     ),
             );
         let mut filter_controls = div().flex().items_center().gap_2().child(

@@ -350,6 +350,8 @@ pub(crate) struct PreparedMetalOutput {
     pub(crate) gpu: Option<crate::content_executor::MetalGpuImage>,
     pub(crate) visible: bool,
     pub(crate) mapping: Option<gpui::content::ResolvedImageMapping>,
+    pub(crate) color_transform: Option<gpui::content::ImageColorTransform>,
+    pub(crate) color_output: gpui::content::ContentColorOutput,
 }
 impl From<MetalCustomOutput> for PreparedMetalOutput {
     fn from(output: MetalCustomOutput) -> Self {
@@ -360,6 +362,8 @@ impl From<MetalCustomOutput> for PreparedMetalOutput {
             gpu: None,
             visible: true,
             mapping: None,
+            color_transform: None,
+            color_output: Default::default(),
         }
     }
 }
@@ -383,6 +387,8 @@ impl PreparedMetalOutput {
             gpu: image,
             visible,
             mapping: None,
+            color_transform: None,
+            color_output: Default::default(),
         }
     }
     pub(crate) fn interpretation(&self) -> Option<gpui::content::ImageInterpretation> {
@@ -426,6 +432,9 @@ impl MetalNv12Output {
     }
 }
 pub(crate) trait MetalSampleSource {
+    fn color_transform(&self) -> Option<gpui::content::ImageColorTransform> {
+        None
+    }
     fn mapping(&self) -> Option<gpui::content::ResolvedImageMapping> {
         None
     }
@@ -446,6 +455,9 @@ impl MetalSampleSource for MetalCustomOutput {
     }
 }
 impl MetalSampleSource for PreparedMetalOutput {
+    fn color_transform(&self) -> Option<gpui::content::ImageColorTransform> {
+        self.color_transform
+    }
     fn mapping(&self) -> Option<gpui::content::ResolvedImageMapping> {
         self.mapping
     }
@@ -705,6 +717,8 @@ impl CustomCompositor {
             gpu: None,
             visible: true,
             mapping: None,
+            color_transform: None,
+            color_output: Default::default(),
         })
     }
 
@@ -721,10 +735,16 @@ impl CustomCompositor {
             return;
         }
         // All fields are float4 to make the Rust/MSL layout unambiguous.
-        let adjustments = draw.content.image_linear_adjustments();
-        let transform = adjustments
-            .map(|v| v.rows())
-            .unwrap_or_else(|| draw.content.image_color_transform());
+        let adjustments = output
+            .color_transform()
+            .map(|t| t.linear_paint())
+            .unwrap_or_else(|| draw.content.image_linear_adjustments());
+        let transform = adjustments.map(|v| v.rows()).unwrap_or_else(|| {
+            output
+                .color_transform()
+                .map(|t| t.encoded_rows())
+                .unwrap_or_else(|| draw.content.image_color_transform())
+        });
         let vignette = adjustments
             .map(|v| v.vignette())
             .unwrap_or([0., 0., 1., 1.]);
@@ -749,6 +769,15 @@ impl CustomCompositor {
         if output.mapping().is_none() {
             mapped[3][0] = -1.;
         }
+        let working_p3 = adjustments.is_some_and(|paint| paint.is_p3());
+        mapped[3][1] = if working_p3 { 1. } else { 0. };
+        mapped[3][2] = if adjustments.is_some() {
+            2.
+        } else if transform != [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.]] {
+            1.
+        } else {
+            0.
+        };
         let params: [[f32; 4]; 16] = [
             [
                 draw.bounds.origin.x.0,

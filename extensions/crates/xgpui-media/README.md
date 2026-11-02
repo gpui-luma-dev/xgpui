@@ -74,12 +74,18 @@ the source. `ContentColorOutput::MatchWindow` instead preserves source gamut and
 requires a capable wide window. Atomic groups accept configured draws through
 `group.push(geometry, image.draw())` and commit their mapping/output intent together.
 
-Filters, adjustments and tiled pages remain on their current effect preparation
-path until the next migration step. Their upload counters and loader staging
-limits describe that path. Mixing ordinary and filtered placements can currently
-retain separate GPU realizations; unifying those producers is next. Ordinary
-images do not use `upload_status()` or `retry_upload()` for GPU readiness; headless
+Filters, linear adjustments and wide images now use the same portable source upload.
+`filtered(...).draw()` returns a checked placement; `adjusted(...).draw()` applies
+linear working-space adjustments. Parameter changes update draw uniforms without
+uploading or hashing the source again. `image_view` also accepts `.mapping(...)`
+and a stable per-placement `.slot(...)` for replacement history.
+
+`ContentColorOutput::WideSdr` explicitly requires a capable wide window, including
+when adjustments extend an RGBA8 source. `image.wide(...)` selects this intent.
+Alpha is preserved; coverage and opacity apply once after color conversion.
+There is no public per-image GPU upload status/count/retry API. Strict headless
 validation uses `prepare_content_snapshot` and retries typed Pending results.
+Tiled pages retain private staging machinery until their subsequent migration.
 
 ## Image adjustments
 

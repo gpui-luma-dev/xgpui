@@ -3,10 +3,7 @@ use anyhow::{Result, ensure};
 use gpui::{prelude::*, *};
 use serde::Serialize;
 use std::{path::PathBuf, time::Instant};
-use xgpui_media::{
-    FrameUploadLimits, ImageJob, LoadStatus, MediaImage, MediaLimits, MediaLoader, UploadLimits,
-    UploadStatus, image_view,
-};
+use xgpui_media::{ImageJob, LoadStatus, MediaImage, MediaLimits, MediaLoader, image_view};
 
 const SOURCES: usize = 4;
 const ROWS: usize = 24;
@@ -53,15 +50,13 @@ struct Report {
     acceptance_criteria: &'static str,
     source_size: [u32; 2],
     source_payload_bytes: usize,
-    frame_upload_limit: usize,
-    frame_byte_limit: usize,
+
     baseline: Cadence,
     loading: Cadence,
     cached: Cadence,
-    replacements_completed: usize,
+    replacements_decoded: usize,
     admission_retries: usize,
-    sampled_peak_workers: usize,
-    sampled_peak_staging_bytes: usize,
+
     scroll_min_y: f32,
     scroll_max_y: f32,
     errors: Vec<String>,
@@ -77,6 +72,7 @@ pub struct ScrollPerf {
     paths: Vec<PathBuf>,
     loader: MediaLoader,
     images: Vec<Option<MediaImage>>,
+    slots: Vec<gpui::content::PresentationSlotId>,
     pending: Option<Pending>,
     scroll: ScrollHandle,
     report_path: PathBuf,
@@ -112,24 +108,19 @@ impl ScrollPerf {
             pixels.save(&path)?;
             paths.push(path);
         }
-        let loader = MediaLoader::with_upload_policy(
-            MediaLimits {
-                max_image_bytes: 36 * MIB,
-                ..Default::default()
-            },
-            UploadLimits::default(),
-            FrameUploadLimits {
-                max_uploads: 1,
-                // Full-chain staging includes 256-byte row padding.
-                max_bytes: 33 * MIB,
-            },
-        )?;
+        let loader = MediaLoader::new(MediaLimits {
+            max_image_bytes: 36 * MIB,
+            ..Default::default()
+        })?;
         let now = Instant::now();
         Ok(Self {
             _directory: directory,
             paths,
             loader,
             images: vec![None; SOURCES],
+            slots: (0..ROWS + SOURCES + 1)
+                .map(|_| gpui::content::PresentationSlotId::new())
+                .collect(),
             pending: None,
             scroll: ScrollHandle::new(),
             report_path,
@@ -140,25 +131,21 @@ impl ScrollPerf {
             next_load: now,
             auto_scroll: true,
             report: Report {
-                schema_version: 1,
+                schema_version: 2,
                 profile: "release",
                 os: std::env::consts::OS,
                 arch: std::env::consts::ARCH,
                 target_hz: 60,
                 reported_display_interval_ms: None,
-                description: "Effect staging path (pending portable effect migration). Native scroll container: 24 cards sharing four retained 3072x2048 images, 1200 points/s triangular scrolling; warmup, 5s cached baseline, 30s repeated file decode/mip/upload replacement, drain, 5s cached scrolling. New load at most every 350ms with one pending replacement; old image stays visible until replacement is host-submitted. Same card geometry in all phases. Generated PNGs and OS file cache do not model cold disk. Raw render-start intervals include long gaps and boundary-trigger work, not GPU/presentation/input timing. Keep window foreground at fixed 60 Hz; app has no artificial frame cap. Generation precedes measurement. Pool/resource peaks are sampled, not total process memory.",
+                description: "Portable image source replacement. Native scroll container: 24 cards sharing four retained 3072x2048 images, 1200 points/s triangular scrolling; warmup, 5s cached baseline, 30s repeated file decode/mip replacement, drain, 5s cached scrolling. New load at most every 350ms with one pending replacement; stable presentation slots retain the old image until replacement pixels complete. Same card geometry in all phases. Generated PNGs and OS file cache do not model cold disk. Raw render-start intervals include long gaps and boundary-trigger work, not GPU/presentation/input timing. Keep window foreground at fixed 60 Hz; app has no artificial frame cap. Generation precedes measurement. Replacement counts mean CPU-decoded sources accepted by the view, not GPU completion; cached scrolling begins after a one-second settling interval, not a GPU-readiness assertion. No staging-pool or GPU-time metrics are reported.",
                 acceptance_criteria: "Provisional 60 Hz check: all three phases p95 <=20ms, <=1% intervals >33.333ms and no >50ms gaps; loading p95 <= baseline p95+2ms; >=30 replacements; >1000 points observed scroll travel; no errors. A failure needs investigation, not sample filtering. Display mode must be independently verified.",
                 source_size: [3072, 2048],
                 source_payload_bytes: 0,
-                frame_upload_limit: 1,
-                frame_byte_limit: 33 * MIB,
                 baseline: Cadence::default(),
                 loading: Cadence::default(),
                 cached: Cadence::default(),
-                replacements_completed: 0,
+                replacements_decoded: 0,
                 admission_retries: 0,
-                sampled_peak_workers: 0,
-                sampled_peak_staging_bytes: 0,
                 scroll_min_y: 0.,
                 scroll_max_y: 0.,
                 errors: vec![],
@@ -195,21 +182,12 @@ impl ScrollPerf {
                 return;
             }
         }
-        if let Some(image) = &pending.image {
-            match image.upload_status() {
-                UploadStatus::Ready => {
-                    self.images[pending.index] = Some(image.clone());
-                    if self.stage != 0 {
-                        self.report.replacements_completed += 1;
-                    }
-                    self.pending = None;
-                }
-                UploadStatus::Failed(error) => {
-                    self.report.errors.push(error);
-                    self.pending = None;
-                }
-                _ => {}
+        if let Some(image) = pending.image.take() {
+            self.images[pending.index] = Some(image);
+            if self.stage != 0 {
+                self.report.replacements_decoded += 1;
             }
+            self.pending = None;
         }
     }
     fn start_load(&mut self, index: usize) {
@@ -233,7 +211,7 @@ impl ScrollPerf {
             && self.report.cached.acceptable()
             && self.report.loading.p95_ms <= self.report.baseline.p95_ms + 2.
             && self.report.scroll_max_y - self.report.scroll_min_y > 1000.
-            && self.report.replacements_completed >= 30
+            && self.report.replacements_decoded >= 30
             && self.report.errors.is_empty();
         match serde_json::to_vec_pretty(&self.report)
             .map_err(anyhow::Error::from)
@@ -271,12 +249,6 @@ impl ScrollPerf {
             }
         }
         self.poll();
-        let stats = self.loader.upload_stats();
-        self.report.sampled_peak_workers = self.report.sampled_peak_workers.max(stats.active_jobs);
-        self.report.sampled_peak_staging_bytes = self
-            .report
-            .sampled_peak_staging_bytes
-            .max(stats.staging_bytes);
         if self.started.elapsed().as_secs() > 90 {
             self.report.errors.push("90 second test timeout".into());
             self.finish();
@@ -287,7 +259,7 @@ impl ScrollPerf {
                 if self.pending.is_none() {
                     if let Some(index) = self.images.iter().position(Option::is_none) {
                         self.start_load(index);
-                    } else if stats.staging_bytes == 0 {
+                    } else {
                         self.transition(1, now);
                         self.previous = None;
                     }
@@ -298,11 +270,13 @@ impl ScrollPerf {
                 if self.phase_started.elapsed().as_secs_f64() >= 30. {
                     self.transition(3, now);
                 } else if self.pending.is_none() && now >= self.next_load {
-                    self.start_load(self.report.replacements_completed % SOURCES);
+                    self.start_load(self.report.replacements_decoded % SOURCES);
                     self.next_load = now + std::time::Duration::from_millis(350);
                 }
             }
-            3 if self.pending.is_none() && stats.staging_bytes == 0 => self.transition(4, now),
+            3 if self.pending.is_none() && self.phase_started.elapsed().as_secs_f64() >= 1. => {
+                self.transition(4, now)
+            }
             4 if self.phase_started.elapsed().as_secs_f64() >= 5. => {
                 self.finish();
                 return;
@@ -338,18 +312,17 @@ impl Render for ScrollPerf {
         if self.stage == 5 && self.auto_scroll {
             window.request_animation_frame();
         }
-        // This run measures the effect staging path and its submission counters.
-        // Migrate its readiness/metrics together with the effect producers.
         let mut thumbnails = div().flex().gap_2();
-        for image in self
+        for (index, image) in self
             .images
             .iter()
             .flatten()
             .chain(self.pending.iter().filter_map(|p| p.image.as_ref()))
+            .enumerate()
         {
             thumbnails = thumbnails.child(
                 image_view(image.clone())
-                    .filter(xgpui_media::ImageFilter::new())
+                    .slot(self.slots[ROWS + index])
                     .w(px(64.))
                     .h(px(40.))
                     .rounded(px(4.)),
@@ -372,7 +345,7 @@ impl Render for ScrollPerf {
             if let Some(image) = &self.images[source] {
                 card = card.child(
                     image_view(image.clone())
-                        .filter(xgpui_media::ImageFilter::new())
+                        .slot(self.slots[index])
                         .w(px(900.))
                         .h(px(260.))
                         .rounded(px(12.)),
@@ -383,8 +356,8 @@ impl Render for ScrollPerf {
             card
         });
         div().size_full().p_3().flex().flex_col().gap_2().bg(rgb(0x101820)).text_color(rgb(0xe8eef4))
-            .child(format!("60 Hz baseline · {} · {} replacements · {} errors · {:.1}s",self.phase(),self.report.replacements_completed,self.report.errors.len(),self.started.elapsed().as_secs_f32()))
-            .child("24 scrolling cards · four 3072×2048 sources · one upload / 32 MiB per scene · keep foreground")
+            .child(format!("60 Hz baseline · {} · {} replacements · {} errors · {:.1}s",self.phase(),self.report.replacements_decoded,self.report.errors.len(),self.started.elapsed().as_secs_f32()))
+            .child("24 scrolling cards · four 3072×2048 sources · renderer-owned source uploads · keep foreground")
             .child(thumbnails)
             .child(crate::ui::button("scroll-toggle",if self.auto_scroll {"Pause auto-scroll"} else {"Start auto-scroll"},self.auto_scroll)
                 .on_click(cx.listener(|this,_,_,cx| {

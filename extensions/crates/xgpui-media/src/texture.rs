@@ -16,7 +16,7 @@ use std::{
 
 /// CPU preparation, host submission and GPU completion are distinct stages.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum UploadStatus {
+pub(crate) enum UploadStatus {
     Idle,
     Queued,
     Preparing,
@@ -27,8 +27,9 @@ pub enum UploadStatus {
     Ready,
     Failed(String),
 }
-/// Immutable decoded image with bounded background GPU staging. Clones share
-/// CPU data, a source-payload reservation and one backend/queue cache.
+/// Immutable decoded image. Clones share CPU pixels, their payload reservation
+/// and portable source identity. GPU uploads are owned by each renderer; tiled
+/// pages retain a private backend staging cache until their migration.
 #[derive(Clone)]
 pub struct MediaImage(Arc<Inner>);
 struct Inner {
@@ -331,25 +332,27 @@ impl MediaImage {
     pub fn mip_count(&self) -> usize {
         self.0.data.levels().len()
     }
-    /// Successful effect/page background preparations, including replacement
+    /// Successful tiled-page background preparations, including replacement
     /// devices/queues. Ordinary uploads are tracked by the renderer instead.
-    pub fn upload_count(&self) -> usize {
+    #[cfg(test)]
+    pub(crate) fn page_upload_count(&self) -> usize {
         self.0.uploads.load(Ordering::Relaxed)
     }
     pub fn payload_bytes(&self) -> usize {
         self.0.data.byte_len()
     }
-    /// Status of the remaining effect/page preparation path. Ordinary image
+    /// Status of the remaining tiled-page preparation path. Ordinary image
     /// uploads are renderer-owned; inspect strict snapshot readiness there.
-    pub fn upload_status(&self) -> UploadStatus {
+    pub(crate) fn page_upload_status(&self) -> UploadStatus {
         let mut state = self.0.state.lock().unwrap();
         state.observe_submission();
         state.status.clone()
     }
-    /// Retry the remaining effect/page preparation path. This does not reset a
-    /// renderer-owned ordinary image. Results from a previous effect generation
+    /// Retry the remaining tiled-page preparation path. This does not reset a
+    /// renderer-owned ordinary image. Results from a previous page generation
     /// are discarded, never published into this cache.
-    pub fn retry_upload(&self) {
+    #[cfg(test)]
+    pub(crate) fn retry_page_upload(&self) {
         self.0.state.lock().unwrap().reset();
     }
     fn staging_bytes(&self) -> usize {
@@ -491,16 +494,16 @@ impl CustomContent for MediaImage {
     }
 }
 impl MediaImage {
-    pub(crate) fn prepare_effect_at_size(
+    pub(crate) fn prepare_page_at_size(
         &self,
         backend: &dyn Any,
         extent: Size<DevicePixels>,
     ) -> Result<Box<dyn Any>> {
         let request =
             gpui::PreparationRequest::new(extent.map(|v| gpui::px(v.0 as f32)), extent, 1.)?;
-        self.prepare_effect(backend, &request, &gpui::PreparationFrame::default())
+        self.prepare_page(backend, &request, &gpui::PreparationFrame::default())
     }
-    pub(crate) fn prepare_effect(
+    pub(crate) fn prepare_page(
         &self,
         backend: &dyn Any,
         _request: &gpui::PreparationRequest,

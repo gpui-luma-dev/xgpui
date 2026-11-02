@@ -698,6 +698,7 @@ fn dynamic_uniform_buffer(device: &ID3D11Device) -> Result<ID3D11Buffer> {
 
 pub(crate) struct PreparedDraw {
     pub portable: Option<gpui::content::ImageInterpretation>,
+    pub color_transform: Option<gpui::content::ImageColorTransform>,
     pub mapping: Option<gpui::content::ResolvedImageMapping>,
     pub source: TextureBundle,
     pub coverage: Option<TextureBundle>,
@@ -838,10 +839,16 @@ impl CustomCompositor {
             if output.mapping.is_none() {
                 mapped[3][0] = -1.;
             }
-            let adjustments = draw.content.image_linear_adjustments();
-            let transform = adjustments
-                .map(|v| v.rows())
-                .unwrap_or_else(|| draw.content.image_color_transform());
+            let adjustments = output
+                .color_transform
+                .map(|t| t.linear_paint())
+                .unwrap_or_else(|| draw.content.image_linear_adjustments());
+            let transform = adjustments.map(|v| v.rows()).unwrap_or_else(|| {
+                output
+                    .color_transform
+                    .map(|t| t.encoded_rows())
+                    .unwrap_or_else(|| draw.content.image_color_transform())
+            });
             let vignette = adjustments
                 .map(|v| v.vignette())
                 .unwrap_or([0., 0., 1., 1.]);
@@ -870,6 +877,15 @@ impl CustomCompositor {
                     AlphaMode::Premultiplied => 2.,
                 };
             }
+            let working_p3 = adjustments.is_some_and(|paint| paint.is_p3());
+            mapped[3][1] = if working_p3 { 1. } else { 0. };
+            mapped[3][2] = if adjustments.is_some() {
+                2.
+            } else if transform != [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.]] {
+                1.
+            } else {
+                0.
+            };
             let params: [[f32; 4]; 13] = [
                 [
                     draw.bounds.origin.x.0,

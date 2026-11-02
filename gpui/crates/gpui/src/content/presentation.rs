@@ -44,6 +44,9 @@ pub enum ContentColorOutput {
     /// Preserve the source gamut. Wide sources require a capable wide window.
     #[default]
     MatchWindow,
+    /// Require an accepted native wide-SDR output, including when a narrow
+    /// source's linear adjustment produces extended or wider-gamut colors.
+    WideSdr,
     /// Clip to an SDR sRGB preview when sampling. Source pixels and mip storage
     /// remain in their declared primaries, transfer, and alpha association.
     SrgbPreview,
@@ -71,6 +74,8 @@ pub struct ContentDraw {
     pub presentation: ContentPresentation,
     /// Source fit, crop, alignment, and filtering; independent of realization.
     pub mapping: ImageMapping,
+    /// Placement color processing, independent of source realization.
+    pub color_transform: ImageColorTransform,
 }
 impl From<Content> for ContentDraw {
     fn from(content: Content) -> Self {
@@ -84,11 +89,17 @@ impl ContentDraw {
             content,
             presentation: ContentPresentation::default(),
             mapping: ImageMapping::default(),
+            color_transform: ImageColorTransform::default(),
         }
     }
     /// Set source sampling and destination placement without changing source identity.
     pub fn mapping(mut self, mapping: ImageMapping) -> Self {
         self.mapping = mapping;
+        self
+    }
+    /// Apply an encoded or linear color transform while reusing the source image.
+    pub fn color_transform(mut self, transform: ImageColorTransform) -> Self {
+        self.color_transform = transform;
         self
     }
     /// Select an explicit output intent without converting or re-uploading pixels.
@@ -121,6 +132,12 @@ pub struct ContentDrawRequest {
     pub request: ContentRequest,
 }
 impl CustomContent for ContentDraw {
+    fn image_color_transform(&self) -> [[f32; 4]; 3] {
+        self.color_transform.encoded_rows()
+    }
+    fn image_linear_adjustments(&self) -> Option<crate::LinearImagePaint> {
+        self.color_transform.linear_paint()
+    }
     fn image_color_output(&self) -> ContentColorOutput {
         self.presentation.color_output
     }

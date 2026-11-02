@@ -1,23 +1,18 @@
-//! Effect staging CPU measurement; migrate its counters with effect producers.
-//! This is not a GPU timestamp benchmark.
+//! Portable source readiness and cached color-change CPU measurements.
+//! Schema 2 replaces producer staging counters; these are not GPU timestamps.
 use anyhow::{Context as _, Result, bail, ensure};
 use gpui::*;
-#[cfg(target_os = "macos")]
-use gpui_apple::metal::MTLDevice as _;
 use image::ImageEncoder as _;
 use serde::Serialize;
 use std::{
-    any::Any,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
-use xgpui_media::{
-    FrameUploadLimits, LoadStatus, MediaImage, MediaLimits, MediaLoader, UploadLimits, UploadStatus,
-};
-
+use xgpui_media::{ImageFilter, LoadStatus, MediaImage, MediaLimits, MediaLoader};
 const MIB: usize = 1024 * 1024;
 const SOURCES: usize = 6;
+const SOURCE_SIDE: u32 = 1024;
 const WAVES: usize = 3;
 const CACHED_FRAMES: usize = 120;
 const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
@@ -29,75 +24,6 @@ const COLORS: [[u8; 3]; SOURCES] = [
     [176, 64, 208],
     [48, 192, 192],
 ];
-
-#[derive(Default, Debug)]
-struct Trace {
-    prepare_ms: f64,
-    calls: usize,
-    backend: String,
-}
-struct TimedImage {
-    image: MediaImage,
-    trace: Arc<Mutex<Trace>>,
-}
-impl std::fmt::Debug for TimedImage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TimedImage").finish_non_exhaustive()
-    }
-}
-impl TimedImage {
-    fn measure(
-        &self,
-        backend: &dyn Any,
-        work: impl FnOnce() -> Result<Box<dyn Any>>,
-    ) -> Result<Box<dyn Any>> {
-        let started = Instant::now();
-        let result = work();
-        let elapsed = started.elapsed().as_secs_f64() * 1000.;
-        let mut trace = self.trace.lock().unwrap();
-        trace.prepare_ms += elapsed;
-        trace.calls += 1;
-        if trace.backend.is_empty() {
-            #[cfg(target_os = "macos")]
-            if let Some(context) =
-                backend.downcast_ref::<gpui_apple::custom_draw::MetalCustomContext>()
-            {
-                trace.backend = format!("Metal / {}", context.device.name());
-            }
-            #[cfg(feature = "wgpu")]
-            if backend.is::<gpui_wgpu::custom_draw::WgpuCustomContext>() {
-                trace.backend = "wgpu (adapter name not exposed by custom context)".into();
-            }
-            let _ = backend;
-            if trace.backend.is_empty() {
-                trace.backend =
-                    "native (backend details unavailable through this lab build)".into();
-            }
-        }
-        result
-    }
-}
-impl CustomContent for TimedImage {
-    fn prepare(&self, backend: &dyn Any, extent: Size<DevicePixels>) -> Result<Box<dyn Any>> {
-        self.measure(backend, || {
-            self.image
-                .filtered(xgpui_media::ImageFilter::new())
-                .prepare(backend, extent)
-        })
-    }
-    fn prepare_in_frame(
-        &self,
-        backend: &dyn Any,
-        request: &PreparationRequest,
-        frame: &PreparationFrame,
-    ) -> Result<Box<dyn Any>> {
-        self.measure(backend, || {
-            self.image
-                .filtered(xgpui_media::ImageFilter::new())
-                .prepare_in_frame(backend, request, frame)
-        })
-    }
-}
 #[derive(Serialize)]
 struct Summary {
     samples: usize,
@@ -131,73 +57,13 @@ impl Summary {
         })
     }
 }
-#[derive(Serialize)]
-struct FrameSample {
-    render_scene_cpu_ms: f64,
-    summed_source_prepare_cpu_ms: f64,
-    observed_new_submissions: usize,
-}
-#[derive(Serialize)]
-struct Wave {
-    index: usize,
-    observed_drain_wall_ms: f64,
-    frames: Vec<FrameSample>,
-}
-#[derive(Serialize)]
-struct Pool {
-    allocated_bytes: usize,
-    cached_bytes: usize,
-    allocations: usize,
-    reuses: usize,
-}
-impl From<ImageStagingPoolStats> for Pool {
-    fn from(s: ImageStagingPoolStats) -> Self {
-        Self {
-            allocated_bytes: s.allocated_bytes,
-            cached_bytes: s.cached_bytes,
-            allocations: s.allocations,
-            reuses: s.reuses,
-        }
-    }
-}
-#[derive(Serialize)]
-struct Report {
-    schema_version: u32,
-    profile: &'static str,
-    os: &'static str,
-    architecture: &'static str,
-    backend: String,
-    source_count: usize,
-    source_dimensions: [u32; 2],
-    placements_per_source: usize,
-    retained_mip_payload_bytes: usize,
-    decode_and_mip_wall_ms: Vec<f64>,
-    upload_workers: usize,
-    staging_budget_bytes: usize,
-    frame_upload_count_limit: usize,
-    frame_upload_byte_limit: usize,
-    target_frame_interval_ms: f64,
-    upload_render_scene_cpu: Summary,
-    upload_source_prepare_cpu: Summary,
-    cached_render_scene_cpu: Summary,
-    cached_source_prepare_cpu: Summary,
-    observed_peak_active_upload_workers: usize,
-    observed_peak_staging_reservations_bytes: usize,
-    pool_before_waves: Pool,
-    pool_after_waves: Pool,
-    uploads_per_source: Vec<usize>,
-    waves: Vec<Wave>,
-    cached_frames: Vec<FrameSample>,
-    validated_capture: String,
-    caveats: Vec<&'static str>,
-}
 fn rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<ScaledPixels> {
     Bounds::new(
         point(ScaledPixels(x), ScaledPixels(y)),
         size(ScaledPixels(w), ScaledPixels(h)),
     )
 }
-fn scene(images: &[MediaImage], trace: &Arc<Mutex<Trace>>) -> Scene {
+fn scene(images: &[MediaImage], filter: ImageFilter) -> Scene {
     let mut scene = Scene::default();
     let bounds = rect(0., 0., 900., 600.);
     scene.insert_primitive(Quad {
@@ -209,10 +75,7 @@ fn scene(images: &[MediaImage], trace: &Arc<Mutex<Trace>>) -> Scene {
     for (index, image) in images.iter().enumerate() {
         let x = (index % 3) as f32 * 300.;
         let y = (index / 3) as f32 * 300.;
-        let content: Arc<dyn CustomContent> = Arc::new(TimedImage {
-            image: image.clone(),
-            trace: trace.clone(),
-        });
+        let content: Arc<dyn CustomContent> = Arc::new(image.filtered(filter));
         for bounds in [
             rect(x + 12., y + 12., 256., 256.),
             rect(x + 224., y + 224., 64., 64.),
@@ -283,300 +146,222 @@ fn decode(loader: &MediaLoader, path: &Path) -> Result<(MediaImage, f64)> {
         std::thread::sleep(Duration::from_millis(1));
     }
 }
-fn ready(images: &[MediaImage]) -> Result<Vec<bool>> {
-    images
-        .iter()
-        .map(|image| match image.upload_status() {
-            UploadStatus::Failed(error) => bail!(error),
-            UploadStatus::Ready => Ok(true),
-            _ => Ok(false),
-        })
-        .collect()
-}
-fn draw(
-    renderer: &mut dyn PlatformHeadlessRenderer,
-    scene: &Scene,
-    images: &[MediaImage],
-    trace: &Arc<Mutex<Trace>>,
-) -> Result<FrameSample> {
-    let before = ready(images)?;
-    {
-        let mut trace = trace.lock().unwrap();
-        trace.prepare_ms = 0.;
-        trace.calls = 0;
-    }
-    let started = Instant::now();
-    renderer.render_scene(scene, size(DevicePixels(900), DevicePixels(600)))?;
-    let elapsed = started.elapsed().as_secs_f64() * 1000.;
-    let after = ready(images)?;
-    let submissions = before
-        .iter()
-        .zip(after)
-        .filter(|(old, new)| !**old && *new)
-        .count();
-    ensure!(submissions <= 1, "per-frame source upload limit exceeded");
-    let trace = trace.lock().unwrap();
-    ensure!(
-        trace.calls == images.len() * 2,
-        "benchmark source placements were not prepared"
-    );
-    Ok(FrameSample {
-        render_scene_cpu_ms: elapsed,
-        summed_source_prepare_cpu_ms: trace.prepare_ms,
-        observed_new_submissions: submissions,
-    })
-}
-fn pace(start: Instant) {
-    std::thread::sleep(FRAME_INTERVAL.saturating_sub(start.elapsed()));
-}
 
-pub fn run(report_path: &Path, png: &Path, portable: bool) -> Result<()> {
-    ensure!(
-        report_path != png,
-        "benchmark JSON and PNG outputs must use distinct paths"
-    );
-    ensure!(
-        !cfg!(debug_assertions),
-        "upload benchmark requires --release (normal just recipes already use release)"
-    );
-    let mut renderer: Box<dyn PlatformHeadlessRenderer> = if portable {
+#[derive(Serialize)]
+struct FrameSample {
+    snapshot_cpu_ms: f64,
+    encode_submit_cpu_ms: f64,
+    pending: bool,
+}
+#[derive(Serialize)]
+struct Wave {
+    index: usize,
+    prepare_ready_wall_ms: f64,
+    frames: Vec<FrameSample>,
+}
+#[derive(Serialize)]
+struct Report {
+    schema_version: u32,
+    profile: &'static str,
+    os: &'static str,
+    architecture: &'static str,
+    backend: &'static str,
+    source_count: usize,
+    source_dimensions: [u32; 2],
+    placements_per_source: usize,
+    retained_mip_payload_bytes: usize,
+    decode_and_mip_wall_ms: Vec<f64>,
+    prepare_snapshot_cpu: Summary,
+    cold_encode_submit_cpu: Summary,
+    cached_color_change_cpu: Summary,
+    waves: Vec<Wave>,
+    cached_frames: Vec<FrameSample>,
+    validated_capture: String,
+    caveats: Vec<&'static str>,
+}
+fn new_renderer(portable: bool) -> Result<Box<dyn PlatformHeadlessRenderer>> {
+    if portable {
         #[cfg(feature = "wgpu")]
         {
-            Box::new(gpui_wgpu::WgpuHeadlessRenderer::new()?)
+            return Ok(Box::new(gpui_wgpu::WgpuHeadlessRenderer::new()?));
         }
         #[cfg(not(feature = "wgpu"))]
         bail!("--wgpu requires --features wgpu");
-    } else {
-        gpui_platform::current_headless_renderer()?
-            .context("native headless renderer unavailable")?
+    }
+    gpui_platform::current_headless_renderer()?.context("native headless renderer unavailable")
+}
+fn draw(renderer: &mut dyn PlatformHeadlessRenderer, scene: &Scene) -> Result<FrameSample> {
+    let start = Instant::now();
+    let pending = match renderer.prepare_content_snapshot(scene) {
+        Ok(()) => false,
+        Err(error)
+            if error
+                .downcast_ref::<content::ContentError>()
+                .is_some_and(|e| e.kind == content::ContentErrorKind::Pending) =>
+        {
+            true
+        }
+        Err(error) => return Err(error),
     };
-    let loader = MediaLoader::with_upload_policy(
-        MediaLimits {
-            max_jobs: 2,
-            max_resident_bytes: 256 * MIB,
-            max_image_bytes: 32 * MIB,
-            max_encoded_bytes: 32 * MIB,
-        },
-        UploadLimits {
-            max_jobs: 2,
-            max_staging_bytes: 64 * MIB,
-        },
-        FrameUploadLimits {
-            max_uploads: 1,
-            // Full-chain staging includes 256-byte row padding.
-            max_bytes: 33 * MIB,
-        },
-    )?;
+    let snapshot_cpu_ms = start.elapsed().as_secs_f64() * 1000.;
+    let start = Instant::now();
+    renderer.render_scene(scene, size(DevicePixels(900), DevicePixels(600)))?;
+    Ok(FrameSample {
+        snapshot_cpu_ms,
+        encode_submit_cpu_ms: start.elapsed().as_secs_f64() * 1000.,
+        pending,
+    })
+}
+fn ready(renderer: &mut dyn PlatformHeadlessRenderer, scene: &Scene) -> Result<Vec<FrameSample>> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut samples = Vec::new();
+    loop {
+        let sample = draw(renderer, scene)?;
+        let pending = sample.pending;
+        samples.push(sample);
+        if !pending {
+            return Ok(samples);
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "portable source readiness timeout"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
+fn validate(image: &image::RgbaImage) -> Result<()> {
+    for (index, color) in COLORS.iter().enumerate() {
+        let x = (index % 3) as u32 * 300;
+        let y = (index / 3) as u32 * 300;
+        for (x, y) in [(x + 140, y + 140), (x + 256, y + 256)] {
+            let pixel = image.get_pixel(x, y).0;
+            ensure!(
+                pixel[..3]
+                    .iter()
+                    .zip(color)
+                    .all(|(a, b)| a.abs_diff(*b) <= 2)
+                    && pixel[3] == 255,
+                "capture mismatch for source {index}: {pixel:?}"
+            );
+        }
+    }
+    Ok(())
+}
+pub fn run(report_path: &Path, png: &Path, portable: bool) -> Result<()> {
+    ensure!(report_path != png, "JSON and PNG outputs must differ");
+    ensure!(
+        !cfg!(debug_assertions),
+        "upload benchmark requires --release"
+    );
+    let loader = MediaLoader::new(MediaLimits {
+        max_jobs: 2,
+        max_resident_bytes: 256 * MIB,
+        max_image_bytes: 32 * MIB,
+        max_encoded_bytes: 32 * MIB,
+    })?;
     let directory = tempfile::Builder::new()
-        .prefix("xgpui-upload-bench-")
+        .prefix("xgpui-portable-upload-bench-")
         .tempdir()?;
-    let trace = Arc::new(Mutex::new(Trace::default()));
-    // Compile pipelines and allocate the render target before timed waves.
     let warm_path = directory.path().join("warm.png");
     fixture(&warm_path, 256, COLORS[0], 1)?;
     let (warm, _) = decode(&loader, &warm_path)?;
-    let warm_scene = scene(std::slice::from_ref(&warm), &trace);
-    let deadline = Instant::now() + Duration::from_secs(30);
-    while !ready(std::slice::from_ref(&warm))?[0] || loader.upload_stats().staging_bytes > 0 {
-        let tick = Instant::now();
-        draw(
-            &mut *renderer,
-            &warm_scene,
-            std::slice::from_ref(&warm),
-            &trace,
-        )?;
-        ensure!(Instant::now() < deadline, "warmup timeout");
-        pace(tick);
-    }
-    renderer.render_scene_to_image(&warm_scene, size(DevicePixels(900), DevicePixels(600)))?;
-    drop(warm_scene);
-    drop(warm);
-    println!("Generating and decoding six 2048×2048 sources before timed GPU staging waves...");
+    let warm_scene = scene(std::slice::from_ref(&warm), ImageFilter::new());
     let mut images = Vec::new();
     let mut decode_ms = Vec::new();
     for (index, color) in COLORS.into_iter().enumerate() {
         let path = directory.path().join(format!("source-{index}.png"));
-        fixture(&path, 2048, color, index as u32 + 17)?;
+        fixture(&path, SOURCE_SIDE, color, index as u32 + 17)?;
         let (image, millis) = decode(&loader, &path)?;
         images.push(image);
         decode_ms.push(millis);
     }
-    let scene = scene(&images, &trace);
-    let pool_before = loader.staging_pool_stats();
+    let base = scene(&images, ImageFilter::new());
+    let adjusted = scene(&images, ImageFilter::new().brightness(1.1).saturation(0.8));
     let mut waves = Vec::new();
-    let mut peak_jobs = 0;
-    let mut peak_bytes = 0;
+    let mut cached = Vec::new();
     for index in 0..WAVES {
-        if index > 0 {
-            for image in &images {
-                image.retry_upload();
-            }
-        }
+        let mut renderer = new_renderer(portable)?;
+        ready(&mut *renderer, &warm_scene)?;
+        renderer.render_scene_to_image(&warm_scene, size(DevicePixels(900), DevicePixels(600)))?;
         let start = Instant::now();
-        let mut frames = Vec::new();
-        loop {
-            let tick = Instant::now();
-            frames.push(draw(&mut *renderer, &scene, &images, &trace)?);
-            let status = loader.upload_stats();
-            peak_jobs = peak_jobs.max(status.active_jobs);
-            peak_bytes = peak_bytes.max(status.staging_bytes);
-            ensure!(
-                status.active_jobs <= 2 && status.staging_bytes <= 64 * MIB,
-                "upload admission exceeded configured bounds"
-            );
-            if ready(&images)?.iter().all(|v| *v)
-                && status.active_jobs == 0
-                && status.staging_bytes == 0
-            {
-                break;
-            }
-            ensure!(
-                start.elapsed() < Duration::from_secs(30),
-                "upload wave did not drain"
-            );
-            pace(tick);
-        }
-        ensure!(
-            frames
-                .iter()
-                .map(|f| f.observed_new_submissions)
-                .sum::<usize>()
-                == SOURCES,
-            "benchmark did not observe every source submission in this wave"
-        );
-        let drain_ms = start.elapsed().as_secs_f64() * 1000.;
+        let frames = ready(&mut *renderer, &base)?;
+        let prepare_ready_wall_ms = start.elapsed().as_secs_f64() * 1000.;
+        let capture =
+            renderer.render_scene_to_image(&base, size(DevicePixels(900), DevicePixels(600)))?;
+        validate(&capture)?;
         println!(
-            "Upload wave {}: {} frames, {:.2} ms to observed staging drain",
+            "Portable source wave {}: {} polls, {:.2} ms ready wall time; pixels verified",
             index + 1,
             frames.len(),
-            drain_ms
+            prepare_ready_wall_ms
         );
         waves.push(Wave {
-            index: index + 1,
-            observed_drain_wall_ms: drain_ms,
+            index,
+            prepare_ready_wall_ms,
             frames,
         });
-    }
-    let mut cached_frames = Vec::new();
-    for _ in 0..CACHED_FRAMES {
-        let tick = Instant::now();
-        cached_frames.push(draw(&mut *renderer, &scene, &images, &trace)?);
-        pace(tick);
-    }
-    // Pixel readback waits for rendering, deliberately outside timing samples.
-    let pixels =
-        renderer.render_scene_to_image(&scene, size(DevicePixels(900), DevicePixels(600)))?;
-    for (index, expected) in COLORS.iter().enumerate() {
-        for offset in [140, 256] {
-            let actual = pixels
-                .get_pixel(
-                    (index % 3) as u32 * 300 + offset,
-                    (index / 3) as u32 * 300 + offset,
-                )
-                .0;
-            ensure!(
-                (0..3).all(|c| actual[c].abs_diff(expected[c]) <= 2),
-                "final source {index} placement {offset} missing/wrong: {actual:?}"
-            );
+        if index + 1 == WAVES {
+            for frame in 0..CACHED_FRAMES {
+                let tick = Instant::now();
+                let sample = draw(
+                    &mut *renderer,
+                    if frame % 2 == 0 { &base } else { &adjusted },
+                )?;
+                ensure!(
+                    !sample.pending,
+                    "color changes unexpectedly restarted source realization"
+                );
+                cached.push(sample);
+                std::thread::sleep(FRAME_INTERVAL.saturating_sub(tick.elapsed()));
+            }
+            let capture = renderer
+                .render_scene_to_image(&base, size(DevicePixels(900), DevicePixels(600)))?;
+            validate(&capture)?;
+            capture.save(png)?;
         }
-        ensure!(
-            images[index].upload_count() == WAVES,
-            "source {index} upload/cache reuse count incorrect"
-        );
     }
-    pixels.save(png)?;
-    let pool_after = loader.staging_pool_stats();
-    ensure!(
-        pool_after.allocated_bytes <= 64 * MIB
-            && pool_after.cached_bytes <= pool_after.allocated_bytes,
-        "staging pool accounting exceeded capacity"
-    );
-    #[cfg(target_os = "macos")]
-    ensure!(
-        pool_after.reuses > pool_before.reuses,
-        "benchmark did not exercise staging-pool reuse"
-    );
-    let upload_cpu: Vec<_> = waves
+    let cold: Vec<f64> = waves
         .iter()
-        .flat_map(|w| w.frames.iter().map(|f| f.render_scene_cpu_ms))
+        .flat_map(|w| w.frames.iter().map(|f| f.encode_submit_cpu_ms))
         .collect();
-    let upload_prepare: Vec<_> = waves
+    let snapshot: Vec<f64> = waves
         .iter()
-        .flat_map(|w| w.frames.iter().map(|f| f.summed_source_prepare_cpu_ms))
+        .flat_map(|w| w.frames.iter().map(|f| f.snapshot_cpu_ms))
         .collect();
-    let cached_cpu: Vec<_> = cached_frames
+    let hot: Vec<f64> = cached
         .iter()
-        .map(|f| f.render_scene_cpu_ms)
-        .collect();
-    let cached_prepare: Vec<_> = cached_frames
-        .iter()
-        .map(|f| f.summed_source_prepare_cpu_ms)
+        .map(|f| f.snapshot_cpu_ms + f.encode_submit_cpu_ms)
         .collect();
     let report = Report {
-        schema_version: 1,
+        schema_version: 2,
         profile: "release",
         os: std::env::consts::OS,
         architecture: std::env::consts::ARCH,
-        backend: trace.lock().unwrap().backend.clone(),
+        backend: if portable { "wgpu" } else { "native" },
         source_count: SOURCES,
-        source_dimensions: [2048, 2048],
+        source_dimensions: [SOURCE_SIDE, SOURCE_SIDE],
         placements_per_source: 2,
         retained_mip_payload_bytes: images.iter().map(|i| i.payload_bytes()).sum(),
         decode_and_mip_wall_ms: decode_ms,
-        upload_workers: 2,
-        staging_budget_bytes: 64 * MIB,
-        frame_upload_count_limit: 1,
-        frame_upload_byte_limit: 32 * MIB,
-        target_frame_interval_ms: FRAME_INTERVAL.as_secs_f64() * 1000.,
-        upload_render_scene_cpu: Summary::new(&upload_cpu)?,
-        upload_source_prepare_cpu: Summary::new(&upload_prepare)?,
-        cached_render_scene_cpu: Summary::new(&cached_cpu)?,
-        cached_source_prepare_cpu: Summary::new(&cached_prepare)?,
-        observed_peak_active_upload_workers: peak_jobs,
-        observed_peak_staging_reservations_bytes: peak_bytes,
-        pool_before_waves: pool_before.into(),
-        pool_after_waves: pool_after.into(),
-        uploads_per_source: images.iter().map(|i| i.upload_count()).collect(),
+        prepare_snapshot_cpu: Summary::new(&snapshot)?,
+        cold_encode_submit_cpu: Summary::new(&cold)?,
+        cached_color_change_cpu: Summary::new(&hot)?,
         waves,
-        cached_frames,
+        cached_frames: cached,
         validated_capture: png.display().to_string(),
         caveats: vec![
-            "CPU wall timings of render_scene and instrumented source preparation; not GPU timestamps or real window/UI frame rates.",
-            "Sources decode/mip before timing; generated PNG creation and pipeline warmup are excluded. Decode/mip wall time is reported separately.",
-            "Observed staging drain includes host polling and frame pacing; Metal/wgpu leases include completion callbacks. D3D11 reservations currently release at observed submission. Ready is host-submitted, not GPU-complete.",
-            "Frame pacing sleeps and final pixel readback are excluded. Driver backpressure and instrumentation may affect CPU samples.",
-            "Nearest-rank percentiles; sample counts are reported. Background system load is uncontrolled; this is one run, not a zero-stutter guarantee.",
-            "Observed peaks are sampled once per rendered frame; source/staging budgets do not represent total process memory or VRAM.",
+            "CPU wall measurements, not GPU timestamps, UI frame rate, or input latency.",
+            "Each wave uses a fresh window renderer after pipeline/target warmup. Device and driver caches may remain warm.",
+            "Readiness wall time includes asynchronous execution, host polling and 1 ms sleeps; it is not isolated upload time.",
+            "Cached frames alternate encoded filters on shared sources; final readback is outside timed samples.",
+            "Schema 2 removes producer preparation counters and loader staging-pool assertions. Renderer content-executor defaults govern GPU admission.",
         ],
     };
-    std::fs::write(report_path, serde_json::to_string_pretty(&report)? + "\n")?;
+    std::fs::write(report_path, serde_json::to_vec_pretty(&report)?)?;
     println!(
-        "{}: upload CPU p95 {:.3} ms / max {:.3} ms; cached p95 {:.3} ms / max {:.3} ms",
-        report.backend,
-        report.upload_render_scene_cpu.p95_ms,
-        report.upload_render_scene_cpu.max_ms,
-        report.cached_render_scene_cpu.p95_ms,
-        report.cached_render_scene_cpu.max_ms
-    );
-    println!(
-        "Saved {} and validated {}",
+        "Saved portable source benchmark to {} and {}",
         report_path.display(),
         png.display()
     );
     Ok(())
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[::core::prelude::v1::test]
-    fn timing_summary_uses_nearest_rank_and_rejects_invalid_samples() -> Result<()> {
-        let s = Summary::new(&[4., 1., 3., 2.])?;
-        assert_eq!(
-            (s.samples, s.mean_ms, s.p50_ms, s.p95_ms, s.max_ms),
-            (4, 2.5, 2., 4., 4.)
-        );
-        assert!(Summary::new(&[]).is_err());
-        assert!(Summary::new(&[f64::NAN]).is_err());
-        Ok(())
-    }
 }

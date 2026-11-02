@@ -54,9 +54,23 @@ fragment float4 gamut_fragment(Vertex in [[stage_in]], constant Params &p [[buff
         else {
             if (p.linear.z < .5) c.a=1.;
             float3 rgb=p.linear.z > 1.5 ? (c.a>0. ? c.rgb/c.a : float3(0.)) : c.rgb;
+            if (p.sampling.z > 0.5 && p.sampling.z < 1.5) {
+                float4 v=float4(rgb,1.);
+                rgb=clamp(float3(dot(p.color_r,v),dot(p.color_g,v),dot(p.color_b,v)),0.,1.);
+            }
             if (p.linear.w < 1.5) rgb=decode_srgb(rgb);
             if (p.linear.w < 2.5) rgb=srgb_to_p3(rgb);
             else if (p.linear.w > 3.5) rgb=rec2020_to_p3(rgb);
+            if (p.sampling.z > 1.5) {
+                if (p.sampling.y < 0.5) rgb=p3_to_srgb(rgb);
+                float4 v=float4(rgb,1.);
+                rgb=float3(dot(p.color_r,v),dot(p.color_g,v),dot(p.color_b,v));
+                float2 dims=float2(image.get_width(),image.get_height()), q=raw_uv*2.-1.;
+                float d=mix(length(q),length(q*dims/min(dims.x,dims.y)),p.vignette.w);
+                float t=clamp((d-p.vignette.y)/p.vignette.z,0.,1.);
+                rgb*=1.-p.vignette.x*t*t*(3.-2.*t);
+                if (p.sampling.y < 0.5) rgb=srgb_to_p3(rgb);
+            }
             c.rgb=rgb*c.a;
         }
     } else if(p.viewport.w > .5) { // Legacy scratch: exact texel read, associated encoded sRGB.

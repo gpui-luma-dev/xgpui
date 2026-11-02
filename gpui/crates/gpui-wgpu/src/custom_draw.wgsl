@@ -60,9 +60,32 @@ fn rec2020_to_p3(c: vec3<f32>) -> vec3<f32> {
         else {
             if p.linear.z<0.5 {color.a=1.;}
             if p.linear.z>1.5 {if color.a>0. {color=vec4(color.rgb/color.a,color.a);}else{color=vec4(0.);}}
-            if p.linear.w>3.5 {color=vec4(rec2020_to_p3(color.rgb),color.a);}
-            if p.linear.w>2.5 {color=vec4(p3_to_srgb(color.rgb),color.a);}
-            if p.linear.w>1.5 {let c=clamp(color.rgb,vec3(0.),vec3(1.));color=vec4(encode_srgb(c.r),encode_srgb(c.g),encode_srgb(c.b),color.a);}
+            var rgb = color.rgb;
+            if p.linear.w>3.5 {rgb=rec2020_to_p3(rgb);}
+            if p.sampling.z>1.5 {
+                // Decode/unassociate first, then convert to the chosen working primaries.
+                if p.linear.w<1.5 {rgb=vec3(decode_srgb(rgb.r),decode_srgb(rgb.g),decode_srgb(rgb.b));}
+                if p.linear.w>2.5 && p.sampling.y<0.5 {rgb=p3_to_srgb(rgb);}
+                if p.linear.w<2.5 && p.sampling.y>0.5 {rgb=srgb_to_p3(rgb);}
+                let v=vec4(rgb,1.);
+                rgb=vec3(dot(p.color_r,v),dot(p.color_g,v),dot(p.color_b,v));
+                let dims=vec2<f32>(textureDimensions(image,0));
+                let q=raw_uv*2.-vec2(1.);
+                let d=mix(length(q),length(q*dims/min(dims.x,dims.y)),p.vignette.w);
+                let t=clamp((d-p.vignette.y)/p.vignette.z,0.,1.);
+                rgb*=1.-p.vignette.x*t*t*(3.-2.*t);
+                if p.sampling.y>0.5 {rgb=p3_to_srgb(rgb);}
+                let c=clamp(rgb,vec3(0.),vec3(1.));
+                rgb=vec3(encode_srgb(c.r),encode_srgb(c.g),encode_srgb(c.b));
+            } else if p.sampling.z>0.5 {
+                let v=vec4(rgb,1.);
+                rgb=clamp(vec3(dot(p.color_r,v),dot(p.color_g,v),dot(p.color_b,v)),vec3(0.),vec3(1.));
+            } else if p.linear.w>1.5 {
+                if p.linear.w>2.5 {rgb=p3_to_srgb(rgb);}
+                let c=clamp(rgb,vec3(0.),vec3(1.));
+                rgb=vec3(encode_srgb(c.r),encode_srgb(c.g),encode_srgb(c.b));
+            }
+            color=vec4(select(vec3(0.),rgb,color.a>0.),color.a);
         }
         return vec4(color.rgb,color.a*coverage*p.viewport.z);
     }

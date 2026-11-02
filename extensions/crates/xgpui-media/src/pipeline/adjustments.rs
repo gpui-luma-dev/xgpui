@@ -1,5 +1,5 @@
 use super::{ColorMatrix, ImagePrimaries, Vignette};
-use gpui::{CustomContent, DevicePixels, PreparationFrame, PreparationRequest, Size};
+use gpui::{CustomContent, DevicePixels, PreparationRequest, Size};
 use std::any::Any;
 
 /// Validated GPU placement adjustments for retained RGBA8 or RGBA16F images.
@@ -47,36 +47,33 @@ impl crate::MediaImage {
         }
     }
 }
-impl CustomContent for AdjustedImage {
-    fn image_color_mode(&self) -> gpui::ImageColorMode {
-        self.image.image_color_mode()
-    }
-
-    fn image_linear_adjustments(&self) -> Option<gpui::LinearImagePaint> {
-        Some(self.adjustments.paint())
-    }
-    fn prepare(&self, backend: &dyn Any, size: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
-        self.image.prepare_effect_at_size(backend, size)
-    }
-    fn prepare_in_frame(
-        &self,
-        backend: &dyn Any,
-        request: &PreparationRequest,
-        frame: &PreparationFrame,
-    ) -> anyhow::Result<Box<dyn Any>> {
-        self.image.prepare_effect(backend, request, frame)
-    }
-    fn prepare_with_request(
-        &self,
-        backend: &dyn Any,
-        request: &PreparationRequest,
-    ) -> anyhow::Result<Box<dyn Any>> {
+impl AdjustedImage {
+    /// Portable linear adjustment, without changing source identity or mips.
+    pub fn draw(&self) -> gpui::content::ContentDraw {
         self.image
-            .prepare_effect(backend, request, &PreparationFrame::default())
+            .draw()
+            .color_transform(gpui::content::ImageColorTransform::linear(
+                self.adjustments.paint(),
+            ))
+    }
+}
+impl CustomContent for AdjustedImage {
+    fn portable_content(
+        &self,
+        request: &PreparationRequest,
+    ) -> Result<Option<gpui::content::ContentDrawRequest>, gpui::content::ContentError> {
+        self.draw().portable_content(request)
+    }
+    fn prepare(&self, _: &dyn Any, _: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
+        Err(gpui::content::ContentError::new(
+            gpui::content::ContentErrorKind::UnsupportedCapability,
+            "adjusted images require portable content presentation",
+        )
+        .into())
     }
 }
 
-/// Explicit native wide-SDR placement. Requires a canonical RGBA16F source and
+/// Explicit native wide-SDR placement. Accepts RGBA8 or RGBA16F source pixels and
 /// an accepted WideGamutSdr window. wgpu/browser hosts reject this output policy.
 /// Adjustment affine row absolute sums must not exceed 4, keeping four nested
 /// wide color filters finite in binary16.
@@ -87,14 +84,6 @@ pub struct WideImage {
 }
 impl crate::MediaImage {
     pub fn wide(&self, adjustments: Option<ImageAdjustments>) -> anyhow::Result<WideImage> {
-        anyhow::ensure!(
-            matches!(
-                self.format(),
-                gpui::ImageTextureFormat::LinearP3Rgba16Float
-                    | gpui::ImageTextureFormat::LinearRec2020Rgba16Float
-            ),
-            "wide placement requires RGBA16F source pixels"
-        );
         if let Some(adjustments) = adjustments {
             anyhow::ensure!(
                 adjustments.paint().rows().iter().all(|row| row
@@ -111,35 +100,31 @@ impl crate::MediaImage {
         })
     }
 }
-impl CustomContent for WideImage {
-    fn image_color_mode(&self) -> gpui::ImageColorMode {
-        match self.image.format() {
-            gpui::ImageTextureFormat::LinearRec2020Rgba16Float => {
-                gpui::ImageColorMode::LinearRec2020Wide
-            }
-            _ => gpui::ImageColorMode::LinearP3Wide,
+impl WideImage {
+    /// Portable wide placement; preserves the source gamut and applies any
+    /// validated linear adjustment before native wide composition.
+    pub fn draw(&self) -> gpui::content::ContentDraw {
+        use gpui::content::*;
+        let draw = self.image.draw().color_output(ContentColorOutput::WideSdr);
+        if let Some(adjustments) = self.adjustments {
+            draw.color_transform(ImageColorTransform::linear(adjustments.paint()))
+        } else {
+            draw
         }
     }
-    fn image_linear_adjustments(&self) -> Option<gpui::LinearImagePaint> {
-        self.adjustments.map(|v| v.paint())
-    }
-    fn prepare(&self, backend: &dyn Any, size: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
-        self.image.prepare_effect_at_size(backend, size)
-    }
-    fn prepare_in_frame(
+}
+impl CustomContent for WideImage {
+    fn portable_content(
         &self,
-        backend: &dyn Any,
         request: &PreparationRequest,
-        frame: &PreparationFrame,
-    ) -> anyhow::Result<Box<dyn Any>> {
-        self.image.prepare_effect(backend, request, frame)
+    ) -> Result<Option<gpui::content::ContentDrawRequest>, gpui::content::ContentError> {
+        self.draw().portable_content(request)
     }
-    fn prepare_with_request(
-        &self,
-        backend: &dyn Any,
-        request: &PreparationRequest,
-    ) -> anyhow::Result<Box<dyn Any>> {
-        self.image
-            .prepare_effect(backend, request, &PreparationFrame::default())
+    fn prepare(&self, _: &dyn Any, _: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
+        Err(gpui::content::ContentError::new(
+            gpui::content::ContentErrorKind::UnsupportedCapability,
+            "wide images require portable content presentation",
+        )
+        .into())
     }
 }

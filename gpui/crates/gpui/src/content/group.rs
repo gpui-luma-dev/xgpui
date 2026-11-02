@@ -120,6 +120,13 @@ impl ContentGroupRequest {
     pub fn id(&self) -> ContentGroupId {
         self.group.id
     }
+    /// Output intent for each ordered member, without materializing geometry.
+    pub fn color_outputs(&self) -> impl Iterator<Item = ContentColorOutput> + '_ {
+        self.group
+            .members
+            .iter()
+            .map(|(_, draw)| draw.presentation.color_output)
+    }
     /// Validate all members and construct local physical geometry. An invalid
     /// member rejects the complete group; clipped members still participate.
     pub fn draws(&self) -> Result<Vec<CustomDraw>> {
@@ -441,12 +448,15 @@ impl<T: Clone> ContentGroupState<T> {
         }
     }
     /// Drop snapshots whose images cannot be presented under the current device/color policy.
-    pub fn retain_images(&mut self, mut supported: impl FnMut(&T) -> bool) {
+    pub fn retain_snapshots(
+        &mut self,
+        mut supported: impl FnMut(&ContentGroupRequest, &[T]) -> bool,
+    ) {
         for state in self.groups.values_mut() {
             if state
                 .snapshot
                 .as_ref()
-                .is_some_and(|s| !s.images.iter().all(&mut supported))
+                .is_some_and(|s| !supported(&s.request, &s.images))
             {
                 state.snapshot = None;
             }

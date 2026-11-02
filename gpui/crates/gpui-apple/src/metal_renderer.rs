@@ -838,14 +838,6 @@ impl MetalRenderer {
                     let output = *raw
                         .downcast::<crate::custom_draw::PreparedMetalOutput>()
                         .unwrap();
-                    #[cfg(target_os = "macos")]
-                    if self.wide_sdr.is_some()
-                        && output.gpu.is_some()
-                        && draw.content.image_color_output()
-                            != gpui::content::ContentColorOutput::SrgbPreview
-                    {
-                        self.wide_sdr.as_mut().unwrap().wide.insert(outputs.len());
-                    }
                     output
                 } else if raw.is::<crate::custom_draw::MetalWideSdrOutput>() {
                     #[cfg(target_os = "macos")]
@@ -888,11 +880,27 @@ impl MetalRenderer {
                     output.into()
                 };
                 #[cfg(target_os = "macos")]
-                if let (Some(image), Some(mapping)) = (&output.gpu, draw.content.image_mapping()) {
-                    output.mapping = Some(mapping.resolve(
-                        &image.descriptor,
-                        [draw.bounds.size.width.0, draw.bounds.size.height.0],
-                    )?);
+                {
+                    if let Some(request) = &portable_requests[draw_index] {
+                        output.color_transform = Some(request.draw.color_transform);
+                        output.color_output = request.draw.presentation.color_output;
+                    }
+                    if self.wide_sdr.is_some()
+                        && output.gpu.is_some()
+                        && output.color_output != gpui::content::ContentColorOutput::SrgbPreview
+                    {
+                        self.wide_sdr.as_mut().unwrap().wide.insert(outputs.len());
+                    }
+                    let mapping = portable_requests[draw_index]
+                        .as_ref()
+                        .map(|request| request.draw.mapping)
+                        .or_else(|| draw.content.image_mapping());
+                    if let (Some(image), Some(mapping)) = (&output.gpu, mapping) {
+                        output.mapping = Some(mapping.resolve(
+                            &image.descriptor,
+                            [draw.bounds.size.width.0, draw.bounds.size.height.0],
+                        )?);
+                    }
                 }
                 let coverage = if draw.coverage.is_some() {
                     let key = crate::custom_draw::CoverageKey::new(draw)?;

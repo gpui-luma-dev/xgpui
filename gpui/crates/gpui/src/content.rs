@@ -8,6 +8,7 @@
 //! imports remain separate; legacy `CustomContent` producers keep their existing path.
 
 mod asset;
+mod color_transform;
 mod descriptors;
 mod graph;
 mod group;
@@ -20,6 +21,7 @@ mod program;
 mod uniforms;
 
 pub use asset::*;
+pub use color_transform::*;
 pub use descriptors::*;
 pub use graph::*;
 pub use group::*;

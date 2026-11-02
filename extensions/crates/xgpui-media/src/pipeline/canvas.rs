@@ -220,7 +220,7 @@ impl CanvasPage {
     pub fn ready(&self) -> bool {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.image.upload_status() == crate::UploadStatus::Ready
+            self.image.page_upload_status() == crate::texture::UploadStatus::Ready
         }
         #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
         {
@@ -264,7 +264,7 @@ impl CustomContent for PagePaint {
     ) -> Result<Box<dyn std::any::Any>> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.0.image.prepare_effect_at_size(backend, size)
+            self.0.image.prepare_page_at_size(backend, size)
         }
         #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
         {
@@ -286,7 +286,7 @@ impl CustomContent for PagePaint {
     ) -> Result<Box<dyn std::any::Any>> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.0.image.prepare_effect(backend, request, frame)
+            self.0.image.prepare_page(backend, request, frame)
         }
         #[cfg(target_arch = "wasm32")]
         {

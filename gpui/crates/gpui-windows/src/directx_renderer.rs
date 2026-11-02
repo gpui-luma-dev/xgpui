@@ -804,15 +804,28 @@ impl DirectXRenderer {
                         } else {
                             compositor.transparent.clone()
                         };
-                        let wide = draw.content.image_color_output()
-                            != gpui::content::ContentColorOutput::SrgbPreview
-                            && interpretation.is_some_and(|i| {
-                                matches!(
-                                    i.color,
-                                    gpui::content::ColorEncoding::LinearP3
-                                        | gpui::content::ColorEncoding::LinearRec2020
-                                )
-                            });
+                        let wide = gpu.is_some()
+                            && requests[draw_index]
+                                .as_ref()
+                                .unwrap()
+                                .draw
+                                .presentation
+                                .color_output
+                                != gpui::content::ContentColorOutput::SrgbPreview
+                            && (requests[draw_index]
+                                .as_ref()
+                                .unwrap()
+                                .draw
+                                .presentation
+                                .color_output
+                                == gpui::content::ContentColorOutput::WideSdr
+                                || interpretation.is_some_and(|i| {
+                                    matches!(
+                                        i.color,
+                                        gpui::content::ColorEncoding::LinearP3
+                                            | gpui::content::ColorEncoding::LinearRec2020
+                                    )
+                                }));
                         (source, false, wide)
                     } else {
                         let output =
@@ -867,7 +880,9 @@ impl DirectXRenderer {
                         };
                         (source, native, wide)
                     };
-                    if draw.content.image_color_mode() != gpui::ImageColorMode::EncodedSrgb {
+                    if requests[draw_index].is_none()
+                        && draw.content.image_color_mode() != gpui::ImageColorMode::EncodedSrgb
+                    {
                         let mut description = D3D11_TEXTURE2D_DESC::default();
                         unsafe {
                             source.texture.GetDesc(&mut description);
@@ -900,14 +915,20 @@ impl DirectXRenderer {
                         None
                     };
                     Ok(PreparedDraw {
+                        color_transform: requests[draw_index]
+                            .as_ref()
+                            .map(|request| request.draw.color_transform),
                         mapping: gpu
                             .and_then(|image| {
-                                draw.content.image_mapping().map(|mapping| {
-                                    mapping.resolve(
-                                        &image.descriptor,
-                                        [draw.bounds.size.width.0, draw.bounds.size.height.0],
-                                    )
-                                })
+                                requests[draw_index]
+                                    .as_ref()
+                                    .map(|request| request.draw.mapping)
+                                    .map(|mapping| {
+                                        mapping.resolve(
+                                            &image.descriptor,
+                                            [draw.bounds.size.width.0, draw.bounds.size.height.0],
+                                        )
+                                    })
                             })
                             .transpose()?,
                         portable: interpretation,

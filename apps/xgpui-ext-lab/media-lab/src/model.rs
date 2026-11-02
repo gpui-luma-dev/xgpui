@@ -1,9 +1,7 @@
 use crate::fixtures::Fixtures;
 use gpui::{Pixels, Point, point, px};
 use std::{collections::VecDeque, time::Instant};
-use xgpui_media::{
-    FrameUploadLimits, ImageJob, LoadStatus, MediaImage, MediaLimits, MediaLoader, UploadLimits,
-};
+use xgpui_media::{ImageJob, LoadStatus, MediaImage, MediaLimits, MediaLoader};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
@@ -89,8 +87,6 @@ pub struct Lab {
     pub radius: f32,
     pub sweep: bool,
     pub started: Instant,
-    pub count_limit: usize,
-    pub byte_limit: usize,
     pub updated: Instant,
     pub settle_frames: u8,
     pub intervals: VecDeque<f32>,
@@ -99,7 +95,7 @@ pub struct Lab {
 impl Lab {
     pub fn new(fixtures: Fixtures) -> anyhow::Result<Self> {
         let selected = if fixtures.samples.len() > 3 { 3 } else { 0 };
-        let loader = Self::loader(1, 16 * 1024 * 1024)?;
+        let loader = MediaLoader::new(MediaLimits::default())?;
         let mut lab = Self {
             ui_perf: None,
             continuous_redraw: false,
@@ -134,8 +130,6 @@ impl Lab {
             radius: 16.,
             sweep: false,
             started: Instant::now(),
-            count_limit: 1,
-            byte_limit: 16 * 1024 * 1024,
             updated: Instant::now(),
             settle_frames: 0,
             intervals: VecDeque::new(),
@@ -173,16 +167,6 @@ impl Lab {
             .hue_rotate([0., 90., 180.][self.filters[3]])
             .tint([[0., 0., 0., 0.], [1., 0.4, 0.1, 0.3], [0.1, 0.6, 1., 0.3]][self.filters[4]])
     }
-    fn loader(count: usize, bytes: usize) -> anyhow::Result<MediaLoader> {
-        MediaLoader::with_upload_policy(
-            MediaLimits::default(),
-            UploadLimits::default(),
-            FrameUploadLimits {
-                max_uploads: count,
-                max_bytes: bytes,
-            },
-        )
-    }
     pub fn select(&mut self, index: usize) {
         self.selected = index;
         self.reset_view();
@@ -201,14 +185,6 @@ impl Lab {
     pub fn burst(&mut self) {
         self.burst = (0..12).map(|_| Slot::waiting()).collect();
         self.intervals.clear();
-    }
-    pub fn policy(&mut self, count: usize, bytes: usize) {
-        // These bounded presets are valid. Retired snapshots keep their old loader
-        // alive until their workers/commands finish; stale results are not displayed.
-        self.loader = Self::loader(count, bytes).expect("valid lab upload policy");
-        self.count_limit = count;
-        self.byte_limit = bytes;
-        self.reload();
     }
     pub fn poll(&mut self) -> bool {
         let now = Instant::now();

@@ -881,7 +881,9 @@ impl CustomCompositor {
         native: bool,
         viewport: Size<DevicePixels>,
     ) -> PreparedDraw {
-        self.prepare_with_interpretation(device, draw, source, mask, native, viewport, None, None)
+        self.prepare_with_interpretation(
+            device, draw, source, mask, native, viewport, None, None, None,
+        )
     }
     pub(crate) fn prepare_with_interpretation(
         &mut self,
@@ -893,11 +895,16 @@ impl CustomCompositor {
         viewport: Size<DevicePixels>,
         interpretation: Option<gpui::content::ImageInterpretation>,
         mapping: Option<gpui::content::ResolvedImageMapping>,
+        color_transform: Option<gpui::content::ImageColorTransform>,
     ) -> PreparedDraw {
-        let adjustments = draw.content.image_linear_adjustments();
-        let transform = adjustments
-            .map(|v| v.rows())
-            .unwrap_or_else(|| draw.content.image_color_transform());
+        let adjustments = color_transform
+            .map(|t| t.linear_paint())
+            .unwrap_or_else(|| draw.content.image_linear_adjustments());
+        let transform = adjustments.map(|v| v.rows()).unwrap_or_else(|| {
+            color_transform
+                .map(|t| t.encoded_rows())
+                .unwrap_or_else(|| draw.content.image_color_transform())
+        });
         let vignette = adjustments
             .map(|v| v.vignette())
             .unwrap_or([0., 0., 1., 1.]);
@@ -930,6 +937,15 @@ impl CustomCompositor {
         if mapping.is_none() {
             mapped[3][0] = -1.;
         }
+        let working_p3 = adjustments.is_some_and(|paint| paint.is_p3());
+        mapped[3][1] = if working_p3 { 1. } else { 0. };
+        mapped[3][2] = if adjustments.is_some() {
+            2.
+        } else if transform != [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.]] {
+            1.
+        } else {
+            0.
+        };
         let params: [[f32; 4]; 13] = [
             [
                 draw.bounds.origin.x.0,

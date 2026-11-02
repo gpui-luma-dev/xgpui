@@ -179,6 +179,7 @@ impl Compositor {
         viewport: Size<DevicePixels>,
         draw: Option<&gpui::CustomDraw>,
         mode: f32,
+        color_transform: Option<gpui::content::ImageColorTransform>,
     ) -> [[f32; 4]; 13] {
         let base = if let Some(d) = draw {
             [
@@ -212,12 +213,15 @@ impl Compositor {
             let h = viewport.height.0 as f32;
             [[0., 0., w, h], [0., 0., w, h], [0.; 4], [w, h, 1., mode]]
         };
-        let adjustment = draw.and_then(|d| d.content.image_linear_adjustments());
-        let rows = adjustment.map(|a| a.rows()).unwrap_or([
-            [1., 0., 0., 0.],
-            [0., 1., 0., 0.],
-            [0., 0., 1., 0.],
-        ]);
+        let adjustment = color_transform
+            .map(|t| t.linear_paint())
+            .unwrap_or_else(|| draw.and_then(|d| d.content.image_linear_adjustments()));
+        let rows = adjustment.map(|a| a.rows()).unwrap_or_else(|| {
+            color_transform
+                .map(|t| t.encoded_rows())
+                .or_else(|| draw.map(|d| d.content.image_color_transform()))
+                .unwrap_or([[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.]])
+        });
         [
             base[0],
             base[1],
@@ -306,7 +310,7 @@ impl Compositor {
                 &encoder,
                 self.scratch.as_ref().unwrap(),
                 None,
-                Self::params(viewport, None, 1.),
+                Self::params(viewport, None, 1., None),
                 false,
                 None,
             );
@@ -467,6 +471,7 @@ impl Compositor {
                                     viewport,
                                     Some(&scene.custom_draws[index]),
                                     if mask.is_some() { -1. } else { 0. },
+                                    outputs[index].0.color_transform,
                                 );
                                 if let Some(interpretation) = outputs[index].0.interpretation() {
                                     let portable =
@@ -480,6 +485,20 @@ impl Compositor {
                                     .unwrap_or_default()
                                     .shader_uniforms();
                                 params[9..13].copy_from_slice(&mapping);
+                                if let Some(transform) = outputs[index].0.color_transform {
+                                    let flags = transform.shader_flags();
+                                    params[12][1] = flags[0];
+                                    params[12][2] = flags[1];
+                                } else if let Some(paint) =
+                                    scene.custom_draws[index].content.image_linear_adjustments()
+                                {
+                                    params[12][1] = if paint.is_p3() { 1. } else { 0. };
+                                    params[12][2] = 2.;
+                                } else if scene.custom_draws[index].content.image_color_transform()
+                                    != [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.]]
+                                {
+                                    params[12][2] = 1.;
+                                }
                                 params
                             },
                             false,
@@ -662,7 +681,7 @@ impl Compositor {
                 &e,
                 self.target.as_ref().unwrap(),
                 None,
-                Self::params(viewport, None, 0.),
+                Self::params(viewport, None, 0., None),
                 true,
                 None,
             );

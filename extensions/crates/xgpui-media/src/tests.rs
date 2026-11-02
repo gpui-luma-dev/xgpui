@@ -1,4 +1,5 @@
 use super::*;
+use crate::texture::UploadStatus;
 use anyhow::{Result, bail};
 use gpui::{
     ContentMask, CustomDraw, DevicePixels, DrawOrder, PlatformHeadlessRenderer, ScaledPixels,
@@ -124,10 +125,37 @@ fn image_scene(image: &MediaImage, side: f32, clipped: bool) -> Scene {
         content_mask: ContentMask { bounds: mask },
         corner_radii: Corners::all(ScaledPixels(if clipped { 3. } else { 0. })),
         opacity: 1.,
-        // These tests exercise the not-yet-migrated effect staging path.
-        content: Arc::new(image.filtered(ImageFilter::new())),
+        content: Arc::new(image.clone()),
         coverage: None,
     });
+    scene.finish();
+    scene
+}
+// The remaining page staging contract is tested separately from portable images.
+#[derive(Debug)]
+struct PageUpload(MediaImage);
+impl gpui::CustomContent for PageUpload {
+    fn prepare(
+        &self,
+        backend: &dyn std::any::Any,
+        size: Size<DevicePixels>,
+    ) -> Result<Box<dyn std::any::Any>> {
+        self.0.prepare_page_at_size(backend, size)
+    }
+    fn prepare_in_frame(
+        &self,
+        backend: &dyn std::any::Any,
+        request: &gpui::PreparationRequest,
+        frame: &gpui::PreparationFrame,
+    ) -> Result<Box<dyn std::any::Any>> {
+        self.0.prepare_page(backend, request, frame)
+    }
+}
+fn page_scene(image: &MediaImage, side: f32, clipped: bool) -> Scene {
+    let mut draw = image_scene(image, side, clipped).custom_draws.remove(0);
+    draw.content = Arc::new(PageUpload(image.clone()));
+    let mut scene = Scene::default();
+    scene.insert_primitive(draw);
     scene.finish();
     scene
 }
@@ -137,20 +165,50 @@ fn render_ready(
     scene: &Scene,
     extent: Size<DevicePixels>,
 ) -> Result<image::RgbaImage> {
+    use gpui::content::{ContentError, ContentErrorKind};
+    let portable = scene.custom_draws.iter().any(|draw| {
+        draw.content.is_content_group() || {
+            let request = gpui::PreparationRequest::new(
+                draw.bounds.size.map(|v| gpui::px(v.0)),
+                size(
+                    DevicePixels(draw.bounds.size.width.0.ceil() as i32),
+                    DevicePixels(draw.bounds.size.height.0.ceil() as i32),
+                ),
+                1.,
+            )
+            .unwrap();
+            !matches!(draw.content.portable_content(&request), Ok(None))
+        }
+    });
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
+        let ready = match renderer.prepare_content_snapshot(scene) {
+            Ok(()) => true,
+            Err(error)
+                if error
+                    .downcast_ref::<ContentError>()
+                    .is_some_and(|e| e.kind == ContentErrorKind::Pending) =>
+            {
+                false
+            }
+            Err(error) => return Err(error),
+        };
         let pixels = renderer.render_scene_to_image(scene, extent)?;
-        match image.upload_status() {
-            UploadStatus::Ready => return Ok(pixels),
-            UploadStatus::Failed(error) => bail!(error),
-            _ => {}
+        if portable && ready {
+            return Ok(pixels);
         }
-        if Instant::now() > deadline {
-            bail!("image upload timed out");
+        if !portable {
+            match image.page_upload_status() {
+                UploadStatus::Ready => return Ok(pixels),
+                UploadStatus::Failed(error) => bail!(error),
+                _ => {}
+            }
         }
+        anyhow::ensure!(Instant::now() < deadline, "image presentation timed out");
         std::thread::sleep(Duration::from_millis(2));
     }
 }
+
 fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaImage> {
     let fixture = Fixture::new();
     let mut job = MediaLoader::default().load(&fixture.0)?;
@@ -185,8 +243,8 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
         assert_eq!(pixels.get_pixel(1, 1).0, [0, 0, 0, 255]);
     }
     assert_eq!(
-        image.upload_count(),
-        1,
+        image.page_upload_count(),
+        0,
         "resizing/replay must reuse source texture"
     );
     // Different placements share source uploads but retain independent uniforms.
@@ -205,7 +263,11 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
         pixels.get_pixel(6, 6).0[1].abs_diff(188) <= 3,
         "filter must not mutate cached source"
     );
-    assert_eq!(image.upload_count(), 1, "filter updates do not reupload");
+    assert_eq!(
+        image.page_upload_count(),
+        0,
+        "filter updates do not reupload"
+    );
     let pixels = renderer.render_scene_to_image(&image_scene(&image, 8., true), extent)?;
     assert_eq!(
         pixels.get_pixel(6, 8).0,
@@ -217,7 +279,7 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
         pixels.get_pixel(11, 4).0[0] < 180,
         "rounded corner coverage"
     );
-    assert_eq!(image.upload_count(), 1);
+    assert_eq!(image.page_upload_count(), 0);
     let mut translucent = image_scene(&image, 8., false);
     translucent.custom_draws[0].opacity = 0.5;
     let pixels = renderer.render_scene_to_image(&translucent, extent)?;
@@ -255,7 +317,7 @@ fn metal_mips_clipping_and_resize_reuse() -> Result<()> {
         &image_scene(&image, 8., false),
         size(DevicePixels(24), DevicePixels(24)),
     )?;
-    assert_eq!(image.upload_count(), 2, "new queue rebuilds texture");
+    assert_eq!(image.page_upload_count(), 0, "new queue rebuilds texture");
     Ok(())
 }
 #[cfg(feature = "wgpu")]
@@ -267,8 +329,8 @@ fn wgpu_mips_clipping_and_resize_reuse() -> Result<()> {
         size(DevicePixels(24), DevicePixels(24)),
     )?;
     assert_eq!(
-        image.upload_count(),
-        1,
+        image.page_upload_count(),
+        0,
         "shared headless queue reuses texture"
     );
     Ok(())
@@ -276,7 +338,7 @@ fn wgpu_mips_clipping_and_resize_reuse() -> Result<()> {
 
 #[cfg(feature = "wgpu")]
 #[test]
-fn legacy_wgpu_outputs_still_require_display_extent() -> Result<()> {
+fn native_custom_outputs_require_the_declared_display_extent() -> Result<()> {
     #[derive(Debug)]
     struct WrongExtent;
     impl gpui::CustomContent for WrongExtent {
@@ -330,10 +392,10 @@ fn upload_admission_waits_for_host_handoff_and_releases_budget() -> Result<()> {
     let second = finish(&mut loader.load(&fixture.0)?)?;
     let extent = size(DevicePixels(24), DevicePixels(24));
     let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new()?;
-    renderer.render_scene_to_image(&image_scene(&first, 8., false), extent)?;
+    renderer.render_scene_to_image(&page_scene(&first, 8., false), extent)?;
     let deadline = Instant::now() + Duration::from_secs(10);
-    while first.upload_status() != UploadStatus::Staged {
-        if let UploadStatus::Failed(error) = first.upload_status() {
+    while first.page_upload_status() != UploadStatus::Staged {
+        if let UploadStatus::Failed(error) = first.page_upload_status() {
             bail!(error);
         }
         if Instant::now() > deadline {
@@ -342,24 +404,24 @@ fn upload_admission_waits_for_host_handoff_and_releases_budget() -> Result<()> {
         std::thread::sleep(Duration::from_millis(2));
     }
     assert_eq!(loader.upload_stats().staging_bytes, 32512);
-    renderer.render_scene_to_image(&image_scene(&second, 8., false), extent)?;
-    assert_eq!(second.upload_status(), UploadStatus::Queued);
-    assert_eq!(second.upload_count(), 0);
+    renderer.render_scene_to_image(&page_scene(&second, 8., false), extent)?;
+    assert_eq!(second.page_upload_status(), UploadStatus::Queued);
+    assert_eq!(second.page_upload_count(), 0);
     render_ready(
         &mut renderer,
         &first,
-        &image_scene(&first, 8., false),
+        &page_scene(&first, 8., false),
         extent,
     )?;
     assert_eq!(loader.upload_stats().staging_bytes, 0);
     render_ready(
         &mut renderer,
         &second,
-        &image_scene(&second, 8., false),
+        &page_scene(&second, 8., false),
         extent,
     )?;
     assert_eq!(loader.upload_stats(), UploadStats::default());
-    assert_eq!(second.upload_count(), 1);
+    assert_eq!(second.page_upload_count(), 1);
     Ok(())
 }
 
@@ -377,14 +439,17 @@ fn upload_budget_failure_is_observable_and_retry_resets_status() -> Result<()> {
     let image = finish(&mut loader.load(&fixture.0)?)?;
     let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new()?;
     renderer.render_scene_to_image(
-        &image_scene(&image, 8., false),
+        &page_scene(&image, 8., false),
         size(DevicePixels(24), DevicePixels(24)),
     )?;
-    assert!(matches!(image.upload_status(), UploadStatus::Failed(_)));
-    assert_eq!(image.upload_count(), 0);
+    assert!(matches!(
+        image.page_upload_status(),
+        UploadStatus::Failed(_)
+    ));
+    assert_eq!(image.page_upload_count(), 0);
     assert_eq!(loader.upload_stats(), UploadStats::default());
-    image.retry_upload();
-    assert_eq!(image.upload_status(), UploadStatus::Idle);
+    image.retry_page_upload();
+    assert_eq!(image.page_upload_status(), UploadStatus::Idle);
     let frame_limited = MediaLoader::with_upload_policy(
         MediaLimits::default(),
         UploadLimits::default(),
@@ -395,12 +460,15 @@ fn upload_budget_failure_is_observable_and_retry_resets_status() -> Result<()> {
     )?;
     let too_large = finish(&mut frame_limited.load(&fixture.0)?)?;
     renderer.render_scene_to_image(
-        &image_scene(&too_large, 8., false),
+        &page_scene(&too_large, 8., false),
         size(DevicePixels(24), DevicePixels(24)),
     )?;
-    assert!(matches!(too_large.upload_status(), UploadStatus::Failed(_)));
+    assert!(matches!(
+        too_large.page_upload_status(),
+        UploadStatus::Failed(_)
+    ));
     assert_eq!(
-        too_large.upload_count(),
+        too_large.page_upload_count(),
         0,
         "oversized source must fail before allocation"
     );
@@ -411,11 +479,11 @@ fn upload_budget_failure_is_observable_and_retry_resets_status() -> Result<()> {
 fn stage_only(renderer: &mut dyn PlatformHeadlessRenderer, image: &MediaImage) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        match image.upload_status() {
+        match image.page_upload_status() {
             UploadStatus::Staged => return Ok(()),
             UploadStatus::Idle | UploadStatus::Queued => {
                 renderer.render_scene_to_image(
-                    &image_scene(image, 8., false),
+                    &page_scene(image, 8., false),
                     size(DevicePixels(24), DevicePixels(24)),
                 )?;
             }
@@ -433,7 +501,7 @@ fn verify_pool_reuse(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> 
     let loader = MediaLoader::default();
     let first = finish(&mut loader.load(&fixture.0)?)?;
     let extent = size(DevicePixels(24), DevicePixels(24));
-    let pixels = render_ready(renderer, &first, &image_scene(&first, 8., false), extent)?;
+    let pixels = render_ready(renderer, &first, &page_scene(&first, 8., false), extent)?;
     assert!(pixels.get_pixel(6, 6).0[0].abs_diff(188) <= 3);
     let deadline = Instant::now() + Duration::from_secs(10);
     while loader.staging_pool_stats().cached_bytes == 0 {
@@ -445,7 +513,7 @@ fn verify_pool_reuse(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> 
     assert_eq!(loader.staging_pool_stats().allocations, 1);
     image::RgbaImage::from_pixel(64, 64, image::Rgba([255, 0, 0, 255])).save(&fixture.0)?;
     let second = finish(&mut loader.load(&fixture.0)?)?;
-    let pixels = render_ready(renderer, &second, &image_scene(&second, 8., false), extent)?;
+    let pixels = render_ready(renderer, &second, &page_scene(&second, 8., false), extent)?;
     assert_eq!(
         pixels.get_pixel(6, 6).0,
         [255, 0, 0, 255],
@@ -484,9 +552,7 @@ fn verify_frame_limits(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()
         }
         let mut scene = Scene::default();
         for index in [0, 0, 1, 2] {
-            let mut draw = image_scene(&images[index], 8., false)
-                .custom_draws
-                .remove(0);
+            let mut draw = page_scene(&images[index], 8., false).custom_draws.remove(0);
             draw.bounds.origin.x = ScaledPixels(4. + index as f32 * 12.);
             draw.content_mask.bounds = draw.bounds;
             scene.insert_primitive(draw);
@@ -497,13 +563,13 @@ fn verify_frame_limits(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()
             assert_eq!(
                 images
                     .iter()
-                    .filter(|image| image.upload_status() == UploadStatus::Ready)
+                    .filter(|image| image.page_upload_status() == UploadStatus::Ready)
                     .count(),
                 expected,
                 "exactly one new source handoff per scene frame"
             );
         }
-        assert!(images.iter().all(|image| image.upload_count() == 1));
+        assert!(images.iter().all(|image| image.page_upload_count() == 1));
     }
     Ok(())
 }
@@ -568,21 +634,21 @@ fn check_linear_adjustments(renderer: &mut dyn PlatformHeadlessRenderer) -> Resu
             "native content mask"
         );
         assert_eq!(
-            image.upload_count(),
-            1,
+            image.page_upload_count(),
+            0,
             "adjustments must reuse source uploads"
         );
     }
-    // Switching back to the old encoded path must not retain new uniforms.
-    let mut legacy = image_scene(&image, 16., false);
-    legacy.custom_draws[0].content = Arc::new(image.filtered(ImageFilter::new().brightness(2.)));
-    let pixels = renderer.render_scene_to_image(&legacy, extent)?;
+    // Switching between linear and encoded transforms must not retain uniforms.
+    let mut encoded = image_scene(&image, 16., false);
+    encoded.custom_draws[0].content = Arc::new(image.filtered(ImageFilter::new().brightness(2.)));
+    let pixels = renderer.render_scene_to_image(&encoded, extent)?;
     let p = pixels.get_pixel(12, 12).0;
     assert!(
         p[0].abs_diff(128) <= 2 && p[1].abs_diff(64) <= 2,
-        "legacy encoded path: {p:?}"
+        "encoded transform: {p:?}"
     );
-    assert_eq!(image.upload_count(), 1);
+    assert_eq!(image.page_upload_count(), 0);
     Ok(())
 }
 #[cfg(target_os = "macos")]
@@ -658,7 +724,7 @@ fn check_float_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()
                     <= 2
             );
         }
-        assert_eq!(image.upload_count(), 1);
+        assert_eq!(image.page_upload_count(), 0);
         assert!(
             image
                 .filtered(ImageFilter::new().brightness(2.))
@@ -687,11 +753,7 @@ fn wgpu_rgba16f_matches_cpu_and_reuses_source() -> Result<()> {
     let image = finish(&mut job)?;
     let mut scene = image_scene(&image, 16., false);
     scene.custom_draws[0].content = Arc::new(image.wide(None)?);
-    assert!(
-        renderer
-            .render_scene_to_image(&scene, size(DevicePixels(28), DevicePixels(28)))
-            .is_err()
-    );
+    assert!(renderer.prepare_content_snapshot(&scene).is_err());
     Ok(())
 }
 #[cfg(target_os = "macos")]
@@ -706,7 +768,7 @@ fn metal_rgba16f_wide_requires_opt_in_and_maps_after_linear_blending() -> Result
     let extent = size(DevicePixels(28), DevicePixels(28));
     let mut scene = image_scene(&image, 16., false);
     scene.custom_draws[0].content = Arc::new(image.wide(None)?);
-    assert!(renderer.render_scene_to_image(&scene, extent).is_err());
+    assert!(renderer.prepare_content_snapshot(&scene).is_err());
     renderer.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
     for working in [ImagePrimaries::Srgb, ImagePrimaries::DisplayP3] {
         let matrix = ColorMatrix::identity(working).exposure(0.5)?;
@@ -745,7 +807,7 @@ fn metal_rgba16f_wide_requires_opt_in_and_maps_after_linear_blending() -> Result
             );
         }
     }
-    assert_eq!(image.upload_count(), 1);
+    assert_eq!(image.page_upload_count(), 0);
     Ok(())
 }
 
@@ -868,7 +930,7 @@ fn check_adobe_rgb_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Resul
                     "{mapping:?} {rgb:?}: {actual} != {byte}"
                 );
             }
-            assert_eq!(image.upload_count(), 1);
+            assert_eq!(image.page_upload_count(), 0);
         }
     }
     Ok(())
@@ -907,8 +969,8 @@ fn check_rec2020_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<
                 gpui::ImageTextureFormat::LinearRec2020Rgba16Float
             );
             assert_eq!(
-                gpui::CustomContent::image_color_mode(&image.wide(None)?),
-                gpui::ImageColorMode::LinearRec2020Wide
+                image.wide(None)?.draw().presentation.color_output,
+                gpui::content::ContentColorOutput::WideSdr
             );
             let scene = image_scene(&image, 16., false);
             let pixels = render_ready(
@@ -948,7 +1010,7 @@ fn check_rec2020_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<
                     );
                 }
             }
-            assert_eq!(image.upload_count(), 1);
+            assert_eq!(image.page_upload_count(), 0);
         }
     }
     Ok(())
@@ -973,10 +1035,7 @@ fn wgpu_rec2020_storage_and_preview() -> Result<()> {
     let image = finish(&mut job)?;
     let mut s = image_scene(&image, 16., false);
     s.custom_draws[0].content = Arc::new(image.wide(None)?);
-    assert!(
-        r.render_scene_to_image(&s, size(DevicePixels(28), DevicePixels(28)))
-            .is_err()
-    );
+    assert!(r.prepare_content_snapshot(&s).is_err());
     Ok(())
 }
 
@@ -996,7 +1055,7 @@ fn adobe_rec2020_wide_blends_before_mapping_and_reuses_uploads() -> Result<()> {
     let mut scene = image_scene(&image, 16., false);
     scene.custom_draws[0].content = Arc::new(image.wide(None)?);
     let extent = size(DevicePixels(28), DevicePixels(28));
-    assert!(r.render_scene_to_image(&scene, extent).is_err());
+    assert!(r.prepare_content_snapshot(&scene).is_err());
     r.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
     // White arrives through the ordinary sRGB UI path before the wide image.
     scene.quads.push(gpui::Quad {
@@ -1030,7 +1089,7 @@ fn adobe_rec2020_wide_blends_before_mapping_and_reuses_uploads() -> Result<()> {
             pixels.get_pixel(12, 12)
         );
     }
-    assert_eq!(image.upload_count(), 1);
+    assert_eq!(image.page_upload_count(), 0);
     let too_large = ImageAdjustments::new(
         ColorMatrix::identity(ImagePrimaries::DisplayP3).exposure(3.)?,
         None,

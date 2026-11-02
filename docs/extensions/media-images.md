@@ -279,12 +279,12 @@ validation records for integration and review.
   Configured draws can also be members of atomic groups. See the
   [portable presentation API](../../extensions/crates/xgpui-media/README.md#portable-image-presentation).
 
-### Remaining effect/page staging
+### Remaining tiled-page staging
 
-The following staging limits, counters and native adoption contracts apply to
-filters, adjustments and tiled pages pending their portable migration. Ordinary
-images use renderer content-executor limits. Mixed ordinary/effect placements may
-currently retain separate GPU realizations.
+Filters, linear adjustments and wide images use renderer-owned portable uploads,
+sharing source pixels with ordinary placements. Parameter edits change presentation
+uniforms only. The staging limits below now apply only to the private tiled-page
+path; they do not describe ordinary images or effects.
 
 - `UploadLimits` independently bounds active staging workers and accounted
   staging reservations. Defaults: two upload workers and 128 MiB staging.
@@ -347,15 +347,10 @@ For wgpu/D3D11, `image_upload_context().stage(data)` remains the unpooled API an
 available. `xgpui-media` uses the pools for full Metal/wgpu sources and allocates
 only a tiny placeholder during preparation.
 
-`image.upload_status()` reports `Idle → Queued/Preparing → Staged → Uploading →
-Ready`, or `Failed(error)`. `Ready` means host-submitted, with queue ordering before
-sampling; it does not assert GPU completion. `image_view` and `MediaImage::paint`
-request redraws until ready or failed. A caller that inserts raw `CustomDraw`
-records must drive repaint/status polling itself, including headless tests.
-Empty, fully clipped and zero-opacity media paint calls do not start uploads or
-request loading redraws. CPU job loading still requires host notification/polling
-as described above.
-Use `loader.upload_stats()` to inspect active jobs and outstanding staging reservations.
+GPU readiness for portable images is renderer-owned. Strict headless callers use
+`prepare_content_snapshot`; typed Pending means retry after completion. There is
+no public per-image upload status or retry method. The remaining page staging
+statistics are not portable renderer metrics.
 
 ### Per-frame admission
 
@@ -384,26 +379,6 @@ SDR sRGB input only. Embedded [ICC ↗](https://en.wikipedia.org/wiki/ICC_profil
 implemented. Mip generation is alpha-aware; the existing compositor still samples
 straight encoded channels between texels/mip levels. This is not a fully linear,
 [premultiplied ↗](https://en.wikipedia.org/wiki/Alpha_compositing) image-compositing pipeline.
-
-## Upload status example
-
-```rust,ignore
-use xgpui_media::{MediaLoader, MediaLimits, UploadLimits, FrameUploadLimits, UploadStatus};
-
-let loader = MediaLoader::with_upload_policy(
-    MediaLimits::default(),
-    UploadLimits { max_jobs: 2, max_staging_bytes: 128 * 1024 * 1024 },
-    FrameUploadLimits { max_uploads: 2, max_bytes: 64 * 1024 * 1024 },
-)?;
-// After taking a CPU-ready MediaImage from its ImageJob and painting it:
-match image.upload_status() {
-    UploadStatus::Ready => { /* commands submitted; source can be sampled */ }
-    UploadStatus::Failed(error) => { /* show error; offer image.retry_upload() */ }
-    _ => { /* placeholder / staging / host handoff pending */ }
-}
-let staging = loader.upload_stats();
-let cache = loader.staging_pool_stats();
-```
 
 ## Image color filters
 

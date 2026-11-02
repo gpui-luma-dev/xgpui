@@ -1,4 +1,4 @@
-use gpui::{CustomContent, DevicePixels, PreparationFrame, PreparationRequest, Size};
+use gpui::{CustomContent, DevicePixels, PreparationRequest, Size};
 use std::any::Any;
 
 /// Ordered affine RGB adjustments in encoded sRGB, preserving source alpha.
@@ -129,35 +129,31 @@ impl FilteredImage {
         Ok(())
     }
 }
+impl FilteredImage {
+    /// Portable filtered placement, sharing the ordinary source upload.
+    pub fn draw(&self) -> Result<gpui::content::ContentDraw, gpui::content::ContentError> {
+        use gpui::content::*;
+        self.validate()
+            .map_err(|e| ContentError::new(ContentErrorKind::InvalidDescriptor, e.to_string()))?;
+        Ok(self
+            .image
+            .draw()
+            .color_transform(ImageColorTransform::encoded_srgb(self.filter.rows())?))
+    }
+}
 impl CustomContent for FilteredImage {
-    fn image_color_mode(&self) -> gpui::ImageColorMode {
-        self.image.image_color_mode()
-    }
-
-    fn image_color_transform(&self) -> [[f32; 4]; 3] {
-        self.filter.rows()
-    }
-    fn prepare(&self, backend: &dyn Any, size: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
-        self.validate()?;
-        self.image.prepare_effect_at_size(backend, size)
-    }
-    fn prepare_in_frame(
+    fn portable_content(
         &self,
-        backend: &dyn Any,
         request: &PreparationRequest,
-        frame: &PreparationFrame,
-    ) -> anyhow::Result<Box<dyn Any>> {
-        self.validate()?;
-        self.image.prepare_effect(backend, request, frame)
+    ) -> Result<Option<gpui::content::ContentDrawRequest>, gpui::content::ContentError> {
+        self.draw()?.portable_content(request)
     }
-    fn prepare_with_request(
-        &self,
-        backend: &dyn Any,
-        request: &PreparationRequest,
-    ) -> anyhow::Result<Box<dyn Any>> {
-        self.validate()?;
-        self.image
-            .prepare_effect(backend, request, &PreparationFrame::default())
+    fn prepare(&self, _: &dyn Any, _: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
+        Err(gpui::content::ContentError::new(
+            gpui::content::ContentErrorKind::UnsupportedCapability,
+            "filtered images require portable content presentation",
+        )
+        .into())
     }
 }
 

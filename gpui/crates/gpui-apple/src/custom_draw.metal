@@ -32,13 +32,13 @@ fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buf
     float coverage = clamp(0.5 - distance, 0.0, 1.0);
     constexpr sampler s(coord::normalized, address::clamp_to_edge, filter::linear, mip_filter::linear);
     if (fmod(p.viewport.w, 2.0) > 0.5) coverage = mask.sample(s, in.uv).r;
+    float2 mapped = (in.uv - p.placement.xy) / p.placement.zw;
+    float2 raw_uv = p.source_uv.xy + mapped * p.source_uv.zw;
     float4 color;
     if (p.viewport.w >= 4.0) {
         float4 yuv = float4(image.sample(s, in.uv).r, chroma.sample(s, in.uv).rg, 1.0);
         color = float4(clamp(float3(dot(p.yuv_r, yuv), dot(p.yuv_g, yuv), dot(p.yuv_b, yuv)), 0.0, 1.0), 1.0);
     } else {
-        float2 mapped = (in.uv - p.placement.xy) / p.placement.zw;
-        float2 raw_uv = p.source_uv.xy + mapped * p.source_uv.zw;
         float2 dx = dfdx(raw_uv), dy = dfdy(raw_uv);
         float2 lo = p.source_clamp.xy, hi = p.source_clamp.zw;
         if (p.sampling.x > 0.5) {
@@ -60,12 +60,32 @@ fragment float4 custom_fragment(Vertex in [[stage_in]], constant Params &p [[buf
         else {
             if (p.linear.z < 0.5) color.a = 1.0;
             if (p.linear.z > 1.5) color.rgb = color.a > 0.0 ? color.rgb / color.a : float3(0.0);
-            if (p.linear.w > 3.5) color.rgb = rec2020_to_p3(color.rgb);
-            if (p.linear.w > 2.5) color.rgb = p3_to_srgb(color.rgb);
-            if (p.linear.w > 1.5) {
-                float3 c = clamp(color.rgb, 0.0, 1.0);
-                color.rgb = float3(encode_srgb(c.r), encode_srgb(c.g), encode_srgb(c.b));
+
+            float3 rgb = color.rgb;
+            if (p.linear.w > 3.5) rgb = rec2020_to_p3(rgb);
+            if (p.sampling.z > 1.5) {
+                if (p.linear.w < 1.5) rgb = float3(decode_srgb(rgb.r),decode_srgb(rgb.g),decode_srgb(rgb.b));
+                if (p.linear.w > 2.5 && p.sampling.y < 0.5) rgb = p3_to_srgb(rgb);
+                if (p.linear.w < 2.5 && p.sampling.y > 0.5) rgb = srgb_to_p3(rgb);
+                float4 v = float4(rgb,1.);
+                rgb = float3(dot(p.color_r,v),dot(p.color_g,v),dot(p.color_b,v));
+                float2 dims=float2(image.get_width(),image.get_height());
+                float2 q = raw_uv*2.-1.;
+                float d = mix(length(q),length(q*dims/min(dims.x,dims.y)),p.vignette.w);
+                float t = clamp((d-p.vignette.y)/p.vignette.z,0.,1.);
+                rgb *= 1.-p.vignette.x*t*t*(3.-2.*t);
+            } else if (p.sampling.z > 0.5) {
+                float4 v = float4(rgb,1.);
+                rgb = clamp(float3(dot(p.color_r,v),dot(p.color_g,v),dot(p.color_b,v)),0.,1.);
+
+            } else if (p.linear.w > 2.5) rgb = p3_to_srgb(rgb);
+
+            if (p.sampling.z > 1.5 && p.sampling.y > 0.5) rgb=p3_to_srgb(rgb);
+            if (p.linear.w > 1.5 || p.sampling.z > 1.5) {
+                float3 c = clamp(rgb,0.,1.);
+                rgb = float3(encode_srgb(c.r),encode_srgb(c.g),encode_srgb(c.b));
             }
+            color.rgb = color.a > 0. ? rgb : float3(0.);
         }
         return float4(color.rgb, color.a * coverage * p.viewport.z);
     }

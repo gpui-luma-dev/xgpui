@@ -7,7 +7,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use xgpui_media::{LoadStatus, MediaImage, MediaLoader, UploadStatus};
+use xgpui_media::{LoadStatus, MediaImage, MediaLoader};
 fn rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<ScaledPixels> {
     Bounds::new(
         point(ScaledPixels(x), ScaledPixels(y)),
@@ -171,25 +171,35 @@ pub fn run(
     let mut frames = 0;
     let pixels = loop {
         frames += 1;
-        let pixels = renderer.render_scene_to_image(&scene, extent)?;
-        for image in &images {
-            if let UploadStatus::Failed(error) = image.upload_status() {
-                bail!(error);
-            }
-        }
-        if images
-            .iter()
-            .all(|i| i.upload_status() == UploadStatus::Ready)
-        {
-            break pixels;
+        match renderer.prepare_content_snapshot(&scene) {
+            Ok(()) => break renderer.render_scene_to_image(&scene, extent)?,
+            Err(error)
+                if error
+                    .downcast_ref::<gpui::content::ContentError>()
+                    .is_some_and(|e| e.kind == gpui::content::ContentErrorKind::Pending) => {}
+            Err(error) => return Err(error),
         }
         ensure!(Instant::now() < deadline, "upload timed out");
         std::thread::sleep(Duration::from_millis(2));
     };
-    ensure!(
-        images.iter().all(|i| i.upload_count() == 1),
-        "capture unexpectedly reuploaded a source"
-    );
+    for row in 0..fixtures.samples.len() {
+        for column in 0..2 {
+            let bright = pixels
+                .enumerate_pixels()
+                .filter(|(x, y, pixel)| {
+                    *x >= 16 + column * 492
+                        && *x < 492 + column * 492
+                        && *y >= 16 + row as u32 * 246
+                        && *y < 242 + row as u32 * 246
+                        && pixel.0[..3].iter().any(|channel| *channel > 80)
+                })
+                .count();
+            ensure!(
+                bright > 1000,
+                "capture panel {row}/{column} has no visible source pixels"
+            );
+        }
+    }
     pixels.save(png)?;
     println!(
         "Saved {} ({}x{}). LEFT: reference. RIGHT: mipmapped/adjusted media.",
@@ -207,8 +217,7 @@ pub fn run(
         );
     }
     println!(
-        "Ready after {frames} preparation frames; pool: {:?}",
-        loader.staging_pool_stats()
+        "Portable snapshot ready after {frames} polls; sources and adjustments share renderer-owned uploads."
     );
     Ok(())
 }

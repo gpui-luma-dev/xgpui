@@ -1557,7 +1557,8 @@ impl WgpuRendererCore {
                         (texture, native)
                     };
                     anyhow::ensure!(
-                        draw.content.image_color_mode() == gpui::ImageColorMode::EncodedSrgb
+                        requests[draw_index].is_some()
+                            || draw.content.image_color_mode() == gpui::ImageColorMode::EncodedSrgb
                             || texture.format() == wgpu::TextureFormat::Rgba16Float,
                         "linear P3 image metadata requires RGBA16F texture"
                     );
@@ -1600,14 +1601,20 @@ impl WgpuRendererCore {
                         gpu.as_ref().map(|image| image.descriptor.interpretation()),
                         gpu.as_ref()
                             .and_then(|image| {
-                                draw.content.image_mapping().map(|mapping| {
-                                    mapping.resolve(
-                                        &image.descriptor,
-                                        [draw.bounds.size.width.0, draw.bounds.size.height.0],
-                                    )
-                                })
+                                requests[draw_index]
+                                    .as_ref()
+                                    .map(|request| request.draw.mapping)
+                                    .map(|mapping| {
+                                        mapping.resolve(
+                                            &image.descriptor,
+                                            [draw.bounds.size.width.0, draw.bounds.size.height.0],
+                                        )
+                                    })
                             })
                             .transpose()?,
+                        requests[draw_index]
+                            .as_ref()
+                            .map(|request| request.draw.color_transform),
                     );
                     prepared.portable_image = gpu;
                     Ok(prepared)

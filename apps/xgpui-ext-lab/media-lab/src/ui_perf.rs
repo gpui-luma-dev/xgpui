@@ -34,12 +34,10 @@ struct Report {
     arch: &'static str,
     description: &'static str,
     source_size: [u32; 2],
-    frame_upload_limit: usize,
-    frame_byte_limit: usize,
     baseline: Samples,
     burst: Samples,
     cached: Samples,
-    completed_sources: usize,
+    decoded_sources: usize,
     errors: Vec<String>,
 }
 pub struct Run {
@@ -62,18 +60,16 @@ impl Run {
             previous: None,
             started: Instant::now(),
             report: Report {
-                schema_version: 1,
+                schema_version: 2,
                 profile: "release",
                 os: std::env::consts::OS,
                 arch: std::env::consts::ARCH,
-                description: "Visible window with zoom sweep: warm primary, 180 baseline intervals, 12 fresh decode/mip/upload snapshots, 180 cached intervals. Render-start cadence includes UI/driver/scheduling; no GPU timestamps or presented-frame proof. No long intervals discarded. Keep window visible and foreground; background load uncontrolled. Burst duration includes decoding and admission waits. Only warmup-to-baseline boundary excluded; burst-trigger work is included. Baseline has no burst previews; cached phase retains final previews.",
+                description: "Visible window with zoom sweep: warm primary, 180 baseline intervals, 12 fresh decode/mip snapshots with renderer-owned presentation, 180 cached intervals. Render-start cadence includes UI/driver/scheduling; no GPU timestamps or presented-frame proof. No long intervals discarded. Keep window visible and foreground; background load uncontrolled. Burst duration includes decoding and admission waits. Source counts mean CPU-decoded sources, not GPU submissions. GPU upload counters are not measured. Only warmup-to-baseline boundary excluded; burst-trigger work is included. Baseline has no burst previews; cached phase retains final previews.",
                 source_size: [source.width, source.height],
-                frame_upload_limit: lab.count_limit,
-                frame_byte_limit: lab.byte_limit,
                 baseline: Samples::default(),
                 burst: Samples::default(),
                 cached: Samples::default(),
-                completed_sources: 0,
+                decoded_sources: 0,
                 errors: vec![],
             },
         })
@@ -115,7 +111,7 @@ impl Run {
                     self.report.burst.raw_ms.push(dt);
                 }
                 if !lab.burst.iter().any(|s| s.pending()) && lab.settle_frames == 0 {
-                    self.report.completed_sources = lab
+                    self.report.decoded_sources = lab
                         .burst
                         .iter()
                         .filter(|s| matches!(s.phase, Phase::Ready | Phase::Retired))
@@ -147,7 +143,7 @@ impl Run {
                 Ok(()) => eprintln!(
                     "Visible performance report: {} ({} sources, {} errors)",
                     self.path.display(),
-                    self.report.completed_sources,
+                    self.report.decoded_sources,
                     self.report.errors.len()
                 ),
                 Err(error) => eprintln!("Visible performance report failed: {error:#}"),

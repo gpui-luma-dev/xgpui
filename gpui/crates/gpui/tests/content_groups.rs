@@ -105,7 +105,7 @@ fn policy_applies_to_the_complete_snapshot_and_obsolete_failures_are_ignored() {
         state.require_ready().unwrap_err().kind,
         ContentErrorKind::InvalidDescriptor
     );
-    state.retain_images(|_| false);
+    state.retain_snapshots(|_, _| false);
     assert!(state.select(&b).unwrap().is_none());
 }
 #[test]
@@ -263,4 +263,32 @@ fn unsupported_headless_backend_rejects_groups_during_strict_preparation() {
         error.downcast_ref::<ContentError>().unwrap().kind,
         ContentErrorKind::UnsupportedCapability
     );
+}
+
+#[test]
+fn snapshot_retirement_observes_explicit_output_intent_even_for_narrow_sources() {
+    let mut state = ContentGroupState::default();
+    let id = ContentGroupId::new();
+    let mut r = request(id, 0.);
+    r.group = ContentGroup::new(id);
+    r.group.push(
+        CustomGeometry::RoundedRect {
+            bounds: Bounds::new(
+                point(gpui::px(0.), gpui::px(0.)),
+                size(gpui::px(2.), gpui::px(2.)),
+            ),
+            corner_radii: Corners::default(),
+        },
+        ContentDraw::new(Content::solid(ColorValue::srgb([1., 0., 0., 1.]).unwrap()))
+            .color_output(ContentColorOutput::WideSdr),
+    );
+    let ticket = observe(&mut state, &r);
+    state.publish(&ticket, vec![1]);
+    assert!(state.select(&ticket).unwrap().is_some());
+    state.retain_snapshots(|request, _| {
+        request
+            .color_outputs()
+            .all(|output| output != ContentColorOutput::WideSdr)
+    });
+    assert!(state.select(&ticket).unwrap().is_none());
 }

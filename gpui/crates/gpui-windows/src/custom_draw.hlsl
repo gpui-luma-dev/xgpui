@@ -83,12 +83,36 @@ float4 custom_fragment(Vertex input) : SV_Target {
         else {
             if(color_flags.z<0.5) color.a=1;
             if(color_flags.z>1.5) color=color.a>0?float4(color.rgb/color.a,color.a):float4(0,0,0,0);
-            if((uint(viewport.w)&4)!=0) {
-                if(color_flags.w>3.5) color.rgb=rec2020_to_p3(color.rgb);
-                color.rgb=p3_to_srgb(color.rgb);
-                return float4(color.rgb*color.a,color.a)*(coverage*viewport.z);
+
+            float3 rgb = color.rgb;
+            if (color_flags.w > 3.5) rgb = rec2020_to_p3(rgb);
+            if (sampling.z > 1.5) {
+                if (color_flags.w < 1.5) rgb = float3(decode_srgb(rgb.r),decode_srgb(rgb.g),decode_srgb(rgb.b));
+                if (color_flags.w > 2.5 && sampling.y < 0.5) rgb = p3_to_srgb(rgb);
+                if (color_flags.w < 2.5 && sampling.y > 0.5) rgb = srgb_to_p3(rgb);
+                float4 v = float4(rgb,1.);
+                rgb = float3(dot(color_r,v),dot(color_g,v),dot(color_b,v));
+                uint w,h; image.GetDimensions(w,h); float2 dims=float2(w,h);
+                float2 q = raw_uv*2.-1.;
+                float d = lerp(length(q),length(q*dims/min(dims.x,dims.y)),vignette.w);
+                float t = clamp((d-vignette.y)/vignette.z,0.,1.);
+                rgb *= 1.-vignette.x*t*t*(3.-2.*t);
+            } else if (sampling.z > 0.5) {
+                float4 v = float4(rgb,1.);
+                rgb = clamp(float3(dot(color_r,v),dot(color_g,v),dot(color_b,v)),0.,1.);
+                if ((uint(viewport.w)&4)!=0) rgb=float3(decode_srgb(rgb.r),decode_srgb(rgb.g),decode_srgb(rgb.b));
+            } else if (color_flags.w > 2.5) rgb = p3_to_srgb(rgb);
+            if ((uint(viewport.w)&4)!=0) {
+                if (sampling.z>1.5 && sampling.y>0.5) rgb=p3_to_srgb(rgb);
+                if (sampling.z<0.5 && color_flags.w<1.5) rgb=float3(decode_srgb(rgb.r),decode_srgb(rgb.g),decode_srgb(rgb.b));
+                return float4(rgb*color.a,color.a)*(coverage*viewport.z);
             }
-            if(color_flags.w>1.5) {float3 c=clamp(color.rgb,0.,1.);color.rgb=float3(encode_srgb(c.r),encode_srgb(c.g),encode_srgb(c.b));}
+            if (sampling.z > 1.5 && sampling.y > 0.5) rgb=p3_to_srgb(rgb);
+            if (color_flags.w > 1.5 || sampling.z > 1.5) {
+                float3 c = clamp(rgb,0.,1.);
+                rgb = float3(encode_srgb(c.r),encode_srgb(c.g),encode_srgb(c.b));
+            }
+            color.rgb = color.a > 0. ? rgb : float3(0.);
         }
         return float4(color.rgb,color.a*coverage*viewport.z);
     }

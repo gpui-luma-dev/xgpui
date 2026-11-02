@@ -7,7 +7,6 @@ use xgpui_media::{
 };
 
 struct FloatLab {
-    loader: MediaLoader,
     job: ImageJob,
     image: Option<MediaImage>,
     exposure: usize,
@@ -111,8 +110,7 @@ impl Render for FloatLab {
                 .child(button("float-output",if self.wide{"Right: native wide"}else{"Right: sRGB preview"}).on_click(cx.listener(|s,_,_,cx|{s.wide= !s.wide;cx.notify();})))
                 .child(button("float-reset","Reset").on_click(cx.listener(|s,_,_,cx|{s.exposure=0;s.saturation=0;s.vignette=false;s.opacity=false;s.wide=true;cx.notify();}))))
             .child(panels)
-            .child(self.image.as_ref().map(|i|format!("1280 × 800 · {:?} · {:?} · preparations {} · {:?}",i.format(),i.source_color(),i.upload_count(),i.upload_status())).unwrap_or_default())
-            .child(format!("Staging pool: {:?}",self.loader.staging_pool_stats()))
+            .child(self.image.as_ref().map(|i|format!("1280 × 800 · {:?} · {:?} · renderer-owned upload",i.format(),i.source_color())).unwrap_or_default())
             .child("Both views share one retained RGBA16F texture. Adjustments run in linear P3; output clips once to the selected gamut.")
             .child("A screenshot is an sRGB preview, not evidence of the display’s wider gamut. Unsupported native wide presentation is labeled as preview.")
     }
@@ -121,7 +119,6 @@ pub fn run() -> Result<()> {
     let loader = MediaLoader::default();
     let job = loader.load_rgba16f(1280, 800, pixels(1280, 800), ImageColor::LINEAR_P3)?;
     let lab = FloatLab {
-        loader,
         job,
         image: None,
         exposure: 0,
