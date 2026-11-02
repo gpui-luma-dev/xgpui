@@ -456,7 +456,7 @@ mod native {
             bounds,
             content_mask: ContentMask { bounds },
             corner_radii: Corners::all(ScaledPixels(12.)),
-            content: video.content(),
+            content: video.draw().into_scene_content(),
             coverage: None,
             opacity: 1.,
             order: Default::default(),

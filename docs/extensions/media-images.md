@@ -301,9 +301,9 @@ let filter = ImageFilter::new()
     .tint([1., 0.7, 0.3, 0.1]);
 let element = image_view(image.clone()).filter(filter).w(px(640.)).h(px(400.));
 // Low-level painting:
-image.paint_filtered(window, bounds, radii, filter);
-// Independent replayable custom content using the same retained source:
-let placement = image.filtered(filter);
+image.paint_filtered(window, bounds, radii, filter)?;
+// Portable placement using the same retained source:
+let placement = image.filtered(filter).draw()?;
 ```
 
 Each filter chain compiles to three affine RGB rows. Metal, wgpu and native D3D11
@@ -1084,3 +1084,19 @@ reused, but custom media captures refresh each paint. Native `just media --video
 also offers [exposure ↗](https://en.wikipedia.org/wiki/Exposure_value), saturation, [vignette ↗](https://en.wikipedia.org/wiki/Vignetting) and blur on generated BGRA/NV12
 surfaces. Native imports are not available in Wasm; test portable blur via
 `?demo=media-tiles&backend=webgpu` and `?demo=media-tiles&backend=webgl`.
+
+
+## Final portable media API
+
+MediaImage and VideoFrame expose `content()` for a portable graph source and
+`draw()` for placement/output policy. FilteredImage, AdjustedImage and WideImage
+expose `draw()`; filters can return a typed validation error. These media values
+no longer implement backend preparation through CustomContent. Ordinary UI code
+uses image/video elements or Window::paint_content. Low-level scene construction
+uses `draw.into_scene_content()` at the scene boundary. No backend check is
+required for source creation, filtering, adjustments or placement.
+
+`paint_filtered` now returns Result and callers must handle it. Invalid filters
+on an image view log a presentation error and omit the invalid placement; they
+never invoke an old native fallback. `VideoFrame::content()` now returns Content,
+while `VideoFrame::draw()` preserves its placement transform and output intent.

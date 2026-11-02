@@ -238,3 +238,13 @@ and retained ownership through graph execution and presentation. VideoFrame has
 no native forwarding branch. Run `just media-dma-buf-test` on a compatible Linux
 host for generated pixels, synchronization and retirement validation; Linux
 runtime acceptance remains pending.
+
+
+Media producer API cleanup: use `image.content()` / `frame.content()` for graph
+sources and `image.draw()` / `frame.draw()` for presentation. Filtered, adjusted
+and wide image values also expose `draw()`. These values do not implement native
+CustomContent preparation. When building a raw scene, use
+`draw.into_scene_content()`; UI code uses `window.paint_content(geometry, draw)`.
+`paint_filtered(...)` returns a typed Result; handle it with `?` or an explicit
+error path. VideoFrame::content now returns Content rather than an erased scene
+object.

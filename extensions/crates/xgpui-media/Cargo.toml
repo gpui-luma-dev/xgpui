@@ -21,6 +21,7 @@ wgpu = ["dep:gpui-wgpu", "gpui-wgpu/dma-buf"]
 [dependencies]
 anyhow = "1"
 half = "2.7"
+log = "0.4"
 xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"] , package = "xgpui-shader", version = "=0.3.0" }
 xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "=0.3.0" }
 refineable = { package = "refineable-gpui-unofficial", version = "=1.25.3" }

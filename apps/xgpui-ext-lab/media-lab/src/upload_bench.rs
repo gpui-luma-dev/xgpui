@@ -75,7 +75,11 @@ fn scene(images: &[MediaImage], filter: ImageFilter) -> Scene {
     for (index, image) in images.iter().enumerate() {
         let x = (index % 3) as f32 * 300.;
         let y = (index / 3) as f32 * 300.;
-        let content: Arc<dyn CustomContent> = Arc::new(image.filtered(filter));
+        let content: Arc<dyn CustomContent> = image
+            .filtered(filter)
+            .draw()
+            .expect("RGBA8 benchmark filter")
+            .into_scene_content();
         for bounds in [
             rect(x + 12., y + 12., 256., 256.),
             rect(x + 224., y + 224., 64., 64.),

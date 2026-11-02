@@ -1,6 +1,4 @@
 use super::{ColorMatrix, ImagePrimaries, Vignette};
-use gpui::{CustomContent, DevicePixels, PreparationRequest, Size};
-use std::any::Any;
 
 /// Validated GPU placement adjustments for retained RGBA8 or RGBA16F images.
 /// Source identity is unchanged. Uses declared linear sRGB/P3 working primaries,
@@ -57,21 +55,6 @@ impl AdjustedImage {
             ))
     }
 }
-impl CustomContent for AdjustedImage {
-    fn portable_content(
-        &self,
-        request: &PreparationRequest,
-    ) -> Result<Option<gpui::content::ContentDrawRequest>, gpui::content::ContentError> {
-        self.draw().portable_content(request)
-    }
-    fn prepare(&self, _: &dyn Any, _: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
-        Err(gpui::content::ContentError::new(
-            gpui::content::ContentErrorKind::UnsupportedCapability,
-            "adjusted images require portable content presentation",
-        )
-        .into())
-    }
-}
 
 /// Explicit native wide-SDR placement. Accepts RGBA8 or RGBA16F source pixels and
 /// an accepted WideGamutSdr window. wgpu/browser hosts reject this output policy.
@@ -111,20 +94,5 @@ impl WideImage {
         } else {
             draw
         }
-    }
-}
-impl CustomContent for WideImage {
-    fn portable_content(
-        &self,
-        request: &PreparationRequest,
-    ) -> Result<Option<gpui::content::ContentDrawRequest>, gpui::content::ContentError> {
-        self.draw().portable_content(request)
-    }
-    fn prepare(&self, _: &dyn Any, _: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
-        Err(gpui::content::ContentError::new(
-            gpui::content::ContentErrorKind::UnsupportedCapability,
-            "wide images require portable content presentation",
-        )
-        .into())
     }
 }

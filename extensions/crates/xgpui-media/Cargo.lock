@@ -4838,6 +4838,7 @@ dependencies = [
  "anyhow",
  "half",
  "image",
+ "log",
  "objc2-core-foundation",
  "objc2-core-video",
  "refineable-gpui-unofficial",

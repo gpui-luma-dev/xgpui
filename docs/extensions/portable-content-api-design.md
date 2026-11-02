@@ -2044,3 +2044,40 @@ validation, and 17 native wgpu executor tests pass (plus the dense child fixture
 The browser check and macOS media build pass; normal lab/import builds are
 warning-free. Linux backend library/tests cross-compile, while the full lab
 cross-check stops in Wayland's C shim because this host lacks Linux headers.
+
+
+### Producer API cleanup and completion audit
+
+MediaImage, FilteredImage, AdjustedImage and WideImage no longer implement
+CustomContent. Their obsolete prepare methods and renderer-only error stubs are
+removed. Media paint helpers and all lab/test scenes use ContentDraw directly.
+VideoFrame exposes content() -> Content and draw() -> ContentDraw consistently
+with ordinary images; it no longer returns a native scene object. Filtering
+validation stays typed: paint_filtered returns Result, and invalid image-view
+placements log the error without a native fallback. Core scene bridges remain
+at the renderer boundary; native brush/text/background drawing is a separate
+core primitive facility, not an extension offscreen producer fallback.
+
+Audit status:
+
+| Area | Result / acceptance still required |
+| --- | --- |
+| Portable shaders, gradients, WideColor, issue-110 labs | Migrated; atomic groups and dense/instanced regression programs retained |
+| Ordinary images, mipmaps, filtering, adjustments, tiled pages | Portable sources and placement policies; producer preparation removed |
+| CoreVideo BGRA/NV12, DXGI BGRA, DMA-BUF BGRA | Portable external content; native ownership is executor/presentation-owned |
+| Metal and wgpu native validation | Existing GPU suites pass on this macOS host |
+| Windows | Backend/fixture cross-compilation checked; Windows hardware/runtime acceptance must be recorded separately |
+| Linux | Backend/fixture cross-compilation checked; Vulkan DMA-BUF runtime acceptance remains pending; full lab cross-build needs Linux C headers |
+| Browser | Wasm build checked; interactive acceptance must be recorded separately |
+| Performance | Deferred to issue #113: compare dense and instanced labs after correctness acceptance |
+| Issue #110 / merge | Keep open pending platform acceptance; no issue closure or merge performed by this audit |
+
+Cleanup verification: all 87 media tests pass after adapting test scenes to the
+public portable draw API. Normal release media and Wasm builds are warning-free;
+Windows native import fixtures cross-compile. Headless media capture succeeds
+and was visually inspected for mip reduction, transparency and rounded coverage.
+For interactive acceptance run just media and just media --video; check filters,
+adjustments, zoom/resize, pause/resume and source replacement without flicker.
+For CLI acceptance run just media --headless --png /tmp/media-cleanup.png; it
+opens no window. Continue native import acceptance with just media-import-test
+on macOS/Windows and just media-dma-buf-test on compatible Linux Vulkan.

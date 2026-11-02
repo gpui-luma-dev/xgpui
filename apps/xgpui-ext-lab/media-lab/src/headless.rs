@@ -150,16 +150,22 @@ pub fn run(
                         } else {
                             Some(Vignette::new(0.6, 0.35, 0.65, 1.)?)
                         };
-                        Arc::new(images[index].adjusted(ImageAdjustments::new(matrix, vignette)?))
+                        images[index]
+                            .adjusted(ImageAdjustments::new(matrix, vignette)?)
+                            .draw()
+                            .into_scene_content()
                     } else {
-                        Arc::new(images[index].filtered(if vivid {
-                            xgpui_media::ImageFilter::new()
-                                .brightness(1.4)
-                                .contrast(1.5)
-                                .saturation(1.8)
-                        } else {
-                            xgpui_media::ImageFilter::new()
-                        }))
+                        images[index]
+                            .filtered(if vivid {
+                                xgpui_media::ImageFilter::new()
+                                    .brightness(1.4)
+                                    .contrast(1.5)
+                                    .saturation(1.8)
+                            } else {
+                                xgpui_media::ImageFilter::new()
+                            })
+                            .draw()?
+                            .into_scene_content()
                     },
                 });
             }

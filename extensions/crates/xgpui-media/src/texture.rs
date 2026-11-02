@@ -1,7 +1,6 @@
 use crate::loader::Reservation;
-use anyhow::Result;
-use gpui::{CustomContent, DevicePixels, ImageTextureData, Size};
-use std::{any::Any, sync::Arc};
+use gpui::ImageTextureData;
+use std::sync::Arc;
 
 /// Immutable decoded image. Clones share CPU pixels, their payload reservation
 /// and portable source identity. GPU uploads and completion are renderer-owned.
@@ -74,22 +73,5 @@ impl MediaImage {
     }
     pub fn payload_bytes(&self) -> usize {
         self.0.data.byte_len()
-    }
-}
-impl CustomContent for MediaImage {
-    fn prepare(&self, backend: &dyn Any, extent: Size<DevicePixels>) -> Result<Box<dyn Any>> {
-        let _ = (backend, extent);
-        Err(gpui::content::ContentError::new(
-            gpui::content::ContentErrorKind::UnsupportedCapability,
-            "ordinary media images require portable content presentation",
-        )
-        .into())
-    }
-    fn portable_content(
-        &self,
-        request: &gpui::PreparationRequest,
-    ) -> std::result::Result<Option<gpui::content::ContentDrawRequest>, gpui::content::ContentError>
-    {
-        self.draw().portable_content(request)
     }
 }

@@ -4,6 +4,7 @@ use gpui::{
     ContentMask, CustomDraw, DevicePixels, DrawOrder, PlatformHeadlessRenderer, ScaledPixels,
     Scene, Size, point, size,
 };
+use std::sync::Arc;
 use std::{
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
@@ -124,7 +125,7 @@ fn image_scene(image: &MediaImage, side: f32, clipped: bool) -> Scene {
         content_mask: ContentMask { bounds: mask },
         corner_radii: Corners::all(ScaledPixels(if clipped { 3. } else { 0. })),
         opacity: 1.,
-        content: Arc::new(image.clone()),
+        content: image.clone().draw().into_scene_content(),
         coverage: None,
     });
     scene.finish();
@@ -176,8 +177,10 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
     let alpha_image = finish(&mut alpha_job)?;
     let extent = size(DevicePixels(24), DevicePixels(24));
     let mut alpha_scene = image_scene(&alpha_image, 8., false);
-    alpha_scene.custom_draws[0].content =
-        Arc::new(alpha_image.filtered(ImageFilter::new().saturation(0.)));
+    alpha_scene.custom_draws[0].content = alpha_image
+        .filtered(ImageFilter::new().saturation(0.))
+        .draw()?
+        .into_scene_content();
     let pixels = render_ready(renderer, &alpha_image, &alpha_scene, extent)?;
     let p = pixels.get_pixel(6, 6).0;
     for channel in &p[..3] {
@@ -201,8 +204,10 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
     }
     // Different placements share source uploads but retain independent uniforms.
     let mut filtered = image_scene(&image, 8., false);
-    filtered.custom_draws[0].content =
-        Arc::new(image.filtered(ImageFilter::new().tint([1., 0., 0., 1.])));
+    filtered.custom_draws[0].content = image
+        .filtered(ImageFilter::new().tint([1., 0., 0., 1.]))
+        .draw()?
+        .into_scene_content();
     filtered.custom_draws[0].opacity = 0.5;
     let pixels = renderer.render_scene_to_image(&filtered, extent)?;
     let p = pixels.get_pixel(6, 6).0;
@@ -338,8 +343,10 @@ fn check_linear_adjustments(renderer: &mut dyn PlatformHeadlessRenderer) -> Resu
             .saturation(0.6)?;
         let vignette = Vignette::new(0.7, 0.25, 0.7, 1.)?;
         let mut scene = image_scene(&image, 16., false);
-        scene.custom_draws[0].content =
-            Arc::new(image.adjusted(ImageAdjustments::new(matrix, Some(vignette))?));
+        scene.custom_draws[0].content = image
+            .adjusted(ImageAdjustments::new(matrix, Some(vignette))?)
+            .draw()
+            .into_scene_content();
         scene.custom_draws[0].opacity = 0.65;
         let pixels = render_ready(renderer, &image, &scene, extent)?;
         for (x, y) in [(12, 12), (5, 12), (18, 12), (12, 5), (12, 18)] {
@@ -364,7 +371,10 @@ fn check_linear_adjustments(renderer: &mut dyn PlatformHeadlessRenderer) -> Resu
     }
     // Switching between linear and encoded transforms must not retain uniforms.
     let mut encoded = image_scene(&image, 16., false);
-    encoded.custom_draws[0].content = Arc::new(image.filtered(ImageFilter::new().brightness(2.)));
+    encoded.custom_draws[0].content = image
+        .filtered(ImageFilter::new().brightness(2.))
+        .draw()?
+        .into_scene_content();
     let pixels = renderer.render_scene_to_image(&encoded, extent)?;
     let p = pixels.get_pixel(12, 12).0;
     assert!(
@@ -407,8 +417,10 @@ fn check_float_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()
                     .saturation(0.8)?;
                 let vignette = Vignette::new(0.6, 0.25, 0.7, 1.)?;
                 let mut scene = image_scene(&image, 16., false);
-                scene.custom_draws[0].content =
-                    Arc::new(image.adjusted(ImageAdjustments::new(matrix, Some(vignette))?));
+                scene.custom_draws[0].content = image
+                    .adjusted(ImageAdjustments::new(matrix, Some(vignette))?)
+                    .draw()
+                    .into_scene_content();
                 scene.custom_draws[0].opacity = 0.65;
                 let pixels = render_ready(
                     renderer,
@@ -473,7 +485,7 @@ fn wgpu_rgba16f_matches_cpu_and_reuses_source() -> Result<()> {
     )?;
     let image = finish(&mut job)?;
     let mut scene = image_scene(&image, 16., false);
-    scene.custom_draws[0].content = Arc::new(image.wide(None)?);
+    scene.custom_draws[0].content = image.wide(None)?.draw().into_scene_content();
     assert!(renderer.prepare_content_snapshot(&scene).is_err());
     Ok(())
 }
@@ -488,13 +500,15 @@ fn metal_rgba16f_wide_requires_opt_in_and_maps_after_linear_blending() -> Result
     let image = finish(&mut job)?;
     let extent = size(DevicePixels(28), DevicePixels(28));
     let mut scene = image_scene(&image, 16., false);
-    scene.custom_draws[0].content = Arc::new(image.wide(None)?);
+    scene.custom_draws[0].content = image.wide(None)?.draw().into_scene_content();
     assert!(renderer.prepare_content_snapshot(&scene).is_err());
     renderer.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
     for working in [ImagePrimaries::Srgb, ImagePrimaries::DisplayP3] {
         let matrix = ColorMatrix::identity(working).exposure(0.5)?;
-        scene.custom_draws[0].content =
-            Arc::new(image.wide(Some(ImageAdjustments::new(matrix, None)?))?);
+        scene.custom_draws[0].content = image
+            .wide(Some(ImageAdjustments::new(matrix, None)?))?
+            .draw()
+            .into_scene_content();
         scene.custom_draws[0].opacity = 0.65;
         let pixels = render_ready(&mut renderer, &image, &scene, extent)?;
         let input = ImageColor::LINEAR_P3.decode(rgba.map(f64::from), working)?;
@@ -561,7 +575,7 @@ fn native_surface_adjustments_follow_conversion_preserve_identity_and_import_onc
         scene.insert_primitive(CustomDraw {
             bounds,
             content_mask: ContentMask { bounds },
-            content: video.content(),
+            content: video.draw().into_scene_content(),
             opacity: 1.,
             order: Default::default(),
             corner_radii: Default::default(),
@@ -588,7 +602,7 @@ fn native_surface_adjustments_follow_conversion_preserve_identity_and_import_onc
                 let adjusted = video.adjusted(ImageAdjustments::new(matrix, Some(vignette))?);
                 assert_eq!(adjusted.timestamp(), video.timestamp());
                 assert_eq!(adjusted.size(), video.size());
-                scene.custom_draws[0].content = adjusted.content();
+                scene.custom_draws[0].content = adjusted.draw().into_scene_content();
                 scene.custom_draws[0].opacity = 0.65;
                 let pixels = render_scene_ready(&mut renderer, &scene, extent)?;
                 for (x, y) in [(24, 24), (104, 24), (184, 24), (264, 24), (160, 100)] {
@@ -723,8 +737,10 @@ fn check_rec2020_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<
                     .exposure(-1.)?
                     .saturation(0.8)?;
                 let mut adjusted = image_scene(&image, 16., false);
-                adjusted.custom_draws[0].content =
-                    Arc::new(image.adjusted(ImageAdjustments::new(matrix, None)?));
+                adjusted.custom_draws[0].content = image
+                    .adjusted(ImageAdjustments::new(matrix, None)?)
+                    .draw()
+                    .into_scene_content();
                 let pixels = renderer
                     .render_scene_to_image(&adjusted, size(DevicePixels(28), DevicePixels(28)))?;
                 let expected = matrix
@@ -761,7 +777,7 @@ fn wgpu_rec2020_storage_and_preview() -> Result<()> {
     )?;
     let image = finish(&mut job)?;
     let mut s = image_scene(&image, 16., false);
-    s.custom_draws[0].content = Arc::new(image.wide(None)?);
+    s.custom_draws[0].content = image.wide(None)?.draw().into_scene_content();
     assert!(r.prepare_content_snapshot(&s).is_err());
     Ok(())
 }
@@ -780,7 +796,7 @@ fn adobe_rec2020_wide_blends_before_mapping_and_reuses_uploads() -> Result<()> {
     )?;
     let image = finish(&mut job)?;
     let mut scene = image_scene(&image, 16., false);
-    scene.custom_draws[0].content = Arc::new(image.wide(None)?);
+    scene.custom_draws[0].content = image.wide(None)?.draw().into_scene_content();
     let extent = size(DevicePixels(28), DevicePixels(28));
     assert!(r.prepare_content_snapshot(&scene).is_err());
     r.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;

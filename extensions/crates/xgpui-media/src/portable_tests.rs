@@ -1,9 +1,10 @@
 use super::*;
 use gpui::content::*;
+use std::sync::Arc;
 
 fn ordinary_scene(image: &MediaImage, side: f32) -> Scene {
     let mut draw = image_scene(image, side, false).custom_draws.remove(0);
-    draw.content = Arc::new(image.clone());
+    draw.content = image.clone().draw().into_scene_content();
     let mut scene = Scene::default();
     scene.insert_primitive(draw);
     scene.finish();
@@ -90,16 +91,12 @@ fn ordinary_bridge_is_portable_source_sized_and_explicit_about_preview() -> Resu
         size(DevicePixels(8), DevicePixels(8)),
         1.,
     )?;
-    let draw = image.portable_content(&request)?.unwrap();
+    let draw = image.draw().portable_content(&request)?.unwrap();
     assert_eq!(
         draw.draw.presentation.color_output,
         ContentColorOutput::SrgbPreview
     );
     assert_eq!(draw.draw.content.id(), image.content().id());
-    assert!(
-        image.prepare(&(), request.raster_size()).is_err(),
-        "ordinary images cannot dispatch through native producer preparation"
-    );
     let graph = ContentGraph::describe(
         &[ContentRoot {
             content: draw.draw.content,

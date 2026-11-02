@@ -22,7 +22,6 @@ use gpui::{
     App, Bounds, Corners, CustomGeometry, Element, ElementId, GlobalElementId, InspectorElementId,
     IntoElement, LayoutId, Pixels, Style, StyleRefinement, Styled, Window,
 };
-use std::sync::Arc;
 
 /// Paint an immutable source-sized image with native clipping and rounded corners.
 /// Layout size is explicit; `paint` stretches and `paint_mapped` selects fit/crop.
@@ -58,8 +57,10 @@ impl MediaImage {
         bounds: Bounds<Pixels>,
         radii: Corners<Pixels>,
         filter: ImageFilter,
-    ) {
-        self.paint_content(window, bounds, radii, || Arc::new(self.filtered(filter)));
+    ) -> Result<(), gpui::content::ContentError> {
+        let draw = self.filtered(filter).draw()?;
+        self.paint_draw(window, bounds, radii, draw);
+        Ok(())
     }
     pub fn paint_adjusted(
         &self,
@@ -68,16 +69,14 @@ impl MediaImage {
         radii: Corners<Pixels>,
         adjustments: ImageAdjustments,
     ) {
-        self.paint_content(window, bounds, radii, || {
-            Arc::new(self.adjusted(adjustments))
-        });
+        self.paint_draw(window, bounds, radii, self.adjusted(adjustments).draw());
     }
-    fn paint_content(
+    fn paint_draw(
         &self,
         window: &mut Window,
         bounds: Bounds<Pixels>,
         radii: Corners<Pixels>,
-        content: impl FnOnce() -> Arc<dyn gpui::CustomContent>,
+        draw: gpui::content::ContentDraw,
     ) {
         if bounds.is_empty()
             || bounds.intersect(&window.content_mask().bounds).is_empty()
@@ -85,12 +84,12 @@ impl MediaImage {
         {
             return;
         }
-        window.paint_custom(
+        window.paint_content(
             CustomGeometry::RoundedRect {
                 bounds,
                 corner_radii: radii,
             },
-            content(),
+            draw,
         );
     }
 }
@@ -253,12 +252,7 @@ impl Element for MediaImageView {
                             draw,
                         );
                     }
-                    Err(_) => self.image.paint_filtered(
-                        window,
-                        bounds,
-                        radii,
-                        self.filter.unwrap_or_default(),
-                    ),
+                    Err(error) => log::error!("Invalid media image presentation: {error}"),
                 }
             });
         });

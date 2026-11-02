@@ -1,9 +1,9 @@
 //! Decoder-independent latest-frame presentation. No decoder or playback clock.
 use anyhow::{Result, ensure};
 use gpui::{
-    App, Bounds, Corners, CustomContent, CustomGeometry, DevicePixels, Element, ElementId,
-    GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels, Size, Style,
-    StyleRefinement, Styled, Window,
+    App, Bounds, Corners, CustomGeometry, DevicePixels, Element, ElementId, GlobalElementId,
+    InspectorElementId, IntoElement, LayoutId, Pixels, Size, Style, StyleRefinement, Styled,
+    Window,
 };
 use std::{
     sync::{Arc, Mutex},
@@ -134,10 +134,13 @@ impl VideoFrame {
     pub fn timestamp(&self) -> Duration {
         self.timestamp
     }
-    /// Source-sized scene bridge. UI callers use video/video_frame with a stable
-    /// element ID so pending frames retain the placement's previous valid output.
-    pub fn content(&self) -> Arc<dyn CustomContent> {
-        self.content.clone().into_scene_content()
+    /// Immutable portable source shared by every placement of this frame.
+    pub fn content(&self) -> gpui::content::Content {
+        self.content.content.clone()
+    }
+    /// Source-sized placement with its output policy and adjustments.
+    pub fn draw(&self) -> gpui::content::ContentDraw {
+        self.content.clone()
     }
     pub fn paint(&self, window: &mut Window, bounds: Bounds<Pixels>, radii: Corners<Pixels>) {
         self.paint_placed(window, bounds, radii, None);
@@ -418,6 +421,7 @@ impl Element for VideoView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::CustomContent as _;
     #[derive(Debug)]
     struct Empty;
     impl gpui::content::ContentSource for Empty {
@@ -556,8 +560,8 @@ mod tests {
                 gpui::size(DevicePixels(side), DevicePixels(side)),
                 1.,
             )?;
-            let plain = frame.content().portable_content(&request)?.unwrap();
-            let adjusted = adjusted.content().portable_content(&request)?.unwrap();
+            let plain = frame.draw().portable_content(&request)?.unwrap();
+            let adjusted = adjusted.draw().portable_content(&request)?.unwrap();
             assert_eq!(plain.draw.content.id(), adjusted.draw.content.id());
             assert!(adjusted.draw.color_transform.linear_paint().is_some());
             let graph = ContentGraph::describe(
@@ -602,7 +606,7 @@ mod tests {
             gpui::size(DevicePixels(32), DevicePixels(32)),
             1.,
         )?;
-        let draw = frame.content().portable_content(&request)?.unwrap();
+        let draw = frame.draw().portable_content(&request)?.unwrap();
         let error = ContentGraph::describe(
             &[ContentRoot {
                 content: draw.draw.content,

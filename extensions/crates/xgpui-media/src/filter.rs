@@ -1,6 +1,3 @@
-use gpui::{CustomContent, DevicePixels, PreparationRequest, Size};
-use std::any::Any;
-
 /// Ordered affine RGB adjustments in encoded sRGB, preserving source alpha.
 /// Calls compose in order. Factors clamp to 0..8; nonfinite factors use identity.
 /// An overflowing composition is ignored. Values clamp to the SDR target range after the combined transform, not per step.
@@ -139,21 +136,6 @@ impl FilteredImage {
             .image
             .draw()
             .color_transform(ImageColorTransform::encoded_srgb(self.filter.rows())?))
-    }
-}
-impl CustomContent for FilteredImage {
-    fn portable_content(
-        &self,
-        request: &PreparationRequest,
-    ) -> Result<Option<gpui::content::ContentDrawRequest>, gpui::content::ContentError> {
-        self.draw()?.portable_content(request)
-    }
-    fn prepare(&self, _: &dyn Any, _: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
-        Err(gpui::content::ContentError::new(
-            gpui::content::ContentErrorKind::UnsupportedCapability,
-            "filtered images require portable content presentation",
-        )
-        .into())
     }
 }
 
