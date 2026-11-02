@@ -76,8 +76,8 @@ impl Drop for ActiveJob {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LoadStatus {
     Loading,
-    /// CPU decode/mips complete. First paint starts background GPU staging;
-    /// observe `MediaImage::upload_status` for staging and host submission.
+    /// CPU decode/mips complete. Ordinary image uploads and completion are
+    /// renderer-owned; this does not imply GPU readiness.
     Ready,
     Failed(String),
     Cancelled,
@@ -142,7 +142,8 @@ impl MediaLoader {
             usage: Mutex::new(Usage::default()),
         })))
     }
-    /// Current active workers and outstanding staging reservations.
+    /// Active workers and staging reservations for the remaining effect/page
+    /// path. Ordinary image uploads use renderer-owned content executor budgets.
     pub fn upload_stats(&self) -> UploadStats {
         self.0.uploads.stats()
     }
@@ -374,6 +375,10 @@ impl MediaLoader {
                     || -> Result<MediaImage> {
                         ensure!(!cancelled.load(Ordering::Acquire), "image load cancelled");
                         let data = build(limits, &cancelled)?;
+                        ensure!(
+                            data.byte_len() <= limits.max_image_bytes,
+                            "decoded image exceeds admitted source payload limit"
+                        );
                         Ok(MediaImage::new_with_color(data, reservation, color))
                     },
                 ))

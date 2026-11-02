@@ -140,8 +140,10 @@ impl Lab {
                     } else {
                         view
                     }
-                } else {
+                } else if self.image_filter() != xgpui_media::ImageFilter::new() {
                     view.filter(self.image_filter())
+                } else {
+                    view
                 };
                 viewport = viewport.child(
                     view.absolute()
@@ -183,11 +185,11 @@ impl Lab {
                     .opacity(self.opacity),
             );
         }
-        let status = if media || self.linear_mode {
+        let status: String = if media || self.linear_mode {
             self.primary
                 .image
                 .as_ref()
-                .map(|i| format!("{:?}", i.upload_status()))
+                .map(|_| "Source decoded · renderer manages GPU readiness".into())
                 .unwrap_or_else(|| self.primary.phase.label().into())
         } else {
             "GPUI img".into()
@@ -230,7 +232,7 @@ impl Lab {
                             )
                             .child(div().text_xs().text_color(rgb(MUTED)).child(
                                 if media || self.linear_mode {
-                                    "Full mip chain · background staging"
+                                    "Full mip chain · source-sized sampling"
                                 } else {
                                     "Single texture level · native baseline"
                                 },
@@ -265,13 +267,7 @@ impl Lab {
                         self.primary
                             .image
                             .as_ref()
-                            .map(|i| {
-                                format!(
-                                    "{} mip levels · {} upload(s)",
-                                    i.mip_count(),
-                                    i.upload_count()
-                                )
-                            })
+                            .map(|i| format!("{} mip levels · {:?}", i.mip_count(), i.format()))
                             .unwrap_or_else(|| "Waiting for decode".into())
                     } else {
                         format!("{} × {} source pixels", sample.width, sample.height)
@@ -283,15 +279,15 @@ impl Lab {
         let pool = self.loader.staging_pool_stats();
         div().flex().flex_col().flex_1().p_4().bg(rgb(PANEL)).border_1().border_color(rgb(LINE)).rounded_lg()
             .child(eyebrow("PIPELINE / LIVE"))
-            .child(metric("Background staging workers",format!("{} / 2",usage.active_jobs)))
-            .child(metric("Staging reservations",mib(usage.staging_bytes)))
-            .child(metric("Pool allocated / idle",format!("{} / {}",mib(pool.allocated_bytes),mib(pool.cached_bytes))))
-            .child(metric("Buffer allocations / reuse",format!("{} / {}",pool.allocations,pool.reuses)))
+            .child(metric("Effect staging workers",format!("{} / 2",usage.active_jobs)))
+            .child(metric("Effect staging reservations",mib(usage.staging_bytes)))
+            .child(metric("Effect pool allocated / idle",format!("{} / {}",mib(pool.allocated_bytes),mib(pool.cached_bytes))))
+            .child(metric("Effect buffer allocations / reuse",format!("{} / {}",pool.allocations,pool.reuses)))
             .child(metric("Redraw interval p95",self.p95().map(|v|format!("{v:.1} ms")).unwrap_or_else(||"—".into())))
             .child(div().mt_2().text_xs().text_color(rgb(MUTED)).child("Redraw intervals include UI work; they are not GPU timings. Native atlas memory is excluded."))
     }
     fn stress(&self) -> Div {
-        let submitted = self
+        let decoded = self
             .burst
             .iter()
             .filter(|s| matches!(s.phase, Phase::Ready | Phase::Retired))
@@ -301,7 +297,6 @@ impl Lab {
             let color = match slot.phase {
                 Phase::Ready | Phase::Retired => MINT,
                 Phase::Failed => 0xf49b8d,
-                Phase::Staging => 0x9bbaf2,
                 _ => MUTED,
             };
             chips = chips.child(
@@ -363,15 +358,15 @@ impl Lab {
             }
         }
         let message = if self.burst.is_empty() {
-            "Start a burst to watch 12 fresh snapshots pass through bounded loading and uploads."
+            "Start a burst of 12 decoded sources; GPU presentation is scheduled by the renderer."
                 .into()
         } else if !self.admission.is_empty() {
             format!(
-                "Backpressure: {}. Completed previews retire to release capacity.",
+                "Backpressure: {}. Decoded sources retire to release capacity.",
                 self.admission
             )
         } else {
-            "READY = host-submitted. DONE = a submitted preview retired to make room.".into()
+            "DECODED = CPU pixels ready. DONE = a decoded source retired to make room.".into()
         };
         div()
             .flex()
@@ -387,12 +382,12 @@ impl Lab {
                 div()
                     .flex()
                     .justify_between()
-                    .child(eyebrow("UPLOAD RUN / 12 SNAPSHOTS"))
+                    .child(eyebrow("DECODE RUN / 12 SNAPSHOTS"))
                     .child(
                         div()
                             .text_xs()
                             .text_color(rgb(MINT))
-                            .child(format!("{submitted} / {} submitted", self.burst.len())),
+                            .child(format!("{decoded} / {} decoded", self.burst.len())),
                     ),
             )
             .child(chips)
@@ -624,7 +619,7 @@ impl Render for Lab {
                     .child(
                         button(
                             "count-budget",
-                            format!("{} / frame", self.count_limit),
+                            format!("Effects: {} / frame", self.count_limit),
                             false,
                         )
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -640,7 +635,7 @@ impl Render for Lab {
                     .child(
                         button(
                             "byte-budget",
-                            format!("{} / frame", mib(self.byte_limit)),
+                            format!("Effects: {} / frame", mib(self.byte_limit)),
                             false,
                         )
                         .on_click(cx.listener(|this, _, _, cx| {

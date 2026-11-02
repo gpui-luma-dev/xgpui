@@ -38,11 +38,23 @@ pub enum ContentErrorPresentation {
     /// Return the content error from rendering this frame.
     FailFrame,
 }
+/// Explicit output intent, independent of immutable source color metadata.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ContentColorOutput {
+    /// Preserve the source gamut. Wide sources require a capable wide window.
+    #[default]
+    MatchWindow,
+    /// Clip to an SDR sRGB preview when sampling. Source pixels and mip storage
+    /// remain in their declared primaries, transfer, and alpha association.
+    SrgbPreview,
+}
 /// Presentation policy, independent of source identity and graph realization.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ContentPresentation {
     /// Stable paint identity; duplicate slots in one scene are rejected.
     pub slot: Option<PresentationSlotId>,
+    /// Explicit source-to-output color intent.
+    pub color_output: ContentColorOutput,
     /// Visibility before native completion.
     pub pending: PendingPresentation,
     /// Behavior after validation or execution fails.
@@ -60,6 +72,11 @@ pub struct ContentDraw {
     /// Source fit, crop, alignment, and filtering; independent of realization.
     pub mapping: ImageMapping,
 }
+impl From<Content> for ContentDraw {
+    fn from(content: Content) -> Self {
+        Self::new(content)
+    }
+}
 impl ContentDraw {
     /// Anonymous draw: initial/pending content is transparent by default.
     pub fn new(content: Content) -> Self {
@@ -72,6 +89,11 @@ impl ContentDraw {
     /// Set source sampling and destination placement without changing source identity.
     pub fn mapping(mut self, mapping: ImageMapping) -> Self {
         self.mapping = mapping;
+        self
+    }
+    /// Select an explicit output intent without converting or re-uploading pixels.
+    pub fn color_output(mut self, output: ContentColorOutput) -> Self {
+        self.presentation.color_output = output;
         self
     }
     /// Associate this draw with a stable logical paint slot.
@@ -99,6 +121,9 @@ pub struct ContentDrawRequest {
     pub request: ContentRequest,
 }
 impl CustomContent for ContentDraw {
+    fn image_color_output(&self) -> ContentColorOutput {
+        self.presentation.color_output
+    }
     fn image_mapping(&self) -> Option<ImageMapping> {
         Some(self.mapping)
     }

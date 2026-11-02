@@ -33,6 +33,7 @@ pub enum UploadStatus {
 pub struct MediaImage(Arc<Inner>);
 struct Inner {
     data: ImageTextureData,
+    content: gpui::content::Content,
     source_color: crate::pipeline::PixelColor,
     uploads: AtomicUsize,
     reservation: Arc<Reservation>,
@@ -281,13 +282,38 @@ impl MediaImage {
         reservation: Arc<Reservation>,
         source_color: crate::pipeline::PixelColor,
     ) -> Self {
+        let pixels = data.pixels().clone().with_owner(reservation.clone());
+        let content = gpui::content::Content::image(gpui::content::ImageAsset::ready(pixels));
         Self(Arc::new(Inner {
             data,
+            content,
             source_color,
             uploads: AtomicUsize::new(0),
             reservation,
             state: Mutex::new(State::new()),
         }))
+    }
+    /// Immutable source for portable graphs. Clones share pixels, identity and
+    /// the loader's source-memory reservation; no GPU work occurs here.
+    pub fn content(&self) -> gpui::content::Content {
+        self.0.content.clone()
+    }
+    /// Ordinary image presentation: source-sized mip sampling and an explicit
+    /// SDR sRGB preview. Use the source directly with an explicit wide output
+    /// policy when preserving its original wide gamut.
+    pub fn draw(&self) -> gpui::content::ContentDraw {
+        use gpui::content::*;
+        let sampler = Sampler {
+            mip_filter: (self.mip_count() > 1).then_some(FilterMode::Linear),
+            ..Sampler::linear_clamp()
+        };
+        ContentDraw::new(self.content())
+            .mapping(
+                ImageMapping::default()
+                    .sampler(sampler)
+                    .expect("clamped image sampler"),
+            )
+            .color_output(ContentColorOutput::SrgbPreview)
     }
     /// Original supplied pixel interpretation, before canonical upload conversion.
     pub fn source_color(&self) -> crate::pipeline::PixelColor {
@@ -305,20 +331,24 @@ impl MediaImage {
     pub fn mip_count(&self) -> usize {
         self.0.data.levels().len()
     }
-    /// Successful background preparations, including replacement devices/queues.
+    /// Successful effect/page background preparations, including replacement
+    /// devices/queues. Ordinary uploads are tracked by the renderer instead.
     pub fn upload_count(&self) -> usize {
         self.0.uploads.load(Ordering::Relaxed)
     }
     pub fn payload_bytes(&self) -> usize {
         self.0.data.byte_len()
     }
+    /// Status of the remaining effect/page preparation path. Ordinary image
+    /// uploads are renderer-owned; inspect strict snapshot readiness there.
     pub fn upload_status(&self) -> UploadStatus {
         let mut state = self.0.state.lock().unwrap();
         state.observe_submission();
         state.status.clone()
     }
-    /// Retry a failed preparation or invalidate an upload explicitly. Results
-    /// from a previous generation are discarded, never published into this cache.
+    /// Retry the remaining effect/page preparation path. This does not reset a
+    /// renderer-owned ordinary image. Results from a previous effect generation
+    /// are discarded, never published into this cache.
     pub fn retry_upload(&self) {
         self.0.state.lock().unwrap().reset();
     }
@@ -439,11 +469,38 @@ impl CustomContent for MediaImage {
     }
 
     fn prepare(&self, backend: &dyn Any, extent: Size<DevicePixels>) -> Result<Box<dyn Any>> {
+        let _ = (backend, extent);
+        Err(gpui::content::ContentError::new(
+            gpui::content::ContentErrorKind::UnsupportedCapability,
+            "ordinary media images require portable content presentation",
+        )
+        .into())
+    }
+    fn portable_content(
+        &self,
+        request: &gpui::PreparationRequest,
+    ) -> std::result::Result<Option<gpui::content::ContentDrawRequest>, gpui::content::ContentError>
+    {
+        self.draw().portable_content(request)
+    }
+    fn image_mapping(&self) -> Option<gpui::content::ImageMapping> {
+        Some(self.draw().mapping)
+    }
+    fn image_color_output(&self) -> gpui::content::ContentColorOutput {
+        gpui::content::ContentColorOutput::SrgbPreview
+    }
+}
+impl MediaImage {
+    pub(crate) fn prepare_effect_at_size(
+        &self,
+        backend: &dyn Any,
+        extent: Size<DevicePixels>,
+    ) -> Result<Box<dyn Any>> {
         let request =
             gpui::PreparationRequest::new(extent.map(|v| gpui::px(v.0 as f32)), extent, 1.)?;
-        self.prepare_in_frame(backend, &request, &gpui::PreparationFrame::default())
+        self.prepare_effect(backend, &request, &gpui::PreparationFrame::default())
     }
-    fn prepare_in_frame(
+    pub(crate) fn prepare_effect(
         &self,
         backend: &dyn Any,
         _request: &gpui::PreparationRequest,

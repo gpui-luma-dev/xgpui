@@ -9,8 +9,14 @@ use std::{
 
 #[cfg(not(target_family = "wasm"))]
 use std::sync::OnceLock;
-type Signature = Vec<(u64, c::ContentRequest, c::ImageMapping)>;
+type Signature = Vec<(
+    u64,
+    c::ContentRequest,
+    c::ImageMapping,
+    c::ContentColorOutput,
+)>;
 struct Pending {
+    color_outputs: Vec<c::ContentColorOutput>,
     keys: Vec<c::OutputKey>,
     presentation_slots: Vec<Option<c::PresentationSlotId>>,
     job: Dx11ContentJob,
@@ -216,6 +222,7 @@ impl ContentPresenter {
                     draw.draw.content.id(),
                     draw.request.clone(),
                     draw.draw.mapping,
+                    draw.draw.presentation.color_output,
                 )
             })
             .collect();
@@ -273,13 +280,13 @@ impl ContentPresenter {
         };
         let graph = graph.filter(|graph| {
             let unsupported = !wide
-                && graph.roots().iter().any(|id| {
+                && graph.roots().iter().zip(&active).any(|(id, draw)| {
                     let c::ResourceDescriptor::Image(d) =
                         &graph.nodes()[id.node()].outputs()[id.output()]
                     else {
                         unreachable!()
                     };
-                    matches!(
+                    draw.draw.presentation.color_output != c::ContentColorOutput::SrgbPreview && matches!(
                         d.interpretation().color,
                         c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
                     )
@@ -336,12 +343,17 @@ impl ContentPresenter {
                     for ticket in &pending.groups {
                         let images = &frame.gpu[ticket.roots.clone()];
                         if wide
-                            || images.iter().all(|image| {
-                                !matches!(
-                                    image.descriptor.interpretation().color,
-                                    c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
-                                )
-                            })
+                            || images
+                                .iter()
+                                .zip(&pending.color_outputs[ticket.roots.clone()])
+                                .all(|(image, output)| {
+                                    *output == c::ContentColorOutput::SrgbPreview
+                                        || !matches!(
+                                            image.descriptor.interpretation().color,
+                                            c::ColorEncoding::LinearP3
+                                                | c::ColorEncoding::LinearRec2020
+                                        )
+                                })
                         {
                             self.groups.publish(ticket, images.to_vec());
                         }
@@ -349,13 +361,15 @@ impl ContentPresenter {
                     // Consume completed work before a newer input can cancel it.
                     // Its destinations may retain these pixels while the newest
                     // generation runs, even if no frame displayed this result yet.
-                    for ((key, slot), image) in pending
+                    for (((key, slot), output), image) in pending
                         .keys
                         .into_iter()
                         .zip(pending.presentation_slots)
+                        .zip(pending.color_outputs)
                         .zip(frame.gpu)
                     {
                         if !wide
+                            && output != c::ContentColorOutput::SrgbPreview
                             && matches!(
                                 image.descriptor.interpretation().color,
                                 c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
@@ -397,6 +411,10 @@ impl ContentPresenter {
                 Ok(job) => {
                     self.requests += 1;
                     self.pending = Some(Pending {
+                        color_outputs: active
+                            .iter()
+                            .map(|draw| draw.draw.presentation.color_output)
+                            .collect(),
                         groups: groups.to_vec(),
                         keys: keys.clone(),
                         presentation_slots: active
@@ -458,6 +476,16 @@ impl ContentPresenter {
                         }
                     })
                     .filter(|image| {
+                        if !wide
+                            && draw.draw.presentation.color_output
+                                != c::ContentColorOutput::SrgbPreview
+                            && matches!(
+                                image.descriptor.interpretation().color,
+                                c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
+                            )
+                        {
+                            return false;
+                        }
                         // A valid crop on the replacement may not fit a retained source.
                         // Such history is unavailable until compatible pixels are ready.
                         let destination = draw.request.logical_size();

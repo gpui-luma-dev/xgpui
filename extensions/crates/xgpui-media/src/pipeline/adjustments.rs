@@ -56,7 +56,7 @@ impl CustomContent for AdjustedImage {
         Some(self.adjustments.paint())
     }
     fn prepare(&self, backend: &dyn Any, size: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
-        self.image.prepare(backend, size)
+        self.image.prepare_effect_at_size(backend, size)
     }
     fn prepare_in_frame(
         &self,
@@ -64,14 +64,15 @@ impl CustomContent for AdjustedImage {
         request: &PreparationRequest,
         frame: &PreparationFrame,
     ) -> anyhow::Result<Box<dyn Any>> {
-        self.image.prepare_in_frame(backend, request, frame)
+        self.image.prepare_effect(backend, request, frame)
     }
     fn prepare_with_request(
         &self,
         backend: &dyn Any,
         request: &PreparationRequest,
     ) -> anyhow::Result<Box<dyn Any>> {
-        self.image.prepare_with_request(backend, request)
+        self.image
+            .prepare_effect(backend, request, &PreparationFrame::default())
     }
 }
 
@@ -123,7 +124,7 @@ impl CustomContent for WideImage {
         self.adjustments.map(|v| v.paint())
     }
     fn prepare(&self, backend: &dyn Any, size: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
-        self.image.prepare(backend, size)
+        self.image.prepare_effect_at_size(backend, size)
     }
     fn prepare_in_frame(
         &self,
@@ -131,13 +132,14 @@ impl CustomContent for WideImage {
         request: &PreparationRequest,
         frame: &PreparationFrame,
     ) -> anyhow::Result<Box<dyn Any>> {
-        self.image.prepare_in_frame(backend, request, frame)
+        self.image.prepare_effect(backend, request, frame)
     }
     fn prepare_with_request(
         &self,
         backend: &dyn Any,
         request: &PreparationRequest,
     ) -> anyhow::Result<Box<dyn Any>> {
-        self.image.prepare_with_request(backend, request)
+        self.image
+            .prepare_effect(backend, request, &PreparationFrame::default())
     }
 }

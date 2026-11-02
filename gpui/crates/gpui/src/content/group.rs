@@ -31,7 +31,7 @@ impl Default for ContentGroupId {
 pub struct ContentGroup {
     id: ContentGroupId,
     revision: u64,
-    members: Vec<(CustomGeometry, Content, ImageMapping)>,
+    members: Vec<(CustomGeometry, ContentDraw)>,
     pending: PendingPresentation,
     on_error: ContentErrorPresentation,
 }
@@ -55,9 +55,12 @@ impl ContentGroup {
             on_error: ContentErrorPresentation::default(),
         }
     }
-    /// Append a member with group-local geometry and an immutable portable source.
-    pub fn push(&mut self, geometry: CustomGeometry, content: Content) {
-        self.push_mapped(geometry, content, ImageMapping::default());
+    /// Append a source or configured draw with group-local geometry. Draw mapping
+    /// and color output are committed atomically. Independent member slots or
+    /// pending/error policies are rejected when the group is described.
+    pub fn push(&mut self, geometry: CustomGeometry, content: impl Into<ContentDraw>) {
+        self.revision = next_content_identity();
+        self.members.push((geometry, content.into()));
     }
     /// Append a mapped image member. Mapping is committed with this group's
     /// geometry and images, and remains unchanged while a replacement is pending.
@@ -67,8 +70,7 @@ impl ContentGroup {
         content: Content,
         mapping: ImageMapping,
     ) {
-        self.revision = next_content_identity();
-        self.members.push((geometry, content, mapping));
+        self.push(geometry, ContentDraw::new(content).mapping(mapping));
     }
     /// Set the policy for the whole group, including first presentation and failures.
     pub fn presentation(
@@ -128,7 +130,15 @@ impl ContentGroupRequest {
         self.group
             .members
             .iter()
-            .map(|(geometry, content, mapping)| {
+            .map(|(geometry, content)| {
+                if content.presentation.slot.is_some()
+                    || content.presentation.pending != PendingPresentation::default()
+                    || content.presentation.on_error != ContentErrorPresentation::default()
+                {
+                    return Err(invalid(
+                        "group members cannot have independent slots or presentation policies",
+                    ));
+                }
                 let (logical, radii, coverage) = match geometry {
                     CustomGeometry::RoundedRect {
                         bounds,
@@ -263,9 +273,10 @@ impl ContentGroupRequest {
                     corner_radii: radii.clamp_radii_for_quad_size(logical.size).scale(scale),
                     opacity: 1.,
                     content: crate::scene::content_with_preparation_geometry(
-                        ContentDraw::new(content.clone())
-                            .mapping(*mapping)
+                        content
+                            .clone()
                             .presentation(ContentPresentation {
+                                color_output: content.presentation.color_output,
                                 pending: PendingPresentation::Transparent,
                                 ..Default::default()
                             })

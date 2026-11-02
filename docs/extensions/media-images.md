@@ -261,16 +261,31 @@ validation records for integration and review.
   axis and must fit the actual backend device limit.
 - These are **source payload bounds**, not a total process/VRAM guarantee.
   Encoded input, codec scratch, retained CPU pixels, GPU pixels and temporary
-  padded staging buffers have separate costs. One GPU source is cached per image;
-  switching device/queue/backend replaces that cache. In-flight/retained scenes
-  may retain older GPU resources until normal scene/command release.
+  padded staging buffers have separate costs. Ordinary images retain packed mip
+  bytes shared with portable graph inputs. Their reservation follows both image
+  clones and graphs until the last CPU payload owner drops. GPU realization and
+  completion are managed by each renderer's content service.
 - Dropping/cancelling a job suppresses publication. Cancellation is checked before
   decode and during mip generation; an active codec decode finishes before its
   worker slot and reservation can be released. `try_take` transfers an image once.
-- `LoadStatus::Ready` means CPU-ready. The first paint starts background GPU
-  staging and returns a cached transparent 1x1 placeholder. Once staging completes,
-  renderer preparation adopts the prepared resources and orders the upload before
-  sampling. Retained renders and layout-size changes reuse the destination texture.
+- `LoadStatus::Ready` means CPU-ready. Ordinary `MediaImage`, default `image_view`
+  and `paint` use portable asynchronous execution with completion-triggered redraw.
+  First presentation is transparent until ready; replay/resize retain the source
+  extent and reuse its uploaded mip chain. Strict headless snapshots report Pending
+  until the requested GPU output is available.
+- `image.draw()` requests mip filtering and an explicit `SrgbPreview` output intent;
+  `image.content()` exposes source pixels without overriding their metadata.
+  `paint_mapped` or `draw().mapping(...)` supports portable fit/alignment/crop.
+  Configured draws can also be members of atomic groups. See the
+  [portable presentation API](../../extensions/crates/xgpui-media/README.md#portable-image-presentation).
+
+### Remaining effect/page staging
+
+The following staging limits, counters and native adoption contracts apply to
+filters, adjustments and tiled pages pending their portable migration. Ordinary
+images use renderer content-executor limits. Mixed ordinary/effect placements may
+currently retain separate GPU realizations.
+
 - `UploadLimits` independently bounds active staging workers and accounted
   staging reservations. Defaults: two upload workers and 128 MiB staging.
   Metal/wgpu admission leases survive submission until GPU completion; D3D11
@@ -302,7 +317,7 @@ validation records for integration and review.
   again; there is no new pixel copy. `retry_upload()` invalidates an upload or
   retries a failure. Notify the host view after an explicit retry.
 
-## Backend contract and current limits
+## Effect/page backend contract and current limits
 
 Native Metal and DirectX 11; enable feature `wgpu` for the portable renderer.
 The backend contexts expose additive `create_image_output(&ImageTextureData)`

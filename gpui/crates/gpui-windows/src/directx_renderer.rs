@@ -804,13 +804,15 @@ impl DirectXRenderer {
                         } else {
                             compositor.transparent.clone()
                         };
-                        let wide = interpretation.is_some_and(|i| {
-                            matches!(
-                                i.color,
-                                gpui::content::ColorEncoding::LinearP3
-                                    | gpui::content::ColorEncoding::LinearRec2020
-                            )
-                        });
+                        let wide = draw.content.image_color_output()
+                            != gpui::content::ContentColorOutput::SrgbPreview
+                            && interpretation.is_some_and(|i| {
+                                matches!(
+                                    i.color,
+                                    gpui::content::ColorEncoding::LinearP3
+                                        | gpui::content::ColorEncoding::LinearRec2020
+                                )
+                            });
                         (source, false, wide)
                     } else {
                         let output =

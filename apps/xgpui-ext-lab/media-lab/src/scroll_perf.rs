@@ -146,7 +146,7 @@ impl ScrollPerf {
                 arch: std::env::consts::ARCH,
                 target_hz: 60,
                 reported_display_interval_ms: None,
-                description: "Native scroll container: 24 cards sharing four retained 3072x2048 images, 1200 points/s triangular scrolling; warmup, 5s cached baseline, 30s repeated file decode/mip/upload replacement, drain, 5s cached scrolling. New load at most every 350ms with one pending replacement; old image stays visible until replacement is host-submitted. Same card geometry in all phases. Generated PNGs and OS file cache do not model cold disk. Raw render-start intervals include long gaps and boundary-trigger work, not GPU/presentation/input timing. Keep window foreground at fixed 60 Hz; app has no artificial frame cap. Generation precedes measurement. Pool/resource peaks are sampled, not total process memory.",
+                description: "Effect staging path (pending portable effect migration). Native scroll container: 24 cards sharing four retained 3072x2048 images, 1200 points/s triangular scrolling; warmup, 5s cached baseline, 30s repeated file decode/mip/upload replacement, drain, 5s cached scrolling. New load at most every 350ms with one pending replacement; old image stays visible until replacement is host-submitted. Same card geometry in all phases. Generated PNGs and OS file cache do not model cold disk. Raw render-start intervals include long gaps and boundary-trigger work, not GPU/presentation/input timing. Keep window foreground at fixed 60 Hz; app has no artificial frame cap. Generation precedes measurement. Pool/resource peaks are sampled, not total process memory.",
                 acceptance_criteria: "Provisional 60 Hz check: all three phases p95 <=20ms, <=1% intervals >33.333ms and no >50ms gaps; loading p95 <= baseline p95+2ms; >=30 replacements; >1000 points observed scroll travel; no errors. A failure needs investigation, not sample filtering. Display mode must be independently verified.",
                 source_size: [3072, 2048],
                 source_payload_bytes: 0,
@@ -338,6 +338,8 @@ impl Render for ScrollPerf {
         if self.stage == 5 && self.auto_scroll {
             window.request_animation_frame();
         }
+        // This run measures the effect staging path and its submission counters.
+        // Migrate its readiness/metrics together with the effect producers.
         let mut thumbnails = div().flex().gap_2();
         for image in self
             .images
@@ -347,6 +349,7 @@ impl Render for ScrollPerf {
         {
             thumbnails = thumbnails.child(
                 image_view(image.clone())
+                    .filter(xgpui_media::ImageFilter::new())
                     .w(px(64.))
                     .h(px(40.))
                     .rounded(px(4.)),
@@ -369,6 +372,7 @@ impl Render for ScrollPerf {
             if let Some(image) = &self.images[source] {
                 card = card.child(
                     image_view(image.clone())
+                        .filter(xgpui_media::ImageFilter::new())
                         .w(px(900.))
                         .h(px(260.))
                         .rounded(px(12.)),

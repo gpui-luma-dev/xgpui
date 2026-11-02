@@ -328,6 +328,8 @@ impl ContentNode {
 /// Validated CPU graph. Creation performs no native allocation or submission.
 #[derive(Debug)]
 pub struct ContentGraph {
+    // Keep source payload reservations alive even after request subscriptions retire.
+    _assets: Vec<ImageAsset>,
     nodes: Vec<ContentNode>,
     roots: Vec<ResourceId>,
     payload_bytes: u64,
@@ -418,6 +420,12 @@ impl ContentGraph {
                 nodes.push(node);
             }
             Ok(Self {
+                _assets: builder
+                    .dependencies
+                    .images
+                    .iter()
+                    .map(|(asset, _, _)| asset.clone())
+                    .collect(),
                 nodes,
                 roots: outputs
                     .into_iter()

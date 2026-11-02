@@ -839,7 +839,11 @@ impl MetalRenderer {
                         .downcast::<crate::custom_draw::PreparedMetalOutput>()
                         .unwrap();
                     #[cfg(target_os = "macos")]
-                    if self.wide_sdr.is_some() && output.gpu.is_some() {
+                    if self.wide_sdr.is_some()
+                        && output.gpu.is_some()
+                        && draw.content.image_color_output()
+                            != gpui::content::ContentColorOutput::SrgbPreview
+                    {
                         self.wide_sdr.as_mut().unwrap().wide.insert(outputs.len());
                     }
                     output

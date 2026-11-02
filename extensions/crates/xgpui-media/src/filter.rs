@@ -139,7 +139,7 @@ impl CustomContent for FilteredImage {
     }
     fn prepare(&self, backend: &dyn Any, size: Size<DevicePixels>) -> anyhow::Result<Box<dyn Any>> {
         self.validate()?;
-        self.image.prepare(backend, size)
+        self.image.prepare_effect_at_size(backend, size)
     }
     fn prepare_in_frame(
         &self,
@@ -148,7 +148,7 @@ impl CustomContent for FilteredImage {
         frame: &PreparationFrame,
     ) -> anyhow::Result<Box<dyn Any>> {
         self.validate()?;
-        self.image.prepare_in_frame(backend, request, frame)
+        self.image.prepare_effect(backend, request, frame)
     }
     fn prepare_with_request(
         &self,
@@ -156,7 +156,8 @@ impl CustomContent for FilteredImage {
         request: &PreparationRequest,
     ) -> anyhow::Result<Box<dyn Any>> {
         self.validate()?;
-        self.image.prepare_with_request(backend, request)
+        self.image
+            .prepare_effect(backend, request, &PreparationFrame::default())
     }
 }
 

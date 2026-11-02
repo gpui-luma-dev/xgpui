@@ -27,10 +27,32 @@ use gpui::{
 use std::sync::Arc;
 
 /// Paint an immutable source-sized image with native clipping and rounded corners.
-/// Layout size is explicit. This first API stretches to the supplied rectangle.
+/// Layout size is explicit; `paint` stretches and `paint_mapped` selects fit/crop.
 impl MediaImage {
     pub fn paint(&self, window: &mut Window, bounds: Bounds<Pixels>, radii: Corners<Pixels>) {
-        self.paint_filtered(window, bounds, radii, ImageFilter::new());
+        window.paint_content(
+            CustomGeometry::RoundedRect {
+                bounds,
+                corner_radii: radii,
+            },
+            self.draw(),
+        );
+    }
+    /// Paint with portable fit, alignment, crop, and sampling controls.
+    pub fn paint_mapped(
+        &self,
+        window: &mut Window,
+        bounds: Bounds<Pixels>,
+        radii: Corners<Pixels>,
+        mapping: gpui::content::ImageMapping,
+    ) {
+        window.paint_content(
+            CustomGeometry::RoundedRect {
+                bounds,
+                corner_radii: radii,
+            },
+            self.draw().mapping(mapping),
+        );
     }
     pub fn paint_filtered(
         &self,
@@ -87,7 +109,7 @@ impl MediaImage {
 pub fn image_view(image: MediaImage) -> MediaImageView {
     MediaImageView {
         image,
-        filter: ImageFilter::new(),
+        filter: None,
         adjustments: None,
         wide: false,
         style: StyleRefinement::default(),
@@ -96,7 +118,7 @@ pub fn image_view(image: MediaImage) -> MediaImageView {
 /// Styled image viewport with native background, opacity, and corner coverage.
 pub struct MediaImageView {
     image: MediaImage,
-    filter: ImageFilter,
+    filter: Option<ImageFilter>,
     adjustments: Option<ImageAdjustments>,
     wide: bool,
     style: StyleRefinement,
@@ -107,7 +129,8 @@ impl MediaImageView {
     pub fn wide_gamut(mut self) -> anyhow::Result<Self> {
         self.image.wide(None)?;
         anyhow::ensure!(
-            self.filter == ImageFilter::new(),
+            self.filter
+                .is_none_or(|filter| filter == ImageFilter::new()),
             "wide images require linear ImageAdjustments"
         );
         self.wide = true;
@@ -122,7 +145,7 @@ impl MediaImageView {
     }
 
     pub fn filter(mut self, filter: ImageFilter) -> Self {
-        self.filter = filter;
+        self.filter = Some(filter);
         self.wide = false;
         self.adjustments = None;
         self
@@ -197,9 +220,10 @@ impl Element for MediaImageView {
                 } else if let Some(adjustments) = self.adjustments {
                     self.image
                         .paint_adjusted(window, bounds, radii, adjustments);
+                } else if let Some(filter) = self.filter {
+                    self.image.paint_filtered(window, bounds, radii, filter);
                 } else {
-                    self.image
-                        .paint_filtered(window, bounds, radii, self.filter);
+                    self.image.paint(window, bounds, radii);
                 }
             });
         });

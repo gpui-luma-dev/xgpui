@@ -108,7 +108,7 @@ mod tests {
         let data = build(2, 1, vec![0, 0, 0, 255, 255, 255, 255, 255], || false).unwrap();
         assert!((data.levels()[1][0] as i32 - 188).abs() <= 1);
         let data = build(2, 1, vec![255, 0, 0, 255, 0, 0, 255, 0], || false).unwrap();
-        assert_eq!(data.levels()[1], [255, 0, 0, 128]);
+        assert_eq!(&data.levels()[1][..], &[255, 0, 0, 128]);
     }
     #[test]
     fn odd_edges_and_cancellation() {

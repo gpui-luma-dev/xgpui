@@ -3,14 +3,12 @@ use gpui::{Pixels, Point, point, px};
 use std::{collections::VecDeque, time::Instant};
 use xgpui_media::{
     FrameUploadLimits, ImageJob, LoadStatus, MediaImage, MediaLimits, MediaLoader, UploadLimits,
-    UploadStatus,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     Waiting,
     Decoding,
-    Staging,
     Ready,
     Retired,
     Failed,
@@ -20,8 +18,7 @@ impl Phase {
         match self {
             Self::Waiting => "WAIT",
             Self::Decoding => "DECODE",
-            Self::Staging => "STAGE",
-            Self::Ready => "READY",
+            Self::Ready => "DECODED",
             Self::Retired => "DONE",
             Self::Failed => "ERROR",
         }
@@ -46,7 +43,7 @@ impl Slot {
         if let Some(job) = self.job.as_mut() {
             if let Some(image) = job.try_take() {
                 self.image = Some(image);
-                self.phase = Phase::Staging;
+                self.phase = Phase::Ready;
                 self.job = None;
             } else if let LoadStatus::Failed(error) = job.status() {
                 self.phase = Phase::Failed;
@@ -54,22 +51,9 @@ impl Slot {
                 self.job = None;
             }
         }
-        if let Some(image) = &self.image {
-            match image.upload_status() {
-                UploadStatus::Ready => self.phase = Phase::Ready,
-                UploadStatus::Failed(error) => {
-                    self.phase = Phase::Failed;
-                    self.error = Some(error);
-                }
-                _ => self.phase = Phase::Staging,
-            }
-        }
     }
     pub fn pending(&self) -> bool {
-        matches!(
-            self.phase,
-            Phase::Waiting | Phase::Decoding | Phase::Staging
-        )
+        matches!(self.phase, Phase::Waiting | Phase::Decoding)
     }
 }
 pub struct Lab {
@@ -251,7 +235,7 @@ impl Lab {
         for slot in &mut self.burst {
             slot.poll();
         }
-        // Retain completed previews within admission limits. Retire older ready sources when
+        // Retain decoded sources within admission limits. Retire older decoded sources when
         // more work is waiting, leaving payload room for the next decode jobs.
         if self.burst.iter().any(|s| s.phase == Phase::Waiting) {
             let ready: Vec<_> = self

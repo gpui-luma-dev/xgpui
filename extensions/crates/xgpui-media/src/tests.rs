@@ -124,7 +124,8 @@ fn image_scene(image: &MediaImage, side: f32, clipped: bool) -> Scene {
         content_mask: ContentMask { bounds: mask },
         corner_radii: Corners::all(ScaledPixels(if clipped { 3. } else { 0. })),
         opacity: 1.,
-        content: Arc::new(image.clone()),
+        // These tests exercise the not-yet-migrated effect staging path.
+        content: Arc::new(image.filtered(ImageFilter::new())),
         coverage: None,
     });
     scene.finish();
@@ -1153,3 +1154,6 @@ fn custom_sample_metadata_is_admitted_and_released_with_image() -> Result<()> {
     );
     Ok(())
 }
+
+#[path = "portable_tests.rs"]
+mod portable;

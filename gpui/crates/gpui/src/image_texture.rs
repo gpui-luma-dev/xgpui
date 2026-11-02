@@ -1,6 +1,13 @@
 //! Validated immutable upload data for opt-in source-sized image textures.
+use crate::content::{
+    AlphaMode, ColorEncoding, ImageDescriptor, ImageExtent, ImageInterpretation, ImagePixels,
+    PixelFormat,
+};
 use anyhow::{Result, ensure};
-use std::sync::Arc;
+use std::{
+    ops::{Deref, Range},
+    sync::Arc,
+};
 
 /// Storage and color contract for source-sized image textures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -20,10 +27,41 @@ pub enum ImageTextureFormat {
 pub struct ImageTextureData {
     width: u32,
     height: u32,
-    levels: Arc<[Vec<u8>]>,
+    levels: Arc<[ImageTextureLevel]>,
+    pixels: ImagePixels,
     byte_len: usize,
     format: ImageTextureFormat,
 }
+/// Immutable mip view sharing the complete packed source allocation.
+#[derive(Clone)]
+pub struct ImageTextureLevel {
+    bytes: Arc<[u8]>,
+    range: Range<usize>,
+}
+impl std::fmt::Debug for ImageTextureLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ImageTextureLevel")
+            .field("range", &self.range)
+            .finish()
+    }
+}
+impl Deref for ImageTextureLevel {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        &self.bytes[self.range.clone()]
+    }
+}
+impl AsRef<[u8]> for ImageTextureLevel {
+    fn as_ref(&self) -> &[u8] {
+        self
+    }
+}
+impl PartialEq for ImageTextureLevel {
+    fn eq(&self, other: &Self) -> bool {
+        **self == **other
+    }
+}
+impl Eq for ImageTextureLevel {}
 impl ImageTextureData {
     /// Maximum combined mip bytes for one source (64 MiB).
     pub const MAX_BYTES: usize = 64 * 1024 * 1024;
@@ -107,9 +145,49 @@ impl ImageTextureData {
             byte_len += bytes.len();
             ensure!(byte_len <= Self::MAX_BYTES, "image texture exceeds 64 MiB");
         }
+        let (pixel_format, color, alpha) = match format {
+            ImageTextureFormat::Rgba8Srgb => {
+                (PixelFormat::Rgba8, ColorEncoding::Srgb, AlphaMode::Straight)
+            }
+            ImageTextureFormat::LinearP3Rgba16Float => (
+                PixelFormat::Rgba16Float,
+                ColorEncoding::LinearP3,
+                AlphaMode::Premultiplied,
+            ),
+            ImageTextureFormat::LinearRec2020Rgba16Float => (
+                PixelFormat::Rgba16Float,
+                ColorEncoding::LinearRec2020,
+                AlphaMode::Premultiplied,
+            ),
+        };
+        let descriptor = ImageDescriptor::new(
+            ImageExtent::new(width, height)?,
+            pixel_format,
+            ImageInterpretation { color, alpha },
+            levels.len() as u32,
+        )?;
+        let packed: Arc<[u8]> = levels
+            .iter()
+            .flat_map(|level| level.iter().copied())
+            .collect::<Vec<_>>()
+            .into();
+        let pixels = ImagePixels::new(descriptor, packed.clone(), Self::MAX_BYTES as u64)?;
+        let mut offset = 0;
+        let levels = levels
+            .into_iter()
+            .map(|level| {
+                let range = offset..offset + level.len();
+                offset = range.end;
+                ImageTextureLevel {
+                    bytes: packed.clone(),
+                    range,
+                }
+            })
+            .collect::<Vec<_>>();
         Ok(Self {
             width,
             height,
+            pixels,
             levels: levels.into(),
             byte_len,
             format,
@@ -136,8 +214,12 @@ impl ImageTextureData {
         self.height
     }
     /// Complete immutable mip chain, largest level first.
-    pub fn levels(&self) -> &[Vec<u8>] {
+    pub fn levels(&self) -> &[ImageTextureLevel] {
         &self.levels
+    }
+    /// Portable immutable pixels sharing this allocation, with no repacking.
+    pub fn pixels(&self) -> &ImagePixels {
+        &self.pixels
     }
     /// Bytes in a 256-byte-row-aligned staging buffer for the complete chain.
     pub fn staging_byte_len(&self) -> usize {

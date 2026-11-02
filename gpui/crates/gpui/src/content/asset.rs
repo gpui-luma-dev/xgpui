@@ -5,10 +5,19 @@ use std::{
     sync::{Arc, Mutex, Weak},
 };
 /// Validated immutable packed mip payload. Color/alpha values remain a producer contract.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ImagePixels {
     descriptor: ImageDescriptor,
     bytes: Arc<[u8]>,
+    owner: Option<Arc<dyn Send + Sync>>,
+}
+impl std::fmt::Debug for ImagePixels {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ImagePixels")
+            .field("descriptor", &self.descriptor)
+            .field("byte_len", &self.bytes.len())
+            .finish()
+    }
 }
 impl ImagePixels {
     /// Validate storage size and an explicit source-memory admission limit.
@@ -29,7 +38,20 @@ impl ImagePixels {
                 "image payload exceeds source-memory limit",
             ));
         }
-        Ok(Self { descriptor, bytes })
+        Ok(Self {
+            descriptor,
+            bytes,
+            owner: None,
+        })
+    }
+    /// Retain a source-memory reservation or other CPU payload owner. Graphs
+    /// keep this owner while they retain the asset's upload bytes.
+    pub fn with_owner(mut self, owner: Arc<dyn Send + Sync>) -> Self {
+        self.owner = Some(match self.owner.take() {
+            Some(previous) => Arc::new((previous, owner)),
+            None => owner,
+        });
+        self
     }
     /// Natural source descriptor, unaffected by destination size.
     pub fn descriptor(&self) -> &ImageDescriptor {

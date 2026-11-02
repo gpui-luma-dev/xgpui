@@ -264,7 +264,7 @@ impl CustomContent for PagePaint {
     ) -> Result<Box<dyn std::any::Any>> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.0.image.prepare(backend, size)
+            self.0.image.prepare_effect_at_size(backend, size)
         }
         #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
         {
@@ -286,7 +286,7 @@ impl CustomContent for PagePaint {
     ) -> Result<Box<dyn std::any::Any>> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.0.image.prepare_in_frame(backend, request, frame)
+            self.0.image.prepare_effect(backend, request, frame)
         }
         #[cfg(target_arch = "wasm32")]
         {

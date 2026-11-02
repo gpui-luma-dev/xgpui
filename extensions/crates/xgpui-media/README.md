@@ -51,6 +51,36 @@ check failure status, and keep the job alive until completion. Cloned image
 handles share the retained upload. `image_view` stretches to the supplied size;
 preserve the source aspect ratio when needed.
 
+## Portable image presentation
+
+Ordinary `MediaImage`, `image_view(image)` and `image.paint(...)` now use the
+portable content API. The renderer owns GPU uploads, completion and redraws.
+`LoadStatus::Ready` means decoded CPU pixels are available, not GPU completion.
+Source pixels and all mip levels share one packed allocation; cloning a source
+or retaining its graph keeps the loader's memory reservation alive.
+
+Use `image.draw()` for configured placement, `image.content()` for graph inputs,
+or `image.paint_mapped(...)` for fit/alignment/crop control. For example:
+
+```rust,ignore
+use gpui::content::{ImageFit, ImageMapping};
+let draw = image.draw().mapping(ImageMapping::new(ImageFit::Contain));
+window.paint_content(geometry, draw);
+```
+
+The default draw requests mip filtering and an explicit sRGB preview. FP16 P3 and
+Rec.2020 pixels retain their source metadata; previewing does not repack or mutate
+the source. `ContentColorOutput::MatchWindow` instead preserves source gamut and
+requires a capable wide window. Atomic groups accept configured draws through
+`group.push(geometry, image.draw())` and commit their mapping/output intent together.
+
+Filters, adjustments and tiled pages remain on their current effect preparation
+path until the next migration step. Their upload counters and loader staging
+limits describe that path. Mixing ordinary and filtered placements can currently
+retain separate GPU realizations; unifying those producers is next. Ordinary
+images do not use `upload_status()` or `retry_upload()` for GPU readiness; headless
+validation uses `prepare_content_snapshot` and retries typed Pending results.
+
 ## Image adjustments
 
 `ImageFilter` applies color adjustments while sampling, preserving alpha and

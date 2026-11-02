@@ -1480,6 +1480,11 @@ pub trait CustomContent: std::fmt::Debug + Send + Sync + 'static {
     fn image_mapping(&self) -> Option<crate::content::ImageMapping> {
         None
     }
+    /// Explicit portable output intent. Wide source metadata alone never opts
+    /// into clipping; previews must be requested by the producer or draw.
+    fn image_color_output(&self) -> crate::content::ContentColorOutput {
+        Default::default()
+    }
     /// Sampling visibility independent of preparation. Zero permits warming a
     /// source without compositing it over a progressive fallback.
     fn image_sample_opacity(&self) -> f32 {
@@ -1573,6 +1578,9 @@ impl CustomContent for ContentWithPreparationGeometry {
     }
     fn image_mapping(&self) -> Option<crate::content::ImageMapping> {
         self.content.image_mapping()
+    }
+    fn image_color_output(&self) -> crate::content::ContentColorOutput {
+        self.content.image_color_output()
     }
     fn image_sample_opacity(&self) -> f32 {
         self.content.image_sample_opacity()

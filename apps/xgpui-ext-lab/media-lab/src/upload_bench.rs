@@ -1,6 +1,9 @@
-//! Reproducible upload-phase CPU measurement, not a GPU timestamp benchmark.
+//! Effect staging CPU measurement; migrate its counters with effect producers.
+//! This is not a GPU timestamp benchmark.
 use anyhow::{Context as _, Result, bail, ensure};
 use gpui::*;
+#[cfg(target_os = "macos")]
+use gpui_apple::metal::MTLDevice as _;
 use image::ImageEncoder as _;
 use serde::Serialize;
 use std::{
@@ -76,7 +79,11 @@ impl TimedImage {
 }
 impl CustomContent for TimedImage {
     fn prepare(&self, backend: &dyn Any, extent: Size<DevicePixels>) -> Result<Box<dyn Any>> {
-        self.measure(backend, || self.image.prepare(backend, extent))
+        self.measure(backend, || {
+            self.image
+                .filtered(xgpui_media::ImageFilter::new())
+                .prepare(backend, extent)
+        })
     }
     fn prepare_in_frame(
         &self,
@@ -85,7 +92,9 @@ impl CustomContent for TimedImage {
         frame: &PreparationFrame,
     ) -> Result<Box<dyn Any>> {
         self.measure(backend, || {
-            self.image.prepare_in_frame(backend, request, frame)
+            self.image
+                .filtered(xgpui_media::ImageFilter::new())
+                .prepare_in_frame(backend, request, frame)
         })
     }
 }

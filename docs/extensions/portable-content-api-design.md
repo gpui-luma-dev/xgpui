@@ -1503,11 +1503,11 @@ platform acceptance is satisfied. Performance optimization stays deferred to #11
 
 ### Image assets and mapping: implementation contract
 
-This is the next implementation stage, not an implemented API checkpoint. The
-existing media path still dispatches `MediaImage`, adjusted/filtered images and
-video through backend-specific `CustomContent::prepare*` methods. Migration must
-preserve source-sized uploads, mip payloads, color metadata and completion-safe
-staging ownership before those methods can be removed.
+Asset readiness, mapping and ordinary `MediaImage` presentation are implemented
+in the checkpoints below. Adjusted/filtered images, tiled pages and video still
+use backend-specific preparation pending their migration. Source-sized uploads,
+mip payloads, color metadata and completion-safe ownership must be preserved
+before the remaining preparation methods can be removed.
 
 #### Asset identity, completion and subscriptions
 
@@ -1626,7 +1626,8 @@ callbacks only request redraw; they never publish images or restore group epochs
 
 CPU race/lifetime tests and Metal/wgpu pixel tests cover this integration. D3D11
 has cross-compilation coverage; Windows execution remains outstanding. Mapping
-presentation is implemented below; ordinary media producer migration is next.
+presentation and ordinary media migration are implemented below; effects and
+adjustments are next.
 
 #### Checked image mapping contract
 
@@ -1673,4 +1674,39 @@ Shared native pixel acceptance tests exercise fit/alignment/crop, linear and
 nearest filtering, mip filtering and crop footprints, slot history, paused-GPU
 atomic publication, error policies, clipping, rounded coverage, and opacity.
 Metal adds linear P3 pixel validation. D3D11 tests cross-compile; Windows runtime
-execution remains outstanding. Ordinary media producer migration is next.
+execution remains outstanding. Ordinary media migration is recorded below.
+
+
+#### Ordinary media migration checkpoint
+
+Ordinary `MediaImage` now exposes `content()` and `draw()` and participates in
+`CustomContent::portable_content`; its ordinary native `prepare` entry point
+rejects use. `paint`, `paint_mapped`, and unfiltered `image_view` record portable
+requests. No per-backend dispatch or producer-owned staging worker is used by
+these draws. The media lab's ordinary panels use this path and label CPU decode
+readiness separately from renderer-managed GPU readiness.
+
+`ContentColorOutput::{MatchWindow,SrgbPreview}` makes output intent explicit.
+Media's default draw requests an sRGB preview while retaining RGBA16F source
+primaries/association and the full mip chain. Wide-source requests without that
+preview intent still require wide output. Policy is tracked in request signatures
+and admitted-job metadata, so changing policy cannot reuse an earlier capability
+failure or accidentally publish an implicit downgrade. `ContentGroup::push` now
+accepts a source or configured draw; member mapping and output policy are retained
+in the atomic snapshot. Independent member slots/pending/error policies are rejected.
+
+`ImageTextureData` now packs once on its CPU construction path. `levels()` returns
+immutable `ImageTextureLevel` slice views of the same allocation exposed by
+`pixels()`. Media's asset pixels retain the loader reservation using
+`ImagePixels::with_owner`; graphs retain encountered asset handles as well as
+upload bytes so removal of the request cannot release CPU admission while a graph
+still holds the payload. This avoids a second persistent copy of decoded mips.
+
+Native Metal/wgpu tests cover ordinary mips, replay/resize without new upload
+requests or producer staging, FP16 P3/Rec.2020 previews, wide-window preview,
+configured atomic members, packed byte sharing, and graph-held source admission.
+Existing effect/filter/page/video tests remain active. Filters, linear adjustments,
+wide effects, tiled pages, and external imports are subsequent migrations; their
+existing preparation machinery remains only for those not-yet-migrated producers.
+The eventual removal of that API remains part of this effort. Mixing ordinary
+and effect placements can temporarily retain separate native realizations.
