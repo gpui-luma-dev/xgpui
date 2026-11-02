@@ -1243,10 +1243,10 @@ native wgpu. Look for passing register/pixel assertions, preserved mip contents,
 and no undefined untouched pixels. These checks establish correctness, not a
 measured performance improvement.
 
-### Atomic content groups: presentation contract (Metal implemented)
+### Atomic content groups: presentation contract (all three backends implemented)
 
-Metal implements this contract as described in the checkpoint below; wgpu/D3D11
-atomic-group support remains pending. The per-slot contract continues to govern
+Metal, wgpu and D3D11 implement this contract as described in the checkpoints
+below. Windows GPU runtime acceptance remains pending. The per-slot contract continues to govern
 independent draws. A stable slot preserves one image, not a set of scene primitives. It cannot express an atomic 512-to-1 membership/layout
 change. In particular, expansion currently presents the one surviving slot while
 511 reintroduced slots have no history. A Metal pixel regression confirms that
@@ -1396,8 +1396,8 @@ pass. The 512-member graph executes 1,024 operations and reports zero producer
 readbacks. Each GPU case runs in a subprocess with a 45-second timeout. Native
 mouse density switches and keyboard replacement/clip/opacity controls were also
 exercised in the updated demo. Windows and Wasm builds cross-check the shared API;
-atomic-group execution on wgpu/D3D11 is the next implementation step and currently
-returns the portable unsupported-capability error.
+the subsequent checkpoint below extends atomic-group execution to wgpu/D3D11.
+Windows GPU runtime acceptance remains pending.
 
 From the repository root, run the deterministic GPU suite on macOS:
 
@@ -1432,3 +1432,71 @@ remain responsive and the retained group should obey the current outer clip and
 opacity. A pending resize retains the previous local layout within the current
 clip before the new layout publishes. Debug and `--release` use the same publication
 contract; this checkpoint is not a frame-time benchmark.
+
+
+### wgpu and D3D11 atomic-group implementation checkpoint
+
+Both backends now apply the same `ContentGroupState<T>` generation, epoch,
+publication and error-policy rules as Metal. Requested group tickets travel with
+their admitted graph; completion publishes whole image sets before newer work is
+admitted. Current cached generations can commit geometry without another producer
+job, while in-progress edits coalesce without starving admitted work. Empty/removal
+and color-policy changes retire incompatible history as specified above.
+
+A CPU-only `ContentGroupScene` bridge flattens group/member requests and replays
+selected complete snapshots at their original scene boundaries. Its native-image
+vector is aligned with the resulting custom-draw array, including independent
+portable draws and non-portable native holes. Scene descriptions retain only CPU
+sources and geometry; GPU handles stay in renderer-owned vectors. This preserves
+browser thread affinity without adding unsafe Send/Sync GPU-content wrappers.
+Strict preparation on a renderer without group support now reports
+`UnsupportedCapability` rather than accepting a group as ready.
+
+wgpu expands the selected scene before normal custom preparation, then keeps its
+selected image owners through the existing submission-completion path, including
+the browser completion registry. D3D11 performs expansion before creating the
+sampling fence and retains selected images through its existing event-query
+retirement service. Native coverage/background subframes skip group observation
+and cannot prune or overwrite the main scene's group state. Wide SDR remains an
+explicit D3D11/Metal presentation capability; wgpu reports its unsupported-wide
+error using the whole group's retain/transparent/fail policy.
+
+Validation: ten wgpu atomic-group GPU cases pass on native wgpu using Metal, with
+API validation enabled. They cover paused 512 → 1 and 1 → 512 publication, progress
+under rapid edits, unrelated UI and native background preparation, independent
+slots, current placement/clip/opacity, order, geometry-only cache reuse, temporary
+hiding, malformed members, duplicates, empty/removal epochs, bounded eventual
+retirement, memory-pressure recovery, native shape coverage, and wide-color
+rejection. Producer readbacks remain zero. The seventeen existing wgpu graph tests
+and seven shared CPU group tests also pass. GPU cases use subprocess deadlines.
+
+The same nine common GPU cases plus a D3D11 wide-color transition/preview case
+cross-compile for Windows. These are **not Windows GPU runtime results**; run them
+on Windows/WARP before accepting that platform. The browser Wasm build checks the
+wgpu implementation, but this checkpoint does not claim browser runtime acceptance.
+Neither lab app nor the performance-review scope in issue #113 changes here.
+
+Run the wgpu group suite from the repository root:
+
+```sh
+cargo test --offline --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-wgpu/Cargo.toml \
+  --features test-support --test portable_content_groups -- --test-threads=1
+```
+
+On Windows, run the D3D11 suite (the headless renderer uses WARP):
+
+```sh
+cargo test --offline --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-windows/Cargo.toml \
+  --features test-support --test portable_content_groups -- --test-threads=1
+```
+
+Look for complete old-group pixels throughout each deterministic pause, then an
+all-at-once switch to the complete replacement. No lone retained tile or partial
+grid is allowed. UI/native draws must repaint during the pause, retired epochs
+must never resurrect, and the tests must assert zero producer readbacks. On
+Windows, also run `portable-content` with the normal native launch command and
+exercise D/R/O/C, idle completion and resize; the app automatically uses D3D11 with
+the same portable group API. Keep issue #110 open until its remaining native
+platform acceptance is satisfied. Performance optimization stays deferred to #113.

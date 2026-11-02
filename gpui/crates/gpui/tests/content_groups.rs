@@ -149,3 +149,118 @@ fn member_requests_preserve_logical_geometry_and_exact_raster_scale() {
     r.scale_factor = f32::NAN;
     assert!(r.draws().is_err());
 }
+
+#[test]
+fn resolved_scene_keeps_images_aligned_with_native_holes_and_explicit_layers() {
+    use gpui::{ContentMask, CustomDraw, Quad, ScaledPixels, Scene};
+    let r = request(ContentGroupId::new(), 0.);
+    let rect = Bounds::new(
+        point(ScaledPixels(4.), ScaledPixels(4.)),
+        size(ScaledPixels(8.), ScaledPixels(8.)),
+    );
+    let mut scene = Scene::default();
+    let draw = |content| CustomDraw {
+        order: 0,
+        bounds: rect,
+        content_mask: ContentMask { bounds: rect },
+        corner_radii: Corners::default(),
+        opacity: 0.5,
+        content,
+        coverage: None,
+    };
+    scene.push_layer(rect);
+    scene.insert_primitive(draw(
+        ContentDraw::new(Content::solid(ColorValue::srgb([0., 1., 0., 1.]).unwrap()))
+            .into_scene_content(),
+    ));
+    #[derive(Debug)]
+    struct Native;
+    impl gpui::CustomContent for Native {
+        fn prepare(
+            &self,
+            _: &dyn std::any::Any,
+            _: gpui::Size<DevicePixels>,
+        ) -> anyhow::Result<Box<dyn std::any::Any>> {
+            anyhow::bail!("CPU fixture only")
+        }
+    }
+    scene.insert_primitive(draw(std::sync::Arc::new(Native)));
+    scene.insert_primitive(draw(r.group.clone().into_scene_content()));
+    scene.pop_layer();
+    scene.insert_primitive(Quad {
+        bounds: rect,
+        content_mask: ContentMask { bounds: rect },
+        background: gpui::black().into(),
+        ..Default::default()
+    });
+    scene.finish();
+    let collect = |draw: &CustomDraw| {
+        let prep = PreparationRequest::new(
+            draw.bounds.size.map(|d| gpui::px(d.0)),
+            size(
+                DevicePixels(draw.bounds.size.width.0 as i32),
+                DevicePixels(draw.bounds.size.height.0 as i32),
+            ),
+            1.,
+        )?;
+        Ok(draw.content.portable_content(&prep)?)
+    };
+    let described = ContentGroupScene::describe(&scene, collect)
+        .unwrap()
+        .unwrap();
+    assert_eq!(described.draws.len(), 3);
+    assert!(described.draws[1].is_none());
+    let mut state = ContentGroupState::default();
+    let tickets = state.observe(&described.groups).unwrap();
+    state.publish(&tickets[0], vec![42]);
+    let resolved = described
+        .resolve(&scene, &state, &tickets, &[Some(7), None, None])
+        .unwrap();
+    assert_eq!(resolved.images, vec![Some(7), None, Some(42)]);
+    assert_eq!(resolved.scene.custom_draws.len(), 3);
+    assert_eq!(resolved.scene.custom_draws[2].bounds.origin, rect.origin);
+    assert_eq!(resolved.scene.custom_draws[2].opacity, 0.5);
+    assert_eq!(resolved.scene.quads[0].order, scene.quads[0].order);
+}
+
+#[test]
+fn unsupported_headless_backend_rejects_groups_during_strict_preparation() {
+    use gpui::{ContentMask, CustomDraw, PlatformHeadlessRenderer, Scene};
+    struct Unsupported;
+    impl PlatformHeadlessRenderer for Unsupported {
+        fn render_scene_to_image(
+            &mut self,
+            _: &Scene,
+            _: gpui::Size<DevicePixels>,
+        ) -> anyhow::Result<image::RgbaImage> {
+            unreachable!()
+        }
+        fn render_scene(&mut self, _: &Scene, _: gpui::Size<DevicePixels>) -> anyhow::Result<()> {
+            unreachable!()
+        }
+        fn sprite_atlas(&self) -> std::sync::Arc<dyn gpui::PlatformAtlas> {
+            unreachable!()
+        }
+    }
+    let r = request(ContentGroupId::new(), 0.);
+    let bounds = Bounds::new(
+        point(ScaledPixels(0.), ScaledPixels(0.)),
+        size(ScaledPixels(8.), ScaledPixels(8.)),
+    );
+    let mut scene = Scene::default();
+    scene.insert_primitive(CustomDraw {
+        order: 0,
+        bounds,
+        content_mask: ContentMask { bounds },
+        corner_radii: Corners::default(),
+        opacity: 1.,
+        content: r.group.into_scene_content(),
+        coverage: None,
+    });
+    scene.finish();
+    let error = Unsupported.prepare_content_snapshot(&scene).unwrap_err();
+    assert_eq!(
+        error.downcast_ref::<ContentError>().unwrap().kind,
+        ContentErrorKind::UnsupportedCapability
+    );
+}

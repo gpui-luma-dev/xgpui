@@ -10,6 +10,7 @@
 mod descriptors;
 mod graph;
 mod group;
+mod group_scene;
 mod lifecycle;
 mod passes;
 mod presentation;
@@ -19,6 +20,7 @@ mod uniforms;
 pub use descriptors::*;
 pub use graph::*;
 pub use group::*;
+pub use group_scene::*;
 pub use lifecycle::*;
 pub use passes::*;
 pub use presentation::*;

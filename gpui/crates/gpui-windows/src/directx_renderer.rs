@@ -423,6 +423,16 @@ impl DirectXRenderer {
     /// [`render_to_image`](Self::render_to_image) (which reads the target back
     /// instead), so the two cannot drift.
     fn render(&mut self, scene: &Scene, background: WindowBackgroundAppearance) -> Result<()> {
+        let resolved = if self.content_subframe_depth == 0 {
+            self.content_presenter
+                .resolve_scene(scene, self.wide_sdr.is_some())?
+        } else {
+            None
+        };
+        let (scene, selected) = resolved
+            .as_ref()
+            .map(|resolved| (&resolved.scene, Some(resolved.images.as_slice())))
+            .unwrap_or((scene, None));
         if let Some(devices) = &self.devices {
             self.custom_retirement.retain(|(query, _)| {
                 let mut complete = 0u32;
@@ -462,7 +472,7 @@ impl DirectXRenderer {
             None
         };
         let parent_sampling = std::mem::take(&mut self.content_sampling);
-        let result = self.render_inner(scene, background);
+        let result = self.render_inner(scene, background, selected);
         let sampling = std::mem::replace(&mut self.content_sampling, parent_sampling);
         if let Some((query, content)) = fence {
             if let Some(devices) = &self.devices {
@@ -480,6 +490,7 @@ impl DirectXRenderer {
         &mut self,
         scene: &Scene,
         background_appearance: WindowBackgroundAppearance,
+        selected: Option<&[Option<crate::content_executor::GpuImage>]>,
     ) -> Result<()> {
         if scene.backdrops.is_empty() && scene.layer_boundaries.is_empty() {
             if let Some(effects) = &mut self.backdrops {
@@ -549,7 +560,7 @@ impl DirectXRenderer {
                 scene,
             )?;
         }
-        let custom_outputs = self.prepare_custom_draws(scene)?;
+        let custom_outputs = self.prepare_custom_draws(scene, selected)?;
         self.pre_draw(&match background_appearance {
             WindowBackgroundAppearance::Opaque => [1.0f32; 4],
             _ => [0.0f32; 4],
@@ -753,10 +764,13 @@ impl DirectXRenderer {
     fn prepare_custom_draws(
         &mut self,
         scene: &Scene,
+        selected: Option<&[Option<crate::content_executor::GpuImage>]>,
     ) -> Result<Vec<crate::custom_draw::PreparedDraw>> {
         use crate::custom_draw::*;
         let requests = self.portable_requests(scene)?;
-        let portable = if self.content_subframe_depth == 0 {
+        let portable = if let Some(images) = selected {
+            images.to_vec()
+        } else if self.content_subframe_depth == 0 {
             self.content_presenter
                 .update(&requests, self.wide_sdr.is_some())?
         } else {
@@ -2791,6 +2805,14 @@ impl Dx11HeadlessRenderer {
 #[cfg(any(test, feature = "test-support"))]
 impl PlatformHeadlessRenderer for Dx11HeadlessRenderer {
     fn prepare_content_snapshot(&mut self, scene: &Scene) -> Result<()> {
+        if self
+            .0
+            .content_presenter
+            .resolve_scene(scene, self.0.wide_sdr.is_some())?
+            .is_some()
+        {
+            return self.0.content_presenter.require_ready();
+        }
         let requests = self.0.portable_requests(scene)?;
         self.0
             .content_presenter

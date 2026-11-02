@@ -1460,10 +1460,13 @@ impl WgpuRendererCore {
         &mut self,
         scene: &Scene,
         viewport: Size<DevicePixels>,
+        selected: Option<&[Option<crate::content_executor::GpuImage>]>,
     ) -> Result<Vec<crate::custom_draw::PreparedDraw>> {
         use crate::custom_draw::*;
         let requests = self.portable_requests(scene)?;
-        let portable = if self.content_subframe_depth == 0 {
+        let portable = if let Some(images) = selected {
+            images.to_vec()
+        } else if self.content_subframe_depth == 0 {
             self.content_presenter.update(&requests, false)?
         } else {
             vec![None; requests.len()]
@@ -1619,6 +1622,15 @@ impl WgpuRendererCore {
         premultiplied_alpha: bool,
         clear_color: wgpu::Color,
     ) -> Result<wgpu::SubmissionIndex> {
+        let resolved = if self.content_subframe_depth == 0 {
+            self.content_presenter.resolve_scene(scene, false)?
+        } else {
+            None
+        };
+        let (scene, selected) = resolved
+            .as_ref()
+            .map(|resolved| (&resolved.scene, Some(resolved.images.as_slice())))
+            .unwrap_or((scene, None));
         if scene.backdrops.is_empty() && scene.layer_boundaries.is_empty() {
             if let Some(effects) = &mut self.backdrops {
                 effects.clear();
@@ -1643,7 +1655,7 @@ impl WgpuRendererCore {
                 .all(|d| d.program.output_encoding() == gpui::ShaderOutputEncoding::EncodedSrgb),
             "linear P3 shaders require a native wide-SDR compositor"
         );
-        let custom_draws = self.prepare_custom_draws(scene, size)?;
+        let custom_draws = self.prepare_custom_draws(scene, size, selected)?;
         if !scene.shader_draws.is_empty() && self.shaders.premultiplied != premultiplied_alpha {
             self.shaders.pipelines.clear();
             self.shaders.premultiplied = premultiplied_alpha;
@@ -3036,6 +3048,14 @@ impl WgpuHeadlessRenderer {
 ))]
 impl gpui::PlatformHeadlessRenderer for WgpuHeadlessRenderer {
     fn prepare_content_snapshot(&mut self, scene: &Scene) -> anyhow::Result<()> {
+        if self
+            .core
+            .content_presenter
+            .resolve_scene(scene, false)?
+            .is_some()
+        {
+            return self.core.content_presenter.require_ready();
+        }
         let requests = self.core.portable_requests(scene)?;
         self.core.content_presenter.update(&requests, false)?;
         self.core.content_presenter.require_ready()

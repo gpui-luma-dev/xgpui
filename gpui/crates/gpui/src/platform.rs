@@ -1462,7 +1462,8 @@ pub trait PlatformHeadlessRenderer {
                 ),
                 1.,
             )?;
-            if draw.content.portable_content(&request)?.is_some() {
+            if draw.content.is_content_group() || draw.content.portable_content(&request)?.is_some()
+            {
                 return Err(crate::content::ContentError::new(
                     crate::content::ContentErrorKind::UnsupportedCapability,
                     "this renderer has no portable content executor",

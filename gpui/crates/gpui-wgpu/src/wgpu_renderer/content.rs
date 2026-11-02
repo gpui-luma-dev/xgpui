@@ -14,6 +14,7 @@ struct Pending {
     keys: Vec<c::OutputKey>,
     presentation_slots: Vec<Option<c::PresentationSlotId>>,
     job: WgpuContentJob,
+    groups: Vec<c::ContentGroupTicket>,
 }
 /// Shared per-device worker and exported-image budget.
 fn service(
@@ -69,6 +70,7 @@ pub(super) struct ContentPresenter {
     requests: usize,
     completions: usize,
     wide: Option<bool>,
+    groups: c::ContentGroupState<GpuImage>,
     redraw: Arc<std::sync::atomic::AtomicBool>,
 }
 impl ContentPresenter {
@@ -90,6 +92,7 @@ impl ContentPresenter {
             requests: 0,
             completions: 0,
             wide: None,
+            groups: Default::default(),
             redraw,
         })
     }
@@ -102,8 +105,13 @@ impl ContentPresenter {
             completions: self.completions,
             cached_images: self.cache.len(),
             retained_slots: self.slots.len(),
+            committed_groups: self.groups.committed_count(),
             pending: self.pending.is_some(),
-            last_error: self.failed.as_ref().map(|(_, e)| e.clone()),
+            last_error: self
+                .failed
+                .as_ref()
+                .map(|(_, e)| e.clone())
+                .or_else(|| self.groups.last_error().cloned()),
             execution: self.stats.clone(),
         }
     }
@@ -119,6 +127,7 @@ impl ContentPresenter {
             )
             .into());
         }
+        self.groups.require_ready()?;
         Ok(())
     }
     pub fn take_redraw(&self) -> bool {
@@ -131,6 +140,32 @@ impl ContentPresenter {
             wake();
         });
     }
+    pub fn resolve_scene(
+        &mut self,
+        scene: &Scene,
+        wide: bool,
+    ) -> Result<Option<c::ResolvedContentScene<GpuImage>>> {
+        let Some(request) = c::ContentGroupScene::describe(scene, |draw| {
+            let prep = gpui::PreparationRequest::new(
+                draw.bounds.size.map(|d| gpui::px(d.0)),
+                crate::custom_draw::extent(draw)?,
+                1.,
+            )?;
+            Ok(draw.content.portable_content(&prep)?)
+        })?
+        else {
+            return Ok(None);
+        };
+        let tickets = self.groups.observe(&request.groups)?;
+        let images = self.update_grouped(&request.draws, wide, &tickets)?;
+        request.report_errors(&mut self.groups, &tickets);
+        Ok(Some(request.resolve(
+            scene,
+            &self.groups,
+            &tickets,
+            &images,
+        )?))
+    }
     fn fail(&mut self, signature: Signature, error: c::ContentError) {
         log::error!("portable content generation failed: {error}");
         self.failed = Some((signature, error));
@@ -140,9 +175,19 @@ impl ContentPresenter {
         draws: &[Option<c::ContentDrawRequest>],
         wide: bool,
     ) -> Result<Vec<Option<GpuImage>>> {
+        self.groups.observe(&[])?;
+        self.update_grouped(draws, wide, &[])
+    }
+    fn update_grouped(
+        &mut self,
+        draws: &[Option<c::ContentDrawRequest>],
+        wide: bool,
+        groups: &[c::ContentGroupTicket],
+    ) -> Result<Vec<Option<GpuImage>>> {
         if self.wide != Some(wide) {
             self.wide = Some(wide);
             self.failed = None;
+            self.groups.clear_errors();
             self.cache.retain(|_, image| {
                 wide || !matches!(
                     image.descriptor.interpretation().color,
@@ -150,6 +195,12 @@ impl ContentPresenter {
                 )
             });
             self.slots.retain(|_, key| self.cache.contains_key(key));
+            self.groups.retain_images(|image| {
+                wide || !matches!(
+                    image.descriptor.interpretation().color,
+                    c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
+                )
+            });
         }
         let active: Vec<_> = draws.iter().flatten().collect();
         let mut slots = HashSet::new();
@@ -249,6 +300,19 @@ impl ContentPresenter {
                 Ok(frame) => {
                     self.stats = frame.stats;
                     self.completions += 1;
+                    for ticket in &pending.groups {
+                        let images = &frame.gpu[ticket.roots.clone()];
+                        if wide
+                            || images.iter().all(|image| {
+                                !matches!(
+                                    image.descriptor.interpretation().color,
+                                    c::ColorEncoding::LinearP3 | c::ColorEncoding::LinearRec2020
+                                )
+                            })
+                        {
+                            self.groups.publish(ticket, images.to_vec());
+                        }
+                    }
                     // Consume completed work before a newer input can cancel it.
                     // Its destinations may retain these pixels while the newest
                     // generation runs, even if no frame displayed this result yet.
@@ -300,6 +364,7 @@ impl ContentPresenter {
                 Ok(job) => {
                     self.requests += 1;
                     self.pending = Some(Pending {
+                        groups: groups.to_vec(),
                         keys: keys.clone(),
                         presentation_slots: active
                             .iter()
@@ -309,6 +374,17 @@ impl ContentPresenter {
                     });
                 }
                 Err(error) => self.fail(signature.clone(), error),
+            }
+        }
+        for ticket in groups {
+            if let Some((_, error)) = &self.failed {
+                self.groups.fail(ticket, error.clone());
+            } else if let Some(images) = keys.get(ticket.roots.clone()).and_then(|keys| {
+                keys.iter()
+                    .map(|key| self.cache.get(key).cloned())
+                    .collect::<Option<Vec<_>>>()
+            }) {
+                self.groups.publish(ticket, images);
             }
         }
         let mut next_key = keys.iter();
@@ -369,6 +445,8 @@ pub struct ContentPresentationStats {
     pub cached_images: usize,
     /// Stable slots with prior valid results.
     pub retained_slots: usize,
+    /// Complete atomic groups with retained geometry and image leases.
+    pub committed_groups: usize,
     /// Whether a generation is still pending.
     pub pending: bool,
     /// Failure of the current generation, reported once.

@@ -34,7 +34,9 @@ cargo run --release --manifest-path apps/xgpui-ext-lab/Cargo.toml \
 ```
 
 This runs both rendering paths through the platform headless renderer. The
-portable-group half currently requires the Metal atomic-group implementation.
+portable-group half uses the platform's atomic-group implementation (Metal, wgpu
+or D3D11). The D3D11 implementation is cross-compiled; its Windows GPU runtime
+acceptance remains pending.
 The comparison uses a 1024×512 physical-pixel canvas at scale 1; use `--width` and
 `--height` to change it. Width must be 320..=4096 and height 160..=4096. Four cases
 cover warm replay of 512 cells, replay of one cell, alternating warm/cool replacement
