@@ -280,3 +280,22 @@ upload with ordinary views. Check rapid filter changes, exposure, saturation and
 vignette for responsive edits without placeholder flashes; reset should restore
 the baseline. Check opacity and rounded edges while editing. Use `--adjustments`
 for linear controls and `--float-images` for native wide-color images.
+
+
+### Portable CoreVideo BGRA import validation
+
+On macOS run `just media-import-test` from the repository root. This runs seven
+release-mode native GPU tests on the command line; it does not open an app window.
+Look for `7 passed; 0 failed`. Add `MTL_DEBUG_LAYER=1` before the command for Metal
+API validation. Fixtures are generated locally; no video file or decoder is used.
+
+The tests check source-sized direct BGRA import, sampled/adjusted window pixels,
+replay reuse, pending acquisition, descriptor/backing rejection, cancellation,
+release after a paused dependent copy and after a submitted-prefix failure, and
+retirement when a scene is removed. Imported views allocate no new image storage;
+window presentation does not read producer pixels back to the CPU. Headless pixel
+validation does read the final target outside presentation.
+
+This step adds the portable graph/native import path for CoreVideo BGRA. The video
+lab still uses its existing native adapters. NV12 conversion and VideoFrame/View
+migration, followed by DXGI and DMA-BUF integration, remain subsequent steps.

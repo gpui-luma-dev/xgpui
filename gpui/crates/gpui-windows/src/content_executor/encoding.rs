@@ -290,6 +290,16 @@ impl Worker {
         cancelled: &AtomicBool,
         readback: bool,
     ) -> Result<Dx11ContentFrame> {
+        if graph
+            .nodes()
+            .iter()
+            .any(|node| matches!(node.operation(), c::ContentOperation::ExternalImage(_)))
+        {
+            return Err(error(
+                c::ContentErrorKind::UnsupportedCapability,
+                "external image imports are unsupported by this executor",
+            ));
+        }
         if unsafe { self.device.GetFeatureLevel() }.0 < D3D_FEATURE_LEVEL_11_0.0 {
             return Err(error(
                 c::ContentErrorKind::UnsupportedCapability,
@@ -817,6 +827,11 @@ impl Run<'_> {
                         );
                     }
                 }
+            }
+            c::ContentOperation::ExternalImage(_) => {
+                return Err(execution(
+                    "external image imports are unsupported by this executor",
+                ));
             }
             c::ContentOperation::UploadImage(_)
             | c::ContentOperation::UploadBuffer(_)

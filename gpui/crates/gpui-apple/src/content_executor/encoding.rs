@@ -83,6 +83,21 @@ impl Worker {
                     "retained GPU content exceeds budget",
                 )
             })?;
+        // Reject incompatible imports before pipeline compilation or submission.
+        for node in graph.nodes() {
+            if let c::ContentOperation::ExternalImage(image) = node.operation() {
+                let lease = image.acquire()?;
+                let frame = lease
+                    .backing::<crate::custom_draw::core_video::CoreVideoFrame>()
+                    .ok_or_else(|| {
+                        failure(
+                            c::ContentErrorKind::UnsupportedCapability,
+                            "unsupported Metal external image backing",
+                        )
+                    })?;
+                frame.validate_external_descriptor(image.descriptor())?;
+            }
+        }
         let mut stats = MetalContentStats {
             worker_thread: std::thread::current().name().map(str::to_owned),
             ..Default::default()
@@ -454,15 +469,37 @@ impl Run<'_> {
             samplers: HashMap::new(),
         };
         for (output, d) in node.outputs().iter().enumerate() {
-            let resource = match d {
-                c::ResourceDescriptor::Image(d) => Arc::new(Resource::Image(
-                    self.worker
-                        .device
-                        .newTextureWithDescriptor(&texture_descriptor(d, self.usages[id][output]))
-                        .ok_or_else(|| allocation("allocate Metal content texture"))?,
-                )),
-                c::ResourceDescriptor::Buffer(d) => {
-                    allocate_buffer(&self.worker.device, d.byte_len())?
+            let resource = if let c::ContentOperation::ExternalImage(image) = node.operation() {
+                let lease = image.acquire()?;
+                let frame = lease
+                    .backing::<crate::custom_draw::core_video::CoreVideoFrame>()
+                    .ok_or_else(|| {
+                        failure(
+                            c::ContentErrorKind::UnsupportedCapability,
+                            "unsupported Metal external backing",
+                        )
+                    })?;
+                let imported = frame
+                    .import_external_bgra(&self.worker.device)
+                    .map_err(|e| execution(e.to_string()))?;
+                Arc::new(Resource::ExternalImage {
+                    import: imported,
+                    _lease: lease,
+                })
+            } else {
+                match d {
+                    c::ResourceDescriptor::Image(d) => Arc::new(Resource::Image(
+                        self.worker
+                            .device
+                            .newTextureWithDescriptor(&texture_descriptor(
+                                d,
+                                self.usages[id][output],
+                            ))
+                            .ok_or_else(|| allocation("allocate Metal content texture"))?,
+                    )),
+                    c::ResourceDescriptor::Buffer(d) => {
+                        allocate_buffer(&self.worker.device, d.byte_len())?
+                    }
                 }
             };
             prepared.owners.push(resource.clone());
@@ -628,6 +665,18 @@ impl Run<'_> {
     }
     fn encode(&mut self, id: usize) -> Result<()> {
         let prepared = self.prepare(id)?;
+        if matches!(
+            self.graph.nodes()[id].operation(),
+            c::ContentOperation::ExternalImage(_)
+        ) {
+            self.stats.external_imports += 1;
+        } else {
+            self.stats.image_allocations += self.graph.nodes()[id]
+                .outputs()
+                .iter()
+                .filter(|d| matches!(d, c::ResourceDescriptor::Image(_)))
+                .count();
+        }
         for owner in &prepared.owners {
             self.tracker.retain_owner(id, owner.clone())?;
         }
@@ -646,7 +695,9 @@ impl Run<'_> {
                 prepared.outputs[0].image(),
                 color.rgba().map(f64::from),
             )?,
-            c::ContentOperation::UploadBuffer(_) | c::ContentOperation::ZeroBuffer => {} // Fully initialized before publication.
+            c::ContentOperation::ExternalImage(_)
+            | c::ContentOperation::UploadBuffer(_)
+            | c::ContentOperation::ZeroBuffer => {} // Fully initialized before publication.
             c::ContentOperation::UploadImage(_) => {
                 let c::ResourceDescriptor::Image(d) = &node.outputs()[0] else {
                     unreachable!()

@@ -1879,3 +1879,54 @@ helpers available only under test/bench features. Those three native helper
 functions now share the constructor's non-Wasm availability. Both the native
 wgpu production check and Windows media production check pass after that fix.
 This compile correction does not establish Windows native GPU acceptance.
+
+
+### External graph import and native Metal BGRA checkpoint
+
+`Content::external(image)` and `ContentBuilder::external_image` now describe a
+source-sized `ContentOperation::ExternalImage`. The structural recipe uses the
+immutable frame identity, not a pointer, image bytes or destination extent.
+Cloned references deduplicate within a graph; new frame identities remain
+separate even when native allocation addresses match. No CPU upload payload is
+created. Readiness is subscribed before observation and participates in existing
+renderer dependency invalidation and paced redraw. Pending acquisition submits
+no native import. Completed observer caches drop their external references so
+pruned ready imports cannot pin a producer after description.
+
+`ContentCapabilities::external_images` defaults to false. Metal advertises its
+initial support. wgpu and D3D11 reject imports with UnsupportedCapability, both
+at description with their capabilities and at executor preflight for graphs
+created elsewhere, before allocation/submission. Native Metal preflight validates
+the adapter type, format, extent, mip count, transfer and alpha contract. Foreign
+backings and descriptor mismatches fail before any graph submission.
+
+`CoreVideoFrame::external_image()` exposes immutable synchronized BGRA as the
+portable handle. NV12 currently returns UnsupportedCapability from this method.
+The worker imports an IOSurface/CoreVideo BGRA8Unorm view directly. A native
+resource owns the Metal texture, CoreVideo view/cache and ExternalImageLease;
+view/cache destruction precedes the producer lease. No pixel upload, CPU readback
+or display-sized image allocation is used for import. An empty command buffer
+provides the graph operation's normal submission/retirement boundary. Dependent
+copies or shader reads retain the imported resource through the existing
+ExecutionTracker and native completion leases. Submitted prefixes drain safely
+after cancellation/failure. Exported roots and compositor submissions retain the
+same resource owner; scene removal releases the current presentation cache.
+There is no device-global imported-result cache or native producer-cache entry.
+An explicit retained presentation slot/group may intentionally retain its prior
+snapshot under the existing policy.
+
+Metal instrumentation now reports external imports and newly allocated graph
+image storage separately. Seven native tests verify raw BGRA pixels, adjusted
+window RGBA/opacity, replay reuse with zero producer readbacks, zero output image
+allocations for direct import, removal/retirement, pending acquisition, rejected
+backings/descriptors, cancellation, a paused dependent copy and failure after a
+submitted copy. The lab's `just media-import-test` recipe runs these in release
+mode without opening a visible window and with no warnings. Ten external-image
+CPU tests include source-size/deduplication/identity, readiness notification and
+pruned-owner retirement. Existing asset/group/mapping/graph tests and all 85 media
+tests pass. Windows production and browser Wasm builds remain compile checks;
+this checkpoint does not add native Windows/Linux import execution.
+
+Next: native NV12 plane conversion and VideoFrame/VideoView migration to portable
+draws and color transforms, followed by native DXGI/DMA-BUF execution. Existing
+video app behavior remains unchanged until that migration is complete.

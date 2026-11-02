@@ -37,6 +37,10 @@ impl Content {
     pub fn image(asset: ImageAsset) -> Self {
         Self::new(AssetSource(asset))
     }
+    /// Describe an immutable external frame at its natural extent.
+    pub fn external(image: ExternalImage) -> Self {
+        Self::new(ExternalSource(image))
+    }
     /// Built-in structurally reusable solid, safe to reconstruct each render.
     pub fn solid(color: ColorValue) -> Self {
         Self::new(Solid(color))
@@ -63,11 +67,19 @@ impl ContentSource for AssetSource {
     }
 }
 
+#[derive(Debug)]
+struct ExternalSource(ExternalImage);
+impl ContentSource for ExternalSource {
+    fn describe(&self, cx: &mut ContentBuilder, _: &ContentRequest) -> Result<ImageRef> {
+        cx.external_image(&self.0)
+    }
+}
 /// Request-owned subscriptions, retained even when graph description fails.
 #[derive(Default)]
 pub struct ContentDependencies {
     images: Vec<(ImageAsset, u64, ImageSubscription)>,
     pending: bool,
+    external: Vec<(ExternalImage, u64, ExternalImageSubscription)>,
 }
 impl ContentDependencies {
     /// Whether any observed asset has transitioned since description.
@@ -75,6 +87,10 @@ impl ContentDependencies {
         self.images
             .iter()
             .any(|(asset, version, _)| asset.observe().0 != *version)
+            || self
+                .external
+                .iter()
+                .any(|(image, version, _)| image.observe().0 != *version)
     }
     /// Whether description encountered an unavailable image.
     pub fn is_pending(&self) -> bool {
@@ -135,6 +151,8 @@ pub struct BufferSlice {
 /// Resource limits supplied by an executor; not backend names or queue capacities.
 #[derive(Clone, Debug)]
 pub struct ContentCapabilities {
+    /// Immutable external-image imports are supported by this executor.
+    pub external_images: bool,
     /// Largest supported image dimension.
     pub max_image_dimension: u32,
     /// Largest supported single buffer.
@@ -155,6 +173,7 @@ pub struct ContentCapabilities {
 impl Default for ContentCapabilities {
     fn default() -> Self {
         Self {
+            external_images: false,
             max_image_dimension: 8192,
             max_buffer_bytes: 256 * 1024 * 1024,
             image_formats: vec![
@@ -235,6 +254,8 @@ pub enum ContentOperation {
     Solid(ColorValue),
     /// Immutable, tightly packed mip payload, largest level first.
     UploadImage(Arc<[u8]>),
+    /// Acquired immutable adapter-owned native image; identity is frame-specific.
+    ExternalImage(ExternalImage),
     /// Copy a whole image with unchanged interpretation and layout.
     CopyImage {
         /// Selected source image output.
@@ -261,6 +282,7 @@ pub enum ContentOperation {
 pub(super) enum RecipeOperation {
     Solid(ColorValue),
     UploadImage(Arc<[u8]>),
+    ExternalImage(u64),
     CopyImage,
     UploadBuffer(Arc<[u8]>),
     ZeroBuffer,
@@ -437,6 +459,11 @@ impl ContentGraph {
                 payload_bytes,
             })
         })();
+        if result.is_ok() {
+            // Successful external acquisition is terminal. Only reachable graph
+            // nodes should retain ready frames, not a readiness-observer cache.
+            dependencies.external.clear();
+        }
         (result, dependencies)
     }
     /// Operations in dependency-first order.
@@ -497,6 +524,54 @@ impl ContentBuilder<'_> {
                 )))
             }
             ImageReadiness::Failed(error) => self.checked(Err(error)),
+        }
+    }
+    /// Observe acquisition before describing a source-sized external root.
+    pub fn external_image(&mut self, image: &ExternalImage) -> Result<ImageRef> {
+        self.healthy()?;
+        if !self.capabilities.external_images {
+            return self.checked(Err(error(
+                ContentErrorKind::UnsupportedCapability,
+                "external image imports are unsupported",
+            )));
+        }
+        let (_, state) = if self
+            .dependencies
+            .external
+            .iter()
+            .any(|(old, _, _)| old.id() == image.id())
+        {
+            image.observe()
+        } else {
+            let (subscription, version, state) = image.subscribe(self.wake.clone());
+            self.dependencies
+                .external
+                .push((image.clone(), version, subscription));
+            (version, state)
+        };
+        match state {
+            ExternalImageReadiness::Pending => {
+                self.dependencies.pending = true;
+                self.checked(Err(error(
+                    ContentErrorKind::Pending,
+                    "external image acquisition is pending",
+                )))
+            }
+            ExternalImageReadiness::Failed(e) => self.checked(Err(e)),
+            ExternalImageReadiness::Ready => {
+                let node = self.add(
+                    ResourceDescriptor::Image(image.descriptor().clone()),
+                    ContentOperation::ExternalImage(image.clone()),
+                    RecipeOperation::ExternalImage(image.id()),
+                    vec![],
+                    0,
+                )?;
+                Ok(ImageRef {
+                    graph: self.id,
+                    node,
+                    output: 0,
+                })
+            }
         }
     }
     pub(super) fn graph_identity(&self) -> u64 {

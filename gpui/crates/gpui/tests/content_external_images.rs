@@ -164,3 +164,113 @@ fn terminal_transition_cannot_race_past_subscription() {
         );
     }
 }
+
+fn root(image: ExternalImage, side: u32) -> ContentRoot {
+    ContentRoot {
+        content: Content::external(image),
+        request: ContentRequest::new(
+            gpui::size(gpui::px(side as f32), gpui::px(side as f32)),
+            ImageExtent::new(side, side).unwrap(),
+            1.,
+        )
+        .unwrap(),
+    }
+}
+fn import_capabilities() -> ContentCapabilities {
+    ContentCapabilities {
+        external_images: true,
+        ..Default::default()
+    }
+}
+#[test]
+fn graph_imports_are_source_sized_frame_specific_and_deduplicated_without_pixels() {
+    let backing = Arc::new(());
+    let image = ExternalImage::ready(descriptor(), backing.clone(), || {});
+    let next = ExternalImage::ready(descriptor(), backing, || {});
+    let graph = ContentGraph::describe(
+        &[root(image.clone(), 64), root(image, 32), root(next, 64)],
+        import_capabilities(),
+        GraphLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(graph.nodes().len(), 2);
+    assert_eq!(graph.roots()[0], graph.roots()[1]);
+    assert_ne!(graph.roots()[0], graph.roots()[2]);
+    assert_eq!(
+        graph.nodes()[0].outputs()[0],
+        ResourceDescriptor::Image(descriptor())
+    );
+    assert!(matches!(
+        graph.nodes()[0].operation(),
+        ContentOperation::ExternalImage(_)
+    ));
+    assert_eq!(graph.payload_bytes(), 0);
+}
+#[test]
+fn pending_import_tracks_acquisition_and_unsupported_executors_reject_it() {
+    let (image, done) = ExternalImage::pending(descriptor(), Arc::new(()), || {});
+    let root = root(image, 64);
+    assert_eq!(
+        ContentGraph::describe(
+            std::slice::from_ref(&root),
+            ContentCapabilities::default(),
+            GraphLimits::default()
+        )
+        .unwrap_err()
+        .kind,
+        ContentErrorKind::UnsupportedCapability
+    );
+    let calls = Arc::new(AtomicUsize::new(0));
+    let count = calls.clone();
+    let (result, dependencies) = ContentGraph::describe_tracked(
+        std::slice::from_ref(&root),
+        import_capabilities(),
+        GraphLimits::default(),
+        Arc::new(move || {
+            count.fetch_add(1, Ordering::SeqCst);
+        }),
+    );
+    assert_eq!(result.unwrap_err().kind, ContentErrorKind::Pending);
+    assert!(dependencies.is_pending());
+    assert!(!dependencies.changed());
+    done.resolve(Ok(()));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert!(dependencies.changed());
+    ContentGraph::describe(&[root], import_capabilities(), GraphLimits::default()).unwrap();
+}
+#[derive(Debug)]
+struct UnusedExternal(ExternalImage);
+impl ContentSource for UnusedExternal {
+    fn describe(
+        &self,
+        cx: &mut ContentBuilder,
+        request: &ContentRequest,
+    ) -> Result<ImageRef, ContentError> {
+        cx.external_image(&self.0)?;
+        cx.solid(request.extent(), ColorValue::srgb([1., 0., 0., 1.])?)
+    }
+}
+#[test]
+fn pruned_ready_imports_do_not_pin_a_producer_in_the_observer_cache() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let count = calls.clone();
+    let image = ExternalImage::ready(descriptor(), Arc::new(()), move || {
+        count.fetch_add(1, Ordering::SeqCst);
+    });
+    let mut root = root(image.clone(), 64);
+    root.content = Content::new(UnusedExternal(image));
+    let (result, dependencies) = ContentGraph::describe_tracked(
+        &[root],
+        import_capabilities(),
+        GraphLimits::default(),
+        Arc::new(|| {}),
+    );
+    let graph = result.unwrap();
+    assert_eq!(graph.nodes().len(), 1);
+    assert!(!dependencies.is_pending());
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "unreachable external source must retire despite a retained graph and dependency observer"
+    );
+}

@@ -27,6 +27,10 @@ canvas-lab *args:
 media *args:
     cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin media-lab -- "$@"
 
+# CoreVideo BGRA import pixels and lease retirement (macOS; no visible window).
+media-import-test *args:
+    cargo test {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --test portable-imports -- --test-threads=1 "$@"
+
 # Six shader examples and typography; select an example in the window.
 shaders *args:
     cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shader-examples -- "$@"

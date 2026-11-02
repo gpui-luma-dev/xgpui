@@ -165,6 +165,16 @@ impl Worker {
         cancelled: &AtomicBool,
         readback: bool,
     ) -> Result<WgpuContentFrame> {
+        if graph
+            .nodes()
+            .iter()
+            .any(|node| matches!(node.operation(), c::ContentOperation::ExternalImage(_)))
+        {
+            return Err(error(
+                c::ContentErrorKind::UnsupportedCapability,
+                "external image imports are unsupported by this executor",
+            ));
+        }
         if cancelled.load(Ordering::Acquire) {
             return Err(error(
                 c::ContentErrorKind::Cancelled,
@@ -879,6 +889,11 @@ impl Run<'_> {
                     outputs[0].texture(),
                     d,
                 );
+            }
+            c::ContentOperation::ExternalImage(_) => {
+                return Err(execution(
+                    "external image imports are unsupported by this executor",
+                ));
             }
             c::ContentOperation::UploadImage(data) => {
                 let c::ResourceDescriptor::Image(d) = &node.outputs()[0] else {

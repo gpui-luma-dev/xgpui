@@ -43,8 +43,8 @@ impl Drop for Inner {
 /// even when a decoder reuses the same allocation address.
 ///
 /// This handle does not import or sample resources. Native adapters validate the
-/// backing, descriptor and synchronization protocol before GPU use. Executor and
-/// graph integration is a separate implementation step.
+/// backing, descriptor and synchronization protocol before GPU use. Graph imports
+/// require an executor that advertises external-image support.
 #[derive(Clone)]
 pub struct ExternalImage(Arc<Inner>);
 impl std::fmt::Debug for ExternalImage {

@@ -166,3 +166,8 @@ required-features = ["web"]
 name = "italy-photo"
 path = "extensions-web/src/italy.rs"
 required-features = ["web"]
+
+[[test]]
+name = "portable-imports"
+path = "media-lab/tests/portable_imports.rs"
+required-features = ["native"]

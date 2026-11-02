@@ -139,6 +139,10 @@ pub struct MetalContentStats {
     pub operations: usize,
     /// Producer command buffers committed.
     pub submissions: usize,
+    /// External native views imported without a pixel upload.
+    pub external_imports: usize,
+    /// Newly allocated graph output image storage (excludes imported views).
+    pub image_allocations: usize,
     /// Root readback command buffers committed.
     pub readbacks: usize,
     /// Largest count of submitted work not yet observed complete.
@@ -362,6 +366,10 @@ impl MetalContentExecutor {
 
 enum Resource {
     Image(Texture),
+    ExternalImage {
+        import: crate::custom_draw::core_video::ExternalBgraImport,
+        _lease: c::ExternalImageLease,
+    },
     Buffer(metal::Buffer),
 }
 // SAFETY: Metal resource retain/release is thread-safe. Only the serial worker
@@ -373,6 +381,7 @@ impl Resource {
     fn image(&self) -> &TextureRef {
         match self {
             Self::Image(t) => t,
+            Self::ExternalImage { import, .. } => &import.texture,
             _ => unreachable!(),
         }
     }
@@ -385,6 +394,9 @@ impl Resource {
     fn allocated_bytes(&self) -> u64 {
         match self {
             Self::Image(t) => MTLResource::allocatedSize(&**t) as u64,
+            Self::ExternalImage { import, .. } => {
+                MTLResource::allocatedSize(&*import.texture) as u64
+            }
             Self::Buffer(b) => MTLResource::allocatedSize(&**b) as u64,
         }
     }
@@ -417,6 +429,7 @@ impl Worker {
             .ok_or_else(|| allocation("allocate bounded Metal queue"))?;
         let threads = device.maxThreadsPerThreadgroup();
         let mut capabilities = c::ContentCapabilities {
+            external_images: true,
             max_image_dimension: 16384,
             max_buffer_bytes: (device.maxBufferLength() as u64).min(u64::from(u32::MAX)),
             ..Default::default()

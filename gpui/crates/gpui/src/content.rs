@@ -5,7 +5,7 @@
 //! Portable programs are parsed, validated and reflected without native GPU access.
 //! `Window::paint_content` records portable presentation requests. Native
 //! execution and compositing are implemented by platform backends. External frame
-//! ownership is portable; graph/native import integration remains a separate step.
+//! ownership and graph imports are portable; native adapters are capability-checked.
 
 mod asset;
 mod color_transform;
