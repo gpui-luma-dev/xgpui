@@ -179,10 +179,7 @@ impl WgpuContext {
         ))
     }
 
-    #[cfg(all(
-        not(target_family = "wasm"),
-        any(test, feature = "bench-support", feature = "test-support")
-    ))]
+    #[cfg(not(target_family = "wasm"))]
     pub(crate) fn new_headless() -> anyhow::Result<(Self, wgpu::TextureFormat)> {
         // Creating a device takes tens of milliseconds, and benchmarks create a headless
         // renderer for every window they open, so the process shares one device until it
@@ -201,10 +198,7 @@ impl WgpuContext {
         Ok(created)
     }
 
-    #[cfg(all(
-        not(target_family = "wasm"),
-        any(test, feature = "bench-support", feature = "test-support")
-    ))]
+    #[cfg(not(target_family = "wasm"))]
     fn create_headless() -> anyhow::Result<(Self, wgpu::TextureFormat)> {
         // Validation-only backend selection; keep normal window instance defaults upstream.
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -284,10 +278,7 @@ impl WgpuContext {
         ))
     }
 
-    #[cfg(all(
-        not(target_family = "wasm"),
-        any(test, feature = "bench-support", feature = "test-support")
-    ))]
+    #[cfg(not(target_family = "wasm"))]
     /// Both candidates are 8-bit RGBA-ordered or BGRA-ordered formats: headless readback
     /// copies rows as 4 bytes per pixel and only swizzles, so no other formats may be added
     /// here without updating it.
