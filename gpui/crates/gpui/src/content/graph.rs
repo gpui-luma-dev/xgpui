@@ -33,6 +33,10 @@ impl Content {
             label: None,
         }
     }
+    /// Present an image asset at its natural source extent.
+    pub fn image(asset: ImageAsset) -> Self {
+        Self::new(AssetSource(asset))
+    }
     /// Built-in structurally reusable solid, safe to reconstruct each render.
     pub fn solid(color: ColorValue) -> Self {
         Self::new(Solid(color))
@@ -51,6 +55,33 @@ impl Content {
         self.label.as_deref()
     }
 }
+#[derive(Debug)]
+struct AssetSource(ImageAsset);
+impl ContentSource for AssetSource {
+    fn describe(&self, cx: &mut ContentBuilder, _: &ContentRequest) -> Result<ImageRef> {
+        cx.image(&self.0)
+    }
+}
+
+/// Request-owned subscriptions, retained even when graph description fails.
+#[derive(Default)]
+pub struct ContentDependencies {
+    images: Vec<(ImageAsset, u64, ImageSubscription)>,
+    pending: bool,
+}
+impl ContentDependencies {
+    /// Whether any observed asset has transitioned since description.
+    pub fn changed(&self) -> bool {
+        self.images
+            .iter()
+            .any(|(asset, version, _)| asset.observe().0 != *version)
+    }
+    /// Whether description encountered an unavailable image.
+    pub fn is_pending(&self) -> bool {
+        self.pending
+    }
+}
+
 #[derive(Debug)]
 struct Solid(ColorValue);
 impl ContentSource for Solid {
@@ -308,80 +339,97 @@ impl ContentGraph {
         capabilities: ContentCapabilities,
         limits: GraphLimits,
     ) -> Result<Self> {
-        if limits.max_depth == 0 || limits.max_nodes == 0 {
-            return Err(error(
-                ContentErrorKind::ResourceLimit,
-                "graph depth and node limits must be positive",
-            ));
-        }
-        let mut builder = ContentBuilder {
-            id: next_content_identity(),
-            capabilities,
-            limits,
-            nodes: Vec::new(),
-            keys: HashMap::new(),
-            described: HashMap::new(),
-            active: HashSet::new(),
-            poison: None,
-            payload_bytes: 0,
-        };
-        let mut outputs = Vec::new();
-        for root in roots {
-            let image = builder.source(&root.content, &root.request)?;
-            outputs.push(ResourceId {
-                node: image.node,
-                output: image.output,
-            });
-        }
-        builder.healthy()?;
-        let mut needed = vec![false; builder.nodes.len()];
-        let mut stack: Vec<_> = outputs.iter().map(|id| id.node).collect();
-        while let Some(id) = stack.pop() {
-            if !needed[id] {
-                needed[id] = true;
-                stack.extend(builder.nodes[id].dependencies.iter().copied());
+        Self::describe_tracked(roots, capabilities, limits, Arc::new(|| {})).0
+    }
+    /// Describe and subscribe atomically to encountered assets, including on error.
+    /// The callback must schedule a paced redraw without retaining the consumer.
+    pub fn describe_tracked(
+        roots: &[ContentRoot],
+        capabilities: ContentCapabilities,
+        limits: GraphLimits,
+        wake: Arc<dyn Fn() + Send + Sync>,
+    ) -> (Result<Self>, ContentDependencies) {
+        let mut dependencies = ContentDependencies::default();
+        let result = (|| {
+            if limits.max_depth == 0 || limits.max_nodes == 0 {
+                return Err(error(
+                    ContentErrorKind::ResourceLimit,
+                    "graph depth and node limits must be positive",
+                ));
             }
-        }
-        let mut remap = vec![0; builder.nodes.len()];
-        let mut nodes = Vec::new();
-        let mut payload_bytes = 0;
-        for (old, mut node) in builder.nodes.into_iter().enumerate() {
-            if !needed[old] {
-                continue;
+            let mut builder = ContentBuilder {
+                id: next_content_identity(),
+                capabilities,
+                limits,
+                nodes: Vec::new(),
+                keys: HashMap::new(),
+                described: HashMap::new(),
+                active: HashSet::new(),
+                poison: None,
+                payload_bytes: 0,
+                dependencies: &mut dependencies,
+                wake,
+            };
+            let mut outputs = Vec::new();
+            for root in roots {
+                let image = builder.source(&root.content, &root.request)?;
+                outputs.push(ResourceId {
+                    node: image.node,
+                    output: image.output,
+                });
             }
-            remap[old] = nodes.len();
-            for dependency in &mut node.dependencies {
-                *dependency = remap[*dependency];
-            }
-            match &mut node.operation {
-                ContentOperation::CopyImage { source }
-                | ContentOperation::CopyBuffer { source, .. } => source.node = remap[source.node],
-                ContentOperation::UploadImage(bytes) | ContentOperation::UploadBuffer(bytes) => {
-                    payload_bytes += bytes.len() as u64
+            builder.healthy()?;
+            let mut needed = vec![false; builder.nodes.len()];
+            let mut stack: Vec<_> = outputs.iter().map(|id| id.node).collect();
+            while let Some(id) = stack.pop() {
+                if !needed[id] {
+                    needed[id] = true;
+                    stack.extend(builder.nodes[id].dependencies.iter().copied());
                 }
-                ContentOperation::Render(pass) => {
-                    pass.remap(&remap);
-                    payload_bytes += pass.payload_bytes();
-                }
-                ContentOperation::Compute(pass) => {
-                    pass.remap(&remap);
-                    payload_bytes += pass.payload_bytes();
-                }
-                _ => {}
             }
-            nodes.push(node);
-        }
-        Ok(Self {
-            nodes,
-            roots: outputs
-                .into_iter()
-                .map(|id| ResourceId {
-                    node: remap[id.node],
-                    output: id.output,
-                })
-                .collect(),
-            payload_bytes,
-        })
+            let mut remap = vec![0; builder.nodes.len()];
+            let mut nodes = Vec::new();
+            let mut payload_bytes = 0;
+            for (old, mut node) in builder.nodes.into_iter().enumerate() {
+                if !needed[old] {
+                    continue;
+                }
+                remap[old] = nodes.len();
+                for dependency in &mut node.dependencies {
+                    *dependency = remap[*dependency];
+                }
+                match &mut node.operation {
+                    ContentOperation::CopyImage { source }
+                    | ContentOperation::CopyBuffer { source, .. } => {
+                        source.node = remap[source.node]
+                    }
+                    ContentOperation::UploadImage(bytes)
+                    | ContentOperation::UploadBuffer(bytes) => payload_bytes += bytes.len() as u64,
+                    ContentOperation::Render(pass) => {
+                        pass.remap(&remap);
+                        payload_bytes += pass.payload_bytes();
+                    }
+                    ContentOperation::Compute(pass) => {
+                        pass.remap(&remap);
+                        payload_bytes += pass.payload_bytes();
+                    }
+                    _ => {}
+                }
+                nodes.push(node);
+            }
+            Ok(Self {
+                nodes,
+                roots: outputs
+                    .into_iter()
+                    .map(|id| ResourceId {
+                        node: remap[id.node],
+                        output: id.output,
+                    })
+                    .collect(),
+                payload_bytes,
+            })
+        })();
+        (result, dependencies)
     }
     /// Operations in dependency-first order.
     pub fn nodes(&self) -> &[ContentNode] {
@@ -398,7 +446,9 @@ impl ContentGraph {
 }
 
 /// Host-created CPU description builder. Native recording is intentionally absent.
-pub struct ContentBuilder {
+pub struct ContentBuilder<'a> {
+    dependencies: &'a mut ContentDependencies,
+    wake: Arc<dyn Fn() + Send + Sync>,
     id: u64,
     capabilities: ContentCapabilities,
     limits: GraphLimits,
@@ -409,7 +459,38 @@ pub struct ContentBuilder {
     poison: Option<ContentError>,
     payload_bytes: u64,
 }
-impl ContentBuilder {
+impl ContentBuilder<'_> {
+    /// Register readiness before observing pixels. Pending remains a retryable state.
+    pub fn image(&mut self, asset: &ImageAsset) -> Result<ImageRef> {
+        self.healthy()?;
+        let (_, state) = if self
+            .dependencies
+            .images
+            .iter()
+            .any(|(a, _, _)| a.id() == asset.id())
+        {
+            asset.observe()
+        } else {
+            let (subscription, version, state) = asset.subscribe(self.wake.clone());
+            self.dependencies
+                .images
+                .push((asset.clone(), version, subscription));
+            (version, state)
+        };
+        match state {
+            ImageReadiness::Available(pixels) => {
+                self.upload_image(pixels.descriptor().clone(), pixels.bytes().clone())
+            }
+            ImageReadiness::Pending => {
+                self.dependencies.pending = true;
+                self.checked(Err(error(
+                    ContentErrorKind::Pending,
+                    "image asset is pending",
+                )))
+            }
+            ImageReadiness::Failed(error) => self.checked(Err(error)),
+        }
+    }
     pub(super) fn graph_identity(&self) -> u64 {
         self.id
     }

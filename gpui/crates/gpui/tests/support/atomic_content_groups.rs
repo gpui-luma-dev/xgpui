@@ -638,3 +638,51 @@ fn atomic_groups_coexist_with_native_subframes_and_independent_slots() {
     assert_eq!(stats.retained_slots, 1);
     assert_eq!(stats.execution.readbacks, 0);
 }
+
+#[test]
+fn pending_image_asset_retains_group_and_wakes_without_gpu_job() {
+    if isolated("pending_image_asset_retains_group_and_wakes_without_gpu_job") {
+        return;
+    }
+    let (mut renderer, rx) = setup();
+    let id = ContentGroupId::new();
+    let old = scene(group(id, false, false), false);
+    read(&mut renderer, &old);
+    completed(&rx);
+    let previous = read(&mut renderer, &old);
+    let (asset, done) = ImageAsset::pending();
+    let mut replacement = ContentGroup::new(id);
+    replacement.push(
+        CustomGeometry::RoundedRect {
+            bounds: Bounds::new(point(px(0.), px(0.)), size(px(64.), px(32.))),
+            corner_radii: Corners::default(),
+        },
+        Content::image(asset),
+    );
+    let requested = scene(replacement, false);
+    canvas_eq(&read(&mut renderer, &requested), &previous);
+    assert!(renderer.content_presentation_stats().last_error.is_none());
+    assert!(renderer.prepare_content_snapshot(&requested).is_err());
+    let descriptor = ImageDescriptor::new(
+        ImageExtent::new(1, 1).unwrap(),
+        PixelFormat::Rgba8,
+        ImageInterpretation {
+            color: ColorEncoding::Srgb,
+            alpha: AlphaMode::Straight,
+        },
+        1,
+    )
+    .unwrap();
+    done.resolve(Ok(ImagePixels::new(
+        descriptor,
+        Arc::from([0, 255, 0, 255]),
+        4,
+    )
+    .unwrap()));
+    completed(&rx);
+    read(&mut renderer, &requested);
+    completed(&rx);
+    canvas_solid(&read(&mut renderer, &requested), [0, 255, 0, 255]);
+    assert!(renderer.content_presentation_stats().last_error.is_none());
+    renderer.prepare_content_snapshot(&requested).unwrap();
+}

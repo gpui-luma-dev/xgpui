@@ -1500,3 +1500,130 @@ Windows, also run `portable-content` with the normal native launch command and
 exercise D/R/O/C, idle completion and resize; the app automatically uses D3D11 with
 the same portable group API. Keep issue #110 open until its remaining native
 platform acceptance is satisfied. Performance optimization stays deferred to #113.
+
+### Image assets and mapping: implementation contract
+
+This is the next implementation stage, not an implemented API checkpoint. The
+existing media path still dispatches `MediaImage`, adjusted/filtered images and
+video through backend-specific `CustomContent::prepare*` methods. Migration must
+preserve source-sized uploads, mip payloads, color metadata and completion-safe
+staging ownership before those methods can be removed.
+
+#### Asset identity, completion and subscriptions
+
+Use an `ImageAsset` handle with a stable request identity and an associated
+single-use completion endpoint. The initial constructor returns a pending asset
+and its completion endpoint. A ready constructor accepts a validated descriptor
+and immutable packed mip bytes. Workers resolve the endpoint with pixels or a
+structured failure; decoding and I/O remain outside the content builder. Completion
+is terminal: Pending → Available or Failed, with no mutation of published pixels.
+A replacement/reload creates a new asset identity. Dropping the last unresolved
+endpoint resolves the request as cancelled; dropping one handle cannot cancel
+other consumers of a cloned asset.
+
+Validation occurs before availability is published: payload size must equal the
+descriptor's packed mip size and configured CPU-byte admission must succeed.
+Pixel color/alpha meaning remains the supplied descriptor contract. CPU payload
+ownership and native upload staging are distinct. Native executors keep their
+existing bounded staging/submission leases; completing an asset does not imply
+that an upload has been submitted or finished.
+
+`Content::image(asset)` and `ContentBuilder::image(&asset)` register the asset as
+an explicit dependency even when it is still pending. The builder must retain the
+dependency set on failed/pending description, including dependencies encountered
+before an error. The presenter observes dependency versions as well as source
+identity/request when deciding whether a cached description or failure is reusable.
+A Pending result must never become a permanent cached error.
+
+Subscribe before reading readiness and verify the observed version afterward,
+or use an equivalent atomic observe-and-subscribe operation. Completion between
+observation and subscription must request a retry. Callbacks only mark/schedule a
+paced redraw; they never paint inline or take a window's frame callback. A window
+owns subscriptions only for its current requests. Replacement, removal and window
+teardown unsubscribe; a late signal may be ignored and cannot resurrect removed
+slots or group epochs. Subscription callbacks use weak window ownership and are
+invoked outside asset locks. Shared assets may notify multiple live windows.
+
+Pending is readiness, not a reported rendering failure. Existing pending policy
+retains the slot/group snapshot or presents transparency. Terminal asset failures
+apply the configured error policy and are reported once for that generation.
+Strict snapshot preparation returns typed Pending until the requested asset and
+GPU output are ready, then returns any terminal error. No UI-thread waiting is
+introduced. Group publication still requires every member to be ready.
+
+#### Mapping and upload reuse
+
+Image uploads retain the asset's natural extent and full declared mip chain;
+changing destination size cannot resize or re-upload unchanged source pixels.
+Image realization identity includes immutable source payload/descriptor and device
+generation. Destination mapping belongs to the draw and committed group geometry,
+not the source realization key.
+
+Add a checked `ImageMapping` value supporting stretch, contain and cover, normalized
+alignment in 0..=1, a source-pixel crop rectangle, and explicit sampler selection.
+Resolve it using the actual completed image descriptor and the full unclipped
+destination. Validate finite coordinates, nonempty in-bounds crops and sampler/
+format compatibility. Contain leaves transparent letterboxing; cover crops the
+source to fill the destination. Clip, native border/path coverage and outer opacity
+apply after mapping. Sampling outside a contain destination must not clamp and
+smear edge pixels into its letterbox. Define half-texel/crop-edge behavior and
+apply the same mapping math in all three compositors.
+
+Retained per-slot images resolve the current draw mapping against their actual
+retained descriptor, rather than assuming the pending replacement has the same
+source dimensions. Atomic groups retain their committed member mapping together
+with geometry/images until the replacement is complete. Current outer placement,
+clip and opacity continue to apply. Default stretch must preserve existing output.
+
+Color conversion remains explicit and independent of mapping. Preserve source
+primaries/transfer/alpha metadata; conversion cannot silently substitute sRGB for
+unsupported wide output. The media migration must state its preview/wide intent
+through the portable API. Filters and adjustments consume source-sized image
+references and declare their working/output interpretation.
+
+#### Delivery order and required evidence
+
+1. Implement immutable ready pixels, pending completion and race-safe observation
+   in core. CPU tests cover clone identity, terminal completion, invalid payloads,
+   endpoint abandonment, multi-subscriber delivery and completion/subscription races.
+2. Add tracked builder dependencies and presenter invalidation/subscription ownership
+   on Metal, wgpu and D3D11. Pause decode completion deterministically: the old slot
+   or whole group must remain visible, unrelated UI must repaint, and completion
+   must update an idle window without further input. Removed consumers must not
+   redraw or publish stale results. Assert zero producer readbacks.
+3. Implement mapping in all three compositors with independent pixel references
+   for contain/cover/alignment/crop, letterboxing, mip/sampler behavior, native
+   masks, opacity and differently sized retained/replacement images. Repeated
+   destination resizes must reuse the source upload.
+4. Migrate ordinary `MediaImage` uploads first, then filters/adjustments. Keep the
+   existing image/media fixtures and compare colors, mips, staging budgets and
+   retirement. Native video/external-frame acquisition and release are a subsequent
+   stage; they must not be disguised as CPU image uploads.
+
+How to test the first implementation step: use deterministic CPU completion tests,
+then paused-completion GPU tests and the media lab. Expected behavior is a current
+subscriber waking exactly through normal redraw scheduling, a complete image/group
+appearing when ready, correct source-sized sampling under resize, and no native
+handles or backend branches in ordinary media producers. No new command or migrated
+media behavior is claimed by this specification-only checkpoint.
+
+#### Image readiness implementation status
+
+`ImageAsset`, validated immutable `ImagePixels`, and single-use `ImageCompletion`
+now provide terminal CPU readiness. `Content::image(asset)` and
+`ContentBuilder::image(&asset)` upload the natural descriptor, independent of
+requested destination size. `ContentGraph::describe_tracked` returns request-owned
+subscriptions alongside either a graph or its error, so an early pending result
+does not lose its completion wakeup. Subscription and readiness observation share
+the asset lock; callbacks run outside it.
+
+Metal, wgpu, and D3D11 presenters now retain those dependencies, invalidate their
+description/failure caches after a readiness version transition, and use their
+existing paced redraw callback. Pending assets do not enter the failure cache;
+strict snapshots report Pending, and existing slot/group policies select retained
+content. Replacing or removing the request drops its subscriptions. Completion
+callbacks only request redraw; they never publish images or restore group epochs.
+
+CPU race/lifetime tests and Metal/wgpu pixel tests cover this integration. D3D11
+has cross-compilation coverage; Windows execution remains outstanding. Source
+mapping controls and migration of ordinary media producers are still next steps.

@@ -656,3 +656,49 @@ fn strict_snapshot_preparation_reports_pending_instead_of_accepting_a_fallback()
     pixels(&read(&mut renderer, &scene), [255, 0, 0, 255]);
     assert_eq!(renderer.content_presentation_stats().requests, 1);
 }
+
+#[test]
+fn pending_image_asset_wakes_idle_presenter_and_uploads_without_failure_cache() {
+    let mut renderer = MetalHeadlessRenderer::new();
+    let rx = wake(&mut renderer);
+    let (asset, done) = ImageAsset::pending();
+    let scene = scene(ContentDraw::new(Content::image(asset)));
+    pixels(&read(&mut renderer, &scene), [0, 0, 0, 255]);
+    assert_eq!(renderer.content_presentation_stats().requests, 0);
+    let descriptor = ImageDescriptor::new(
+        ImageExtent::new(1, 1).unwrap(),
+        PixelFormat::Rgba8,
+        ImageInterpretation {
+            color: ColorEncoding::Srgb,
+            alpha: AlphaMode::Straight,
+        },
+        1,
+    )
+    .unwrap();
+    done.resolve(Ok(ImagePixels::new(
+        descriptor,
+        Arc::from([255, 0, 0, 255]),
+        4,
+    )
+    .unwrap()));
+    completed(&rx); // CPU asset completion must wake even with no GPU job.
+    let _ = read(&mut renderer, &scene);
+    completed(&rx); // GPU upload completion.
+    pixels(&read(&mut renderer, &scene), [255, 0, 0, 255]);
+    assert_eq!(renderer.content_presentation_stats().requests, 1);
+}
+
+#[test]
+fn removed_image_asset_does_not_wake_presenter_on_late_completion() {
+    let mut renderer = MetalHeadlessRenderer::new();
+    let rx = wake(&mut renderer);
+    let (asset, done) = ImageAsset::pending();
+    let pending = scene(ContentDraw::new(Content::image(asset)));
+    let _ = read(&mut renderer, &pending);
+    let mut empty = Scene::default();
+    empty.finish();
+    let _ = read(&mut renderer, &empty);
+    drop(done);
+    assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
+    assert_eq!(renderer.content_presentation_stats().requests, 0);
+}

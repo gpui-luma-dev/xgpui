@@ -64,6 +64,7 @@ pub(super) struct ContentPresenter {
     cache: HashMap<c::OutputKey, GpuImage>,
     slots: HashMap<c::PresentationSlotId, c::OutputKey>,
     failed: Option<(Signature, c::ContentError)>,
+    dependencies: c::ContentDependencies,
     description: Option<(Signature, Arc<c::ContentGraph>)>,
     pub stats: WgpuContentStats,
     pub limits: WgpuContentLimits,
@@ -86,6 +87,7 @@ impl ContentPresenter {
             cache: HashMap::new(),
             slots: HashMap::new(),
             failed: None,
+            dependencies: c::ContentDependencies::default(),
             description: None,
             stats: Default::default(),
             limits: Default::default(),
@@ -120,7 +122,7 @@ impl ContentPresenter {
         if let Some((_, error)) = &self.failed {
             return Err(error.clone().into());
         }
-        if self.pending.is_some() {
+        if self.pending.is_some() || self.dependencies.is_pending() {
             return Err(c::ContentError::new(
                 c::ContentErrorKind::Pending,
                 "requested portable content is pending; retry the snapshot asynchronously",
@@ -220,6 +222,11 @@ impl ContentPresenter {
             .iter()
             .map(|draw| (draw.draw.content.id(), draw.request.clone()))
             .collect();
+        if self.dependencies.changed() {
+            self.description = None;
+            self.failed = None;
+            self.dependencies = c::ContentDependencies::default();
+        }
         if self.failed.as_ref().is_some_and(|(s, _)| *s != signature) {
             self.failed = None;
         }
@@ -236,24 +243,33 @@ impl ContentPresenter {
             .is_some_and(|(old, _)| *old != signature)
         {
             self.description = None;
+            self.dependencies = c::ContentDependencies::default();
+        }
+        if roots.is_empty() {
+            self.dependencies = c::ContentDependencies::default();
         }
         let graph = if let Some((_, graph)) = &self.description {
             Some(graph.clone())
         } else if roots.is_empty() || self.failed.is_some() {
             None
         } else {
-            match c::ContentGraph::describe(
+            let (result, dependencies) = c::ContentGraph::describe_tracked(
                 &roots,
                 self.executor.capabilities().clone(),
                 c::GraphLimits::default(),
-            ) {
+                self.wake.clone(),
+            );
+            self.dependencies = dependencies;
+            match result {
                 Ok(graph) => {
                     let graph = Arc::new(graph);
                     self.description = Some((signature.clone(), graph.clone()));
                     Some(graph)
                 }
                 Err(error) => {
-                    self.fail(signature.clone(), error);
+                    if error.kind != c::ContentErrorKind::Pending {
+                        self.fail(signature.clone(), error);
+                    }
                     None
                 }
             }

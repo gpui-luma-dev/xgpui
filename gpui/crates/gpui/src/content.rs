@@ -7,6 +7,7 @@
 //! execution and window compositing live in the Apple backend. Assets and external
 //! imports remain separate; legacy `CustomContent` producers keep their existing path.
 
+mod asset;
 mod descriptors;
 mod graph;
 mod group;
@@ -17,6 +18,7 @@ mod presentation;
 mod program;
 mod uniforms;
 
+pub use asset::*;
 pub use descriptors::*;
 pub use graph::*;
 pub use group::*;

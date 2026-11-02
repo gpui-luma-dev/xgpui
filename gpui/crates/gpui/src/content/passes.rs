@@ -756,7 +756,7 @@ fn binding_keys(bindings: &[ResolvedBinding], inputs: &mut Inputs) -> Vec<KeyBin
         .collect()
 }
 
-impl ContentBuilder {
+impl ContentBuilder<'_> {
     /// Validate and record one render pass. Any returned error poisons this graph.
     pub fn render(&mut self, pass: RenderPass) -> Result<ImageRef> {
         self.healthy()?;
