@@ -336,6 +336,11 @@ reference parity or verification of every control. A missing browser backend is
 recorded explicitly; it never counts as passing that backend. A failed build or
 staging prerequisite prevents browser checks from testing stale assets.
 
+Release-mode lab tests opt into GPUI's `debug-selectors` feature through a
+dev-dependency so visual input assertions can locate actual rendered bounds.
+Normal release lab/application builds do not enable that instrumentation and
+keep the selector no-op path.
+
 `test-ui` builds and opens native labs sequentially, printing a specific checklist
 for each. Exercise the controls, close the window, then enter `pass`, `fail`,
 `unsupported` (with a capability reason), or `untested`, optionally followed by a

@@ -178,3 +178,8 @@ windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Di
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 gpui-wgpu = { package = "xgpui-wgpu", path = "../../gpui/crates/gpui-wgpu", version = "=1.0.2", features = ["test-support", "dma-buf"] }
+
+# Release-mode visual tests need selector recording; normal lab binaries retain
+# the production no-op path even when test-support is otherwise enabled.
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+gpui = { package = "xgpui", path = "../../gpui/crates/gpui", version = "=1.2.0", features = ["debug-selectors"] }

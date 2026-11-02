@@ -240,7 +240,7 @@ mod conditional {
 }
 
 /// Provides definitions used by `#[derive_inspector_reflection]`.
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, feature = "test-support"))]
 pub mod inspector_reflection {
     use std::any::Any;
 

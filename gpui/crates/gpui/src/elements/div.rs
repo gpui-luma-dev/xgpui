@@ -878,10 +878,16 @@ pub trait InteractiveElement: Sized {
     /// Set a key that can be used to look up this element's bounds
     /// in the [`crate::VisualTestContext::debug_bounds`] map.
     ///
-    /// Selectors are only recorded in debug builds with the `test-support`
-    /// feature. Elsewhere this is a no-op, so `test-support` can stay enabled
-    /// in release builds without the per-frame cost.
-    #[cfg(any(test, all(debug_assertions, feature = "test-support")))]
+    /// Selectors are recorded with `test-support` in debug builds, or when the
+    /// `debug-selectors` feature opts release visual tests into instrumentation.
+    /// Ordinary release builds keep this a no-op.
+    #[cfg(any(
+        test,
+        all(
+            feature = "test-support",
+            any(debug_assertions, feature = "debug-selectors")
+        )
+    ))]
     fn debug_selector(mut self, f: impl FnOnce() -> String) -> Self {
         self.interactivity().debug_selector = Some(f());
         self
@@ -890,10 +896,16 @@ pub trait InteractiveElement: Sized {
     /// Set a key that can be used to look up this element's bounds
     /// in the [`crate::VisualTestContext::debug_bounds`] map.
     ///
-    /// Selectors are only recorded in debug builds with the `test-support`
-    /// feature. Elsewhere this is a no-op, so `test-support` can stay enabled
-    /// in release builds without the per-frame cost.
-    #[cfg(not(any(test, all(debug_assertions, feature = "test-support"))))]
+    /// Selectors are recorded with `test-support` in debug builds, or when the
+    /// `debug-selectors` feature opts release visual tests into instrumentation.
+    /// Ordinary release builds keep this a no-op.
+    #[cfg(not(any(
+        test,
+        all(
+            feature = "test-support",
+            any(debug_assertions, feature = "debug-selectors")
+        )
+    )))]
     #[inline]
     fn debug_selector(self, _: impl FnOnce() -> String) -> Self {
         self
@@ -2200,7 +2212,13 @@ pub struct Interactivity {
     #[cfg(debug_assertions)]
     pub(crate) source_location: Option<&'static core::panic::Location<'static>>,
 
-    #[cfg(any(test, all(debug_assertions, feature = "test-support")))]
+    #[cfg(any(
+        test,
+        all(
+            feature = "test-support",
+            any(debug_assertions, feature = "debug-selectors")
+        )
+    ))]
     pub(crate) debug_selector: Option<String>,
 }
 
@@ -2523,7 +2541,13 @@ impl Interactivity {
 
                 let style = self.compute_style_internal(hitbox, element_state.as_mut(), window, cx);
 
-                #[cfg(any(test, all(debug_assertions, feature = "test-support")))]
+                #[cfg(any(
+                    test,
+                    all(
+                        feature = "test-support",
+                        any(debug_assertions, feature = "debug-selectors")
+                    )
+                ))]
                 if let Some(debug_selector) = &self.debug_selector {
                     window
                         .next_frame

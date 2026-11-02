@@ -3008,8 +3008,31 @@ mod tests {
                         MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
                     let cache = renderer.core_video_texture_cache.clone();
                     let extent = size(DevicePixels(32), DevicePixels(18));
-                    let target = crate::custom_draw::texture(&renderer.device, extent).unwrap();
+                    // This fixture reads the final compositor target on the CPU.
+                    // Native producer textures remain private; use the same CPU-visible
+                    // validation target storage as MetalHeadlessRenderer instead.
+                    let descriptor = metal::TextureDescriptor::new();
+                    unsafe { descriptor.setWidth(extent.width.0 as usize) };
+                    unsafe { descriptor.setHeight(extent.height.0 as usize) };
+                    descriptor.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+                    descriptor.setUsage(
+                        metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead,
+                    );
+                    descriptor.setStorageMode(if renderer.is_apple_gpu {
+                        metal::MTLStorageMode::Shared
+                    } else {
+                        metal::MTLStorageMode::Managed
+                    });
+                    let target = renderer
+                        .device
+                        .newTextureWithDescriptor(&descriptor)
+                        .unwrap();
                     let command = renderer.render_frame(&scene, &target, extent).unwrap();
+                    if !renderer.is_apple_gpu {
+                        let blit = command.blitCommandEncoder().unwrap();
+                        blit.synchronizeResource(ProtocolObject::from_ref(&*target));
+                        blit.endEncoding();
+                    }
                     drop(scene);
                     drop(renderer);
                     // This observer is one owner. Pending sampling must retain its own cache,

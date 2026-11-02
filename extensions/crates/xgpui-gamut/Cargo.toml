@@ -29,6 +29,7 @@ gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=1.2
 gpui-apple = { path = "../../../gpui/crates/gpui-apple", features = ["test-support"] , package = "xgpui-apple", version = "=2.0.1" }
 
 [dev-dependencies]
+anyhow = "1"
 xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"] , package = "xgpui-shader", version = "=0.3.0" }
 
 [target.'cfg(target_os = "windows")'.dev-dependencies]

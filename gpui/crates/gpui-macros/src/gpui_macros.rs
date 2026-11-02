@@ -9,7 +9,9 @@ mod register_action;
 mod styles;
 mod test;
 
-#[cfg(debug_assertions)]
+// Keep the macro available across host/target profiles: rustdoc can enable
+// debug assertions while its proc-macro dependency was compiled in release.
+// Call sites decide whether reflection is enabled.
 mod derive_inspector_reflection;
 
 use proc_macro::TokenStream;
@@ -157,7 +159,7 @@ pub fn box_shadow_style_methods(input: TokenStream) -> TokenStream {
 ///
 /// ```
 /// #[gpui::test]
-/// async fn test_foo(mut cx: &TestAppContext) { }
+/// async fn test_foo(cx: &gpui::TestAppContext) { }
 /// ```
 ///
 /// In addition to passing a TestAppContext, you can also ask for a `StdRnd` instance.
@@ -312,7 +314,6 @@ pub fn property_test(args: TokenStream, function: TokenStream) -> TokenStream {
 ///
 /// The `invoke` method on `FunctionReflection` will run the method. `FunctionReflection` also
 /// provides the method's documentation.
-#[cfg(debug_assertions)]
 #[proc_macro_attribute]
 pub fn derive_inspector_reflection(_args: TokenStream, input: TokenStream) -> TokenStream {
     derive_inspector_reflection::derive_inspector_reflection(_args, input)
