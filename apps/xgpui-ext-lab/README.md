@@ -47,3 +47,16 @@ the same window controls and a headless JSON performance comparison:
 cargo run --release --manifest-path apps/xgpui-ext-lab/Cargo.toml \
   --bin portable-content-instanced --features runtime-shaders
 ```
+
+## Repository-wide validation and guided UI acceptance
+
+From the repository root, use `just test-all` for the host-supported automated
+native matrix, `just test-web` for Wasm/docs plus Chromium startup/resize checks,
+and `just test-ui` for sequential native lab checklists with operator-recorded
+results. Append `--list` to inspect commands without running them. Each run saves
+JSON/Markdown results, logs and relevant captures in `target/test-runs/` and
+separates passed, failed, unsupported and untested checks. Launching/closing a
+window alone is never a UI pass. These commands do not include the separate
+xgpui-lab consumer or establish other-platform acceptance.
+
+See [test matrix, filters, report semantics and browser setup](../../docs/LOCAL_DEVELOPMENT.md#run-the-repository-test-matrix).

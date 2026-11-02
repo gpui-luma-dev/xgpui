@@ -109,3 +109,15 @@ lab-test *args:
 [linux]
 media-dma-buf-test:
     WGPU_BACKEND=vulkan WGPU_DEBUG=1 WGPU_VALIDATION=1 VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation cargo test {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --test portable-imports native::dma_buf_native_generated_snapshot -- --ignored --exact --nocapture --test-threads=1
+
+# All host-supported automated suites and headless captures; saves a combined report.
+test-all *args:
+    {{ python }} scripts/run_tests.py all --profile {{ profile }} "$@"
+
+# Guided native UI acceptance; closing a lab alone does not mark it passed.
+test-ui *args:
+    {{ python }} scripts/run_tests.py ui --profile {{ profile }} "$@"
+
+# Build both browser collections, verify docs, then run Chromium startup/resize checks.
+test-web *args:
+    {{ python }} scripts/run_tests.py web --profile {{ profile }} "$@"

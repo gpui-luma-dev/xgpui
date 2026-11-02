@@ -306,3 +306,102 @@ fit the compositor's 1,024-device-pixel limit. `just media --video` also offers
 linear adjustments, vignette and blur on generated native macOS Metal frames;
 no video file is needed. See the [media pipeline guide](#media-pipeline) for
 resource reuse, output color and backend limits.
+
+## Run the repository test matrix
+
+Run from the repository root with Python 3.11+, Rust/Cargo and `just` on PATH:
+
+```sh
+just test-all
+just test-web
+just test-ui
+```
+
+These are three distinct scopes. `test-all` runs the native automated matrix for
+this host: repository Python/tool tests, framework/backend/extension unit and
+integration tests, doctests, lab tests/builds, the original Metal deadlock
+regression where supported, headless media/gradient/gamut checks, dense/instanced
+pixel parity, benchmark captures and automated canvas input smoke. Some automatic
+checks need a graphical session and may briefly open a window. It does not claim
+all possible feature combinations, other operating systems, browser acceptance,
+or manual UI inspection. The separate sibling `xgpui-lab` is not included; its
+consumer migration is tracked in xgpui-lab#38.
+
+`test-web` runs the browser calculation tests, generates/verifies the docs, builds
+both Wasm collections, stages a fresh site and launches real Chromium. It discovers
+all demo links in both galleries and forces WebGPU and WebGL2 separately, checking
+startup, a visible canvas, the actual requested graphics context, resize and browser
+errors. It saves screenshots. This is startup/resize smoke coverage, not pixel
+reference parity or verification of every control. A missing browser backend is
+recorded explicitly; it never counts as passing that backend. A failed build or
+staging prerequisite prevents browser checks from testing stale assets.
+
+`test-ui` builds and opens native labs sequentially, printing a specific checklist
+for each. Exercise the controls, close the window, then enter `pass`, `fail`,
+`unsupported` (with a capability reason), or `untested`, optionally followed by a
+note. **Closing an app alone never passes it.** A crash overrides a claimed pass;
+without a terminal, manual checks remain untested. This includes the dense and
+instanced windows, paints/shaders, image/adjustment/float/tile/video/path views,
+gamut, card/Mandelbrot canvas, text, SVG, color and the two benchmark windows.
+
+Review the plan or select a smaller scope:
+
+```sh
+just test-all --list
+just test-ui --list
+just test-web --list
+just profile=dev test-all --only 'media*,paint-*'
+just test-ui --only 'portable-content*'
+just test-all --timeout 1800
+```
+
+Use repeated `--only` options or comma-separated name globs. Selected runs are
+marked as partial coverage in their reports; they do not establish acceptance of
+the omitted checks. `--timeout` is a per-automated-command wall-clock limit,
+including compilation. Timeouts terminate the command's process tree. Manual
+inspection has no automatic pass or time limit. `--no-gpu` leaves GPU checks
+untested. On Linux, use `--include-dma-buf` to attempt the native DMA-BUF fixture
+with suitable hardware and Khronos validation; otherwise it remains untested.
+
+Reports are saved under `target/test-runs/<UTC timestamp>-<mode>/`:
+
+- `report.md` — readable per-check results and links to logs.
+- `report.json` — commands, revision, dirty-tree indicator, host, profile, timing,
+  operator notes, warning counts and result status.
+- Per-command logs, screenshots, PNG captures and workload reports.
+- Copies of standalone library resolution lockfiles for dependency evidence.
+
+Results distinguish **passed**, **failed**, **unsupported** (not applicable to
+this host), and **untested** (missing prerequisites, skipped, interrupted or not
+inspected). Exit 0 means the selected applicable checks passed; 1 means at least
+one failed; 2 means coverage is incomplete. A run with no passing checks cannot
+report success. Ignored Rust tests and warnings remain visible in full Cargo logs;
+the report does not redefine an ignored test as passed. In particular, subprocess
+helper tests may be ignored as standalone entrypoints but executed by parent tests.
+
+App/tool commands retain `--locked`. Standalone library manifests may not track a
+lockfile and their test features may require a different resolution. They use
+normal Cargo library resolution, which can create/update their local Cargo.lock;
+the resolved locks are copied into the run artifacts. Use `--locked-libraries`
+when intentionally enforcing existing standalone locks; missing/stale locks then
+fail explicitly. The runner never retries a failed frozen build without its lock.
+No dependencies or system software are installed automatically.
+
+### Browser prerequisites
+
+In addition to the toolchain required by `just web-build` (including the pinned
+wasm-bindgen CLI), install Node.js on PATH and the optional test-only Python
+browser dependency. Follow the [Playwright library setup](https://playwright.dev/python/docs/library):
+
+```sh
+python3 -m venv target/test-browser
+target/test-browser/bin/python -m pip install -r scripts/browser-test-requirements.txt
+target/test-browser/bin/python -m playwright install chromium
+just python=target/test-browser/bin/python test-web
+```
+
+On Windows use `python` and `target/test-browser/Scripts/python.exe` for the
+virtual environment interpreter. Linux additionally needs Chromium's OS runtime
+libraries; provision them for the host rather than treating their absence as a
+passing browser test. Browser screenshots and errors describe the tested
+Chromium/adapter configuration, not every browser or physical display capability.
