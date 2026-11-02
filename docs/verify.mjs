@@ -222,7 +222,9 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 26);
+assert.equal(Object.keys(data.extension_documents).length, 28);
+assert.match(data.extension_documents['native-metal-paints'].html, /Native Metal portable content/);
+assert.match(data.extension_documents['portable-content-api-design'].html, /ContentSource/);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -371,7 +373,11 @@ console.log('Verified API-change source links against regenerated declaration an
 
 // Instanced shaders must be discoverable, rendered offline, and packaged for Pages.
 assert.ok(data.extension_documents['instanced-wgsl-v2']);
-assert.match(run('extensionPage("shader-models")'), /Migration from v1\/v2 terminology/);
+const shaderModelsPage = run('extensionPage("shader-models")');
+assert.match(shaderModelsPage, /Producer lifecycle/);
+assert.match(shaderModelsPage, /shader_paint::ShaderProgram::new/);
+assert.match(shaderModelsPage, /ContentSource/);
+assert.doesNotMatch(shaderModelsPage, /ShaderProgram::new_v1/);
 assert.ok(index.includes('href="#instanced-wgsl-v2"'));
 assert.ok(index.includes('href="examples/extensions/"'));
 assert.match(run('shaderCrateGuide()'), /just --justfile apps\/xgpui-ext-lab\/shader-examples\/justfile ui/);

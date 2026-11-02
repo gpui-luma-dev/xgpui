@@ -16,7 +16,7 @@ integration and workload; neither name implies stabilization or broader backend 
 | Loops and derivatives | Accepted with discard, subject to portable WGSL validation | Subject to Naga validation |
 | Resources | No user textures, resource bindings or compute | No user resource bindings or compute |
 | Output | Straight-alpha encoded-sRGB SDR | Encoded-sRGB SDR by default; explicit `new_linear_p3` requires an active native `WideGamutSdr` window |
-| Backends | Portable content executor (currently Metal); D3D11/wgpu execution pending | Metal, D3D11, wgpu, browser WebGPU and WebGL2 |
+| Backends | Metal, D3D11 and wgpu, including browser WebGPU/WebGL2 for supported shader operations | Metal, D3D11, wgpu, browser WebGPU and WebGL2 |
 
 Backend implementation does not establish driver acceptance on every platform.
 The [shader-paint guide](portable-wgsl-v1.md) and

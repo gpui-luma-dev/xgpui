@@ -436,7 +436,7 @@ fn drive<F: Future<Output = Result<WgpuContentFrame>>>(
         std::thread::park_timeout(Duration::from_millis(1));
     }
 }
-fn capabilities(device: &wgpu::Device) -> c::ContentCapabilities {
+pub(crate) fn capabilities(device: &wgpu::Device) -> c::ContentCapabilities {
     let l = device.limits();
     let mut caps = c::ContentCapabilities::default();
     #[cfg(all(target_os = "linux", feature = "dma-buf"))]

@@ -273,7 +273,7 @@ validation records for integration and review.
   `image.content()` exposes source pixels without overriding their metadata.
   `paint_mapped` or `draw().mapping(...)` supports portable fit/alignment/crop.
   Configured draws can also be members of atomic groups. See the
-  [portable presentation API](../../extensions/crates/xgpui-media/README.md#portable-image-presentation).
+  [portable presentation API](https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-media/README.md#portable-image-presentation).
 
 ### Portable tiled-page presentation
 

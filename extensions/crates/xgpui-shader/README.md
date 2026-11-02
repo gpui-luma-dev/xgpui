@@ -181,7 +181,7 @@ with `painted().bg_paint(...)`, border paints, paths, or `ContentDraw`. Owned
 Linear, radial, conic and diamond geometry, 2–32 sorted stops, duplicate-offset
 hard edges, endpoint clamping and premultiplied encoded-sRGB interpolation are
 preserved. Output is straight-alpha RGBA8 sRGB. One shared WGSL program uses
-reflected uniforms and an immutable 1024-byte stop buffer; the host owns native
+reflected uniforms, including an immutable 1024-byte stop table; the host owns native
 pipelines, resource sharing, asynchronous completion and replay caching.
 Producer preparation/pipeline counters and native adapters have been removed.
 

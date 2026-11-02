@@ -354,3 +354,22 @@ without transparency flashes and matching rounded/background/border/path coverag
 WebGL2 does not supply storage/compute for these graphs; use WebGPU for this
 acceptance. The source API is identical to native Metal, with no browser producer
 adapters. See [lifecycle and native wgpu tests](../../../docs/extensions/portable-paints.md).
+
+
+### Portable browser acceptance
+
+`just test-web` now builds and stages the current galleries, verifies their docs,
+and runs real Chromium startup/resize checks. See the repository development
+guide for the optional browser test environment. There are 47 cases: 23 canvas
+demos on each forced backend, plus the Italy DOM-image comparison once.
+
+Analytic gradients use reflected inline stop uniforms, so they need no storage
+buffer capability on WebGL2. The compositor receives the source mip count as
+metadata rather than requiring GLSL texture-level queries. Compute mesh comparison
+views use the initialized device's functional capabilities: WebGL2 keeps the
+direct brush/editor and other paints available and explains why only the compute
+comparison is unavailable. No hidden renderer substitution is used.
+
+Italy uses browser-managed DOM images rather than a GPUI canvas. Its test checks
+image decoding, source choice and the Rust/Wasm sRGB preview; it does not claim
+WebGPU/WebGL rendering or physical display calibration.

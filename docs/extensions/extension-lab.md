@@ -98,7 +98,7 @@ cargo run --release --manifest-path apps/xgpui-ext-lab/Cargo.toml \
 Both have D (512 ↔ 1), R (warm/cool), O (opacity), and C (clip) controls. The
 instanced companion uses one compatible main-pass shader batch for the grid.
 Its `--benchmark` mode compares both paths and exports JSON measurements; see
-[workloads, measurement boundaries and commands](../../apps/xgpui-ext-lab/portable-content-instanced/README.md).
+[workloads, measurement boundaries and commands](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/portable-content-instanced/README.md).
 The original app remains the atomic-group regression workload.
 
 ### Pastel waves

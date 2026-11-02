@@ -762,7 +762,10 @@ fn generate(root: &Path) -> Result<()> {
         ("canvas", "docs/extensions/canvas.md"),
         ("color-math", "docs/extensions/color-math.md"),
         ("color-workflows", "docs/extensions/color-workflows.md"),
-        ("pixels-and-metadata", "docs/extensions/pixels-and-metadata.md"),
+        (
+            "pixels-and-metadata",
+            "docs/extensions/pixels-and-metadata.md",
+        ),
         ("color-labs", "docs/extensions/color-labs.md"),
         ("icc-profiles", "docs/extensions/icc-profiles.md"),
         ("media-images", "docs/extensions/media-images.md"),
@@ -781,6 +784,14 @@ fn generate(root: &Path) -> Result<()> {
             "docs/extensions/paint-contract-hardening.md",
         ),
         ("portable-paints", "docs/extensions/portable-paints.md"),
+        (
+            "portable-content-api-design",
+            "docs/extensions/portable-content-api-design.md",
+        ),
+        (
+            "native-metal-paints",
+            "docs/extensions/native-metal-paints.md",
+        ),
         (
             "native-dx11-paints",
             "docs/extensions/native-dx11-paints.md",

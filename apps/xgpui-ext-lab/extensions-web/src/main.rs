@@ -135,11 +135,11 @@ fn launch() -> anyhow::Result<()> {
                 .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
         }
         Application::with_platform_and_text_system(
-            platform,
+            platform.clone(),
             Arc::new(xgpui_parley::ParleyTextSystem::new(fonts, "IBM Plex Sans")?),
         )
     } else {
-        let app = Application::with_platform(platform);
+        let app = Application::with_platform(platform.clone());
         app.text_system().add_fonts(vec![Cow::Borrowed(PLEX)])?;
         app
     }
@@ -154,6 +154,9 @@ fn launch() -> anyhow::Result<()> {
         })
         .is_some_and(|query| query.matches());
     let handle = app.run_embedded(move |cx| {
+        let supports_compute = platform
+            .content_capabilities()
+            .is_some_and(|caps| caps.compute.is_some());
         cx.set_reduce_motion(reduced_motion);
         let options = WindowOptions::default();
         if canvas || mandelbrot {
@@ -182,8 +185,10 @@ fn launch() -> anyhow::Result<()> {
             cx.open_window(options, |_, cx| cx.new(typography::TypographyDemo::new))
                 .expect("open typography demo");
         } else if hermite {
-            cx.open_window(options, |_, cx| cx.new(|_| hermite::HermiteDemo::new()))
-                .expect("open Hermite editor");
+            cx.open_window(options, |_, cx| {
+                cx.new(|_| hermite::HermiteDemo::new(supports_compute))
+            })
+            .expect("open Hermite editor");
         } else if brushes || layers {
             cx.open_window(options, |_, cx| cx.new(|_| brushes::BrushDemo::new(layers)))
                 .expect("open brush gallery");
@@ -201,8 +206,10 @@ fn launch() -> anyhow::Result<()> {
             })
             .expect("open SVG demo");
         } else {
-            cx.open_window(options, |_, cx| cx.new(|_| shader::ShaderDemo::new()))
-                .expect("open shader demo");
+            cx.open_window(options, |_, cx| {
+                cx.new(|_| shader::ShaderDemo::new(supports_compute))
+            })
+            .expect("open shader demo");
         }
         cx.activate(true);
     });

@@ -160,7 +160,7 @@ fn every_gradient_kind_matches_independent_pixel_reference_and_reuses_one_pipeli
                     .unwrap()
                     .wait_for_readback(Duration::from_secs(20))
                     .unwrap();
-                assert_eq!(frame.stats.operations, 2);
+                assert_eq!(frame.stats.operations, 1); // stop table is an inline uniform, not an upload node
                 assert_eq!(frame.stats.pipeline_compilations, usize::from(first));
                 first = false;
                 assert!(frame.stats.max_in_flight <= 1);
@@ -245,7 +245,7 @@ fn compositor_shares_realizations_and_caches_replay_edits_and_resize() {
     assert_eq!(image.get_pixel(4, 4), image.get_pixel(20, 4));
     assert!(image.get_pixel(4, 4).0[0] > 0);
     let stats = renderer.content_presentation_stats();
-    assert_eq!(stats.execution.operations, 2);
+    assert_eq!(stats.execution.operations, 1);
     assert_eq!(stats.cached_images, 1);
     assert_eq!(stats.execution.readbacks, 0);
     let mut replay = Scene::default();
@@ -355,7 +355,7 @@ fn dense_gradient_worker() {
                 let stats = renderer.content_presentation_stats();
                 assert_eq!(stats.requests, requests);
                 if requests > before {
-                    assert_eq!(stats.execution.operations, count + 1);
+                    assert_eq!(stats.execution.operations, count);
                 }
                 assert_eq!(stats.execution.readbacks, 0);
                 assert!(stats.execution.max_in_flight <= 2);

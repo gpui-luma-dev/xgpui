@@ -56,6 +56,7 @@ fn grid(t: f32) -> Result<xgpui_shader::MeshGrid> {
 }
 
 pub struct HermiteDemo {
+    supports_compute: bool,
     mesh: model::HermiteEditor,
     light: bool,
     dragging: Option<Control>,
@@ -73,8 +74,9 @@ fn button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Stateful<
         .child(label.into())
 }
 impl HermiteDemo {
-    pub fn new() -> Self {
+    pub fn new(supports_compute: bool) -> Self {
         Self {
+            supports_compute,
             mesh: model::HermiteEditor::new(0),
             light: false,
             dragging: None,
@@ -288,7 +290,8 @@ impl Render for HermiteDemo {
             .child(points).child(controls)
             .child("Angles are clockwise from right; lengths use normalized mesh coordinates. White marker = selected point; gold/cyan lines = U/V tangents at ¼ length. Both previews use the same edited points.")
             .child(div().flex().flex_wrap().gap_4()
-                .child(div().flex().flex_col().gap_2().child("Portable mesh · current edit").child(painted().w(px(320.)).h(px(210.)).bg_paint(gpui::content::ContentDraw::new(self.mesh.tessellated.content()).slot(self.mesh.presentation_slot))))
+                .child(div().flex().flex_col().gap_2().child("Portable mesh · current edit").when(self.supports_compute, |view| view.child(painted().w(px(320.)).h(px(210.)).bg_paint(gpui::content::ContentDraw::new(self.mesh.tessellated.content()).slot(self.mesh.presentation_slot))))
+                    .when(!self.supports_compute, |view| view.child("Compute comparison unavailable on this renderer. The direct brush preview and editing remain available.")))
                 .child(div().flex().flex_col().gap_2().child("Direct brush · point markers").child(preview)));
         if let Ok(brush) = &self.mesh.brush {
             root = root

@@ -108,6 +108,17 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(len(cases), 4)
             self.assertEqual({r[2] for r in cases}, {"webgpu", "webgl"})
 
+    def test_dom_photo_demo_is_not_misreported_as_two_gpu_cases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            site = Path(directory)
+            for gallery in ["extensions", "shaders"]:
+                index = site / "examples" / gallery / "index.html"
+                index.parent.mkdir(parents=True)
+                index.write_text('<a href="?demo=italy">Italy</a>' if gallery == "extensions" else '<a href="?example=minimal">Minimal</a>')
+            cases = browser_smoke.routes(site)
+            photos = [case for case in cases if "italy" in case[0]]
+            self.assertEqual(photos, [("extensions-italy-dom", "/examples/extensions/?demo=italy", "dom")])
+
 
 if __name__ == "__main__":
     unittest.main()

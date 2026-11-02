@@ -89,7 +89,7 @@ pub struct Gradient {
 struct Source {
     kind: GradientKind,
     stops: Arc<[GradientStop]>,
-    bytes: Arc<[u8]>,
+    stop_uniforms: Arc<UniformValues>,
     program: PortableProgram,
 }
 impl Gradient {
@@ -107,8 +107,8 @@ impl Gradient {
                 )
             })
             .clone()?;
-        // An explicitly initialized fixed-size storage table avoids backend ABI
-        // assumptions and leaves scalar/vector uniform packing to reflection.
+        // A fixed-size uniform table works on WebGL2 as well as storage-capable
+        // hosts. Reflection packs sixteen column-major blocks without ABI casts.
         let mut bytes = vec![0u8; 32 * 32];
         for (index, stop) in stops.iter().enumerate() {
             for (word, value) in stop
@@ -122,10 +122,18 @@ impl Gradient {
                     .copy_from_slice(&value.to_le_bytes());
             }
         }
+        let mut stop_uniforms = UniformValues::new();
+        for (index, block) in bytes.chunks_exact(64).enumerate() {
+            let words: Vec<f32> = block
+                .chunks_exact(4)
+                .map(|word| f32::from_le_bytes(word.try_into().unwrap()))
+                .collect();
+            stop_uniforms = stop_uniforms.matrix(format!("data{index}"), 4, 4, words);
+        }
         Self::from_source(Source {
             kind,
             stops: stops.into(),
-            bytes: bytes.into(),
+            stop_uniforms: Arc::new(stop_uniforms),
             program,
         })
     }
@@ -217,10 +225,6 @@ impl ContentSource for Source {
         } else {
             [radians.cos(), radians.sin(), radians, 0.]
         };
-        let buffer = cx.upload_buffer(
-            BufferDescriptor::new(1024, BufferLayout::new(32, 16)?, BufferUsage::STORAGE)?,
-            self.bytes.clone(),
-        )?;
         let uniforms = UniformValues::new()
             .vec4(
                 "size_kind_count",
@@ -242,14 +246,7 @@ impl ContentSource for Source {
                 ImageDescriptor::new(request.extent(), PixelFormat::Rgba8, interpretation(), 1)?,
             )
             .uniform("p", uniforms)
-            .storage_buffer(
-                "stops",
-                BufferSlice {
-                    buffer,
-                    offset: 0,
-                    byte_len: 1024,
-                },
-            ),
+            .uniform("stops", (*self.stop_uniforms).clone()),
         )
     }
 }
@@ -301,7 +298,7 @@ mod tests {
         );
     }
     #[test]
-    fn immutable_snapshots_share_identity_and_stop_uploads() {
+    fn immutable_snapshots_share_identity_and_portable_stop_uniforms() {
         let base = Gradient::linear(
             0.,
             vec![
@@ -314,9 +311,10 @@ mod tests {
         let edited = base.with_kind(GradientKind::Linear { angle: 90. }).unwrap();
         assert_ne!(base.content().id(), edited.content().id());
         assert_eq!(base.kind(), GradientKind::Linear { angle: 0. });
-        assert!(Arc::ptr_eq(&base.source.bytes, &edited.source.bytes));
-        assert_eq!(base.source.bytes.len(), 1024);
-        assert!(base.source.bytes[64..].iter().all(|b| *b == 0));
+        assert!(Arc::ptr_eq(
+            &base.source.stop_uniforms,
+            &edited.source.stop_uniforms
+        ));
         let request = ContentRequest::new(
             gpui::size(gpui::px(8.), gpui::px(8.)),
             ImageExtent::new(8, 8).unwrap(),
@@ -334,18 +332,24 @@ mod tests {
                     request,
                 },
             ],
-            ContentCapabilities::default(),
+            ContentCapabilities {
+                bindings: BindingLimits {
+                    max_storage_bytes: 0,
+                    ..BindingLimits::default()
+                },
+                ..ContentCapabilities::default()
+            },
             GraphLimits::default(),
         )
         .unwrap();
-        assert_eq!(graph.nodes().len(), 3); // one shared stop upload, two renders
+        assert_eq!(graph.nodes().len(), 2); // independent renders; no storage-buffer requirement
         assert_eq!(
             graph
                 .nodes()
                 .iter()
                 .filter(|n| matches!(n.operation(), ContentOperation::UploadBuffer(_)))
                 .count(),
-            1
+            0
         );
         let next = base
             .with_stops(vec![GradientStop::new(0., [0.; 4]); 2])

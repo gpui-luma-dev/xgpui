@@ -212,6 +212,14 @@ impl WebPlatform {
         }
     }
 
+    /// Actual portable capabilities after asynchronous graphics initialization.
+    pub fn content_capabilities(&self) -> Option<gpui::content::ContentCapabilities> {
+        self.wgpu_context
+            .borrow()
+            .as_ref()
+            .map(WgpuContext::content_capabilities)
+    }
+
     /// Returns an HTTP client that runs browser Fetch operations on this platform's main thread.
     pub fn fetch_http_client(&self) -> FetchHttpClient {
         FetchHttpClient::new(self.dispatcher.clone())

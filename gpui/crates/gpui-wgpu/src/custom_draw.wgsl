@@ -44,7 +44,7 @@ fn rec2020_to_p3(c: vec3<f32>) -> vec3<f32> {
     if p.sampling.x > 0.5 {
         let dims = vec2<f32>(textureDimensions(image, 0));
         let footprint = max(length(dx * dims), length(dy * dims));
-        let lod = clamp(log2(max(footprint, 1.)), 0., f32(textureNumLevels(image) - 1u));
+        let lod = clamp(log2(max(footprint, 1.)), 0., p.sampling.w);
         let level = u32(select(floor(lod + 0.5), ceil(lod), p.sampling.x > 1.5));
         let half_texel = vec2(0.5) / vec2<f32>(textureDimensions(image, level));
         let base_half = vec2(0.5) / dims;

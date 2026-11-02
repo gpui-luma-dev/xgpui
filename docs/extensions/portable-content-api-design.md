@@ -2081,3 +2081,32 @@ adjustments, zoom/resize, pause/resume and source replacement without flicker.
 For CLI acceptance run just media --headless --png /tmp/media-cleanup.png; it
 opens no window. Continue native import acceptance with just media-import-test
 on macOS/Windows and just media-dma-buf-test on compatible Linux Vulkan.
+
+
+### Browser and docs acceptance repair
+
+The Chromium smoke runner now uses full headless Chromium with GPU enabled,
+rather than its software-GPU headless shell. macOS Metal-backed startup/resize
+acceptance passes on both requested browser backends. Italy is recognized as a
+DOM-image test with source/preview interaction, not a canvas/backend test.
+
+The fixed 32-stop analytic gradient table now uses reflected uniform blocks
+(1024 bytes) on every backend. It no longer requires a storage-buffer upload;
+an individual gradient executes one render operation and a dense set of N
+distinct gradients executes N operations. Immutable parameter edits share the
+CPU stop snapshot, while the renderer caches compiled programs/completed images.
+Native reference-pixel, replay, rapid-parameter and dense timeout tests preserve
+their assertions with the new exact operation counts.
+
+The wgpu compositor supplies mip-level metadata to its sampling shader because
+GLSL ES 3.00 does not support textureNumLevels. Crop/mip behavior still follows
+the actual source texture. WgpuContext and WebPlatform expose initialized
+ContentCapabilities for demo integration. Mesh/gradient galleries preserve
+compute-capable comparisons where available and show a capability notice for
+that comparison otherwise; direct brushes, editing and ordinary paints continue
+to render. Applications do not branch on Metal/D3D11/wgpu to describe producers.
+
+The website now registers this specification and the native Metal guide and
+converts source README links to valid repository URLs. Its verifier asserts the
+current public constructors/lifecycle rather than removed v1 constructor names.
+The comprehensive documentation restructuring remains issue #115.

@@ -27,6 +27,9 @@ def routes(site):
         if not index.is_file():
             raise FileNotFoundError(f"Missing {index}; run the web build/staging steps")
         for name in sorted(set(re.findall(r"\?" + parameter + r"=([a-z0-9-]+)", index.read_text()))):
+            if gallery == "extensions" and name == "italy":
+                result.append(("extensions-italy-dom", "/examples/extensions/?demo=italy", "dom"))
+                continue
             for backend in ["webgpu", "webgl"]:
                 result.append((f"{gallery}-{name}-{backend}",
                                f"/examples/{gallery}/?{parameter}={name}&backend={backend}", backend))
@@ -65,19 +68,21 @@ def main(argv=None):
     try:
         with sync_playwright() as playwright:
             try:
-                browser = playwright.chromium.launch(headless=not args.headed,
-                    args=["--enable-unsafe-webgpu"])
+                browser = playwright.chromium.launch(channel="chromium", headless=not args.headed,
+                    args=["--enable-gpu"])
             except Exception as error:
                 print(f"UNTESTED: Chromium could not launch: {error}")
                 return 2
             try:
-                metadata = dict(browser=browser.version, host=platform.platform(), selection=args.only or "all")
+                metadata = dict(browser=browser.version, host=platform.platform(), selection=args.only or "all",
+                                channel="chromium", args=["--enable-gpu"])
                 probe = browser.new_page()
                 probe.goto(base)
                 capabilities = probe.evaluate("""async () => {
                     let gpu = null;
                     try { gpu = await navigator.gpu?.requestAdapter(); } catch (_) {}
-                    return {webgpu: !!gpu, webgl: !!document.createElement('canvas').getContext('webgl2')};
+                    return {webgpu: !!gpu, webgl: !!document.createElement('canvas').getContext('webgl2'), dom: true,
+                        adapter: gpu ? {vendor: gpu.info?.vendor, architecture: gpu.info?.architecture, description: gpu.info?.description} : null};
                 }""")
                 probe.close()
                 for name, path, backend in cases:
@@ -110,7 +115,7 @@ def main(argv=None):
                         page.wait_for_function("""() => {
                             const status = document.querySelector('#status');
                             const error = document.querySelector('#error');
-                            const ready = document.querySelector('canvas') && (status ? status.hidden :
+                            const ready = (document.querySelector('canvas') || document.querySelector('#italy-demo')) && (status ? status.hidden :
                                 document.querySelector('#index')?.hidden && error?.hidden);
                             return ready || (error && !error.hidden) ||
                                 (status && !status.hidden && !status.textContent.startsWith('Loading'));
@@ -118,6 +123,19 @@ def main(argv=None):
                         visible_error = page.locator('#error:not([hidden]), #status:not([hidden])')
                         if visible_error.count():
                             raise AssertionError(visible_error.first.inner_text())
+                        if backend == "dom":
+                            page.wait_for_function("() => {const i=document.querySelector('#italy-main');return i?.complete && i.naturalWidth>0;}")
+                            page.locator('input[name="italy-mode"][value="srgb"]').check()
+                            page.wait_for_function("() => {const i=document.querySelector('#italy-main');return i.src.startsWith('blob:') && i.complete && i.naturalWidth>0;}")
+                            page.locator('#italy-thumbnails button').first.click()
+                            page.wait_for_function("() => document.querySelector('#italy-selection').textContent.includes('sRGB · sRGB preview')")
+                            page.screenshot(path=str(args.output / (name + ".png")))
+                            page.set_viewport_size({"width": 820, "height": 620})
+                            page.screenshot(path=str(args.output / (name + "-resized.png")))
+                            if errors:
+                                raise AssertionError("; ".join(errors))
+                            row.update(status="passed", detail="DOM images loaded, sRGB preview and source selection, resize; no browser errors", screenshot=name + ".png")
+                            continue
                         canvas = page.locator("canvas").first
                         canvas.wait_for(state="visible", timeout=10000)
                         page.wait_for_timeout(1500)  # Permit asynchronous GPU failures to reach the browser error channel.

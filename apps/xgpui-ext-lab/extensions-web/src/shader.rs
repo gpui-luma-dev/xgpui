@@ -8,6 +8,7 @@ use xgpui_shader::{
 };
 
 pub struct ShaderDemo {
+    supports_compute: bool,
     paints: Vec<(&'static str, Paint)>,
     slots: Vec<[PresentationSlotId; 3]>,
     mesh: Arc<MeshGradient>,
@@ -20,7 +21,7 @@ pub struct ShaderDemo {
 }
 
 impl ShaderDemo {
-    pub fn new() -> Self {
+    pub fn new(supports_compute: bool) -> Self {
         let stops = || {
             vec![
                 GradientStop::new(0.0, [0.95, 0.15, 0.35, 1.0]),
@@ -114,6 +115,7 @@ impl ShaderDemo {
             .map(|_| std::array::from_fn(|_| PresentationSlotId::new()))
             .collect();
         Self {
+            supports_compute,
             slots,
             paints,
             mesh_paint: mesh.content().into(),
@@ -248,7 +250,8 @@ impl Render for ShaderDemo {
                         cx.notify();
                     }))))
             .child(div().flex().flex_wrap().gap_4()
-                .child(card("Hermite mesh", self.mesh_paint.clone(), opacity,self.slots[self.paints.len()]))
+                .when(self.supports_compute, |view| view.child(card("Hermite mesh", self.mesh_paint.clone(), opacity,self.slots[self.paints.len()])))
+                .when(!self.supports_compute, |view| view.child("Hermite compute mesh unavailable: this renderer does not support compute. Other gradient and WGSL examples remain available."))
                 .child(card("Portable WGSL", self.wash.clone(), opacity,self.slots[self.paints.len()+1]))
                 .children(self.paints.iter().enumerate().map(|(index,(label,paint))|card(label,paint.clone(),opacity,self.slots[index]))))
     }

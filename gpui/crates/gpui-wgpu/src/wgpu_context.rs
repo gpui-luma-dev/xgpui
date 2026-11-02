@@ -446,7 +446,10 @@ impl WgpuContext {
         }
 
         #[cfg(all(target_os = "linux", feature = "dma-buf"))]
-        if adapter.features().contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF) {
+        if adapter
+            .features()
+            .contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF)
+        {
             required_features |= wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
         }
         let color_atlas_texture_format = Self::select_color_texture_format(adapter)?;
@@ -737,6 +740,11 @@ impl WgpuContext {
             rgba_features.allowed_usages,
         ))
     }
+    /// Portable graph capabilities of this initialized device (no GPU work).
+    pub fn content_capabilities(&self) -> gpui::content::ContentCapabilities {
+        crate::content_executor::capabilities(&self.device)
+    }
+
     pub fn backend(&self) -> WgpuBackend {
         self.backend
     }

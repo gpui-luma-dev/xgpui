@@ -937,6 +937,8 @@ impl CustomCompositor {
         if mapping.is_none() {
             mapped[3][0] = -1.;
         }
+        // Explicit metadata avoids textureNumLevels, which GLSL ES 3.00 lacks.
+        mapped[3][3] = source.mip_level_count().saturating_sub(1) as f32;
         let working_p3 = adjustments.is_some_and(|paint| paint.is_p3());
         mapped[3][1] = if working_p3 { 1. } else { 0. };
         mapped[3][2] = if adjustments.is_some() {

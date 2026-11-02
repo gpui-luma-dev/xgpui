@@ -1,6 +1,6 @@
 'use strict';
 
-const shaderGuideRoutes = ['shader-models', 'typography', 'brushes', 'paint-validation', 'extension-paints', 'shader-producers', 'paint-contract-hardening', 'portable-wgsl-v1', 'instanced-wgsl-v2', 'portable-paints', 'native-dx11-paints'];
+const shaderGuideRoutes = ['shader-models', 'typography', 'brushes', 'paint-validation', 'extension-paints', 'shader-producers', 'paint-contract-hardening', 'portable-wgsl-v1', 'instanced-wgsl-v2', 'portable-paints', 'native-metal-paints', 'native-dx11-paints'];
 
 function isExtensionRoute(route) {
   return route === 'extensions' || Object.hasOwn(data.extension_documents, route);

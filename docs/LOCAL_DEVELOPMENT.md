@@ -331,7 +331,11 @@ consumer migration is tracked in xgpui-lab#38.
 both Wasm collections, stages a fresh site and launches real Chromium. It discovers
 all demo links in both galleries and forces WebGPU and WebGL2 separately, checking
 startup, a visible canvas, the actual requested graphics context, resize and browser
-errors. It saves screenshots. This is startup/resize smoke coverage, not pixel
+errors. Italy is a DOM-image demo: it runs once, checking actual image loading,
+source selection and its Rust/Wasm sRGB preview instead of claiming GPU-canvas
+coverage. The runner uses full Chromium's headless mode with `--enable-gpu` and
+records its browser/adapter details; the old headless shell's software GPU is not
+a substitute for this native-GPU acceptance. It saves screenshots. This is startup/resize smoke coverage, not pixel
 reference parity or verification of every control. A missing browser backend is
 recorded explicitly; it never counts as passing that backend. A failed build or
 staging prerequisite prevents browser checks from testing stale assets.
