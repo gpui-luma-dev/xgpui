@@ -1,6 +1,6 @@
 [package]
 name = "xgpui"
-version = "1.2.0"
+version = "2.0.0"
 edition = "2024"
 authors = ["Nathan Sobo <nathan@zed.dev>"]
 description = "GPU-accelerated application framework with xgpui rendering extensions"
@@ -68,7 +68,7 @@ derive_more = { version = "2.1", features = ["deref", "deref_mut", "from_str", "
 etagere = { version = "0.2" }
 futures = { version = "0.3.34" }
 futures-concurrency = { version = "7.7.1", optional = true }
-gpui_macros = { package = "xgpui-macros", version = "=1.0.0" }
+gpui_macros = { package = "xgpui-macros", version = "=1.0.1" }
 gpui_shared_string = { package = "gpui-shared-string-gpui-unofficial", version = "=1.26.2" }
 http_client = { package = "http-client-gpui-unofficial", version = "=1.26.2" }
 image = { version = "0.25.1", default-features = false, features = [

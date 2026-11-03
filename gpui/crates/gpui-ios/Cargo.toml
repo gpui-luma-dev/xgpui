@@ -1,11 +1,11 @@
 [package]
 name = "xgpui-ios"
-version = "0.1.0"
+version = "1.26.2"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
-description = "Experimental UIKit and Metal backend for xgpui on iOS"
-publish = false
+description = "Upstream-derived UIKit and Metal backend for xgpui on iOS"
+publish = ["crates-io"]
 homepage = "https://xgpui.dev/"
 documentation = "https://xgpui.dev/"
 readme = "README.md"
@@ -33,10 +33,10 @@ harness = false
 runtime_shaders = ["gpui_apple/runtime_shaders"]
 
 [dependencies]
-gpui = { package = "xgpui", version = "=1.2.0" }
+gpui = { package = "xgpui", version = "=2.0.0" }
 
 [target.'cfg(target_os = "ios")'.dev-dependencies]
-gpui_platform = { package = "xgpui-platform", version = "=1.0.2" }
+gpui_platform = { package = "xgpui-platform", version = "=2.0.0" }
 objc2-ui-kit = { version = "0.3.2", default-features = false, features = ["std", "block2", "objc2-quartz-core", "objc2-core-foundation", "NSText", "UIApplication", "UICommand", "UICornerConfiguration", "UICornerRadius", "UIEvent", "UIGeometry", "UIGestureRecognizer", "UIPanGestureRecognizer", "UIScreenEdgePanGestureRecognizer", "UIInterface", "UIOpenURLContext", "UIPasteboard", "UIResponder", "UIScene", "UISceneConfiguration", "UISceneDefinitions", "UISceneOptions", "UISceneSession", "UIScreen", "UITextInput", "UITextInputTraits", "UITouch", "UITraitCollection", "UIView", "UIViewController", "UIWindow", "UIWindowScene", "UIConversationContext"] }
 slotmap = { version = "1.0.6" }
 
@@ -44,7 +44,7 @@ slotmap = { version = "1.0.6" }
 anyhow = { version = "1.0.86" }
 block2 = { version = "0.6" }
 futures = { version = "0.3.34" }
-gpui_apple = { package = "xgpui-apple", version = "=2.0.1", features = ["font-kit"] }
+gpui_apple = { package = "xgpui-apple", version = "=3.0.0", features = ["font-kit"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 objc2 = { version = "0.6" }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSArray", "NSAttributedString", "NSCoder", "NSData", "NSDate", "NSDictionary", "NSEnumerator", "NSError", "NSGeometry", "NSNull", "NSObjCRuntime", "NSObject", "NSProcessInfo", "NSRange", "NSRunLoop", "NSSet", "NSString", "NSURL", "NSValue", "objc2-core-foundation", "std", "NSThread", "NSOperation", "NSUserActivity", "block2"] }

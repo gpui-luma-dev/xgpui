@@ -127,6 +127,7 @@ API = {
     "xgpui-media": "pub fn filter() -> xgpui_media::ImageFilter { xgpui_media::ImageFilter::new().brightness(1.1) }",
     "xgpui-parley": "pub use xgpui_parley::ParleyTextSystem;",
     "xgpui-svg": "pub fn scheduler() -> xgpui_svg::SvgScheduler { xgpui_svg::SvgScheduler::default() }",
+    "xgpui-canvas": "pub use xgpui_canvas::{Camera2D, Scene};",
 }
 
 PROFILES = [
@@ -255,7 +256,17 @@ def verify(root, output, offline, retry=False, only_profiles=False, nightly_web=
         manifest_path = consumer / "Cargo.toml"
         manifest_path.write_text(dump_toml(manifest))
         (consumer / "src/lib.rs").write_text(API[name] + "\n")
-        ok, log = run("consumer-" + name, ["check", "--jobs", "4", "--target", target, "--manifest-path", str(manifest_path)])
+        arguments = ["check", "--jobs", "4", "--target", target, "--manifest-path", str(manifest_path)]
+        if name == "xgpui-web" and nightly_web:
+            # The default multithreaded dependency requires nightly and atomics;
+            # a stable baseline check would misreport a supported configuration.
+            config = tomllib.loads((root / "gpui/crates/gpui-web/examples/hello_web/.cargo/config.toml").read_text())
+            arguments[1:1] = ["-Z", "build-std=std,panic_abort"]
+            ok, log = run("consumer-" + name, arguments, toolchain="nightly",
+                          rustflags=config["target"]["wasm32-unknown-unknown"]["rustflags"])
+            row["consumer_toolchain"] = "nightly"
+        else:
+            ok, log = run("consumer-" + name, arguments)
         row.update(consumer_status="passed" if ok else "failed", consumer_log=str(log))
         # Resolve metadata separately so a compile failure still records where
         # candidate dependencies came from. No path may point into the checkout.

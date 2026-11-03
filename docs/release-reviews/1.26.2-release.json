@@ -1,0 +1,152 @@
+{
+  "baseline": "release-2026-10-31-ed4469267251",
+  "baseline_commit": "ed4469267251f68fcc9c96c2957ece8912084630",
+  "source_commit": "eda9c2589abe94b5c48ab0087b2e6d2979ec4fea",
+  "packages": [
+    {
+      "name": "xgpui-macros",
+      "old": "1.0.0",
+      "new": "1.0.1",
+      "reason": "Compatible property-test code-generation fix for the proptest 1.12 Rust-path attribute syntax; packaged examples point to the matching framework release.",
+      "change": "patch",
+      "published_old": "1.0.0"
+    },
+    {
+      "name": "xgpui",
+      "old": "1.2.0",
+      "new": "2.0.0",
+      "reason": "PlatformInput variant rename/addition, new required public struct fields, and matching core type identity; adds hot reload, native text notifications and benchmark support.",
+      "change": "major",
+      "published_old": "1.2.0"
+    },
+    {
+      "name": "xgpui-apple",
+      "old": "2.0.1",
+      "new": "3.0.0",
+      "reason": "MetalCustomContext.queue and objc2_queue are no longer public, struct literals are no longer supported, and new_renderer gains use_display_p3; adopt record(), queue_identity(), and core 2 types while preserving objc2-metal.",
+      "change": "major",
+      "published_old": "2.0.1"
+    },
+    {
+      "name": "xgpui-wgpu",
+      "old": "1.0.2",
+      "new": "2.0.0",
+      "reason": "Public WgpuRenderer::draw takes the core 2 Scene and renderer/custom-draw APIs expose core 2 geometry/traits; aligns WGSL sprite layout.",
+      "change": "major",
+      "published_old": "1.0.2"
+    },
+    {
+      "name": "xgpui-windows",
+      "old": "1.0.2",
+      "new": "2.0.0",
+      "reason": "WindowsPlatform implements the core 2 Platform contract; updates input variants, activation handling, helper pins and sprite shader layout.",
+      "change": "major",
+      "published_old": "1.0.2"
+    },
+    {
+      "name": "xgpui-ios",
+      "old": "0.1.0",
+      "new": "1.26.2",
+      "reason": "First proposed publication following gpui-unofficial 1.26.2. The iOS implementation is byte-identical to the upstream capture; package/dependency metadata and the simulator build script are adapted to XGPUI. Runtime simulator/device validation remains pending.",
+      "change": "first-upstream-aligned",
+      "published_old": null
+    },
+    {
+      "name": "xgpui-linux",
+      "old": "1.0.2",
+      "new": "2.0.0",
+      "reason": "Public current_platform/linux_platform return the core 2 Platform trait; updates scroll events and pinned 1.26.2 helpers.",
+      "change": "major",
+      "published_old": "1.0.2"
+    },
+    {
+      "name": "xgpui-macos",
+      "old": "2.0.1",
+      "new": "3.0.0",
+      "reason": "MacPlatform now implements the core 2 Platform contract and re-exported renderer primitives carry core 2 types; ships objc2 ABI/pasteboard/dialog fixes and Display P3 window wiring.",
+      "change": "major",
+      "published_old": "2.0.1"
+    },
+    {
+      "name": "xgpui-web",
+      "old": "1.0.2",
+      "new": "2.0.0",
+      "reason": "WebPlatform and browser window/input interfaces use core 2 types; updates scroll event construction and matching backend requirements.",
+      "change": "major",
+      "published_old": "1.0.2"
+    },
+    {
+      "name": "xgpui-platform",
+      "old": "1.0.2",
+      "new": "2.0.0",
+      "reason": "Re-exports core 2 Platform and returns core 2 Application; adds target-selected experimental iOS and a packaged focus-cleanup benchmark.",
+      "change": "major",
+      "published_old": "1.0.2"
+    },
+    {
+      "name": "xgpui-color",
+      "old": "0.3.0",
+      "new": "0.3.0",
+      "reason": "No packaged source, README or runtime dependency changes since the completed release; retain and verify the published payload.",
+      "change": "unchanged",
+      "published_old": "0.3.0"
+    },
+    {
+      "name": "xgpui-parley",
+      "old": "0.2.2",
+      "new": "0.3.0",
+      "reason": "ParleyTextSystem implements core 2 PlatformTextSystem; public font/text contracts and platform dependency move to the matching core 2 family.",
+      "change": "minor-breaking",
+      "published_old": "0.2.2"
+    },
+    {
+      "name": "xgpui-shader",
+      "old": "0.3.0",
+      "new": "0.4.0",
+      "reason": "Public painted elements and producers implement core 2 traits; native producers adopt Apple 3 host-owned record() batching. Existing objc2 ownership is retained.",
+      "change": "minor-breaking",
+      "published_old": "0.3.0"
+    },
+    {
+      "name": "xgpui-svg",
+      "old": "0.2.2",
+      "new": "0.3.0",
+      "reason": "Public SVG element/renderer interfaces consume core 2 Window, geometry and element traits; exact core requirement changes.",
+      "change": "minor-breaking",
+      "published_old": "0.2.2"
+    },
+    {
+      "name": "xgpui-canvas",
+      "old": "0.2.1",
+      "new": "0.3.0",
+      "reason": "The optional gpui integration exposes core 2 elements and shader 0.4 painter types. CPU-only camera/scene APIs are unchanged.",
+      "change": "minor-breaking",
+      "published_old": "0.2.1"
+    },
+    {
+      "name": "xgpui-gamut",
+      "old": "0.2.2",
+      "new": "0.3.0",
+      "reason": "Public WideColor producers implement core 2 CustomContent and use shader 0.4/Apple 3 recording; GPU output and window contracts require the matching family.",
+      "change": "minor-breaking",
+      "published_old": "0.2.2"
+    },
+    {
+      "name": "xgpui-media",
+      "old": "0.4.0",
+      "new": "0.5.0",
+      "reason": "Public elements, native frame exports and paint signatures use core 2/backend types; adds RasterSource, CanvasPaint, retained viewports, sampling-only adjustments and deferred admission retry.",
+      "change": "minor-breaking",
+      "published_old": "0.4.0"
+    }
+  ],
+  "upstream_release": "1.26.2",
+  "publication_authorized": false,
+  "proposal_status": "review-required",
+  "upstream_commit": "bb63411a365ac328a7780ba7101d72ec91625be8",
+  "zed_commit": "c4273271092b0287f7d181f616bd5171e0a2f70c",
+  "version_policy": "docs/RELEASE_PROCEDURE.md",
+  "compatibility_review": "Manual supported-public-API review; automatic patch suggestions overridden.",
+  "rust_version_review": "No declared rust-version changed; edition remains 2024. Rust 1.99.0 is validated; a lower MSRV is not established.",
+  "ios_publication": "First proposed crates.io publication at 1.26.2, following the captured upstream version while the iOS implementation remains unchanged. Source equality is verified; package/dependency metadata and the example build script are adapted. Runtime-validation confidence is documented separately from package version."
+}

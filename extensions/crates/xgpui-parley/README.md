@@ -8,8 +8,8 @@ paragraph layout. GPUI retains native input, frame caches and glyph atlas owners
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui", version = "1.0.0" }
-xgpui-parley = "0.2.1"
+gpui = { package = "xgpui", version = "2.0.0" }
+xgpui-parley = "0.3.0"
 ```
 
 ## Select the backend
