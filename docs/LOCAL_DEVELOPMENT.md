@@ -21,7 +21,7 @@ lockfiles. Recipes allow dependency downloads; they do not force offline mode.
 
 XGPUI keeps ten framework and backend crates in `gpui/crates/`: `gpui`,
 `gpui-macros`, `gpui-platform`, `gpui-apple`, `gpui-macos`, `gpui-linux`,
-`gpui-windows`, `gpui-web`, `gpui-wgpu` and experimental `gpui-ios`. The seven XGPUI extension crates live
+`gpui-windows`, `gpui-web`, `gpui-wgpu` and `gpui-ios`. The seven XGPUI extension crates live
 under `extensions/crates/`.
 
 Downstream versions vary by package. The unchanged iOS implementation follows the captured upstream version, 1.26.2; other packages retain their existing independent version histories. Local directory names and Rust import names stay stable; Cargo package
@@ -31,7 +31,7 @@ names use the XGPUI prefix:
 | --- | --- |
 | `gpui` | `xgpui` |
 | `gpui-apple` | `xgpui-apple` |
-| `gpui-ios` | `xgpui-ios` (experimental; first publication proposed) |
+| `gpui-ios` | `xgpui-ios` (1.26.2) |
 | `gpui-linux` | `xgpui-linux` |
 | `gpui-macos` | `xgpui-macos` |
 | `gpui-macros` | `xgpui-macros` |
@@ -125,10 +125,11 @@ not Cargo arguments. For extra Cargo features, use the direct Cargo command with
 that app's manifest, as in the macOS runtime-shader example below. The app-level
 justfiles remain available for specialized captures and benchmarks.
 
-## Experimental iOS backend
+## iOS backend
 
 `xgpui-ios` follows the captured upstream version while its iOS implementation remains unchanged.
-Its first registry publication is proposed at 1.26.2 and awaits approval.
+Version 1.26.2 is published on crates.io. Simulator compilation and packaging
+are checked; interactive simulator/device validation remains pending.
 Install Xcode, select its developer directory, and add the simulator target:
 
 ```sh
@@ -279,7 +280,8 @@ platform and, where applicable, a graphical session.
 
 ## Preview this website
 
-Generate the crate inventory and embedded guides, then serve `docs/` locally:
+Generate the crate inventory and embedded guides, then serve the staged website
+from `target/site/` locally:
 
 ```sh
 just docs-check
@@ -299,6 +301,7 @@ them, install the Wasm target and the CLI version pinned by the build scripts:
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.129 --locked
 just web-build
+just docs-serve
 ```
 
 These scripts also require Bash and Python 3; on Windows run them in a Bash
