@@ -1,0 +1,290 @@
+{
+  "proposal": "GPUI 1.26.2 release candidate",
+  "checked_package_source_commit": "35758ab1d0599739e8427c590b33c5e150c6e926",
+  "baseline": "release-2026-10-31-ed4469267251",
+  "publication_authorized": false,
+  "uploads_enabled": false,
+  "registry_plan": {
+    "status": "planned",
+    "mode": "plan",
+    "packages": [
+      {
+        "name": "xgpui-macros",
+        "version": "1.0.1",
+        "status": "publish-needed",
+        "archive_sha256": "427143eff29c6afd52870d7fc13b4745dd062d25aa5f325a821a994589209b06",
+        "files": 19
+      },
+      {
+        "name": "xgpui",
+        "version": "2.0.0",
+        "status": "publish-needed",
+        "archive_sha256": "82abab43d0c54eac368778ed4ab0868cabb438ecbf958226f28cd6714c3dcff5",
+        "files": 181
+      },
+      {
+        "name": "xgpui-apple",
+        "version": "3.0.0",
+        "status": "publish-needed",
+        "archive_sha256": "a17522f5a12cc42c12e479e2ceb95b79aa4c4d2674520eb63f8bc1ee46e3dfc5",
+        "files": 34
+      },
+      {
+        "name": "xgpui-wgpu",
+        "version": "2.0.0",
+        "status": "publish-needed",
+        "archive_sha256": "12bd511818cf953e143f603fc5229c370f00ef33f48bf914f9ba4146446f9380",
+        "files": 29
+      },
+      {
+        "name": "xgpui-windows",
+        "version": "2.0.0",
+        "status": "publish-needed",
+        "archive_sha256": "a6a57ec99d583b529ffec3b8e3a97274a0d1dddfd19671254045286778739b2e",
+        "files": 47
+      },
+      {
+        "name": "xgpui-ios",
+        "version": "0.1.0",
+        "status": "publish-needed",
+        "archive_sha256": "2099d9ab92ca9ee47ad123f42eb92dc1a89fc21b177332c9a2a444b44edc600f",
+        "files": 16
+      },
+      {
+        "name": "xgpui-linux",
+        "version": "2.0.0",
+        "status": "publish-needed",
+        "archive_sha256": "dd681dcebcafca05041fa4f5d70e579cf43a616842b5b4c205c9b347f7ca502a",
+        "files": 31
+      },
+      {
+        "name": "xgpui-macos",
+        "version": "3.0.0",
+        "status": "publish-needed",
+        "archive_sha256": "5d122b12bea26606a11245e1f3f896f6e349bad3954784af8e06042c5ff1d188",
+        "files": 16
+      },
+      {
+        "name": "xgpui-web",
+        "version": "2.0.0",
+        "status": "publish-needed",
+        "archive_sha256": "ff85713f88728dfda5890b100d2f4e281281dd98759107fda4ece681d1985aad",
+        "files": 24
+      },
+      {
+        "name": "xgpui-platform",
+        "version": "2.0.0",
+        "status": "publish-needed",
+        "archive_sha256": "f27d2efe1ae8916c022735e5daa9cf048dcb12495a8b9df02abcb24940d65cdf",
+        "files": 8
+      },
+      {
+        "name": "xgpui-color",
+        "version": "0.3.0",
+        "status": "already-published",
+        "archive_sha256": "3c6b670823f8b451e1b78c58a02b73cbe31f7535a7f136b162bd3ef7f54ba729",
+        "files": 36,
+        "registry_checksum": "aeaedb17e987461ac2f3c8cbcb3c2124854f4a31a0e8da21944073ab081dcbdf"
+      },
+      {
+        "name": "xgpui-parley",
+        "version": "0.3.0",
+        "status": "publish-needed",
+        "archive_sha256": "7ecdae482dd1038a17bd4110880ccfd81c9f0d93dccada76701f9b21a850f25a",
+        "files": 24
+      },
+      {
+        "name": "xgpui-shader",
+        "version": "0.4.0",
+        "status": "publish-needed",
+        "archive_sha256": "5d89fcb60a5d09f846c8490be8e7f87edaf45594259a2ed52555bbc35d7e2c26",
+        "files": 84
+      },
+      {
+        "name": "xgpui-svg",
+        "version": "0.3.0",
+        "status": "publish-needed",
+        "archive_sha256": "c723ad976b5a7bed478170f2acdb6239b1f5a9069fef2018736f9b19ae0364a3",
+        "files": 13
+      },
+      {
+        "name": "xgpui-canvas",
+        "version": "0.3.0",
+        "status": "publish-needed",
+        "archive_sha256": "33fc9d0d0d70f3328cd5b1404825904e7644c0fdcc7c55b4c192771b74909e32",
+        "files": 15
+      },
+      {
+        "name": "xgpui-gamut",
+        "version": "0.3.0",
+        "status": "publish-needed",
+        "archive_sha256": "697fa35e865dd65acd1d1c6c74dab5f00227e454d82abdfa3e9391b184bc0bfd",
+        "files": 12
+      },
+      {
+        "name": "xgpui-media",
+        "version": "0.5.0",
+        "status": "publish-needed",
+        "archive_sha256": "b21ac90971b71a80750c37c8572dd844ff9326b1cdf1aeb937ada09ab297dcdf",
+        "files": 26
+      }
+    ]
+  },
+  "checks": {
+    "python_tests": 62,
+    "rust_normalizer_tests": 9,
+    "normalization": "passed",
+    "generated_manifests": "passed",
+    "locked_native_full_capture": "passed",
+    "local_framework_and_helper_identities": "passed",
+    "external_dependency_locksets": "unchanged",
+    "documentation_generation_and_verification": "passed",
+    "offline_archives": {
+      "passed": 17
+    },
+    "isolated_consumers": {
+      "xgpui": {
+        "version": "2.0.0",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-apple": {
+        "version": "3.0.0",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-linux": {
+        "version": "2.0.0",
+        "target": "x86_64-unknown-linux-gnu",
+        "consumer_status": "failed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-macos": {
+        "version": "3.0.0",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-macros": {
+        "version": "1.0.1",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-platform": {
+        "version": "2.0.0",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-web": {
+        "version": "2.0.0",
+        "target": "wasm32-unknown-unknown",
+        "consumer_status": "passed",
+        "consumer_toolchain": "nightly",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-wgpu": {
+        "version": "2.0.0",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-windows": {
+        "version": "2.0.0",
+        "target": "x86_64-pc-windows-msvc",
+        "consumer_status": "failed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-color": {
+        "version": "0.3.0",
+        "consumer_status": "covered-by-dedicated-color-validator"
+      },
+      "xgpui-gamut": {
+        "version": "0.3.0",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-media": {
+        "version": "0.5.0",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-parley": {
+        "version": "0.3.0",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-shader": {
+        "version": "0.4.0",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-svg": {
+        "version": "0.3.0",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-canvas": {
+        "version": "0.3.0",
+        "target": "aarch64-apple-darwin",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      },
+      "xgpui-ios": {
+        "version": "0.1.0",
+        "target": "aarch64-apple-ios-sim",
+        "consumer_status": "passed",
+        "dependency_metadata_status": "passed"
+      }
+    },
+    "feature_profiles": {
+      "xgpui-apple": {
+        "font-kit": "passed"
+      },
+      "xgpui-web": {
+        "single-threaded": "passed",
+        "single-threaded-application": "passed",
+        "multithreaded-nightly": "passed"
+      },
+      "xgpui-gamut": {
+        "instanced": "passed"
+      },
+      "xgpui-media": {
+        "wgpu": "passed"
+      },
+      "xgpui-parley": {
+        "system-fonts": "passed"
+      },
+      "xgpui-shader": {
+        "portable": "passed"
+      }
+    },
+    "combined_native_consumer": "passed"
+  },
+  "host_limitations": [
+    {
+      "package": "xgpui-linux",
+      "target": "x86_64-unknown-linux-gnu",
+      "reason": "Mac host lacks Linux C sysroot: Wayland log_shim.c cannot find stdio.h. Native release-PR CI is required."
+    },
+    {
+      "package": "xgpui-windows",
+      "target": "x86_64-pc-windows-msvc",
+      "reason": "Mac host lacks the llvm-rc Windows resource compiler. Native release-PR CI is required."
+    }
+  ],
+  "registry_verification_limit": "Plan mode inspects archives and checks collisions; it is not registry-backed Cargo build verification. Candidate dependencies are unpublished until approved ordered publication.",
+  "ios_limit": "Simulator/device execution has not been performed. The first registry version remains an explicit experimental proposal.",
+  "local_reports": {
+    "registry": "/tmp/xgpui-release-1.26.2-registry-plan/report.json",
+    "consumers": "/tmp/xgpui-release-1.26.2-packages/report.json"
+  }
+}
