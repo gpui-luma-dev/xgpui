@@ -25,7 +25,7 @@ test-support = [
     "dep:postage",
     "dep:web-time",
 ]
-bench-support = ["profiler", "dep:criterion"]
+bench-support = ["profiler", "dep:criterion", "dep:perf-event"]
 # Preserve the published feature name while consumers migrate to `bench-support`.
 bench = ["bench-support"]
 # Tracks every entity handle so tests can assert nothing leaked. Also enabled
@@ -164,8 +164,11 @@ objc2-metal = { version = "0.3", optional = true }
 [target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))'.dependencies]
 scap = { version = "0.0.8-zed", package = "zed-scap", default-features = false, optional = true }
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = { version = "0.2" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+perf-event = { package = "perf-event2", version = "0.7.4", optional = true }
 
 
 [target.'cfg(target_os = "windows")'.dependencies]

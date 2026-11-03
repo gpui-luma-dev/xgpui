@@ -189,3 +189,23 @@ demo targets. `just lab-build` builds the native binaries; `just lab-test` runs
 unit and compatibility tests. Select a particular workload using `--bin`, and
 use its browser build script for WASM packaging. The package has its own shared
 lockfile and `publish = false`; it is excluded from the library release map.
+
+## Benchmark support
+
+The platform benchmarks require `bench-support`. Their test targets also need
+`test-support` when using `cargo check --benches`:
+
+```sh
+cargo check --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-platform/Cargo.toml --features bench-support,test-support,runtime_shaders --benches
+```
+
+The core package includes Zed's benchmark metrics source at the captured Zed
+commit. `bench-metrics-provenance.json` records that source and the local test
+adaptation. It is compiled only with `bench-support`; the Linux `perf-event2`
+dependency is optional and only activated by that feature. The public benchmark
+measurement and allocator types remain available through `gpui`.
+
+Benchmark collectors use process-wide tracing and allocation state. Run their
+unit tests with `--test-threads=1` to isolate measurements from other test cases.
+Native CI compiles all platform benchmarks and runs the metrics and benchmark
+context tests on Windows, Linux and macOS.

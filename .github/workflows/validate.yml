@@ -52,6 +52,18 @@ jobs:
         run: |
           cargo metadata --locked --format-version 1 > "$RUNNER_TEMP/xgpui-metadata.json"
           python scripts/check_local_dependencies.py "$RUNNER_TEMP/xgpui-metadata.json"
+      - name: Check benchmark support and all platform benchmarks
+        run: cargo check --locked --manifest-path gpui/crates/gpui-platform/Cargo.toml --config .cargo/validation.toml --features bench-support,test-support,runtime_shaders --benches
+      - name: Test benchmark metrics and application context
+        shell: bash
+        env:
+          # Avoid Criterion's fallback cargo metadata invocation, which does not
+          # inherit the explicit compatibility configuration from cargo test.
+          CRITERION_HOME: ${{ runner.temp }}/criterion-tests
+        run: |
+          # Benchmark collectors share process-wide tracing and allocator state.
+          cargo test --locked --manifest-path gpui/crates/gpui/Cargo.toml --config .cargo/validation.toml --features bench-support,test-support,gpui_platform/runtime_shaders --lib bench_metrics:: -- --test-threads=1
+          cargo test --locked --manifest-path gpui/crates/gpui/Cargo.toml --config .cargo/validation.toml --features bench-support,test-support,gpui_platform/runtime_shaders --lib app::bench_context:: -- --test-threads=1
 
   ios-compile:
     name: Experimental iOS simulator compile

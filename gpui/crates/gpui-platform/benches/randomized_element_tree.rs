@@ -25,7 +25,7 @@ use std::{
 };
 
 use gpui::{
-    BenchAppContext, Context, Window,
+    BenchAppContext, Context, Window, bench_metrics,
     private::rand::{Rng as _, SeedableRng as _, rngs::StdRng},
     randomized_element_tree::{
         ChangeLocality, RandomizedElementTree, RandomizedElementTreeBounds,

@@ -12,6 +12,11 @@ mod app;
 mod arena;
 mod asset_cache;
 mod assets;
+// Zed's benchmark support is omitted from the gpui-unofficial capture. Keep the
+// pinned source in this package so its public benchmark APIs work in archives.
+#[cfg(feature = "bench-support")]
+#[doc(hidden)]
+pub mod bench_metrics;
 mod bounds_tree;
 mod color;
 /// The default colors used by GPUI.

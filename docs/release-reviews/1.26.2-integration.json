@@ -28,7 +28,10 @@
     "Replace obsolete Git proptest override with upstream proptest 1.12 and the updated property macro.",
     "Retain async-process compatibility override.",
     "Keep focus_cleanup benchmark inside the platform archive rather than referring to a sibling crate.",
-    "Retain existing downstream release versions pending compatibility review."
+    "Retain existing downstream release versions pending compatibility review.",
+    "Bundle Zed's missing bench_metrics source inside the core package, gated by bench-support, with explicit source provenance and optional Linux perf-event2 support.",
+    "Use fresh mapped pages for page-fault tests; serialize process-wide benchmark measurements.",
+    "Set CRITERION_HOME in CI to avoid Criterion invoking cargo metadata without the test command's compatibility configuration."
   ],
   "checks": [
     {
@@ -91,9 +94,29 @@
       "packages": 17
     },
     {
-      "name": "Standalone focus_cleanup benchmark compile",
-      "status": "blocked",
-      "reason": "Existing captured bench_context.rs imports bench_metrics, absent from upstream package dependencies and capture inventory."
+      "name": "All platform benchmark targets compile with bench-support and test-support",
+      "status": "passed",
+      "benchmarks": [
+        "focus_cleanup",
+        "inspector_render",
+        "randomized_element_tree"
+      ]
+    },
+    {
+      "name": "Benchmark-enabled core library tests (serial)",
+      "status": "passed",
+      "tests": 487,
+      "ignored": 2
+    },
+    {
+      "name": "Locked CI benchmark metrics tests (serial, explicit Criterion output directory)",
+      "status": "passed",
+      "tests": 9
+    },
+    {
+      "name": "Locked CI benchmark context tests (serial, explicit Criterion output directory)",
+      "status": "passed",
+      "tests": 6
     }
   ],
   "compatibility_review_required": [
@@ -103,7 +126,6 @@
     "Review GPU sprite layout and native interface changes and dependent public types before selecting versions."
   ],
   "remaining_release_gates": [
-    "Resolve or explicitly scope existing bench-support / missing bench_metrics limitation.",
     "Collect native Windows and Linux CI evidence.",
     "Run iOS example and protocol tests on an installed simulator runtime.",
     "Complete public API compatibility review and choose new downstream versions.",
@@ -119,7 +141,7 @@
     {
       "name": "xgpui",
       "version": "1.2.0",
-      "sha256": "e17cd8f267456dafe0ed1be09197107f69ca7b459a95ea74a5071ae27d23c3bb"
+      "sha256": "238a3fddc815f8d35f022b5256bb7a4fb3e0717eef263ac9c2cd19ba5c017415"
     },
     {
       "name": "xgpui-apple",
@@ -159,7 +181,7 @@
     {
       "name": "xgpui-platform",
       "version": "1.0.2",
-      "sha256": "181ad8092fc189152f3cc395c271ec8d4fcd67dc97812c2397ded67e504263ba"
+      "sha256": "5f649c77d17a1e6e5860eac49488c3fbe55cfc82af8f4692b252193ad49fc1ab"
     },
     {
       "name": "xgpui-color",
@@ -197,5 +219,15 @@
       "sha256": "20c8df6f29e83af0c6d5f7c5b4394510de8aba7710f02ae135954b29979e645b"
     }
   ],
-  "local_validation_logs": "/tmp/xgpui-1.26.2-review.b0CdQY"
+  "local_validation_logs": "/tmp/xgpui-1.26.2-review.b0CdQY",
+  "benchmark_support": {
+    "source_provenance": "gpui/crates/gpui/bench-metrics-provenance.json",
+    "source_blob": "ee0d0fd68e61826f74367c4a463b25e6b9f93494",
+    "ci_platforms": [
+      "ubuntu-24.04",
+      "macos-latest",
+      "windows-latest"
+    ],
+    "ci_tests": "bench_metrics:: and app::bench_context::, with --test-threads=1 and CRITERION_HOME set"
+  }
 }
