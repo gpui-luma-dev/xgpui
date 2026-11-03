@@ -213,9 +213,10 @@ Each renderer crate adds `pub mod custom_draw`.
 // gpui_apple::custom_draw — macOS/Metal
 pub struct MetalCustomContext {
     pub device: metal::Device,
-    pub queue: metal::CommandQueue,
+    // Native queue and shared recording state are private.
 }
-// Public method: cache_key() -> u64
+// Public methods: new(device, queue), cache_key(), queue_identity(),
+// record(|host_command| -> anyhow::Result<()>). Only the host submits.
 pub struct MetalCustomOutput {
     pub texture: metal::Texture,
     pub commands: Vec<metal::CommandBuffer>,

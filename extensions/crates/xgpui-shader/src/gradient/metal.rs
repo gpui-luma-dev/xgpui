@@ -1,7 +1,7 @@
 use super::{Gradient, GradientKind};
 use anyhow::{Result, bail};
 use gpui::{DevicePixels, Size};
-use gpui_apple::custom_draw::MetalCustomContext;
+use gpui_apple::custom_draw::{MetalCustomContext, MetalQueueIdentity};
 use gpui_apple::metal::*;
 use std::{
     any::Any,
@@ -13,7 +13,7 @@ use std::{
 
 #[derive(Default)]
 pub(super) struct PipelineCache {
-    cached: Mutex<Option<(u64, RenderPipelineState, CommandQueue)>>,
+    cached: Mutex<Option<(u64, RenderPipelineState, MetalQueueIdentity)>>,
     pub compilations: AtomicUsize,
 }
 impl PipelineCache {
@@ -51,7 +51,7 @@ impl PipelineCache {
             .device
             .newRenderPipelineStateWithDescriptor_error(&descriptor)
             .map_err(anyhow::Error::msg)?;
-        *cached = Some((ctx.cache_key(), pipeline.clone(), ctx.queue.clone()));
+        *cached = Some((ctx.cache_key(), pipeline.clone(), ctx.queue_identity()));
         self.compilations.fetch_add(1, Ordering::Relaxed);
         Ok(pipeline)
     }
@@ -116,40 +116,38 @@ impl Gradient {
                     offset: [s.offset, 0., 0., 0.],
                 })
                 .collect();
-            let command = ctx
-                .queue
-                .commandBuffer()
-                .expect("Metal command buffer allocation failed")
-                .to_owned();
-            let pass = RenderPassDescriptor::new();
-            let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
-            attachment.setTexture(Some(&texture));
-            attachment.setLoadAction(MTLLoadAction::DontCare);
-            attachment.setStoreAction(MTLStoreAction::Store);
-            let encoder = command
-                .renderCommandEncoderWithDescriptor(&pass)
-                .expect("Metal render encoder allocation failed");
-            encoder.setRenderPipelineState(&pipeline);
-            unsafe {
-                encoder.setFragmentBytes_length_atIndex(
+            let command = ctx.record(|command| {
+                let pass = RenderPassDescriptor::new();
+                let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+                attachment.setTexture(Some(&texture));
+                attachment.setLoadAction(MTLLoadAction::DontCare);
+                attachment.setStoreAction(MTLStoreAction::Store);
+                let encoder = command
+                    .renderCommandEncoderWithDescriptor(&pass)
+                    .expect("Metal render encoder allocation failed");
+                encoder.setRenderPipelineState(&pipeline);
+                unsafe {
+                    encoder.setFragmentBytes_length_atIndex(
                     std::ptr::NonNull::new(params.as_ptr().cast::<std::ffi::c_void>() as *mut _)
                         .expect("non-null bytes"),
                     std::mem::size_of_val(&params) as usize,
                     0,
                 )
-            };
-            unsafe {
-                encoder.setFragmentBytes_length_atIndex(
-                    std::ptr::NonNull::new(stops.as_ptr().cast::<std::ffi::c_void>() as *mut _)
-                        .expect("non-null bytes"),
-                    std::mem::size_of_val(stops.as_slice()) as usize,
-                    1,
-                )
-            };
-            unsafe {
-                encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6)
-            };
-            encoder.endEncoding();
+                };
+                unsafe {
+                    encoder.setFragmentBytes_length_atIndex(
+                        std::ptr::NonNull::new(stops.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                            .expect("non-null bytes"),
+                        std::mem::size_of_val(stops.as_slice()) as usize,
+                        1,
+                    )
+                };
+                unsafe {
+                    encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6)
+                };
+                encoder.endEncoding();
+                Ok(())
+            })?;
             Ok((texture, command))
         })?;
         if generated {

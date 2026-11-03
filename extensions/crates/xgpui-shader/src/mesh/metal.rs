@@ -1,7 +1,7 @@
 use super::MeshGradient;
 use anyhow::{Result, bail};
 use gpui::{DevicePixels, Size};
-use gpui_apple::custom_draw::MetalCustomContext;
+use gpui_apple::custom_draw::{MetalCustomContext, MetalQueueIdentity};
 use gpui_apple::metal::*;
 use std::{
     any::Any,
@@ -19,7 +19,7 @@ pub(super) struct PipelineCache {
 struct CachedPipelines {
     key: u64,
     pipelines: Arc<Pipelines>,
-    _queue: CommandQueue,
+    _queue: MetalQueueIdentity,
 }
 struct Pipelines {
     coefficients: ComputePipelineState,
@@ -94,7 +94,7 @@ impl PipelineCache {
         *cached = Some(CachedPipelines {
             key: ctx.cache_key(),
             pipelines: pipelines.clone(),
-            _queue: ctx.queue.clone(),
+            _queue: ctx.queue_identity(),
         });
         self.compilations.fetch_add(1, Ordering::Relaxed);
         Ok(pipelines)
@@ -205,74 +205,72 @@ impl MeshGradient {
                 .device
                 .newTextureWithDescriptor(&descriptor)
                 .expect("Metal texture allocation failed");
-            let command = ctx
-                .queue
-                .commandBuffer()
-                .expect("Metal command buffer allocation failed")
-                .to_owned();
-            let params = Params {
-                width: self.grid.width,
-                height: self.grid.height,
-                samples: self.samples,
-                patches: self.stats.patches,
-            };
-            compute(
-                &command,
-                &pipelines.coefficients,
-                &controls,
-                &patches,
-                &params,
-                self.stats.patches,
-            );
-            compute(
-                &command,
-                &pipelines.evaluate,
-                &patches,
-                &vertices,
-                &params,
-                self.stats.evaluated_vertices,
-            );
-            compute(
-                &command,
-                &pipelines.triangles,
-                &vertices,
-                &triangles,
-                &params,
-                self.stats.triangles / 2,
-            );
-            let pass = RenderPassDescriptor::new();
-            let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
-            attachment.setTexture(Some(&texture));
-            attachment.setLoadAction(MTLLoadAction::Clear);
-            attachment.setStoreAction(MTLStoreAction::Store);
-            attachment.setClearColor(MTLClearColor {
-                red: 0.,
-                green: 0.,
-                blue: 0.,
-                alpha: 0.,
-            });
-            let encoder = command
-                .renderCommandEncoderWithDescriptor(&pass)
-                .expect("Metal render encoder allocation failed");
-            encoder.setRenderPipelineState(&pipelines.draw);
-            encoder.setCullMode(MTLCullMode::None);
-            encoder.setViewport(MTLViewport {
-                originX: 0.,
-                originY: 0.,
-                width: size.width.0 as f64,
-                height: size.height.0 as f64,
-                znear: 0.,
-                zfar: 1.,
-            });
-            unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&triangles), 0, 0) };
-            unsafe {
-                encoder.drawPrimitives_vertexStart_vertexCount(
-                    MTLPrimitiveType::Triangle,
-                    0,
-                    self.stats.triangles as usize * 3,
-                )
-            };
-            encoder.endEncoding();
+            let command = ctx.record(|command| {
+                let params = Params {
+                    width: self.grid.width,
+                    height: self.grid.height,
+                    samples: self.samples,
+                    patches: self.stats.patches,
+                };
+                compute(
+                    &command,
+                    &pipelines.coefficients,
+                    &controls,
+                    &patches,
+                    &params,
+                    self.stats.patches,
+                );
+                compute(
+                    &command,
+                    &pipelines.evaluate,
+                    &patches,
+                    &vertices,
+                    &params,
+                    self.stats.evaluated_vertices,
+                );
+                compute(
+                    &command,
+                    &pipelines.triangles,
+                    &vertices,
+                    &triangles,
+                    &params,
+                    self.stats.triangles / 2,
+                );
+                let pass = RenderPassDescriptor::new();
+                let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+                attachment.setTexture(Some(&texture));
+                attachment.setLoadAction(MTLLoadAction::Clear);
+                attachment.setStoreAction(MTLStoreAction::Store);
+                attachment.setClearColor(MTLClearColor {
+                    red: 0.,
+                    green: 0.,
+                    blue: 0.,
+                    alpha: 0.,
+                });
+                let encoder = command
+                    .renderCommandEncoderWithDescriptor(&pass)
+                    .expect("Metal render encoder allocation failed");
+                encoder.setRenderPipelineState(&pipelines.draw);
+                encoder.setCullMode(MTLCullMode::None);
+                encoder.setViewport(MTLViewport {
+                    originX: 0.,
+                    originY: 0.,
+                    width: size.width.0 as f64,
+                    height: size.height.0 as f64,
+                    znear: 0.,
+                    zfar: 1.,
+                });
+                unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&triangles), 0, 0) };
+                unsafe {
+                    encoder.drawPrimitives_vertexStart_vertexCount(
+                        MTLPrimitiveType::Triangle,
+                        0,
+                        self.stats.triangles as usize * 3,
+                    )
+                };
+                encoder.endEncoding();
+                Ok(())
+            })?;
             Ok((texture, command))
         })?;
         if generated {

@@ -37,7 +37,7 @@ fn with_context(test: impl FnOnce(MetalCustomContext)) {
         let queue = device
             .newCommandQueue()
             .expect("Metal queue allocation failed");
-        test(MetalCustomContext { device, queue });
+        test(MetalCustomContext::new(device, queue));
     });
 }
 
@@ -199,12 +199,12 @@ fn submission_rejects_foreign_device_when_available() {
             eprintln!("foreign-device GPU test unavailable: this machine has one Metal device");
             return;
         };
-        let other_context = MetalCustomContext {
-            queue: other
+        let other_context = MetalCustomContext::new(
+            other.clone(),
+            other
                 .newCommandQueue()
                 .expect("Metal queue allocation failed"),
-            device: other,
-        };
+        );
         let output = output(&other_context, vec![]);
         assert_eq!(
             validate(&context, output).err().unwrap().to_string(),
@@ -242,5 +242,52 @@ fn metal_staging_pool_returns_buffer_after_gpu_completion() {
             .unwrap();
         assert_eq!(pool.stats().allocations, 1);
         assert_eq!(pool.stats().reuses, 1);
+    });
+}
+
+#[test]
+fn host_recording_bounds_unsubmitted_buffers_and_rotates_after_submission() {
+    with_context(|context| {
+        let first = context.record(|_| Ok(())).unwrap();
+        for _ in 0..1024 {
+            let next = context.record(|_| Ok(())).unwrap();
+            assert_eq!(first.as_ptr(), next.as_ptr());
+        }
+        let output = output(&context, vec![first.clone()]);
+        submit_custom_commands(&context, [&output]).unwrap();
+        let next = context.record(|_| Ok(())).unwrap();
+        assert_ne!(first.as_ptr(), next.as_ptr());
+        first.waitUntilCompleted();
+        assert_eq!(first.status(), MTLCommandBufferStatus::Completed);
+    });
+}
+
+#[test]
+fn upload_worker_cannot_encode_into_the_ui_preparation_batch() {
+    with_context(|context| {
+        let worker = context.clone();
+        let error = std::thread::spawn(move || {
+            worker
+                .record(|_| panic!("wrong-thread encoder invoked"))
+                .err()
+                .unwrap()
+                .to_string()
+        })
+        .join()
+        .unwrap();
+        assert!(error.contains("preparation thread"));
+        assert!(context.record(|_| Ok(())).is_ok());
+    });
+}
+
+#[test]
+fn recursive_recording_returns_an_error_without_blocking_the_ui() {
+    with_context(|context| {
+        context
+            .record(|_| {
+                assert!(context.record(|_| Ok(())).is_err());
+                Ok(())
+            })
+            .unwrap();
     });
 }

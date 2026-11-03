@@ -32,10 +32,6 @@ impl WideColor {
             .context("failed to allocate wide-color Metal texture")?;
         #[cfg(test)]
         super::PRODUCER_ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let command = context
-            .objc2_queue()
-            .commandBuffer()
-            .context("failed to allocate wide-color Metal command buffer")?;
         let pass = MTLRenderPassDescriptor::new();
         // SAFETY: attachment zero is within Metal's eight color attachments.
         let c = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
@@ -49,10 +45,13 @@ impl WideColor {
             blue: b * a,
             alpha: a,
         });
-        command
-            .renderCommandEncoderWithDescriptor(&pass)
-            .context("failed to encode wide-color Metal clear")?
-            .endEncoding();
+        let command = context.record(|command| {
+            command
+                .renderCommandEncoderWithDescriptor(&pass)
+                .context("failed to encode wide-color Metal clear")?
+                .endEncoding();
+            Ok(())
+        })?;
         Ok(Box::new(
             MetalWideSdrOutput::from_objc2_linear_p3_premultiplied(
                 context,

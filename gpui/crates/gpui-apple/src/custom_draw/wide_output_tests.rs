@@ -82,7 +82,7 @@ fn context() -> MetalCustomContext {
     let queue = device
         .newCommandQueue()
         .expect("Metal queue allocation failed");
-    MetalCustomContext { device, queue }
+    MetalCustomContext::new(device, queue)
 }
 #[test]
 fn wide_output_pending_reuse_submission_and_queue_separation() -> Result<()> {
@@ -108,13 +108,12 @@ fn wide_output_pending_reuse_submission_and_queue_separation() -> Result<()> {
             first.output.commands[0].as_ptr(),
             second.output.commands[0].as_ptr()
         );
-        let other = MetalCustomContext {
-            device: c.device.clone(),
-            queue: c
-                .device
+        let other = MetalCustomContext::new(
+            c.device.clone(),
+            c.device
                 .newCommandQueue()
                 .expect("Metal queue allocation failed"),
-        };
+        );
         assert!(cached.reusable_for(&other).is_err());
         assert_eq!(command.status(), MTLCommandBufferStatus::NotEnqueued);
         submit_custom_commands(&c, [&first.output, &second.output])?;

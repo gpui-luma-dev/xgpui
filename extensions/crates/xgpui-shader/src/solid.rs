@@ -83,15 +83,13 @@ impl SolidColor {
                 blue: c[2] as f64,
                 alpha: c[3] as f64,
             });
-            let command = context
-                .queue
-                .commandBuffer()
-                .expect("Metal command buffer allocation failed")
-                .to_owned();
-            command
-                .renderCommandEncoderWithDescriptor(&pass)
-                .expect("Metal render encoder allocation failed")
-                .endEncoding();
+            let command = context.record(|command| {
+                command
+                    .renderCommandEncoderWithDescriptor(&pass)
+                    .expect("Metal render encoder allocation failed")
+                    .endEncoding();
+                Ok(())
+            })?;
             Ok((texture, command))
         })?;
         if generated {

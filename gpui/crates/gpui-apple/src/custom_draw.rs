@@ -7,7 +7,7 @@ mod coverage_cache;
 use anyhow::{Result, ensure};
 pub(crate) use coverage_cache::{CoverageCache, CoverageKey};
 use gpui::{CustomDraw, DevicePixels, Size, size};
-use objc2_metal::{MTLCommandBuffer, MTLCommandQueue, MTLDevice, MTLTexture};
+use objc2_metal::{MTLCommandBuffer, MTLDevice, MTLTexture};
 
 /// Borrowed by producers during preparation. Handles belong to the host device.
 #[derive(Clone)]
@@ -15,23 +15,92 @@ pub struct MetalCustomContext {
     /// Active host device; create all producer resources on this device.
     pub device: Device,
     /// Host queue for recording commands. Only the host commits them.
-    pub queue: CommandQueue,
+    pub(crate) queue: CommandQueue,
+    recording: std::sync::Arc<std::sync::Mutex<PreparationRecording>>,
 }
 
+/// Retains native queue identity for caches without exposing recording/submission.
+#[derive(Clone)]
+pub struct MetalQueueIdentity(CommandQueue);
+impl MetalQueueIdentity {
+    pub fn key(&self) -> u64 {
+        self.0.as_ptr() as usize as u64
+    }
+}
+
+struct PreparationRecording {
+    command: Option<CommandBuffer>,
+    thread: std::thread::ThreadId,
+}
+// SAFETY: only the creating thread may encode, checked in record(). The mutex
+// protects access and retained Metal command owners may be released on any thread.
+// Upload workers carry this context but use their independently admitted buffers.
+unsafe impl Send for PreparationRecording {}
+
 impl MetalCustomContext {
+    /// Bind a preparation batch to the host device/queue. Clones share recording.
+    pub fn new(device: Device, queue: CommandQueue) -> Self {
+        Self {
+            device,
+            queue,
+            recording: std::sync::Arc::new(std::sync::Mutex::new(PreparationRecording {
+                command: None,
+                thread: std::thread::current().id(),
+            })),
+        }
+    }
+
+    /// Encode one producer into the host preparation batch. There is at most one
+    /// unsubmitted buffer regardless of producer count. The closure must finish
+    /// all encoders before returning; only the renderer submits returned commands.
+    /// Background source uploads use the separately admitted staging path.
+    pub fn record(
+        &self,
+        encode: impl FnOnce(&CommandBuffer) -> Result<()>,
+    ) -> Result<CommandBuffer> {
+        let mut recording = self
+            .recording
+            .try_lock()
+            .map_err(|_| anyhow::anyhow!("Metal preparation recording is busy or poisoned"))?;
+        ensure!(
+            recording.thread == std::thread::current().id(),
+            "Metal batch recording must run on its preparation thread"
+        );
+        if recording
+            .command
+            .as_ref()
+            .is_none_or(|command| command.status() != MTLCommandBufferStatus::NotEnqueued)
+        {
+            recording.command = Some(
+                self.queue
+                    .commandBuffer()
+                    .ok_or_else(|| anyhow::anyhow!("Metal command buffer allocation failed"))?
+                    .to_owned(),
+            );
+        }
+        let command = recording.command.as_ref().unwrap();
+        encode(command)?;
+        Ok(command.clone())
+    }
+
     /// Typed objc2 view of the host device, borrowed for this context's lifetime.
     /// Producers may retain it when keeping resources beyond preparation.
     pub fn objc2_device(&self) -> &ProtocolObject<dyn MTLDevice> {
         &self.device
     }
 
+    #[cfg(test)]
     /// Typed objc2 view of the host queue. Producers record commands on this
     /// queue; only the host may enqueue or commit them.
-    pub fn objc2_queue(&self) -> &ProtocolObject<dyn MTLCommandQueue> {
+    pub(crate) fn objc2_queue(&self) -> &ProtocolObject<dyn objc2_metal::MTLCommandQueue> {
         &self.queue
     }
 
     /// Queue-scoped cache identity. Cached command buffers retain their queue.
+    pub fn queue_identity(&self) -> MetalQueueIdentity {
+        MetalQueueIdentity(self.queue.clone())
+    }
+
     pub fn cache_key(&self) -> u64 {
         self.queue.as_ptr() as usize as u64
     }

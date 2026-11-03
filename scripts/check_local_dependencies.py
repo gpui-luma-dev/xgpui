@@ -5,8 +5,8 @@ import pathlib
 import sys
 
 root = pathlib.Path(__file__).resolve().parents[1]
-provenance = json.loads((root / "upstream.json").read_text())
-metadata = json.loads(pathlib.Path(sys.argv[1]).read_text())
+provenance = json.loads((root / "upstream.json").read_text(encoding="utf-8"))
+metadata = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 registry = provenance.get("registry_packages", {})
 helpers = registry.get("packages", {})
 published = set(helpers.values())

@@ -682,10 +682,10 @@ impl MetalRenderer {
                 self.custom_compositor =
                     Some(crate::custom_draw::CustomCompositor::new(&self.device)?);
             }
-            let context = crate::custom_draw::MetalCustomContext {
-                device: self.device.clone(),
-                queue: self.command_queue.clone(),
-            };
+            let context = crate::custom_draw::MetalCustomContext::new(
+                self.device.clone(),
+                self.command_queue.clone(),
+            );
             let mut outputs = Vec::new();
             let preparation_frame = gpui::PreparationFrame::default();
             for draw in &scene.custom_draws {
@@ -2511,10 +2511,10 @@ impl MetalHeadlessRenderer {
     /// Host context for bounded queue gates in native lifecycle tests.
     #[cfg(any(test, feature = "test-support"))]
     pub fn validation_context(&self) -> crate::custom_draw::MetalCustomContext {
-        crate::custom_draw::MetalCustomContext {
-            device: self.renderer.device.clone(),
-            queue: self.renderer.command_queue.clone(),
-        }
+        crate::custom_draw::MetalCustomContext::new(
+            self.renderer.device.clone(),
+            self.renderer.command_queue.clone(),
+        )
     }
 
     /// Observe native owners without extending the instance-pool lifetime.
@@ -2833,8 +2833,31 @@ mod tests {
                         MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
                     let cache = renderer.core_video_texture_cache.clone();
                     let extent = size(DevicePixels(32), DevicePixels(18));
-                    let target = crate::custom_draw::texture(&renderer.device, extent).unwrap();
+                    // This fixture reads the final compositor target on the CPU.
+                    // Native producer textures remain private; use the same CPU-visible
+                    // validation target storage as MetalHeadlessRenderer instead.
+                    let descriptor = metal::TextureDescriptor::new();
+                    unsafe { descriptor.setWidth(extent.width.0 as usize) };
+                    unsafe { descriptor.setHeight(extent.height.0 as usize) };
+                    descriptor.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+                    descriptor.setUsage(
+                        metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead,
+                    );
+                    descriptor.setStorageMode(if renderer.is_apple_gpu {
+                        metal::MTLStorageMode::Shared
+                    } else {
+                        metal::MTLStorageMode::Managed
+                    });
+                    let target = renderer
+                        .device
+                        .newTextureWithDescriptor(&descriptor)
+                        .unwrap();
                     let command = renderer.render_frame(&scene, &target, extent).unwrap();
+                    if !renderer.is_apple_gpu {
+                        let blit = command.blitCommandEncoder().unwrap();
+                        blit.synchronizeResource(ProtocolObject::from_ref(&*target));
+                        blit.endEncoding();
+                    }
                     drop(scene);
                     drop(renderer);
                     // This observer is one owner. Pending sampling must retain its own cache,

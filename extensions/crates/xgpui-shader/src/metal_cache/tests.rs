@@ -6,12 +6,12 @@ use std::sync::Arc;
 
 fn context() -> MetalCustomContext {
     let device = MTLCreateSystemDefaultDevice().expect("Metal device required");
-    MetalCustomContext {
-        queue: device
+    MetalCustomContext::new(
+        device.clone(),
+        device
             .newCommandQueue()
             .expect("Metal queue allocation failed"),
-        device,
-    }
+    )
 }
 fn extent(w: i32, h: i32) -> Size<DevicePixels> {
     size(DevicePixels(w), DevicePixels(h))
@@ -30,11 +30,7 @@ fn generate(
         .device
         .newTextureWithDescriptor(&desc)
         .expect("Metal texture allocation failed");
-    let command = ctx
-        .queue
-        .commandBuffer()
-        .expect("Metal command buffer allocation failed")
-        .to_owned();
+    let command = ctx.record(|_| Ok(())).unwrap();
     let pass = RenderPassDescriptor::new();
     let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
     attachment.setTexture(Some(&texture));
@@ -61,7 +57,9 @@ fn prepare(
 }
 fn submit(output: &MetalCustomOutput) {
     for command in &output.commands {
-        command.commit();
+        if command.status() == MTLCommandBufferStatus::NotEnqueued {
+            command.commit();
+        }
         command.waitUntilCompleted();
         assert_eq!(command.status(), MTLCommandBufferStatus::Completed);
     }
@@ -244,13 +242,12 @@ fn all_producers_reuse_alternating_sizes_and_preserve_pending_commands() {
 #[test]
 fn all_producers_separate_queues_on_the_same_device() {
     let a = context();
-    let b = MetalCustomContext {
-        device: a.device.clone(),
-        queue: a
-            .device
+    let b = MetalCustomContext::new(
+        a.device.clone(),
+        a.device
             .newCommandQueue()
             .expect("Metal queue allocation failed"),
-    };
+    );
     assert_ne!(a.cache_key(), b.cache_key());
     for probe in producers() {
         let first = output(&probe, &a, extent(16, 16));
