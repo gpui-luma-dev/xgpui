@@ -5034,7 +5034,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui"
-version = "1.2.0"
+version = "2.0.0"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -5104,7 +5104,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-macros"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -5114,7 +5114,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-wgpu"
-version = "1.0.2"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "ash",
@@ -5385,7 +5385,7 @@ source = "git+https://github.com/zed-industries/async-process.git?rev=0b6d671357
 
 [[patch.unused]]
 name = "xgpui-apple"
-version = "2.0.1"
+version = "3.0.0"
 
 [[patch.unused]]
 name = "xgpui-ios"
@@ -5393,20 +5393,20 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "xgpui-linux"
-version = "1.0.2"
+version = "2.0.0"
 
 [[patch.unused]]
 name = "xgpui-macos"
-version = "2.0.1"
+version = "3.0.0"
 
 [[patch.unused]]
 name = "xgpui-platform"
-version = "1.0.2"
+version = "2.0.0"
 
 [[patch.unused]]
 name = "xgpui-web"
-version = "1.0.2"
+version = "2.0.0"
 
 [[patch.unused]]
 name = "xgpui-windows"
-version = "1.0.2"
+version = "2.0.0"

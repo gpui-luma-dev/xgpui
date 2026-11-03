@@ -31,7 +31,7 @@ names use the XGPUI prefix:
 | --- | --- |
 | `gpui` | `xgpui` |
 | `gpui-apple` | `xgpui-apple` |
-| `gpui-ios` | `xgpui-ios` (experimental, unpublished) |
+| `gpui-ios` | `xgpui-ios` (experimental; first publication proposed) |
 | `gpui-linux` | `xgpui-linux` |
 | `gpui-macos` | `xgpui-macos` |
 | `gpui-macros` | `xgpui-macros` |
@@ -127,7 +127,8 @@ justfiles remain available for specialized captures and benchmarks.
 
 ## Experimental iOS backend
 
-`xgpui-ios` is a local, unpublished backend with no stable platform contract yet.
+`xgpui-ios` is an experimental backend with no stable platform contract yet.
+Its first registry publication is proposed at 0.1.0 and awaits approval.
 Install Xcode, select its developer directory, and add the simulator target:
 
 ```sh

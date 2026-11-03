@@ -3721,7 +3721,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui"
-version = "1.2.0"
+version = "2.0.0"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -3788,7 +3788,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-macros"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -3798,7 +3798,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-svg"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "web-time",
@@ -3990,7 +3990,7 @@ dependencies = [
 
 [[patch.unused]]
 name = "xgpui-apple"
-version = "2.0.1"
+version = "3.0.0"
 
 [[patch.unused]]
 name = "xgpui-ios"
@@ -3998,24 +3998,24 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "xgpui-linux"
-version = "1.0.2"
+version = "2.0.0"
 
 [[patch.unused]]
 name = "xgpui-macos"
-version = "2.0.1"
+version = "3.0.0"
 
 [[patch.unused]]
 name = "xgpui-platform"
-version = "1.0.2"
+version = "2.0.0"
 
 [[patch.unused]]
 name = "xgpui-web"
-version = "1.0.2"
+version = "2.0.0"
 
 [[patch.unused]]
 name = "xgpui-wgpu"
-version = "1.0.2"
+version = "2.0.0"
 
 [[patch.unused]]
 name = "xgpui-windows"
-version = "1.0.2"
+version = "2.0.0"

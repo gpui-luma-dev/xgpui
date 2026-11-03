@@ -177,10 +177,9 @@ and dependency aliases stable. The helper package version follows the captured
 For example, the local `gpui` crate is packaged as `xgpui`; applications retain
 `use gpui::*` through a Cargo alias. Internal dependencies use exact requirements
 from the release map. Supporting packages retain their upstream identities and
-`=1.26.2` requirements. Experimental `xgpui-ios` is unpublished. The integration
-branch retains existing package versions until a separate release compatibility
-review selects new versions; its changed source is not a publishable replacement
-for those existing registry versions.
+`=1.26.2` requirements. The release candidate proposes experimental `xgpui-ios` 0.1.0 alongside the
+core 2.0 family. Review and approval of the proposed versions and publication
+remain separate steps in the release procedure.
 
 ## Extension lab package
 

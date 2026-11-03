@@ -8,8 +8,8 @@ backend for WebAssembly.
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui", version = "1.0.0" }
-gpui_platform = { package = "xgpui-platform", version = "1.0.0" }
+gpui = { package = "xgpui", version = "2.0.0" }
+gpui_platform = { package = "xgpui-platform", version = "2.0.0" }
 ```
 
 The registry package is `xgpui-platform`; Rust code imports `gpui_platform`.

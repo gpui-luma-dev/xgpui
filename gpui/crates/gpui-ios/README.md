@@ -1,7 +1,8 @@
 # xgpui-ios (experimental)
 
 Experimental local UIKit backend for XGPUI, captured from gpui-unofficial
-`release/1.26.2` and originally developed in Zed. This crate is unpublished.
+`release/1.26.2` and originally developed in Zed. Version 0.1.0 is proposed as
+its first experimental registry release; publication is pending approval.
 Its APIs and platform coverage are not yet a supported compatibility contract.
 
 It provides application lifecycle, windowing, native text input, safe-area and

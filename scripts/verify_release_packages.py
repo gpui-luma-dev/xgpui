@@ -127,6 +127,7 @@ API = {
     "xgpui-media": "pub fn filter() -> xgpui_media::ImageFilter { xgpui_media::ImageFilter::new().brightness(1.1) }",
     "xgpui-parley": "pub use xgpui_parley::ParleyTextSystem;",
     "xgpui-svg": "pub fn scheduler() -> xgpui_svg::SvgScheduler { xgpui_svg::SvgScheduler::default() }",
+    "xgpui-canvas": "pub use xgpui_canvas::{Camera2D, Scene};",
 }
 
 PROFILES = [
