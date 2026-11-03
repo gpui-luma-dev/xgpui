@@ -5,9 +5,8 @@ Compared with pre-feature main `9b64657`. **Opt-in usage does not mean zero SDK 
 ## GPUI 1.26.2 migration
 
 The update merged after the October 31 release moves the core to `xgpui 2.0.0`
-while preserving XGPUI’s objc2/objc2-metal integration. New registry versions
-await publication; use matching core, backend and extension versions when
-upgrading.
+while preserving XGPUI’s objc2/objc2-metal integration. The registry versions
+are published; use matching core, backend and extension versions when upgrading.
 
 - Replace `PlatformInput::ScrollWheel` with `Scroll` and handle `BackGesture`
   in exhaustive matches. `ScrollWheelEvent` and `on_scroll_wheel` remain

@@ -12,7 +12,7 @@
     "group": "Platforms & rendering",
     "role": "Selects and constructs the native or web platform.",
     "surface": "application, headless, background_executor and current_platform; additional exports depend on target and test/bench features.",
-    "review": "Keep platform selection separate from renderer changes. The iOS branch selects the experimental local UIKit backend; simulator compilation does not establish runtime support.",
+    "review": "Keep platform selection separate from renderer changes. The iOS target selects the upstream-derived UIKit backend; simulator compilation does not establish runtime support.",
     "entry": "src/gpui_platform.rs"
   },
   "gpui-apple": {
@@ -130,9 +130,9 @@
   "gpui-ios": {
     "short": "gpui-ios",
     "group": "Platforms & rendering",
-    "role": "Experimental, unpublished UIKit backend for iOS application lifecycle, windows, touch and native text input.",
+    "role": "Upstream-derived UIKit backend for iOS application lifecycle, windows, touch and native text input; published as xgpui-ios 1.26.2.",
     "surface": "IosPlatform and current_platform on iOS, StatusBarContentStyle, and iOS status-bar controls.",
-    "review": "Library, simulator example and native protocol-test compilation are checked. Runtime behavior needs an installed simulator runtime; wide-gamut SDR presentation remains macOS-only.",
+    "review": "Implementation files follow captured upstream 1.26.2 unchanged; package wiring is adapted to XGPUI. Simulator compilation, linking and app packaging pass. Interactive simulator/device validation remains pending; wide-SDR presentation remains macOS-only.",
     "entry": "src/gpui_ios.rs"
   }
 }

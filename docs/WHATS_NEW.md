@@ -5,7 +5,8 @@
 Since the [October 31, 2026 release](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-10-31-ed4469267251),
 XGPUI has gained an upstream framework update, more reliable Metal rendering,
 retained photo viewports and smoother native fractal navigation. These changes
-are merged into `main`; the new crate versions await publication.
+are included in the [November 3 release](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-03-712732c7cf07);
+the new crate versions are available on crates.io.
 
 ### GPUI 1.26.2
 
@@ -78,8 +79,8 @@ keeps its separate CPU implementation. See the [canvas guide](#canvas).
 ### Updating an application
 
 The new core is **xgpui 2.0.0**, with **Apple/macOS 3.0.0** and matching backend
-and extension versions. The [reviewed version table and migration notes](https://github.com/gpui-luma-dev/xgpui/blob/fe8fa29fa4f833984524ec4c7331b9c6720a6298/docs/release-reviews/1.26.2-release-notes.md)
-cover the whole family; crates.io publication is still pending.
+and extension versions. The [release version table and migration notes](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-03-712732c7cf07)
+cover the published family.
 
 Input matches change from `PlatformInput::ScrollWheel` to `Scroll` and gain
 `BackGesture`; complete scroll/window/inset literals need the added fields.
