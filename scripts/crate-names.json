@@ -2,6 +2,7 @@
   "collections-gpui-unofficial": "collections",
   "derive-refineable-gpui-unofficial": "derive-refineable",
   "gpui-apple-gpui-unofficial": "gpui-apple",
+  "gpui-ios-gpui-unofficial": "gpui-ios",
   "gpui-linux-gpui-unofficial": "gpui-linux",
   "gpui-macos-gpui-unofficial": "gpui-macos",
   "gpui-macros-gpui-unofficial": "gpui-macros",

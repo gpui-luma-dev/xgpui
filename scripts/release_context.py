@@ -20,7 +20,10 @@ def context_inputs(before, incoming):
         if not re.fullmatch(r"[0-9a-f]{40}", sha) or metadata.get("zed_commit") != sha:
             raise ValueError("Missing or inconsistent exact Zed SHA in capture provenance")
         crates = metadata.get("crates", [])
-        if not crates or len(set(crates)) != len(provenance["packages"]):
+        # Normalization removes registry helpers from packages, while preserving
+        # the complete capture in source_packages. Zed context covers both.
+        source = provenance.get("source_packages", provenance["packages"])
+        if not crates or len(set(crates)) != len(crates) or len(crates) != len(source):
             raise ValueError("Zed crate inventory does not cover the captured packages")
         for crate in crates:
             if not isinstance(crate, str) or not crate or crate.startswith("/") or ".." in pathlib.PurePosixPath(crate).parts:

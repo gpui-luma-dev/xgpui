@@ -6,7 +6,7 @@ on:
       release:
         description: gpui-unofficial release number without release/
         required: true
-        default: "1.25.3"
+        default: "1.26.2"
         type: string
       expected_sha:
         description: Optional full source commit SHA to verify
@@ -82,9 +82,11 @@ jobs:
           python3 - <<'PY'
           import json, os, pathlib
           report = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'review.json').read_text())
-          code = [e for e in report['entries'] if e['kind'] == 'code']
-          cargo = [e for e in report['entries'] if e['kind'] == 'cargo']
-          metadata = [e for e in report['entries'] if e['kind'] == 'metadata']
+          proposed = [e for e in report['entries'] if not e.get('retain_local')]
+          retained = [e for e in report['entries'] if e.get('retain_local')]
+          code = [e for e in proposed if e['kind'] == 'code']
+          cargo = [e for e in proposed if e['kind'] == 'cargo']
+          metadata = [e for e in proposed if e['kind'] == 'metadata']
           lines = [f"Incoming gpui-unofficial {report['release']} tree proposal.",
                    f"Source commit: `{report['source_commit']}`.", "",
                    "Unintegrated proposal: complete incoming files, not resolved patches. main is unchanged.",
@@ -95,6 +97,9 @@ jobs:
               if entry.get('retain_local'): label += '; RETAINED: not applied'
               elif entry['downstream_overlap']: label += '; MANUAL REVIEW: downstream differs'
               lines.append(f"- `{entry['path']}` — {entry['change']}; {label}")
+          lines += ['', f"## Retained downstream changes ({len(retained)})", '',
+                    'Upstream did not change these files; local code, manifests and metadata are retained.', '']
+          lines.extend(f"- `{entry['path']}` ({entry['kind']})" for entry in retained)
           lines += ["", f"## Cargo versions and dependencies ({len(cargo)})", "",
                     "Separate commit: package versions and dependency requirements, excluding the removed staging mirror.", "",
                     f"## Generated metadata/artifacts ({len(metadata)})", "",

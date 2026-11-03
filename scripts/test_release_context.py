@@ -10,6 +10,27 @@ BASE, HEAD = "a" * 40, "b" * 40
 
 
 class ContextTests(unittest.TestCase):
+    def test_normalized_inventory_keeps_registry_helpers_and_new_ios_in_context(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            roots = [pathlib.Path(temporary) / name for name in ("old", "new")]
+            for root, sha, crates in [(roots[0], BASE, ["gpui", "scheduler"]),
+                                      (roots[1], HEAD, ["gpui", "scheduler", "gpui_ios"])]:
+                (root / "gpui/crates").mkdir(parents=True)
+                (root / "upstream.json").write_text(json.dumps({
+                    "zed_commit": sha, "packages": {"gpui": "gpui/crates/gpui"},
+                    "source_packages": {c: c for c in crates}}))
+                (root / "gpui/crates/transform-metadata.json").write_text(json.dumps({
+                    "zed_commit": sha, "crates": crates}))
+            self.assertEqual(context_inputs(*roots)["paths"],
+                             ["crates/gpui", "crates/gpui_ios", "crates/scheduler"])
+            metadata = roots[1] / "gpui/crates/transform-metadata.json"
+            metadata.write_text(json.dumps({"zed_commit": HEAD, "crates": ["gpui", "scheduler"]}))
+            with self.assertRaises(ValueError):
+                context_inputs(*roots)
+            metadata.write_text(json.dumps({"zed_commit": HEAD, "crates": ["gpui", "gpui", "scheduler"]}))
+            with self.assertRaises(ValueError):
+                context_inputs(*roots)
+
     def test_exact_shas_and_union_include_nested_and_supporting_crates(self):
         with tempfile.TemporaryDirectory() as temporary:
             roots = [pathlib.Path(temporary) / name for name in ("old", "new")]
