@@ -1,11 +1,9 @@
 //! Queue-scoped immutable Metal outputs, bounded by live texture bytes.
 use anyhow::{Result, bail, ensure};
 use gpui::{DevicePixels, Size};
-use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput};
+use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput, MetalQueueIdentity};
 use gpui_apple::metal::*;
 use gpui_apple::metal::{CommandBuffer, MTLCommandBufferStatus, Texture};
-use objc2::{Message, rc::Retained, runtime::ProtocolObject};
-use objc2_metal::MTLCommandQueue;
 use std::{collections::HashMap, sync::Mutex};
 
 const OUTPUT_BUDGET: u64 = 64 * 1024 * 1024;
@@ -19,7 +17,7 @@ struct Entry {
     texture: Texture,
     command: CommandBuffer,
     // Prevent queue identity from being recycled while this entry exists.
-    _queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
+    _queue: MetalQueueIdentity,
     used: u64,
     bytes: u64,
 }
@@ -108,7 +106,7 @@ impl OutputCache {
                 Entry {
                     texture: texture.clone(),
                     command: command.clone(),
-                    _queue: context.objc2_queue().retain(),
+                    _queue: context.queue_identity(),
                     used,
                     bytes,
                 },

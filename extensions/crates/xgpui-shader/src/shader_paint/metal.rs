@@ -1,5 +1,5 @@
 use super::*;
-use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput};
+use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput, MetalQueueIdentity};
 use gpui_apple::metal::*;
 use std::{collections::HashMap, sync::Mutex};
 
@@ -63,7 +63,7 @@ struct Key {
 struct Cached {
     texture: Texture,
     command: CommandBuffer,
-    _queue: CommandQueue,
+    _queue: MetalQueueIdentity,
 }
 #[derive(Default)]
 pub(super) struct OutputCache(Mutex<HashMap<Key, Cached>>);
@@ -122,39 +122,39 @@ impl Snapshot {
             .device
             .newTextureWithDescriptor(&descriptor)
             .expect("Metal texture allocation failed");
-        let command = context
-            .queue
-            .commandBuffer()
-            .expect("Metal command buffer allocation failed")
-            .to_owned();
-        let pass = RenderPassDescriptor::new();
-        let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
-        attachment.setTexture(Some(&texture));
-        attachment.setLoadAction(MTLLoadAction::DontCare);
-        attachment.setStoreAction(MTLStoreAction::Store);
-        let encoder = command
-            .renderCommandEncoderWithDescriptor(&pass)
-            .expect("Metal render encoder allocation failed");
-        encoder.setRenderPipelineState(&pipeline);
-        let geometry = self.geometry(request);
-        unsafe {
-            encoder.setFragmentBytes_length_atIndex(
-                std::ptr::NonNull::new(geometry.as_ptr().cast::<std::ffi::c_void>() as *mut _)
-                    .expect("non-null bytes"),
-                16,
-                0,
-            )
-        };
-        unsafe {
-            encoder.setFragmentBytes_length_atIndex(
+        let command = context.record(|command| {
+            let pass = RenderPassDescriptor::new();
+            let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+            attachment.setTexture(Some(&texture));
+            attachment.setLoadAction(MTLLoadAction::DontCare);
+            attachment.setStoreAction(MTLStoreAction::Store);
+            let encoder = command
+                .renderCommandEncoderWithDescriptor(&pass)
+                .expect("Metal render encoder allocation failed");
+            encoder.setRenderPipelineState(&pipeline);
+            let geometry = self.geometry(request);
+            unsafe {
+                encoder.setFragmentBytes_length_atIndex(
+                    std::ptr::NonNull::new(geometry.as_ptr().cast::<std::ffi::c_void>() as *mut _)
+                        .expect("non-null bytes"),
+                    16,
+                    0,
+                )
+            };
+            unsafe {
+                encoder.setFragmentBytes_length_atIndex(
                 std::ptr::NonNull::new(self.bytes.as_ptr().cast::<std::ffi::c_void>() as *mut _)
                     .expect("non-null bytes"),
                 self.bytes.len() as usize,
                 1,
             )
-        };
-        unsafe { encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6) };
-        encoder.endEncoding();
+            };
+            unsafe {
+                encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6)
+            };
+            encoder.endEncoding();
+            Ok(())
+        })?;
         let bytes: u64 = cache
             .values()
             .map(|v| (v.texture.width() * v.texture.height() * 4) as u64)
@@ -167,7 +167,7 @@ impl Snapshot {
             Cached {
                 texture: texture.clone(),
                 command: command.clone(),
-                _queue: context.queue.clone(),
+                _queue: context.queue_identity(),
             },
         );
         Ok(Box::new(MetalCustomOutput {

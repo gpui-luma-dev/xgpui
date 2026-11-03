@@ -120,11 +120,8 @@ impl Frame {
             .objc2_device()
             .newTextureWithDescriptor(&descriptor)
             .context("allocate Mandelbrot viewport")?;
-        let command = context
-            .objc2_queue()
-            .commandBuffer()
-            .context("allocate Mandelbrot commands")?;
-        encode(&command, &pipeline, &texture, self.request)?;
+        let command =
+            context.record(|command| encode(command, &pipeline, &texture, self.request))?;
         let output = MetalWideSdrOutput::from_objc2_linear_p3_premultiplied(
             context,
             texture,
@@ -196,7 +193,7 @@ mod tests {
     fn full_resolution_gpu_timing() {
         let device = MTLCreateSystemDefaultDevice().expect("Metal device");
         let queue = device.newCommandQueue().unwrap();
-        let context = MetalCustomContext { device, queue };
+        let context = MetalCustomContext::new(device, queue);
         let engine = Arc::new(Engine::default());
         for zoom in [1., 32., 64.] {
             let view = View {
@@ -231,7 +228,7 @@ mod tests {
     fn metal_viewport_matches_f64_reference_at_stable_points() {
         let device = MTLCreateSystemDefaultDevice().expect("Metal device");
         let queue = device.newCommandQueue().unwrap();
-        let context = MetalCustomContext { device, queue };
+        let context = MetalCustomContext::new(device, queue);
         let pipeline = Engine::default().pipeline(&context).unwrap();
         for (real, imaginary) in [(0., 0.), (-1., 0.), (2., 2.), (0.5, 0.5), (-0.25, 0.5)] {
             let view = View {
@@ -256,7 +253,7 @@ mod tests {
                 .objc2_device()
                 .newTextureWithDescriptor(&descriptor)
                 .unwrap();
-            let command = context.objc2_queue().commandBuffer().unwrap();
+            let command = context.record(|_| Ok(())).unwrap();
             encode(&command, &pipeline, &texture, request).unwrap();
             // This test owns its queue. Production producers never commit/wait.
             command.commit();
