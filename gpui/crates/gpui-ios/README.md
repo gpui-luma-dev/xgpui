@@ -1,9 +1,8 @@
 # xgpui-ios
 
 iOS backend for XGPUI, captured from gpui-unofficial `release/1.26.2` and
-originally developed in Zed. The proposed package version is **1.26.2**, following
+originally developed in Zed. The package version is **1.26.2**, following
 the captured upstream release while the iOS implementation remains unchanged.
-Publication is pending approval.
 
 The iOS source files are unchanged from that capture. Dependency identities use
 XGPUI's core and shared Apple backend; package metadata and the simulator build

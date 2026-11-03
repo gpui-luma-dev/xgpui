@@ -230,21 +230,32 @@ fn prepare_manifest(
             if local.starts_with("gpui") {
                 document["lib"]["name"] = toml_edit::value(local.replace('-', "_"));
             }
-            // The platform depends on core. Keep core's test/example-only edge
-            // local so Cargo omits it from the registry manifest on first release.
-            if local == "gpui" {
-                if let Some(options) = document
-                    .get_mut("dev-dependencies")
-                    .and_then(|deps| deps.get_mut("gpui_platform"))
+            // Platform depends on core and iOS. Keep their test/example-only
+            // reverse edges local so Cargo omits them from registry manifests.
+            if matches!(local.as_str(), "gpui" | "gpui-ios") {
+                localize_platform_development_dependency(document.as_item_mut());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn localize_platform_development_dependency(item: &mut Item) {
+    if let Some(table) = item.as_table_like_mut() {
+        for (key, value) in table.iter_mut() {
+            if key.get() == "dev-dependencies" {
+                if let Some(options) = value
+                    .get_mut("gpui_platform")
                     .and_then(Item::as_table_like_mut)
                 {
                     options.insert("path", toml_edit::value("../gpui-platform"));
                     options.remove("version");
                 }
+            } else {
+                localize_platform_development_dependency(value);
             }
         }
     }
-    Ok(())
 }
 
 fn externalize(item: &mut Item, registry: &Names, version: &str, remove_paths: bool) -> Result<()> {
@@ -912,6 +923,34 @@ mod tests {
     }
 
     #[test]
+    fn ios_target_platform_development_dependency_stays_local_across_normalization() {
+        let release = BTreeMap::from([
+            ("gpui-ios".into(), "xgpui-ios".into()),
+            ("gpui-platform".into(), "xgpui-platform".into()),
+        ]);
+        let mut document = "[package]\nname='xgpui-ios'\nversion='1.26.2'\n[target.'cfg(target_os = \"ios\")'.dev-dependencies]\ngpui_platform={package='xgpui-platform',version='=2.0.0',features=['runtime_shaders']}\n"
+            .parse::<DocumentMut>().unwrap();
+        let versions = BTreeMap::from([("xgpui-ios".into(), "1.26.2".into())]);
+        for _ in 0..2 {
+            prepare_manifest(
+                &mut document,
+                &Names::new(),
+                "1.26.2",
+                &release,
+                "2.0.0",
+                &versions,
+            )
+            .unwrap();
+            let dependency = &document["target"]["cfg(target_os = \"ios\")"]["dev-dependencies"]["gpui_platform"];
+            assert_eq!(dependency["package"].as_str(), Some("xgpui-platform"));
+            assert_eq!(dependency["path"].as_str(), Some("../gpui-platform"));
+            assert!(dependency.get("version").is_none());
+            assert_eq!(dependency["features"][0].as_str(), Some("runtime_shaders"));
+            assert_eq!(document["package"]["version"].as_str(), Some("1.26.2"));
+        }
+    }
+
+    #[test]
     fn extension_versions_are_independent_of_framework_dependencies() {
         let release = BTreeMap::from([
             ("gpui".into(), "xgpui".into()),
@@ -1074,8 +1113,8 @@ mod tests {
         assert!(harness["dependencies"].get("gpui-linux").is_none());
         assert!(harness["dependencies"].get("gpui-ios").is_none());
         assert_eq!(
-            harness["target"]["cfg(target_os = \"ios\")"]["dependencies"]["gpui-ios"]
-                ["optional"].as_bool(),
+            harness["target"]["cfg(target_os = \"ios\")"]["dependencies"]["gpui-ios"]["optional"]
+                .as_bool(),
             Some(true)
         );
         assert!(
