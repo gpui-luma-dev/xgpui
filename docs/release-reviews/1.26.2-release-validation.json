@@ -293,6 +293,134 @@
     "upstream_source_equality": "passed: all iOS src files byte-identical to captured gpui-unofficial 1.26.2",
     "locked_ios_simulator_build": "passed: full-capture,runtime-shaders; aarch64-apple-ios-sim",
     "external_dependency_locksets": "unchanged",
-    "registry_plan": "pending refresh"
+    "registry_plan": {
+      "status": "planned",
+      "mode": "plan",
+      "uploads_enabled": false,
+      "packages": [
+        {
+          "name": "xgpui-macros",
+          "version": "1.0.1",
+          "status": "publish-needed",
+          "archive_sha256": "427143eff29c6afd52870d7fc13b4745dd062d25aa5f325a821a994589209b06",
+          "files": 19
+        },
+        {
+          "name": "xgpui",
+          "version": "2.0.0",
+          "status": "publish-needed",
+          "archive_sha256": "82abab43d0c54eac368778ed4ab0868cabb438ecbf958226f28cd6714c3dcff5",
+          "files": 181
+        },
+        {
+          "name": "xgpui-apple",
+          "version": "3.0.0",
+          "status": "publish-needed",
+          "archive_sha256": "a17522f5a12cc42c12e479e2ceb95b79aa4c4d2674520eb63f8bc1ee46e3dfc5",
+          "files": 34
+        },
+        {
+          "name": "xgpui-wgpu",
+          "version": "2.0.0",
+          "status": "publish-needed",
+          "archive_sha256": "12bd511818cf953e143f603fc5229c370f00ef33f48bf914f9ba4146446f9380",
+          "files": 29
+        },
+        {
+          "name": "xgpui-windows",
+          "version": "2.0.0",
+          "status": "publish-needed",
+          "archive_sha256": "a6a57ec99d583b529ffec3b8e3a97274a0d1dddfd19671254045286778739b2e",
+          "files": 47
+        },
+        {
+          "name": "xgpui-ios",
+          "version": "1.26.2",
+          "status": "publish-needed",
+          "archive_sha256": "7bd5f237d22e86de4069d1788f7690d50e7e7483bbd953052b2fc29ddc4ff509",
+          "files": 16
+        },
+        {
+          "name": "xgpui-linux",
+          "version": "2.0.0",
+          "status": "publish-needed",
+          "archive_sha256": "dd681dcebcafca05041fa4f5d70e579cf43a616842b5b4c205c9b347f7ca502a",
+          "files": 31
+        },
+        {
+          "name": "xgpui-macos",
+          "version": "3.0.0",
+          "status": "publish-needed",
+          "archive_sha256": "5d122b12bea26606a11245e1f3f896f6e349bad3954784af8e06042c5ff1d188",
+          "files": 16
+        },
+        {
+          "name": "xgpui-web",
+          "version": "2.0.0",
+          "status": "publish-needed",
+          "archive_sha256": "ff85713f88728dfda5890b100d2f4e281281dd98759107fda4ece681d1985aad",
+          "files": 24
+        },
+        {
+          "name": "xgpui-platform",
+          "version": "2.0.0",
+          "status": "publish-needed",
+          "archive_sha256": "7771dc19fa04b748855194dd74b6f7ab84f3a007a5ad479203f2df40d2517eec",
+          "files": 8
+        },
+        {
+          "name": "xgpui-color",
+          "version": "0.3.0",
+          "status": "already-published",
+          "archive_sha256": "3c6b670823f8b451e1b78c58a02b73cbe31f7535a7f136b162bd3ef7f54ba729",
+          "files": 36
+        },
+        {
+          "name": "xgpui-parley",
+          "version": "0.3.0",
+          "status": "publish-needed",
+          "archive_sha256": "7ecdae482dd1038a17bd4110880ccfd81c9f0d93dccada76701f9b21a850f25a",
+          "files": 24
+        },
+        {
+          "name": "xgpui-shader",
+          "version": "0.4.0",
+          "status": "publish-needed",
+          "archive_sha256": "5d89fcb60a5d09f846c8490be8e7f87edaf45594259a2ed52555bbc35d7e2c26",
+          "files": 84
+        },
+        {
+          "name": "xgpui-svg",
+          "version": "0.3.0",
+          "status": "publish-needed",
+          "archive_sha256": "c723ad976b5a7bed478170f2acdb6239b1f5a9069fef2018736f9b19ae0364a3",
+          "files": 13
+        },
+        {
+          "name": "xgpui-canvas",
+          "version": "0.3.0",
+          "status": "publish-needed",
+          "archive_sha256": "33fc9d0d0d70f3328cd5b1404825904e7644c0fdcc7c55b4c192771b74909e32",
+          "files": 15
+        },
+        {
+          "name": "xgpui-gamut",
+          "version": "0.3.0",
+          "status": "publish-needed",
+          "archive_sha256": "697fa35e865dd65acd1d1c6c74dab5f00227e454d82abdfa3e9391b184bc0bfd",
+          "files": 12
+        },
+        {
+          "name": "xgpui-media",
+          "version": "0.5.0",
+          "status": "publish-needed",
+          "archive_sha256": "b21ac90971b71a80750c37c8572dd844ff9326b1cdf1aeb937ada09ab297dcdf",
+          "files": 26
+        }
+      ]
+    },
+    "checked_package_source_commit": "3fbe9fe94d94abb365421a7dba1cf0d37b8669c7",
+    "local_report": "/tmp/xgpui-release-1.26.2-ios-aligned-plan/report.json",
+    "consumer_scope": "Earlier isolated consumer results remain recorded against their original source. The aligned candidate was checked with the locked full-capture iOS simulator build; isolated archive consumers were not rerun for this metadata-only alignment."
   }
 }
