@@ -20,6 +20,8 @@ under `extensions/crates/` and do not depend on this package.
 | Color conversions and gradient comparisons | `color-lab` | `just color` |
 | Native and Parley text comparisons | `text-lab` | `just text` |
 | SVG rendering, scaling and scheduling | `svg-lab` | `just svg` |
+| Spatial cards and native Mandelbrot explorer | `canvas-lab` | `just canvas-lab` |
+| Dense Metal producer regression (macOS) | `metal-producer-regression` | See below |
 | Quad rendering benchmark | `quad-bench` | `just quad-bench` |
 | Color-field rendering benchmark | `color-field-bench` | `just color-field-bench` |
 | Native and browser shader examples | `shader-examples` | `just shaders` |
@@ -80,6 +82,31 @@ requirements and the distinction between framework builds and lab builds.
 These applications run on your desktop, not inside the browser. Run the commands
 from the repository root after following the platform setup in
 [Local Development](../LOCAL_DEVELOPMENT.md).
+
+### Canvas and Mandelbrot
+
+Explore spatial cards, or open the native fractal explorer:
+
+```sh
+just canvas-lab
+just canvas-lab --mandelbrot
+```
+
+The native Mandelbrot explorer retains complete frames during navigation, with
+Metal compute for shallow views on supported macOS wide-SDR hosts and CPU
+refinement for deep views. See the [canvas guide](canvas.md).
+
+### Metal producer regression (macOS)
+
+Run the supervised control and dense 512-producer workload, including replay,
+scene replacement and pixel checks:
+
+```sh
+cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin metal-producer-regression --target-dir target
+```
+
+Each child has a 15-second runtime limit after compilation. A timeout fails the
+check; preparation markers help locate a stall.
 
 ### Pastel waves
 

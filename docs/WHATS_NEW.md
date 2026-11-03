@@ -2,6 +2,93 @@
 
 ## Latest
 
+Since the [October 31, 2026 release](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-10-31-ed4469267251),
+XGPUI has gained an upstream framework update, more reliable Metal rendering,
+retained photo viewports and smoother native fractal navigation. These changes
+are merged into `main`; the new crate versions await publication.
+
+### GPUI 1.26.2
+
+The framework now follows **gpui-unofficial 1.26.2**. The update adds optional
+debug hot reload, application lifecycle and memory-warning callbacks, native
+text-selection and content notifications, back gestures and improved touch
+scrolling. It also brings focus cleanup and sprite batching fixes. XGPUI’s
+extensions, wide-gamut rendering and objc2/objc2-metal conversion are preserved.
+([Upstream integration #123](https://github.com/gpui-luma-dev/xgpui/pull/123))
+
+**The upstream iOS backend is included.** It lives in `gpui/crates/gpui-ios`
+alongside the other framework backends, with UIKit windows, touch, keyboard and
+native text input. Its implementation files are unchanged from the captured
+upstream source; package wiring is adapted to XGPUI. `xgpui-ios` follows
+upstream’s **1.26.2** version while that implementation remains unchanged.
+Simulator compilation, linking and app packaging pass; interactive simulator
+and device testing remains pending. See [iOS setup](#local-development).
+
+The new `WindowOptions::use_display_p3` option connects to the existing macOS
+wide-gamut SDR compositor. Ordinary UI colors keep their sRGB interpretation;
+wide-gamut content still needs the appropriate content and window configuration.
+iOS wide-SDR presentation remains unsupported.
+
+### Metal rendering and photo viewports
+
+**Dense custom-rendered scenes no longer need a separate pending command buffer
+for every producer.** Producers encode through `MetalCustomContext::record` into
+one shared preparation batch, and the host validates and submits the work.
+This fixes command-buffer exhaustion during dense preparation. A supervised
+512-producer regression covers replay, scene replacement and pixel correctness.
+The objc2 resource ownership model is retained.
+([Rendering update #121](https://github.com/gpui-luma-dev/xgpui/pull/121))
+
+**Large photos refine while keeping an overview visible.** The media extension’s
+`RasterSource` builds requested mip pages from bounded decoded pixels and RGB
+metadata, using linear-light, alpha-aware filtering. A source replacement keeps
+the previous overview visible as new pages become ready. `CanvasPaint` selects
+wide SDR or an sRGB preview and applies existing GPU image adjustments without
+rebuilding source pages or uploading them again. Admission retry also handles
+workers that are still retiring. Applications retain control of decoding and
+source limits; page allowances do not represent total GPU memory.
+
+### Smoother Mandelbrot navigation
+
+The native canvas lab now keeps a complete frame on screen and reprojects it
+while a replacement prepares offscreen. Shallow views use cached Metal compute
+into linear-P3 float textures on supported macOS wide-SDR hosts. Deeper views use
+background CPU calculation with preview and detail refinement. Frames replace
+each other as complete images, avoiding partial tile boundaries during navigation.
+([Canvas update #108](https://github.com/gpui-luma-dev/xgpui/pull/108))
+
+Run `just canvas-lab --mandelbrot`, or add `--mandelbrot-cpu` to compare the CPU
+route. Native runtime validation is currently macOS arm64; the browser explorer
+keeps its separate CPU implementation. See the [canvas guide](#canvas).
+
+### Fixes and development tools
+
+- **macOS objc2 fixes:** corrected Objective-C argument and callback types,
+  native text-input/dialog handling, nullable pasteboards, Services menu wiring
+  and layer background clearing. These follow the earlier bindings conversion.
+- **Benchmark support:** restored the matching upstream metrics required by
+  `bench-support`, with allocation, frame and CPU counters and platform benchmarks.
+  These remain opt-in; the existing profiler is retained.
+- **Upstream sync:** release comparisons preserve downstream policies, manifests
+  and metadata and use the complete upstream source-package inventory.
+- **CI coverage:** the update passed Windows, Linux and macOS library builds and
+  benchmark checks, iOS simulator compilation, browser shader builds and docs
+  checks. These do not establish graphical runtime support on every backend.
+
+### Updating an application
+
+The new core is **xgpui 2.0.0**, with **Apple/macOS 3.0.0** and matching backend
+and extension versions. The [reviewed version table and migration notes](https://github.com/gpui-luma-dev/xgpui/blob/fe8fa29fa4f833984524ec4c7331b9c6720a6298/docs/release-reviews/1.26.2-release-notes.md)
+cover the whole family; crates.io publication is still pending.
+
+Input matches change from `PlatformInput::ScrollWheel` to `Scroll` and gain
+`BackGesture`; complete scroll/window/inset literals need the added fields.
+Custom Metal integrations use `MetalCustomContext::new`, `record()` and
+`queue_identity()` in place of context struct literals and public queue access.
+See [GPUI API changes](#gpui-public-api).
+
+## October 31, 2026
+
 ### Color and wide gamut, from source pixels to the display
 
 XGPUI’s expanded color pipeline connects **sRGB, Display P3, Adobe RGB (1998)

@@ -2,6 +2,27 @@
 
 Compared with pre-feature main `9b64657`. **Opt-in usage does not mean zero SDK changes.**
 
+## GPUI 1.26.2 migration
+
+The update merged after the October 31 release moves the core to `xgpui 2.0.0`
+while preserving XGPUI’s objc2/objc2-metal integration. New registry versions
+await publication; use matching core, backend and extension versions when
+upgrading.
+
+- Replace `PlatformInput::ScrollWheel` with `Scroll` and handle `BackGesture`
+  in exhaustive matches. `ScrollWheelEvent` and `on_scroll_wheel` remain
+  deprecated compatibility names; new code uses `ScrollEvent` and `on_scroll`.
+- Complete `ScrollEvent` literals need `source`; `WindowOptions` and
+  `WindowParams` gain `use_display_p3`; `WindowInsets` gains `corner_radii`.
+- Construct Metal contexts with `MetalCustomContext::new`. Producers use
+  `record()` and finish all encoders inside its closure; only the host submits.
+  Use `queue_identity()` for cache identity. Context struct literals and public
+  queue access are no longer supported. Resource handles remain objc2 types.
+- Custom integrations that mirror GPU sprite layouts need the updated field
+  ordering used by the Rust, WGSL and HLSL definitions.
+
+See [What’s new](../WHATS_NEW.md) for features and the reviewed version family.
+
 ## Changes by extension
 
 | GPUI change | Required by | Role |
@@ -210,16 +231,17 @@ These are GPUI renderer SDK additions, not `xgpui-shader` exports.
 Each renderer crate adds `pub mod custom_draw`.
 
 ```rust
-// gpui_apple::custom_draw — macOS/Metal
+// gpui_apple::custom_draw — shared Apple Metal renderer
+// Handle types below use objc2 and objc2_metal.
 pub struct MetalCustomContext {
-    pub device: metal::Device,
+    pub device: Retained<ProtocolObject<dyn MTLDevice>>,
     // Native queue and shared recording state are private.
 }
 // Public methods: new(device, queue), cache_key(), queue_identity(),
 // record(|host_command| -> anyhow::Result<()>). Only the host submits.
 pub struct MetalCustomOutput {
-    pub texture: metal::Texture,
-    pub commands: Vec<metal::CommandBuffer>,
+    pub texture: Retained<ProtocolObject<dyn MTLTexture>>,
+    pub commands: Vec<Retained<ProtocolObject<dyn MTLCommandBuffer>>>,
 }
 ```
 
