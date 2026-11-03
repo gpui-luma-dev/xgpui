@@ -84,13 +84,13 @@ enum Output {
 }
 impl Output {
     fn is_submitted(&self) -> bool {
-        match self {
+        match *self {
             #[cfg(target_os = "macos")]
-            Self::Metal(output) => output.is_submitted(),
+            Self::Metal(ref output) => output.is_submitted(),
             #[cfg(feature = "wgpu")]
-            Self::Wgpu(output) => output.is_submitted(),
+            Self::Wgpu(ref output) => output.is_submitted(),
             #[cfg(target_os = "windows")]
-            Self::Dx11(output) => output.is_submitted(),
+            Self::Dx11(ref output) => output.is_submitted(),
         }
     }
     fn into_any(self) -> Box<dyn Any> {

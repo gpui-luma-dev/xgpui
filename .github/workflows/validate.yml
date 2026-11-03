@@ -47,6 +47,9 @@ jobs:
           sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev
       - name: Check all retained native libraries
         run: cargo check --locked --features full-capture,runtime-shaders
+      - name: Check media without optional GPU backends
+        if: runner.os == 'Linux'
+        run: cargo check --locked --manifest-path extensions/crates/xgpui-media/Cargo.toml --no-default-features --lib
       - name: Verify local framework and registry helper identities
         shell: bash
         run: |
