@@ -12,7 +12,7 @@
     "group": "Platforms & rendering",
     "role": "Selects and constructs the native or web platform.",
     "surface": "application, headless, background_executor and current_platform; additional exports depend on target and test/bench features.",
-    "review": "Keep platform selection separate from renderer changes. The iOS branch selects the experimental local UIKit backend; simulator compilation does not establish runtime support.",
+    "review": "Keep platform selection separate from renderer changes. The iOS target selects the upstream-derived UIKit backend; simulator compilation does not establish runtime support.",
     "entry": "src/gpui_platform.rs"
   },
   "gpui-apple": {
@@ -20,7 +20,7 @@
     "group": "Platforms & rendering",
     "role": "Shared Apple rendering and services, gated for macOS or iOS.",
     "surface": "Metal renderer, dispatcher, optional text system, keychain and thermal modules.",
-    "review": "Start the Apple color investigation in metal_renderer.rs: BGRA8Unorm appears in layer and texture setup. Shared iOS code does not establish a complete iOS window backend.",
+    "review": "Trace window color configuration into shared Metal rendering and the wide-SDR compositor. Custom producers use host-owned record() batches and opaque queue identity; preserve objc2 ownership. Review macOS wide-SDR and iOS runtime support separately.",
     "entry": "src/gpui_apple.rs"
   },
   "gpui-macos": {
@@ -115,7 +115,7 @@
     "short": "xgpui-media",
     "group": "Extensions",
     "role": "Large images, color adjustments and GPU-backed video previews for GPUI.",
-    "surface": "MediaLoader, MediaLimits, UploadLimits, FrameUploadLimits, ImageJob, MediaImage, UploadStatus and image_view. Metal/wgpu completion-driven staging reuse; shared per-scene source count/byte admission; backend-specific staging and host-only submission. ImageFilter, FilteredImage and image_view.filter provide ordered in-shader SDR RGB adjustments without reuploading source textures. VideoStream/VideoFrame provide bounded latest-frame presentation, with macOS BGRA and two-plane NV12 IOSurface import (BT.601/709, full/video range, same-pass conversion) and completion-safe snapshot lifetime; Windows dedicated immutable same-device BGRA textures have an initial native adapter (cross-checked, runtime pending); keyed NT-handle snapshots now support nonblocking ownership handoff (Windows test code cross-checks, execution pending); Linux now has an opt-in immutable linear BGRA DMA-BUF Vulkan snapshot adapter (Linux cross-check and host layout tests; GPU runtime pending). A generated Linux native fixture now exercises export/import, pixel capture, cache reuse and lifetime with Vulkan validation-error counting; the harness cross-compiles but native execution remains pending. Explicit fence import, pool reuse and foreign-family imports remain pending. A release benchmark records upload-phase versus cached render CPU samples, staging-pool reuse and pixel validation on macOS Metal/wgpu; GPU timing and zero-stutter guarantees are not claimed. The lab defaults to release builds; system playback adapters are separate follow-up work.",
+    "surface": "MediaLoader, MediaLimits, UploadLimits, FrameUploadLimits, ImageJob, MediaImage, UploadStatus and image_view. Metal/wgpu completion-driven staging reuse; shared per-scene source count/byte admission; backend-specific staging and host-only submission. ImageFilter, FilteredImage and image_view.filter provide ordered in-shader SDR RGB adjustments without reuploading source textures. VideoStream/VideoFrame provide bounded latest-frame presentation, with macOS BGRA and two-plane NV12 IOSurface import (BT.601/709, full/video range, same-pass conversion) and completion-safe snapshot lifetime; Windows dedicated immutable same-device BGRA textures have an initial native adapter (cross-checked, runtime pending); keyed NT-handle snapshots now support nonblocking ownership handoff (Windows test code cross-checks, execution pending); Linux now has an opt-in immutable linear BGRA DMA-BUF Vulkan snapshot adapter (Linux cross-check and host layout tests; GPU runtime pending). A generated Linux native fixture now exercises export/import, pixel capture, cache reuse and lifetime with Vulkan validation-error counting; the harness cross-compiles but native execution remains pending. Explicit fence import, pool reuse and foreign-family imports remain pending. A release benchmark records upload-phase versus cached render CPU samples, staging-pool reuse and pixel validation on macOS Metal/wgpu; GPU timing and zero-stutter guarantees are not claimed. The lab defaults to release builds; system playback adapters are separate follow-up work. RasterSource provides bounded decoded RGB input with alpha-aware linear-P3 mip pages; CanvasPaint applies sampling-only adjustments and retains the previous overview during source replacement. Page allowances are not a total GPU-memory cap.",
     "review": "Preserve completion-held exclusive buffer leases, stale-generation rejection, abandoned-recording retry and shared frame budgets. D3D11 pooling/runtime validation, chunked uploads, fairness and timing benchmarks remain pending. Limits do not bound total driver/process memory.",
     "entry": "src/lib.rs"
   },
@@ -130,9 +130,9 @@
   "gpui-ios": {
     "short": "gpui-ios",
     "group": "Platforms & rendering",
-    "role": "Experimental, unpublished UIKit backend for iOS application lifecycle, windows, touch and native text input.",
+    "role": "Upstream-derived UIKit backend for iOS lifecycle, windows, touch and native text input; source version 1.26.2 awaits publication.",
     "surface": "IosPlatform and current_platform on iOS, StatusBarContentStyle, and iOS status-bar controls.",
-    "review": "Library, simulator example and native protocol-test compilation are checked. Runtime behavior needs an installed simulator runtime; wide-gamut SDR presentation remains macOS-only.",
+    "review": "Implementation files follow the captured upstream 1.26.2 source unchanged; package wiring is adapted to XGPUI. Simulator library/example builds, packaging and protocol-test compilation pass; interactive simulator/device execution is pending. Wide-SDR presentation remains macOS-only.",
     "entry": "src/gpui_ios.rs"
   }
 }

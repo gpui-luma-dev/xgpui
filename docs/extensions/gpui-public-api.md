@@ -2,6 +2,33 @@
 
 Compared with pre-feature main `9b64657`. **Opt-in usage does not mean zero SDK changes.**
 
+## Since the October 31 release: GPUI 1.26.2
+
+The merged update tracks gpui-unofficial **1.26.2** and preserves XGPUI’s
+objc2/objc2-metal renderer. The new package versions are not yet published.
+
+- Replace `PlatformInput::ScrollWheel` with `Scroll` in input matches and handle
+  `BackGesture` in exhaustive matches. Complete scroll/window/inset struct
+  literals need the new fields; review custom platform implementations against
+  the updated core traits.
+- Metal producers construct contexts with `MetalCustomContext::new` and encode
+  through `record()`. Finish every encoder inside the closure and leave command
+  submission to the host. `queue_identity()` supplies cache identity without
+  public queue access; context struct literals are no longer supported.
+- `WindowOptions::use_display_p3` negotiates the existing macOS wide-SDR path.
+  Keep explicit content color interpretation and check the effective window
+  status. The option does not enable HDR or iOS wide-SDR output.
+- Optional debug hot reload, lifecycle/memory-warning hooks and native
+  text-selection/content notifications extend the core integration surface.
+  Restored metrics are gated by `bench-support`.
+- The upstream-derived UIKit backend is selected on iOS from
+  `gpui/crates/gpui-ios`; its source follows upstream 1.26.2. Simulator compile,
+  link and packaging checks pass; interactive runtime validation is pending.
+
+Use the matching core/backend/extension version family described in
+[What’s new](../WHATS_NEW.md). For recording and photo presentation, see
+[host Metal recording and retained raster viewports](focused-gpu-images.md).
+
 ## Changes by extension
 
 | GPUI change | Required by | Role |
@@ -210,16 +237,17 @@ These are GPUI renderer SDK additions, not `xgpui-shader` exports.
 Each renderer crate adds `pub mod custom_draw`.
 
 ```rust
-// gpui_apple::custom_draw — macOS/Metal
+// Surface summary; retained protocol handles use objc2 and objc2_metal.
+// gpui_apple::custom_draw — shared Apple Metal renderer
 pub struct MetalCustomContext {
-    pub device: metal::Device,
+    pub device: Retained<ProtocolObject<dyn MTLDevice>>,
     // Native queue and shared recording state are private.
 }
 // Public methods: new(device, queue), cache_key(), queue_identity(),
 // record(|host_command| -> anyhow::Result<()>). Only the host submits.
 pub struct MetalCustomOutput {
-    pub texture: metal::Texture,
-    pub commands: Vec<metal::CommandBuffer>,
+    pub texture: Retained<ProtocolObject<dyn MTLTexture>>,
+    pub commands: Vec<Retained<ProtocolObject<dyn MTLCommandBuffer>>>,
 }
 ```
 

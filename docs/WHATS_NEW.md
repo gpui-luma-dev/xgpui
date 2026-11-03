@@ -2,6 +2,107 @@
 
 ## Latest
 
+Changes merged since the [October 31, 2026 release](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-10-31-ed4469267251).
+These changes are available from source; the new crate versions are not yet
+published to crates.io.
+
+### GPUI 1.26.2, with XGPUI’s rendering extensions preserved
+
+The framework now tracks **gpui-unofficial 1.26.2**, bringing optional debug
+hot reload, application lifecycle and memory-warning callbacks, native
+text-selection/content notifications, back gestures and improved touch scrolling.
+Focus cleanup and sprite batching fixes are included. XGPUI’s extensions,
+wide-gamut compositor and objc2/objc2-metal conversion are preserved.
+([#123](https://github.com/gpui-luma-dev/xgpui/pull/123))
+
+- **iOS from upstream.** The UIKit backend now lives in `gpui/crates/gpui-ios`,
+  alongside the other framework backends. Its iOS implementation files are
+  unchanged from the upstream capture, with package wiring adapted to XGPUI.
+  `xgpui-ios` follows upstream’s **1.26.2** version while that implementation
+  remains unchanged. Simulator library/example builds, app packaging and native
+  text-input protocol-test compilation pass; interactive simulator/device
+  execution remains pending. See [iOS setup](#local-development).
+- **Display P3 window option.** `WindowOptions::use_display_p3` connects to the
+  existing macOS wide-SDR compositor. Ordinary controls retain sRGB semantics;
+  content, window and display capabilities still determine the output.
+  This is wide-gamut SDR, not HDR; iOS wide-SDR presentation remains unsupported.
+- **Working benchmark support.** Restored the matching upstream benchmark
+  metrics needed by `bench-support`, including allocation, frame and CPU
+  counters and platform benchmarks. These are opt-in development tools;
+  ordinary library defaults do not enable them. The existing profiler remains
+  in place.
+
+### Reliable Metal producers and retained photo viewports
+
+**Dense Metal producer scenes share host-owned recording.** Producers encode
+through `MetalCustomContext::record`, finish their encoders inside the closure,
+and leave submission to the renderer. A preparation batch shares one unsubmitted
+command buffer, avoiding exhaustion when many producers prepare together.
+Caches retain opaque queue identity. The supervised 512-producer regression
+passes replay and dense/sparse replacement with pixel readback and Metal API
+Validation. ([#111](https://github.com/gpui-luma-dev/xgpui/pull/111),
+[#121](https://github.com/gpui-luma-dev/xgpui/pull/121))
+
+**Photos can refine without blanking the viewport.** `RasterSource` accepts
+bounded decoded pixels and resolved RGB metadata, then produces requested mip
+rectangles as linear-P3 RGBA16F pages. Alpha-aware filtering avoids transparent
+pixel color bleed. `CanvasPaint` selects wide SDR or an sRGB preview and applies
+existing GPU image adjustments while reusing source pages and uploads. A
+replacement source retains the previous overview until new pages are ready;
+admission retry handles retiring workers. Applications still own decoding and
+source admission, and tile allowances are separate from total GPU memory.
+([#121](https://github.com/gpui-luma-dev/xgpui/pull/121))
+
+See the [Metal producer and photo viewport guide](#focused-gpu-images).
+The new macOS regression workload is also listed in [Labs & benchmarks](#extension-lab).
+
+### Smoother native Mandelbrot exploration
+
+The canvas lab now reprojects one complete retained frame while its successor
+prepares offscreen. Navigation avoids presenting partial tile boundaries;
+completed detail replaces the front image when ready. Shallow views use cached
+Metal compute into linear-P3 float textures on supported wide-SDR hosts. Deeper
+views use background CPU calculation with bounded preview/detail refinement.
+The P3 palette includes colors outside sRGB; the browser companion retains its
+separate CPU implementation.
+([#108](https://github.com/gpui-luma-dev/xgpui/pull/108))
+
+Run `just canvas-lab --mandelbrot`, or force the CPU route with
+`just canvas-lab --mandelbrot --mandelbrot-cpu`. This path has macOS arm64 runtime
+validation; it does not establish other-backend performance or deep-zoom GPU
+support. See the [canvas guide](#canvas).
+
+### macOS fixes and safer upstream updates
+
+- **objc2 follow-up fixes.** Corrected Objective-C argument and callback types,
+  nullable pasteboard handling, the Services submenu, layer background clearing
+  and native text-input/dialog handling. These fixes build on the earlier
+  bindings conversion. ([#105](https://github.com/gpui-luma-dev/xgpui/pull/105),
+  [#106](https://github.com/gpui-luma-dev/xgpui/pull/106))
+- **Sync and CI.** Upstream comparisons now retain downstream release policies,
+  manifests and metadata and use the complete source-package inventory. Native
+  Windows, Linux and macOS builds, benchmark checks, iOS simulator compilation,
+  browser shaders and documentation checks passed for the merged release PR.
+  Compilation does not establish graphical runtime acceptance on every backend.
+  ([#122](https://github.com/gpui-luma-dev/xgpui/pull/122),
+  [#124](https://github.com/gpui-luma-dev/xgpui/pull/124))
+
+### Updating an application
+
+The merged version family includes **xgpui 2.0.0**, **Apple/macOS 3.0.0**,
+**Linux/Windows/web/wgpu/platform 2.0.0**, **macros 1.0.1**, **iOS 1.26.2**,
+**shader 0.4.0**, **media 0.5.0**, and **canvas/gamut/Parley/SVG 0.3.0**.
+**Color stays at 0.3.0.** These are source versions awaiting publication.
+
+For the main source changes, update `PlatformInput::ScrollWheel` matches to
+`Scroll`, handle `BackGesture`, and supply the new fields when constructing
+complete scroll/window/inset literals. Custom Metal producers use
+`MetalCustomContext::new`, `record()` and `queue_identity()`; queue access and
+context struct literals are no longer public. Update related crate pins together
+when the new versions are published. See [GPUI API changes](#gpui-public-api).
+
+## October 31, 2026
+
 ### Color and wide gamut, from source pixels to the display
 
 XGPUI’s expanded color pipeline connects **sRGB, Display P3, Adobe RGB (1998)

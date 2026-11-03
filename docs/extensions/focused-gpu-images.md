@@ -1,9 +1,8 @@
 # Focused GPU images
 
-This branch starts at pre-PR116 main (6b8bdc27). It retains GPUI entities,
-layout/input, cached views, direct main-pass shaders, color math, media sources
-and tile scheduling. It contains no public content graph, presentation slots,
-atomic content groups or global portable-content budget.
+XGPUI combines host-owned Metal recording with retained raster viewports for
+photo presentation. Applications keep GPUI entities, layout/input, cached views,
+direct main-pass shaders, color math, media sources and tile scheduling.
 
 ## Host Metal recording
 

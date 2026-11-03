@@ -760,6 +760,7 @@ fn generate(root: &Path) -> Result<()> {
         ("local-development", "docs/LOCAL_DEVELOPMENT.md"),
         ("extension-lab", "docs/extensions/extension-lab.md"),
         ("canvas", "docs/extensions/canvas.md"),
+        ("focused-gpu-images", "docs/extensions/focused-gpu-images.md"),
         ("color-math", "docs/extensions/color-math.md"),
         ("color-workflows", "docs/extensions/color-workflows.md"),
         ("pixels-and-metadata", "docs/extensions/pixels-and-metadata.md"),
