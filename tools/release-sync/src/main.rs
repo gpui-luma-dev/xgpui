@@ -595,6 +595,7 @@ fn build_manifests(root: &Path, check: bool) -> Result<()> {
             "any(target_os = \"macos\", target_os = \"ios\")",
         ),
         ("gpui-macos", "target_os = \"macos\""),
+        ("gpui-ios", "target_os = \"ios\""),
         (
             "gpui-linux",
             "any(target_os = \"linux\", target_os = \"freebsd\")",
@@ -1015,6 +1016,7 @@ mod tests {
             "gpui-platform",
             "gpui-apple",
             "gpui-macos",
+            "gpui-ios",
             "gpui-linux",
             "gpui-windows",
             "gpui-web",
@@ -1054,7 +1056,7 @@ mod tests {
             toml::from_str(&fs::read_to_string(root.join("Cargo.toml")).unwrap()).unwrap();
         assert_eq!(
             workspace["workspace"]["exclude"].as_array().unwrap().len(),
-            8
+            9
         );
         assert!(workspace["patch"]["crates-io"].get("proptest").is_none());
         let harness: toml::Value =
@@ -1070,6 +1072,12 @@ mod tests {
         assert!(full.iter().any(|v| v.as_str() == Some("dep:helper")));
         assert!(!full.iter().any(|v| v.as_str() == Some("dep:gpui")));
         assert!(harness["dependencies"].get("gpui-linux").is_none());
+        assert!(harness["dependencies"].get("gpui-ios").is_none());
+        assert_eq!(
+            harness["target"]["cfg(target_os = \"ios\")"]["dependencies"]["gpui-ios"]
+                ["optional"].as_bool(),
+            Some(true)
+        );
         assert!(
             harness["target"]["cfg(target_os = \"macos\")"]["dependencies"]
                 .get("gpui-macos")

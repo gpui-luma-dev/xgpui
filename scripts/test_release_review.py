@@ -1,11 +1,13 @@
 """Tree review proposals are deliberately separate from integration."""
 import json
 import pathlib
+import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from import_release import git
-from release_review import apply, classify, compare
+from release_review import POLICIES, apply, classify, compare, prepare
 
 
 class ReviewTests(unittest.TestCase):
@@ -46,6 +48,71 @@ class ReviewTests(unittest.TestCase):
         apply(self.root, self.incoming, plan, "code")
         self.assertEqual((self.root / self.code).read_text(), "our patch\n")
         self.assertEqual(git("rev-parse", "main", cwd=self.root), head)
+
+    def test_downstream_only_manifests_and_metadata_are_retained(self):
+        paths = ("gpui/crates/gpui/Cargo.toml", "gpui/crates/gpui/README.md")
+        for name in paths:
+            (self.root / name).write_text("downstream identity and documentation\n")
+        plan = self.plan()
+        self.assertEqual({e["kind"] for e in plan["entries"]}, {"cargo", "metadata"})
+        self.assertTrue(all(e["retain_local"] for e in plan["entries"]))
+        for kind in ("code", "cargo", "metadata"):
+            apply(self.root, self.incoming, plan, kind)
+        for name in paths:
+            self.assertEqual((self.root / name).read_text(), "downstream identity and documentation\n")
+
+    def test_prepare_stages_current_policies_in_both_captures(self):
+        policies = {
+            POLICIES[0]: {"helper": "helper-gpui-unofficial"},
+            POLICIES[1]: {"version": "2.0.0", "packages": {"gpui": "xgpui"}},
+        }
+        for name, data in policies.items():
+            path = self.root / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_text(json.dumps(data))
+        snapshot = self.base / "snapshot"
+        observed = []
+        run = subprocess.run
+
+        def normalize(command, **kwargs):
+            if command[0] != str(self.base / "normalizer"):
+                return run(command, **kwargs)
+            tree = pathlib.Path(command[command.index("--root") + 1])
+            for name in POLICIES:
+                self.assertEqual((tree / name).read_bytes(), (self.root / name).read_bytes())
+            observed.append(tree)
+
+        def capture_fixture(tree, source, revision, release, expected_sha):
+            # The captures can contain an older policy; it must be replaced.
+            for name in POLICIES:
+                path = tree / name
+                path.parent.mkdir(exist_ok=True)
+                path.write_text("stale upstream policy")
+            (tree / "gpui/crates").mkdir(parents=True, exist_ok=True)
+            (tree / "upstream.json").write_text(json.dumps({
+                "commit": "a" * 40, "zed_commit": "b" * 40, "packages": {"gpui": "gpui/crates/gpui"}}))
+            (tree / "gpui/crates/transform-metadata.json").write_text(json.dumps({
+                "zed_commit": "b" * 40, "crates": ["gpui"]}))
+
+        provenance = self.root / "upstream.json"
+        data = json.loads(provenance.read_text())
+        data["ref"] = "release/1.25.2"
+        provenance.write_text(json.dumps(data))
+        with patch("release_review.capture", side_effect=capture_fixture), \
+                patch("release_review.subprocess.run", side_effect=normalize):
+            report = prepare(self.root, snapshot, self.base / "report.json", self.base, "HEAD",
+                             "1.26.2", self.base / "normalizer", self.base / "map.json")
+        self.assertEqual(len(observed), 4)  # normalize and check, for each snapshot
+        self.assertEqual(len(set(observed)), 2)
+        self.assertEqual(report["zed_context"]["paths"], ["crates/gpui"])
+        self.assertFalse(any(e["path"].startswith("scripts/") for e in report["entries"]))
+
+    def test_missing_policy_fails_before_creating_snapshot(self):
+        snapshot = self.base / "snapshot"
+        with self.assertRaises(FileNotFoundError):
+            prepare(self.root, snapshot, self.base / "report.json", self.base, "HEAD",
+                    "1.26.2", self.base / "normalizer", self.base / "map.json")
+        self.assertFalse(snapshot.exists())
 
     def test_source_cargo_and_generated_metadata_apply_separately(self):
         (self.incoming / self.code).write_text("new upstream source\n")

@@ -16,6 +16,7 @@ from release_context import context_inputs
 STAGING = "gpui/crates/transformed-crates/"
 
 SCOPES = ("gpui", ".cargo/config.toml", "upstream.json")
+POLICIES = ("scripts/registry-crates.json", "scripts/release-packages.json")
 
 
 def signature(path):
@@ -65,7 +66,7 @@ def compare(root, before, incoming, release):
         kind = classify(name, packages)
         entries.append({
             "path": name, "kind": kind,
-            "retain_local": kind == "code" and old == new and old != local,
+            "retain_local": not name.startswith(STAGING) and old == new and old != local,
             "change": "added" if local is None else "deleted" if new is None else "modified",
             "upstream_changed": old != new,
             "downstream_overlap": old != local,
@@ -111,12 +112,20 @@ def prepare(root, incoming, report_path, source, revision, release, normalizer, 
     if incoming.exists():
         raise ValueError("Snapshot destination must not exist")
     previous = json.loads((root / "upstream.json").read_text())
+    # Both snapshots must use the same downstream identities, versions and
+    # externalization policy. Missing inputs silently disable those policies in
+    # the normalizer, so fail before creating either snapshot if one is absent.
+    policies = {name: (root / name).read_bytes() for name in POLICIES}
     with tempfile.TemporaryDirectory() as temporary:
         before = pathlib.Path(temporary)
         incoming.mkdir(parents=True)
         capture(before, source, previous["commit"], previous["ref"].removeprefix("release/"), previous["commit"])
         capture(incoming, source, revision, release, expected_sha)
         for tree in (before, incoming):
+            for name, contents in policies.items():
+                path = tree / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(contents)
             command = [str(normalizer), "normalize", "--root", str(tree), "--map", str(name_map)]
             subprocess.run(command, check=True)
             subprocess.run([*command, "--check"], check=True)
