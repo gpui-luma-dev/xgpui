@@ -46,9 +46,9 @@
     {
       "name": "xgpui-ios",
       "old": "0.1.0",
-      "new": "0.1.0",
-      "reason": "First proposed publication of the upstream-derived UIKit backend, using local core 2/Apple 3 identities. Required by the platform registry graph; simulator compile/link checks pass, interactive runtime validation remains pending.",
-      "change": "first-experimental",
+      "new": "1.26.2",
+      "reason": "First proposed publication following gpui-unofficial 1.26.2. The iOS implementation is byte-identical to the upstream capture; package/dependency metadata and the simulator build script are adapted to XGPUI. Runtime simulator/device validation remains pending.",
+      "change": "first-upstream-aligned",
       "published_old": null
     },
     {
@@ -148,5 +148,5 @@
   "version_policy": "docs/RELEASE_PROCEDURE.md",
   "compatibility_review": "Manual supported-public-API review; automatic patch suggestions overridden.",
   "rust_version_review": "No declared rust-version changed; edition remains 2024. Rust 1.99.0 is validated; a lower MSRV is not established.",
-  "ios_publication": "Proposed first experimental crates.io publication. Its manifest permits crates.io only; no upload is authorized by this preparation."
+  "ios_publication": "First proposed crates.io publication at 1.26.2, following the captured upstream version while the iOS implementation remains unchanged. Source equality is verified; package/dependency metadata and the example build script are adapted. Runtime-validation confidence is documented separately from package version."
 }

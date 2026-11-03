@@ -6031,7 +6031,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-ios"
-version = "0.1.0"
+version = "1.26.2"
 dependencies = [
  "anyhow",
  "block2 0.6.2",

@@ -24,7 +24,7 @@ XGPUI keeps ten framework and backend crates in `gpui/crates/`: `gpui`,
 `gpui-windows`, `gpui-web`, `gpui-wgpu` and experimental `gpui-ios`. The seven XGPUI extension crates live
 under `extensions/crates/`.
 
-Downstream versions are independent of the captured GPUI release and vary by package. Local directory names and Rust import names stay stable; Cargo package
+Downstream versions vary by package. The unchanged iOS implementation follows the captured upstream version, 1.26.2; other packages retain their existing independent version histories. Local directory names and Rust import names stay stable; Cargo package
 names use the XGPUI prefix:
 
 | Local directory / import name | Release package |
@@ -127,8 +127,8 @@ justfiles remain available for specialized captures and benchmarks.
 
 ## Experimental iOS backend
 
-`xgpui-ios` is an experimental backend with no stable platform contract yet.
-Its first registry publication is proposed at 0.1.0 and awaits approval.
+`xgpui-ios` follows the captured upstream version while its iOS implementation remains unchanged.
+Its first registry publication is proposed at 1.26.2 and awaits approval.
 Install Xcode, select its developer directory, and add the simulator target:
 
 ```sh

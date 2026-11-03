@@ -1,10 +1,10 @@
 [package]
 name = "xgpui-ios"
-version = "0.1.0"
+version = "1.26.2"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
-description = "Experimental UIKit and Metal backend for xgpui on iOS"
+description = "Upstream-derived UIKit and Metal backend for xgpui on iOS"
 publish = ["crates-io"]
 homepage = "https://xgpui.dev/"
 documentation = "https://xgpui.dev/"

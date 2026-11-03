@@ -282,9 +282,17 @@
     }
   ],
   "registry_verification_limit": "Plan mode inspects archives and checks collisions; it is not registry-backed Cargo build verification. Candidate dependencies are unpublished until approved ordered publication.",
-  "ios_limit": "Simulator/device execution has not been performed. The first registry version remains an explicit experimental proposal.",
+  "ios_limit": "Simulator/device execution has not been performed. Version 1.26.2 follows upstream while the iOS implementation remains unchanged; runtime validation confidence is independent of the version.",
   "local_reports": {
     "registry": "/tmp/xgpui-release-1.26.2-registry-plan/report.json",
     "consumers": "/tmp/xgpui-release-1.26.2-packages/report.json"
+  },
+  "checked_package_source_scope": "Historical full preparation run before metadata-only iOS alignment from 0.1.0 to upstream 1.26.2; refreshed checks are recorded separately.",
+  "ios_version_alignment": {
+    "version": "1.26.2",
+    "upstream_source_equality": "passed: all iOS src files byte-identical to captured gpui-unofficial 1.26.2",
+    "locked_ios_simulator_build": "passed: full-capture,runtime-shaders; aarch64-apple-ios-sim",
+    "external_dependency_locksets": "unchanged",
+    "registry_plan": "pending refresh"
   }
 }

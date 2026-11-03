@@ -35,7 +35,7 @@
     "xgpui-web": "2.0.0",
     "xgpui-windows": "2.0.0",
     "xgpui-canvas": "0.3.0",
-    "xgpui-ios": "0.1.0",
+    "xgpui-ios": "1.26.2",
     "xgpui-macros": "1.0.1"
   }
 }

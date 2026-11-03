@@ -55,7 +55,7 @@ criterion = { version = "0.8.2", features = ["html_reports"] }
 gpui_macos = { package = "xgpui-macos", version = "=3.0.0" }
 
 [target.'cfg(target_os = "ios")'.dependencies]
-gpui_ios = { package = "xgpui-ios", version = "=0.1.0" }
+gpui_ios = { package = "xgpui-ios", version = "=1.26.2" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 gpui_windows = { package = "xgpui-windows", version = "=2.0.0" }
