@@ -115,6 +115,7 @@ API = {
     "xgpui-macros": "pub use gpui_macros::Action;",
     "xgpui-apple": "pub use gpui_apple::AppleDispatcher;",
     "xgpui-macos": "pub use gpui_macos::MacPlatform;",
+    "xgpui-ios": "pub use gpui_ios::{IosPlatform, StatusBarContentStyle};",
     "xgpui-windows": "pub use gpui_windows::WindowsPlatform;",
     "xgpui-linux": "pub use gpui_linux::current_platform;",
     "xgpui-web": "pub use gpui_web::{WebPlatform, WebBackendPreference};",
@@ -228,7 +229,8 @@ def verify(root, output, offline, retry=False, only_profiles=False, nightly_web=
     save()
 
     host = next(line.split(": ", 1)[1] for line in report["rustc"].splitlines() if line.startswith("host: "))
-    targets = {"xgpui-windows": "x86_64-pc-windows-msvc", "xgpui-linux": "x86_64-unknown-linux-gnu", "xgpui-web": "wasm32-unknown-unknown"}
+    targets = {"xgpui-windows": "x86_64-pc-windows-msvc", "xgpui-linux": "x86_64-unknown-linux-gnu", "xgpui-web": "wasm32-unknown-unknown",
+               "xgpui-ios": "aarch64-apple-ios-sim"}
     for name, directory in candidates.items():
         if only_profiles:
             continue
@@ -246,6 +248,8 @@ def verify(root, output, offline, retry=False, only_profiles=False, nightly_web=
         document = tomllib.loads((directory / "Cargo.toml").read_text())
         alias = document.get("lib", {}).get("name", name.replace("-", "_"))
         dependency = {"package": name, "version": "=" + package["version"], "path": str(directory)}
+        if name == "xgpui-ios":
+            dependency["features"] = ["runtime_shaders"]
         manifest = {"package": {"name": "consumer-" + name, "version": "0.0.0", "edition": "2024", "publish": False},
                     "workspace": {}, "dependencies": {alias: dependency}}
         manifest_path = consumer / "Cargo.toml"

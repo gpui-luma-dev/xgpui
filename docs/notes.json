@@ -12,7 +12,7 @@
     "group": "Platforms & rendering",
     "role": "Selects and constructs the native or web platform.",
     "surface": "application, headless, background_executor and current_platform; additional exports depend on target and test/bench features.",
-    "review": "Keep platform selection separate from renderer changes. This snapshot has no iOS branch in current_platform.",
+    "review": "Keep platform selection separate from renderer changes. The iOS branch selects the experimental local UIKit backend; simulator compilation does not establish runtime support.",
     "entry": "src/gpui_platform.rs"
   },
   "gpui-apple": {
@@ -126,5 +126,13 @@
     "surface": "Camera2D, PanGesture, Scene, snapping and Overview; optional GPUI Canvas and configurable GridPainter.",
     "review": "Callers own selection and input policy. Native and browser labs cover cards and CPU fractals; rotation, isometric grids and general subtree transforms remain follow-ups.",
     "entry": "src/lib.rs"
+  },
+  "gpui-ios": {
+    "short": "gpui-ios",
+    "group": "Platforms & rendering",
+    "role": "Experimental, unpublished UIKit backend for iOS application lifecycle, windows, touch and native text input.",
+    "surface": "IosPlatform and current_platform on iOS, StatusBarContentStyle, and iOS status-bar controls.",
+    "review": "Library, simulator example and native protocol-test compilation are checked. Runtime behavior needs an installed simulator runtime; wide-gamut SDR presentation remains macOS-only.",
+    "entry": "src/gpui_ios.rs"
   }
 }

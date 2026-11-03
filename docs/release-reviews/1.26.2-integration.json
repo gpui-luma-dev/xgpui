@@ -1,0 +1,233 @@
+{
+  "upstream_release": "1.26.2",
+  "upstream_commit": "bb63411a365ac328a7780ba7101d72ec91625be8",
+  "zed_commit": "c4273271092b0287f7d181f616bd5171e0a2f70c",
+  "previous_upstream_commit": "39d276b1500d503ec6d37efcaaa0dc0c00730576",
+  "integration_base": "28e62fb86221cf469319bef58410b150fe3a2c21",
+  "tooling_branch": "codex/sync-release-policies",
+  "integration_branch": "codex/integrate-gpui-1.26.2",
+  "publication_ready": false,
+  "release_versions_selected": false,
+  "experimental_ios": {
+    "package": "xgpui-ios",
+    "version": "0.1.0",
+    "publish": false,
+    "checks": [
+      "iOS simulator library compile",
+      "example build, link and app bundle signing",
+      "text input protocol test compile and link"
+    ],
+    "runtime_tested": false
+  },
+  "integration_decisions": [
+    "Preserve downstream-only code, manifest metadata and READMEs.",
+    "Merge upstream changes against the normalized 1.25.3 source tree.",
+    "Keep objc2-metal bindings and existing public two-argument MetalRenderer constructor.",
+    "Map use_display_p3 through WideGamutSdr negotiation; transparent windows retain default presentation.",
+    "Reject wide-image presentation on iOS while retaining macOS wide-gamut support.",
+    "Replace obsolete Git proptest override with upstream proptest 1.12 and the updated property macro.",
+    "Retain async-process compatibility override.",
+    "Keep focus_cleanup benchmark inside the platform archive rather than referring to a sibling crate.",
+    "Retain existing downstream release versions pending compatibility review.",
+    "Bundle Zed's missing bench_metrics source inside the core package, gated by bench-support, with explicit source provenance and optional Linux perf-event2 support.",
+    "Use fresh mapped pages for page-fault tests; serialize process-wide benchmark measurements.",
+    "Set CRITERION_HOME in CI to avoid Criterion invoking cargo metadata without the test command's compatibility configuration."
+  ],
+  "checks": [
+    {
+      "name": "Python repository tooling tests",
+      "status": "passed",
+      "tests": 62
+    },
+    {
+      "name": "Rust release tooling tests",
+      "status": "passed",
+      "tests": 9
+    },
+    {
+      "name": "Core library tests",
+      "status": "passed",
+      "tests": 396,
+      "ignored": 2
+    },
+    {
+      "name": "Apple renderer tests including native Metal and Display P3 negotiation",
+      "status": "passed",
+      "tests": 53
+    },
+    {
+      "name": "Locked native full-capture runtime-shader build",
+      "status": "passed"
+    },
+    {
+      "name": "Native extension lab compile (wgpu and portable shaders)",
+      "status": "passed"
+    },
+    {
+      "name": "Optional hot-reload compile",
+      "status": "passed"
+    },
+    {
+      "name": "Stable single-threaded browser extension demo compile",
+      "status": "passed"
+    },
+    {
+      "name": "Nightly atomic multithreaded default web consumer compile",
+      "status": "passed"
+    },
+    {
+      "name": "Local framework and registry helper identity verification",
+      "status": "passed"
+    },
+    {
+      "name": "Normalized capture and generated build manifests",
+      "status": "passed"
+    },
+    {
+      "name": "Documentation generation and JavaScript verification",
+      "status": "passed",
+      "crates": 17
+    },
+    {
+      "name": "Offline package archive generation and content inspection",
+      "status": "passed",
+      "packages": 17
+    },
+    {
+      "name": "All platform benchmark targets compile with bench-support and test-support",
+      "status": "passed",
+      "benchmarks": [
+        "focus_cleanup",
+        "inspector_render",
+        "randomized_element_tree"
+      ]
+    },
+    {
+      "name": "Benchmark-enabled core library tests (serial)",
+      "status": "passed",
+      "tests": 487,
+      "ignored": 2
+    },
+    {
+      "name": "Locked CI benchmark metrics tests (serial, explicit Criterion output directory)",
+      "status": "passed",
+      "tests": 9
+    },
+    {
+      "name": "Locked CI benchmark context tests (serial, explicit Criterion output directory)",
+      "status": "passed",
+      "tests": 6
+    }
+  ],
+  "compatibility_review_required": [
+    "PlatformInput::ScrollWheel renamed to Scroll; BackGesture variant added.",
+    "ScrollEvent gains source; old ScrollWheelEvent name remains deprecated alias.",
+    "WindowOptions and WindowParams gain use_display_p3; WindowInsets gains corner_radii.",
+    "Review GPU sprite layout and native interface changes and dependent public types before selecting versions."
+  ],
+  "remaining_release_gates": [
+    "Collect native Windows and Linux CI evidence.",
+    "Run iOS example and protocol tests on an installed simulator runtime.",
+    "Complete public API compatibility review and choose new downstream versions.",
+    "Review experimental iOS publication policy before including it in a registry release.",
+    "Run final registry-equivalent packaging and consumer verification from a reviewed release commit."
+  ],
+  "package_archives": [
+    {
+      "name": "xgpui-macros",
+      "version": "1.0.0",
+      "sha256": "78386492e3855432effa04a68189fb22c2b7f57d23f84960d7b1be0bf83debef"
+    },
+    {
+      "name": "xgpui",
+      "version": "1.2.0",
+      "sha256": "238a3fddc815f8d35f022b5256bb7a4fb3e0717eef263ac9c2cd19ba5c017415"
+    },
+    {
+      "name": "xgpui-apple",
+      "version": "2.0.1",
+      "sha256": "cd4f52207882eaa5eddd77e9594daadaea40265dabadd2ffc0757e49589e79f9"
+    },
+    {
+      "name": "xgpui-wgpu",
+      "version": "1.0.2",
+      "sha256": "97cea502bc4660f00e216efac2bd201ae44bdf50cd6b106439822b7f14c5d7d7"
+    },
+    {
+      "name": "xgpui-windows",
+      "version": "1.0.2",
+      "sha256": "538c293822fbc3b42b961a3f325e64ad6bfbeb52cbab2524dbaa58e3d426711b"
+    },
+    {
+      "name": "xgpui-ios",
+      "version": "0.1.0",
+      "sha256": "4e2784ee003e15399571c9280ae77992f6861129744a94006145aab22193d4d2"
+    },
+    {
+      "name": "xgpui-linux",
+      "version": "1.0.2",
+      "sha256": "b549a2e2742b5183fb04e348355117a35f26f2e2cd8c06ecdb5310677e106e3d"
+    },
+    {
+      "name": "xgpui-macos",
+      "version": "2.0.1",
+      "sha256": "5c849957fd04279c34757ec13bbcfd0c373883791e9bc28a7e55e3442de65b77"
+    },
+    {
+      "name": "xgpui-web",
+      "version": "1.0.2",
+      "sha256": "20f15764090d4d6ca0ccee444e820d38c4c38b3abfd535772c2d371e0f170119"
+    },
+    {
+      "name": "xgpui-platform",
+      "version": "1.0.2",
+      "sha256": "5f649c77d17a1e6e5860eac49488c3fbe55cfc82af8f4692b252193ad49fc1ab"
+    },
+    {
+      "name": "xgpui-color",
+      "version": "0.3.0",
+      "sha256": "3c6b670823f8b451e1b78c58a02b73cbe31f7535a7f136b162bd3ef7f54ba729"
+    },
+    {
+      "name": "xgpui-parley",
+      "version": "0.2.2",
+      "sha256": "b4c12d6ef7dd24f06bd4c5b283c0172112e8bddf24a885fef30f89b1482a81c4"
+    },
+    {
+      "name": "xgpui-shader",
+      "version": "0.3.0",
+      "sha256": "08160b7745c4793f38f7d15903091144508946101ff81252fc989b66e09c86fc"
+    },
+    {
+      "name": "xgpui-svg",
+      "version": "0.2.2",
+      "sha256": "7c6e8837e1b991ff11f1463de826f8ce64551d746c22c73f91bd48aded454582"
+    },
+    {
+      "name": "xgpui-canvas",
+      "version": "0.2.1",
+      "sha256": "60d8f9846ea193c81c8e4b847e8d7b778d225206c43386a13182594d3eddddbc"
+    },
+    {
+      "name": "xgpui-gamut",
+      "version": "0.2.2",
+      "sha256": "46445348dbca678b7b3070a8585c61f1a0bace2f47f4b6e3931913beb954a974"
+    },
+    {
+      "name": "xgpui-media",
+      "version": "0.4.0",
+      "sha256": "20c8df6f29e83af0c6d5f7c5b4394510de8aba7710f02ae135954b29979e645b"
+    }
+  ],
+  "local_validation_logs": "/tmp/xgpui-1.26.2-review.b0CdQY",
+  "benchmark_support": {
+    "source_provenance": "gpui/crates/gpui/bench-metrics-provenance.json",
+    "source_blob": "ee0d0fd68e61826f74367c4a463b25e6b9f93494",
+    "ci_platforms": [
+      "ubuntu-24.04",
+      "macos-latest",
+      "windows-latest"
+    ],
+    "ci_tests": "bench_metrics:: and app::bench_context::, with --test-threads=1 and CRITERION_HOME set"
+  }
+}

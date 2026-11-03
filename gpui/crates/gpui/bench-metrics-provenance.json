@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/zed-industries/zed",
+  "commit": "c4273271092b0287f7d181f616bd5171e0a2f70c",
+  "path": "crates/bench_metrics/src/bench_metrics.rs",
+  "local_path": "src/bench_metrics.rs",
+  "license": "Apache-2.0",
+  "integration": "Upstream source compiled as a bench-support-gated module; dependency declarations live in the enclosing xgpui manifest. The page-fault test uses a fresh anonymous mapping rather than allocator pages and does not assume fault batching or page size.",
+  "upstream_git_blob": "1ec628b0e943e34ca6c0f87e5def8f86a63e967f"
+}

@@ -5,6 +5,7 @@ target-dir = "target"
 [patch.crates-io]
 "xgpui" = { path = "gpui/crates/gpui" }
 "xgpui-apple" = { path = "gpui/crates/gpui-apple" }
+"xgpui-ios" = { path = "gpui/crates/gpui-ios" }
 "xgpui-linux" = { path = "gpui/crates/gpui-linux" }
 "xgpui-macos" = { path = "gpui/crates/gpui-macos" }
 "xgpui-macros" = { path = "gpui/crates/gpui-macros" }

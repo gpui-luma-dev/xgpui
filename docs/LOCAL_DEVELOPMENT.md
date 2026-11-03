@@ -19,9 +19,9 @@ lockfiles. Recipes allow dependency downloads; they do not force offline mode.
 
 ## Local crates and published dependencies
 
-XGPUI keeps nine framework and backend crates in `gpui/crates/`: `gpui`,
+XGPUI keeps ten framework and backend crates in `gpui/crates/`: `gpui`,
 `gpui-macros`, `gpui-platform`, `gpui-apple`, `gpui-macos`, `gpui-linux`,
-`gpui-windows`, `gpui-web` and `gpui-wgpu`. The seven XGPUI extension crates live
+`gpui-windows`, `gpui-web`, `gpui-wgpu` and experimental `gpui-ios`. The seven XGPUI extension crates live
 under `extensions/crates/`.
 
 Downstream versions are independent of the captured GPUI release and vary by package. Local directory names and Rust import names stay stable; Cargo package
@@ -31,6 +31,7 @@ names use the XGPUI prefix:
 | --- | --- |
 | `gpui` | `xgpui` |
 | `gpui-apple` | `xgpui-apple` |
+| `gpui-ios` | `xgpui-ios` (experimental, unpublished) |
 | `gpui-linux` | `xgpui-linux` |
 | `gpui-macos` | `xgpui-macos` |
 | `gpui-macros` | `xgpui-macros` |
@@ -48,7 +49,7 @@ The supporting crates below are dependencies from the published
 They are no longer copied into this repository. Cargo downloads them from
 crates.io; manifests keep familiar Rust import names using dependency aliases.
 For example, the `collections` dependency uses the package
-`collections-gpui-unofficial`, currently at `=1.25.3` to match the captured upstream release, rather than the
+`collections-gpui-unofficial`, currently at `=1.26.2` to match the captured upstream release, rather than the
 independent downstream package versions.
 
 | Former local crate names | Published crates.io packages |
@@ -123,6 +124,23 @@ Select a debug build explicitly with `just profile=dev media`. App arguments are
 not Cargo arguments. For extra Cargo features, use the direct Cargo command with
 that app's manifest, as in the macOS runtime-shader example below. The app-level
 justfiles remain available for specialized captures and benchmarks.
+
+## Experimental iOS backend
+
+`xgpui-ios` is a local, unpublished backend with no stable platform contract yet.
+Install Xcode, select its developer directory, and add the simulator target:
+
+```sh
+rustup target add aarch64-apple-ios-sim
+cargo check --locked --features full-capture,runtime-shaders --target aarch64-apple-ios-sim
+bash gpui/crates/gpui-ios/examples/ios/build-simulator.sh --locked
+```
+
+The script builds and ad-hoc signs `target/gpui-ios-example/GPUIIosExample.app`.
+Launching it requires an installed iOS Simulator runtime. CI checks library,
+example and native protocol-test compilation; those checks do not establish
+runtime behavior. The backend currently uses standard color presentation;
+XGPUI's wide-gamut SDR compositor remains macOS-only.
 
 ## Windows
 
@@ -201,7 +219,7 @@ all extension libraries and labs.** The labs share the separate `xgpui-ext-lab` 
 and repository tools retain their own workspaces. Select a lab with
 `--manifest-path apps/xgpui-ext-lab/Cargo.toml --bin <name>`.
 
-The checked-in `.cargo/config.toml` maps the nine retained framework/backend
+The checked-in `.cargo/config.toml` maps the ten retained framework/backend
 crate names to local source. Supporting crates retain their published identities
 and are not overridden.
 Standalone commands also pass `.cargo/validation.toml` for the pinned

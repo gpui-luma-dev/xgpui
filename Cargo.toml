@@ -5,6 +5,7 @@ members = ["tools/build-all"]
 exclude = [
     "gpui/crates/gpui",
     "gpui/crates/gpui-apple",
+    "gpui/crates/gpui-ios",
     "gpui/crates/gpui-linux",
     "gpui/crates/gpui-macos",
     "gpui/crates/gpui-macros",
