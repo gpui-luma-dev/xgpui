@@ -9,8 +9,11 @@ mod blur;
 pub use blur::ImageBlur;
 mod canvas;
 pub use canvas::{
-    CanvasOptions, CanvasPage, CanvasSnapshot, CanvasStats, CanvasView, TileCanvas, TileProvider,
+    CanvasOptions, CanvasPage, CanvasPaint, CanvasSnapshot, CanvasStats, CanvasView, TileCanvas,
+    TileProvider,
 };
+mod raster;
+pub use raster::RasterSource;
 mod generated;
 pub use generated::GeneratedCanvas;
 mod adjustments;

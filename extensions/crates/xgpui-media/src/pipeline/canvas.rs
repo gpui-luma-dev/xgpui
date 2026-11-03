@@ -236,8 +236,27 @@ impl CanvasPage {
         }
     }
 }
+#[derive(Clone, Copy, Debug)]
+pub struct CanvasPaint {
+    /// Native wide SDR requires an accepted wide window and float source pages.
+    pub wide: bool,
+    /// Sampling-only adjustments do not change page/source identity or uploads.
+    pub adjustments: Option<ImageAdjustments>,
+    /// Zero records/adopts pending pages without covering the displayed image.
+    pub opacity: f32,
+}
+impl Default for CanvasPaint {
+    fn default() -> Self {
+        Self {
+            wide: false,
+            adjustments: None,
+            opacity: 1.,
+        }
+    }
+}
+
 #[derive(Debug)]
-struct PagePaint(Arc<CanvasPage>, bool);
+struct PagePaint(Arc<CanvasPage>, bool, CanvasPaint);
 impl CustomContent for PagePaint {
     fn image_source_size(&self) -> Option<gpui::Size<gpui::DevicePixels>> {
         let r = self.0.tile.upload();
@@ -248,14 +267,21 @@ impl CustomContent for PagePaint {
     }
 
     fn image_sample_opacity(&self) -> f32 {
-        if self.1 { 1. } else { 0. }
+        if self.1 { self.2.opacity } else { 0. }
     }
     fn image_color_mode(&self) -> gpui::ImageColorMode {
         if self.0.tile.key().image.format == PixelFormat::Rgba16Float {
-            gpui::ImageColorMode::LinearP3Preview
+            if self.2.wide {
+                gpui::ImageColorMode::LinearP3Wide
+            } else {
+                gpui::ImageColorMode::LinearP3Preview
+            }
         } else {
             gpui::ImageColorMode::EncodedSrgb
         }
+    }
+    fn image_linear_adjustments(&self) -> Option<gpui::LinearImagePaint> {
+        self.2.adjustments.map(ImageAdjustments::paint)
     }
     fn prepare(
         &self,
@@ -319,7 +345,7 @@ type Placement = (
     Arc<dyn CustomContent>,
 );
 impl CanvasSnapshot {
-    fn placements(&self, bounds: gpui::Bounds<gpui::Pixels>) -> Vec<Placement> {
+    fn placements(&self, bounds: gpui::Bounds<gpui::Pixels>, paint: CanvasPaint) -> Vec<Placement> {
         use gpui::{Bounds, point, px, size};
         let scale = self.view.scale as f32;
         let origin = bounds.center()
@@ -360,7 +386,7 @@ impl CanvasSnapshot {
                     placements.push((
                         destination,
                         clip,
-                        Arc::new(PagePaint(preview.clone(), preview.ready()))
+                        Arc::new(PagePaint(preview.clone(), preview.ready(), paint))
                             as Arc<dyn CustomContent>,
                     ));
                 }
@@ -372,16 +398,42 @@ impl CanvasSnapshot {
                 placements.push((
                     destination,
                     clip,
-                    Arc::new(PagePaint(page.clone(), page.ready())) as Arc<dyn CustomContent>,
+                    Arc::new(PagePaint(page.clone(), page.ready(), paint))
+                        as Arc<dyn CustomContent>,
                 ));
             }
         }
         placements
     }
     pub fn paint(&self, bounds: gpui::Bounds<gpui::Pixels>, window: &mut gpui::Window) {
+        self.paint_with(bounds, window, CanvasPaint::default())
+            .expect("default canvas paint");
+    }
+    /// Present retained pages using explicit output policy and GPU adjustments.
+    /// Changing these parameters reuses the existing uploads and page budget.
+    pub fn paint_with(
+        &self,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        window: &mut gpui::Window,
+        paint: CanvasPaint,
+    ) -> Result<()> {
         use gpui::{ContentMask, Corners, CustomGeometry, px};
+        ensure!(
+            paint.opacity.is_finite() && (0. ..=1.).contains(&paint.opacity),
+            "invalid canvas opacity"
+        );
+        if paint.wide {
+            ensure!(
+                self.image.format == PixelFormat::Rgba16Float,
+                "wide canvas requires float pages"
+            );
+            ensure!(
+                window.color_status().effective() == gpui::WindowColorMode::WideGamutSdr,
+                "wide canvas requires accepted native wide SDR"
+            );
+        }
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            for (destination, clip, content) in self.placements(bounds) {
+            for (destination, clip, content) in self.placements(bounds, paint) {
                 window.with_content_mask(Some(ContentMask { bounds: clip }), |window| {
                     window.paint_custom(
                         CustomGeometry::RoundedRect {
@@ -401,6 +453,7 @@ impl CanvasSnapshot {
         {
             window.request_animation_frame();
         }
+        Ok(())
     }
 }
 fn subtract(
@@ -456,6 +509,7 @@ pub struct TileCanvas {
     stats: CanvasStats,
     stopped: bool,
     progressive: ProgressiveImage<CanvasSnapshot>,
+    presented: Option<Arc<CanvasSnapshot>>,
     failed: HashSet<TileKey>,
     #[cfg(all(target_arch = "wasm32", feature = "wgpu"))]
     uploads: Arc<BrowserUploads>,
@@ -531,6 +585,7 @@ impl TileCanvas {
                 budgets: options.budgets,
                 staging: Mutex::new(0),
             }),
+            presented: None,
             progressive: ProgressiveImage::new(
                 source,
                 SourceCapabilities {
@@ -704,6 +759,7 @@ impl TileCanvas {
         self.preview = None;
         self.desired.clear();
         self.stopped = true;
+        self.presented = None;
         self.progressive.cancel();
     }
     /// Replace asset/provider. Old workers/scenes retain charged leases until
@@ -733,7 +789,23 @@ impl TileCanvas {
         self.options
             .budgets
             .check_tile(&pyramid.tile(provider.source(), mip, 0, 0)?)?;
+        // Retain only the complete overview while replacing a source. Fine
+        // pages retire normally, leaving room for the successor overview.
+        let presented = self
+            .presented
+            .as_ref()
+            .filter(|s| s.preview.as_ref().is_some_and(|p| p.ready()))
+            .map(|s| {
+                Arc::new(CanvasSnapshot {
+                    source: s.source,
+                    image: s.image,
+                    view: s.view,
+                    preview: s.preview.clone(),
+                    pages: Vec::new(),
+                })
+            });
         self.cancel();
+        self.presented = presented;
         self.provider = provider;
         self.pyramid = pyramid;
         self.view = None;
@@ -756,6 +828,55 @@ impl TileCanvas {
     }
     pub fn snapshot(&self) -> Option<Arc<CanvasSnapshot>> {
         self.progressive.snapshot().cloned()
+    }
+    /// Last published source, including the previous overview during replacement.
+    pub fn displayed_source(&self) -> Option<SourceId> {
+        self.presented.as_ref().map(|s| s.source)
+    }
+
+    /// Present one retained image while its successor overview uploads. Source
+    /// replacement keeps the prior overview; view/adjustment edits reuse pages.
+    /// Call advance before paint and arrange animation while status is pending.
+    pub fn paint(
+        &mut self,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        window: &mut gpui::Window,
+        paint: CanvasPaint,
+    ) -> Result<()> {
+        let current = self.snapshot();
+        if current
+            .as_ref()
+            .is_some_and(|s| s.preview.as_ref().is_some_and(|p| p.ready()))
+        {
+            self.presented = current.clone();
+        }
+        if let Some(front) = &self.presented {
+            front.paint_with(
+                bounds,
+                window,
+                CanvasPaint {
+                    wide: paint.wide && front.image.format == PixelFormat::Rgba16Float,
+                    ..paint
+                },
+            )?;
+        }
+        if let Some(next) = current {
+            if !self
+                .presented
+                .as_ref()
+                .is_some_and(|front| Arc::ptr_eq(front, &next))
+            {
+                next.paint_with(
+                    bounds,
+                    window,
+                    CanvasPaint {
+                        opacity: 0.,
+                        ..paint
+                    },
+                )?;
+            }
+        }
+        Ok(())
     }
     pub fn stats(&self) -> CanvasStats {
         let u = self.usage.lock().unwrap();
@@ -920,7 +1041,7 @@ impl TileCanvas {
             let provider = self.provider.clone();
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let job = self.loader.load_guarded(
+                let job = match self.loader.load_guarded(
                     tile.key().image.color,
                     Some(lease.clone()),
                     move |_, cancelled| {
@@ -928,7 +1049,13 @@ impl TileCanvas {
                         Self::validate_page(tile, &data)?;
                         Ok(data)
                     },
-                )?;
+                ) {
+                    Ok(job) => job,
+                    // Cancelled workers and in-flight old images can still own
+                    // loader admission. Retry next frame after they retire.
+                    Err(error) if error.is::<crate::loader::AdmissionDeferred>() => break,
+                    Err(error) => return Err(error),
+                };
                 self.pending.push(Pending {
                     tile,
                     revision: self.revision,
@@ -1121,6 +1248,41 @@ mod tests {
         assert_eq!(usage.lock().unwrap().jobs, 0);
         Ok(())
     }
+    #[test]
+    fn retiring_workers_defer_new_pages_without_failing_or_leaking_reservations() -> Result<()> {
+        let mut canvas =
+            TileCanvas::new(Arc::new(GeneratedCanvas::new(0)), CanvasOptions::default())?;
+        let gate = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+        let mut jobs = Vec::new();
+        for _ in 0..canvas.options.budgets.decode_jobs {
+            let gate = gate.clone();
+            jobs.push(
+                canvas
+                    .loader
+                    .load_guarded(ImageColor::SRGB, None, move |_, _| {
+                        let (lock, wake) = &*gate;
+                        let mut released = lock.lock().unwrap();
+                        while !*released {
+                            released = wake.wait(released).unwrap();
+                        }
+                        ImageTextureData::page(1, 1, vec![0; 4], ImageTextureFormat::Rgba8Srgb)
+                    })?,
+            );
+        }
+        let result = canvas.advance(view());
+        *gate.0.lock().unwrap() = true;
+        gate.1.notify_all();
+        drop(jobs);
+        result?;
+        assert_eq!(
+            canvas.stats().gpu_bytes,
+            0,
+            "rejected page admission must retire its lease"
+        );
+        assert!(settled(&mut canvas, view())?.preview.is_some());
+        Ok(())
+    }
+
     #[test]
     fn replacement_rejects_obsolete_generations_and_retains_no_full_image() -> Result<()> {
         let mut canvas =
@@ -1321,7 +1483,8 @@ mod tests {
                 background: gpui::rgb(0).into(),
                 ..Default::default()
             });
-            for (destination, clip, content) in snapshot.placements(bounds) {
+            for (destination, clip, content) in snapshot.placements(bounds, CanvasPaint::default())
+            {
                 scene.insert_primitive(CustomDraw {
                     bounds: destination.map(|v| ScaledPixels(f32::from(v))),
                     content_mask: ContentMask {

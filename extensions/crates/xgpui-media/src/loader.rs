@@ -49,6 +49,21 @@ impl Default for MediaLoader {
         Self::new(MediaLimits::default()).unwrap()
     }
 }
+#[derive(Debug)]
+pub(crate) enum AdmissionDeferred {
+    WorkersBusy,
+    PayloadBudget,
+}
+impl std::fmt::Display for AdmissionDeferred {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::WorkersBusy => "media workers busy",
+            Self::PayloadBudget => "media payload budget exhausted",
+        })
+    }
+}
+impl std::error::Error for AdmissionDeferred {}
+
 /// A retained reservation travels with every clone of the resulting image.
 /// Reserve the per-image maximum plus custom metadata before conversion; unused capacity is
 /// released only when the job and all image snapshots have been dropped.
@@ -343,11 +358,12 @@ impl MediaLoader {
             .context("media metadata reservation overflow")?;
         {
             let mut usage = self.0.usage.lock().unwrap();
-            ensure!(usage.jobs < self.0.limits.max_jobs, "media workers busy");
-            ensure!(
-                reserved_bytes <= self.0.limits.max_resident_bytes - usage.bytes,
-                "media payload budget exhausted"
-            );
+            if usage.jobs >= self.0.limits.max_jobs {
+                return Err(AdmissionDeferred::WorkersBusy.into());
+            }
+            if reserved_bytes > self.0.limits.max_resident_bytes.saturating_sub(usage.bytes) {
+                return Err(AdmissionDeferred::PayloadBudget.into());
+            }
             usage.jobs += 1;
             usage.bytes += reserved_bytes;
         }
