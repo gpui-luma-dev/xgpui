@@ -12,7 +12,7 @@ cargo build --locked
 
 The private root harness builds GPUI and the selected platform backend by
 default. Nine framework/backend crates remain local. Seventeen supporting crates
-come from the published `gpui-unofficial` release, currently pinned to `=1.25.3`.
+come from the published `gpui-unofficial` release, currently pinned to `=1.26.2`.
 Optional integrations and development-only support are not direct default build
 inputs. Metal shaders compile at build time
 by default. The harness launches nothing.
@@ -168,19 +168,19 @@ pulls of the upstream framework alongside the local fork.
 
 ## Downstream release identities
 
-`scripts/release-packages.json` defines the XGPUI framework version (`1.0.0`),
-per-package version overrides for the six extensions (`0.2.0`), and package
-identities. Normalization applies those versions while keeping directory names,
-library names and dependency aliases stable. The helper package version follows
-the captured `release/1.25.3` provenance independently. `upstream.json` records
-both downstream distribution identities and upstream source/helper versions.
+`scripts/release-packages.json` defines downstream package identities and individual
+version overrides for ten framework/backend crates and seven extensions.
+Normalization applies those versions while keeping directory names, library names
+and dependency aliases stable. The helper package version follows the captured
+`release/1.26.2` provenance independently. `upstream.json` records both sets.
 
-For example, the local `gpui` crate is packaged as `xgpui`; applications
-retain `use gpui::*` through a Cargo alias. Internal release-family dependency
-requirements are exact: `=1.0.0` for framework packages and `=0.2.0` for
-extensions. Supporting packages keep their upstream
-identities and `=1.25.3` requirements. This prepares package naming/versioning;
-facade design, packaging verification and the publishing workflow follow later.
+For example, the local `gpui` crate is packaged as `xgpui`; applications retain
+`use gpui::*` through a Cargo alias. Internal dependencies use exact requirements
+from the release map. Supporting packages retain their upstream identities and
+`=1.26.2` requirements. Experimental `xgpui-ios` is unpublished. The integration
+branch retains existing package versions until a separate release compatibility
+review selects new versions; its changed source is not a publishable replacement
+for those existing registry versions.
 
 ## Extension lab package
 

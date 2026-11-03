@@ -13,6 +13,7 @@ runtime-shaders = [
 ]
 full-capture = [
     "dep:gpui-apple",
+    "dep:gpui-ios",
     "dep:gpui-linux",
     "dep:gpui-macos",
     "dep:gpui-macros",
@@ -29,6 +30,9 @@ gpui-wgpu = { path = "../../gpui/crates/gpui-wgpu", package = "xgpui-wgpu", opti
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 gpui-apple = { path = "../../gpui/crates/gpui-apple", package = "xgpui-apple", optional = true }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+gpui-ios = { path = "../../gpui/crates/gpui-ios", package = "xgpui-ios", optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
 gpui-linux = { path = "../../gpui/crates/gpui-linux", package = "xgpui-linux", optional = true }

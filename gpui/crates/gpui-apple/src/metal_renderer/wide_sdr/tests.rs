@@ -74,6 +74,29 @@ fn renderer() -> MetalRenderer {
         .unwrap();
     r
 }
+
+#[test]
+fn display_p3_window_option_negotiates_existing_color_modes() {
+    let pool = Arc::new(Mutex::new(Default::default()));
+    for (transparent, requested, expected) in [
+        (false, false, gpui::WindowColorMode::Default),
+        (false, true, gpui::WindowColorMode::WideGamutSdr),
+        (true, true, gpui::WindowColorMode::Default),
+    ] {
+        // The Metal constructor uses its own layer; window/view pointers are unused.
+        let renderer = unsafe {
+            crate::metal_renderer::new_renderer(
+                pool.clone(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                size(32., 32.),
+                transparent,
+                requested,
+            )
+        };
+        assert_eq!(renderer.color_status().effective(), expected);
+    }
+}
 fn b(x: f32, y: f32, w: f32, h: f32) -> Bounds<ScaledPixels> {
     Bounds::new(
         point(ScaledPixels(x), ScaledPixels(y)),

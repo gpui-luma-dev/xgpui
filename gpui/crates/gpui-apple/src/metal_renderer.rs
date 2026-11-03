@@ -55,8 +55,15 @@ pub unsafe fn new_renderer(
     _native_view: *mut c_void,
     _bounds: gpui::Size<f32>,
     transparent: bool,
+    use_display_p3: bool,
 ) -> Renderer {
-    MetalRenderer::new(context, transparent)
+    let mut renderer = MetalRenderer::new(context, transparent);
+    if use_display_p3 {
+        if let Err(error) = renderer.set_color_mode(gpui::WindowColorMode::WideGamutSdr) {
+            log::warn!("Display P3 presentation unavailable: {error:#}");
+        }
+    }
+    renderer
 }
 
 pub struct InstanceBufferPool {
@@ -759,11 +766,16 @@ impl MetalRenderer {
                         gpui::ImageColorMode::LinearP3Wide
                             | gpui::ImageColorMode::LinearRec2020Wide
                     ) {
-                        anyhow::ensure!(
-                            self.wide_sdr.is_some(),
-                            "wide image requires WideGamutSdr presentation"
-                        );
-                        self.wide_sdr.as_mut().unwrap().wide.insert(outputs.len());
+                        #[cfg(target_os = "macos")]
+                        {
+                            anyhow::ensure!(
+                                self.wide_sdr.is_some(),
+                                "wide image requires WideGamutSdr presentation"
+                            );
+                            self.wide_sdr.as_mut().unwrap().wide.insert(outputs.len());
+                        }
+                        #[cfg(not(target_os = "macos"))]
+                        anyhow::bail!("wide-gamut SDR presentation is unsupported");
                     }
                     output.into()
                 };

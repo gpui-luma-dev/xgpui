@@ -32,7 +32,7 @@ accesskit = { version = "0.24.0", features = ["enumn"] }
 accesskit_macos = { version = "0.26.0" }
 anyhow = { version = "1.0.86" }
 block2 = { version = "0.6" }
-collections = { package = "collections-gpui-unofficial", version = "=1.25.3" }
+collections = { package = "collections-gpui-unofficial", version = "=1.26.2" }
 core-foundation = { version = "0.10" }
 core-foundation-sys = { version = "0.8.6" }
 core-graphics = { version = "0.24" }
@@ -41,7 +41,7 @@ dispatch2 = { version = "0.3", default-features = false, features = ["std", "blo
 foreign-types = { version = "0.5" }
 futures = { version = "0.3.34" }
 gpui_apple = { package = "xgpui-apple", version = "=2.0.1" }
-gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.25.3" }
+gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.26.2" }
 image = { version = "0.25.1", default-features = false, features = [
     "bmp",
     "dds",
@@ -148,7 +148,7 @@ objc2-user-notifications = { version = "0.3", default-features = false, features
     "UNUserNotificationCenter"] }
 parking_lot = { version = "0.12.1" }
 raw-window-handle = { version = "0.6" }
-scheduler = { package = "scheduler-gpui-unofficial", version = "=1.25.3" }
+scheduler = { package = "scheduler-gpui-unofficial", version = "=1.26.2" }
 semver = { version = "1.0", features = ["serde"] }
 smallvec = { version = "1.6", features = ["union", "const_new"] }
 strum = { version = "0.28", features = ["derive"] }

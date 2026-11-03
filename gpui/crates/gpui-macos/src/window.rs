@@ -1098,6 +1098,7 @@ impl MacWindow {
             display_id,
             window_min_size,
             tabbing_identifier,
+            use_display_p3,
             ..
         }: WindowParams,
         cursor_visible: Arc<AtomicBool>,
@@ -1257,6 +1258,7 @@ impl MacWindow {
                     native_view as *mut _,
                     bounds.size.map(|pixels| pixels.as_f32()),
                     false,
+                    use_display_p3,
                 ),
                 color_status: gpui::WindowColorStatus::new(
                     gpui::WindowColorMode::Default,
@@ -3271,7 +3273,7 @@ extern "C-unwind" fn handle_view_event(this: *const Object, _: Sel, native_event
                 | PlatformInput::MouseUp(_)
                 | PlatformInput::MousePressure(_)
                 | PlatformInput::MouseExited(_)
-                | PlatformInput::ScrollWheel(_)
+                | PlatformInput::Scroll(_)
                 | PlatformInput::Pinch(_)
         ) {
             lock.cursor_visible.store(true, Ordering::Relaxed);

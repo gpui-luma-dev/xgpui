@@ -1,6 +1,8 @@
 //! Reproducible upload-phase CPU measurement, not a GPU timestamp benchmark.
 use anyhow::{Context as _, Result, bail, ensure};
 use gpui::*;
+#[cfg(target_os = "macos")]
+use gpui_apple::metal::MTLDevice as _;
 use image::ImageEncoder as _;
 use serde::Serialize;
 use std::{

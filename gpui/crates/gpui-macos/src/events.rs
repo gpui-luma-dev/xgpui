@@ -3,7 +3,7 @@ use gpui::{
     Capslock, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, ModifiersChangedEvent, MouseButton,
     MouseDownEvent, MouseExitEvent, MouseMoveEvent, MousePressureEvent, MouseUpEvent,
     NavigationDirection, PinchEvent, Pixels, PlatformInput, PressureStage, ScrollDelta,
-    ScrollWheelEvent, TouchPhase, point, px,
+    ScrollEvent, ScrollSource, TouchPhase, point, px,
 };
 use objc2::msg_send;
 use objc2_app_kit::*;
@@ -370,7 +370,7 @@ pub(crate) unsafe fn platform_input_from_native(
                     ScrollDelta::Lines(raw_data)
                 };
 
-                PlatformInput::ScrollWheel(ScrollWheelEvent {
+                PlatformInput::Scroll(ScrollEvent {
                     position: point(
                         px(({
                             let value: NSPoint = msg_send![native_event, locationInWindow];
@@ -387,6 +387,7 @@ pub(crate) unsafe fn platform_input_from_native(
                     delta,
                     touch_phase: phase,
                     modifiers: read_modifiers(native_event),
+                    source: ScrollSource::Pointer,
                 })
             }),
             NSEventType::LeftMouseDragged

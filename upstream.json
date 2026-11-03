@@ -1,10 +1,11 @@
 {
-  "commit": "39d276b1500d503ec6d37efcaaa0dc0c00730576",
+  "commit": "bb63411a365ac328a7780ba7101d72ec91625be8",
   "destination": "gpui",
   "distribution": {
     "packages": {
       "gpui": "xgpui",
       "gpui-apple": "xgpui-apple",
+      "gpui-ios": "xgpui-ios",
       "gpui-linux": "xgpui-linux",
       "gpui-macos": "xgpui-macos",
       "gpui-macros": "xgpui-macros",
@@ -27,6 +28,7 @@
       "xgpui-canvas": "0.2.1",
       "xgpui-color": "0.3.0",
       "xgpui-gamut": "0.2.2",
+      "xgpui-ios": "0.1.0",
       "xgpui-linux": "1.0.2",
       "xgpui-macos": "2.0.1",
       "xgpui-media": "0.4.0",
@@ -74,6 +76,7 @@
   "packages": {
     "gpui": "gpui/crates/gpui",
     "gpui-apple": "gpui/crates/gpui-apple",
+    "gpui-ios": "gpui/crates/gpui-ios",
     "gpui-linux": "gpui/crates/gpui-linux",
     "gpui-macos": "gpui/crates/gpui-macos",
     "gpui-macros": "gpui/crates/gpui-macros",
@@ -82,7 +85,7 @@
     "gpui-wgpu": "gpui/crates/gpui-wgpu",
     "gpui-windows": "gpui/crates/gpui-windows"
   },
-  "ref": "release/1.25.3",
+  "ref": "release/1.26.2",
   "registry_packages": {
     "packages": {
       "collections": "collections-gpui-unofficial",
@@ -103,13 +106,14 @@
       "ztracing": "ztracing-gpui-unofficial",
       "ztracing-macro": "ztracing-macro-gpui-unofficial"
     },
-    "version": "1.25.3"
+    "version": "1.26.2"
   },
   "repository": "https://github.com/gpui-archipelago/gpui-unofficial",
   "source_packages": {
     "collections-gpui-unofficial": "gpui/crates/collections-gpui-unofficial",
     "derive-refineable-gpui-unofficial": "gpui/crates/derive-refineable-gpui-unofficial",
     "gpui-apple-gpui-unofficial": "gpui/crates/gpui-apple-gpui-unofficial",
+    "gpui-ios-gpui-unofficial": "gpui/crates/gpui-ios-gpui-unofficial",
     "gpui-linux-gpui-unofficial": "gpui/crates/gpui-linux-gpui-unofficial",
     "gpui-macos-gpui-unofficial": "gpui/crates/gpui-macos-gpui-unofficial",
     "gpui-macros-gpui-unofficial": "gpui/crates/gpui-macros-gpui-unofficial",
@@ -134,6 +138,6 @@
     "ztracing-gpui-unofficial": "gpui/crates/ztracing-gpui-unofficial",
     "ztracing-macro-gpui-unofficial": "gpui/crates/ztracing-macro-gpui-unofficial"
   },
-  "zed_commit": "8dd255c3eafb5231056fe4e6f601cedd011f1c93",
-  "zed_tag": "v1.25.3"
+  "zed_commit": "c4273271092b0287f7d181f616bd5171e0a2f70c",
+  "zed_tag": "v1.26.2"
 }
