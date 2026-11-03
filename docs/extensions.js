@@ -25,7 +25,8 @@ function brushDemoLinks() {
 function liveDemoOverview() {
   return '<section class="demo-entry" aria-label="Live browser demos"><div class="demo-entry-heading"><span>LIVE BROWSER DEMOS</span><a href="examples/extensions/">Browse all demos →</a></div><div class="demo-launch-grid">' +
     '<a class="demo-launch" href="examples/extensions/?demo=brushes"><div class="demo-thumb brush-thumb"></div><strong>Brushes &amp; gradients ↗</strong><span>Color fields, mesh, noise, glyphs and paths.</span></a>' +
-    '<a class="demo-launch" href="examples/extensions/?demo=layers"><div class="demo-thumb layer-thumb"></div><strong>Layer effects ↗</strong><span>Blur, filters and destination blending.</span></a>' +
+    '<a class="demo-launch" href="examples/shaders/?example=shadows"><div class="demo-thumb shadow-thumb" aria-hidden="true"></div><strong>Gradient shadows ↗</strong><span>Colored falloff with adjustable spread, offset and softness.</span></a>' +
+    '<a class="demo-launch" href="examples/extensions/?demo=italy"><div class="demo-thumb italy-thumb" aria-hidden="true"></div><strong>Italy image comparison ↗</strong><span>Compare sRGB, Display P3 and highlighted out-of-gamut colors.</span></a>' +
     '<a class="demo-launch" href="examples/shaders/"><div class="demo-thumb shader-thumb"></div><strong>Shader playground ↗</strong><span>Particles, composition, shadows and animated borders.</span></a></div></section>';
 }
 function gamutDemoPanel() {
