@@ -36,7 +36,7 @@ runtime_shaders = ["gpui_apple/runtime_shaders"]
 gpui = { package = "xgpui", version = "=2.0.0" }
 
 [target.'cfg(target_os = "ios")'.dev-dependencies]
-gpui_platform = { package = "xgpui-platform", version = "=2.0.0" }
+gpui_platform = { package = "xgpui-platform", path = "../gpui-platform" }
 objc2-ui-kit = { version = "0.3.2", default-features = false, features = ["std", "block2", "objc2-quartz-core", "objc2-core-foundation", "NSText", "UIApplication", "UICommand", "UICornerConfiguration", "UICornerRadius", "UIEvent", "UIGeometry", "UIGestureRecognizer", "UIPanGestureRecognizer", "UIScreenEdgePanGestureRecognizer", "UIInterface", "UIOpenURLContext", "UIPasteboard", "UIResponder", "UIScene", "UISceneConfiguration", "UISceneDefinitions", "UISceneOptions", "UISceneSession", "UIScreen", "UITextInput", "UITextInputTraits", "UITouch", "UITraitCollection", "UIView", "UIViewController", "UIWindow", "UIWindowScene", "UIConversationContext"] }
 slotmap = { version = "1.0.6" }
 
