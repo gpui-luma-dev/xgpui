@@ -93,6 +93,9 @@ controls remain available. See [canvas](#canvas) and [local development](#local-
   it does not certify every standalone library suite, assistive technology,
   external producer or physical wide-gamut display. See
   [Windows validation](LOCAL_DEVELOPMENT.md#windows-validation).
+- **Reliable benchmark scope tests:** setup exclusion is checked with explicit
+  recorded poll timings and exact scope membership, avoiding flaky upper limits
+  caused by hosted-runner scheduling delays. Runtime measurement is unchanged.
 - **Build and documentation upkeep:** corrected the native input example's test
   initialization, refreshed normalized version metadata, documented local website
   preview, and corrected immutable release-source and color-lab guide links.
