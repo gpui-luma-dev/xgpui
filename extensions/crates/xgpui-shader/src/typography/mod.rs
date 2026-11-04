@@ -27,6 +27,7 @@ pub struct SelectableText {
     selection: Selection,
     focus: FocusHandle,
     selecting: bool,
+    selection_pointer: Option<Point<Pixels>>,
     geometry: Option<Geometry>,
     scroll_x: Pixels,
     accessible_run: Rc<RefCell<accesskit::Node>>,
@@ -58,8 +59,10 @@ impl SelectableText {
             shadow: None,
             selection: Selection::new(&text),
             text,
-            focus: cx.focus_handle(),
+            // Explicitly tracked handles retain their own tab-stop setting.
+            focus: cx.focus_handle().tab_stop(true),
             selecting: false,
+            selection_pointer: None,
             geometry: None,
             scroll_x: px(0.),
         })
@@ -145,6 +148,7 @@ impl SelectableText {
         window.focus(&self.focus, cx);
         let offset = self.index_at(event.position);
         self.selecting = true;
+        self.selection_pointer = Some(event.position);
         if event.click_count >= 3 {
             self.select_all(cx);
         } else if event.click_count == 2 {
@@ -578,6 +582,7 @@ impl Element for TextLine {
                 let _ = weak.update(cx, |this, cx| {
                     if this.selecting && event.pressed_button == Some(MouseButton::Left) {
                         this.selection.move_to(this.index_at(event.position), true);
+                        this.selection_pointer = Some(event.position);
                         cx.notify();
                     } else {
                         this.selecting = false;
@@ -586,8 +591,20 @@ impl Element for TextLine {
             }
         });
         let weak = self.entity.downgrade();
-        window.on_mouse_event(move |_: &MouseUpEvent, _, _, cx| {
-            let _ = weak.update(cx, |this, _| this.selecting = false);
+        window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+            if phase != DispatchPhase::Bubble || event.button != MouseButton::Left {
+                return;
+            }
+            let _ = weak.update(cx, |this, cx| {
+                // Fast drags may release beyond the last delivered mouse move.
+                // Avoid changing word/line selections on a stationary click.
+                if this.selecting && this.selection_pointer != Some(event.position) {
+                    this.selection.move_to(this.index_at(event.position), true);
+                    cx.notify();
+                }
+                this.selecting = false;
+                this.selection_pointer = None;
+            });
         });
     }
 }
@@ -679,6 +696,41 @@ mod interaction_tests {
             Modifiers::default(),
         );
         text.read_with(cx, |text, _| assert_eq!(text.selected_text(), source));
+        // A fast reverse drag can release beyond the last delivered move event.
+        // The release coordinate, rather than that stale move, must win.
+        let end = text.read_with(cx, |text, _| {
+            bounds.origin + point(px(*text.geometry.as_ref().unwrap().carets.last().unwrap() + 4.), px(0.))
+        });
+        cx.simulate_mouse_down(end, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_move(
+            bounds.origin + point(px(30.), px(0.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(bounds.origin, MouseButton::Left, Modifiers::default());
+        text.read_with(cx, |text, _| assert_eq!(text.selected_text(), source));
+        // Even a drag with no intermediate move must commit its release point.
+        cx.simulate_mouse_down(bounds.origin, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::default());
+        text.update(cx, |text, cx| {
+            assert_eq!(text.selected_text(), source);
+            assert!(text.copy_selection(cx));
+        });
+        assert_eq!(cx.read_from_clipboard().unwrap().text().unwrap(), source);
+        // A release at the same point must preserve double/triple-click ranges.
+        for clicks in [2, 3] {
+            cx.simulate_event(MouseDownEvent {
+                position: bounds.origin,
+                button: MouseButton::Left,
+                modifiers: Modifiers::default(),
+                click_count: clicks,
+                first_mouse: false,
+            });
+            let selected = text.read_with(cx, |text, _| text.selected_text().to_owned());
+            assert!(!selected.is_empty());
+            cx.simulate_mouse_up(bounds.origin, MouseButton::Left, Modifiers::default());
+            text.read_with(cx, |text, _| assert_eq!(text.selected_text(), selected));
+        }
         let window = cx.update(|window, _| window.window_handle());
         cx.simulate_window_resize(window, size(px(80.), px(100.)));
         cx.run_until_parked();
@@ -733,6 +785,15 @@ mod interaction_tests {
                 assert_eq!(text.accessible_run.borrow().value(), Some(source));
             });
             assert_eq!(cx.read_from_clipboard().unwrap().text().unwrap(), source);
+        }
+        for scale in [1., 1.5, 2., 3.] {
+            cx.simulate_scale_factor_change(scale);
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            text.read_with(cx, |text, _| {
+                assert_eq!(text.selected_text(), source);
+                assert_eq!(text.geometry.as_ref().unwrap().carets, before);
+                assert_eq!(text.accessible_run.borrow().value(), Some(source));
+            });
         }
         let effect = text.read_with(cx, |text, _| text.effect());
         text.update(cx, |text, cx| {

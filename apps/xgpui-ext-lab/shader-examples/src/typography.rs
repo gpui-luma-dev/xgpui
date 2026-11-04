@@ -35,6 +35,7 @@ const SAMPLES: [(&str, &str, &str); 4] = [
     ),
 ];
 pub struct TypographyDemo {
+    focus: FocusHandle,
     samples: Vec<Entity<SelectableText>>,
     active: usize,
     narrow: bool,
@@ -54,7 +55,9 @@ pub struct TypographyDemo {
     softness: usize,
 }
 impl TypographyDemo {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let focus = cx.focus_handle();
+        window.focus(&focus, cx);
         let samples: Vec<_> = SAMPLES
             .iter()
             .map(|(_, text, _)| {
@@ -66,6 +69,7 @@ impl TypographyDemo {
             .map(|sample| cx.observe(sample, |_, _, cx| cx.notify()))
             .collect();
         let mut demo = Self {
+            focus,
             samples,
             active: 0,
             narrow: false,
@@ -256,7 +260,19 @@ impl Render for TypographyDemo {
         let surface = if self.light { 0xffffff } else { 0x131f30 };
         let foreground = if self.light { 0x142238 } else { 0xeaf1f6 };
         let muted = if self.light { 0x50617a } else { 0x9fb0c5 };
-        div().id("typography-demo").size_full().overflow_y_scroll()
+        div().id("typography-demo")
+            .role(Role::Application).aria_label("Selectable typography demo")
+            .track_focus(&self.focus)
+            .on_key_down(|event, window, cx| {
+                let modifiers = event.keystroke.modifiers;
+                if event.keystroke.key == "tab"
+                    && !modifiers.control && !modifiers.alt && !modifiers.platform
+                {
+                    if modifiers.shift { window.focus_prev(cx); } else { window.focus_next(cx); }
+                    cx.stop_propagation();
+                }
+            })
+            .size_full().overflow_y_scroll()
             .bg(rgb(background)).text_color(rgb(foreground)).font_family("IBM Plex Sans")
             .child(div().max_w(px(1040.)).mx_auto().p_8().flex().flex_col().gap_6()
                 .child(div().flex().justify_between().items_center()
@@ -358,5 +374,44 @@ impl Render for TypographyDemo {
                     .child("TRY IT  /  Tab to focus · Shift + arrows to select · Home / End · Cmd or Ctrl + A / C · double-click a word · triple-click the line")
                     .child(if cfg!(target_family = "wasm") { "ACCESSIBILITY  /  The web platform has no canvas accessibility bridge yet. Use the native demo to inspect read-only text and selection semantics." } else { "ACCESSIBILITY  /  Read-only text field with the full source, a text run and selection endpoints. Motion does not change the accessible source or selection." })
                     .child("SCOPE  /  Single-line LTR text. Wrapping, bidirectional selection and rich text editing remain outside this milestone.")))
+    }
+}
+
+#[cfg(all(test, not(target_family = "wasm")))]
+mod tests {
+    use super::*;
+
+    #[::core::prelude::v1::test]
+    fn tab_and_shift_tab_reach_and_leave_selectable_text() {
+        let mut app = TestAppContext::build_with_text_system(
+            TestDispatcher::new(0),
+            None,
+            std::sync::Arc::new(gpui_wgpu::CosmicTextSystem::new_without_system_fonts(
+                "IBM Plex Sans",
+            )),
+        );
+        app.text_system()
+            .add_fonts(vec![std::borrow::Cow::Borrowed(super::super::FONT)])
+            .unwrap();
+        let (demo, cx) = app.add_window_view(TypographyDemo::new);
+        let text_focus = demo.read_with(cx, |demo, cx| demo.samples[0].focus_handle(cx));
+        // Start from the initial root focus and traverse the actual controls.
+        let mut reached_text = false;
+        for _ in 0..64 {
+            cx.simulate_keystrokes("tab");
+            if cx.update(|window, _| text_focus.is_focused(window)) {
+                reached_text = true;
+                break;
+            }
+        }
+        assert!(reached_text, "Tab must reach the selectable text from startup");
+        cx.simulate_keystrokes("shift-tab");
+        assert!(!cx.update(|window, _| text_focus.is_focused(window)));
+        cx.simulate_keystrokes("tab");
+        assert!(cx.update(|window, _| text_focus.is_focused(window)));
+        cx.simulate_keystrokes("tab");
+        assert!(!cx.update(|window, _| text_focus.is_focused(window)));
+        cx.simulate_keystrokes("shift-tab");
+        assert!(cx.update(|window, _| text_focus.is_focused(window)));
     }
 }
