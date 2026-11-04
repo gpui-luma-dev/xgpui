@@ -179,7 +179,7 @@ fn launch() -> anyhow::Result<()> {
             })
             .expect("open media demo");
         } else if typography {
-            cx.open_window(options, |_, cx| cx.new(typography::TypographyDemo::new))
+            cx.open_window(options, |window, cx| cx.new(|cx| typography::TypographyDemo::new(window, cx)))
                 .expect("open typography demo");
         } else if hermite {
             cx.open_window(options, |_, cx| cx.new(|_| hermite::HermiteDemo::new()))

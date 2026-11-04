@@ -79,7 +79,7 @@ fn open(mode: examples::Mode, cx: &mut App) {
     if mode == examples::Mode::Typography {
         cx.open_window(options, |window, cx| {
             window.set_window_title("Selectable Typography · xgpui-shader");
-            cx.new(typography::TypographyDemo::new)
+            cx.new(|cx| typography::TypographyDemo::new(window, cx))
         })
         .expect("open typography demo");
         cx.activate(true);
