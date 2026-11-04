@@ -117,6 +117,10 @@ just lab-test video_lab:: -- --test-threads=1
 ```
 
 Windows now has a generated ~30 fps BGRA8 source using native D3D11/DXGI.
+Its center band has scrolling diagonal stripes and a large bouncing puck that
+crosses the image. The upper color bars and lower alpha reference area remain
+fixed for pixel checks; pause should visibly freeze the motion, and resume should
+show the newest position. Both previews must show the same moving frame.
 The same pause/resume, burst, stop/restart, opacity, corner, exposure, saturation,
 vignette and blur controls drive both platforms. Both previews use the same
 immutable snapshot; an unadjusted reference sits beside the adjusted preview.
@@ -136,6 +140,9 @@ signals and joins its worker, while a stopped stream can retain its last frame.
 
 Headless capture uses D3D11 WARP and checks BGRA colors, straight alpha, corners,
 linear exposure, inherited opacity, clipping, placement/resize reuse and teardown.
+It also checks that replacing a frame updates more than a quarter of the output.
+A host-independent fixture test verifies that substantial motion leaves all
+reference rows unchanged across frames.
 Additional tests cover pause/burst/latest-frame replacement, retained snapshots,
 producer closure and restart. The Windows apps workflow builds the media lab and
 runs these tests. Default video capture output uses the system temporary directory

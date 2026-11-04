@@ -24,9 +24,7 @@ use std::{
 };
 use xgpui_media::VideoFrame;
 
-const WIDTH: u32 = 320;
-const HEIGHT: u32 = 180;
-const COLORS: [[u8; 3]; 4] = [[224, 64, 32], [64, 208, 64], [32, 64, 224], [224, 192, 96]];
+use super::windows_pattern::{self, COLORS, HEIGHT, WIDTH};
 
 #[derive(Debug)]
 struct Imported {
@@ -43,26 +41,8 @@ pub(super) struct Snapshot {
 }
 impl Snapshot {
     pub(super) fn new(index: u64) -> Arc<Self> {
-        let mut pixels = Vec::with_capacity((WIDTH * HEIGHT * 4) as usize);
-        for y in 0..HEIGHT {
-            for x in 0..WIDTH {
-                let [r, g, b] = COLORS[(x / (WIDTH / 4)) as usize];
-                // Straight alpha in the lower half of the last color bar.
-                let a = if y >= HEIGHT / 2 && x >= WIDTH * 3 / 4 {
-                    128
-                } else {
-                    255
-                };
-                // A moving white tick animates without changing reference pixels.
-                if y >= HEIGHT - 8 && x == (index % u64::from(WIDTH)) as u32 {
-                    pixels.extend_from_slice(&[255, 255, 255, 255]);
-                } else {
-                    pixels.extend_from_slice(&[b, g, r, a]);
-                }
-            }
-        }
         Arc::new(Self {
-            pixels,
+            pixels: windows_pattern::pixels(index),
             imported: Mutex::new(None),
             initializations: AtomicUsize::new(0),
         })
@@ -172,6 +152,20 @@ pub(super) fn capture(png: &Path) -> Result<()> {
         pixels.get_pixel(4, 4).0[..3] == [0, 0, 0],
         "DXGI rounded corners"
     );
+    let next = Snapshot::new(8);
+    scene.custom_draws[0].content = next.video_frame(Duration::from_millis(264))?.content();
+    let moving = renderer.render_scene_to_image(&scene, output_size)?;
+    let changed = pixels
+        .pixels()
+        .zip(moving.pixels())
+        .filter(|(a, b)| a != b)
+        .count();
+    ensure!(
+        changed > (WIDTH * HEIGHT / 4) as usize,
+        "DXGI playback must update the animated region: {changed} pixels changed"
+    );
+    scene.custom_draws[0].content = video.content();
+    drop(next);
     use xgpui_media::pipeline::{ColorMatrix, ImageAdjustments, ImagePrimaries};
     scene.custom_draws[0].content = video
         .adjusted(ImageAdjustments::new(

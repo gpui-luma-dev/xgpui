@@ -1,5 +1,7 @@
 #[cfg(target_os = "windows")]
 mod windows;
+#[cfg(any(target_os = "windows", test))]
+mod windows_pattern;
 
 use crate::{model::Lab, ui::button};
 use anyhow::Result;
