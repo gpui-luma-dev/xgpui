@@ -4930,7 +4930,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -4997,7 +4997,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-apple"
-version = "3.0.0"
+version = "3.0.1"
 dependencies = [
  "anyhow",
  "async-task",
@@ -5047,7 +5047,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-shader"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -5069,7 +5069,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-wgpu"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -5094,7 +5094,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-windows"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -5364,20 +5364,20 @@ source = "git+https://github.com/zed-industries/async-process.git?rev=0b6d671357
 
 [[patch.unused]]
 name = "xgpui-ios"
-version = "1.26.2"
+version = "1.26.3"
 
 [[patch.unused]]
 name = "xgpui-linux"
-version = "2.0.0"
+version = "2.0.1"
 
 [[patch.unused]]
 name = "xgpui-macos"
-version = "3.0.0"
+version = "3.0.1"
 
 [[patch.unused]]
 name = "xgpui-platform"
-version = "2.0.0"
+version = "2.0.1"
 
 [[patch.unused]]
 name = "xgpui-web"
-version = "2.0.0"
+version = "2.0.1"
