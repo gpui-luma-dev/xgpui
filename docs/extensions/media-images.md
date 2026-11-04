@@ -226,10 +226,11 @@ Both commands use release mode and generate their own sample content.
 
 | Area | Status |
 | --- | --- |
-| Images and color filters | Metal/wgpu tests pass on macOS; D3D11 cross-compiles. |
+| Images and color filters | Metal/wgpu tests pass on macOS; Windows native labs and lab-test passed in owner testing, 2026-11-04. |
 | Browser sampling, filters and contour effects | Checked on WebGPU and WebGL2 in Chromium on macOS. |
 | macOS native frames | [BGRA ↗](https://en.wikipedia.org/wiki/RGBA_color_model) and 8-bit [NV12 ↗](https://en.wikipedia.org/wiki/YCbCr) with explicit [BT.601 ↗](https://en.wikipedia.org/wiki/Rec._601)/[BT.709 ↗](https://en.wikipedia.org/wiki/Rec._709) selection are tested. |
-| Windows DXGI and Linux DMA-BUF frames | Implemented and cross-compiled; native runtime checks are pending. |
+| Windows DXGI frames | Same-device generated BGRA demo and selected lab tests passed in Windows owner testing, 2026-11-04. Keyed shared-handle library tests are not established by the root lab-test result. |
+| Linux DMA-BUF frames | Implemented and cross-compiled; native runtime checks remain pending. |
 
 **60 Hz is the performance baseline.** Three sustained-scroll runs on an M4 Max
 completed 252 large-image replacements without errors. Loading redraw p95 was
@@ -603,10 +604,12 @@ Dropping a Rust frame is not a pool-recycle signal. The direct constructor rejec
 constructor below for those. Device negotiation, decoder array slices and YUV
 conversion remain unsupported.
 
-Windows compilation is checked from macOS. A Windows-only WARP regression covers
+Windows native BGRA lab presentation and `just lab-test` passed in owner testing
+on 2026-11-04. A separate Windows-only WARP library regression covers
 native resource identity (no copy), retained pixels, resize-independent source
-extent, wrong backend/device and unsupported format rejection; execution on
-Windows remains outstanding. Linux DMA-BUF runtime verification, explicit
+extent, wrong backend/device and unsupported format rejection; execution of
+that dedicated suite is not established by the same-device lab result; see
+[Windows validation](../LOCAL_DEVELOPMENT.md#windows-validation). Linux DMA-BUF runtime verification, explicit
 fences/pool reuse and broader surface formats remain required before Phase 5 is complete.
 
 System file playback is tracked separately in [issue #40](https://github.com/gpui-luma-dev/xgpui/issues/40).
@@ -823,7 +826,9 @@ its recording/readiness tests in a terminal configured with the native build too
 cargo test --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib custom_draw::tests
 ```
 
-Native D3D11 execution remains unverified until that command runs on Windows.
+Windows native lab and root lab-test execution passed in owner testing on
+2026-11-04. This dedicated library command is separate from the root lab-test
+selection; retain its own result when run. See [Windows validation](../LOCAL_DEVELOPMENT.md#windows-validation).
 
 ### Web documentation preview
 
@@ -1151,7 +1156,8 @@ Run `just media --float-images`, or try the
 [RGBA16F browser preview](../examples/extensions/?demo=media-float),
 [WebGPU](../examples/extensions/?demo=media-float&backend=webgpu) or
 [WebGL2](../examples/extensions/?demo=media-float&backend=webgl).
-Browser output is clipped sRGB; Windows/Linux native runtime QA remains pending.
+Browser output is clipped sRGB. Windows native labs and `just lab-test` passed
+in owner testing on 2026-11-04; Linux native QA remains separately tracked.
 
 
 ## Large raster canvases

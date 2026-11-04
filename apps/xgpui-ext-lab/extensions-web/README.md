@@ -277,7 +277,9 @@ reset and mode/zoom controls reuse one source upload.
 
 See [media pipeline guide](../../../docs/extensions/media-pipeline.md) for the
 `load_rgba16f` API, input metadata, byte limits and backend validation status.
-Windows/Linux native runtime QA remains pending; 60 Hz stays the baseline.
+The native lab companion and `just lab-test` passed in Windows user testing on
+2026-11-04. Windows browser testing and Linux native runtime retain separate
+coverage; 60 Hz stays the performance baseline.
 
 
 ### Progressive tiled canvas (Phase 4)

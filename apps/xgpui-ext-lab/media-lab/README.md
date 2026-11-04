@@ -41,8 +41,8 @@ the host, enforces one upload per image, and fails on errors or timeout. It writ
 an unlabeled contact sheet: atlas left, media right; frequency, alpha and terrain
 rows, followed by your optional image. Native capture is `/tmp/media-lab.png`;
 wgpu capture is `/tmp/media-lab-wgpu.png`. The wgpu feature selects only the headless
-backend; interactive macOS windows use Metal. Windows/Linux runtime QA remains
-outstanding.
+backend; interactive macOS windows use Metal. Windows native labs and `just lab-test` passed in user testing on 2026-11-04;
+Linux runtime QA remains outstanding.
 
 ## Color filter checks
 
@@ -117,8 +117,9 @@ On a Windows SDK host, `just --justfile apps/xgpui-ext-lab/media-lab/justfile dx
 native BGRA and keyed NT-handle snapshot regressions in release mode. Separate
 WARP devices test busy acquisition, handle lifetime, retained ownership, compositor
 pixels and producer-key handoff. This requires no video file or decoder. The
-interactive Windows demo is described below. Windows test code is cross-checked
-from macOS; native execution is still pending.
+interactive Windows demo and root `just lab-test` passed in user testing on
+2026-11-04. These runs cover same-device BGRA presentation; the separate keyed
+NT-handle ownership suite above is not established by the root lab-test result.
 
 ### Windows synthetic video surfaces (#133)
 
@@ -162,9 +163,9 @@ producer closure and restart. The Windows apps workflow builds the media lab and
 runs these tests. Default video capture output uses the system temporary directory
 on each OS. Native video rejects `--wgpu` explicitly.
 
-Windows code and tests are cross-checked from macOS. The new Windows capture and
-interactive controls still need execution on Windows; macOS capture results do
-not establish Windows GPU acceptance. NV12/YUV conversion, decoding, A/V clocks,
+The project owner confirmed all native labs and `just lab-test` passed on Windows
+on 2026-11-04, including the video demo and selected capture/lifecycle checks.
+See [Windows validation](../../../docs/LOCAL_DEVELOPMENT.md#windows-validation). NV12/YUV conversion, decoding, A/V clocks,
 shared producer pools and device-loss recovery are outside this demo's scope.
 
 ## Linux DMA-BUF layout checks
@@ -303,7 +304,9 @@ reset and mode/zoom controls reuse one source upload.
 
 See [media pipeline guide](../../../docs/extensions/media-pipeline.md) for the
 `load_rgba16f` API, input metadata, byte limits and backend validation status.
-Windows/Linux native runtime QA remains pending; 60 Hz stays the baseline.
+Windows native lab/testing passed in user testing on 2026-11-04. Linux native
+runtime QA remains pending; this does not add sustained performance evidence.
+60 Hz stays the baseline.
 
 
 ### Progressive tiled canvas (Phase 4)

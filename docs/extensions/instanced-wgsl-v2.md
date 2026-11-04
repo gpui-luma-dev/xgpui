@@ -24,11 +24,11 @@ opt-in SDR API, not the complete unrestricted shader system proposed in the RFC.
 | Generated vertex/fragment wrappers; clipping and inherited opacity | Implemented |
 | WGSL validation and MSL, HLSL SM5 and SPIR-V translation | Implemented |
 | Native Metal and wgpu rendering | Implemented; macOS pixel checks passed |
-| Native D3D11 dispatch | Implemented and Windows cross-compiled; Windows driver execution pending |
+| Native D3D11 dispatch | Implemented; native paint/gamut Windows CI baseline and owner-confirmed labs/lab-test pass recorded in [Windows validation](../LOCAL_DEVELOPMENT.md#windows-validation) |
 | Browser WebGPU and WebGL2 | Implemented; local Chromium smoke checks passed |
 | Rounded-box, pulse-glow and soft particle presets | Implemented |
 | Local native demo and shared WASM companion | Implemented; same Rust example views and shader sources |
-| Explicit linear-P3 shader output and optional gamut fills/gradients (#25) | Implemented; Metal reference checks passed, Windows cross-compiled |
+| Explicit linear-P3 shader output and optional gamut fills/gradients (#25) | Implemented; Metal references and earlier Windows native gamut CI passed; Windows lab/lab-test pass confirmed 2026-11-04 |
 
 The shader regression suite passed, including Metal/wgpu pixel checks, ABI and
 invalid-input rejection, native/shader ordering, replay, and a 5,000-instance

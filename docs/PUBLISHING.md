@@ -219,7 +219,7 @@ existing mesh-gradient notice and Parley's font licenses remain included.
 | xgpui-shader | macOS default and `portable-shaders` checks passed. |
 | xgpui-svg | macOS compile check passed. |
 | xgpui-linux | Cross-check blocked by the missing Linux C sysroot (`stdio.h` while compiling Wayland). |
-| xgpui-windows | Cross-check blocked by the missing `llvm-rc` Windows resource compiler. |
+| xgpui-windows | At this isolated-package checkpoint, cross-checking stopped at missing `llvm-rc`. Subsequent source/lab cross-checks pass with the installed LLVM compiler, and Windows native labs/lab-test passed in owner testing on 2026-11-04; these do not retroactively rerun this isolated-package check. |
 | xgpui-web | Single-threaded profiles passed on stable; default multithreaded profile passed on nightly with atomic-WASM flags. |
 
 A combined consumer using all 12 macOS-applicable packages **built, linked and

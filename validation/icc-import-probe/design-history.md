@@ -6,7 +6,7 @@ Current usage and scope: docs/extensions/icc-profiles.md.
 
 # Pixels and color metadata — #85 Stage C
 
-Status: pixels + metadata, f64 sampled/parametric decoding and a bounded optional RGB matrix/TRC parsing adapter are implemented. General ICC support remains out of scope. Draft #88/#89 remain separate review units; neither is merged. Windows/Linux native acceptance remains outstanding.
+Status: pixels + metadata, f64 sampled/parametric decoding and a bounded optional RGB matrix/TRC parsing adapter are implemented. General ICC support remains out of scope. Draft #88/#89 remain separate review units; neither is merged. This is a historical design checkpoint. Current Windows native labs and lab-test passed in owner testing on 2026-11-04; see [current validation](../../docs/LOCAL_DEVELOPMENT.md#windows-validation). Linux and feature-specific acceptance retain their own scope.
 
 ## Boundary
 
@@ -95,7 +95,7 @@ These results establish CPU conversion/storage behavior and existing macOS rende
 
 The 120-digit oracle in `scripts/generate_bradford_references.py` uses a pivoted Gauss-Jordan inverse independent of production's cofactor inverse. It covers 408 signed, zero, near-black and large XYZ vectors in both directions. Scale-aware bounds account for cancellation while constructing matrix off-diagonals; there is no ordinary absolute-error floor that hides dark errors. A second check uses the published CSS matrix. D50 diagonal-colorant fixtures independently verify explicit mapping and associated FP16 storage. Identity is exact; nonfinite inputs and overflow are rejected. Source colorant quantization admission is propagated through the CAT separately from numerical conversion tolerances.
 
-Follow-up validation: 20 color unit tests, 4 adaptation tests, 6 independent Adobe numerical tests, 69 serial Metal/wgpu media tests and 8 sibling lab tests pass. Strict color all-target and media library Clippy, formatting, fixture regeneration and diff checks pass. Windows/Linux native execution remains unverified.
+Follow-up validation: 20 color unit tests, 4 adaptation tests, 6 independent Adobe numerical tests, 69 serial Metal/wgpu media tests and 8 sibling lab tests pass. Strict color all-target and media library Clippy, formatting, fixture regeneration and diff checks pass. Windows/Linux execution was not recorded at that checkpoint; current Windows lab coverage is recorded in [Windows validation](../../docs/LOCAL_DEVELOPMENT.md#windows-validation).
 
 ## Sampled/parametric curve investigation — acceptance unresolved
 

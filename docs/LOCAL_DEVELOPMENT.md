@@ -182,6 +182,33 @@ The first recipe builds the libraries for Windows. The second builds and
 opens the shader example application. Commands below also work in PowerShell;
 they use single lines rather than shell-specific continuation characters.
 
+### Windows validation
+
+On **2026-11-04**, the project owner confirmed that **all native labs and
+`just lab-test` passed on Windows** using the existing Git/Bash, Rust/Windows
+build tools and Just setup. This includes the shared BGRA video-surface demo on
+`codex/extension-lab-commands`. The [Windows testing issue](https://github.com/gpui-luma-dev/xgpui/issues/133)
+records the original reports and fixes; the successful retest was reported in
+the development chat. This supersedes blanket descriptions of these labs as
+Windows-untested or cross-compilation-only.
+
+| Coverage | Evidence |
+| --- | --- |
+| Native lab applications, including media/video, color/chromaticity, gamut, shaders, canvas, SVG and text | User-confirmed Windows pass, 2026-11-04 |
+| Root `just lab-test`: native lab binary tests and compatibility target | User-confirmed Windows pass, 2026-11-04; native-window tests remain opt-in |
+| Media video capture and snapshot lifecycle checks selected by `lab-test` | Windows lab-test pass; same-device generated BGRA/D3D11 path |
+| Windows x64 source and lab test compilation | Cross-check passed from macOS with the installed LLVM resource compiler; a separate compile result |
+| Earlier native paint/gamut backend baseline | [2026-10-25 CI](https://github.com/gpui-luma-dev/xgpui/actions/runs/40207704397): Windows D3D11/WARP, Windows wgpu/DX12 and Linux Vulkan jobs passed at `ece8ddfb88969e43503a8ab3f37315718383b2ac` |
+
+`lab-test` selects lab binary tests and the compatibility target; it is not a
+claim that every standalone library suite, opt-in desktop test or external
+producer was exercised. Keep dedicated keyed/shared-handle ownership tests,
+IME and assistive-technology acceptance, physical display/calibration checks,
+new backend features and sustained performance measurements separately scoped.
+Windows NV12, decoder/pool APIs, playback and recovery remain tracked in
+[issue #134](https://github.com/gpui-luma-dev/xgpui/issues/134). Linux and browser
+results retain their own host/backend scope.
+
 ## Linux
 
 Build in a native Linux environment with a working graphical session and Vulkan

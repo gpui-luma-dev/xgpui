@@ -264,7 +264,9 @@ seams as phase changes. The Images button returns to media tests.
 Headless captures have the same three rows/columns, fixed at 68% trim and a 16/8
 pattern with phase 5. They check visible pixel coverage and decreasing coverage
 from original to trim to dashes. Metal and wgpu capture paths are available;
-native Windows/Linux execution remains outstanding.
+Windows native labs and `just lab-test` passed in owner testing on 2026-11-04.
+Dedicated capture commands retain their own artifact evidence; Linux runtime
+acceptance remains separate. See [Windows validation](../LOCAL_DEVELOPMENT.md#windows-validation).
 
 
 ### Browser contour-effects comparison

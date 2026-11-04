@@ -131,6 +131,7 @@ The integrated color lab passes 24 macOS tests covering independent numerical
 references, ICC interpretation, FP16 storage, pinned WebKit assets, photo loading,
 and native-versus-preview Metal composition. Live macOS verification covers both
 tabs, chromaticity fill, and xy/u′v′ state retention when switching workspaces.
-The binary and tests cross-check for Windows; Windows/Linux runtime acceptance
-and physical monitor accuracy remain unverified. Source provenance, shared asset
+The owner also confirmed all native labs and `just lab-test` passed on Windows
+on 2026-11-04; see [Windows validation](../LOCAL_DEVELOPMENT.md#windows-validation).
+Linux runtime acceptance and physical monitor accuracy remain separate. Source provenance, shared asset
 attribution and exact test scope are recorded in the color-lab README.

@@ -68,8 +68,9 @@ cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ex
 cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab
 ```
 
-Cross-compile, HLSL generation and extension Clippy pass. Windows driver/WARP,
-interactive rendering, hardware performance and device-loss runtime acceptance
-remain outstanding. WARP/readback timing is not hardware GPU timing.
+Windows native paint/gamut backend CI passed on 2026-10-25; the owner also
+confirmed all native labs and `just lab-test` passed on Windows on 2026-11-04.
+See [Windows validation](../LOCAL_DEVELOPMENT.md#windows-validation). Hardware
+performance measurements and device-loss recovery remain separate acceptance work. WARP/readback timing is not hardware GPU timing.
 
 [wgpu adapter](portable-paints.md) · [WGSL](portable-wgsl-v1.md)
