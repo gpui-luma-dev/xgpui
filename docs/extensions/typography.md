@@ -332,7 +332,7 @@ physical display appearance or sustained resource behavior.
 | Desktop interaction / exact OS clipboard | Unverified | Unverified | Owner reported native demo working on 2026-11-04; detailed interaction/clipboard coverage not recorded |
 | Rendering / scale / reduced motion | Unverified | Unverified | Retina visual and headless pixel checks passed; simulated 1x/1.5x/2x/3x logical geometry passed; other physical scales unavailable |
 | Assistive-technology reading / focus / selection | Unverified | Unverified | Owner confirmed VoiceOver focus/reading and complete mouse selection read via VO-Fn-F6; native Unicode and hidden-source selection actions passed |
-| Repeated-animation resource behavior | Unverified | Unverified | 65-second Metal observation passed; allocations stable after warm-up (details below) |
+| Repeated-animation resource behavior | Unverified | Unverified | Offscreen Metal allocations stable; 180s native wave/glow + 30s paused observation showed no continuing RSS growth and stopped animation redraws |
 
 Windows, Linux and macOS are equal acceptance targets. A missing host is a
 verification gap. The Windows lab report is recorded in issue #28's November 4
@@ -433,6 +433,35 @@ The normal focused suite passed 15 tests with this resource observation ignored;
 the observation was then run explicitly and passed. Windows validation is deferred
 at the owner's request; Linux acceptance remains unverified. Additional physical
 display scales and exhaustive VoiceOver speech combinations remain explicit limits.
+
+### Native-window resource observation — 2026-11-04
+
+Ran the actual `shader-examples --example typography` desktop window on the same
+macOS host, based on local commit `51e1ab4`. Temporary instrumentation started
+Wave with the demo's default gradient/glow, counted view renders, paused playback
+at 180 seconds, then quit normally after another 30 seconds. The source was
+restored and the ordinary demo rebuilt; no monitoring behavior remains enabled.
+`ps` sampled process RSS and CPU every 15 seconds. Reduced motion was off.
+
+| Elapsed | View renders | RSS (KiB) | Process CPU (%) | State |
+| --- | --- | --- | --- | --- |
+| 15s | 924 | 115,936 | 48.0 | Wave/glow |
+| 30s | 1,867 | 115,936 | 46.1 | Wave/glow |
+| 60s | 3,025 | 116,160 | 26.4 | Wave/glow |
+| 120s | 4,159 | 115,696 | 30.2 | Wave/glow |
+| 165s | 5,282 | 115,696 | 28.2 | Wave/glow |
+| 180s | 5,469 | 115,680 | 0.0 | Pause boundary |
+| 195s | 5,470 | 115,712 | 0.7 | Paused |
+| 210s | 5,470 | 115,744 | 0.6 | Paused |
+
+RSS across all post-startup samples ranged from 115,680 to 116,416 KiB (about
+113–114 MiB), without a continuing upward trend. CPU readings are instantaneous
+`ps` percentages relative to one core, not GPU usage. Frame cadence varied during
+ordinary desktop operation; this was not a controlled frame-rate benchmark.
+Pausing produced one final redraw and then no additional view renders through
+210 seconds. The process exited normally with code 0. No native-window resource
+regression was observed in this workload. Native GPU allocations were not profiled;
+the separate offscreen Metal measurements above remain the GPU-allocation evidence.
 
 ### Native acceptance procedure
 
