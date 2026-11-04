@@ -41,6 +41,53 @@ for targets, launch commands and why the lab package is unpublished.
 launch an application. See [Local Development](docs/LOCAL_DEVELOPMENT.md) for Windows,
 Linux and macOS build/run commands, or [build harness details](docs/BUILDING.md).
 
+## Crate release preflight
+
+Run `just release-check` (Python 3.11+) while developing or before asking an
+agent to prepare a release. It detects crate changes, including staged,
+unstaged and non-ignored new files, and checks crates.io for versions that
+would prevent those changes from being published.
+
+The tracking epoch is `release-2026-11-03-712732c7cf07`, configured in
+`scripts/release-check.json`. Override it with `just release-check --epoch TAG`.
+The epoch is a trusted completed release baseline. For each crate, a later
+non-draft GitHub release advances that baseline only when its notes contain a
+three-column verification row (`Crate | Version | Result` or `Verification`)
+with `published-verified` or `already-published`, the version agrees with the
+tagged manifest, and that version exists on crates.io. Release agents must
+retain these verification rows when editing release notes. Partial/draft or
+unverified releases never advance the baseline. Tags must be available locally;
+run `git fetch origin --tags` when the command reports a missing release tag.
+
+Results distinguish:
+
+- **Version bump required:** crate files changed, or an internal dependency
+  changed, but the current version is already published.
+- **Dependency pin update required:** a candidate has a new version but still
+  references an old internal dependency version.
+- **Ready for new version:** changes have an unpublished version and matching
+  internal pins. This is ready for release preparation, not publication approval.
+- **Unchanged:** no changes since that crate's verified baseline; no bump needed.
+
+The command exits successfully when no changes would be missed, including when
+there is nothing to release. Missing registry/history checks and disabled
+publication for changed candidates fail the check. Version bumps remain a
+review decision; this command never edits versions or uploads anything.
+
+Change detection conservatively covers crate directories (including tests,
+examples and READMEs, excluding Cargo.lock), explicitly configured external
+readme/license/build files, and transitive internal dependencies, including
+optional/target-specific and versioned development dependencies. Root website
+and tooling edits alone do not require crate bumps. This is a Git-based change
+check, not a normalized archive comparison; other shared inputs outside crate
+directories need release review. Builds, API compatibility and exact payload
+verification remain separate release steps.
+
+The check reads public GitHub release metadata and crates.io metadata without
+publication credentials. Use `just release-check --report /tmp/xgpui-release-check.json`
+to save the machine-readable report outside the checkout, or `--json` for JSON
+on stdout. Without just, run `python3 scripts/release_check.py`.
+
 ## Documentation website
 
 ```sh

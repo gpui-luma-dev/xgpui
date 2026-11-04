@@ -11,6 +11,10 @@ options := "--profile " + profile + " --locked --config .cargo/validation.toml -
 default:
     @just --justfile "{{ justfile() }}" --list
 
+# Detect changed crates needing version bumps or dependency pin updates.
+release-check *args:
+    {{ python }} scripts/release_check.py "$@"
+
 # Preview all ignored Cargo outputs, including standalone crates and old app paths.
 clean-preview:
     {{ python }} scripts/clean_build_outputs.py
