@@ -1492,41 +1492,60 @@ mod tests {
     #[test]
     fn foreground_work_excludes_setup_before_trace_scope_starts() {
         let (journal, _journal_guard) = install_test_foreground_journal(1024, 64);
-        let dispatcher = Arc::new(ThreadedDispatcher::new());
-        let foreground_executor = ForegroundExecutor::new(dispatcher);
-
-        // Fixture/setup work that must not be attributed to the measurement:
-        // a long poll recorded before the trace scope (and its journal
-        // collector) is created.
-        let setup_task = foreground_executor.spawn(async move {
-            std::thread::sleep(Duration::from_millis(80));
-        });
-        run_task_to_completion(&foreground_executor, setup_task);
+        // Exercise the real journal/scope/report path with explicit poll timings.
+        // Sleeping tasks also measure runner scheduling delays, which can exceed
+        // any small upper bound even when setup is correctly excluded.
+        let start = Instant::now();
+        let setup_end = start + Duration::from_millis(80);
+        let measured_end = setup_end + Duration::from_millis(10);
+        let poll = |start, end| profiler::TaskTiming {
+            location: std::panic::Location::caller(),
+            spawned: scheduler::SpawnTime(start),
+            start,
+            end: profiler::YieldTime(end),
+        };
+        let mut all_polls = journal.collector();
+        profiler::journal::begin_foreground_turn();
+        profiler::journal::record_task_poll(poll(start, setup_end));
 
         let trace_scope = TraceScope::start(journal.collector());
-
-        let measured_task = foreground_executor.spawn(async move {
-            std::thread::sleep(Duration::from_millis(10));
-        });
-        run_task_to_completion(&foreground_executor, measured_task);
-
+        profiler::journal::begin_foreground_turn();
+        profiler::journal::record_task_poll(poll(setup_end, measured_end));
         let events = trace_scope.finish();
+        let measured: Vec<_> = events.foreground_events().collect();
+        assert_eq!(
+            measured.len(),
+            1,
+            "only the measured poll belongs to the scope"
+        );
+        let ForegroundEvent::TaskPoll(timing) = measured[0] else {
+            panic!("expected the measured task poll, got {:?}", measured[0]);
+        };
+        assert_eq!(timing.start, setup_end);
+        assert_eq!(timing.end.0, measured_end);
+
+        // Verify the setup poll really was recorded, rather than passing because
+        // tracing was disabled before the scope started.
+        let recorded_polls = all_polls
+            .collect_unseen()
+            .entries
+            .into_iter()
+            .filter(|entry| {
+                matches!(
+                    entry,
+                    ForegroundJournalEntry::Event(ForegroundEvent::TaskPoll(_))
+                )
+            })
+            .count();
+        assert_eq!(recorded_polls, 2);
+
         let report = BenchReport::default();
         report.record_foreground_events(events.foreground_events());
-
         let summary = report
             .foreground_work()
-            .expect("the measured task's poll should be reported");
-        assert!(
-            summary.max < Duration::from_millis(40),
-            "setup work's 80ms poll must not leak into the measured summary, got {:?}",
-            summary.max
-        );
-        assert!(
-            summary.total < Duration::from_millis(40),
-            "setup work's 80ms poll must not leak into the measured total, got {:?}",
-            summary.total
-        );
+            .expect("the measured poll is reported");
+        assert_eq!(summary.count, 1);
+        assert_eq!(summary.total, Duration::from_millis(10));
     }
 
     #[test]

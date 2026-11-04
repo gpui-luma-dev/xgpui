@@ -1,6 +1,127 @@
 # What's new
 
-## Latest
+## Latest — November 4, 2026 pre-release
+
+Changes since [release-2026-11-03-deba615a1d9c](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-03-deba615a1d9c):
+better keyboard and macOS accessibility focus for selectable typography, a shared
+moving video fixture on Windows and macOS, an integrated native color lab, and
+release checks that catch changed crates needing new versions. **This is a
+pre-release summary of merged changes, not a publication announcement.**
+
+### Selectable typography: keyboard focus and VoiceOver
+
+**Tab and Shift+Tab now reach and leave the selectable text field.** The demo
+handles focus traversal and the retained text handle is a tab stop. On macOS,
+the accessibility adapter now follows the actual first-responder view and starts
+with the correct window-focus state, allowing VoiceOver to reach and read the
+message. Rapid mouse drags commit the final release position, avoiding a stale
+selection endpoint without changing stationary double/triple-click selection.
+([Typography fixes #136](https://github.com/gpui-luma-dev/xgpui/pull/136))
+
+The existing typewriter, wave, scramble, gradient and glow effects keep the real
+source intact. Native accessibility checks selected combining accents and joined
+emoji exactly, including the complete source at zero reveal. VoiceOver's
+read-current-selection command read the entire mouse selection; interrupted
+character announcements during dragging do not indicate lost source text.
+
+macOS checks include 15 focused tests, focus-traversal and platform tests, Retina
+inspection, simulated 1x/1.5x/2x/3x selection geometry, and resource observations.
+A three-minute native wave/glow run stayed around 113–114 MiB of resident memory;
+pausing stopped animation redraws and brought CPU below 1%. A separate offscreen
+Metal run kept GPU allocations stable. These are bounded observations, not a
+performance guarantee. Typography-specific Windows acceptance is deferred, Linux
+acceptance remains unverified, and other physical display scales were not tested.
+Try `just lab-shader --example typography` and see the
+[typography guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/typography.md).
+
+### One moving video fixture on Windows and macOS
+
+The native media lab now uses the **same generated scrolling bands, bouncing
+puck, frame indices and timestamps** on both platforms. Motion is clearly visible
+while fixed color/alpha reference regions remain available for checking output.
+The macOS adapter copies the shared BGRA rows to IOSurfaces and derives its NV12
+variants from the same scene; Windows presents immutable, same-device D3D11 BGRA
+textures. Both placements reuse a presented snapshot.
+
+Windows WARP capture checks cover color, alpha, corners, clipping, exposure,
+resize/reuse, frame replacement and teardown. Shared fixture checks cover motion,
+BGRA source agreement and NV12 matrix/range vectors. Pause, burst, latest-frame
+replacement and restart exercise stream lifecycle behavior. Run
+`just lab-media --video` and see the [media guide](#media-pipeline).
+This lab adds no decoder or new published video API; foreign-device/shared-handle
+producers, Windows YUV conversion, playback clocks and recovery remain separate.
+([Native lab work #135](https://github.com/gpui-luma-dev/xgpui/pull/135))
+
+### Color workspaces and consistent lab navigation
+
+**The native color app now contains Swatches and Chromaticity workspaces**, with
+settings retained when switching between them. Chromaticity brings CIE xy/u′v′
+charts, primaries and transfer functions, gamut/luminance previews, FP16 storage
+and ICC inspection, hidden-symbol comparisons and the Italy photo comparison
+into this repository. It reuses the checked-in datasets, profiles, photographs
+and attribution; no sibling checkout or runtime asset download is required.
+`just lab-color --chromaticity` opens it directly. The integrated app has 24
+recorded macOS numerical, fixture and composition tests. See [color labs](#color-labs).
+
+The root commands now consistently use `just lab-canvas`, `lab-media`,
+`lab-shader`, `lab-paint`, `lab-gamut`, `lab-color`, `lab-text` and `lab-svg`;
+existing short commands remain aliases. `lab-parley` selects the shared text lab,
+with `--backend parley` choosing that backend. `just lab-build` builds native labs
+and `just lab-test` runs their unit/compatibility tests; native-window tests remain
+opt-in. Shader examples accept an explicit `--example` selector.
+
+The card canvas and Mandelbrot now share pointer-anchored wheel, two-finger scroll
+and pinch zoom behavior. Drag empty canvas background to pan; Space+left drag or
+middle drag also pans when starting over a card. Selection, snapping and overview
+controls remain available. See [canvas](#canvas) and [local development](#local-development).
+
+### Compatibility, release checks and platform evidence
+
+- **Media builds without a native GPU backend again.** The texture output match
+  now compiles when all backend variants are disabled, fixing the minimal Linux
+  configuration. CI explicitly checks that configuration.
+  ([Media fix #129](https://github.com/gpui-luma-dev/xgpui/pull/129))
+- **Release preflight:** `just release-check` detects crate and transitive internal
+  dependency changes since a verified release baseline, includes working-tree
+  changes, and checks crates.io version availability and internal pins. It reports
+  required bumps, stale pins, unpublished candidates and blocked checks without
+  editing versions or publishing. Verified per-crate release evidence can advance
+  the baseline. See the [release-check instructions](https://github.com/gpui-luma-dev/xgpui#crate-release-preflight).
+  ([Release tooling #132](https://github.com/gpui-luma-dev/xgpui/pull/132))
+- **Windows native labs:** the owner confirmed all native labs and `just lab-test`
+  passed on November 4, including the moving video demo. This supplements builds;
+  it does not certify every standalone library suite, assistive technology,
+  external producer or physical wide-gamut display. See
+  [Windows validation](LOCAL_DEVELOPMENT.md#windows-validation).
+- **Reliable benchmark scope tests:** setup exclusion is checked with explicit
+  recorded poll timings and exact scope membership, avoiding flaky upper limits
+  caused by hosted-runner scheduling delays. Runtime measurement is unchanged.
+- **Build and documentation upkeep:** corrected the native input example's test
+  initialization, refreshed normalized version metadata, documented local website
+  preview, and corrected immutable release-source and color-lab guide links.
+  The merged work passed native macOS/Windows/Linux CI, browser shader builds,
+  iOS simulator compilation and repository/documentation checks.
+
+### Prepared crate versions
+
+The following patch versions and their internal dependency pins are prepared for
+the next release. **These changes do not themselves publish crates.**
+
+| Crates | Prepared version |
+| --- | --- |
+| `xgpui`, `xgpui-linux`, `xgpui-platform`, `xgpui-web`, `xgpui-wgpu`, `xgpui-windows` | 2.0.1 |
+| `xgpui-apple`, `xgpui-macos` | 3.0.1 |
+| `xgpui-gamut`, `xgpui-parley`, `xgpui-svg`, `xgpui-canvas` | 0.3.1 |
+| `xgpui-media` | 0.5.1 |
+| `xgpui-shader` | 0.4.1 |
+| `xgpui-ios` | 1.26.3 |
+
+`xgpui-color` remains 0.3.0 and `xgpui-macros` remains 1.0.1. Labs remain
+unpublished. External dependency versions and checksums are unchanged by these
+patch-version updates. The release preflight reports all 15 changed candidates
+with unpublished versions and matching pins.
+
+## November 3, 2026
 
 Since the [October 31, 2026 release](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-10-31-ed4469267251),
 XGPUI has gained an upstream framework update, more reliable Metal rendering,
