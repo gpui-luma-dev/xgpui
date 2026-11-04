@@ -79,7 +79,7 @@ build. Chromaticity flags select that workspace automatically. Existing
 `lab-chromaticity` / `chromaticity` recipes forward to the local color lab;
 no sibling checkout is needed. State is retained when switching tabs.
 `lab-gamut` remains the separate native wide-output/compositing lab.
-See the [color-lab README](../../apps/xgpui-ext-lab/color-lab/README.md)
+See the [color-lab README](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/color-lab/README.md)
 for source provenance, fixtures and platform/test scope.
 
 ## Read the controls in order
