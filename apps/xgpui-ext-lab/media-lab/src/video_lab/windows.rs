@@ -24,7 +24,7 @@ use std::{
 };
 use xgpui_media::VideoFrame;
 
-use super::windows_pattern::{self, COLORS, HEIGHT, WIDTH};
+use super::pattern::{self, COLORS, HEIGHT, WIDTH};
 
 #[derive(Debug)]
 struct Imported {
@@ -42,7 +42,7 @@ pub(super) struct Snapshot {
 impl Snapshot {
     pub(super) fn new(index: u64) -> Arc<Self> {
         Arc::new(Self {
-            pixels: windows_pattern::pixels(index),
+            pixels: pattern::pixels(index),
             imported: Mutex::new(None),
             initializations: AtomicUsize::new(0),
         })

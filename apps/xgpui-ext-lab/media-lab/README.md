@@ -73,13 +73,24 @@ visible and decreasing coverage. See the SVG web guide for bounds and semantics.
 
 ## Native video presentation (macOS Metal / Windows D3D11)
 
+Both platforms use one shared frame generator in `video_lab/pattern.rs`: scrolling
+diagonal bands and a bouncing puck, with fixed color/alpha reference areas.
+BGRA pixels, frame indices, timestamps and controls match across hosts. Only the
+native buffer/presentation adapters differ. macOS copies the shared rows into
+fresh IOSurfaces; Windows initializes source-sized D3D11 textures from them.
+No published-crate API or renderer change is needed for these lab fixtures.
+
 ```sh
 just --justfile apps/xgpui-ext-lab/media-lab/justfile video
 just --justfile apps/xgpui-ext-lab/media-lab/justfile video-capture
 ```
 
 On macOS, the Video surfaces button opens a generated ~30 fps IOSurface source. Format
-cycles BGRA8 and NV12 full/video range using BT.601/BT.709. Both
+cycles BGRA8 and NV12 full/video range using BT.601/BT.709. NV12 planes are derived
+from the same source RGB and animation, with averaged 2×2 chroma. NV12 has no
+alpha channel, so its source is explicitly opaque; choose BGRA on both hosts
+when comparing transparency. Quantization/chroma subsampling can change NV12
+edge pixels without changing the underlying scene. Both
 viewports share one snapshot per render. Pause holds the displayed frame while
 production continues; Burst 120 replaces pending frames, Resume picks the latest,
 and Stop retains the final frame. Restart creates a fresh source. Opacity and
@@ -91,7 +102,8 @@ texture view without a staging upload or display-sized intermediate. This is a
 presentation test, not a decoder or A/V playback clock. Native NV12 samples luma
 and chroma in the compositor without an intermediate conversion target. Additional
 YUV formats/backends, HDR and premultiplied-alpha frames remain pending. Headless
-capture validates all five modes for RGB values, corners, clipping, opacity and
+capture validates all five modes for motion, RGB values, alpha/opaque references,
+corners, clipping, opacity and
 retained import reuse, saving the requested BGRA PNG and four NV12 sibling PNGs.
 No sample file is required.
 
@@ -117,7 +129,7 @@ just lab-test video_lab:: -- --test-threads=1
 ```
 
 Windows now has a generated ~30 fps BGRA8 source using native D3D11/DXGI.
-Its center band has scrolling diagonal stripes and a large bouncing puck that
+The shared center band has scrolling diagonal stripes and a large bouncing puck that
 crosses the image. The upper color bars and lower alpha reference area remain
 fixed for pixel checks; pause should visibly freeze the motion, and resume should
 show the newest position. Both previews must show the same moving frame.
@@ -141,8 +153,10 @@ signals and joins its worker, while a stopped stream can retain its last frame.
 Headless capture uses D3D11 WARP and checks BGRA colors, straight alpha, corners,
 linear exposure, inherited opacity, clipping, placement/resize reuse and teardown.
 It also checks that replacing a frame updates more than a quarter of the output.
-A host-independent fixture test verifies that substantial motion leaves all
-reference rows unchanged across frames.
+Host-independent fixture tests verify that substantial motion leaves all
+reference rows unchanged and that NV12 encoding matches fixed matrix/range
+vectors. The macOS adapter test compares IOSurface rows byte-for-byte with the
+same BGRA source consumed by Windows, including after later frames are allocated.
 Additional tests cover pause/burst/latest-frame replacement, retained snapshots,
 producer closure and restart. The Windows apps workflow builds the media lab and
 runs these tests. Default video capture output uses the system temporary directory

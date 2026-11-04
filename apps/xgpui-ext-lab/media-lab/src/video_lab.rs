@@ -1,7 +1,9 @@
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
+mod pattern;
 #[cfg(target_os = "windows")]
 mod windows;
-#[cfg(any(target_os = "windows", test))]
-mod windows_pattern;
 
 use crate::{model::Lab, ui::button};
 use anyhow::Result;
@@ -42,13 +44,13 @@ impl SourceFormat {
         match self {
             Self::Bgra => "BGRA8",
             #[cfg(target_os = "macos")]
-            Self::Full601 => "NV12 full · BT.601",
+            Self::Full601 => "NV12 opaque · full · BT.601",
             #[cfg(target_os = "macos")]
-            Self::Video601 => "NV12 video · BT.601",
+            Self::Video601 => "NV12 opaque · video · BT.601",
             #[cfg(target_os = "macos")]
-            Self::Full709 => "NV12 full · BT.709",
+            Self::Full709 => "NV12 opaque · full · BT.709",
             #[cfg(target_os = "macos")]
-            Self::Video709 => "NV12 video · BT.709",
+            Self::Video709 => "NV12 opaque · video · BT.709",
         }
     }
     #[cfg(target_os = "macos")]
@@ -63,14 +65,7 @@ impl SourceFormat {
     }
     #[cfg(target_os = "macos")]
     fn frame(self, index: u64) -> Result<xgpui_media::CoreVideoFrame> {
-        use gpui_apple::custom_draw::core_video::{Nv12Matrix, test_frame, test_nv12_frame};
-        match self {
-            Self::Bgra => test_frame(320, 180, index),
-            Self::Full601 => test_nv12_frame(320, 180, index, Nv12Matrix::Bt601, false),
-            Self::Video601 => test_nv12_frame(320, 180, index, Nv12Matrix::Bt601, true),
-            Self::Full709 => test_nv12_frame(320, 180, index, Nv12Matrix::Bt709, false),
-            Self::Video709 => test_nv12_frame(320, 180, index, Nv12Matrix::Bt709, true),
-        }
+        macos::frame(self, index)
     }
     fn video_frame(self, index: u64) -> Result<xgpui_media::VideoFrame> {
         let timestamp = std::time::Duration::from_micros(index * 33_333);
@@ -518,6 +513,32 @@ mod native {
             pixels.get_pixel(4, 4).0[..3] == [0, 0, 0],
             "rounded corner coverage"
         );
+        let reference = pixels.get_pixel(264, 124).0;
+        let expected = if format == SourceFormat::Bgra {
+            [112u8, 96, 48]
+        } else {
+            [224, 192, 96]
+        };
+        ensure!(
+            (0..3).all(|i| reference[i].abs_diff(expected[i]) <= 3),
+            "{} alpha/opaque reference: {reference:?}",
+            format.label()
+        );
+        let next = format.frame(8)?;
+        scene.custom_draws[0].content =
+            VideoFrame::core_video(next, Duration::from_millis(264)).content();
+        let moving = renderer.render_scene_to_image(&scene, extent)?;
+        let changed = pixels
+            .pixels()
+            .zip(moving.pixels())
+            .filter(|(a, b)| a != b)
+            .count();
+        ensure!(
+            changed > (pattern::WIDTH * pattern::HEIGHT / 4) as usize,
+            "{} playback must update the shared animated region: {changed} pixels",
+            format.label()
+        );
+        scene.custom_draws[0].content = video.content();
         scene.custom_draws[0].opacity = 0.5;
         let alpha = renderer.render_scene_to_image(&scene, extent)?;
         ensure!(
@@ -539,7 +560,7 @@ mod native {
         );
         pixels.save(png)?;
         println!(
-            "Saved {}: {} IOSurface; RGB/range/matrix, clipping, corners, opacity and resize reuse passed.",
+            "Saved {}: {} IOSurface; shared motion, RGB/range/matrix, alpha/opaque reference, clipping, corners, opacity and resize reuse passed.",
             png.display(),
             format.label()
         );
