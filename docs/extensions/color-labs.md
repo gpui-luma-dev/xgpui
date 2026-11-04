@@ -60,27 +60,27 @@ The native lab is needed to compare actual wide output or inspect GPU readback.
 
 ## Run the native chromaticity lab
 
-The standalone app lives in the sibling `xgpui-lab` checkout, outside the
-unpublished in-repository `xgpui-ext-lab` package. Keep them distinct when choosing
-commands. From `xgpui`:
+The native chromaticity workspace is integrated into this repository's
+`color-lab` binary. Run it from the root, then switch between **Swatches** and
+**Chromaticity** with the tabs:
 
 ```sh
-just profile=dev chromaticity
-just profile=dev chromaticity --icc-sampled
-just chromaticity-test
+just lab-color
+just lab-color --chromaticity
+just profile=dev lab-color --icc-sampled
+just lab-color --uv --native-fill
+just lab-color --photo
+just lab-color --help
+just lab-color-test
 ```
 
-From the sibling `xgpui-lab` directory:
-
-```sh
-just chromaticity
-just chromaticity --icc-parametric
-just chromaticity-test
-```
-
-The root recipe defaults to a release build; `profile=dev` selects a development
-build. Clone the sibling repository beside xgpui for root delegation to work.
-These commands require the matching local API changes in both repositories.
+The launch recipes default to release; `profile=dev` selects a development
+build. Chromaticity flags select that workspace automatically. Existing
+`lab-chromaticity` / `chromaticity` recipes forward to the local color lab;
+no sibling checkout is needed. State is retained when switching tabs.
+`lab-gamut` remains the separate native wide-output/compositing lab.
+See the [color-lab README](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/color-lab/README.md)
+for source provenance, fixtures and platform/test scope.
 
 ## Read the controls in order
 
@@ -127,9 +127,11 @@ physical display accuracy. Windows/Linux floating-point readback is unsupported.
 
 ## Validation status
 
-macOS Metal live checks pass for all four published profile selectors at
-half-alpha Green, and for sampled sRGB2014 Mid gray directly and through nested
-blur. Its decoded values, XYZ and small neutral offset match the displayed
-reference precision. The full metadata cycle and returning to named input also
-work. Detailed fixtures and results remain in validation documents beside the
-implementations; runtime evidence is kept separate from cross-compilation.
+The integrated color lab passes 24 macOS tests covering independent numerical
+references, ICC interpretation, FP16 storage, pinned WebKit assets, photo loading,
+and native-versus-preview Metal composition. Live macOS verification covers both
+tabs, chromaticity fill, and xy/u′v′ state retention when switching workspaces.
+The owner also confirmed all native labs and `just lab-test` passed on Windows
+on 2026-11-04; see [Windows validation](../LOCAL_DEVELOPMENT.md#windows-validation).
+Linux runtime acceptance and physical monitor accuracy remain separate. Source provenance, shared asset
+attribution and exact test scope are recorded in the color-lab README.

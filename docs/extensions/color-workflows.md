@@ -60,7 +60,7 @@ the source numbers.
 | Named/custom color math, curve evaluation, XYZ and mapping | CPU Rust | The same Rust compiled to Wasm |
 | Bounded RGB ICC parsing | Optional `xgpui-color/icc` | Bundled-profile demo uses the same optional parser |
 | Explicit P3/Rec.2020 CPU pixel packing | Media pipeline | Pixels + metadata demo shows actual CPU FP16 bytes |
-| Wide-gamut composition/presentation | Metal implemented and runtime checked; Windows implemented with native acceptance still outstanding | Current GPUI demo canvas is an explicit sRGB preview |
+| Wide-gamut composition/presentation | Metal runtime checked; Windows native labs and lab-test passed (owner, 2026-11-04); physical display measurement remains separate | Current GPUI demo canvas is an explicit sRGB preview |
 | GPU FP16 composition readback | On-demand Metal validation | Not provided by these browser demos |
 | Physical display measurement | Requires external measurement | Not established by a browser capability query |
 

@@ -154,7 +154,7 @@ cargo test --config .cargo/validation.toml \
 | CPU/Naga | vec3 padding, bad parameters, subset rejection, source diagnostics, target translation |
 | Metal + wgpu/Metal | Alpha, opacity, clipping, logical coordinates, logical-size cache invalidation |
 | Snapshots | Parameter immutability, sharing, unused uniforms |
-| Windows/Vulkan | Runtime acceptance outstanding; translation ≠ driver execution |
+| Windows/Vulkan | Native paint/gamut backend CI passed on 2026-10-25; Windows labs/lab-test passed in owner testing on 2026-11-04. See [scope](../LOCAL_DEVELOPMENT.md#windows-validation). |
 
 App source: `apps/xgpui-ext-lab/paint-lab/src/portable.rs`, `src/shaders/portable-wash.wgsl`.
 [Native D3D11](native-dx11-paints.md) · [wgpu adapter](portable-paints.md)

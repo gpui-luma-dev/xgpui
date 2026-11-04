@@ -15,14 +15,21 @@ From the repository root:
 ```sh
 just lab-build                         # Build native labs and benchmarks.
 just lab-test                          # Run unit/compatibility tests.
-just media                             # Open the media lab.
-just shaders                           # Open the shader examples.
-just quad-bench --headless --cpu-only   # Run a bounded CPU benchmark.
+just lab-media                         # Open the media lab.
+just lab-shader                        # Open the shader examples.
+just lab-quad-bench --headless --cpu-only   # Run a bounded CPU benchmark.
 just web-build                         # Build and package both browser demos.
 ```
 
-Existing recipes also include `paints`, `gamut`, `color`, `text`, `svg`, and
-`color-field-bench`. Target names and output executable names are unchanged.
+Each extension has a `lab-*` recipe: `lab-canvas`, `lab-media`, `lab-shader`,
+`lab-paint`, `lab-gamut`, `lab-color`, `lab-text` (also `lab-parley`) and `lab-svg`.
+Use `just lab-media --help`, or the corresponding lab's `--help`, to see all app
+options. Every recipe forwards arguments, including quoted file paths. The old
+short names and `*-lab` names remain aliases. Native launch recipes enable runtime shaders,
+portable shaders and wgpu; platform-specific capabilities still apply.
+Target names and output executable names are unchanged. `lab-color` includes
+Swatches/Chromaticity tabs and accepts `--chromaticity`; its old chromaticity
+recipes now run locally without a sibling checkout. See [Color lab](color-lab/README.md).
 
 Select one executable directly:
 

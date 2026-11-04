@@ -1,7 +1,7 @@
 use gpui::*;
 
 #[::core::prelude::v1::test]
-fn existing_complete_window_literals_need_no_new_fields() {
+fn explicit_window_options_preserve_default_color_mode() {
     let options = WindowOptions {
         window_bounds: None,
         titlebar: None,
@@ -20,8 +20,10 @@ fn existing_complete_window_literals_need_no_new_fields() {
         window_decorations: None,
         icon: None,
         tabbing_identifier: None,
+        use_display_p3: false,
     };
     assert!(!options.show);
+    assert!(!options.use_display_p3);
 }
 
 #[::core::prelude::v1::test]

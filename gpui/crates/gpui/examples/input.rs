@@ -898,6 +898,7 @@ mod tests {
             last_layout: None,
             last_bounds: None,
             is_selecting: false,
+            scroll_x: px(0.),
         }
     }
 

@@ -6,6 +6,7 @@ set positional-arguments
 profile := "release"
 python := if os() == "windows" { "python" } else { "python3" }
 options := "--profile " + profile + " --locked --config .cargo/validation.toml --target-dir target"
+lab-features := "--features runtime-shaders,portable-shaders,wgpu"
 
 # List sample apps and development commands without launching anything.
 default:
@@ -24,52 +25,79 @@ clean:
     {{ python }} scripts/clean_build_outputs.py --apply
 
 # Experimental spatial viewport with 10,000 selectable cards.
-canvas-lab *args:
-    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin canvas-lab -- "$@"
+lab-canvas *args:
+    cargo run {{ options }} {{ lab-features }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin canvas-lab -- "$@"
 
 # Image mipmapping, filters, GPU surfaces and path effects (generated samples).
-media *args:
-    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin media-lab -- "$@"
+lab-media *args:
+    cargo run {{ options }} {{ lab-features }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin media-lab -- "$@"
 
 # Six shader examples and typography; select an example in the window.
-shaders *args:
-    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shader-examples -- "$@"
+lab-shader *args:
+    cargo run {{ options }} {{ lab-features }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shader-examples -- "$@"
 
 # Paints, gradients, brushes and layer effects.
-paints *args:
-    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab -- "$@"
+lab-paint *args:
+    cargo run {{ options }} {{ lab-features }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab -- "$@"
 
 # Native wide-SDR gamut comparison.
-gamut *args:
-    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab -- "$@"
+lab-gamut *args:
+    cargo run {{ options }} {{ lab-features }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab -- "$@"
 
-# Color conversion and sRGB/P3 reference swatches.
-color *args:
-    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab -- "$@"
+# Color swatches and CIE chromaticity; --help lists workspace options.
+lab-color *args:
+    cargo run {{ options }} {{ lab-features }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab -- "$@"
 
-# Chromaticity diagrams, FP16 inspection and native-wide comparisons (sibling xgpui-lab).
-chromaticity *args:
-    just --justfile ../xgpui-lab/justfile --set profile "{{ profile }}" chromaticity "$@"
+# Existing short commands remain available; every alias forwards app options.
+alias media := lab-media
+alias shaders := lab-shader
+alias paints := lab-paint
+alias gamut := lab-gamut
+alias color := lab-color
+alias text := lab-text
+alias svg := lab-svg
+# Parley shares the text comparison lab; select --backend parley for Parley only.
+alias lab-parley := lab-text
 
-# Numerical and dataset checks for the sibling chromaticity lab.
-chromaticity-test *args:
-    just --justfile ../xgpui-lab/justfile chromaticity-test "$@"
+alias canvas-lab := lab-canvas
+alias media-lab := lab-media
+alias shader-lab := lab-shader
+alias paint-lab := lab-paint
+alias gamut-lab := lab-gamut
+alias color-lab := lab-color
+alias text-lab := lab-text
+alias svg-lab := lab-svg
+alias quad-bench := lab-quad-bench
+alias color-field-bench := lab-color-field-bench
+alias chromaticity := lab-chromaticity
+alias chromaticity-test := lab-color-test
+alias lab-chromaticity-test := lab-color-test
+alias parley-lab := lab-text
+
+# Compatibility shortcut; use lab-color --chromaticity for new commands.
+[private]
+lab-chromaticity *args:
+    @just --justfile "{{ justfile() }}" --set profile "{{ profile }}" lab-color --chromaticity "$@"
+
+# Numerical, ICC, CIE dataset and color workspace checks.
+lab-color-test *args:
+    cargo test {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab --features runtime-shaders,portable-shaders,wgpu "$@"
 
 # Native versus Parley text, paragraphs and scrolling.
-text *args:
-    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin text-lab -- "$@"
+lab-text *args:
+    cargo run {{ options }} {{ lab-features }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin text-lab -- "$@"
 
 # SVG rendering, zoom and scheduling comparisons.
-svg *args:
-    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin svg-lab -- "$@"
+lab-svg *args:
+    cargo run {{ options }} {{ lab-features }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin svg-lab -- "$@"
 
 # Quad rendering benchmark (bounded run by default).
-quad-bench *args:
-    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin quad-bench -- "$@"
+lab-quad-bench *args:
+    cargo run {{ options }} {{ lab-features }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin quad-bench -- "$@"
 
 # Color-field rendering benchmark (bounded run by default).
-color-field-bench *args:
-    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-field-bench -- "$@"
+lab-color-field-bench *args:
+    cargo run {{ options }} {{ lab-features }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-field-bench -- "$@"
 
 # Build the representative core/platform libraries; does not launch an app.
 build *args:

@@ -201,7 +201,7 @@ impl Render for Gallery {
             .child(format!("SVG gallery • {} tiles • {} • {} MiB / element • {:.1}× • {}",self.count,if self.eager{"eager"}else{"visible + overscan"},self.policy.max_output_bytes/MIB,self.zoom,if self.report.is_some(){phase(t)}else{"interactive"}))
             .child("Scroll to explore • hold Command and wheel to zoom • automated reports exercise all elements concurrently")
             .child(div().id("gallery-scroll").h(px(VIEW_HEIGHT)).overflow_y_scroll().track_scroll(&self.scroll)
-                .on_scroll_wheel(cx.listener(|this,event:&ScrollWheelEvent,_,cx| {
+                .on_scroll(cx.listener(|this,event:&ScrollEvent,_,cx| {
                     if event.modifiers.platform {let delta=event.delta.pixel_delta(px(16.));this.zoom=(this.zoom*(-f32::from(delta.y)*0.005).exp()).clamp(0.25,16.);cx.stop_propagation();}
                     cx.notify();
 

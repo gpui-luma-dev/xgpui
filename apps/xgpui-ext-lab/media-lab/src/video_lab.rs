@@ -1,25 +1,40 @@
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
+mod pattern;
+#[cfg(target_os = "windows")]
+mod windows;
+
 use crate::{model::Lab, ui::button};
 use anyhow::Result;
 use gpui::{prelude::*, *};
 use std::path::Path as FilePath;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SourceFormat {
     #[default]
     Bgra,
+    #[cfg(target_os = "macos")]
     Full601,
+    #[cfg(target_os = "macos")]
     Video601,
+    #[cfg(target_os = "macos")]
     Full709,
+    #[cfg(target_os = "macos")]
     Video709,
 }
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 impl SourceFormat {
-    const ALL: [Self; 5] = [
+    const ALL: &'static [Self] = &[
         Self::Bgra,
+        #[cfg(target_os = "macos")]
         Self::Full601,
+        #[cfg(target_os = "macos")]
         Self::Video601,
+        #[cfg(target_os = "macos")]
         Self::Full709,
+        #[cfg(target_os = "macos")]
         Self::Video709,
     ];
     fn next(self) -> Self {
@@ -28,12 +43,17 @@ impl SourceFormat {
     fn label(self) -> &'static str {
         match self {
             Self::Bgra => "BGRA8",
-            Self::Full601 => "NV12 full · BT.601",
-            Self::Video601 => "NV12 video · BT.601",
-            Self::Full709 => "NV12 full · BT.709",
-            Self::Video709 => "NV12 video · BT.709",
+            #[cfg(target_os = "macos")]
+            Self::Full601 => "NV12 opaque · full · BT.601",
+            #[cfg(target_os = "macos")]
+            Self::Video601 => "NV12 opaque · video · BT.601",
+            #[cfg(target_os = "macos")]
+            Self::Full709 => "NV12 opaque · full · BT.709",
+            #[cfg(target_os = "macos")]
+            Self::Video709 => "NV12 opaque · video · BT.709",
         }
     }
+    #[cfg(target_os = "macos")]
     fn slug(self) -> &'static str {
         match self {
             Self::Bgra => "bgra",
@@ -43,19 +63,27 @@ impl SourceFormat {
             Self::Video709 => "nv12-video-709",
         }
     }
+    #[cfg(target_os = "macos")]
     fn frame(self, index: u64) -> Result<xgpui_media::CoreVideoFrame> {
-        use gpui_apple::custom_draw::core_video::{Nv12Matrix, test_frame, test_nv12_frame};
-        match self {
-            Self::Bgra => test_frame(320, 180, index),
-            Self::Full601 => test_nv12_frame(320, 180, index, Nv12Matrix::Bt601, false),
-            Self::Video601 => test_nv12_frame(320, 180, index, Nv12Matrix::Bt601, true),
-            Self::Full709 => test_nv12_frame(320, 180, index, Nv12Matrix::Bt709, false),
-            Self::Video709 => test_nv12_frame(320, 180, index, Nv12Matrix::Bt709, true),
+        macos::frame(self, index)
+    }
+    fn video_frame(self, index: u64) -> Result<xgpui_media::VideoFrame> {
+        let timestamp = std::time::Duration::from_micros(index * 33_333);
+        #[cfg(target_os = "macos")]
+        {
+            Ok(xgpui_media::VideoFrame::core_video(
+                self.frame(index)?,
+                timestamp,
+            ))
+        }
+        #[cfg(target_os = "windows")]
+        {
+            windows::Snapshot::new(index).video_frame(timestamp)
         }
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 mod native {
     use super::*;
     use std::{
@@ -66,23 +94,26 @@ mod native {
         },
         time::{Duration, Instant},
     };
-    use xgpui_media::{VideoFrame, VideoStream, video_frame};
+    #[cfg(target_os = "macos")]
+    use xgpui_media::VideoFrame;
+    use xgpui_media::{VideoStream, video_frame};
     pub struct Demo {
         pub stream: VideoStream,
         stop: Arc<AtomicBool>,
         burst: mpsc::SyncSender<()>,
         error: Arc<Mutex<Option<String>>>,
+        worker: Option<std::thread::JoinHandle<()>>,
     }
     impl Demo {
         pub fn new(format: SourceFormat) -> Result<Self> {
             let (sender, stream) = VideoStream::channel();
-            sender.publish(VideoFrame::core_video(format.frame(0)?, Duration::ZERO))?;
+            sender.publish(format.video_frame(0)?)?;
             let stop = Arc::new(AtomicBool::new(false));
             let done = stop.clone();
             let error = Arc::new(Mutex::new(None));
             let report = error.clone();
             let (burst, requests) = mpsc::sync_channel(1);
-            std::thread::Builder::new()
+            let worker = std::thread::Builder::new()
                 .name("media-lab-video".into())
                 .spawn(move || {
                     let mut index = 1;
@@ -93,19 +124,14 @@ mod native {
                             if done.load(Ordering::Relaxed) {
                                 break;
                             }
-                            let result = format
-                                .frame(index)
-                                .map(|f| {
-                                    VideoFrame::core_video(f, Duration::from_micros(index * 33_333))
-                                })
-                                .and_then(|f| sender.publish(f));
+                            let result = format.video_frame(index).and_then(|f| sender.publish(f));
                             if let Err(e) = result {
                                 *report.lock().unwrap() = Some(e.to_string());
                                 return;
                             }
                             index += 1;
                         }
-                        std::thread::sleep(
+                        std::thread::park_timeout(
                             Duration::from_millis(33).saturating_sub(start.elapsed()),
                         );
                     }
@@ -115,12 +141,19 @@ mod native {
                 stop,
                 burst,
                 error,
+                worker: Some(worker),
             })
         }
     }
     impl Drop for Demo {
         fn drop(&mut self) {
             self.stop.store(true, Ordering::Relaxed);
+            if let Some(worker) = self.worker.take() {
+                worker.thread().unpark();
+                if worker.join().is_err() {
+                    eprintln!("video source worker panicked during shutdown");
+                }
+            }
         }
     }
     pub fn render(lab: &mut Lab, window: &mut Window, cx: &mut Context<Lab>) -> Stateful<Div> {
@@ -252,15 +285,12 @@ mod native {
                     })
                     .child(format!("Source timestamp: {stamp:.3}s"))
                     .child(format!(
-                        "320 × 180 · IOSurface {}",
+                        "320 × 180 · {} {}",
+                        source_label(),
                         lab.video_format.label()
                     )),
             )
-            .child(
-                div()
-                    .text_color(rgb(0x94a19f))
-                    .child("Native texture views · no media staging upload"),
-            );
+            .child(div().text_color(rgb(0x94a19f)).child(source_note()));
         let controls = div()
             .flex()
             .items_center()
@@ -414,16 +444,17 @@ mod native {
                         )),
                 );
         root.child(div().text_size(px(28.)).font_weight(FontWeight::SEMIBOLD).child("Video surfaces"))
-            .child("Synthetic 30 fps source · native Metal · bounded latest-frame presentation")
+            .child(format!("Synthetic 30 fps source · {} · bounded latest-frame presentation", source_label()))
             .child(controls).child(previews).child(diagnostic)
             .children(demo.error.lock().unwrap().clone().map(|e|div().text_color(rgb(0xffaa99)).child(e)))
             .child(div().text_sm().text_color(rgb(0x94a19f)).child("Pause holds the displayed snapshot while the producer continues replacing pending frames. Resume shows the newest frame. Source timestamps are diagnostic metadata; this is not a decoder or A/V clock."))
-            .child(div().text_sm().text_color(rgb(0x94a19f)).child("The synthetic source writes fresh CPU pixels into IOSurfaces. Presentation imports them without a texture upload. In-flight GPU frames have separate lifetimes; channel capacity is not a total memory limit."))
+            .child(div().text_sm().text_color(rgb(0x94a19f)).child(source_note()).child("In-flight GPU frames have separate lifetimes; channel capacity is not a total memory limit."))
     }
+    #[cfg(target_os = "macos")]
     pub fn capture(png: &FilePath) -> Result<()> {
         let mut renderer = gpui_platform::current_headless_renderer()?
             .ok_or_else(|| anyhow::anyhow!("native renderer unavailable"))?;
-        for format in SourceFormat::ALL {
+        for &format in SourceFormat::ALL {
             let path = if format == SourceFormat::Bgra {
                 png.to_path_buf()
             } else {
@@ -439,6 +470,7 @@ mod native {
         }
         Ok(())
     }
+    #[cfg(target_os = "macos")]
     fn capture_format(
         renderer: &mut dyn PlatformHeadlessRenderer,
         png: &FilePath,
@@ -481,6 +513,32 @@ mod native {
             pixels.get_pixel(4, 4).0[..3] == [0, 0, 0],
             "rounded corner coverage"
         );
+        let reference = pixels.get_pixel(264, 124).0;
+        let expected = if format == SourceFormat::Bgra {
+            [112u8, 96, 48]
+        } else {
+            [224, 192, 96]
+        };
+        ensure!(
+            (0..3).all(|i| reference[i].abs_diff(expected[i]) <= 3),
+            "{} alpha/opaque reference: {reference:?}",
+            format.label()
+        );
+        let next = format.frame(8)?;
+        scene.custom_draws[0].content =
+            VideoFrame::core_video(next, Duration::from_millis(264)).content();
+        let moving = renderer.render_scene_to_image(&scene, extent)?;
+        let changed = pixels
+            .pixels()
+            .zip(moving.pixels())
+            .filter(|(a, b)| a != b)
+            .count();
+        ensure!(
+            changed > (pattern::WIDTH * pattern::HEIGHT / 4) as usize,
+            "{} playback must update the shared animated region: {changed} pixels",
+            format.label()
+        );
+        scene.custom_draws[0].content = video.content();
         scene.custom_draws[0].opacity = 0.5;
         let alpha = renderer.render_scene_to_image(&scene, extent)?;
         ensure!(
@@ -502,21 +560,54 @@ mod native {
         );
         pixels.save(png)?;
         println!(
-            "Saved {}: {} IOSurface; RGB/range/matrix, clipping, corners, opacity and resize reuse passed.",
+            "Saved {}: {} IOSurface; shared motion, RGB/range/matrix, alpha/opaque reference, clipping, corners, opacity and resize reuse passed.",
             png.display(),
             format.label()
         );
         Ok(())
     }
+
+    #[cfg(test)]
+    mod lifecycle_tests {
+        use super::*;
+
+        #[::core::prelude::v1::test]
+        fn source_shutdown_retains_last_frame_and_restart_is_independent() -> Result<()> {
+            let demo = Demo::new(SourceFormat::Bgra)?;
+            let stream = demo.stream.clone();
+            let shown = stream.snapshot().expect("synchronous initial frame");
+            stream.set_playing(false);
+            drop(demo); // Joins the worker; no delayed producer survives a restart.
+            anyhow::ensure!(
+                stream.stats().closed,
+                "source shutdown must close the producer"
+            );
+            anyhow::ensure!(
+                stream.snapshot().unwrap().timestamp() == shown.timestamp(),
+                "closed paused stream retains its displayed frame"
+            );
+            let restarted = Demo::new(SourceFormat::Bgra)?;
+            anyhow::ensure!(!restarted.stream.stats().closed, "new source must be live");
+            anyhow::ensure!(
+                restarted.stream.snapshot().is_some(),
+                "restart has an initial frame"
+            );
+            anyhow::ensure!(
+                stream.stats().closed,
+                "restart cannot revive the old stream"
+            );
+            Ok(())
+        }
+    }
 }
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub use native::{Demo, render};
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn render(_: &mut Lab, _: &mut Window, cx: &mut Context<Lab>) -> Stateful<Div> {
     div()
         .id("video-unavailable")
         .p_6()
-        .child("This interactive synthetic source requires macOS Metal. DXGI/DMA-BUF adapters have separate native checks.")
+        .child("This interactive synthetic source requires macOS Metal or Windows D3D11. Linux DMA-BUF adapters have separate native checks.")
         .child(
             button("video-back", "← Images", false).on_click(cx.listener(|this, _, _, cx| {
                 this.video_mode = false;
@@ -525,14 +616,45 @@ pub fn render(_: &mut Lab, _: &mut Window, cx: &mut Context<Lab>) -> Stateful<Di
         )
 }
 pub fn capture(png: &FilePath, wgpu: bool) -> Result<()> {
-    anyhow::ensure!(!wgpu, "CoreVideo import requires native Metal, not wgpu");
+    anyhow::ensure!(
+        !wgpu,
+        "Native video surfaces require Metal or D3D11, not wgpu"
+    );
     #[cfg(target_os = "macos")]
     {
         native::capture(png)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        windows::capture(png)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = png;
-        anyhow::bail!("native video capture currently requires macOS Metal")
+        anyhow::bail!("native video capture requires macOS Metal or Windows D3D11")
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn source_label() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "Metal / IOSurface"
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "D3D11 / DXGI"
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn source_note() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "Fresh CPU pixels in IOSurfaces; native texture views without a media staging upload."
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "CPU-generated BGRA initializes one immutable D3D11 texture per displayed source frame; native DXGI sampling reuses it for both previews and redraws."
     }
 }

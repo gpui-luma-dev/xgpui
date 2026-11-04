@@ -147,7 +147,10 @@ Try the new browser examples:
 The [gallery](examples/extensions/) now contains **24 examples**. The Italy
 example uses browser image color management; the GPUI web canvas demos remain
 sRGB previews. Native wide-gamut rendering has macOS/Metal validation;
-Windows/Linux native runtime acceptance remains outstanding. Visible output
+Windows native paint/gamut CI has a recorded passing baseline; the owner also
+confirmed all native labs and `just lab-test` passed on 2026-11-04. See
+[Windows validation](LOCAL_DEVELOPMENT.md#windows-validation) for the current
+scope and remaining platform-specific checks. Visible output
 still depends on the browser or OS color management and the actual display.
 
 ## October 30, 2026

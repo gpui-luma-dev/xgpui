@@ -74,4 +74,4 @@ Executed on the development Mac for this replacement:
   source replacement and suspend/resume passed. The 24 MP probe retained
   96,000,000 CPU source bytes and 28,942,648 page GPU bytes at its reported stage.
 
-Other OS GPU runtime acceptance and displayed frame pacing were not measured.
+At that checkpoint, other-OS runtime acceptance and displayed frame pacing were not measured. The owner subsequently confirmed all native labs and `just lab-test` passed on Windows on 2026-11-04; see [Windows validation](../LOCAL_DEVELOPMENT.md#windows-validation). This adds functional coverage, not frame-pacing measurements.

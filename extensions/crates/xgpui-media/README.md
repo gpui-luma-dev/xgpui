@@ -124,7 +124,8 @@ For wider storage, `pipeline::rec2020_rgba16f_data` and
 bounded premultiplied linear Rec.2020 SDR with associated mipmaps. Metal/D3D11/wgpu
 provide clipped sRGB previews. Native `wide()` accepts P3 and Rec.2020 storage:
 Metal composes/captures in extended linear P3; Windows uses scRGB with existing
-capture restrictions. Windows runtime remains unverified. Keep P3 storage for the
+capture restrictions. On 2026-11-04 the owner confirmed all native labs and
+`just lab-test` passed on Windows; see the [validation scope](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation). Physical wide-gamut delivery remains a separate display check. Keep P3 storage for the
 entire P3 gamut: bounded Rec.2020 clips a small P3 boundary region. Tiled FP16 pages
 still require P3. ICC inference remains separate work. Transfer functions are independent of primaries. CPU matrices accept Adobe
 RGB; GPU `ImageAdjustments` explicitly require sRGB or P3 working primaries.

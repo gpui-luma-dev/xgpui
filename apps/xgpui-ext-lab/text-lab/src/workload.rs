@@ -293,7 +293,7 @@ impl Render for ScrollLab {
                         .child(StyledText::new(text).with_runs(text_runs.to_vec()))
                 }).collect::<Vec<_>>()
             })).track_scroll(&self.scroll).flex_1().min_h_0()
-                .on_scroll_wheel(cx.listener(|_, _, _, cx| cx.notify())))
+                .on_scroll(cx.listener(|_, _, _, cx| cx.notify())))
     }
 }
 

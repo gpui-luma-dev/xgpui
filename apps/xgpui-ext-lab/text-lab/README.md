@@ -114,7 +114,7 @@ Manual macOS/aarch64 results (2026-10-24):
 | Paragraph, Parley | Typing/paste, visual selection/reflow and accent composition/commit: checked |
 | Paragraph U.S. accent panel | Placement, candidate selection, commit and Escape cancel: user-confirmed pass; keyboard settings unchanged |
 
-Remaining: paragraph conversion IMEs, Windows/Linux runtime/IME, accessibility,
+Remaining: paragraph conversion IMEs, focused Windows/Linux IME and accessibility acceptance,
 and broader BiDi/UAX #14 conformance. See [adapter limits](../../../extensions/crates/xgpui-parley/README.md).
 
 ## Windows and Linux host testing
@@ -123,8 +123,11 @@ The shared adapter uses GPUI's Windows/DX11 or Linux/Wayland/X11 host. Native
 window, clipboard, input and GPU initialization stay with GPUI. Windows needs
 Visual Studio C++ tools and the Windows SDK (`fxc.exe` for release shaders);
 Linux needs native build prerequisites and a Vulkan driver/display session.
-A macOS Windows cross-check stopped at missing `llvm-rc`; no Windows build pass
-is claimed.
+Windows native labs and `just lab-test` passed in user testing on 2026-11-04.
+The current Windows x64 source/test cross-check also passes with the installed
+LLVM resource compiler. These replace the earlier missing-`llvm-rc` build notice;
+see [Windows validation](../../../docs/LOCAL_DEVELOPMENT.md#windows-validation).
+Conversion IME and assistive-technology behavior require their dedicated checks.
 
 PowerShell/Linux shell, from the repository root; omit `--offline` on first use:
 

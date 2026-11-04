@@ -76,8 +76,9 @@ This is a browser scheduling observation, not GPU timing or a 120 FPS claim.
 WebGL2 startup can report the existing dual-source-text fallback and a resize
 poll timeout; the tested examples continued rendering without console errors.
 The shader crate's 23 tests passed, including Metal/wgpu pixel checks. The native
-example app compiled for macOS and cross-compiled for Windows; D3D11 driver
-execution remains to be checked on Windows.
+example app initially compiled for macOS and cross-compiled for Windows. That
+checkpoint is superseded by the owner's 2026-11-04 Windows native-lab and
+`just lab-test` pass; see [Windows validation](../../../docs/LOCAL_DEVELOPMENT.md#windows-validation).
 
 Native app acceptance on 2026-10-25: launched the macOS Metal app, switched
 between Minimal, Glow and Particles using the in-app selector, and verified the

@@ -19,6 +19,8 @@ default = ["native"]
 native = []
 web = ["xgpui-color/icc"]
 native-window-tests = ["native"]
+# Enable the tests in the shared GPUI input example reused by text-lab.
+test-support = ["gpui/test-support"]
 portable-shaders = ["xgpui-shader/portable-shaders"]
 wgpu = ["xgpui-media/wgpu", "xgpui-shader/wgpu"]
 runtime-shaders = ["gpui_platform/runtime_shaders"]
@@ -27,7 +29,7 @@ runtime-shaders = ["gpui_platform/runtime_shaders"]
 xgpui-canvas = { path = "../../extensions/crates/xgpui-canvas", features = ["gpui"] , package = "xgpui-canvas", version = "=0.3.0" }
 anyhow = "1"
 gpui = { package = "xgpui", path = "../../gpui/crates/gpui", version = "=2.0.0" }
-xgpui-color = { path = "../../extensions/crates/xgpui-color", version = "=0.3.0", package = "xgpui-color" }
+xgpui-color = { path = "../../extensions/crates/xgpui-color", version = "=0.3.0", package = "xgpui-color", features = ["icc"] }
 xgpui-gamut = { path = "../../extensions/crates/xgpui-gamut", version = "=0.3.0", features = ["instanced"] , package = "xgpui-gamut" }
 xgpui-media = { path = "../../extensions/crates/xgpui-media", version = "=0.5.0", package = "xgpui-media" }
 xgpui-svg = { path = "../../extensions/crates/xgpui-svg", version = "=0.3.0", package = "xgpui-svg" }
@@ -41,6 +43,10 @@ unicode-segmentation = "1"
 web-time = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+log = "0.4"
+
+[dev-dependencies]
+sha2 = "0.10"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -55,9 +61,16 @@ tempfile = "3"
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
 xgpui-media = { path = "../../extensions/crates/xgpui-media", version = "=0.5.0", features = ["wgpu"] , package = "xgpui-media" }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+gpui-windows = { package = "xgpui-windows", path = "../../gpui/crates/gpui-windows", version = "=2.0.0" }
+windows = { version = "0.62", features = ["Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi_Common"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-apple = { package = "xgpui-apple", path = "../../gpui/crates/gpui-apple", version = "=3.0.0", features = ["test-support", "font-kit"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSString"] }
+
+objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFDictionary", "CFBase"] }
+objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVReturn"] }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 core-foundation = "0.10"
@@ -129,7 +142,7 @@ bench = false
 
 [[bin]]
 name = "color-lab"
-path = "gamut-lab/src/color_main.rs"
+path = "color-lab/src/main.rs"
 required-features = ["native"]
 
 [[test]]

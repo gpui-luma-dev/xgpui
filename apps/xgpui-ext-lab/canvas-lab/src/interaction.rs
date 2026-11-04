@@ -15,6 +15,20 @@ pub(super) enum Gesture {
 }
 
 impl Lab {
+    pub(super) fn zoom_view(&mut self, position: Point<Pixels>, factor: f64) {
+        let anchor = position - self.bounds.origin;
+        zoom_camera(
+            &mut self.camera,
+            WorldPoint::new(f32::from(anchor.x) as f64, f32::from(anchor.y) as f64),
+            WorldPoint::new(
+                f32::from(self.bounds.size.width) as f64,
+                f32::from(self.bounds.size.height) as f64,
+            ),
+            factor,
+            self.fractal.enabled,
+        );
+    }
+
     pub(super) fn cancel_interaction(&mut self) {
         self.cancel_selection();
         self.drag.end();
@@ -477,4 +491,76 @@ pub(super) fn smoke_preview(
         }),
         cx,
     );
+}
+
+// Navigation is shared by card and Mandelbrot views; editing gestures remain
+// specific to cards. Space always permits panning when starting over a card.
+pub(super) fn primary_drag_pans(fractal: bool, space: bool, shift: bool, hit_card: bool) -> bool {
+    fractal || space || (!shift && !hit_card)
+}
+
+fn zoom_camera(
+    camera: &mut Camera2D,
+    anchor: WorldPoint,
+    viewport: WorldPoint,
+    factor: f64,
+    fractal: bool,
+) {
+    camera.zoom_at_with_limits(
+        anchor,
+        viewport,
+        factor,
+        0.01,
+        if fractal { 1e10 } else { 64. },
+    );
+}
+
+#[cfg(test)]
+mod navigation_tests {
+    use super::*;
+
+    #[::core::prelude::v1::test]
+    fn background_drag_pans_in_both_views_and_card_editing_is_preserved() {
+        for fractal in [false, true] {
+            assert!(primary_drag_pans(fractal, false, false, false));
+            assert!(primary_drag_pans(fractal, true, false, true));
+        }
+        assert!(
+            !primary_drag_pans(false, false, false, true),
+            "drag a card to move it"
+        );
+        assert!(
+            !primary_drag_pans(false, false, true, false),
+            "shift-drag empty space to select"
+        );
+        assert!(
+            !primary_drag_pans(false, false, true, true),
+            "shift-drag a card to select"
+        );
+        assert!(primary_drag_pans(true, false, false, true));
+    }
+
+    #[::core::prelude::v1::test]
+    fn zoom_is_pointer_anchored_and_identical_below_the_mode_limits() {
+        let viewport = WorldPoint::new(1000., 700.);
+        let anchor = WorldPoint::new(120., 230.);
+        let mut cards = Camera2D::default();
+        let mut fractal = cards;
+        let before = cards.screen_to_world(anchor, viewport);
+        for factor in [1.2, 0.8, 1.1] {
+            zoom_camera(&mut cards, anchor, viewport, factor, false);
+            zoom_camera(&mut fractal, anchor, viewport, factor, true);
+        }
+        let after = cards.screen_to_world(anchor, viewport);
+        assert!((before.x - after.x).abs() < 1e-9);
+        assert!((before.y - after.y).abs() < 1e-9);
+        assert_eq!(cards.zoom(), fractal.zoom());
+        let other = fractal.screen_to_world(anchor, viewport);
+        assert_eq!(after.x, other.x);
+        assert_eq!(after.y, other.y);
+        zoom_camera(&mut cards, anchor, viewport, 1e20, false);
+        zoom_camera(&mut fractal, anchor, viewport, 1e20, true);
+        assert_eq!(cards.zoom(), 64.);
+        assert_eq!(fractal.zoom(), 1e10);
+    }
 }

@@ -60,7 +60,10 @@ Explicit paragraph direction/language and advanced styling remain follow-ups.
 Retained face IDs are not recycled, and old layouts remain rasterizable after
 font loading. Pin fonts, fallback, variation settings and shaping versions for
 deterministic results; host discovery and raster pixels can still differ.
-Windows/Linux use the same adapter, but runtime validation remains outstanding.
+Windows/Linux use the same adapter. On 2026-11-04 the owner confirmed all native
+labs, including text, and `just lab-test` passed on Windows. Linux runtime and
+focused IME/assistive-technology acceptance remain separate checks; see the
+[validation scope](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation).
 
 ## Guides and examples
 
@@ -68,7 +71,7 @@ Windows/Linux use the same adapter, but runtime validation remains outstanding.
 - [Text and editing/IME lab](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/text-lab/README.md)
 - [Bundled test fonts and licenses](https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-parley/tests/fonts/README.md)
 
-Run `just text` from the repository root for the native comparison lab.
+Run `just lab-text` from the repository root for the native comparison lab.
 
 ## GPUI public API changes: additions and compatibility
 

@@ -36,7 +36,7 @@ paths-capture:
 paths-wgpu-capture:
     cargo run {{options}} --features wgpu -- --headless --paths --wgpu --png /tmp/path-effects-wgpu.png
 
-# Open synthetic IOSurface video presentation (macOS Metal).
+# Open synthetic native video presentation (macOS Metal / Windows D3D11).
 video *args:
     cargo run {{options}} -- --video "$@"
 

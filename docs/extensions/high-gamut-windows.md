@@ -4,8 +4,10 @@
 
 
 Opt-in **macOS Metal / Windows D3D11** presentation: wide [SDR ↗](https://en.wikipedia.org/wiki/Standard-dynamic-range_video) surfaces and normal
-[sRGB ↗](https://en.wikipedia.org/wiki/SRGB) controls in one window. Windows integration is cross-compiled here; native
-WARP/desktop execution and physical display checks remain required. Linux, [HDR ↗](https://en.wikipedia.org/wiki/High_dynamic_range)
+[sRGB ↗](https://en.wikipedia.org/wiki/SRGB) controls in one window. Windows native labs and `just lab-test` passed in owner
+testing on 2026-11-04; [Windows validation](../LOCAL_DEVELOPMENT.md#windows-validation)
+also records the earlier native paint/gamut CI baseline. Physical display checks
+retain their separate scope. Linux, [HDR ↗](https://en.wikipedia.org/wiki/High_dynamic_range)
 content and transparent wide windows remain deferred.
 
 ## GPUI public API changes: additions and compatibility
@@ -274,8 +276,8 @@ cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ex
 
 Move the window to your wide-gamut monitor and check `Effective: WideGamutSdr` and
 `Display wide gamut: Some(true)`. `None` means display capability is unknown.
-macOS Metal runtime presentation was checked; Windows cross-compilation passes,
-while Windows native execution and physical display acceptance remain separate.
+macOS Metal presentation was checked; the owner confirmed Windows native labs
+and `just lab-test` passed on 2026-11-04. Physical display measurement remains separate.
 The status reports negotiation and capability, not calibrated color accuracy.
 
 The [browser comparison and runtime diagnostics](color-math.md#browser-color--gamut-lab)

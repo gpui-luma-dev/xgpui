@@ -269,7 +269,7 @@ validated core upload data synchronously without loader admission.
 | Backend | RGBA16F sampling | Output policy / validation |
 | --- | --- | --- |
 | macOS Metal | Native RGBA16Float, [trilinear mips ↗](https://en.wikipedia.org/wiki/Trilinear_filtering) | Explicit sRGB preview, or accepted wide-SDR linear-P3 compositor; release pixels and UI tested |
-| Windows D3D11 | R16G16B16A16_FLOAT | Preview, or existing wide-SDR/scRGB compositor; cross-compilation only, native QA pending |
+| Windows D3D11 | R16G16B16A16_FLOAT | Preview or wide-SDR/scRGB compositor; Windows native labs/lab-test passed in owner testing, 2026-11-04; physical output measurement is separate |
 | wgpu / Linux | Rgba16Float | Explicit sRGB preview; wide placement returns an error; macOS wgpu pixel tests, Linux native QA pending |
 | Wasm WebGPU / WebGL2 | Rgba16Float through wgpu | Explicit sRGB preview; both browser demos manually tested; no browser wide presentation claim |
 
@@ -624,7 +624,9 @@ overflow, cache identities and independent pool/frame feasibility.
   and **forced WebGL2**, including controls, animated exposure/zoom, opacity,
   corners, reset and mode switching. Preparations remained at one.
 - Strict media/lab Clippy, formatting and documentation checks pass. Windows
-  cross-compilation passes; Windows/Linux native GPU execution remains pending.
+  cross-compilation passed at this phase checkpoint. Windows native labs and
+  `just lab-test` subsequently passed in owner testing on 2026-11-04; Linux and
+  dedicated library-suite results retain their own scope.
 
 These are functional and pixel checks, not GPU timestamps or a new sustained
 60 Hz performance benchmark. Keep the documented 60 Hz baseline for performance
@@ -651,9 +653,10 @@ The release native Metal and forced WebGPU/WebGL2 demos were manually exercised:
 Fit/1:1, pan/drag/wheel zoom, replacement, cancellation/restart and low-memory
 mode. The 2 MiB policy coarsens the selected mip while the preview stays usable.
 Strict lint/build/documentation checks and Windows cross-compilation pass.
-Windows/Linux native GPU testing remains under #23.
+Windows native labs and `just lab-test` passed in owner testing on 2026-11-04.
+Remaining Linux and dedicated import/ownership checks stay under #23.
 
-**Status:** Phases 1–5 are implemented on the working branch, pending review. System playback remains #40. #23's Windows/Linux runtime testing remains outstanding.
+**Status:** Phases 1–5 were merged in PR #43. Windows native labs and `just lab-test` passed in owner testing on 2026-11-04. Remaining Linux and dedicated import/ownership coverage is tracked in #23; deferred video APIs are tracked in #134. System playback remains #40.
 
 ### Phase 5 verification (2026-10-26)
 
@@ -671,4 +674,6 @@ video pause/resume, format switching, opacity, corners and reset were exercised.
 Testing caught the existing 1,024-device-pixel capture limit; bounded previews and
 explicit API checks prevent an oversized blur from blanking the renderer.
 These are functional/reference checks, not a new sustained 60 Hz benchmark.
-Windows/Linux native runtime validation remains outstanding under #23.
+Windows native labs and `just lab-test` passed in owner testing on 2026-11-04;
+see [Windows validation](../LOCAL_DEVELOPMENT.md#windows-validation). Remaining
+Linux and dedicated import/ownership checks stay under #23.

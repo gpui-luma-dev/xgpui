@@ -420,8 +420,8 @@ impl Render for Lab {
                         div()
                             .id(ElementId::Name(format!("viewport-{mode}").into()))
                             .cursor_crosshair()
-                            .on_scroll_wheel(cx.listener(
-                                move |this, event: &ScrollWheelEvent, _, cx| {
+                            .on_scroll(cx.listener(
+                                move |this, event: &ScrollEvent, _, cx| {
                                     let delta = f32::from(event.delta.pixel_delta(px(24.)).y);
                                     if delta != 0. {
                                         let anchor =

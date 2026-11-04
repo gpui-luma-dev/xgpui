@@ -6,7 +6,7 @@ CIE 2019, *CIE 1931 chromaticity coordinates of spectrum loci, 2 degree observer
 
 - Source: https://cie.co.at/datatable/cie-1931-chromaticity-coordinates-spectrum-loci-2-degree-observer
 - CSV: https://files.cie.co.at/Publications-datasets/CIE_cc_1931_2deg.csv
-- License: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), per the included metadata. This dataset and its plotted locus retain that license, separately from application code. This browser demo plots the xy coordinates and closes the endpoints with the purple boundary.
+- License: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), per the included metadata. This dataset and its plotted locus retain that license, separately from application code. The browser demo plots xy coordinates; the native color lab also transforms them to u′v′. Both close the endpoints with the purple boundary.
 - SHA-256: `5a3f0582ea0907867c7a2718051bbdc04f39e758d8c09e628930efc62386e399` (verified against the published metadata).
 
 No network access is required at runtime. Source data spans 360–830 nm in 1 nm increments. CIE classifies these published chromaticities as approximated; plotting does not add measurement precision.

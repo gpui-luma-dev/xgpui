@@ -14,17 +14,17 @@ under `extensions/crates/` and do not depend on this package.
 
 | Workload | Target | Root recipe |
 | --- | --- | --- |
-| Image loading, mipmaps, adjustments, tiled canvases and paths | `media-lab` | `just media` |
-| Brushes, gradients, meshes and layer effects | `paint-lab` | `just paints` |
-| Native wide-gamut presentation | `gamut-lab` | `just gamut` |
-| Color conversions and gradient comparisons | `color-lab` | `just color` |
-| Native and Parley text comparisons | `text-lab` | `just text` |
-| SVG rendering, scaling and scheduling | `svg-lab` | `just svg` |
-| Spatial cards and native Mandelbrot explorer | `canvas-lab` | `just canvas-lab` |
+| Image loading, mipmaps, adjustments, tiled canvases and paths | `media-lab` | `just lab-media` |
+| Brushes, gradients, meshes and layer effects | `paint-lab` | `just lab-paint` |
+| Native wide-gamut presentation | `gamut-lab` | `just lab-gamut` |
+| Color conversions and gradient comparisons | `color-lab` | `just lab-color` |
+| Native and Parley text comparisons | `text-lab` | `just lab-text` |
+| SVG rendering, scaling and scheduling | `svg-lab` | `just lab-svg` |
+| Spatial cards and native Mandelbrot explorer | `canvas-lab` | `just lab-canvas` |
 | Dense Metal producer regression (macOS) | `metal-producer-regression` | See below |
-| Quad rendering benchmark | `quad-bench` | `just quad-bench` |
-| Color-field rendering benchmark | `color-field-bench` | `just color-field-bench` |
-| Native and browser shader examples | `shader-examples` | `just shaders` |
+| Quad rendering benchmark | `quad-bench` | `just lab-quad-bench` |
+| Color-field rendering benchmark | `color-field-bench` | `just lab-color-field-bench` |
+| Native and browser shader examples | `shader-examples` | `just lab-shader` |
 | Browser extension gallery | `extensions-web` | `just web-build` |
 
 The package also keeps the associated sample assets, fixtures, benchmark scripts
@@ -71,7 +71,7 @@ cargo run --release --locked --config .cargo/validation.toml --manifest-path app
 For a bounded benchmark without a window:
 
 ```sh
-just quad-bench --headless --cpu-only
+just lab-quad-bench --headless --cpu-only
 ```
 
 See [Local Development](../LOCAL_DEVELOPMENT.md) for toolchains, native platform
@@ -88,8 +88,8 @@ from the repository root after following the platform setup in
 Explore spatial cards, or open the native fractal explorer:
 
 ```sh
-just canvas-lab
-just canvas-lab --mandelbrot
+just lab-canvas
+just lab-canvas --mandelbrot
 ```
 
 The native Mandelbrot explorer retains complete frames during navigation, with
@@ -113,7 +113,7 @@ check; preparation markers help locate a stall.
 Open the native paint lab's animated ribbon experiment:
 
 ```sh
-just paints --pastel-waves
+just lab-paint --pastel-waves
 ```
 
 ### Full paint lab
@@ -121,7 +121,7 @@ just paints --pastel-waves
 Open the desktop brush, gradient, mesh and layer-effect comparisons:
 
 ```sh
-just paints
+just lab-paint
 ```
 
 ### Native wide gamut
@@ -130,7 +130,7 @@ Compare native wide-SDR presentation with ordinary sRGB controls on a supported
 display:
 
 ```sh
-just gamut
+just lab-gamut
 ```
 
 ### Native text comparison
@@ -138,7 +138,7 @@ just gamut
 Compare native and Parley shaping, editing and virtualized paragraphs:
 
 ```sh
-just text
+just lab-text
 ```
 
 ### Desktop SVG lab
@@ -146,7 +146,7 @@ just text
 Open the native SVG rendering, zoom and scheduling comparisons:
 
 ```sh
-just svg
+just lab-svg
 ```
 
 ## Browser demos and local docs
@@ -184,6 +184,6 @@ names refer to different applications and development roles.
 
 [Browse the package source](https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab).
 
-## Color tasks and the sibling lab
+## Color tasks and the native color lab
 
-The browser gallery includes [chromaticity](../examples/extensions/?demo=chromaticity) and [pixels + metadata](../examples/extensions/?demo=pixel-metadata) demos. Both are sRGB previews of Rust/Wasm calculations. The standalone native chromaticity app lives in the separate sibling `xgpui-lab` repository. From this repository use `just profile=dev chromaticity`; see [color labs](color-labs.md) for commands, controls and the limits of CPU values, GPU readback and display capability reports.
+The browser gallery includes [chromaticity](../examples/extensions/?demo=chromaticity) and [pixels + metadata](../examples/extensions/?demo=pixel-metadata) demos. Both are sRGB previews of Rust/Wasm calculations. The native chromaticity workspace now lives in this package's `color-lab`, alongside the original swatches. Use `just lab-color --chromaticity` or switch tabs in `just lab-color`; see [color labs](color-labs.md) for commands, controls and the limits of CPU values, GPU readback and display capability reports.
