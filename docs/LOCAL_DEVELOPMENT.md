@@ -98,32 +98,54 @@ configuration and the shared `target/` directory.
 
 | Command | Opens |
 | --- | --- |
-| `just media` | Image [mipmapping ↗](https://en.wikipedia.org/wiki/Mipmap), filters, GPU surfaces and path effects |
-| `just shaders` | Shader examples and typography |
-| `just paints` | Paints, gradients, brushes and layer effects |
-| `just gamut` | Native wide-SDR [gamut ↗](https://en.wikipedia.org/wiki/Gamut) comparison |
-| `just color` | Color conversion and sRGB/P3 reference swatches |
-| `just text` | Native/Parley text, paragraphs and scrolling |
-| `just svg` | SVG rendering, zoom and scheduling |
-| `just quad-bench` | Quad rendering benchmark |
-| `just color-field-bench` | Color-field rendering benchmark |
+| `just lab-canvas` | Spatial canvas, navigation and selection |
+| `just lab-media` | Image [mipmapping ↗](https://en.wikipedia.org/wiki/Mipmap), filters, GPU surfaces and path effects |
+| `just lab-shader` | Shader examples and typography |
+| `just lab-paint` | Paints, gradients, brushes and layer effects |
+| `just lab-gamut` | Native wide-SDR [gamut ↗](https://en.wikipedia.org/wiki/Gamut) comparison |
+| `just lab-color` | Swatches and CIE chromaticity/FP16/ICC workspaces |
+| `just lab-text` / `just lab-parley` | Native/Parley text, paragraphs and scrolling |
+| `just lab-svg` | SVG rendering, zoom and scheduling |
+| `just lab-quad-bench` | Quad rendering benchmark |
+| `just lab-color-field-bench` | Color-field rendering benchmark |
 
-Arguments after the recipe name go to the app. For example:
+Every lab accepts `--help` to list its complete command-line options without
+opening a window. Arguments after the recipe name go directly to the app,
+including quoted paths. The short names `media`, `shaders`, `paints`, `gamut`,
+`color`, `text` and `svg`, and the previous `*-lab` names, remain aliases with
+identical options. Canonical launch commands start with `lab-` so they appear
+together in `just --list`.
 
 ```sh
-just shaders composition
-just media --paths
-just media --tiled # Generated 72 MP canvas; pan/zoom/cache pressure, blur/quality
-just media --float-images # Supplied RGBA16F pixels; generated sample, native wide/sRGB comparison
-just media --adjustments
-just media --image "photos/my image.png"
-just text --help
+just lab-media --help
+just lab-shader --help
+just lab-shader --example composition # Positional `composition` also works.
+just lab-media --paths
+just lab-media --tiled # Generated 72 MP canvas; pan/zoom/cache pressure, blur/quality
+just lab-media --float-images # Supplied RGBA16F pixels; native wide/sRGB comparison
+just lab-media --adjustments
+just lab-media --image "photos/my image.png"
+just lab-media --headless --wgpu --png "target/media preview.png"
+just lab-color --chromaticity
+just lab-color --help
+just lab-text --help
+just lab-parley --backend parley --workload paragraph
 ```
 
-Select a debug build explicitly with `just profile=dev media`. App arguments are
-not Cargo arguments. For extra Cargo features, use the direct Cargo command with
-that app's manifest, as in the macOS runtime-shader example below. The app-level
-justfiles remain available for specialized captures and benchmarks.
+Parley uses the same text lab; pass `--backend parley` for only that engine or
+leave the default to compare both. Color lab has Swatches/Chromaticity tabs; `--chromaticity`, `--uv`, `--photo`
+and its ICC flags select the chromaticity workspace. Preset, mapping and alpha
+controls remain available in the window. It no longer needs the sibling lab. Shader/typography
+controls also remain available in the window.
+
+Native launch recipes enable `runtime-shaders`, `portable-shaders` and `wgpu`
+so feature-gated app options are available without changing the Cargo command.
+Host/GPU restrictions still apply: media's synthetic video option supports
+macOS Metal (BGRA/NV12) and Windows D3D11 (BGRA only); native wide output
+requires a supported backend/display.
+Select a debug build with `just profile=dev lab-media`. App arguments are not
+Cargo arguments. The app-level justfiles remain available for specialized
+captures and benchmarks.
 
 ## iOS backend
 
@@ -153,7 +175,7 @@ MSVC tools available. Select the native MSVC Rust toolchain, such as
 ```powershell
 rustc -vV
 just build
-just shaders
+just lab-shader
 ```
 
 The first recipe builds the libraries for Windows. The second builds and
@@ -170,7 +192,7 @@ libraries but cannot open the example window.
 
 ```sh
 just build
-just shaders
+just lab-shader
 ```
 
 Run inside your normal Wayland or X11 desktop session. The repository's [Linux Vulkan CI workflow](https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/paints-backend.yml) lists the native packages used on Ubuntu if a linker reports
@@ -183,7 +205,7 @@ the active Xcode installation must include the Metal compiler.
 
 ```sh
 just build
-just shaders
+just lab-shader
 ```
 
 If the build fails because the Metal compiler is unavailable, the root harness
@@ -237,16 +259,16 @@ Cargo configuration or manifest edits are required for these recipes.
 The lab generates its own image samples; no photo or video file is needed.
 
 ```sh
-just media
+just lab-media
 ```
 
 Compare [atlas ↗](https://en.wikipedia.org/wiki/Texture_atlas) and mipmapped images, change filters, zoom and pan. Run
-`just media --adjustments` for linear [exposure ↗](https://en.wikipedia.org/wiki/Exposure_value) and [vignette ↗](https://en.wikipedia.org/wiki/Vignetting) with a shared-source
+`just lab-media --adjustments` for linear [exposure ↗](https://en.wikipedia.org/wiki/Exposure_value) and [vignette ↗](https://en.wikipedia.org/wiki/Vignetting) with a shared-source
 original/adjusted comparison. Open the path
 effects view with:
 
 ```sh
-just media --paths
+just lab-media --paths
 ```
 
 Use release mode for visual performance testing. Debug builds are useful for
@@ -324,7 +346,7 @@ Build harness details are maintained in
 [BUILDING.md](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/BUILDING.md).
 
 The tiled lab's blur controls use a bounded [sRGB ↗](https://en.wikipedia.org/wiki/SRGB) preview so the capture and halo
-fit the compositor's 1,024-device-pixel limit. `just media --video` also offers
+fit the compositor's 1,024-device-pixel limit. `just lab-media --video` also offers
 linear adjustments, vignette and blur on generated native macOS Metal frames;
 no video file is needed. See the [media pipeline guide](#media-pipeline) for
 resource reuse, output color and backend limits.

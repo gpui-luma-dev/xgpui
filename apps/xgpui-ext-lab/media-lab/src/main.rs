@@ -38,7 +38,7 @@ struct Options {
     /// Open contour trim and dash examples (or capture them headlessly).
     #[arg(long, conflicts_with = "video")]
     paths: bool,
-    /// Open synthetic native video presentation (macOS Metal).
+    /// Open synthetic native video presentation (macOS Metal / Windows D3D11).
     #[arg(long)]
     video: bool,
     /// Measure bounded upload CPU work versus cached-source rendering in release.
@@ -86,11 +86,12 @@ fn main() -> Result<()> {
         );
     }
     if options.headless && options.video {
+        let default_png = std::env::temp_dir().join("video-lab.png");
         return video_lab::capture(
             options
                 .png
                 .as_deref()
-                .unwrap_or(std::path::Path::new("/tmp/video-lab.png")),
+                .unwrap_or(&default_png),
             options.wgpu,
         );
     }

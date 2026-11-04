@@ -162,7 +162,7 @@ impl Render for TiledDemo {
             .bg(rgb(0x253342))
             .overflow_hidden()
             .cursor_crosshair()
-            .on_scroll_wheel(cx.listener(move |s, event: &ScrollWheelEvent, _, cx| {
+            .on_scroll(cx.listener(move |s, event: &ScrollEvent, _, cx| {
                 let delta = f64::from(f32::from(event.delta.pixel_delta(px(24.)).y));
                 s.zoom = (scale * (delta * 0.002).clamp(-1., 1.).exp()).clamp(0.01, 4.);
                 s.complete_ms = None;

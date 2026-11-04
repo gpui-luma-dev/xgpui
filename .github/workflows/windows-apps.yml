@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [gamut-lab, paint-lab, shader-examples]
+        app: [gamut-lab, paint-lab, shader-examples, media-lab, color-lab]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -31,6 +31,12 @@ jobs:
       - name: Run gamut compatibility tests
         if: matrix.app == 'gamut-lab'
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab --test compatibility --target-dir target/windows-apps
+      - name: Check native DXGI video pixels and snapshot lifetimes (D3D11 WARP)
+        if: matrix.app == 'media-lab'
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin media-lab --target-dir target/windows-apps video_lab:: -- --test-threads=1
+      - name: Check color and chromaticity numerical/fixture tests
+        if: matrix.app == 'color-lab'
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab --target-dir target/windows-apps -- --test-threads=1
       # Native window tests and physical display checks require a desktop session.
       # The separate portable-paints workflow runs the offscreen D3D11 WARP suite.
       - uses: actions/upload-artifact@v4

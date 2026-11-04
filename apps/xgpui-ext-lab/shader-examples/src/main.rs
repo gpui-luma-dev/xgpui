@@ -43,7 +43,24 @@ fn main() {
 }
 #[cfg(not(target_family = "wasm"))]
 fn main() {
-    let mode = examples::Mode::parse(&std::env::args().skip(1).collect::<Vec<_>>().join("&"));
+    use clap::Parser;
+
+    #[derive(Parser)]
+    #[command(about = "Native shader examples and selectable typography")]
+    struct Options {
+        /// Example to open (defaults to minimal); also selectable in the window.
+        #[arg(value_enum, conflicts_with = "example")]
+        mode: Option<examples::Mode>,
+        /// Select an example using a named option instead of a positional value.
+        #[arg(long, value_enum)]
+        example: Option<examples::Mode>,
+    }
+
+    let options = Options::parse();
+    let mode = options
+        .example
+        .or(options.mode)
+        .unwrap_or(examples::Mode::Minimal);
     let app = gpui_platform::application();
     app.text_system()
         .add_fonts(vec![Cow::Borrowed(FONT)])
@@ -63,7 +80,8 @@ fn open(mode: examples::Mode, cx: &mut App) {
         cx.open_window(options, |window, cx| {
             window.set_window_title("Selectable Typography · xgpui-shader");
             cx.new(typography::TypographyDemo::new)
-        }).expect("open typography demo");
+        })
+        .expect("open typography demo");
         cx.activate(true);
         return;
     }

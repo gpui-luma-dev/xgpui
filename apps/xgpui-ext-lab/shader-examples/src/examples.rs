@@ -6,6 +6,7 @@ use xgpui_shader::{
 };
 
 #[derive(Clone, Copy, PartialEq)]
+#[cfg_attr(not(target_family = "wasm"), derive(clap::ValueEnum))]
 pub enum Mode {
     Typography,
     Minimal,
@@ -16,6 +17,7 @@ pub enum Mode {
     Borders,
 }
 impl Mode {
+    #[cfg(target_family = "wasm")]
     pub fn parse(query: &str) -> Self {
         if query.contains("typography") {
             Self::Typography

@@ -356,41 +356,40 @@ impl Render for Lab {
                         cx.notify();
                     })))
                 .child(if self.fractal.enabled { "P3 Mandelbrot • Drag: pan • Scroll: zoom • F: cards • R: reset" } else { "Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel" })
-                .child(if self.fractal.enabled { if window.color_status().effective() == WindowColorMode::WideGamutSdr { "Display P3 wide SDR • M: preview (adds capture cost)" } else { "Mapped sRGB fallback • M: preview (adds capture cost)" } } else { "Scroll / Space-drag: pan • Pinch: zoom • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view • F: Mandelbrot" })
+                .child(if self.fractal.enabled { if window.color_status().effective() == WindowColorMode::WideGamutSdr { "Display P3 wide SDR • M: preview (adds capture cost)" } else { "Mapped sRGB fallback • M: preview (adds capture cost)" } } else { "Scroll / Pinch: zoom • Background / Space-drag: pan • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view • F: Mandelbrot" })
                 .child(if self.fractal.enabled { format!("{:.1}% • {}", self.camera.zoom() * 100., self.fractal.status()) } else { format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len()) }))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
-                .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
+                .on_scroll(cx.listener(|this, event: &ScrollEvent, _, cx| {
                     this.cancel_interaction();
                     let delta = event.delta.pixel_delta(px(24.));
-                    if this.fractal.enabled {
-                        let anchor = event.position - this.bounds.origin;
-                        this.camera.zoom_at_with_limits(
-                            WorldPoint::new(f32::from(anchor.x) as f64, f32::from(anchor.y) as f64),
-                            this.viewport(), (f64::from(f32::from(delta.y)) * 0.005).clamp(-1., 1.).exp(), 0.01, 1e10);
-                    } else {
-                        this.camera.pan_by(WorldPoint::new(f32::from(delta.x) as f64, f32::from(delta.y) as f64));
-                    }
+                    this.zoom_view(event.position, (f64::from(f32::from(delta.y)) * 0.005).clamp(-1., 1.).exp());
                     cx.stop_propagation(); cx.notify();
                 }))
                 .on_pinch(cx.listener(|this, event: &PinchEvent, _, cx| {
-                    if this.fractal.enabled { cx.stop_propagation(); return; }
                     this.cancel_interaction();
-                    let anchor = event.position - this.bounds.origin;
-                    this.camera.zoom_at_with_limits(WorldPoint::new(f32::from(anchor.x) as f64, f32::from(anchor.y) as f64), this.viewport(), (1. + f64::from(event.delta)).max(0.01), 0.01, if this.fractal.enabled { 1e10 } else { 64. });
+                    this.zoom_view(event.position, (1. + f64::from(event.delta)).max(0.01));
                     cx.stop_propagation(); cx.notify();
                 }))
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &MouseDownEvent, window, cx| {
                     this.focus.focus(window, cx);
-                    if this.space_down { this.drag.begin(WorldPoint::new(f32::from(event.position.x) as f64, f32::from(event.position.y) as f64)); }
-                    else if this.fractal.enabled { this.drag.begin(WorldPoint::new(f32::from(event.position.x) as f64, f32::from(event.position.y) as f64)); }
-                    else { this.start_selection(event); cx.notify(); }
+                    let hit_card = this.scene.hit_test(this.world_at(event.position)).is_some();
+                    if interaction::primary_drag_pans(this.fractal.enabled, this.space_down, event.modifiers.shift, hit_card) {
+                        this.cancel_interaction();
+                        if !this.fractal.enabled && !this.space_down && !hit_card {
+                            this.selected.clear();
+                        }
+                        this.drag.begin(WorldPoint::new(f32::from(event.position.x) as f64, f32::from(event.position.y) as f64));
+                    } else {
+                        this.start_selection(event);
+                    }
+                    cx.notify();
                 }))
-                .on_mouse_down(MouseButton::Middle, cx.listener(|this, event: &MouseDownEvent, _, _| this.drag.begin(WorldPoint::new(f32::from(event.position.x) as f64, f32::from(event.position.y) as f64))))
+                .on_mouse_down(MouseButton::Middle, cx.listener(|this, event: &MouseDownEvent, _, _| { this.cancel_interaction(); this.drag.begin(WorldPoint::new(f32::from(event.position.x) as f64, f32::from(event.position.y) as f64)); }))
                 .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                     if this.gesture.is_some() && event.pressed_button == Some(MouseButton::Left) {
                         this.update_selection(event.position, event.modifiers.alt); cx.notify(); return;
                     }
-                    if event.pressed_button != Some(MouseButton::Middle) && !((this.space_down || this.fractal.enabled) && event.pressed_button == Some(MouseButton::Left)) { this.drag.end(); }
+                    if event.pressed_button != Some(MouseButton::Middle) && event.pressed_button != Some(MouseButton::Left) { this.drag.end(); }
                     else if let Some(delta) = this.drag.update(WorldPoint::new(f32::from(event.position.x) as f64, f32::from(event.position.y) as f64)) {
                         this.camera.pan_by(delta);
                         cx.notify();

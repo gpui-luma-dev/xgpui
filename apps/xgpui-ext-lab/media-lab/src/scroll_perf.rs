@@ -388,7 +388,7 @@ impl Render for ScrollPerf {
                     this.auto_scroll = !this.auto_scroll; cx.notify();
                 })))
             .child(div().id("large-image-feed").h(px(height)).overflow_y_scroll().track_scroll(&self.scroll)
-                .on_scroll_wheel(cx.listener(|_,_: &ScrollWheelEvent,_,cx|cx.notify())).children(rows))
+                .on_scroll(cx.listener(|_,_: &ScrollEvent,_,cx|cx.notify())).children(rows))
     }
 }
 pub fn run(path: PathBuf) -> Result<()> {

@@ -27,7 +27,7 @@ From the repository root:
 ```sh
 just         # List sample apps and development commands.
 just build   # Build optimized native libraries.
-just shaders # Launch the shader examples.
+just lab-shader # Launch the shader examples.
 ```
 
 Recipes use Bash (on Windows, Git for Windows Bash must be on PATH).

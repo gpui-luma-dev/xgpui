@@ -104,7 +104,7 @@ impl Lab {
             .overflow_hidden()
             .cursor_crosshair()
             .child(checker())
-            .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
+            .on_scroll(cx.listener(|this, event: &ScrollEvent, _, cx| {
                 let delta = f32::from(event.delta.pixel_delta(px(24.)).y);
                 this.zoom = (this.zoom * (delta * 0.002).clamp(-1., 1.).exp()).clamp(0.1, 4.);
                 cx.stop_propagation();

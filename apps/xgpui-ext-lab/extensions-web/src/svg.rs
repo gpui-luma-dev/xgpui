@@ -367,7 +367,7 @@ impl Render for SvgDemo {
                 .overflow_hidden()
                 .bg(backdrop)
                 .cursor_crosshair()
-                .on_scroll_wheel(cx.listener(move |this, e: &ScrollWheelEvent, _, cx| {
+                .on_scroll(cx.listener(move |this, e: &ScrollEvent, _, cx| {
                     let delta = f32::from(e.delta.pixel_delta(px(24.)).y);
                     this.zoom_at(
                         e.position - this.bounds[mode].center(),

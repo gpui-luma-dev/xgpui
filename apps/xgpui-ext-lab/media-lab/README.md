@@ -71,14 +71,14 @@ Trim uses total length across contours; dash phase restarts at each retained
 contour. The headless PNG has the same layout at 68% trim, with pixel checks for
 visible and decreasing coverage. See the SVG web guide for bounds and semantics.
 
-## Native video presentation (macOS Metal)
+## Native video presentation (macOS Metal / Windows D3D11)
 
 ```sh
 just --justfile apps/xgpui-ext-lab/media-lab/justfile video
 just --justfile apps/xgpui-ext-lab/media-lab/justfile video-capture
 ```
 
-The Video surfaces button opens a generated ~30 fps IOSurface source. Format
+On macOS, the Video surfaces button opens a generated ~30 fps IOSurface source. Format
 cycles BGRA8 and NV12 full/video range using BT.601/BT.709. Both
 viewports share one snapshot per render. Pause holds the displayed frame while
 production continues; Burst 120 replaces pending frames, Resume picks the latest,
@@ -105,8 +105,46 @@ On a Windows SDK host, `just --justfile apps/xgpui-ext-lab/media-lab/justfile dx
 native BGRA and keyed NT-handle snapshot regressions in release mode. Separate
 WARP devices test busy acquisition, handle lifetime, retained ownership, compositor
 pixels and producer-key handoff. This requires no video file or decoder. The
-interactive synthetic video source remains macOS-only. Windows test code is
-cross-checked from macOS; native execution is still pending.
+interactive Windows demo is described below. Windows test code is cross-checked
+from macOS; native execution is still pending.
+
+### Windows synthetic video surfaces (#133)
+
+```sh
+just lab-media --video
+just lab-media --headless --video --png "target/video-lab.png"
+just lab-test video_lab:: -- --test-threads=1
+```
+
+Windows now has a generated ~30 fps BGRA8 source using native D3D11/DXGI.
+The same pause/resume, burst, stop/restart, opacity, corner, exposure, saturation,
+vignette and blur controls drive both platforms. Both previews use the same
+immutable snapshot; an unadjusted reference sits beside the adjusted preview.
+Windows exposes BGRA8 only; the five BGRA/NV12 formats remain available on macOS.
+No decoder, video file, Media Foundation setup or external runtime is required.
+
+The worker generates owned CPU BGRA pixels. On first presentation, the lab
+initializes a source-sized texture on the compositor's device and wraps it with
+the existing native `DxgiFrame` adapter. It initializes once per presented source
+frame/device and reuses that texture for both placements and redraws. Pending
+frames replaced before presentation do not allocate GPU textures. This includes
+one CPU-to-texture initialization; it is not zero-copy decoder import or a test
+of foreign-device/shared-handle production. Those adapters retain their separate
+`dxgi-test` coverage. Source textures are never mutated or returned to a pool;
+prepared outputs retain their own COM references. Stopping or replacing the demo
+signals and joins its worker, while a stopped stream can retain its last frame.
+
+Headless capture uses D3D11 WARP and checks BGRA colors, straight alpha, corners,
+linear exposure, inherited opacity, clipping, placement/resize reuse and teardown.
+Additional tests cover pause/burst/latest-frame replacement, retained snapshots,
+producer closure and restart. The Windows apps workflow builds the media lab and
+runs these tests. Default video capture output uses the system temporary directory
+on each OS. Native video rejects `--wgpu` explicitly.
+
+Windows code and tests are cross-checked from macOS. The new Windows capture and
+interactive controls still need execution on Windows; macOS capture results do
+not establish Windows GPU acceptance. NV12/YUV conversion, decoding, A/V clocks,
+shared producer pools and device-loss recovery are outside this demo's scope.
 
 ## Linux DMA-BUF layout checks
 
@@ -222,7 +260,7 @@ for the fixed-60-Hz M4 Max observations and raw reports.
 
 ## Linear adjustments (issue #26 Phase 2)
 
-Run `just media --adjustments` from the repository root. Both panels share one
+Run `just lab-media --adjustments` from the repository root. Both panels share one
 source upload: original on the left, linear-sRGB matrix/vignette on the right.
 Cycle EV exposure, contrast around 0.18, saturation and vignette, then animate,
 reset, zoom/pan and check alpha/opacity/corners. The upload count stays at one.
@@ -234,7 +272,7 @@ RGBA16F/P3 uploads are available in Phase 3 below. Progressive/tiled images are 
 
 ### RGBA16F supplied pixels (Phase 3)
 
-Run `just media --float-images` from the repository root for the release native
+Run `just lab-media --float-images` from the repository root for the release native
 comparison, or open `?demo=media-float&backend=webgpu` /
 `?demo=media-float&backend=webgl` in the rebuilt extensions web app.
 Generated P3 colors, a near-black gradient and alpha edges need no external asset
@@ -249,7 +287,7 @@ Windows/Linux native runtime QA remains pending; 60 Hz stays the baseline.
 
 ### Progressive tiled canvas (Phase 4)
 
-`just media --tiled` opens the release native app. Rebuild the web app and open
+`just lab-media --tiled` opens the release native app. Rebuild the web app and open
 `?demo=media-tiles&backend=webgpu` or `?demo=media-tiles&backend=webgl`.
 The shared view displays a generated 12,000 × 6,000 source without allocating it
 in full. Fit/1:1, drag, wheel zoom and arrow controls change visible pages; source
@@ -272,7 +310,7 @@ quality. It blurs assembled pages once, avoiding internal tile seams. Nonzero
 blur uses a smaller preview to fit the existing 1,024-device-pixel capture limit,
 including halo. Filtering is premultiplied encoded sRGB; capture/filter textures
 are additional to page budgets. Media uploads/imports and target allocations are
-reused, but custom media captures refresh each paint. Native `just media --video`
+reused, but custom media captures refresh each paint. Native `just lab-media --video`
 also offers exposure, saturation, vignette and blur on generated BGRA/NV12
 surfaces. Native imports are not available in Wasm; test portable blur via
 `?demo=media-tiles&backend=webgpu` and `?demo=media-tiles&backend=webgl`.

@@ -6565,10 +6565,12 @@ dependencies = [
  "core-text",
  "image",
  "libc",
+ "log",
  "objc2-foundation 0.3.2",
  "parley",
  "serde",
  "serde_json",
+ "sha2",
  "skrifa 0.44.0",
  "sysinfo",
  "tempfile",
@@ -6577,6 +6579,7 @@ dependencies = [
  "web-sys",
  "web-time",
  "wgpu",
+ "windows 0.62.2",
  "xgpui",
  "xgpui-apple",
  "xgpui-canvas",
@@ -6589,6 +6592,7 @@ dependencies = [
  "xgpui-svg",
  "xgpui-web",
  "xgpui-wgpu",
+ "xgpui-windows",
 ]
 
 [[package]]
