@@ -280,8 +280,10 @@ Those follow-ups retain these gates:
 - Windows lab and unit-test acceptance is confirmed. #140 retains broader
   DirectWrite compatibility/host validation; the five standalone backend fixture
   tests are implemented and cross-checked for MSVC.
-  Cosmic arbitrary-axis integration and native/browser validation remains #141;
-  the bundled Cosmic interface does not expose arbitrary axis inputs.
+- Cosmic inspection and Linux headless font validation are complete. #141 retains
+  arbitrary-axis integration, interactive Linux desktop acceptance and default
+  web backend parity; the bundled Cosmic interface does not expose arbitrary
+  axis inputs. The Parley Wasm inspector already supports inspection and axes.
 - Automatic optical sizing remains explicitly deferred until size-dependent
   instance identity and coordinate mapping are specified and tested.
 
@@ -409,3 +411,13 @@ resolved-instance identity, fallback, metrics and Swash rasterization; painting
 with varied coordinates alone would be incorrect. Linux CI also runs the Parley
 library, native-host construction/axis smoke test and shared slider tests.
 Interactive Wayland/X11 and Linux IME/accessibility acceptance remain separate.
+
+Validation at commit `8359fe8` passed on Ubuntu: 29 Cosmic tests, 36 active Parley
+library tests, the native-host construction/axis smoke test and shared slider
+tests. The complete [validation run](https://github.com/gpui-luma-dev/xgpui/actions/runs/42065875880)
+also passed native macOS/Windows, experimental iOS simulator and Wasm checks.
+The Linux host build exposed a stale DMA-BUF completion-guard call; the private
+guard now retains either staging allocations or imported textures, preserving
+resource lifetime and admission-release order. This adds no public API and is
+included in `xgpui-wgpu 2.1.0`; no additional version increment is needed for this
+fix within the same release.

@@ -26,8 +26,9 @@ stays fixed when text size changes; automatic optical sizing remains separate.
 inspectors without hard-coded tag lists. Results distinguish unsupported queries,
 successful empty lists and errors. Existing `FontFeatures` continues to accept
 numeric feature parameters. Core privately parses the metadata; the additive
-`PlatformTextSystem::font_table` hook obtains bytes from CoreText, DirectWrite or
-Parley's actual resolved face. No helper crate or public parser API is added.
+`PlatformTextSystem::font_table` hook obtains bytes from CoreText, DirectWrite,
+native Cosmic or Parley's actual resolved face. No helper crate or public parser
+API is added.
 
 Try the native/Parley comparison and run its tests from the repository root:
 
@@ -71,6 +72,8 @@ Cosmic shaping/metrics/raster work. Parley remains the axis-capable Linux option
 Linux validation includes the Cosmic and Parley suites, a headless native-host
 construction/axis smoke test, and shared slider interaction tests. Physical
 Wayland/X11 output and Linux IME/accessibility remain separate acceptance checks.
+The Linux DMA-BUF import path also uses the current completion guard to retain
+imported textures until preparation commands finish.
 
 ### Core 3.0 migration
 
