@@ -142,3 +142,40 @@ Use `--backend both` for comparison or `--workload scroll --scroll-frames 640
 Report OS/display server, scale, GPU/driver and terminal output.
 
 Font licenses: repository Plex assets; [Inter and Noto fixtures](../../../extensions/crates/xgpui-parley/tests/fonts/README.md).
+
+
+The comparison workload also registers pinned Roboto Flex and shows static
+`wght`/`wdth`/negative `slnt`/explicit `opsz` samples, a numeric-feature sample,
+and the backend's axis ranges and GSUB/GPOS feature tags. Axis samples are
+omitted when the backend does not support explicit variations. The comparison now has live sliders at the top of each window for weight,
+width, negative slant, and optical size, with matching presets and two specimen
+sizes. Each window is controlled independently. See
+[font controls and API review](../../../docs/FONT-CONTROLS.md).
+
+[Font-controls testing](../../../docs/FONT-CONTROLS-TESTING.md) includes native
+Windows fixture tests, visual checks, and headless comparison commands.
+
+
+## Live axis controls
+
+```sh
+just text --backend both
+just lab-test axes::tests -- --nocapture
+```
+
+Drag any slider or focus it and use arrows (Shift for larger steps), Home, or
+End. Presets and Default use the same values on native and Parley. The large
+specimen, small wrapping specimen, axis values, and measured advance update
+live. The steps are `wght=10`, `wdth=1`, `slnt=0.25`, `opsz=1` in design units.
+The controls expose slider values and increment/decrement/set-value actions to
+accessibility clients.
+
+Each inspector admits at most 512 distinct preview combinations for its
+lifetime. On exhaustion it holds the last successful preview and explains why;
+previously visited settings, including Default, still work. Restart the lab for
+a fresh session. This is a descriptor admission limit, not a global CPU/GPU
+memory guarantee. Timings-only runs do not construct the live inspector.
+
+`just lab-test` runs the lab suite with backtraces enabled. The filtered command
+above runs the pointer/keyboard/preset/preview-limit subset against the real
+backends.

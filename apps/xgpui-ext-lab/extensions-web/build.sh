@@ -38,6 +38,19 @@ PYTHON
 cp "$app/italy.mjs" "$app/italy.css" "$out/"
 mkdir -p "$out/italy"
 cp "$app/assets/italy/"*.jpg "$app/assets/italy/README.md" "$app/assets/italy/prepare.swift" "$out/italy/"
+mkdir -p "$out/font-licenses"
+cp extensions/crates/xgpui-parley/tests/fonts/RobotoFlex-OFL.txt "$out/font-licenses/"
+cp extensions/crates/xgpui-parley/tests/fonts/Inter-LICENSE "$out/font-licenses/"
+cp gpui/crates/gpui-web/assets/fonts/ibm-plex-sans/license.txt "$out/font-licenses/IBM-Plex-license.txt"
+cp extensions/crates/xgpui-parley/tests/fonts/NotoSans-LICENSE "$out/font-licenses/"
+cat > "$out/font-licenses/index.html" <<'HTML'
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Font licenses</title>
+<h1>Bundled font licenses</h1><ul>
+<li><a href="RobotoFlex-OFL.txt">Roboto Flex</a></li>
+<li><a href="Inter-LICENSE">Inter</a></li>
+<li><a href="IBM-Plex-license.txt">IBM Plex Sans</a></li>
+<li><a href="NotoSans-LICENSE">Noto Sans Arabic and Hebrew</a></li></ul>
+HTML
 cp "$app/color-attribution.html" "$out/color-attribution.html"
 cp -R "$app/assets/colorimetry" "$out/colorimetry"
 mkdir -p "$out/icc"

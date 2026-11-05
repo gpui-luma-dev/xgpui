@@ -410,3 +410,53 @@ fn overflowing_paragraph_geometry_is_rejected_without_breaking_old_layouts() -> 
     );
     Ok(())
 }
+
+#[test]
+fn explicit_axes_change_wrapping_carets_and_selection_with_retained_faces() -> Result<()> {
+    let backend = backend()?;
+    let text = "Hamburgefonts Hamburgefonts Hamburgefonts";
+    let mut descriptor = gpui::font("Roboto Flex");
+    let mut results = Vec::new();
+    for width in [50.0, 150.0] {
+        descriptor.variations = super::tests::axes(&[
+            ("wdth", width),
+            ("wght", 500.0),
+            ("slnt", -8.0),
+            ("opsz", 14.0),
+        ]);
+        let id = backend.font_id(&descriptor)?;
+        let runs = [FontRun {
+            len: text.len(),
+            font_id: id,
+        }];
+        let prepared = backend.prepare_paragraph(text, px(24.0), &runs)?;
+        let wide = prepared.layout(px(2000.0))?;
+        let narrow = prepared.layout(px(190.0))?;
+        let end = at(text.len(), Affinity::Upstream);
+        let caret = wide.caret_bounds(end)?;
+        let selection = wide.selection_bounds(at(0, Affinity::Downstream), end)?;
+        assert_eq!(selection.len(), 1);
+        assert!((f32::from(selection[0].size.width) - f32::from(caret.origin.x)).abs() < 0.1);
+        let hit = wide.hit_test(point(caret.origin.x, caret.origin.y + px(1.0)))?;
+        assert_eq!(hit.byte_index, text.len());
+        for &face in wide.resolved_faces() {
+            assert_eq!(
+                backend.face(face)?.normalized_coords(),
+                backend.face(id)?.normalized_coords()
+            );
+        }
+        results.push((wide, narrow, caret.origin.x));
+    }
+    assert!(results[1].2 > results[0].2);
+    assert!(results[1].1.parley_layout().len() >= results[0].1.parley_layout().len());
+    // Both old prepared layouts still retain their own geometry and coordinates.
+    assert!(
+        results[0]
+            .0
+            .caret_bounds(at(text.len(), Affinity::Upstream))?
+            .origin
+            .x
+            < results[1].2
+    );
+    Ok(())
+}

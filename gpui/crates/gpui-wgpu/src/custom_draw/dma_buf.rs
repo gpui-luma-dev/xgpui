@@ -277,7 +277,10 @@ fn import(
         .guards
         .lock()
         .unwrap()
-        .push(Arc::new(texture.clone()));
+        .push(ImageCopyCompletion {
+            _resource: Arc::new(texture.clone()),
+            _admission: None,
+        });
     Ok(WgpuCustomOutput {
         texture,
         source_sized: true,

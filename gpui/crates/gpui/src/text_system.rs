@@ -1,5 +1,8 @@
 mod font_fallbacks;
 mod font_features;
+pub(crate) mod font_inspection;
+mod font_introspection;
+mod font_variations;
 mod line;
 mod line_layout;
 mod line_wrapper;
@@ -7,6 +10,8 @@ mod paragraph;
 
 pub use font_fallbacks::*;
 pub use font_features::*;
+pub use font_introspection::*;
+pub use font_variations::*;
 pub use line::*;
 pub use line_layout::*;
 pub use line_wrapper::*;
@@ -325,6 +330,25 @@ impl TextSystem {
     #[cfg(test)]
     pub(crate) fn report_missing_glyphs_in_test(&self, missing_glyphs: Vec<MissingGlyph>) {
         self.missing_glyph_reporter.report(missing_glyphs);
+    }
+
+    /// Reports this backend's font inspection and static variation capabilities.
+    pub fn font_capabilities(&self) -> FontCapabilities {
+        self.platform_text_system.font_capabilities()
+    }
+    /// Queries available axis ranges for a resolved face.
+    pub fn font_axes(&self, font_id: FontId) -> Result<FontQuery<Vec<VariationAxisInfo>>> {
+        self.platform_text_system.font_axes(font_id)
+    }
+
+    /// Queries GSUB/GPOS features on this resolved face. A successful empty list
+    /// differs from an unsupported query or an error. Metadata does not guarantee
+    /// applicability to a particular script, language, or input text.
+    pub fn opentype_features(
+        &self,
+        font_id: FontId,
+    ) -> Result<FontQuery<Vec<OpenTypeFeatureInfo>>> {
+        self.platform_text_system.opentype_features(font_id)
     }
 
     /// Get the FontId for the configure font family and style.
@@ -1314,6 +1338,9 @@ pub struct Font {
     /// The font features to use.
     pub features: FontFeatures,
 
+    /// Precise explicit variable-font coordinates in design units.
+    pub variations: FontVariations,
+
     /// The fallbacks fonts to use.
     pub fallbacks: Option<FontFallbacks>,
 
@@ -1335,6 +1362,7 @@ pub fn font(family: impl Into<SharedString>) -> Font {
     Font {
         family: family.into(),
         features: FontFeatures::default(),
+        variations: FontVariations::default(),
         weight: FontWeight::default(),
         style: FontStyle::default(),
         fallbacks: None,

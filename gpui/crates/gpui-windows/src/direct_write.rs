@@ -26,13 +26,115 @@ use windows_numerics::Vector2;
 use crate::*;
 use gpui::*;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct FontInfo {
     font_family_h: HSTRING,
     font_face: IDWriteFontFace3,
     features: IDWriteTypography,
     fallbacks: Option<IDWriteFontFallback>,
     font_collection: IDWriteFontCollection1,
+    variations: FontVariations,
+    selection_weight: DWRITE_FONT_WEIGHT,
+    selection_style: DWRITE_FONT_STYLE,
+}
+
+// DirectWrite tags use little-endian byte order, unlike OpenType's on-disk tags.
+fn font_table(face: &IDWriteFontFace3, tag: &[u8; 4]) -> Result<Option<Vec<u8>>> {
+    unsafe {
+        let mut data = std::ptr::null_mut();
+        let mut size = 0;
+        let mut context = std::ptr::null_mut();
+        let mut exists = windows::core::BOOL::default();
+        face.TryGetFontTable(
+            u32::from_le_bytes(*tag),
+            &mut data,
+            &mut size,
+            &mut context,
+            &mut exists,
+        )?;
+        if !exists.as_bool() {
+            return Ok(None);
+        }
+        struct Table<'a>(&'a IDWriteFontFace3, *mut c_void);
+        impl Drop for Table<'_> {
+            fn drop(&mut self) {
+                unsafe { self.0.ReleaseFontTable(self.1) }
+            }
+        }
+        let _table = Table(face, context);
+        anyhow::ensure!(size == 0 || !data.is_null(), "null DirectWrite table data");
+        Ok(Some(if size == 0 {
+            Vec::new()
+        } else {
+            std::slice::from_raw_parts(data.cast::<u8>(), size as usize).to_vec()
+        }))
+    }
+}
+
+fn varied_face(
+    face: &IDWriteFontFace3,
+    settings: &FontVariations,
+    implicit_weight: Option<f32>,
+) -> Result<(IDWriteFontFace3, Vec<DWRITE_FONT_AXIS_VALUE>)> {
+    unsafe {
+        let face5: IDWriteFontFace5 = face.cast()?;
+        if !face5.HasVariations().as_bool() {
+            return Ok((face.clone(), Vec::new()));
+        }
+        let resource = face5.GetFontResource()?;
+        let count = resource.GetFontAxisCount() as usize;
+        anyhow::ensure!(count <= 4096, "unreasonable font axis count");
+        let mut ranges = vec![DWRITE_FONT_AXIS_RANGE::default(); count];
+        resource.GetFontAxisRanges(&mut ranges)?;
+        let face_count = face5.GetFontAxisValueCount() as usize;
+        anyhow::ensure!(face_count <= 4096, "unreasonable instance axis count");
+        let mut values = vec![DWRITE_FONT_AXIS_VALUE::default(); face_count];
+        face5.GetFontAxisValues(&mut values)?;
+        for value in &mut values {
+            if value.axisTag == DWRITE_FONT_AXIS_TAG_WEIGHT {
+                if let Some(weight) = implicit_weight {
+                    value.value = weight;
+                }
+            }
+            if let Some((_, coordinate)) = settings
+                .settings()
+                .iter()
+                .find(|(tag, _)| u32::from_le_bytes(*tag.as_bytes()) == value.axisTag.0)
+            {
+                value.value = *coordinate;
+            }
+            let range = ranges
+                .iter()
+                .find(|range| range.axisTag == value.axisTag)
+                .context("missing axis range")?;
+            anyhow::ensure!(
+                range.minValue.is_finite()
+                    && range.maxValue.is_finite()
+                    && range.minValue <= range.maxValue
+                    && value.value.is_finite(),
+                "invalid font axis range or coordinate"
+            );
+            value.value = value.value.clamp(range.minValue, range.maxValue);
+        }
+        let instance = resource.CreateFontFace(face.GetSimulations(), &values)?;
+        Ok((instance.cast()?, values))
+    }
+}
+
+fn instance_collection(
+    factory: &IDWriteFactory5,
+    face: &IDWriteFontFace3,
+    values: &[DWRITE_FONT_AXIS_VALUE],
+) -> Result<IDWriteFontCollection1> {
+    unsafe {
+        let face5: IDWriteFontFace5 = face.cast()?;
+        let reference = face5
+            .GetFontResource()?
+            .CreateFontFaceReference(face.GetSimulations(), values)?;
+        let builder = factory.CreateFontSetBuilder()?;
+        builder.AddFontFaceReference2(&reference)?;
+        Ok(factory.CreateFontCollectionFromFontSet(&builder.CreateFontSet()?)?)
+    }
 }
 
 pub(crate) struct DirectWriteTextSystem {
@@ -48,6 +150,7 @@ struct DirectWriteComponents {
     text_renderer: TextRendererWrapper,
     system_ui_font_name: SharedString,
     system_subpixel_rendering: bool,
+    static_variations: bool,
 }
 
 impl Drop for DirectWriteComponents {
@@ -77,8 +180,10 @@ struct DirectWriteState {
     custom_font_collection: IDWriteFontCollection1,
     fonts: Vec<FontInfo>,
     font_to_font_id: HashMap<Font, FontId>,
-    font_info_cache: HashMap<usize, FontId>,
+    font_info_cache: HashMap<(usize, FontId), FontId>,
     layout_line_scratch: Vec<u16>,
+    // The in-memory loader borrows these buffers. Drop them after every face.
+    font_data: Vec<Cow<'static, [u8]>>,
 }
 
 impl GPUState {
@@ -183,7 +288,7 @@ impl DirectWriteTextSystem {
 
         let system_subpixel_rendering = get_system_subpixel_rendering();
         let system_ui_font_name = get_system_ui_font_name();
-        let components = DirectWriteComponents {
+        let mut components = DirectWriteComponents {
             locale,
             factory,
             in_memory_loader,
@@ -191,6 +296,7 @@ impl DirectWriteTextSystem {
             text_renderer,
             system_ui_font_name,
             system_subpixel_rendering,
+            static_variations: false,
         };
 
         let system_font_collection = unsafe {
@@ -207,6 +313,29 @@ impl DirectWriteTextSystem {
                 .CreateFontCollectionFromFontSet(&custom_font_set)?
         };
 
+        // Probe the interface actually needed by ranged axis settings. Older
+        // DirectWrite versions retain their existing text path.
+        components.static_variations = unsafe {
+            components
+                .factory
+                .CreateTextFormat(
+                    &HSTRING::from(components.system_ui_font_name.as_str()),
+                    &system_font_collection,
+                    DWRITE_FONT_WEIGHT_NORMAL,
+                    DWRITE_FONT_STYLE_NORMAL,
+                    DWRITE_FONT_STRETCH_NORMAL,
+                    16.0,
+                    &components.locale,
+                )
+                .and_then(|format| {
+                    components
+                        .factory
+                        .CreateTextLayout(&[32], &format, 100.0, 100.0)
+                })
+                .and_then(|layout| layout.cast::<IDWriteTextLayout4>())
+                .is_ok()
+        };
+
         Ok(Self {
             components,
             state: RwLock::new(DirectWriteState {
@@ -217,6 +346,7 @@ impl DirectWriteTextSystem {
                 font_to_font_id: HashMap::default(),
                 font_info_cache: HashMap::default(),
                 layout_line_scratch: Vec::new(),
+                font_data: Vec::new(),
             }),
         })
     }
@@ -243,6 +373,10 @@ impl PlatformTextSystem for DirectWriteTextSystem {
     }
 
     fn font_id(&self, font: &Font) -> Result<FontId> {
+        anyhow::ensure!(
+            font.variations.settings().is_empty() || self.components.static_variations,
+            "this DirectWrite version does not support ranged font variations"
+        );
         let lock = self.state.upgradable_read();
         if let Some(font_id) = lock.font_to_font_id.get(font) {
             Ok(*font_id)
@@ -251,6 +385,26 @@ impl PlatformTextSystem for DirectWriteTextSystem {
                 .select_and_cache_font(&self.components, font)
                 .with_context(|| format!("Failed to select font: {:?}", font))
         }
+    }
+
+    fn font_capabilities(&self) -> FontCapabilities {
+        FontCapabilities {
+            feature_introspection: true,
+            axis_introspection: true,
+            static_variations: self.components.static_variations,
+        }
+    }
+
+    fn font_table(&self, id: FontId, tag: FontTag) -> Result<FontQuery<Option<Vec<u8>>>> {
+        let face = self
+            .state
+            .read()
+            .fonts
+            .get(id.0)
+            .context("invalid font ID")?
+            .font_face
+            .clone();
+        Ok(FontQuery::Supported(font_table(&face, tag.as_bytes())?))
     }
 
     fn font_metrics(&self, font_id: FontId) -> FontMetrics {
@@ -332,7 +486,8 @@ impl DirectWriteState {
             let font_id = FontId(this.fonts.len());
             let font_face_key = info.font_face.cast::<IUnknown>().unwrap().as_raw().addr();
             this.fonts.push(info);
-            this.font_info_cache.insert(font_face_key, font_id);
+            this.font_info_cache
+                .insert((font_face_key, font_id), font_id);
             Some(font_id)
         };
 
@@ -363,30 +518,20 @@ impl DirectWriteState {
         fonts: Vec<Cow<'static, [u8]>>,
     ) -> Result<()> {
         for font_data in fonts {
-            match font_data {
-                Cow::Borrowed(data) => unsafe {
-                    let font_file = components
-                        .in_memory_loader
-                        .CreateInMemoryFontFileReference(
-                            &components.factory,
-                            data.as_ptr().cast(),
-                            data.len() as _,
-                            None,
-                        )?;
-                    components.builder.AddFontFile(&font_file)?;
-                },
-                Cow::Owned(data) => unsafe {
-                    let font_file = components
-                        .in_memory_loader
-                        .CreateInMemoryFontFileReference(
-                            &components.factory,
-                            data.as_ptr().cast(),
-                            data.len() as _,
-                            None,
-                        )?;
-                    components.builder.AddFontFile(&font_file)?;
-                },
-            }
+            let font_file = unsafe {
+                components
+                    .in_memory_loader
+                    .CreateInMemoryFontFileReference(
+                        &components.factory,
+                        font_data.as_ptr().cast(),
+                        font_data.len() as _,
+                        None,
+                    )?
+            };
+            // Keep owned bytes alive even if a later collection rebuild fails;
+            // native resources or the builder can still refer to this file.
+            self.font_data.push(font_data);
+            unsafe { components.builder.AddFontFile(&font_file)? };
         }
         let set = unsafe { components.builder.CreateFontSet()? };
         let collection = unsafe { components.factory.CreateFontCollectionFromFontSet(&set)? };
@@ -398,6 +543,7 @@ impl DirectWriteState {
     fn generate_font_fallbacks(
         fallbacks: &FontFallbacks,
         factory: &IDWriteFactory5,
+        source_collection: &IDWriteFontCollection1,
         system_font_collection: &IDWriteFontCollection1,
     ) -> Result<Option<IDWriteFontFallback>> {
         let fallback_list = fallbacks.fallback_list();
@@ -406,7 +552,12 @@ impl DirectWriteState {
         }
         unsafe {
             let builder = factory.CreateFontFallbackBuilder()?;
-            let font_set = &system_font_collection.GetFontSet()?;
+            let set_builder = factory.CreateFontSetBuilder()?;
+            set_builder.AddFontSet(&source_collection.GetFontSet()?)?;
+            set_builder.AddFontSet(&system_font_collection.GetFontSet()?)?;
+            let combined =
+                factory.CreateFontCollectionFromFontSet(&set_builder.CreateFontSet()?)?;
+            let font_set = &combined.GetFontSet()?;
             let mut unicode_ranges = Vec::new();
             for family_name in fallback_list {
                 let family_name = HSTRING::from(family_name);
@@ -441,7 +592,7 @@ impl DirectWriteState {
                 builder.AddMapping(
                     &unicode_ranges,
                     &[family_name.as_ptr()],
-                    None,
+                    &combined,
                     None,
                     None,
                     1.0,
@@ -466,6 +617,7 @@ impl DirectWriteState {
         &Font {
             ref family,
             ref features,
+            ref variations,
             ref fallbacks,
             weight,
             style,
@@ -498,12 +650,33 @@ impl DirectWriteState {
             let res = maybe!({
                 let font_face_ref = unsafe { font.GetFontFaceReference(index).log_err()? };
                 let font_face = unsafe { font_face_ref.CreateFontFace().log_err()? };
+                let variable = font_face
+                    .cast::<IDWriteFontFace5>()
+                    .is_ok_and(|face| unsafe { face.HasVariations().as_bool() });
+                let selection_weight = if variable && !variations.settings().is_empty() {
+                    font_weight_to_dwrite(weight)
+                } else {
+                    unsafe { font_face.GetWeight() }
+                };
+                let selection_style = unsafe { font_face.GetStyle() };
+                let font_face = if variations.settings().is_empty() {
+                    font_face
+                } else {
+                    varied_face(&font_face, variations, Some(weight.0))
+                        .log_err()?
+                        .0
+                };
                 let direct_write_features =
                     unsafe { Self::generate_font_features(factory, features).log_err()? };
                 let fallbacks = fallbacks.as_ref().and_then(|fallbacks| {
-                    Self::generate_font_fallbacks(fallbacks, factory, system_font_collection)
-                        .log_err()
-                        .flatten()
+                    Self::generate_font_fallbacks(
+                        fallbacks,
+                        factory,
+                        collection,
+                        system_font_collection,
+                    )
+                    .log_err()
+                    .flatten()
                 });
                 let font_info = FontInfo {
                     font_family_h: font_family_h.clone(),
@@ -511,6 +684,9 @@ impl DirectWriteState {
                     features: direct_write_features,
                     fallbacks,
                     font_collection: collection.clone(),
+                    variations: variations.clone(),
+                    selection_weight,
+                    selection_style,
                 };
                 Some(font_info)
             });
@@ -541,6 +717,7 @@ impl DirectWriteState {
 
             let mut utf8_offset = 0usize;
             let mut utf16_offset = 0u32;
+            let mut font_ranges = Vec::with_capacity(font_runs.len());
             let text_layout = {
                 let first_run = &font_runs[0];
                 let font_info = &self.fonts[first_run.font_id.0];
@@ -550,8 +727,8 @@ impl DirectWriteState {
                     .CreateTextFormat(
                         &font_info.font_family_h,
                         collection,
-                        font_info.font_face.GetWeight(),
-                        font_info.font_face.GetStyle(),
+                        font_info.selection_weight,
+                        font_info.selection_style,
                         DWRITE_FONT_STRETCH_NORMAL,
                         font_size.as_f32(),
                         &components.locale,
@@ -574,21 +751,13 @@ impl DirectWriteState {
                     startPosition: utf16_offset,
                     length: current_text_utf16_length,
                 };
+                font_ranges.push((text_range, first_run.font_id));
                 layout.SetTypography(&font_info.features, text_range)?;
                 utf16_offset += current_text_utf16_length;
 
                 layout
             };
 
-            let (ascent, descent) = {
-                let mut first_metrics = [DWRITE_LINE_METRICS::default(); 4];
-                let mut line_count = 0u32;
-                text_layout.GetLineMetrics(Some(&mut first_metrics), &mut line_count)?;
-                (
-                    px(first_metrics[0].baseline),
-                    px(first_metrics[0].height - first_metrics[0].baseline),
-                )
-            };
             let mut break_ligatures = true;
             for run in &font_runs[1..] {
                 let font_info = &self.fonts[run.font_id.0];
@@ -610,13 +779,64 @@ impl DirectWriteState {
                     font_size.as_f32()
                 };
                 text_layout.SetFontSize(font_size, text_range)?;
-                text_layout.SetFontStyle(font_info.font_face.GetStyle(), text_range)?;
-                text_layout.SetFontWeight(font_info.font_face.GetWeight(), text_range)?;
+                text_layout.SetFontStyle(font_info.selection_style, text_range)?;
+                text_layout.SetFontWeight(font_info.selection_weight, text_range)?;
                 text_layout.SetTypography(&font_info.features, text_range)?;
+                font_ranges.push((text_range, run.font_id));
 
                 break_ligatures = !break_ligatures;
             }
 
+            if font_runs
+                .iter()
+                .any(|run| !self.fonts[run.font_id.0].variations.settings().is_empty())
+            {
+                let layout4: IDWriteTextLayout4 = text_layout.cast()?;
+                let mut resolved = Vec::new();
+                let mut discarded = Vec::new();
+                {
+                    let mut context = RendererContext {
+                        text_system: self,
+                        components,
+                        index_converter: StringIndexConverter::new(text),
+                        runs: &mut discarded,
+                        width: 0.0,
+                        font_ranges: &font_ranges,
+                        resolve_variations: Some(&mut resolved),
+                    };
+                    text_layout.Draw(
+                        Some((&raw mut context).cast::<c_void>().cast_const()),
+                        &components.text_renderer.0,
+                        0.0,
+                        0.0,
+                    )?;
+                }
+                layout4.SetAutomaticFontAxes(DWRITE_AUTOMATIC_FONT_AXES_NONE)?;
+                for (range, requested, face) in resolved {
+                    let settings = &self.fonts[requested.0].variations;
+                    let (instance, values) = varied_face(&face, settings, None)?;
+                    // Static faces ignore unsupported axes, retaining their
+                    // original selection and simulation behavior.
+                    if values.is_empty() {
+                        continue;
+                    }
+                    let collection = instance_collection(&components.factory, &instance, &values)?;
+                    let family = get_name(instance.GetFamilyNames()?, &components.locale)?;
+                    text_layout.SetFontCollection(&collection, range)?;
+                    text_layout.SetFontFamilyName(&HSTRING::from(family), range)?;
+                    layout4.SetFontAxisValues(&values, range)?;
+                }
+            }
+
+            let (ascent, descent) = {
+                let mut first_metrics = [DWRITE_LINE_METRICS::default(); 4];
+                let mut line_count = 0u32;
+                text_layout.GetLineMetrics(Some(&mut first_metrics), &mut line_count)?;
+                (
+                    px(first_metrics[0].baseline),
+                    px(first_metrics[0].height - first_metrics[0].baseline),
+                )
+            };
             let mut runs = Vec::new();
             let mut renderer_context = RendererContext {
                 text_system: self,
@@ -624,6 +844,8 @@ impl DirectWriteState {
                 index_converter: StringIndexConverter::new(text),
                 runs: &mut runs,
                 width: 0.0,
+                font_ranges: &font_ranges,
+                resolve_variations: None,
             };
             text_layout.Draw(
                 Some((&raw mut renderer_context).cast::<c_void>().cast_const()),
@@ -1407,6 +1629,8 @@ struct RendererContext<'t, 'a, 'b> {
     index_converter: StringIndexConverter<'a>,
     runs: &'b mut Vec<ShapedRun>,
     width: f32,
+    font_ranges: &'b [(DWRITE_TEXT_RANGE, FontId)],
+    resolve_variations: Option<&'b mut Vec<(DWRITE_TEXT_RANGE, FontId, IDWriteFontFace3)>>,
 }
 
 #[derive(Debug)]
@@ -1531,33 +1755,51 @@ impl IDWriteTextRenderer_Impl for TextRenderer_Impl {
             ));
         };
 
-        let font_face_key = font_face.cast::<IUnknown>().unwrap().as_raw().addr();
-        let font_id = context
-            .text_system
-            .font_info_cache
-            .get(&font_face_key)
-            .copied()
-            // in some circumstances, we might be getting served a FontFace that we did not create ourselves
-            // so create a new font from it and cache it accordingly. The usual culprit here seems to be Segoe UI Symbol
-            .map_or_else(
-                || {
-                    let font = font_face_to_font(font_face, &self.locale)
-                        .ok_or_else(|| Error::new(DWRITE_E_NOFONT, "Failed to create font"))?;
-                    let font_id = match context.text_system.font_to_font_id.get(&font) {
-                        Some(&font_id) => font_id,
-                        None => context
-                            .text_system
-                            .select_and_cache_font(context.components, &font)
-                            .ok_or_else(|| Error::new(DWRITE_E_NOFONT, "Failed to create font"))?,
-                    };
-                    context
-                        .text_system
-                        .font_info_cache
-                        .insert(font_face_key, font_id);
-                    windows::core::Result::Ok(font_id)
-                },
-                Ok,
-            )?;
+        let requested = context
+            .font_ranges
+            .iter()
+            .find(|(range, _)| {
+                desc.textPosition >= range.startPosition
+                    && desc.textPosition < range.startPosition + range.length
+            })
+            .map(|(_, id)| *id)
+            .ok_or_else(|| Error::new(E_INVALIDARG, "glyph run has no requested descriptor"))?;
+        if let Some(resolved) = context.resolve_variations.as_mut() {
+            if !context.text_system.fonts[requested.0]
+                .variations
+                .settings()
+                .is_empty()
+            {
+                resolved.push((
+                    DWRITE_TEXT_RANGE {
+                        startPosition: desc.textPosition,
+                        length: desc.stringLength,
+                    },
+                    requested,
+                    font_face.clone(),
+                ));
+            }
+            return Ok(());
+        }
+        let font_face_key = (font_face.cast::<IUnknown>()?.as_raw().addr(), requested);
+        let font_id = if let Some(&id) = context.text_system.font_info_cache.get(&font_face_key) {
+            id
+        } else {
+            // Keep the shaper's actual face (including axis coordinates), not a
+            // new family/weight selection that could discard the instance.
+            let mut info = context.text_system.fonts[requested.0].clone();
+            info.font_face = font_face.clone();
+            if let Some(actual) = font_face_to_font(font_face, &self.locale) {
+                info.font_family_h = HSTRING::from(actual.family.as_str());
+            }
+            let id = FontId(context.text_system.fonts.len());
+            context.text_system.fonts.push(info);
+            context
+                .text_system
+                .font_info_cache
+                .insert(font_face_key, id);
+            id
+        };
 
         let color_font = unsafe { font_face.IsColorFont().as_bool() };
 
@@ -1787,6 +2029,7 @@ fn font_face_to_font(font_face: &IDWriteFontFace3, locale: &HSTRING) -> Option<F
     Some(Font {
         family: family_name.into(),
         features: FontFeatures::default(),
+        variations: Default::default(),
         weight: font_weight_from_dwrite(weight),
         style: font_style_from_dwrite(style),
         fallbacks: None,
@@ -2164,6 +2407,275 @@ mod tests {
             &rasterized[corner..corner + 4],
             &[0, 0, 0, 0],
             "uncovered texel retained the poison from the uninitialized render target"
+        );
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod font_variation_tests {
+    use super::{DirectWriteTextSystem, get_name};
+    use anyhow::{Context, Result};
+    use gpui::{
+        FontFallbacks, FontFeatures, FontId, FontQuery, FontRun, FontVariations, FontWeight,
+        GlyphId, LineLayout, PlatformTextSystem, RenderGlyphParams, font, point, px,
+    };
+    use std::{borrow::Cow, sync::Arc};
+    use windows::{
+        Win32::Graphics::DirectWrite::{DWRITE_FONT_AXIS_VALUE, IDWriteFontFace5},
+        core::Interface,
+    };
+
+    const FLEX: &[u8] =
+        include_bytes!("../../../../extensions/crates/xgpui-parley/tests/fonts/RobotoFlex.ttf");
+    const PLEX: &[u8] =
+        include_bytes!("../../gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf");
+
+    fn backend() -> Result<DirectWriteTextSystem> {
+        let fonts = DirectWriteTextSystem::new(None)?;
+        anyhow::ensure!(
+            fonts.font_capabilities().static_variations,
+            "these native tests require DirectWrite IDWriteTextLayout4 (use a current Windows 10/11 host)"
+        );
+        fonts.add_fonts(vec![Cow::Borrowed(FLEX), Cow::Borrowed(PLEX)])?;
+        Ok(fonts)
+    }
+    fn axes(values: &[(&str, f32)]) -> FontVariations {
+        FontVariations::new(
+            values
+                .iter()
+                .map(|(tag, value)| (tag.parse().unwrap(), *value)),
+        )
+        .unwrap()
+    }
+    fn coordinate(fonts: &DirectWriteTextSystem, id: FontId, tag: &[u8; 4]) -> Result<f32> {
+        let face: IDWriteFontFace5 = fonts.state.read().fonts[id.0].font_face.cast()?;
+        let mut values = vec![
+            DWRITE_FONT_AXIS_VALUE::default();
+            unsafe { face.GetFontAxisValueCount() } as usize
+        ];
+        unsafe { face.GetFontAxisValues(&mut values)? };
+        Ok(values
+            .into_iter()
+            .find(|value| value.axisTag.0 == u32::from_le_bytes(*tag))
+            .context("missing axis coordinate")?
+            .value)
+    }
+    fn line(
+        fonts: &DirectWriteTextSystem,
+        id: FontId,
+        text: &str,
+        size: f32,
+    ) -> Result<LineLayout> {
+        fonts.state.write().layout_line(
+            &fonts.components,
+            text,
+            px(size),
+            &[FontRun {
+                len: text.len(),
+                font_id: id,
+            }],
+        )
+    }
+    fn mask(fonts: &DirectWriteTextSystem, id: FontId, glyph: GlyphId) -> Result<Vec<u8>> {
+        let params = RenderGlyphParams {
+            font_id: id,
+            glyph_id: glyph,
+            font_size: px(32.0),
+            scale_factor: 1.0,
+            subpixel_variant: point(0, 0),
+            is_emoji: false,
+            subpixel_rendering: false,
+            dilation: 0,
+        };
+        let bounds = fonts.glyph_raster_bounds(&params)?;
+        Ok(fonts.rasterize_glyph(&params, bounds)?.1)
+    }
+
+    #[test]
+    fn font_variation_owned_font_bytes_outlive_registration() -> Result<()> {
+        let fonts = DirectWriteTextSystem::new(None)?;
+        anyhow::ensure!(
+            fonts.font_capabilities().static_variations,
+            "IDWriteTextLayout4 required"
+        );
+        fonts.add_fonts(vec![Cow::Owned(FLEX.to_vec())])?;
+        let scratch = vec![0xa5; FLEX.len()];
+        std::hint::black_box(&scratch);
+        let mut descriptor = font("Roboto Flex");
+        descriptor.variations = axes(&[("slnt", -9.125), ("wght", 600.0)]);
+        let id = fonts.font_id(&descriptor)?;
+        let shaped = line(&fonts, id, "H", 32.0)?;
+        assert!((coordinate(&fonts, shaped.runs[0].font_id, b"slnt")? + 9.125).abs() < 0.01);
+        assert!(!mask(&fonts, shaped.runs[0].font_id, shaped.runs[0].glyphs[0].id)?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn font_variation_inspection_and_numeric_features() -> Result<()> {
+        let fonts = backend()?;
+        let id = fonts.font_id(&font("Roboto Flex"))?;
+        let FontQuery::Supported(available) = fonts.font_axes(id)? else {
+            panic!("axis query unsupported")
+        };
+        assert!(
+            available
+                .iter()
+                .any(|axis| axis.tag.to_string() == "slnt" && axis.min_value == -10.0)
+        );
+        let FontQuery::Supported(features) = fonts.opentype_features(id)? else {
+            panic!("feature query unsupported")
+        };
+        assert!(
+            features
+                .iter()
+                .any(|feature| feature.tag.to_string() == "liga" && feature.substitution)
+        );
+        assert!(
+            features
+                .iter()
+                .any(|feature| feature.tag.to_string() == "kern" && feature.positioning)
+        );
+        assert!(fonts.font_axes(FontId(usize::MAX)).is_err());
+        assert!(fonts.opentype_features(FontId(usize::MAX)).is_err());
+        let mut descriptor = font("IBM Plex Sans");
+        descriptor.features = FontFeatures(Arc::new(vec![("ss01".into(), 2)]));
+        let id = fonts.font_id(&descriptor)?;
+        assert_eq!(
+            unsafe { fonts.state.read().fonts[id.0].features.GetFontFeature(0)? }.parameter,
+            2
+        );
+        assert!(!line(&fonts, id, "office", 24.0)?.runs.is_empty());
+        assert_eq!(fonts.font_axes(id)?, FontQuery::Supported(Vec::new()));
+        Ok(())
+    }
+
+    #[test]
+    fn font_variation_static_instances_keep_shaping_metrics_and_raster_in_agreement() -> Result<()>
+    {
+        let fonts = backend()?;
+        let mut descriptor = font("Roboto Flex");
+        descriptor.weight = FontWeight::BOLD;
+        descriptor.variations = axes(&[
+            ("wght", 300.25),
+            ("wdth", 75.0),
+            ("slnt", -10.0),
+            ("opsz", 14.0),
+        ]);
+        let narrow = fonts.font_id(&descriptor)?;
+        descriptor.variations = axes(&[
+            ("opsz", 14.0),
+            ("slnt", -10.0),
+            ("wdth", 75.0),
+            ("wght", 300.25),
+        ]);
+        assert_eq!(fonts.font_id(&descriptor)?, narrow);
+        assert!((coordinate(&fonts, narrow, b"wght")? - 300.25).abs() < 0.01);
+        assert_eq!(coordinate(&fonts, narrow, b"slnt")?, -10.0);
+        let first = line(&fonts, narrow, "H", 32.0)?;
+        let resolved = first.runs[0].font_id;
+        assert!((coordinate(&fonts, resolved, b"wght")? - 300.25).abs() < 0.01);
+        assert_eq!(coordinate(&fonts, resolved, b"slnt")?, -10.0);
+        assert_eq!(coordinate(&fonts, resolved, b"opsz")?, 14.0);
+        let glyph = first.runs[0].glyphs[0].id;
+        let expected = fonts.advance(resolved, glyph)?.width * 32.0
+            / fonts.font_metrics(resolved).units_per_em as f32;
+        assert!((first.width.as_f32() - expected).abs() < 0.05);
+        assert!(
+            (fonts.advance(narrow, glyph)?.width - fonts.advance(resolved, glyph)?.width).abs()
+                < 0.5
+        );
+        let original_mask = mask(&fonts, resolved, glyph)?;
+        assert!(!original_mask.is_empty());
+        let twice = line(&fonts, narrow, "H", 64.0)?;
+        assert!((twice.width.as_f32() - first.width.as_f32() * 2.0).abs() < 0.05);
+        descriptor.variations = axes(&[
+            ("wght", 900.0),
+            ("wdth", 150.0),
+            ("slnt", 0.0),
+            ("opsz", 14.0),
+        ]);
+        let wide = fonts.font_id(&descriptor)?;
+        let wider = line(&fonts, wide, "H", 32.0)?;
+        assert!(wider.width > first.width);
+        assert_ne!(
+            original_mask,
+            mask(&fonts, wider.runs[0].font_id, wider.runs[0].glyphs[0].id)?
+        );
+        assert_eq!(
+            original_mask,
+            mask(&fonts, resolved, glyph)?,
+            "old layouts must retain their raster instance"
+        );
+        descriptor.variations = axes(&[("wght", 5000.0)]);
+        let clamped = fonts.font_id(&descriptor)?;
+        assert_eq!(coordinate(&fonts, clamped, b"wght")?, 1000.0);
+        let clamped_line = line(&fonts, clamped, "H", 32.0)?;
+        assert_eq!(
+            coordinate(&fonts, clamped_line.runs[0].font_id, b"wght")?,
+            1000.0
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn font_variation_explicit_optical_size_stays_fixed_across_sizes() -> Result<()> {
+        let fonts = backend()?;
+        let mut descriptor = font("Roboto Flex");
+        descriptor.variations = axes(&[
+            ("wght", 500.125),
+            ("slnt", -9.125),
+            ("opsz", 72.0),
+            ("XXXX", -123.0),
+        ]);
+        let id = fonts.font_id(&descriptor)?;
+        let mut widths = Vec::new();
+        for size in [16.0, 48.0] {
+            let shaped = line(&fonts, id, "H", size)?;
+            let resolved = shaped.runs[0].font_id;
+            assert_eq!(coordinate(&fonts, resolved, b"opsz")?, 72.0);
+            assert!((coordinate(&fonts, resolved, b"slnt")? + 9.125).abs() < 0.01);
+            assert!((coordinate(&fonts, resolved, b"wght")? - 500.125).abs() < 0.01);
+            widths.push(shaped.width.as_f32());
+        }
+        assert!((widths[1] - 3.0 * widths[0]).abs() < 0.05);
+        Ok(())
+    }
+
+    #[test]
+    fn font_variation_axes_reach_in_memory_fallback_and_ignore_unsupported_primary_axes()
+    -> Result<()> {
+        let fonts = backend()?;
+        let mut primary = font("IBM Plex Sans");
+        primary.fallbacks = Some(FontFallbacks::from_fonts(vec!["Roboto Flex".into()]));
+        primary.variations = axes(&[("slnt", -10.0), ("wght", 800.0)]);
+        let id = fonts.font_id(&primary)?;
+        let fallback = fonts.font_id(&font("Roboto Flex"))?;
+        let ch = (0x20..0x3000)
+            .filter_map(char::from_u32)
+            .find(|&ch| {
+                fonts.glyph_for_char(id, ch).is_none()
+                    && fonts.glyph_for_char(fallback, ch).is_some()
+            })
+            .context("no fallback-only fixture character")?;
+        let text = ch.to_string();
+        let fallback_line = line(&fonts, id, &text, 24.0)?;
+        let actual = fallback_line.runs[0].font_id;
+        let name = get_name(
+            unsafe {
+                fonts.state.read().fonts[actual.0]
+                    .font_face
+                    .GetFamilyNames()?
+            },
+            &fonts.components.locale,
+        )?;
+        assert!(name.contains("Roboto"), "U+{:04X}: {name}", ch as u32);
+        assert_eq!(coordinate(&fonts, actual, b"slnt")?, -10.0);
+        assert_eq!(coordinate(&fonts, actual, b"wght")?, 800.0);
+        let ordinary = line(&fonts, id, "H", 24.0)?;
+        assert_eq!(
+            fonts.font_axes(ordinary.runs[0].font_id)?,
+            FontQuery::Supported(Vec::new())
         );
         Ok(())
     }

@@ -8,8 +8,8 @@ paragraph layout. GPUI retains native input, frame caches and glyph atlas owners
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui", version = "2.0.0" }
-xgpui-parley = "0.3.0"
+gpui = { package = "xgpui", version = "=3.0.0" }
+xgpui-parley = "=0.4.0"
 ```
 
 ## Select the backend
@@ -28,10 +28,34 @@ let app = Application::with_platform_and_text_system(
 );
 ```
 
-The example also uses `gpui_platform` from the `xgpui-platform` package at `1.0.0`.
+The example also uses `gpui_platform` from the `xgpui-platform` package at `2.0.2`.
 The default family must be present; `.SystemUIFont` maps to that family.
 `FontFallbacks` specifies ordered fallback. Optional `system-fonts` discovery is
 off by default, and native platform initialization remains unchanged.
+
+## Variable fonts
+
+Use typed axis tags with core's precise variation settings:
+
+```rust,ignore
+use gpui::{FontTag, FontVariations};
+
+let mut face = gpui::font("Roboto Flex");
+face.variations = FontVariations::new([
+    (FontTag::WEIGHT, 650.0),
+    (FontTag::WIDTH, 85.0),
+    (FontTag::SLANT, -7.5),
+    (FontTag::OPTICAL_SIZE, 14.0),
+])?;
+```
+
+`FontTag::ITALIC` selects the registered italic-design axis; custom tags can be
+parsed explicitly. Both paragraph and flat-line paths retain effective axes for
+metrics and rasterization. GPUI's `font_axes`, `opentype_features` and
+`font_capabilities` expose resolved-face inspection. Optional `VariationPreview`
+quantizes before resolution and limits admitted descriptors without evicting
+resources. See the [font-controls guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/font-controls.md)
+for styling, fallback, backend support and migration.
 
 ## Lines and paragraphs
 
@@ -68,6 +92,7 @@ focused IME/assistive-technology acceptance remain separate checks; see the
 ## Guides and examples
 
 - [Text backend setup, supported subset and validation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/parley-text.md)
+- [Wasm font-controls demo](https://xgpui.dev/examples/extensions/?demo=font-controls) — the native lab’s sliders and font inspection, running through Parley in Wasm on WebGPU/WebGL2.
 - [Text and editing/IME lab](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/text-lab/README.md)
 - [Bundled test fonts and licenses](https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-parley/tests/fonts/README.md)
 
@@ -85,5 +110,5 @@ for additions, affected public types and migration requirements.
 [Repository](https://github.com/gpui-luma-dev/xgpui) · [Release preparation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/PUBLISHING.md) ·
 [Website](https://xgpui.dev/). Licensed under Apache-2.0.
 
-This extension uses its own `0.2.0` version, separate from xgpui framework
-`1.0.0` and the upstream GPUI baseline.
+This extension uses its own `0.4.0` version, separate from xgpui core `3.0.0`
+and the upstream GPUI baseline.

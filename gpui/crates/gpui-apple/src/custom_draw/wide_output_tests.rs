@@ -15,8 +15,8 @@ fn objc2_producer_transfers_owned_resources_without_submitting() -> Result<()> {
         let descriptor = objc2_metal::MTLTextureDescriptor::new();
         // SAFETY: positive 8x8 dimensions are supported by Metal.
         unsafe {
-            unsafe { descriptor.setWidth(8) };
-            unsafe { descriptor.setHeight(8) };
+            descriptor.setWidth(8);
+            descriptor.setHeight(8);
         }
         descriptor.setPixelFormat(objc2_metal::MTLPixelFormat::RGBA16Float);
         descriptor.setUsage(objc2_metal::MTLTextureUsage::ShaderRead);

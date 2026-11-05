@@ -336,6 +336,22 @@ impl State {
                 gpui::FontStyle::Oblique => parley::FontStyle::Oblique(None),
             };
             builder.push(StyleProperty::FontStyle(style), range.clone());
+            let variations = font
+                .variations
+                .settings()
+                .iter()
+                .map(|(tag, value)| {
+                    Ok(parley::FontVariation::new(
+                        parley::setting::Tag::parse(&tag.to_string())
+                            .context("invalid axis tag")?,
+                        *value,
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            builder.push(
+                StyleProperty::FontVariations(parley::FontVariations::List(Cow::Owned(variations))),
+                range.clone(),
+            );
             let features = font
                 .features
                 .tag_value_list()
@@ -476,6 +492,41 @@ impl PlatformTextSystem for ParleyTextSystem {
         };
         state.descriptors.insert(descriptor.clone(), id);
         Ok(id)
+    }
+
+    fn font_capabilities(&self) -> gpui::FontCapabilities {
+        gpui::FontCapabilities {
+            feature_introspection: true,
+            axis_introspection: true,
+            static_variations: true,
+        }
+    }
+
+    fn font_table(
+        &self,
+        id: FontId,
+        tag: gpui::FontTag,
+    ) -> Result<gpui::FontQuery<Option<Vec<u8>>>> {
+        let face = self.face(id)?;
+        let data = face.data();
+        let font = skrifa::FontRef::from_index(data.data.data(), data.index)?;
+        let tag = skrifa::Tag::new(tag.as_bytes());
+        let table = if font
+            .table_directory()
+            .table_records()
+            .iter()
+            .any(|record| record.tag() == tag)
+        {
+            Some(
+                font.table_data(tag)
+                    .context("unreadable font table")?
+                    .as_bytes()
+                    .to_vec(),
+            )
+        } else {
+            None
+        };
+        Ok(gpui::FontQuery::Supported(table))
     }
 
     fn font_metrics(&self, id: FontId) -> FontMetrics {

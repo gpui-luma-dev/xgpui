@@ -312,7 +312,7 @@ impl WgpuCustomContext {
             .lock()
             .unwrap()
             .push(ImageCopyCompletion {
-                _staging: staged.allocation.clone(),
+                _resource: staged.allocation.clone(),
                 _admission: guard,
             });
         Ok(WgpuCustomOutput {
@@ -391,7 +391,7 @@ pub struct WgpuImageUploadContext {
     queue: Arc<wgpu::Queue>,
 }
 struct ImageCopyCompletion {
-    _staging: Arc<gpui::ImageStagingLease<wgpu::Buffer>>,
+    _resource: Arc<dyn Send + Sync>,
     _admission: Option<Arc<dyn Send + Sync>>,
 }
 struct StagedMip {

@@ -1,8 +1,6 @@
 use super::*;
 use crate::metal;
-use crate::metal::*;
 use gpui::{CustomContent, CustomDraw, Quad, rgb, rgba};
-use objc2::{rc::Retained, runtime::ProtocolObject};
 use std::{any::Any, sync::Arc};
 
 #[derive(Debug)]

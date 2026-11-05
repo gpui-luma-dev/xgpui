@@ -1,9 +1,9 @@
 use crate::{
     self as gpui, AbsoluteLength, AlignContent, AlignItems, AlignSelf, BorderStyle, CursorStyle,
     DefiniteLength, Display, Fill, FlexDirection, FlexWrap, Font, FontFeatures, FontStyle,
-    FontWeight, GridPlacement, GridTemplate, GridTemplateMinSize, Hsla, JustifyContent, Length,
-    SharedString, StrikethroughStyle, StyleRefinement, TextAlign, TextOverflow,
-    TextStyleRefinement, UnderlineStyle, WhiteSpace, px, relative, rems,
+    FontVariations, FontWeight, GridPlacement, GridTemplate, GridTemplateMinSize, Hsla,
+    JustifyContent, Length, SharedString, StrikethroughStyle, StyleRefinement, TextAlign,
+    TextOverflow, TextStyleRefinement, UnderlineStyle, WhiteSpace, px, relative, rems,
 };
 pub use gpui_macros::{
     border_style_methods, box_shadow_style_methods, cursor_style_methods, margin_style_methods,
@@ -716,11 +716,18 @@ pub trait Styled: Sized {
         self
     }
 
+    /// Sets precise variable-font coordinates for this element and its children.
+    fn font_variations(mut self, variations: FontVariations) -> Self {
+        self.text_style().font_variations = Some(variations);
+        self
+    }
+
     /// Sets the font of this element and its children.
     fn font(mut self, font: Font) -> Self {
         let Font {
             family,
             features,
+            variations,
             fallbacks,
             weight,
             style,
@@ -729,6 +736,7 @@ pub trait Styled: Sized {
         let text_style = self.text_style();
         text_style.font_family = Some(family);
         text_style.font_features = Some(features);
+        text_style.font_variations = Some(variations);
         text_style.font_weight = Some(weight);
         text_style.font_style = Some(style);
         text_style.font_fallbacks = fallbacks;

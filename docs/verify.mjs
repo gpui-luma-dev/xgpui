@@ -90,7 +90,7 @@ assert.ok(index.includes('href="examples/extensions/"'));
 assert.ok(index.includes('href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>'));
 assert.ok(index.indexOf('GitHub repository ↗') < index.indexOf('<nav aria-label="Documentation">'));
 assert.ok(index.indexOf('>Live demos ↗</a>') < index.indexOf('>Instanced shaders</a>'));
-for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'chromaticity', 'pixel-metadata', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
+for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'hermite', 'parley', 'font-controls', 'svg', 'color', 'chromaticity', 'pixel-metadata', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
   const html = run(`browserDemoLinks('${demo}')`);
   assert.ok(html.includes(`href="examples/extensions/?demo=${demo}"`));
   assert.ok(html.includes('https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web'));
@@ -111,7 +111,7 @@ const listedModules = [...wasmIndex.matchAll(/data-wasm-module="([^"]+)"/g)].map
 const legacyModules = [...legacyManifest.matchAll(/\[\[bin\]\]\s+name = "([^"]+)"/g)].map(m => m[1]);
 assert.deepEqual(listedModules.slice().sort(), legacyModules.sort(), 'every legacy Wasm binary needs an index entry');
 for (const [, module] of legacyGallery.matchAll(/data-module="([^"]+)"/g)) assert.ok(listedModules.includes(module), module);
-for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'hermite', 'parley', 'svg', 'color', 'chromaticity', 'pixel-metadata', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
+for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'hermite', 'parley', 'font-controls', 'svg', 'color', 'chromaticity', 'pixel-metadata', 'typography', 'media-filters', 'media-float', 'media-tiles', 'mipmaps', 'path-effects']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="?demo=' + demo + suffix + '"'), demo + suffix);
   }
@@ -222,7 +222,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 26);
+assert.equal(Object.keys(data.extension_documents).length, 27);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -231,6 +231,14 @@ assert.match(extensionOverview, /2\. Wide-gamut presentation/);
 assert.match(extensionOverview, /href="#extension-paints"/);
 assert.match(extensionOverview, /href="#high-gamut-windows"/);
 assert.match(extensionOverview, /href="#parley-text"/);
+assert.match(extensionOverview, /href="#font-controls"/);
+assert.match(index, /href="#font-controls">Fonts &amp; OpenType/);
+assert.match(run('overview()'), /href="#font-controls"/);
+assert.match(run('parleyCrateGuide()'), /href="#font-controls"/);
+assert.match(data.extension_documents['font-controls'].html, /PlatformTextSystem::font_table/);
+assert.match(data.extension_documents['font-controls'].html, /just lab-test live_axis/);
+assert.match(data.extension_documents['font-controls'].html, /demo=font-controls/);
+assert.match(data.extension_documents['font-controls'].html, /Cosmic\/Canvas/);
 assert.match(run('cratePage(crates.find(c => c.package === "xgpui-parley"), "overview")'), /layout_paragraph/);
 assert.equal(data.extension_packages['xgpui-svg'], 'extensions/crates/xgpui-svg');
 assert.ok(!data.provenance.packages['xgpui-svg']);
@@ -296,9 +304,9 @@ let extensionRail = element('crate-list').innerHTML;
 assert.ok(extensionRail.indexOf('>Extensions</p>') < extensionRail.indexOf('>Core</p>'));
 assert.match(extensionRail, /class="crate-link" aria-current="page" href="#crate=xgpui-shader/);
 assert.match(extensionRail, /class="crate-link" href="#crate=xgpui-gamut&amp;tab=overview">xgpui-gamut|class="crate-link" href="#crate=xgpui-gamut&tab=overview">xgpui-gamut/);
-run('sidebar("linear-p3")');
+run('sidebar()');
 assert.match(element('crate-list').innerHTML, />Extensions<.*xgpui-gamut/s);
-assert.ok(!element('crate-list').innerHTML.includes('>Core</p>'));
+assert.ok(element('crate-list').innerHTML.includes('>Core</p>'));
 context.location.hash = '#high-gamut-windows';
 run('render()');
 assert.match(element('crate-list').innerHTML, /aria-current="page" href="#crate=xgpui-gamut/);
@@ -322,7 +330,7 @@ context.location.hash = '#svg-rendering';
 run('render()');
 assert.match(element('crate-list').innerHTML, /aria-current="page" href="#crate=xgpui-svg/);
 assert.match(element('content').innerHTML, /SvgScheduler/);
-run('sidebar("aggregate image")');
+run('sidebar()');
 assert.match(element('crate-list').innerHTML, />Extensions<.*xgpui-svg/s);
 context.location.hash = '#crate=xgpui-svg&tab=overview';
 run('render()');
@@ -405,7 +413,7 @@ assert.match(element('crate-list').innerHTML, /aria-current="page" href="#crate=
 context.location.hash = '#crate=xgpui-color&tab=overview';
 run('render()');
 assert.match(element('content').innerHTML, /GPUI API compatibility/);
-run('sidebar("standalone")');
+run('sidebar()');
 assert.match(element('crate-list').innerHTML, />Extensions<.*xgpui-color/s);
 console.log('Verified standalone color crate navigation, guide and dependency boundaries.');
 
@@ -442,8 +450,8 @@ console.log('Verified demo discovery, distinct brush/layer launch labels and vis
 
 // "All demos" includes both hosted apps, without duplicating launch cards.
 const allLaunches = [...wasmIndex.matchAll(/<a href="([^"]+)">Open demo ↗<\/a>/g)].map(m => m[1]);
-assert.equal(allLaunches.length, 24);
-assert.equal(new Set(allLaunches).size, 24);
+assert.equal(allLaunches.length, 25);
+assert.equal(new Set(allLaunches).size, 25);
 for (const example of ['minimal', 'glow', 'particles', 'composition', 'shadows', 'borders']) {
   for (const suffix of ['', '&backend=webgpu', '&backend=webgl']) {
     assert.ok(wasmIndex.includes('href="../shaders/?example=' + example + suffix + '"'));
@@ -454,7 +462,7 @@ for (const id of ['brushes-paints','layer-effects','shaders-motion','typography'
 }
 assert.ok(wasmIndex.includes('--pastel-waves'));
 assert.ok(wasmIndex.includes('Show launch command'));
-console.log('Verified unified index covers all 24 hosted demos and separates native launch commands.');
+console.log('Verified unified index covers all 25 hosted demos and separates native launch commands.');
 
 assert.match(run('extensionPage("typography")'), /Selectable typography/);
 assert.match(run('extensionPage("typography")'), /demo=typography/);

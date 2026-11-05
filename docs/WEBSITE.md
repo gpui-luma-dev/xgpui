@@ -50,6 +50,10 @@ without opening a GUI. It does not perform visual browser validation.
 
 Website source: `index.html`, `style.css`, `app.js`, `guides.js`, `extensions.js`, `notes.json`.
 The architecture reference lives in `guides.js`; review its source references after syncing.
+The [font-controls guide](extensions/font-controls.md) is embedded at
+`#font-controls` and linked from What's new, the extension overview, Parley,
+typography and core API migration pages. It documents core 3.0 axes, private
+metadata parsing, backend support and the native comparison lab.
 The sidebar links to **Local Development** (`#local-development`), embedded from
 [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md). It covers native builds and app
 launches on Windows, Linux and macOS, plus website/Wasm previews.

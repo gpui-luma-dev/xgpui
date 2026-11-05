@@ -1,7 +1,8 @@
 # xgpui-parley
 
 Opt-in Parley 0.12/HarfRust text backend: flat-LTR compatibility, BiDi paragraphs,
-resolved-face metrics and grayscale rasterization. GPUI retains platform input,
+resolved-face metrics, precise variable-font axes and grayscale rasterization.
+GPUI retains platform input,
 frame caches and glyph atlas ownership.
 
 ## GPUI public API changes: additions and compatibility
@@ -23,9 +24,9 @@ changes to existing GPUI callers.
 ## Construction
 
 ```toml
-# Application under apps/:
 [dependencies]
-xgpui-parley = { path = "../../extensions/crates/xgpui-parley", features = ["system-fonts"] }
+gpui = { package = "xgpui", version = "=3.0.0" }
+xgpui-parley = { version = "=0.4.0", features = ["system-fonts"] }
 ```
 
 ```rust
@@ -42,8 +43,93 @@ let app = Application::with_platform_and_text_system(
 
 The explicit default family must exist; `.SystemUIFont` maps to it. Ordered
 fallback uses `FontFallbacks`. `system-fonts` is optional and off by default.
-Native platform initialization is unchanged. Windows/Linux use the same adapter;
-runtime validation remains outstanding.
+Native platform initialization is unchanged. Native and Parley font-controls
+labs/tests are verified on macOS and Windows. Linux runtime acceptance and
+paragraph conversion IMEs remain separate checks.
+
+## Variable fonts and inspection
+
+Version 0.4.0 accepts `Font::variations` in flat-line and paragraph shaping and
+retains the actual resolved coordinates for metrics and rasterization. Use
+`FontTag::{WEIGHT, WIDTH, SLANT, OPTICAL_SIZE, ITALIC}` for standard axes, and
+validated tag parsing for custom axes; see the [typed styling example](font-controls.md#set-precise-axes). Explicit
+signed/fractional axes, clamping, fallback and instance isolation share core's
+[font-controls contract](font-controls.md). `font_axes`, `opentype_features`, and
+`font_capabilities` are available through GPUI's text system. Parley supplies raw
+resolved-face tables through the backend hook; the parsers remain private in core.
+
+### Inspect axes and OpenType features
+
+After registering the font with the selected backend, query it through the
+window's text system:
+
+```rust
+use gpui::{FontQuery, font};
+
+let text_system = window.text_system();
+let capabilities = text_system.font_capabilities();
+let font_id = text_system.resolve_font(&font("Roboto Flex"));
+
+if capabilities.axis_introspection {
+    match text_system.font_axes(font_id)? {
+        FontQuery::Unsupported => { /* Hide the axis inspector. */ }
+        FontQuery::Supported(axes) => {
+            for axis in axes {
+                println!("{}: {} .. {} (default {}, hidden={})",
+                    axis.tag, axis.min_value, axis.max_value,
+                    axis.default_value, axis.hidden);
+            }
+        }
+    }
+}
+
+if capabilities.feature_introspection {
+    match text_system.opentype_features(font_id)? {
+        FontQuery::Unsupported => { /* Hide the feature inspector. */ }
+        FontQuery::Supported(features) => {
+            for feature in features {
+                println!("{}: GSUB={}, GPOS={}",
+                    feature.tag, feature.substitution, feature.positioning);
+            }
+        }
+    }
+}
+```
+
+A successful empty list differs from unsupported inspection; `?` propagates
+read/parsing errors. Results describe the resolved face, including any font
+substitution performed by `resolve_font`. Use IDs from this same text system.
+Feature presence does not guarantee an effect on every script or string.
+
+### Set axes with typed tags
+
+```rust
+use gpui::{FontTag, FontVariations, div, prelude::*};
+
+let axes = FontVariations::new([
+    (FontTag::WEIGHT, 650.0),
+    (FontTag::WIDTH, 85.0),
+    (FontTag::SLANT, -7.5),
+    (FontTag::OPTICAL_SIZE, 14.0),
+])?;
+
+let specimen = div()
+    .font_family("Roboto Flex")
+    .font_variations(axes)
+    .child("Hamburgefonts 012345");
+```
+
+Check `capabilities.static_variations` before offering axis editing. Standard
+tags need no parsing; coordinates remain validated and clamp per resolved face.
+
+### Interactive previews
+
+`VariationPreview` is an optional extension utility for a fixed font descriptor:
+configure axis-specific intervals and a finite capacity, then obtain quantized
+GPUI fonts before resolution. It works with native text backends too. Retain the
+controller throughout the inspector session; keep precise author values separate.
+It never recycles font IDs or evicts atlas resources. See the
+[preview policy](font-controls.md#interactive-preview-policy) and live lab.
 
 ## Paragraphs and input
 
@@ -79,11 +165,12 @@ invalidate geometry until repaint. Apply origin/scrolling once at the UI edge.
 | `paint_paragraph(layout, origin, color_at, window)` | Visual glyph painting through the existing atlas |
 
 `ParleyTextSystem`, `FaceRegistry`, `RegisteredFace`, `GlyphRasterizer`,
-`ParagraphShape` and `ParagraphLayout` belong to **xgpui-parley**, not GPUI.
+`ParagraphShape`, `ParagraphLayout` and `VariationPreview` belong to **xgpui-parley**, not GPUI.
 Parley/HarfRust/Skrifa types do not enter the core signatures.
 
-The text additions change no existing public struct fields or required trait
-methods. Existing backend implementations need no paragraph override;
+The paragraph additions change no existing public struct fields or required trait
+methods. Core 3.0 font controls separately add descriptor/style fields; see the
+[migration table](gpui-public-api.md#font-axes-and-inspection-core-30). Existing backend implementations need no paragraph override;
 `Application::with_platform` and `PlatformTextSystem::layout_line` retain their
 contracts. `EntityInputHandler`, `ElementInputHandler` and glyph/emoji paint
 methods are existing GPUI APIs. Internal changes add paragraph frame-cache
@@ -94,7 +181,7 @@ font selection behavior without adding public API.
 
 | Boundary | Contract |
 | --- | --- |
-| Font identity | Requested descriptors distinguish features/fallbacks; shaped IDs retain actual blob, face index and normalized variation location |
+| Font identity | Requested descriptors distinguish features/fallbacks/variations; shaped IDs retain actual blob, face index and normalized variation location |
 | Lifetime | IDs are not recycled; old layouts remain rasterizable after font registration |
 | Shape cache | GPUI key: source, ordered FontRuns, size |
 | Reflow cache | Same key plus width; immutable layout Arcs; width changes reuse shaping |
@@ -127,13 +214,18 @@ accessibility and broader BiDi/UAX #14 conformance remain follow-ups.
 
 ## Lab and validation
 
+[The Wasm font inspector](../examples/extensions/?demo=font-controls) runs the
+same GPUI axis controls with Parley shaping and rasterization in Wasm, through
+WebGPU or WebGL2. It displays axis ranges, GSUB/GPOS feature tags and precise
+static samples beside the live preview. This is separate from the default GPUI
+web text backend, whose explicit-axis requests remain unsupported.
+
 ```sh
-# Repository root; paragraph mode uses Parley, compare uses both backends.
-just --justfile apps/xgpui-ext-lab/text-lab/justfile ui
-just --justfile apps/xgpui-ext-lab/text-lab/justfile paragraph
-just --justfile apps/xgpui-ext-lab/text-lab/justfile paragraph --timings-only
-just --justfile apps/xgpui-ext-lab/text-lab/justfile scroll --scroll-frames 640 --exit-after-scroll
-just --justfile apps/xgpui-ext-lab/text-lab/justfile test
+just text --backend both
+just text --workload paragraph
+just text --workload paragraph --timings-only
+just text --workload scroll --scroll-frames 640 --exit-after-scroll
+just lab-test
 ```
 
 The lab covers bundled fallback/variable fonts, mixed scripts, wrapping, caret,
@@ -146,4 +238,6 @@ UTF-16 composition/candidate replacement and stale/wrapped IME geometry.
 Manual macOS results (2026-10-24): single-line native/Parley Japanese–Romaji popup
 selection/commit/cancel passed; paragraph U.S. accent-panel placement, selection,
 commit/cancel passed by user confirmation without keyboard-setting changes.
-Paragraph conversion IMEs and Windows/Linux runtime/IME remain unvalidated.
+The November 5, 2026 native/Parley font-controls labs and unit tests passed on
+macOS and Windows. Paragraph conversion IMEs and Linux runtime/IME acceptance
+remain unvalidated.

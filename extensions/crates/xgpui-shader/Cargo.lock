@@ -4433,7 +4433,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -4930,7 +4930,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -4997,7 +4997,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-apple"
-version = "3.0.1"
+version = "3.1.0"
 dependencies = [
  "anyhow",
  "async-task",
@@ -5047,7 +5047,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-shader"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -5069,7 +5069,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-wgpu"
-version = "2.0.1"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -5085,6 +5085,7 @@ dependencies = [
  "raw-window-handle",
  "smallvec",
  "swash",
+ "ttf-parser",
  "unicode-bidi",
  "unicode-segmentation",
  "web-sys",
@@ -5094,7 +5095,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-windows"
-version = "2.0.1"
+version = "2.1.0"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -5364,20 +5365,20 @@ source = "git+https://github.com/zed-industries/async-process.git?rev=0b6d671357
 
 [[patch.unused]]
 name = "xgpui-ios"
-version = "1.26.3"
+version = "1.26.4"
 
 [[patch.unused]]
 name = "xgpui-linux"
-version = "2.0.1"
+version = "2.0.2"
 
 [[patch.unused]]
 name = "xgpui-macos"
-version = "3.0.1"
+version = "3.0.2"
 
 [[patch.unused]]
 name = "xgpui-platform"
-version = "2.0.1"
+version = "2.0.2"
 
 [[patch.unused]]
 name = "xgpui-web"
-version = "2.0.1"
+version = "2.0.2"

@@ -19,15 +19,13 @@ function filterDeclarations(items, query='', kind='', root=false) {
   const q = query.trim().toLowerCase();
   return items.filter(d => (!root || d.root_export) && (!kind || d.kind===kind) && (!q || [d.name,d.signature,d.module,d.file,...d.guards].join(' ').toLowerCase().includes(q)));
 }
-function sidebar(query='') {
+function sidebar() {
   const route = parseRoute(location.hash);
-  const q = query.toLowerCase().trim();
-  const matches = crates.filter(c => !q || (c.package+' '+notes[c.package].role+' '+c.declarations.map(d=>d.name).join(' ')).toLowerCase().includes(q));
   document.getElementById('crate-list').innerHTML = groups.map(g => {
-    const list=matches.filter(c=>notes[c.package].group===g);
+    const list=crates.filter(c=>notes[c.package].group===g);
     const entries = list.map(c=>'<a class="crate-link" '+(route.pkg===c.package || (c.package === 'xgpui-shader' && shaderGuideRoutes.includes(route.global)) || (c.package === 'xgpui-color' && route.global === 'color-math') || (c.package === 'xgpui-gamut' && route.global === 'high-gamut-windows') || (c.package === 'xgpui-parley' && route.global === 'parley-text') || (c.package === 'xgpui-canvas' && route.global === 'canvas') || (c.package === 'xgpui-svg' && route.global === 'svg-rendering') || (c.package === 'xgpui-media' && route.global === 'media-images') ? 'aria-current="page" ' : '')+'href="'+crateUrl(c.package)+'">'+escapeHtml(short(c.package))+'</a>').join('');
     return entries ? '<p class="group-label">'+escapeHtml(g)+'</p>'+entries : '';
-  }).join('') || '<p>No crates match.</p>';
+  }).join('');
 
 }
 function header(eyebrow,title,lead) {return '<div class="eyebrow">'+escapeHtml(eyebrow)+'</div><h1>'+escapeHtml(title)+'</h1><p class="lead">'+escapeHtml(lead)+'</p>';}
@@ -35,7 +33,7 @@ function overview() {
   return header('XGPUI / Extensions / GPUI','GPUI architecture and extensions','A source map of GPUI: responsibilities, runtime boundaries and downstream extensions.')+
     '<p class="muted">Upstream source baseline: gpui-unofficial '+escapeHtml(data.provenance.ref)+'. XGPUI packages use independent versions.</p>'+
     '<section aria-label="Why XGPUI?"><h2>Why XGPUI?</h2><p>XGPUI adds richer graphics, text and rendering features through opt-in extensions and small integration seams, keeping changes to GPUI’s public API focused and minimal. The aim is to make those features easier to evolve while keeping upstream updates from <a href="https://github.com/zed-industries/zed">Zed</a> and <a href="https://github.com/gpui-archipelago/gpui-unofficial">gpui-unofficial</a> straightforward to adopt.</p></section>'+liveDemoOverview()+
-    '<nav class="overview-guides" aria-label="Start reading"><h2>Start here</h2><dl><dt><a href="#whats-new">What’s new →</a></dt><dd>GPUI 1.26.2, retained photo viewports, Metal rendering and recent fixes.</dd><dt><a href="#local-development">Local Development →</a></dt><dd>Build on Windows, Linux and macOS; run native labs and preview the docs.</dd><dt><a href="#extension-lab">xgpui-ext-lab →</a></dt><dd>Unpublished labs, benchmarks and browser demos; what they contain and how to run them.</dd><dt><a href="#color-workflows">Color &amp; wide gamut →</a></dt><dd>Interpret pixels, choose storage, enable native wide output and test with browser or desktop labs.</dd><dt><a href="#architecture">Architecture →</a></dt><dd>Ownership, element lifecycle and renderer contracts.</dd><dt><a href="#pipeline">Rendering pipeline →</a></dt><dd>Explore clipping, layers, primitive ordering and batches.</dd><dt><a href="#extensions">Extensions to GPUI →</a></dt><dd>Shader, wide-gamut, Parley and SVG APIs, integration and backend ownership.</dd></dl></nav>'+
+    '<nav class="overview-guides" aria-label="Start reading"><h2>Start here</h2><dl><dt><a href="#whats-new">What’s new →</a></dt><dd>Variable fonts, OpenType inspection, core 3.0 migration and recent fixes.</dd><dt><a href="#local-development">Local Development →</a></dt><dd>Build on Windows, Linux and macOS; run native labs and preview the docs.</dd><dt><a href="#extension-lab">xgpui-ext-lab →</a></dt><dd>Unpublished labs, benchmarks and browser demos; what they contain and how to run them.</dd><dt><a href="#color-workflows">Color &amp; wide gamut →</a></dt><dd>Interpret pixels, choose storage, enable native wide output and test with browser or desktop labs.</dd><dt><a href="#font-controls">Fonts &amp; OpenType →</a></dt><dd>Set variable-font axes, inspect features, run the Wasm font lab and migrate to core 3.0.</dd><dt><a href="#architecture">Architecture →</a></dt><dd>Ownership, element lifecycle and renderer contracts.</dd><dt><a href="#pipeline">Rendering pipeline →</a></dt><dd>Explore clipping, layers, primitive ordering and batches.</dd><dt><a href="#extensions">Extensions to GPUI →</a></dt><dd>Shader, wide-gamut, Parley and SVG APIs, integration and backend ownership.</dd></dl></nav>'+
     '<section class="overview-reading"><h2>Rendering changes</h2><p>'+crateLink('gpui')+' → '+crateLink('gpui-platform')+' → platform implementation → '+crateLink('gpui-apple')+' / '+crateLink('gpui-wgpu')+'</p><p>Trace scene and window contracts, then surface formats, shaders and color handling in the selected renderer.</p></section>'+
     '<div class="crate-directory">'+groups.map(g=>'<section><h2>'+escapeHtml(g)+'</h2><dl>'+crates.filter(c=>notes[c.package].group===g).map(c=>'<dt>'+crateLink(c.package)+'</dt><dd>'+escapeHtml(notes[c.package].role)+'</dd>').join('')+'</dl></section>').join('')+'</div>';
 }
@@ -82,7 +80,7 @@ function render() {
   content.innerHTML=c?cratePage(c,route.tab):route.pkg?header('Not found','Unknown crate','Choose a captured crate from the navigation.'):isExtensionRoute(route.global)?extensionPage(route.global):route.global==='pipeline'?pipelinePage():route.global==='architecture'?architecturePage():route.global==='review'?review():overview();
   window.enhanceCodeExamples?.(content);
   document.title=(c?short(c.package):isExtensionRoute(route.global)?extensionTitle(route.global):route.global==='pipeline'?'Rendering pipeline explorer':route.global==='architecture'?'Architecture overview':route.global==='review'?'API review roadmap':'Code roadmap')+' · xgpui';
-  sidebar(document.getElementById('crate-search').value);
+  sidebar();
   if(route.section && isExtensionRoute(route.global)) {
     const target = document.getElementById(route.section);
     for(let parent = target?.parentElement; parent; parent = parent.parentElement) {
@@ -98,6 +96,5 @@ function render() {
 }
 if(typeof document!=='undefined') {
   window.addEventListener('hashchange',()=>{render();if(!parseRoute(location.hash).section) window.scrollTo(0,0);});
-  document.getElementById('crate-search').addEventListener('input',event=>sidebar(event.target.value));
   render();
 }

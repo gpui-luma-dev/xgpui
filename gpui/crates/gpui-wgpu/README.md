@@ -13,12 +13,23 @@ For application setup, use the matching framework packages:
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui", version = "2.0.0" }
-gpui_platform = { package = "xgpui-platform", version = "2.0.0" }
+gpui = { package = "xgpui", version = "=3.0.0" }
+gpui_platform = { package = "xgpui-platform", version = "=2.0.2" }
 ```
 
 The registry package is `xgpui-wgpu`; its Rust library name is
 `gpui_wgpu`. Keep framework packages on a compatible xgpui release.
+
+## Cosmic font inspection
+
+Version 2.1.0 exposes resolved-face OpenType features and variable-axis metadata
+through GPUI's `font_capabilities`, `font_axes` and `opentype_features` queries.
+Cosmic obtains table bytes from the actual resolved font and collection face;
+core parses the metadata privately. Missing tables remain distinct from errors.
+
+Arbitrary explicit axis application is not enabled: `static_variations` is false
+and nonempty settings are rejected. Applications can select `xgpui-parley` for
+static axes on Linux. See the [font-controls guide](https://xgpui.dev/#font-controls).
 
 ## Features
 
@@ -37,11 +48,11 @@ The registry package is `xgpui-wgpu`; its Rust library name is
 
 ## Versioning and provenance
 
-The xgpui framework version is `1.0.0`, independent of the upstream release.
+This backend uses version `2.1.0` with core `3.0.0`, independently of the upstream
+release.
 This maintained downstream package derives from Zed's `gpui_wgpu` crate via
 [gpui-unofficial](https://github.com/gpui-archipelago/gpui-unofficial).
-The accepted capture is `release/1.25.3` at commit
-`39d276b1500d503ec6d37efcaaa0dc0c00730576`; its Zed source is `v1.25.3`
-(`8dd255c3eafb5231056fe4e6f601cedd011f1c93`).
+The accepted source capture and Zed provenance are recorded in
+[upstream.json](https://github.com/gpui-luma-dev/xgpui/blob/main/upstream.json).
 
 Licensed under Apache-2.0. xgpui is independent of Zed Industries.

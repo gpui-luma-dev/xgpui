@@ -135,11 +135,19 @@ just lab-gamut
 
 ### Native text comparison
 
-Compare native and Parley shaping, editing and virtualized paragraphs:
+Compare native and Parley shaping, editing and virtualized paragraphs. Each
+supported comparison window includes live weight, width, slant and optical-size
+sliders, keyboard controls, presets, wrapping specimens and measured advances:
 
 ```sh
-just lab-text
+just text --backend both
+just lab-test live_axis -- --nocapture
 ```
+
+The native/Parley font-controls labs and tests are verified on macOS and Windows.
+Tests run with backtraces. The same sliders also run in the [Wasm font inspector](../examples/extensions/?demo=font-controls)
+with Parley on WebGPU/WebGL2. See [font controls](font-controls.md) for support,
+preview admission limits and core 3.0 migration.
 
 ### Desktop SVG lab
 

@@ -12,7 +12,7 @@ Open the browser typography demo through
 The same demo runs natively:
 
 ```sh
-just --justfile apps/xgpui-ext-lab/shader-examples/justfile typography
+just lab-shader --example typography
 ```
 
 Choose Editorial, Ligatures, Unicode or Overflow. Drag to select, double-click a
@@ -55,6 +55,15 @@ visible. The element has no animation clock. Static and paused snapshots schedul
 `select_all(cx)`, `clear_selection(cx)` and `copy_selection(cx)` support host
 controls. Empty selections leave the clipboard untouched. The entity implements
 `Focusable`, so a host can explicitly focus it with `window.focus`.
+
+## Variable-font styling
+
+The element inherits core font variation settings as well as font size and color.
+Use `.font_variations(...)` on its parent to set precise weight, width, slant or
+optical-size axes. Unlike the paint effects below, axes can change advances,
+wrapping and selection geometry. Use the separate live inspector with
+`just text --backend both`; see [font controls](font-controls.md) for the supported
+backends and core 3.0 migration.
 
 ## Paint-only motion
 

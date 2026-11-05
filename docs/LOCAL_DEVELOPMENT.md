@@ -104,7 +104,7 @@ configuration and the shared `target/` directory.
 | `just lab-paint` | Paints, gradients, brushes and layer effects |
 | `just lab-gamut` | Native wide-SDR [gamut ↗](https://en.wikipedia.org/wiki/Gamut) comparison |
 | `just lab-color` | Swatches and CIE chromaticity/FP16/ICC workspaces |
-| `just lab-text` / `just lab-parley` | Native/Parley text, paragraphs and scrolling |
+| `just lab-text` / `just lab-parley` | Native/Parley text, live font-axis sliders, paragraphs and scrolling |
 | `just lab-svg` | SVG rendering, zoom and scheduling |
 | `just lab-quad-bench` | Quad rendering benchmark |
 | `just lab-color-field-bench` | Color-field rendering benchmark |
@@ -131,6 +131,13 @@ just lab-color --help
 just lab-text --help
 just lab-parley --backend parley --workload paragraph
 ```
+
+The text comparison has independent weight, width, slant and optical-size sliders
+on native and Parley windows. macOS and Windows labs/tests are verified. Run
+`just text --backend both` to compare them, `just lab-test` for the suite, or
+`just lab-test live_axis -- --nocapture` for slider interactions. The existing
+lab-test command enables backtraces automatically. See [font controls](extensions/font-controls.md)
+for capabilities, preview limits and the core 3.0 migration.
 
 Parley uses the same text lab; pass `--backend parley` for only that engine or
 leave the default to compare both. Color lab has Swatches/Chromaticity tabs; `--chromaticity`, `--uv`, `--photo`

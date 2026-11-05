@@ -9,7 +9,7 @@ pub(crate) const INTER: &[u8] = include_bytes!("../tests/fonts/InterVariable.ttf
 
 pub(crate) fn fonts() -> FontContext {
     let mut fonts = FontContext::new();
-    for data in [INTER, PLEX] {
+    for data in [INTER, PLEX, FLEX] {
         fonts
             .collection
             .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
@@ -28,3 +28,5 @@ pub(crate) fn shape(fonts: &mut FontContext, text: &str, family: &str, weight: f
     layout.align(Alignment::Start, AlignmentOptions::default());
     layout
 }
+
+pub(crate) const FLEX: &[u8] = include_bytes!("../tests/fonts/RobotoFlex.ttf");

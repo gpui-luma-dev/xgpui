@@ -131,4 +131,4 @@ lab-build *args:
 
 # Run unit and compatibility tests; native window tests remain opt-in.
 lab-test *args:
-    cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bins --test compatibility --target-dir target "$@"
+    RUST_BACKTRACE=1 cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bins --test compatibility --target-dir target "$@"

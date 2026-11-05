@@ -11,7 +11,7 @@ function extensionTitle(route) {
 const browserDemoNames = {
   canvas: 'spatial card canvas', mandelbrot: 'Mandelbrot explorer',
   typography: 'Selectable typography', brushes: 'Brush gallery', layers: 'Layer effects', shader: 'Gradient paints',
-  chromaticity: 'Chromaticity & gamut', 'pixel-metadata': 'Pixels + metadata', hermite: 'Hermite editor', color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs',
+  chromaticity: 'Chromaticity & gamut', 'pixel-metadata': 'Pixels + metadata', hermite: 'Hermite editor', color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs', 'font-controls': 'Variable fonts',
 };
 function browserDemoLinks(demo) {
   return '<p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=' + demo + '">Open ' + browserDemoNames[demo] + ' ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p>';
@@ -91,7 +91,7 @@ function extensionPage(route) {
       : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
-    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'canvas' ? browserDemoLinks('canvas') + browserDemoLinks('mandelbrot') : route === 'typography' ? browserDemoLinks('typography') : route === 'brushes' ? brushDemoLinks() : route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
+    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'font-controls' ? browserDemoLinks('font-controls') : route === 'canvas' ? browserDemoLinks('canvas') + browserDemoLinks('mandelbrot') : route === 'typography' ? browserDemoLinks('typography') : route === 'brushes' ? brushDemoLinks() : route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
   return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation, text and SVG extensions.') + banner +
     '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p>' +
@@ -119,8 +119,8 @@ MetalWideSdrOutput::from_linear_p3_premultiplied(context, texture, commands)?;`)
     extensionCode('sh', `just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui
 just --justfile apps/xgpui-ext-lab/gamut-lab/justfile test`) +
     colorDemoLinks() +
-    '<h2>3. Parley text</h2><p>Shared text backend with flat-LTR compatibility, BiDi paragraph layout and editing/IME geometry. Existing GPUI caches and glyph atlas; Windows/Linux runtime validation remains outstanding.</p>' +
-    '<div class="cards">' + extensionCard('parley-text', 'Construction, paragraph/input seams, cache and face identity, supported subset and validation.') + '</div>' +
+    '<h2>3. Parley text</h2><p>Shared text backend with flat-LTR compatibility, BiDi paragraph layout and editing/IME geometry. Precise font axes and feature inspection use existing GPUI caches and the glyph atlas. Font-controls labs/tests are verified on macOS and Windows; Linux acceptance remains separate.</p>' +
+    '<div class="cards">' + extensionCard('parley-text', 'Construction, paragraphs, precise axes, preview policy, cache and face identity, supported subset and validation.') + extensionCard('font-controls', 'Weight, width, slant and optical size; inspection, native/Parley lab, backend support and core 3.0 migration.') + '</div>' +
     '<h2>4. Progressive SVG</h2><p>Experimental full-color static SVG elements with preview/detail refinement, shared FIFO admission and aggregate image accounting. Native lab and attributed offline samples; smaller budgets reduce deep-zoom detail.</p>' +
     '<div class="cards">' + extensionCard('svg-rendering', 'Use SvgImage and SvgScheduler, understand accounting limits, and run the native sample.') + '</div>' +
     '<h2>5. Standalone color math</h2><p><code>xgpui-color</code> provides color conversions, gamut mapping, OkLab/OkLCh interpolation and reusable WGSL helpers with zero runtime dependencies in its default configuration. Optional ICC parsing adds a parser dependency. Use it without GPUI or a GPU context.</p>' +
@@ -200,7 +200,8 @@ function gamutCrateGuide() {
 }
 
 function parleyCrateGuide() {
-  return browserDemoLinks('parley') + '<article class="extension-document">' +
+  return '<div class="cards">' + extensionCard('font-controls', 'Variable fonts and OpenType inspection: typed axes, API examples, backend support and preview limits.') + '</div>' +
+    browserDemoLinks('font-controls') + browserDemoLinks('parley') + '<article class="extension-document">' +
     data.extension_documents['parley-text'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
 }
 
