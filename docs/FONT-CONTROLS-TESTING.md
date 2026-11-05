@@ -4,6 +4,25 @@ Run commands from the repository root. The lab bundles licensed fonts; no font
 installation is needed. See the [font-controls guide](extensions/font-controls.md)
 for API usage, backend support and the core 3.0 migration.
 
+## Wasm inspector
+
+Open the [font-controls demo](examples/extensions/?demo=font-controls)
+from the website's Text gallery. Use its WebGPU and WebGL2 launch links to check
+both renderers. The real GPUI slider component and Parley/Skrifa pipeline execute
+in Wasm; the specimens are not CSS text. Check all four sliders, keyboard limits,
+presets, measured advances, and axis/feature metadata.
+
+To build and preview the site locally:
+
+```sh
+just web-build
+just docs
+just docs-serve
+```
+
+Open `/examples/extensions/?demo=font-controls` on the local server. The default
+GPUI web text backend remains separate from this demo's Parley backend.
+
 ## Native and Parley comparison
 
 On macOS or Windows:
@@ -65,6 +84,14 @@ its headless platform deliberately supplies a no-op text backend and is unsuitab
 for this test. The preview-capacity test is included in the full lab suite.
 
 ## Validation scope
+
+The Wasm inspector was exercised in the local in-app browser on November 5,
+2026, using both WebGPU and WebGL2. Checks covered all four pointer sliders,
+Home/arrow keyboard changes (including `slnt=-9.75`), the Wide preset and Default
+reset. The pinned specimen's 32px advance changed from 337.05px at Default to
+446.73px at Wide and returned to 337.05px on reset. Axis ranges, GSUB/GPOS feature
+tags and static/numeric-feature specimens rendered through the Wasm pipeline.
+These are browser checks on this host, not exhaustive browser/device coverage.
 
 The native/Parley labs and lab unit tests were confirmed working on macOS and
 Windows on November 5, 2026. A subtle cross-platform slant appearance difference

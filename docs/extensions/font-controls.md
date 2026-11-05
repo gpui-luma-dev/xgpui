@@ -7,7 +7,14 @@ the same settings through shaping, metrics, wrapping, fallback and rasterization
 
 ## Try the live inspector
 
-From the repository root:
+[Open the Wasm font inspector](../examples/extensions/?demo=font-controls), or
+choose [WebGPU](../examples/extensions/?demo=font-controls&backend=webgpu) /
+[WebGL2](../examples/extensions/?demo=font-controls&backend=webgl) explicitly.
+It reuses the native lab's GPUI sliders and bundled fonts. Parley/HarfRust shapes
+and Skrifa/tiny-skia rasterizes the actual glyphs in Wasm; CSS text is not used.
+WebGPU/WebGL2 chooses the GPU renderer, not a different text engine.
+
+For native CoreText/DirectWrite versus Parley, run from the repository root:
 
 ```sh
 just text --backend both
@@ -150,8 +157,13 @@ additional package, or copied parser implementation is required.
 | Apple font-kit / CoreText | Supported | Supported; macOS labs/tests verified |
 | Windows / DirectWrite | Supported | Supported when the `IDWriteTextLayout4` runtime probe succeeds; Windows labs/tests verified |
 | Parley / HarfRust / Skrifa | Supported | Supported for flat lines and paragraphs; macOS/Windows labs/tests verified |
+| Parley in Wasm | Supported | Supported; Wasm inspector interactions verified on WebGPU and WebGL2 |
 | Cosmic / Linux | Unsupported | Nonempty explicit axis requests rejected |
-| Browser native text | Unsupported | Nonempty explicit axis requests rejected |
+| GPUI default web text backend (Cosmic/Canvas) | Unsupported | Nonempty explicit axis requests rejected; this is an integration limit, not a browser-wide restriction |
+
+The Wasm inspector was verified on this host with both renderers, including
+pointer controls, keyboard input, presets and restored measurements. This is not
+exhaustive browser/device acceptance.
 
 Shared Apple code also serves iOS, but macOS acceptance does not establish iOS
 runtime validation. Cosmic and browser parity are tracked in

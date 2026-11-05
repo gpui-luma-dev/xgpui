@@ -17,6 +17,7 @@ fails explicitly if unavailable; check the browser console for adapter details.
 | `xgpui-shader` | `?demo=brushes` | Universal solid/linear/radial fills and borders, 16-point freeform, regular and tangent-controlled Hermite mesh, Simplex/Worley/dither modulation, glyph masks and direct/native paths. |
 | `xgpui-shader` | `?demo=layers` | Subtree opacity, grayscale/saturation/brightness/contrast/inversion, adaptive/full-resolution blur, seven destination blends and backdrop blur. |
 | `xgpui-parley` | `?demo=parley` | Paragraph shaping, bidirectional text and editing. |
+| `xgpui-parley` | `?demo=font-controls` | Shared native-lab weight/width/slant/optical-size sliders, presets, real layout advances and axis/feature inspection in Wasm. |
 | `xgpui-svg` | `?demo=svg` | Progressive SVG rendering and viewport rasterization. |
 
 The Color / Gamut demo uses the standalone `xgpui-color` math crate directly.
@@ -75,6 +76,39 @@ The demos exercise SDR output. `xgpui-gamut` currently has Metal and native D3D1
 presentation adapters; a browser wide-gamut presentation path is separate work.
 Compile/link checks do not establish browser GPU, clipboard, or IME correctness;
 the checklist above is intended for local interactive acceptance.
+
+## Variable-font inspector
+
+Open `?demo=font-controls`, optionally adding `&backend=webgpu` or
+`&backend=webgl`. The font-controls view shares `text-lab/src/axes.rs` and its
+static samples directly. Parley/HarfRust shapes the fonts and Skrifa/tiny-skia
+rasterizes glyphs in Wasm. CSS font rendering and native CoreText/DirectWrite
+are not used; WebGPU/WebGL2 only selects GPUI's renderer.
+
+Drag all four sliders, focus a slider and use arrows/Home/End, and compare the
+Default, Condensed, Slanted and Wide presets. The large and wrapping specimens,
+values and 32px advance update together. Axis metadata and GSUB/GPOS tags come
+from the resolved Roboto Flex face. Static rows also include Inter's numeric
+`cv02=2` feature. Font licenses are packaged under `font-licenses/` and linked
+from the demo footer.
+
+Local acceptance on November 5, 2026 passed pointer controls, keyboard changes
+(including fractional slant), presets and reset on WebGPU and WebGL2. Default's
+337.05px advance became 446.73px with Wide and returned on reset. The inspector
+admits 512 combinations; capacity errors preserve the last preview, and old
+settings remain usable. This is not a global memory budget or an eviction policy.
+
+Build and preview from the repository root:
+
+```sh
+just web-build
+just docs
+just docs-serve
+```
+
+Then open `/examples/extensions/?demo=font-controls`. The site Text gallery links
+to all renderer choices. The default GPUI Cosmic/Canvas web text backend remains
+separate and does not yet support explicit arbitrary axes.
 
 ## SVG demo
 

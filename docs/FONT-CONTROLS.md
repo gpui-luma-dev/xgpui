@@ -37,8 +37,10 @@ font queries, font IDs belong to the text system that created them.
 Apple's font-kit backend, Parley, and DirectWrite implement feature and axis
 queries. DirectWrite static axes require the runtime `IDWriteTextLayout4` probe
 to succeed. Native/Parley font-controls labs and tests are verified on macOS
-and Windows. Cosmic/web
-currently return `Unsupported` through the default platform methods.
+and Windows. Parley in Wasm supports the same queries and static axes, exposed
+in the [Wasm inspector](extensions/font-controls.md#try-the-live-inspector).
+The default Cosmic/Canvas web text backend and native Cosmic currently return
+`Unsupported` through the default platform methods.
 `TextSystem::font_capabilities()` reports support explicitly. Unsupported backends
 reject nonempty axis requests in their `font_id` entry point rather than silently
 pretending to apply them. Note that GPUI's existing `resolve_font` convenience

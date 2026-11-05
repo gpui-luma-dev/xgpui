@@ -8,17 +8,23 @@ use gpui_web::{WebBackendPreference, WebPlatform};
 use std::{borrow::Cow, cell::RefCell, rc::Rc, sync::Arc};
 
 // Share the native lab's editor, including its UTF-16/IME bridge and BiDi geometry.
+#[path = "../../text-lab/src/axes.rs"]
+mod axes;
 mod brushes;
 mod canvas;
 mod color;
 mod color_samples;
 mod color_tasks;
 mod color_tasks_model;
+mod font_controls;
 mod hermite;
 mod italy;
 mod media;
 #[path = "../../text-lab/src/paragraph.rs"]
 mod paragraph;
+#[allow(dead_code)]
+#[path = "../../text-lab/src/samples.rs"]
+mod samples;
 mod shader;
 mod svg;
 #[path = "../../../web-support/tiled_demo.rs"]
@@ -59,6 +65,7 @@ pub fn demo_behavior(demo: &str) -> String {
             "Typography: gradient, glow and shadow • kinetic glyphs with an unchanged source"
         }
         "svg" => "SVG: independent views • sharp / texture zoom • no worker",
+        "font-controls" => "Variable fonts: weight, width, slant, optical size • Parley shaping and rasterization in Wasm",
         "parley" => "Parley: editable paragraphs • selection and BiDi",
         "brushes" => "Brushes: universal fills, noise, glyphs and paths",
         "hermite" => "Hermite: live 2×2 / 3×3 mesh editor • points and tangent vectors",
@@ -104,6 +111,7 @@ fn launch() -> anyhow::Result<()> {
     let canvas = parameters.contains(&"demo=canvas");
     let mandelbrot = parameters.contains(&"demo=mandelbrot");
     let typography = parameters.contains(&"demo=typography");
+    let font_controls = parameters.contains(&"demo=font-controls");
     let parley = parameters.contains(&"demo=parley");
     let svg = parameters.contains(&"demo=svg");
     let color = parameters.contains(&"demo=color");
@@ -127,17 +135,26 @@ fn launch() -> anyhow::Result<()> {
     // These demos need no worker pool or shared Wasm memory.
     let platform = Rc::new(WebPlatform::new_with_backend(false, backend));
     let http = Arc::new(platform.fetch_http_client());
-    let app = if parley {
+    let mut font_demo = None;
+    let app = if parley || font_controls {
         let mut fonts = parley::FontContext::new();
         for data in [PLEX, paragraph::FONTS[0], paragraph::FONTS[1]] {
             fonts
                 .collection
                 .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
         }
-        Application::with_platform_and_text_system(
-            platform,
-            Arc::new(xgpui_parley::ParleyTextSystem::new(fonts, "IBM Plex Sans")?),
-        )
+        if font_controls {
+            for data in [samples::FLEX, samples::INTER] {
+                fonts
+                    .collection
+                    .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
+            }
+        }
+        let text_system = Arc::new(xgpui_parley::ParleyTextSystem::new(fonts, "IBM Plex Sans")?);
+        if font_controls {
+            font_demo = Some(font_controls::Prepared::new(&*text_system)?);
+        }
+        Application::with_platform_and_text_system(platform, text_system)
     } else {
         let app = Application::with_platform(platform);
         app.text_system().add_fonts(vec![Cow::Borrowed(PLEX)])?;
@@ -161,6 +178,16 @@ fn launch() -> anyhow::Result<()> {
                 cx.new(|cx| canvas::CanvasDemo::new(mandelbrot, window, cx))
             })
             .expect("open canvas demo");
+        } else if font_controls {
+            cx.open_window(options, |_, cx| {
+                cx.new(|cx| {
+                    font_controls::FontDemo::new(
+                        font_demo.take().expect("prepared font inspector"),
+                        cx,
+                    )
+                })
+            })
+            .expect("open font-controls demo");
         } else if parley {
             let timings = paragraph::measure(cx.text_system().clone(), 5)
                 .expect("paragraph layout diagnostics");
@@ -179,8 +206,10 @@ fn launch() -> anyhow::Result<()> {
             })
             .expect("open media demo");
         } else if typography {
-            cx.open_window(options, |window, cx| cx.new(|cx| typography::TypographyDemo::new(window, cx)))
-                .expect("open typography demo");
+            cx.open_window(options, |window, cx| {
+                cx.new(|cx| typography::TypographyDemo::new(window, cx))
+            })
+            .expect("open typography demo");
         } else if hermite {
             cx.open_window(options, |_, cx| cx.new(|_| hermite::HermiteDemo::new()))
                 .expect("open Hermite editor");

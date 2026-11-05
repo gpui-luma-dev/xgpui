@@ -50,6 +50,11 @@ axis parity remain separate work. Native/Parley raster differences are expected;
 a subtle cross-platform slant appearance difference was observed in both panels,
 with matching endpoints and no functional failure.
 
+The [Wasm font inspector](examples/extensions/?demo=font-controls) brings these
+same GPUI sliders and metadata queries to the browser using Parley in Wasm.
+Choose WebGPU or WebGL2 for rendering; shaping and rasterization stay in Rust.
+Native CoreText/DirectWrite comparison remains in the desktop lab.
+
 Read the [font-controls guide](extensions/font-controls.md) for API examples,
 backend capabilities, preview policy and migration details.
 

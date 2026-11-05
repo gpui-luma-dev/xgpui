@@ -11,7 +11,7 @@ function extensionTitle(route) {
 const browserDemoNames = {
   canvas: 'spatial card canvas', mandelbrot: 'Mandelbrot explorer',
   typography: 'Selectable typography', brushes: 'Brush gallery', layers: 'Layer effects', shader: 'Gradient paints',
-  chromaticity: 'Chromaticity & gamut', 'pixel-metadata': 'Pixels + metadata', hermite: 'Hermite editor', color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs',
+  chromaticity: 'Chromaticity & gamut', 'pixel-metadata': 'Pixels + metadata', hermite: 'Hermite editor', color: 'Color & gamut', svg: 'Progressive SVG', parley: 'Text & paragraphs', 'font-controls': 'Variable fonts',
 };
 function browserDemoLinks(demo) {
   return '<p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=' + demo + '">Open ' + browserDemoNames[demo] + ' ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p>';

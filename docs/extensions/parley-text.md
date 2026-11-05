@@ -148,6 +148,12 @@ accessibility and broader BiDi/UAX #14 conformance remain follow-ups.
 
 ## Lab and validation
 
+[The Wasm font inspector](../examples/extensions/?demo=font-controls) runs the
+same GPUI axis controls with Parley shaping and rasterization in Wasm, through
+WebGPU or WebGL2. It displays axis ranges, GSUB/GPOS feature tags and precise
+static samples beside the live preview. This is separate from the default GPUI
+web text backend, whose explicit-axis requests remain unsupported.
+
 ```sh
 just text --backend both
 just text --workload paragraph

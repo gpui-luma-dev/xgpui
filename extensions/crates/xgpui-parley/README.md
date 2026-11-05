@@ -92,6 +92,7 @@ focused IME/assistive-technology acceptance remain separate checks; see the
 ## Guides and examples
 
 - [Text backend setup, supported subset and validation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/parley-text.md)
+- [Wasm font-controls demo](https://xgpui.dev/examples/extensions/?demo=font-controls) — the native lab’s sliders and font inspection, running through Parley in Wasm on WebGPU/WebGL2.
 - [Text and editing/IME lab](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/text-lab/README.md)
 - [Bundled test fonts and licenses](https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-parley/tests/fonts/README.md)
 
