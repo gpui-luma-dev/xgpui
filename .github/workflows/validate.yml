@@ -90,9 +90,9 @@ jobs:
       - name: Check retained iOS libraries
         run: cargo check --locked --features full-capture,runtime-shaders --target aarch64-apple-ios-sim
       - name: Build the simulator example bundle
-        run: bash gpui/crates/gpui-ios/examples/ios/build-simulator.sh --locked
+        run: bash gpui/crates/gpui-ios/examples/ios/build-simulator.sh --locked --config .cargo/validation.toml
       - name: Compile native text input protocol tests
-        run: cargo test --locked --manifest-path gpui/crates/gpui-ios/Cargo.toml --features runtime_shaders --target aarch64-apple-ios-sim --test text_input --no-run
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-ios/Cargo.toml --features runtime_shaders --target aarch64-apple-ios-sim --test text_input --no-run
 
   shader-wasm:
     runs-on: ubuntu-latest
