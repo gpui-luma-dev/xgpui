@@ -5,8 +5,7 @@
 Changes since [release-2026-11-03-deba615a1d9c](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-03-deba615a1d9c):
 better keyboard and macOS accessibility focus for selectable typography, a shared
 moving video fixture on Windows and macOS, an integrated native color lab, and
-release checks that catch changed crates needing new versions. **This is a
-pre-release summary of merged changes, not a publication announcement.**
+release checks that catch changed crates needing new versions. 
 
 ### Selectable typography: keyboard focus and VoiceOver
 
