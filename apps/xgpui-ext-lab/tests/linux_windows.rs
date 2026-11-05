@@ -46,7 +46,8 @@ fn main() {
                     }
                 });
             } else if self.frames < 3 {
-                window.request_animation_frame();
+                // Repaint the shell as well as the content, independent of element caching.
+                window.on_next_frame(|window, _| window.refresh());
             }
             div()
                 .size_full()

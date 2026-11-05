@@ -71,10 +71,11 @@ jobs:
         timeout-minutes: 2
         run: |
           timeout 60s vulkaninfo --summary 2>&1 | tee "$LINUX_CI_RESULTS/vulkaninfo.log"
-      - name: Test all seven extension crates with committed lockfiles
+      - name: Test extension crates and the experimental desktop shell with committed lockfiles
         run: |
           run_suite() { local name="$1"; shift; "$@" 2>&1 | tee "$LINUX_CI_RESULTS/$name.log"; }
           common=(test --locked --config .cargo/validation.toml)
+          run_suite shell cargo "${common[@]}" --manifest-path extensions/crates/xgpui-shell/Cargo.toml --lib -- --test-threads=1
           run_suite color cargo "${common[@]}" --manifest-path extensions/crates/xgpui-color/Cargo.toml --features icc --lib --tests -- --test-threads=1
           run_suite canvas cargo "${common[@]}" --manifest-path extensions/crates/xgpui-canvas/Cargo.toml --features gpui --lib -- --test-threads=1
           run_suite svg cargo "${common[@]}" --manifest-path extensions/crates/xgpui-svg/Cargo.toml --lib -- --test-threads=1
