@@ -19,15 +19,13 @@ function filterDeclarations(items, query='', kind='', root=false) {
   const q = query.trim().toLowerCase();
   return items.filter(d => (!root || d.root_export) && (!kind || d.kind===kind) && (!q || [d.name,d.signature,d.module,d.file,...d.guards].join(' ').toLowerCase().includes(q)));
 }
-function sidebar(query='') {
+function sidebar() {
   const route = parseRoute(location.hash);
-  const q = query.toLowerCase().trim();
-  const matches = crates.filter(c => !q || (c.package+' '+notes[c.package].role+' '+c.declarations.map(d=>d.name).join(' ')).toLowerCase().includes(q));
   document.getElementById('crate-list').innerHTML = groups.map(g => {
-    const list=matches.filter(c=>notes[c.package].group===g);
+    const list=crates.filter(c=>notes[c.package].group===g);
     const entries = list.map(c=>'<a class="crate-link" '+(route.pkg===c.package || (c.package === 'xgpui-shader' && shaderGuideRoutes.includes(route.global)) || (c.package === 'xgpui-color' && route.global === 'color-math') || (c.package === 'xgpui-gamut' && route.global === 'high-gamut-windows') || (c.package === 'xgpui-parley' && route.global === 'parley-text') || (c.package === 'xgpui-canvas' && route.global === 'canvas') || (c.package === 'xgpui-svg' && route.global === 'svg-rendering') || (c.package === 'xgpui-media' && route.global === 'media-images') ? 'aria-current="page" ' : '')+'href="'+crateUrl(c.package)+'">'+escapeHtml(short(c.package))+'</a>').join('');
     return entries ? '<p class="group-label">'+escapeHtml(g)+'</p>'+entries : '';
-  }).join('') || '<p>No crates match.</p>';
+  }).join('');
 
 }
 function header(eyebrow,title,lead) {return '<div class="eyebrow">'+escapeHtml(eyebrow)+'</div><h1>'+escapeHtml(title)+'</h1><p class="lead">'+escapeHtml(lead)+'</p>';}
@@ -82,7 +80,7 @@ function render() {
   content.innerHTML=c?cratePage(c,route.tab):route.pkg?header('Not found','Unknown crate','Choose a captured crate from the navigation.'):isExtensionRoute(route.global)?extensionPage(route.global):route.global==='pipeline'?pipelinePage():route.global==='architecture'?architecturePage():route.global==='review'?review():overview();
   window.enhanceCodeExamples?.(content);
   document.title=(c?short(c.package):isExtensionRoute(route.global)?extensionTitle(route.global):route.global==='pipeline'?'Rendering pipeline explorer':route.global==='architecture'?'Architecture overview':route.global==='review'?'API review roadmap':'Code roadmap')+' · xgpui';
-  sidebar(document.getElementById('crate-search').value);
+  sidebar();
   if(route.section && isExtensionRoute(route.global)) {
     const target = document.getElementById(route.section);
     for(let parent = target?.parentElement; parent; parent = parent.parentElement) {
@@ -98,6 +96,5 @@ function render() {
 }
 if(typeof document!=='undefined') {
   window.addEventListener('hashchange',()=>{render();if(!parseRoute(location.hash).section) window.scrollTo(0,0);});
-  document.getElementById('crate-search').addEventListener('input',event=>sidebar(event.target.value));
   render();
 }
