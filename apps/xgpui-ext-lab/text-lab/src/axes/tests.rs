@@ -180,7 +180,11 @@ fn live_axis_controls_on_native() {
 #[cfg(target_os = "windows")]
 #[test]
 fn live_axis_controls_on_native_windows() {
-    interaction_checks(gpui_platform::current_platform(true).text_system());
+    // A headless Windows platform deliberately supplies NoopTextSystem. Keep a
+    // window-capable platform alive for COM and native DirectWrite resources;
+    // interaction_checks itself still draws into GPUI's simulated test window.
+    let platform = gpui_platform::current_platform(false);
+    interaction_checks(platform.text_system());
 }
 
 #[test]

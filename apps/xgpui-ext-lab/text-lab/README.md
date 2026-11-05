@@ -159,8 +159,8 @@ Windows fixture tests, visual checks, and headless comparison commands.
 ## Live axis controls
 
 ```sh
-just --justfile apps/xgpui-ext-lab/text-lab/justfile axes
-just --justfile apps/xgpui-ext-lab/text-lab/justfile axes-test
+just text --backend both
+just text-test axes::tests -- --nocapture
 ```
 
 Drag any slider or focus it and use arrows (Shift for larger steps), Home, or
@@ -176,5 +176,6 @@ previously visited settings, including Default, still work. Restart the lab for
 a fresh session. This is a descriptor admission limit, not a global CPU/GPU
 memory guarantee. Timings-only runs do not construct the live inspector.
 
-The normal `test` recipe includes these interaction tests; `axes-test` runs
-just the pointer/keyboard/preset/preview-limit subset against the real backends.
+`just text-test` runs the text-lab tests with backtraces enabled. The filtered
+command above runs the pointer/keyboard/preset/preview-limit subset against the
+real backends. `just lab-test` also enables backtraces across the lab suite.
