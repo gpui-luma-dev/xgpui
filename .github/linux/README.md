@@ -13,8 +13,9 @@ The Ubuntu job uses committed lockfiles and a shared Cargo target/cache. It runs
   Parley construction/interop tests, with the relevant Linux features enabled.
 - All native lab test binaries, the shared lab library and compatibility tests.
 - Vulkan image and path captures, saved with per-suite logs and adapter details.
-- A dedicated real-window probe under headless Weston and Xvfb/Openbox. It opens
-  default and requested client-decorated windows, completes rendered frames,
+- A dedicated real-window probe under Weston nested in Xvfb, and directly under
+  Xvfb/Openbox. It opens default and requested client-decorated windows, completes
+  rendered frames,
   checks per-window titles, decoration insets and color fallback, then exits.
 
 The window probe is opt-in (`linux-window-tests`) and is not part of normal
@@ -37,6 +38,10 @@ export WGPU_BACKEND=vulkan
 dbus-run-session -- bash .github/linux/window-smoke.sh
 rmdir "$XDG_RUNTIME_DIR"
 ```
+
+Weston uses its X11 backend on Xvfb so it provides the input seat required by
+GPUI; Ubuntu 24.04’s headless backend does not advertise `wl_seat`. The Wayland
+probe clears `DISPLAY` to ensure it connects through Wayland.
 
 The script checks server readiness, imposes a timeout on each probe and cleans up
 its display-server processes on success or failure. Use a private runtime directory.
