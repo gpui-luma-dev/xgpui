@@ -10,6 +10,19 @@ use std::{
 pub struct FontTag([u8; 4]);
 
 impl FontTag {
+    /// Registered weight axis (`wght`), conventionally 400 for regular weight.
+    pub const WEIGHT: Self = Self(*b"wght");
+    /// Registered width axis (`wdth`), expressed as a percentage of normal width.
+    pub const WIDTH: Self = Self(*b"wdth");
+    /// Registered slant axis (`slnt`), expressed in degrees; negative values lean right.
+    pub const SLANT: Self = Self(*b"slnt");
+    /// Registered optical-size axis (`opsz`), expressed in typographic points.
+    /// Setting this explicitly does not enable automatic optical sizing.
+    pub const OPTICAL_SIZE: Self = Self(*b"opsz");
+    /// Registered italic axis (`ital`), conventionally 0 for roman and 1 for italic.
+    /// This selects a font design independently of the slant angle.
+    pub const ITALIC: Self = Self(*b"ital");
+
     /// Returns the tag's bytes in OpenType order.
     pub fn as_bytes(&self) -> &[u8; 4] {
         &self.0
@@ -84,8 +97,8 @@ mod tests {
     }
     #[test]
     fn canonical_coordinates_preserve_signed_precision() {
-        let slnt = "slnt".parse().unwrap();
-        let wght = "wght".parse().unwrap();
+        let slnt = FontTag::SLANT;
+        let wght = FontTag::WEIGHT;
         let a = FontVariations::new([(wght, 300.25), (slnt, -12.5), (wght, 400.125)]).unwrap();
         let b = FontVariations::new([(slnt, -12.5), (wght, 400.125)]).unwrap();
         assert_eq!(a, b);
@@ -122,6 +135,16 @@ mod tests {
 
     #[test]
     fn rejects_invalid_coordinates_and_tags() {
+        for (tag, name) in [
+            (FontTag::WEIGHT, "wght"),
+            (FontTag::WIDTH, "wdth"),
+            (FontTag::SLANT, "slnt"),
+            (FontTag::OPTICAL_SIZE, "opsz"),
+            (FontTag::ITALIC, "ital"),
+        ] {
+            assert_eq!(name.parse::<FontTag>().unwrap(), tag);
+            assert_eq!(tag.to_string(), name);
+        }
         for tag in ["", "abc", "abcde", "éab", "a\nbc"] {
             assert!(tag.parse::<FontTag>().is_err());
         }

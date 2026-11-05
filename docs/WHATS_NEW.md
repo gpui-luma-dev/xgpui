@@ -10,8 +10,12 @@ size controls. The labs and tests were confirmed working on both platforms.
 
 ### Live variable-font controls and inspection
 
-Set `Font::variations` or use `.font_variations(...)` on styled elements. Signed,
-finite coordinates preserve negative slant and fractional author values. Each
+Set `Font::variations` or use `.font_variations(...)` on styled elements.
+`FontTag::WEIGHT`, `WIDTH`, `SLANT`, `OPTICAL_SIZE`, and `ITALIC` provide typed
+constants for the standard axes, so ordinary code needs no string parsing.
+Custom tags still support validated parsing, and serialized tags stay unchanged.
+
+Signed, finite coordinates preserve negative slant and fractional author values. Each
 resolved face clamps supported axes to its own range; fallback runs retain the
 request and resolve their own coordinates. Explicit settings take precedence
 over corresponding implicit weight/style axes. Metrics, wrapping, caret/selection

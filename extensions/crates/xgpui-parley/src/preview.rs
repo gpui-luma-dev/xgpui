@@ -96,7 +96,7 @@ mod tests {
     use super::*;
     #[test]
     fn admission_limits_combinations_without_mutating_precise_author_values() -> Result<()> {
-        let tag = "slnt".parse()?;
+        let tag = FontTag::SLANT;
         let axis = VariationAxisInfo {
             tag,
             min_value: -10.0,

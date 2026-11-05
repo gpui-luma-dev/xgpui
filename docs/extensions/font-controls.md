@@ -43,13 +43,13 @@ Load or install a font that supports the requested axes. Roboto Flex is bundled
 with the lab; applications provide their own fonts.
 
 ```rust
-use gpui::{FontVariations, div, prelude::*};
+use gpui::{FontTag, FontVariations, div, prelude::*};
 
 let axes = FontVariations::new([
-    ("wght".parse()?, 650.0),
-    ("wdth".parse()?, 85.0),
-    ("slnt".parse()?, -7.5),
-    ("opsz".parse()?, 14.0),
+    (FontTag::WEIGHT, 650.0),
+    (FontTag::WIDTH, 85.0),
+    (FontTag::SLANT, -7.5),
+    (FontTag::OPTICAL_SIZE, 14.0),
 ])?;
 
 let specimen = div()
@@ -62,6 +62,32 @@ For explicit text runs, assign the same settings to `gpui::font(family).variatio
 `TextStyle::font_variations` participates in inheritance and refinement.
 Coordinates serialize as a tag-to-number map, for example
 `{"slnt": -7.5, "wght": 650.0}`.
+
+Use these constants for the five [registered axes](https://learn.microsoft.com/en-us/typography/opentype/spec/dvaraxisreg):
+
+| Constant | OpenType tag | Coordinate meaning |
+| --- | --- | --- |
+| `FontTag::WEIGHT` | `wght` | Weight; conventionally 400 for regular |
+| `FontTag::WIDTH` | `wdth` | Percentage of normal width |
+| `FontTag::SLANT` | `slnt` | Angle in degrees; negative values lean right |
+| `FontTag::OPTICAL_SIZE` | `opsz` | Optical design size in typographic points |
+| `FontTag::ITALIC` | `ital` | Italic design; conventionally 0 for roman and 1 for italic |
+
+Constants are already validated tags and need no `.parse()` or error handling.
+`FontVariations::new` remains fallible because coordinates must be finite. The
+font determines its supported ranges: constants do not guarantee a font has that
+axis or impose a universal range. Italic design and slant angle are separate axes.
+Explicit optical size does not track GPUI's pixel font size automatically.
+
+Custom axes remain available through validated parsing:
+
+```rust
+let grade = "GRAD".parse::<FontTag>()?;
+let custom_axes = FontVariations::new([(grade, 25.0)])?;
+```
+
+The spelling change does not alter serialization: constants still write standard
+tags such as `wght` and `slnt` into the same tag-to-number map.
 
 `FontTag` validates four printable ASCII bytes. `FontVariations` accepts finite
 signed `f32` coordinates, sorts tags, keeps the last duplicate and normalizes

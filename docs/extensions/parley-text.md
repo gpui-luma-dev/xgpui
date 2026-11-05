@@ -50,7 +50,9 @@ paragraph conversion IMEs remain separate checks.
 ## Variable fonts and inspection
 
 Version 0.4.0 accepts `Font::variations` in flat-line and paragraph shaping and
-retains the actual resolved coordinates for metrics and rasterization. Explicit
+retains the actual resolved coordinates for metrics and rasterization. Use
+`FontTag::{WEIGHT, WIDTH, SLANT, OPTICAL_SIZE, ITALIC}` for standard axes, and
+validated tag parsing for custom axes; see the [typed styling example](font-controls.md#set-precise-axes). Explicit
 signed/fractional axes, clamping, fallback and instance isolation share core's
 [font-controls contract](font-controls.md). `font_axes`, `opentype_features`, and
 `font_capabilities` are available through GPUI's text system. Parley supplies raw

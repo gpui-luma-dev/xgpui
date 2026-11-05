@@ -15,7 +15,7 @@ CoreText, DirectWrite and Parley share the same contracts. See
 | `TextStyle::font_variations: FontVariations` | Breaking for exhaustive literals/patterns. Add `font_variations: Default::default()`. |
 | `TextStyleRefinement::font_variations: Option<FontVariations>` | Breaking for exhaustive literals/patterns. Add `font_variations: None`; absent serialized settings remain unset. |
 | `Styled::font_variations(FontVariations)` | Additive styling method; settings inherit into fonts and text runs. |
-| `FontTag`, `FontVariations` | Additive validated tag and immutable settings types; finite signed coordinates, canonical equality/hash, serde map and schema. |
+| `FontTag`, `FontVariations` | Additive validated tag and immutable settings types; finite signed coordinates, canonical equality/hash, serde map and schema. `FontTag::{WEIGHT, WIDTH, SLANT, OPTICAL_SIZE, ITALIC}` supplies the five registered axis constants without parsing. |
 | `FontQuery<T>`, `FontCapabilities`, `VariationAxisInfo`, `OpenTypeFeatureInfo` | Additive inspection types: distinguish unsupported/success/error, expose supported backends, axis ranges and GSUB/GPOS provenance. |
 | `TextSystem::{font_axes, opentype_features, font_capabilities}` | Additive application-facing query methods. IDs belong to the resolving text system. |
 | `PlatformTextSystem::{font_axes, opentype_features, font_capabilities}` | Additive default methods; existing custom backends need no override. |

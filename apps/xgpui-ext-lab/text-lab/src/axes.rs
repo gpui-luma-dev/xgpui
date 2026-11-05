@@ -18,11 +18,11 @@ const PRESET_IDS: [&str; 4] = [
 ];
 const SPECIMEN: &str = "Hamburgefonts 012345";
 const WRAPPING: &str = "Hamburgefonts 012345 · Hamburgefonts 012345 · Hamburgefonts 012345";
-const CONTROLS: [(&str, &str, f32); 4] = [
-    ("wght", "Weight", 10.0),
-    ("wdth", "Width", 1.0),
-    ("slnt", "Slant", 0.25),
-    ("opsz", "Optical size", 1.0),
+const CONTROLS: [(FontTag, &str, f32); 4] = [
+    (FontTag::WEIGHT, "Weight", 10.0),
+    (FontTag::WIDTH, "Width", 1.0),
+    (FontTag::SLANT, "Slant", 0.25),
+    (FontTag::OPTICAL_SIZE, "Optical size", 1.0),
 ];
 
 struct Axis {
@@ -57,7 +57,7 @@ impl Controls {
             .map(|&(tag, label, step)| {
                 let info = available
                     .iter()
-                    .find(|axis| axis.tag.to_string() == tag)
+                    .find(|axis| axis.tag == tag)
                     .with_context(|| format!("Roboto Flex is missing {tag}"))?
                     .clone();
                 ensure!(

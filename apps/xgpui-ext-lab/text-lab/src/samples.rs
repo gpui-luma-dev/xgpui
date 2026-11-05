@@ -98,17 +98,12 @@ pub fn axis_samples() -> Result<Vec<Sample>> {
     let mut samples = Vec::new();
     for (width, slant, optical) in [(50.0, 0.0, 14.0), (100.0, -10.0, 14.0), (150.0, -5.0, 72.0)] {
         let mut font = font("Roboto Flex");
-        font.variations = gpui::FontVariations::new(
-            [
-                ("wght", 500.25),
-                ("wdth", width),
-                ("slnt", slant),
-                ("opsz", optical),
-            ]
-            .into_iter()
-            .map(|(tag, value)| Ok((tag.parse()?, value)))
-            .collect::<Result<Vec<_>>>()?,
-        )?;
+        font.variations = gpui::FontVariations::new([
+            (gpui::FontTag::WEIGHT, 500.25),
+            (gpui::FontTag::WIDTH, width),
+            (gpui::FontTag::SLANT, slant),
+            (gpui::FontTag::OPTICAL_SIZE, optical),
+        ])?;
         samples.push(Sample {
             label: format!("Roboto Flex / wght=500.25 wdth={width} slnt={slant} opsz={optical}"),
             text: "Hamburgefonts 012345".into(),

@@ -55,6 +55,10 @@ Backend-specific shaping limitations still apply.
 ## Precise variation values
 
 `FontTag` accepts exactly four printable ASCII bytes, including spaces.
+Use `FontTag::{WEIGHT, WIDTH, SLANT, OPTICAL_SIZE, ITALIC}` for the registered
+axes. Constants avoid parsing in normal application code. Custom tags still use
+validated `FromStr`, and serialized tag strings are unchanged.
+
 `FontVariations::new` accepts `(FontTag, f32)` pairs in font design units:
 
 - Coordinates remain signed and precise to f32; negative slant is preserved.
@@ -74,8 +78,8 @@ every entry before canonicalizing duplicates.
 ```rust,ignore
 let mut font = gpui::font("Roboto Flex");
 font.variations = gpui::FontVariations::new([
-    ("slnt".parse()?, -10.125),
-    ("wght".parse()?, 500.25),
+    (gpui::FontTag::SLANT, -10.125),
+    (gpui::FontTag::WEIGHT, 500.25),
 ])?;
 ```
 
@@ -216,6 +220,11 @@ copied parser source, synchronization script, or public parser API.
 | Generated `TextStyleRefinement::font_variations: Option<FontVariations>` | Additive setting and serialized key; **breaking for exhaustive literals/patterns** | Required by normal style refinement/inheritance. Missing serialized values remain `None`. |
 | `Styled::font_variations(FontVariations)` | Additive default trait method | Convenience over the style field; can be moved to an extension trait independently. |
 | `FontTag` | Additive type; `FromStr`, `Display`, `Clone`, `Copy`, `Debug`, equality, ordering, hash; `as_bytes()` | Used by core variation settings and inspection results. Could move with the owning contract types, at the cost of a core dependency on that crate. |
+| `FontTag::WEIGHT` | Additive associated constant for `wght`; no source/serialization change | Typed spelling for the registered weight axis; belongs with the existing core tag type. |
+| `FontTag::WIDTH` | Additive associated constant for `wdth`; no source/serialization change | Typed spelling for the registered width axis; same ownership. |
+| `FontTag::SLANT` | Additive associated constant for `slnt`; no source/serialization change | Typed spelling for the registered signed slant axis; same ownership. |
+| `FontTag::OPTICAL_SIZE` | Additive associated constant for `opsz`; no source/serialization change | Typed spelling for explicit optical size; does not enable automatic sizing. Same ownership. |
+| `FontTag::ITALIC` | Additive associated constant for `ital`; no source/serialization change | Completes the five registered axes; italic design selection is distinct from slant. Same ownership. |
 | `FontVariations` | Additive type; `new()`, `settings()`, default, clone/debug, equality/hash, serde, schema, `TryFrom<BTreeMap<String,f32>>`, conversion back to that map | Needed by the new core descriptor/style fields. Validated immutable storage protects cache equality/hash invariants. Could move to a small shared font-types crate; not dependent on Parley. |
 | `FontQuery<T>` with `Unsupported` / `Supported(T)` | Additive enum, clone/debug/equality | Makes unsupported inspection distinct from success and failure. Could move to an inspection extension if the query methods move. |
 | `OpenTypeFeatureInfo` with public `tag`, `substitution`, `positioning` | Additive type, clone/debug/equality | Cross-backend inspection return type. Can move with an extension-owned inspector interface. |
@@ -353,3 +362,24 @@ inputs, outputs, traits, and re-exports now resolve to the matching 3.0 type
 universe, so consumers must upgrade the pinned stack together; mixing this
 release family with core 2.x is unsupported. The exhaustive-literal migrations above
 remain necessary wherever applications directly construct the changed core types.
+
+
+## Ergonomics follow-ups
+
+The standard axis constants are implemented. The following are design follow-ups,
+not callable APIs in this release:
+
+- Axis lookup and immutable editing helpers: a `get` operation, a validated
+  `with` update, and `without` removal would avoid reconstructing settings for
+  every control change. Removal must restore the backend/default axis behavior
+  rather than writing an arbitrary zero. Equality, hashing and finite-value
+  validation must keep their current guarantees.
+- Typed feature construction: `FontFeatures` currently exposes string/number
+  pairs through an `Arc<Vec<_>>`. A typed constructor could accept validated tags
+  while preserving numeric selectors, existing serialized input and compatibility.
+- Fallible resolution: a public error-returning resolver would let inspectors
+  distinguish a missing/rejected requested font from successful fallback.
+  The existing `resolve_font` intentionally falls back and can panic if the
+  fallback stack also fails; it must retain that behavior for existing callers.
+
+Each additional core API requires its own compatibility and ownership review.
