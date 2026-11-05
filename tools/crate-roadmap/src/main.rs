@@ -769,6 +769,7 @@ fn generate(root: &Path) -> Result<()> {
         ("media-pipeline", "docs/extensions/media-pipeline.md"),
         ("svg-rendering", "docs/extensions/svg-rendering.md"),
         ("parley-text", "docs/extensions/parley-text.md"),
+        ("font-controls", "docs/extensions/font-controls.md"),
         (
             "high-gamut-windows",
             "docs/extensions/high-gamut-windows.md",

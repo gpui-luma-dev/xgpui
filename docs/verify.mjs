@@ -222,7 +222,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 26);
+assert.equal(Object.keys(data.extension_documents).length, 27);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
@@ -231,6 +231,9 @@ assert.match(extensionOverview, /2\. Wide-gamut presentation/);
 assert.match(extensionOverview, /href="#extension-paints"/);
 assert.match(extensionOverview, /href="#high-gamut-windows"/);
 assert.match(extensionOverview, /href="#parley-text"/);
+assert.match(extensionOverview, /href="#font-controls"/);
+assert.match(data.extension_documents['font-controls'].html, /PlatformTextSystem::font_table/);
+assert.match(data.extension_documents['font-controls'].html, /just lab-test live_axis/);
 assert.match(run('cratePage(crates.find(c => c.package === "xgpui-parley"), "overview")'), /layout_paragraph/);
 assert.equal(data.extension_packages['xgpui-svg'], 'extensions/crates/xgpui-svg');
 assert.ok(!data.provenance.packages['xgpui-svg']);

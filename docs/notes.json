@@ -3,7 +3,7 @@
     "short": "gpui",
     "group": "Core",
     "role": "Application model, entities, windows, elements, input, layout, text and scene primitives.",
-    "surface": "Broad root re-exports connect private implementation modules to the application-facing API. AppContext and platform traits define important contracts.",
+    "surface": "Broad root re-exports connect private implementation modules to the application-facing API. AppContext and platform traits define important contracts. Core 3.0 adds FontVariations, inherited font-axis styling, resolved-face inspection and default font_table backend access; parsing stays private.",
     "review": "Review root re-exports by subsystem. Preserve hidden macro support until generated consumers have been checked.",
     "entry": "src/gpui.rs"
   },
@@ -19,7 +19,7 @@
     "short": "gpui-apple",
     "group": "Platforms & rendering",
     "role": "Shared Apple rendering and services, gated for macOS or iOS.",
-    "surface": "Metal renderer, dispatcher, optional text system, keychain and thermal modules.",
+    "surface": "Metal renderer, dispatcher, optional text system, keychain and thermal modules. CoreText static axes and inspection retain effective native/fallback font identity.",
     "review": "Start the Apple color investigation in metal_renderer.rs: BGRA8Unorm appears in layer and texture setup. Shared iOS code does not establish a complete iOS window backend.",
     "entry": "src/gpui_apple.rs"
   },
@@ -43,7 +43,7 @@
     "short": "gpui-windows",
     "group": "Platforms & rendering",
     "role": "Windows native platform, Win32 windows, DirectWrite and DirectX integration.",
-    "surface": "WindowsPlatform is the narrow root export; most native modules are crate-private.",
+    "surface": "WindowsPlatform is the narrow root export; most native modules are crate-private. DirectWrite static axes, resolved-face table access and runtime capability reporting feed core inspection.",
     "review": "A small export list still implements the shared platform contract. Check backend implementations when that contract changes.",
     "entry": "src/gpui_windows.rs"
   },
@@ -91,8 +91,8 @@
     "short": "xgpui-parley",
     "group": "Extensions",
     "role": "Opt-in Parley/HarfRust text shaping, BiDi paragraphs and grayscale rasterization.",
-    "surface": "ParleyTextSystem, retained face/variation identity and optional GPUI paragraph shaping/geometry. GPUI owns frame caches and the glyph atlas.",
-    "review": "Preserve descriptor/resolved-face identity and immutable layouts. Explicit direction/language and Unicode conformance remain follow-ups; Windows/Linux runtime and paragraph conversion IMEs need validation.",
+    "surface": "ParleyTextSystem, retained face/variation identity and optional GPUI paragraph shaping/geometry. GPUI owns frame caches and the glyph atlas. Explicit static axes and VariationPreview share canonical GPUI descriptors.",
+    "review": "Native/Parley font-controls labs and tests are verified on macOS and Windows. Preserve descriptor/resolved-face identity and immutable layouts. Linux runtime, paragraph conversion IMEs, explicit direction/language and Unicode conformance remain follow-ups.",
     "entry": "src/lib.rs"
   },
   "xgpui-svg": {

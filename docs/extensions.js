@@ -119,8 +119,8 @@ MetalWideSdrOutput::from_linear_p3_premultiplied(context, texture, commands)?;`)
     extensionCode('sh', `just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui
 just --justfile apps/xgpui-ext-lab/gamut-lab/justfile test`) +
     colorDemoLinks() +
-    '<h2>3. Parley text</h2><p>Shared text backend with flat-LTR compatibility, BiDi paragraph layout and editing/IME geometry. Existing GPUI caches and glyph atlas; Windows/Linux runtime validation remains outstanding.</p>' +
-    '<div class="cards">' + extensionCard('parley-text', 'Construction, paragraph/input seams, cache and face identity, supported subset and validation.') + '</div>' +
+    '<h2>3. Parley text</h2><p>Shared text backend with flat-LTR compatibility, BiDi paragraph layout and editing/IME geometry. Precise font axes and feature inspection use existing GPUI caches and the glyph atlas. Font-controls labs/tests are verified on macOS and Windows; Linux acceptance remains separate.</p>' +
+    '<div class="cards">' + extensionCard('parley-text', 'Construction, paragraphs, precise axes, preview policy, cache and face identity, supported subset and validation.') + extensionCard('font-controls', 'Weight, width, slant and optical size; inspection, native/Parley lab, backend support and core 3.0 migration.') + '</div>' +
     '<h2>4. Progressive SVG</h2><p>Experimental full-color static SVG elements with preview/detail refinement, shared FIFO admission and aggregate image accounting. Native lab and attributed offline samples; smaller budgets reduce deep-zoom detail.</p>' +
     '<div class="cards">' + extensionCard('svg-rendering', 'Use SvgImage and SvgScheduler, understand accounting limits, and run the native sample.') + '</div>' +
     '<h2>5. Standalone color math</h2><p><code>xgpui-color</code> provides color conversions, gamut mapping, OkLab/OkLCh interpolation and reusable WGSL helpers with zero runtime dependencies in its default configuration. Optional ICC parsing adds a parser dependency. Use it without GPUI or a GPU context.</p>' +

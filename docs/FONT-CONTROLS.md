@@ -2,6 +2,10 @@
 
 Issue: <https://github.com/gpui-luma-dev/xgpui/issues/27>
 
+The [web font-controls guide](extensions/font-controls.md) covers usage, support
+and core 3.0 migration. This document retains the implementation contract,
+measurements and individual API rationale.
+
 ## Feature introspection
 
 Resolve a font, then query the resolved face:
@@ -32,7 +36,8 @@ font queries, font IDs belong to the text system that created them.
 
 Apple's font-kit backend, Parley, and DirectWrite implement feature and axis
 queries. DirectWrite static axes require the runtime `IDWriteTextLayout4` probe
-to succeed; native Windows execution remains to be validated. Cosmic/web
+to succeed. Native/Parley font-controls labs and tests are verified on macOS
+and Windows. Cosmic/web
 currently return `Unsupported` through the default platform methods.
 `TextSystem::font_capabilities()` reports support explicitly. Unsupported backends
 reject nonempty axis requests in their `font_id` entry point rather than silently
@@ -60,7 +65,7 @@ Backend-specific shaping limitations still apply.
 - Empty settings preserve existing font behavior.
 
 `Font::variations` now carries these values through Apple, Parley, and the
-DirectWrite implementation (pending native Windows validation). For normal
+DirectWrite implementation. For normal
 element styling, use `Styled::font_variations(...)` or `Styled::font(...)`;
 `TextStyle::font_variations` propagates them into text runs. Values serialize as
 a JSON map, such as `{"slnt": -10.125, "wght": 500.25}`. Deserialization validates
@@ -97,7 +102,8 @@ caret/selection geometry, fallback, and rasterization:
    design, including units, precedence, clamping, and fonts without `opsz`.
 6. Keep precise author coordinates distinct from any future preview policy.
    Preview quantization must occur before resolution and affect shaping and
-   rendering together. Quantization and eviction are outside this milestone.
+   rendering together. The optional extension preview policy is described below; global budgets and
+   frame-safe eviction remain separate.
 
 Apple keeps requested descriptors separate from resolved native identity, then
 applies author coordinates to resolved fallback runs before reshaping. Its cascade
@@ -239,11 +245,11 @@ the new fields or use `..`. Empty coordinates preserve existing axis behavior.
 The in-memory Apple fallback correction described above is a separate behavior
 fix: requested embedded fallbacks can now resolve to their actual font.
 
-## Accepted scope and follow-ups
+## Released scope and follow-ups
 
-The user approved finishing #27 with the Apple/Parley static rollout and measured
-previews, tracking later stages separately. This implementation completes that
-scope, with the public API approved and raw parsers private in core. Follow-ups:
+The release includes Apple, DirectWrite and Parley static axes, inspection, and
+measured previews. macOS and Windows labs and unit tests are confirmed working.
+The public API is reviewed and raw parsers remain private in core. Follow-ups:
 
 - [#139: measured CPU/GPU budgets and frame-safe eviction](https://github.com/gpui-luma-dev/xgpui/issues/139)
 - [#140: DirectWrite static-axis and inspection parity](https://github.com/gpui-luma-dev/xgpui/issues/140)
@@ -258,16 +264,16 @@ Those follow-ups retain these gates:
   atlas tiles directly; removing glyph keys alone cannot guarantee cached views
   repaint or protect in-flight texture use. Font IDs must remain valid for old
   layouts. Existing removal hooks are not a complete policy.
-- Native DirectWrite execution and validation is pending in #140; the code and
-  five native fixture tests are now implemented and cross-checked for MSVC.
+- Windows lab and unit-test acceptance is confirmed. #140 retains broader
+  DirectWrite compatibility/host validation; the five standalone backend fixture
+  tests are implemented and cross-checked for MSVC.
   Cosmic arbitrary-axis integration and native/browser validation remains #141;
   the bundled Cosmic interface does not expose arbitrary axis inputs.
 - Automatic optical sizing remains explicitly deferred until size-dependent
   instance identity and coordinate mapping are specified and tested.
 
 Do not advertise globally bounded scrubbing based on these isolated diagnostics.
-The initial implementation can be finalized after its individual public API
-review; later stages are tracked in the linked issues.
+Later stages are tracked in the linked issues.
 
 
 ## Verification on the implementation host
@@ -284,7 +290,8 @@ review; later stages are tracked in the linked issues.
 - WebAssembly backend: `cargo check` passed for `wasm32-unknown-unknown` with
   default features disabled.
 - Windows library and tests: MSVC cross-check passed with `--no-default-features
-  --features test-support`. Native Windows execution remains unverified.
+  --features test-support`. Windows lab and lab-unit-test execution passed by user confirmation on
+  November 5, 2026; standalone backend fixture execution is not separately recorded.
   The Windows crate's existing default feature still forwards `gpui/default`;
   its dependency now disables implicit defaults so explicit opt-out works and
   cross-checking does not require the Windows manifest resource compiler.
@@ -316,13 +323,12 @@ its advance measurement use the same effective settings. No new core GPUI
 public API was added for these controls.
 
 
-## Unpublished version plan
+## Release versions
 
-These versions prepare the font-controls changes for release; they are not a
-claim of publication. Internal dependency requirements are pinned exactly to
-this set. No new crate is published; the parser module is private inside `xgpui`.
+The font-controls release uses these versions and exact internal dependency
+requirements. No new crate is published; the parser module is private inside `xgpui`.
 
-| Crate | Previous | Candidate | Rationale |
+| Crate | Previous | Version | Rationale |
 | --- | --- | --- | --- |
 | `xgpui` | 2.0.1 | **3.0.0** | Breaking fields on `Font`, `TextStyle`, and `TextStyleRefinement`; other APIs are additive. |
 | `xgpui-apple` | 3.0.1 | **3.1.0** | New static axes and introspection capabilities; existing public signatures remain intact. |
@@ -344,6 +350,6 @@ this set. No new crate is published; the parser module is private inside `xgpui`
 versioning policy does not automatically propagate major bumps to dependent
 crates: these dependents retain their public members/signatures. Their GPUI
 inputs, outputs, traits, and re-exports now resolve to the matching 3.0 type
-universe, so consumers must upgrade the pinned stack together; mixing these
-candidates with core 2.x is unsupported. The exhaustive-literal migrations above
+universe, so consumers must upgrade the pinned stack together; mixing this
+release family with core 2.x is unsupported. The exhaustive-literal migrations above
 remain necessary wherever applications directly construct the changed core types.

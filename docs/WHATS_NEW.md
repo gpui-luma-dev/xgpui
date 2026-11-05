@@ -1,6 +1,86 @@
 # What's new
 
-## Latest — November 4, 2026
+## Latest — November 5, 2026
+
+**Variable fonts now work through the full text pipeline on macOS and Windows.**
+`xgpui 3.0.0` adds precise axis settings and OpenType inspection;
+`xgpui-parley 0.4.0` adds matching shaping support and a quantized preview utility.
+The native and Parley text-lab panels expose live weight, width, slant and optical
+size controls. The labs and tests were confirmed working on both platforms.
+
+### Live variable-font controls and inspection
+
+Set `Font::variations` or use `.font_variations(...)` on styled elements. Signed,
+finite coordinates preserve negative slant and fractional author values. Each
+resolved face clamps supported axes to its own range; fallback runs retain the
+request and resolve their own coordinates. Explicit settings take precedence
+over corresponding implicit weight/style axes. Metrics, wrapping, caret/selection
+geometry and rasterization use the same resolved instance. Explicit optical size
+stays fixed when text size changes; automatic optical sizing remains separate.
+
+`TextSystem::font_axes`, `opentype_features`, and `font_capabilities` support font
+inspectors without hard-coded tag lists. Results distinguish unsupported queries,
+successful empty lists and errors. Existing `FontFeatures` continues to accept
+numeric feature parameters. Core privately parses the metadata; the additive
+`PlatformTextSystem::font_table` hook obtains bytes from CoreText, DirectWrite or
+Parley's actual resolved face. No helper crate or public parser API is added.
+
+Try the native/Parley comparison and run its tests from the repository root:
+
+```sh
+just text --backend both
+just lab-test
+```
+
+Both panels have independent sliders, keyboard/accessibility controls, presets,
+two specimen sizes and a live advance measurement. Arrow keys adjust settings,
+Shift makes larger steps, and Home/End reach the limits. Tests use backtraces by
+default. A Windows interaction-test setup fix now uses real DirectWrite instead
+of the headless platform's no-op text system.
+
+`VariationPreview` quantizes before font resolution so shaping and painting
+agree. The lab limits each window to 512 admitted combinations and holds its last
+preview when full. This does not promise globally bounded memory or atlas
+reclamation. Frame-safe eviction, automatic optical sizing and Cosmic/browser
+axis parity remain separate work. Native/Parley raster differences are expected;
+a subtle cross-platform slant appearance difference was observed in both panels,
+with matching endpoints and no functional failure.
+
+Read the [font-controls guide](extensions/font-controls.md) for API examples,
+backend capabilities, preview policy and migration details.
+
+### Core 3.0 migration
+
+**Exhaustive struct literals need three new fields:** `Font::variations`,
+`TextStyle::font_variations`, and `TextStyleRefinement::font_variations`.
+Use `Default::default()` for the first two and `None` for refinements; exhaustive
+patterns can use `..`. Calls using constructors/defaults generally need only a
+recompile. Empty settings retain existing axis behavior. Upgrade matching backend
+and extension pins together; the remaining inspection APIs are additive, and
+custom backends inherit unsupported defaults. See the
+[API migration guide](extensions/gpui-public-api.md#font-axes-and-inspection-core-30).
+
+### Font-controls crate versions
+
+| Crates | Version |
+| --- | --- |
+| `xgpui` | **3.0.0** |
+| `xgpui-apple` | **3.1.0** |
+| `xgpui-windows` | **2.1.0** |
+| `xgpui-parley` | **0.4.0** |
+| `xgpui-macos` | 3.0.2 |
+| `xgpui-ios` | 1.26.4 |
+| `xgpui-linux`, `xgpui-platform`, `xgpui-web`, `xgpui-wgpu` | 2.0.2 |
+| `xgpui-gamut`, `xgpui-canvas`, `xgpui-svg` | 0.3.2 |
+| `xgpui-media` | 0.5.2 |
+| `xgpui-shader` | 0.4.2 |
+
+Apple and Windows receive minor capability releases; Parley's new APIs use a
+pre-1.0 minor release. The remaining affected crates receive patch updates for
+backend fixes or matching exact dependency pins. `xgpui-color` stays at 0.3.0 and
+`xgpui-macros` at 1.0.1.
+
+## November 4, 2026
 
 Changes since [release-2026-11-03-deba615a1d9c](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-03-deba615a1d9c):
 better keyboard and macOS accessibility focus for selectable typography, a shared
@@ -101,12 +181,11 @@ controls remain available. See [canvas](#canvas) and [local development](#local-
   The merged work passed native macOS/Windows/Linux CI, browser shader builds,
   iOS simulator compilation and repository/documentation checks.
 
-### Prepared crate versions
+### November 4 crate versions
 
-The following patch versions and their internal dependency pins are prepared for
-the next release. **These changes do not themselves publish crates.**
+The November 4 update uses these patch versions and matching internal pins.
 
-| Crates | Prepared version |
+| Crates | Version |
 | --- | --- |
 | `xgpui`, `xgpui-linux`, `xgpui-platform`, `xgpui-web`, `xgpui-wgpu`, `xgpui-windows` | 2.0.1 |
 | `xgpui-apple`, `xgpui-macos` | 3.0.1 |
@@ -115,10 +194,8 @@ the next release. **These changes do not themselves publish crates.**
 | `xgpui-shader` | 0.4.1 |
 | `xgpui-ios` | 1.26.3 |
 
-`xgpui-color` remains 0.3.0 and `xgpui-macros` remains 1.0.1. Labs remain
-unpublished. External dependency versions and checksums are unchanged by these
-patch-version updates. The release preflight reports all 15 changed candidates
-with unpublished versions and matching pins.
+`xgpui-color` remains 0.3.0 and `xgpui-macros` remains 1.0.1. Labs are development tools. External dependency versions and checksums are
+unchanged by these patch-version updates.
 
 ## November 3, 2026
 

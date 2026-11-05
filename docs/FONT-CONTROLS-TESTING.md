@@ -1,134 +1,84 @@
 # Test font controls
 
-Run commands from the repository root. Fonts are bundled fixtures; no font
-installation is needed. The comparison has live axis sliders and static samples;
-it is not a frame-time stress test.
+Run commands from the repository root. The lab bundles licensed fonts; no font
+installation is needed. See the [font-controls guide](extensions/font-controls.md)
+for API usage, backend support and the core 3.0 migration.
 
-## macOS: visual comparison
+## Native and Parley comparison
 
-```sh
-cargo run --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin text-lab --features runtime-shaders -- --backend both
-```
-
-Two windows compare native CoreText and Parley. The live sliders are at the top:
-weight, width, slant, and optical size. Each window has independent controls;
-use the same presets to compare matching settings. Drag the tracks, or focus a
-slider and use arrows (Shift for larger steps), Home, and End. Confirm both
-specimen sizes and the advance measurement change without clipping. Default
-restores the original settings.
-
-There is also a justfile shortcut and an interaction-test recipe:
+On macOS or Windows:
 
 ```sh
-just --justfile apps/xgpui-ext-lab/text-lab/justfile axes
-just --justfile apps/xgpui-ext-lab/text-lab/justfile axes-test
+just text --backend both
 ```
 
-The live inspector quantizes design coordinates in steps 10/1/0.25/1 and admits
-512 combinations per window. On exhaustion it holds the last preview; revisiting
-old settings still works. Restart for a fresh session. This does not claim a
-global CPU/GPU memory budget.
+Two windows compare native CoreText/DirectWrite with Parley. Each has independent
+weight, width, slant and optical-size sliders. Use the same presets to compare
+matching settings. Drag a track or focus a slider and use arrows, Shift for
+larger steps, Home and End. Confirm both specimen sizes, wrapping and measured
+advance update together, without clipping. Default restores the original values.
 
-Scroll farther down for the static Roboto Flex rows:
+The inspector uses steps of 10/1/0.25/1 design units and admits 512 combinations
+per window. When full, it holds the last preview and displays an explanation.
+Previously admitted settings and Default remain usable. Restart for a fresh
+session. This is not a global CPU/GPU memory budget or an eviction policy.
+
+Scroll down for the static samples:
 
 - `wdth=50`, upright, `opsz=14`: condensed.
 - `wdth=100`, `slnt=-10`, `opsz=14`: visibly slanted.
-- `wdth=150`, `slnt=-5`, `opsz=72`: wider, with larger optical-size design.
-- Inter `cv02=2`: exercises a numeric feature value.
+- `wdth=150`, `slnt=-5`, `opsz=72`: wider, with a larger optical-size design.
+- Inter `cv02=2`: a numeric OpenType feature value.
 
-Axis ranges and available GSUB/GPOS tags appear above the samples. Feature
-presence does not guarantee an effect on every string. Confirm glyphs are not
-clipped, rows differ, and the editor still supports selection and typing.
+Available axis ranges and GSUB/GPOS tags appear with the samples. Presence does
+not guarantee an effect on every string. Check that the editor still supports
+selection and typing. Minor native/Parley or display-dependent raster differences
+need not indicate a coordinate mismatch; compare the displayed values and presets.
 
-For a headless smoke test, append `--timings-only --iterations 3`.
+Windows requires the MSVC toolchain, Visual Studio C++ Build Tools and Windows
+SDK. DirectWrite static axes require the `IDWriteTextLayout4` runtime probe to
+succeed; unsupported runtimes omit the controls instead of pretending to apply
+axes. macOS uses the shared Apple font-kit/CoreText implementation.
 
-## Windows: fixture tests first
-
-Use a current Windows 10/11 host with Rust's MSVC toolchain and the Visual Studio
-C++ Build Tools/Windows SDK. The tests explicitly require DirectWrite's
-`IDWriteTextLayout4`; older runtimes report unsupported capabilities.
-
-In PowerShell, from the repo root:
-
-```powershell
-cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --no-default-features --features test-support --lib font_variation -- --nocapture
-```
-
-Expected: **five tests pass**:
-
-- Owned in-memory font bytes survive registration and later resource use.
-- GSUB/GPOS features, axis ranges, invalid IDs, and numeric feature parameters.
-- Negative slant, axis-order equivalence, explicit weight precedence, clamping,
-  requested/resolved coordinates, advance agreement, and retained raster output.
-- Explicit `opsz=72` stays fixed at different sizes; signed fractional axes and
-  an unsupported tag retain the specified semantics.
-- A static primary passes axes to a bundled variable fallback; unsupported
-  primary axes remain ignored.
-
-These tests use native DirectWrite and grayscale rasterization without a D3D
-GPU. They have been cross-checked for MSVC on macOS; native execution on Windows
-has not yet been performed. Please retain the complete output if a test fails.
-
-## Windows: native/Parley comparison
-
-```powershell
-cargo run --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin text-lab -- --backend both
-```
-
-Use the same sliders, presets, and visual checks as macOS. The native window
-exercises DirectWrite axes; the other window uses Parley. Small glyph positioning/raster differences
-between backends are expected. A message saying explicit axes are unavailable
-means the DirectWrite runtime probe failed; the axis rows will be omitted.
-
-For headless output:
-
-```powershell
-cargo run --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin text-lab -- --backend both --timings-only --iterations 3
-```
-
-Keep debug builds for the initial Windows test. Release builds additionally use
-the repository's existing shader-compilation requirements.
-
-## Portable patch for another checkout
-
-The accompanying `xgpui-font-controls-windows.patch` contains the entire local
-font-controls change, including the core contract, both existing backends,
-DirectWrite, fixtures, documentation, and tests. It excludes the unrelated
-untracked `docs/COMPARISON.md`. It is based on commit:
-
-```text
-3d2a8484255fdd18473f2f98bf7572a858a9fe64
-```
-
-Apply it to a clean checkout of that commit, rather than a checkout that already
-contains portions of these changes:
-
-```powershell
-git switch -c codex/font-controls-test 3d2a8484255fdd18473f2f98bf7572a858a9fe64
-git apply --check C:\path\to\xgpui-font-controls-windows.patch
-git apply C:\path\to\xgpui-font-controls-windows.patch
-```
-
-## Automated tests on macOS
-
-The private core parser/query tests check table parsing and preserve unsupported,
-missing-table, read-error, and malformed-table results. The pinned-font backend
-tests exercise the complete native-table-access → core-parser query path.
+For headless comparison output:
 
 ```sh
-cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui/Cargo.toml --features gpui_platform/runtime_shaders --lib font_inspection
-cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui/Cargo.toml --lib text_system --features gpui_platform/runtime_shaders
-cargo test --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-parley/Cargo.toml --lib --features native-test,gpui-platform/runtime_shaders
-cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-apple/Cargo.toml --lib text_system::tests --features font-kit,runtime_shaders
-cargo test --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin text-lab --features runtime-shaders
+just text --backend both --timings-only --iterations 3
 ```
 
-The separate CPU sweep and Metal allocation diagnostic commands and measured
-baselines are in [FONT-CONTROLS.md](FONT-CONTROLS.md#preview-policy-and-measured-baseline).
-Neither is a guarantee of globally bounded scrubbing or frame-safe eviction.
+## Lab tests
 
+```sh
+just lab-test
+```
 
-The DirectWrite implementation follows Microsoft's
-[axis-aware font selection model](https://learn.microsoft.com/en-us/windows/win32/directwrite/font-selection).
-Its runtime capability probe and the native tests are preferable to assuming
-support from a Windows version string alone.
+Backtraces are enabled automatically. To isolate slider interaction failures:
+
+```sh
+just lab-test live_axis -- --nocapture
+```
+
+These tests send actual pointer and keyboard events through GPUI's simulated test
+windows, checking endpoint values, focus/keyboard changes, drag release, presets,
+layout changes and restored defaults. Windows uses a real DirectWrite text system:
+its headless platform deliberately supplies a no-op text backend and is unsuitable
+for this test. The preview-capacity test is included in the full lab suite.
+
+## Validation scope
+
+The native/Parley labs and lab unit tests were confirmed working on macOS and
+Windows on November 5, 2026. A subtle cross-platform slant appearance difference
+was observed in both panels, with matching endpoints, and accepted as non-blocking.
+
+Implementation-host checks also passed 52 core text tests (including six private
+parser/query tests), nine Apple text-system tests, 36 Parley tests and ten text-lab
+tests. Core tests distinguish unsupported queries, absent tables, read failures
+and malformed metadata. Backend fixtures cover resolved-face inspection, signed
+axes, clamping, fallback, stable identity and layout/raster agreement. Five
+standalone DirectWrite fixture tests and the lab test targets cross-compile for
+MSVC; separate native execution of the standalone fixture suite is not recorded.
+
+The CPU sweep and Metal allocation baselines are documented in
+[FONT-CONTROLS.md](FONT-CONTROLS.md#preview-policy-and-measured-baseline). They do
+not establish globally bounded scrubbing, frame-safe eviction, exhaustive runtime
+compatibility, physical-display equivalence or complete IME acceptance.

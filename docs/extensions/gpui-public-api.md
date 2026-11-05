@@ -2,6 +2,39 @@
 
 Compared with pre-feature main `9b64657`. **Opt-in usage does not mean zero SDK changes.**
 
+## Font axes and inspection: core 3.0
+
+`xgpui 3.0.0` adds variable-font controls and resolved-face inspection. Native
+CoreText, DirectWrite and Parley share the same contracts. See
+[variable fonts and OpenType inspection](font-controls.md) for examples and
+[the release versions](../WHATS_NEW.md#font-controls-crate-versions) for matching pins.
+
+| Core API change | Compatibility / migration |
+| --- | --- |
+| `Font::variations: FontVariations` | Breaking for exhaustive literals/patterns. Add `variations: Default::default()` or use `gpui::font(family)`. |
+| `TextStyle::font_variations: FontVariations` | Breaking for exhaustive literals/patterns. Add `font_variations: Default::default()`. |
+| `TextStyleRefinement::font_variations: Option<FontVariations>` | Breaking for exhaustive literals/patterns. Add `font_variations: None`; absent serialized settings remain unset. |
+| `Styled::font_variations(FontVariations)` | Additive styling method; settings inherit into fonts and text runs. |
+| `FontTag`, `FontVariations` | Additive validated tag and immutable settings types; finite signed coordinates, canonical equality/hash, serde map and schema. |
+| `FontQuery<T>`, `FontCapabilities`, `VariationAxisInfo`, `OpenTypeFeatureInfo` | Additive inspection types: distinguish unsupported/success/error, expose supported backends, axis ranges and GSUB/GPOS provenance. |
+| `TextSystem::{font_axes, opentype_features, font_capabilities}` | Additive application-facing query methods. IDs belong to the resolving text system. |
+| `PlatformTextSystem::{font_axes, opentype_features, font_capabilities}` | Additive default methods; existing custom backends need no override. |
+| `PlatformTextSystem::font_table(FontId, FontTag) -> Result<FontQuery<Option<Vec<u8>>>>` | Additive backend hook with unsupported default. Native code supplies resolved-face table bytes; default queries parse them privately in core. Missing tables differ from read failures. |
+
+Constructors/default-based callers generally only need recompilation. Exhaustive
+patterns can use `..`. Empty variations preserve prior backend axis behavior.
+Author values remain precise, explicit coordinates override corresponding
+implicit axes, ranges clamp per face, and fallback faces resolve independently.
+No existing `FontFeatures` signature or numeric-value behavior changes.
+
+The parser is private core implementation. No parser function, helper package or
+source synchronization enters the application contract. `VariationPreview`
+belongs to `xgpui-parley`, returns ordinary GPUI fonts, and adds no further core
+API. Its descriptor admission limit does not implement global budgets or eviction.
+The Windows dependency's explicit default-feature opt-out is corrected; ordinary
+default builds retain existing defaults. Keep core/backend/extension versions
+matched when upgrading.
+
 ## GPUI 1.26.2 migration
 
 The update merged after the October 31 release moves the core to `xgpui 2.0.0`
@@ -35,7 +68,7 @@ See [What’s new](../WHATS_NEW.md) for features and the reviewed version family
 | Renderer `custom_draw` contexts and ordinary outputs | xgpui-shader; shared contexts also serve xgpui-gamut | Metal/wgpu/D3D11 producer recording and host submission |
 | Window color mode/status; typed Metal/D3D11 wide-SDR outputs | [xgpui-gamut](high-gamut-windows.md) | Negotiate and compose explicit linear-P3 surfaces |
 | `Style::overflow_mask` border-inset correction | Independent fix | Behavior only; no signature change |
-| macOS variable-font selection/identity correction | Native comparison baseline for the Parley lab | Behavior only; no public API addition |
+| Font variations, resolved-face inspection and backend table access | [Font controls](font-controls.md); native backends and Parley | Core 3.0 descriptor/style fields and additive inspection hooks |
 
 Paint recording is shared infrastructure; window color negotiation is specific
 to wide-gamut presentation. Parley uses the existing [glyph atlas ↗](https://en.wikipedia.org/wiki/Texture_atlas), not custom-draw
