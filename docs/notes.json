@@ -59,7 +59,7 @@
     "short": "gpui-wgpu",
     "group": "Platforms & rendering",
     "role": "GPU context, renderer, atlas and text support used across platform backends.",
-    "surface": "WgpuRenderer, WgpuContext, WgpuSurfaceConfig, atlas/text exports and a public wgpu re-export.",
+    "surface": "WgpuRenderer, WgpuContext, WgpuSurfaceConfig, atlas/text exports and a public wgpu re-export. Cosmic now exposes resolved-face feature/axis inspection through core table access; arbitrary axis application remains unsupported.",
     "review": "WgpuContext exposes device and queue fields. Review the intended custom-rendering contract before narrowing these handles or adding shader extension points.",
     "entry": "src/gpui_wgpu.rs"
   },

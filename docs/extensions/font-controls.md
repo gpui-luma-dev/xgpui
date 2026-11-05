@@ -158,7 +158,7 @@ additional package, or copied parser implementation is required.
 | Windows / DirectWrite | Supported | Supported when the `IDWriteTextLayout4` runtime probe succeeds; Windows labs/tests verified |
 | Parley / HarfRust / Skrifa | Supported | Supported for flat lines and paragraphs; macOS/Windows labs/tests verified |
 | Parley in Wasm | Supported | Supported; Wasm inspector interactions verified on WebGPU and WebGL2 |
-| Cosmic / Linux | Unsupported | Nonempty explicit axis requests rejected |
+| Cosmic / Linux (`xgpui-wgpu 2.1`) | Supported for resolved font files | Nonempty explicit axis requests rejected; inspection does not enable editing |
 | GPUI default web text backend (Cosmic/Canvas) | Unsupported | Nonempty explicit axis requests rejected; this is an integration limit, not a browser-wide restriction |
 
 The Wasm inspector was verified on this host with both renderers, including
@@ -166,7 +166,10 @@ pointer controls, keyboard input, presets and restored measurements. This is not
 exhaustive browser/device acceptance.
 
 Shared Apple code also serves iOS, but macOS acceptance does not establish iOS
-runtime validation. Cosmic and browser parity are tracked in
+runtime validation. Cosmic inspection uses the same private core parsers through
+the backend table hook. The text lab displays available metadata even when
+static-axis editing is unavailable. Cosmic axis application and default web
+backend parity are tracked in
 [#141](https://github.com/gpui-luma-dev/xgpui/issues/141).
 
 ## Interactive preview policy

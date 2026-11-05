@@ -39,8 +39,10 @@ queries. DirectWrite static axes require the runtime `IDWriteTextLayout4` probe
 to succeed. Native/Parley font-controls labs and tests are verified on macOS
 and Windows. Parley in Wasm supports the same queries and static axes, exposed
 in the [Wasm inspector](extensions/font-controls.md#try-the-live-inspector).
-The default Cosmic/Canvas web text backend and native Cosmic currently return
-`Unsupported` through the default platform methods.
+Cosmic now implements table access for resolved font files, including collection
+faces, and reports feature/axis inspection support. Its arbitrary static axis
+requests remain rejected. The default Cosmic/Canvas web wrapper still reports
+inspection as `Unsupported`; it does not expose the new native Cosmic hook.
 `TextSystem::font_capabilities()` reports support explicitly. Unsupported backends
 reject nonempty axis requests in their `font_id` entry point rather than silently
 pretending to apply them. Note that GPUI's existing `resolve_font` convenience
@@ -345,7 +347,7 @@ requirements. No new crate is published; the parser module is private inside `xg
 | `xgpui-apple` | 3.0.1 | **3.1.0** | New static axes and introspection capabilities; existing public signatures remain intact. |
 | `xgpui-windows` | 2.0.1 | **2.1.0** | New static axes and introspection capabilities; existing public signatures remain intact. |
 | `xgpui-parley` | 0.3.1 | **0.4.0** | New axes/introspection capabilities and additive `VariationPreview` API; no removed APIs. |
-| `xgpui-wgpu` | 2.0.1 | **2.0.2** | Reject unsupported explicit axes and update core pin. |
+| `xgpui-wgpu` | 2.0.1 | **2.1.0** | Adds Cosmic feature/axis inspection; arbitrary axis application remains rejected. |
 | `xgpui-web` | 2.0.1 | **2.0.2** | Reject unsupported explicit axes and update core/backend pins. |
 | `xgpui-macos` | 3.0.1 | **3.0.2** | Core and Apple dependency-pin updates only. |
 | `xgpui-ios` | 1.26.3 | **1.26.4** | Core and Apple dependency-pin updates only. |
@@ -385,3 +387,25 @@ not callable APIs in this release:
   fallback stack also fails; it must retain that behavior for existing callers.
 
 Each additional core API requires its own compatibility and ownership review.
+
+
+## Cosmic inspection milestone
+
+`CosmicTextSystem` implements the existing `PlatformTextSystem::font_table` hook
+using the selected font's bytes and collection index. `ttf-parser::RawFace` reads
+the directory and table extent; the core's existing private parsers interpret
+GSUB/GPOS and `fvar`. Advertised unreadable tables return errors; absent tables
+return `Supported(None)`. Invalid IDs return errors without indexing panics.
+No new core public type, field or method is introduced.
+
+The backend reports feature and axis inspection, while `static_variations` stays
+false. The text lab displays inspection independently from axis editing. Tests
+cover pinned static/variable fonts, a two-face collection, invalid IDs, missing
+and corrupt table reads, and continued rejection of explicit axes.
+
+Cosmic 0.19 still lacks a general arbitrary-axis shaping input in its attribute
+contract. Static-axis support remains a separate change spanning shaping,
+resolved-instance identity, fallback, metrics and Swash rasterization; painting
+with varied coordinates alone would be incorrect. Linux CI also runs the Parley
+library, native-host construction/axis smoke test and shared slider tests.
+Interactive Wayland/X11 and Linux IME/accessibility acceptance remain separate.

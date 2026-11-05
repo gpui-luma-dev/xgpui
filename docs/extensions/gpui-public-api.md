@@ -27,6 +27,11 @@ Author values remain precise, explicit coordinates override corresponding
 implicit axes, ranges clamp per face, and fallback faces resolve independently.
 No existing `FontFeatures` signature or numeric-value behavior changes.
 
+Cosmic (`xgpui-wgpu 2.1`) now implements the existing table hook and reports
+feature/axis inspection support, without enabling explicit static variations.
+This adds no further core API. The default Cosmic/Canvas web wrapper remains
+separate.
+
 The parser is private core implementation. No parser function, helper package or
 source synchronization enters the application contract. `VariationPreview`
 belongs to `xgpui-parley`, returns ordinary GPUI fonts, and adds no further core

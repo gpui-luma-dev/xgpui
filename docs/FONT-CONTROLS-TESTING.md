@@ -65,6 +65,22 @@ For headless comparison output:
 just text --backend both --timings-only --iterations 3
 ```
 
+## Linux: inspection versus editing
+
+```sh
+just text --backend both
+```
+
+The native Cosmic panel displays Roboto Flex's axis ranges and feature tags but
+omits editable sliders and static-axis specimens. The Parley panel applies axes
+with the same controls used on macOS, Windows and Wasm. Keep these capabilities
+separate: successful inspection does not establish arbitrary-axis shaping support.
+
+The repository validation workflow runs Cosmic fixture tests, the Parley library,
+a headless native-host construction/axis smoke check and the shared slider tests
+on Ubuntu. This is distinct from interactive Wayland/X11, IME and accessibility
+acceptance on a Linux desktop.
+
 ## Lab tests
 
 ```sh

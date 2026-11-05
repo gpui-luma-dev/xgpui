@@ -58,6 +58,20 @@ Native CoreText/DirectWrite comparison remains in the desktop lab.
 Read the [font-controls guide](extensions/font-controls.md) for API examples,
 backend capabilities, preview policy and migration details.
 
+### Cosmic font inspection
+
+Linux's default Cosmic backend now reads OpenType features and variable-axis
+ranges from its resolved font files, including the correct face in collections.
+Core performs the private metadata parsing. Missing tables, failed reads and
+invalid IDs retain distinct results. The native text-lab panel shows this
+metadata independently of whether axis editing is available.
+
+This is inspection support: arbitrary axis application still requires additional
+Cosmic shaping/metrics/raster work. Parley remains the axis-capable Linux option.
+Linux validation includes the Cosmic and Parley suites, a headless native-host
+construction/axis smoke test, and shared slider interaction tests. Physical
+Wayland/X11 output and Linux IME/accessibility remain separate acceptance checks.
+
 ### Core 3.0 migration
 
 **Exhaustive struct literals need three new fields:** `Font::variations`,
@@ -79,12 +93,13 @@ custom backends inherit unsupported defaults. See the
 | `xgpui-parley` | **0.4.0** |
 | `xgpui-macos` | 3.0.2 |
 | `xgpui-ios` | 1.26.4 |
-| `xgpui-linux`, `xgpui-platform`, `xgpui-web`, `xgpui-wgpu` | 2.0.2 |
+| `xgpui-linux`, `xgpui-platform`, `xgpui-web` | 2.0.2 |
+| `xgpui-wgpu` | **2.1.0** |
 | `xgpui-gamut`, `xgpui-canvas`, `xgpui-svg` | 0.3.2 |
 | `xgpui-media` | 0.5.2 |
 | `xgpui-shader` | 0.4.2 |
 
-Apple and Windows receive minor capability releases; Parley's new APIs use a
+Apple, Windows and wgpu receive minor capability releases; Parley's new APIs use a
 pre-1.0 minor release. The remaining affected crates receive patch updates for
 backend fixes or matching exact dependency pins. `xgpui-color` stays at 0.3.0 and
 `xgpui-macros` at 1.0.1.
