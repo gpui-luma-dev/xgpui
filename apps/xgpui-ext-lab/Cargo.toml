@@ -35,7 +35,7 @@ xgpui-media = { path = "../../extensions/crates/xgpui-media", version = "=0.5.2"
 xgpui-svg = { path = "../../extensions/crates/xgpui-svg", version = "=0.3.2", package = "xgpui-svg" }
 xgpui-parley = { path = "../../extensions/crates/xgpui-parley", version = "=0.4.0", package = "xgpui-parley" }
 xgpui-shader = { path = "../../extensions/crates/xgpui-shader", version = "=0.4.2", features = ["portable-shaders", "wgpu"] , package = "xgpui-shader" }
-gpui-wgpu = { package = "xgpui-wgpu", path = "../../gpui/crates/gpui-wgpu", version = "=2.0.2" }
+gpui-wgpu = { package = "xgpui-wgpu", path = "../../gpui/crates/gpui-wgpu", version = "=2.1.0" }
 image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "webp"] }
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
 skrifa = "=0.44.0"
@@ -52,7 +52,7 @@ sha2 = "0.10"
 clap = { version = "4", features = ["derive"] }
 gpui = { package = "xgpui", path = "../../gpui/crates/gpui", version = "=3.0.0", features = ["test-support", "profiler"] }
 gpui_platform = { package = "xgpui-platform", path = "../../gpui/crates/gpui-platform", version = "=2.0.2", default-features = false, features = ["test-support", "font-kit", "wayland", "x11"] }
-gpui-wgpu = { package = "xgpui-wgpu", path = "../../gpui/crates/gpui-wgpu", version = "=2.0.2", features = ["test-support"] }
+gpui-wgpu = { package = "xgpui-wgpu", path = "../../gpui/crates/gpui-wgpu", version = "=2.1.0", features = ["test-support"] }
 xgpui-parley = { path = "../../extensions/crates/xgpui-parley", version = "=0.4.0", features = ["system-fonts"] , package = "xgpui-parley" }
 sysinfo = { version = "=0.31.4", default-features = false, features = ["system"] }
 libc = "0.2"

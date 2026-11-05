@@ -5,10 +5,11 @@ use cosmic_text::{
     FontFeatures as CosmicFontFeatures, FontSystem, ShapeBuffer, ShapeLine, Stretch, Style, Weight,
 };
 use gpui::{
-    Bounds, DevicePixels, FallbackFontClass, Font, FontFallbacks, FontFeatures, FontId,
-    FontMetrics, FontRun, GlyphId, IsZero as _, LineLayout, MissingGlyph, MissingGlyphSink, Pixels,
-    PlatformTextSystem, RenderGlyphParams, SUBPIXEL_VARIANTS_X, SUBPIXEL_VARIANTS_Y, ShapedGlyph,
-    ShapedRun, SharedString, Size, TextRenderingMode, point, size,
+    Bounds, DevicePixels, FallbackFontClass, Font, FontCapabilities, FontFallbacks, FontFeatures,
+    FontId, FontMetrics, FontQuery, FontRun, FontTag, GlyphId, IsZero as _, LineLayout,
+    MissingGlyph, MissingGlyphSink, Pixels, PlatformTextSystem, RenderGlyphParams,
+    SUBPIXEL_VARIANTS_X, SUBPIXEL_VARIANTS_Y, ShapedGlyph, ShapedRun, SharedString, Size,
+    TextRenderingMode, point, size,
 };
 
 use itertools::Itertools;
@@ -216,6 +217,29 @@ impl PlatformTextSystem for CosmicTextSystem {
         self.0.write().prewarm_fonts(font_ids);
     }
 
+    fn font_capabilities(&self) -> FontCapabilities {
+        FontCapabilities {
+            feature_introspection: true,
+            axis_introspection: true,
+            static_variations: false,
+        }
+    }
+
+    fn font_table(&self, id: FontId, tag: FontTag) -> Result<FontQuery<Option<Vec<u8>>>> {
+        let state = self.0.read();
+        let loaded = state.loaded_fonts.get(id.0).context("invalid font ID")?;
+        let face = state
+            .font_system
+            .db()
+            .face(loaded.font.id())
+            .context("resolved font face is missing from the database")?;
+        Ok(FontQuery::Supported(font_table_data(
+            loaded.font.data(),
+            face.index,
+            tag,
+        )?))
+    }
+
     fn font_metrics(&self, font_id: FontId) -> FontMetrics {
         let metrics = self
             .0
@@ -285,6 +309,25 @@ impl PlatformTextSystem for CosmicTextSystem {
     ) -> TextRenderingMode {
         TextRenderingMode::Subpixel
     }
+}
+
+// Table access only: core's default inspection methods interpret the contents.
+// Preserve collection indices and distinguish an absent table from a failed read.
+fn font_table_data(data: &[u8], index: u32, tag: FontTag) -> Result<Option<Vec<u8>>> {
+    let face = ttf_parser::RawFace::parse(data, index)
+        .context("failed to read the resolved font's table directory")?;
+    let tag = ttf_parser::Tag::from_bytes(tag.as_bytes());
+    if !face
+        .table_records
+        .into_iter()
+        .any(|record| record.tag == tag)
+    {
+        return Ok(None);
+    }
+    let bytes = face
+        .table(tag)
+        .context("advertised font table is unreadable")?;
+    Ok(Some(bytes.to_vec()))
 }
 
 impl CosmicTextSystemState {
@@ -1253,9 +1296,127 @@ mod tests {
         }
     }
 
-    const IBM_PLEX: &[u8] =
-        include_bytes!("../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf");
+    const IBM_PLEX: &[u8] = include_bytes!("../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf");
     const LILEX: &[u8] = include_bytes!("../assets/fonts/lilex/Lilex-Regular.ttf");
+    const FLEX: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../extensions/crates/xgpui-parley/tests/fonts/RobotoFlex.ttf"
+    ));
+
+    #[test]
+    fn font_inspection_reports_metadata_without_enabling_axis_application() -> Result<()> {
+        let backend = CosmicTextSystem::new_without_system_fonts("IBM Plex Sans");
+        backend.add_fonts(vec![Cow::Borrowed(IBM_PLEX), Cow::Borrowed(FLEX)])?;
+        assert_eq!(
+            backend.font_capabilities(),
+            FontCapabilities {
+                feature_introspection: true,
+                axis_introspection: true,
+                static_variations: false,
+            }
+        );
+        let regular = backend.font_id(&gpui::font("IBM Plex Sans"))?;
+        assert_eq!(
+            backend.font_axes(regular)?,
+            FontQuery::Supported(Vec::new())
+        );
+        let FontQuery::Supported(features) = backend.opentype_features(regular)? else {
+            panic!("inspection must be supported");
+        };
+        assert!(
+            features
+                .iter()
+                .any(|f| f.tag.to_string() == "liga" && f.substitution)
+        );
+        assert!(
+            features
+                .iter()
+                .any(|f| f.tag.to_string() == "kern" && f.positioning)
+        );
+        assert!(features.windows(2).all(|pair| pair[0].tag < pair[1].tag));
+        let variable = backend.font_id(&gpui::font("Roboto Flex"))?;
+        let FontQuery::Supported(axes) = backend.font_axes(variable)? else {
+            panic!("inspection must be supported");
+        };
+        let slant = axes.iter().find(|a| a.tag == FontTag::SLANT).unwrap();
+        assert_eq!(
+            (slant.min_value, slant.default_value, slant.max_value),
+            (-10.0, 0.0, 0.0)
+        );
+        assert!(axes.iter().any(|a| a.tag == FontTag::OPTICAL_SIZE));
+        assert_eq!(
+            backend.font_table(regular, "ZZZZ".parse()?)?,
+            FontQuery::Supported(None)
+        );
+        assert!(
+            backend
+                .font_table(FontId(usize::MAX), "fvar".parse()?)
+                .is_err()
+        );
+        assert!(backend.font_axes(FontId(usize::MAX)).is_err());
+        assert!(backend.opentype_features(FontId(usize::MAX)).is_err());
+        let mut descriptor = gpui::font("Roboto Flex");
+        descriptor.variations = gpui::FontVariations::new([(FontTag::SLANT, -5.0)])?;
+        assert!(backend.font_id(&descriptor).is_err());
+        // Application-facing queries use the same default core parser path.
+        let system = gpui::TextSystem::new(Arc::new(backend));
+        assert_eq!(system.font_axes(variable)?, FontQuery::Supported(axes));
+        Ok(())
+    }
+
+    #[test]
+    fn font_inspection_uses_the_resolved_collection_face() -> Result<()> {
+        // Build a two-face TTC. Table offsets in a collection are file-relative.
+        let mut collection = Vec::from(&b"ttcf\0\x01\0\0\0\0\0\x02"[..]);
+        collection.extend([0; 8]);
+        for (index, data) in [IBM_PLEX, FLEX].into_iter().enumerate() {
+            collection.resize(collection.len().next_multiple_of(4), 0);
+            let base = collection.len();
+            collection[12 + index * 4..16 + index * 4]
+                .copy_from_slice(&(base as u32).to_be_bytes());
+            collection.extend(data);
+            let count = u16::from_be_bytes(data[4..6].try_into().unwrap()) as usize;
+            for record in 0..count {
+                let at = base + 12 + record * 16 + 8;
+                let offset = u32::from_be_bytes(collection[at..at + 4].try_into().unwrap());
+                collection[at..at + 4].copy_from_slice(&(offset + base as u32).to_be_bytes());
+            }
+        }
+        let backend = CosmicTextSystem::new_without_system_fonts("IBM Plex Sans");
+        backend.add_fonts(vec![Cow::Owned(collection)])?;
+        let regular = backend.font_id(&gpui::font("IBM Plex Sans"))?;
+        let variable = backend.font_id(&gpui::font("Roboto Flex"))?;
+        assert_eq!(
+            backend.font_axes(regular)?,
+            FontQuery::Supported(Vec::new())
+        );
+        let FontQuery::Supported(axes) = backend.font_axes(variable)? else {
+            panic!("unsupported")
+        };
+        assert!(axes.iter().any(|a| a.tag == FontTag::SLANT));
+        let state = backend.0.read();
+        let loaded = &state.loaded_fonts[variable.0];
+        assert_eq!(
+            state.font_system.db().face(loaded.font.id()).unwrap().index,
+            1
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn font_inspection_distinguishes_absent_and_unreadable_tables() -> Result<()> {
+        assert!(font_table_data(IBM_PLEX, 0, "ZZZZ".parse()?)?.is_none());
+        let mut data = IBM_PLEX.to_vec();
+        let count = u16::from_be_bytes(data[4..6].try_into().unwrap()) as usize;
+        let record = (0..count)
+            .map(|n| 12 + n * 16)
+            .find(|&at| &data[at..at + 4] == b"GSUB")
+            .unwrap();
+        data[record + 8..record + 12].copy_from_slice(&u32::MAX.to_be_bytes());
+        assert!(font_table_data(&data, 0, "GSUB".parse()?).is_err());
+        assert!(font_table_data(&data[..12], 0, "GSUB".parse()?).is_err());
+        Ok(())
+    }
 
     /// Every code point of `Bidi_Class=B`, each of which starts a new bidi
     /// paragraph and so can split one line into mixed-direction paragraphs.

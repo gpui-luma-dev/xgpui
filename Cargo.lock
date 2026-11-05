@@ -6183,7 +6183,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-wgpu"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -6198,6 +6198,7 @@ dependencies = [
  "raw-window-handle",
  "smallvec",
  "swash",
+ "ttf-parser",
  "unicode-bidi",
  "unicode-segmentation",
  "web-sys",

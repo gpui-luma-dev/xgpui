@@ -217,8 +217,10 @@ fn main() -> Result<()> {
     };
     let mut samples = samples::samples()?;
     let capabilities = backend.font_capabilities();
-    let inspection = if capabilities.static_variations {
+    if capabilities.static_variations {
         samples.extend(samples::axis_samples()?);
+    }
+    let inspection = if capabilities.axis_introspection || capabilities.feature_introspection {
         let id = backend.font_id(&font("Roboto Flex"))?;
         let axes = match backend.font_axes(id)? {
             FontQuery::Supported(axes) => axes
@@ -241,9 +243,16 @@ fn main() -> Result<()> {
                 .join(", "),
             FontQuery::Unsupported => "unsupported".into(),
         };
-        format!("Roboto Flex axes: {axes} | GSUB/GPOS tags (applicability varies): {features}")
+        format!(
+            "Roboto Flex axes: {axes} | GSUB/GPOS tags (applicability varies): {features} | Explicit axis editing: {}",
+            if capabilities.static_variations {
+                "supported"
+            } else {
+                "unavailable; static samples disabled"
+            }
+        )
     } else {
-        "Explicit axes unavailable on this backend; static axis samples disabled.".into()
+        "Font inspection and explicit axes unavailable on this backend; static axis samples disabled.".into()
     };
     let live_axes = if options.workload == Workload::Compare && !options.timings_only {
         axes::Controls::for_backend(&*backend)?
