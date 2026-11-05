@@ -405,7 +405,7 @@ resource reuse, output color and backend limits.
 
 ## Linux CI coverage
 
-The [Linux extension workflow](../.github/workflows/linux-extensions.yml) runs all
+The [Linux extension workflow](https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/linux-extensions.yml) runs all
 seven extension suites, native lab tests, Vulkan image/path captures and real
 window smoke probes under headless Weston and Xvfb/Openbox. Its path filters
 include all lab and shared app code. Existing paint and native font checks remain
@@ -414,4 +414,4 @@ physical GPU DMA-BUF or desktop input acceptance.
 
 A separate opt-in workflow-dispatch job targets a configured `xgpui-vulkan`
 self-hosted runner and runs strict native DMA-BUF/video checks with synchronization
-validation. See [runner setup and local commands](../.github/linux/README.md).
+validation. See [runner setup and local commands](https://github.com/gpui-luma-dev/xgpui/blob/main/.github/linux/README.md).
