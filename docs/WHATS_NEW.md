@@ -1,6 +1,6 @@
 # What's new
 
-## Latest — November 4, 2026 pre-release
+## Latest — November 4, 2026
 
 Changes since [release-2026-11-03-deba615a1d9c](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-03-deba615a1d9c):
 better keyboard and macOS accessibility focus for selectable typography, a shared
