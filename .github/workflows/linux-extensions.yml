@@ -61,12 +61,16 @@ jobs:
           workspaces: '. -> target/linux-ci'
           shared-key: linux-extensions-v1
       - name: Install native libraries, Mesa and virtual display servers
+        timeout-minutes: 10
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev mesa-vulkan-drivers vulkan-tools weston xvfb openbox x11-utils dbus-x11
           mkdir -p "$XDG_RUNTIME_DIR" "$LINUX_CI_RESULTS"
           chmod 700 "$XDG_RUNTIME_DIR"
-          vulkaninfo --summary 2>&1 | tee "$LINUX_CI_RESULTS/vulkaninfo.log"
+      - name: Inspect hosted Vulkan adapter
+        timeout-minutes: 2
+        run: |
+          timeout 60s vulkaninfo --summary 2>&1 | tee "$LINUX_CI_RESULTS/vulkaninfo.log"
       - name: Test all seven extension crates with committed lockfiles
         run: |
           run_suite() { local name="$1"; shift; "$@" 2>&1 | tee "$LINUX_CI_RESULTS/$name.log"; }
