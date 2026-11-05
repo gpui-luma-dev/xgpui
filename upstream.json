@@ -19,7 +19,8 @@
       "xgpui-media": "xgpui-media",
       "xgpui-parley": "xgpui-parley",
       "xgpui-shader": "xgpui-shader",
-      "xgpui-svg": "xgpui-svg"
+      "xgpui-svg": "xgpui-svg",
+      "xgpui-font-inspect": "xgpui-font-inspect"
     },
     "version": "1.0.0",
     "versions": {
@@ -39,7 +40,8 @@
       "xgpui-svg": "0.3.1",
       "xgpui-web": "2.0.1",
       "xgpui-wgpu": "2.0.1",
-      "xgpui-windows": "2.0.1"
+      "xgpui-windows": "2.0.1",
+      "xgpui-font-inspect": "0.1.0"
     }
   },
   "normalization": {

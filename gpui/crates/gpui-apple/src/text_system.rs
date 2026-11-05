@@ -79,17 +79,31 @@ struct FontKey {
 // Descriptor identity retains features/cascade lists and effective variations.
 // Point size belongs to the glyph cache key, not the font instance identity.
 #[derive(PartialEq, Eq)]
-struct NativeFontKey(CTFontDescriptor);
+struct NativeFontKey {
+    descriptor: CTFontDescriptor,
+    coordinates: Vec<(i64, u64)>,
+    freeze_variations: bool,
+}
 
 impl Hash for NativeFontKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        unsafe { CFHash(self.0.as_CFTypeRef()) }.hash(state);
+        unsafe { CFHash(self.descriptor.as_CFTypeRef()) }.hash(state);
+        self.coordinates.hash(state);
+        self.freeze_variations.hash(state);
     }
 }
 
 unsafe extern "C" {
     fn CTFontCopyVariation(font: CTFontRef) -> CFDictionaryRef;
+    fn CTFontCreateCopyWithAttributes(
+        font: CTFontRef,
+        size: CGFloat,
+        matrix: *const std::ffi::c_void,
+        descriptor: core_text::font_descriptor::CTFontDescriptorRef,
+    ) -> CTFontRef;
     static kCTFontVariationAxisIdentifierKey: core_foundation::string::CFStringRef;
+    static kCTFontOpticalSizeAttribute: core_foundation::string::CFStringRef;
+    static kCTFontVariationAxisDefaultValueKey: core_foundation::string::CFStringRef;
     static kCTFontVariationAxisMinimumValueKey: core_foundation::string::CFStringRef;
     static kCTFontVariationAxisMaximumValueKey: core_foundation::string::CFStringRef;
 }
@@ -115,6 +129,7 @@ fn variations(font: &CTFont) -> CFMutableDictionary<CFNumber, CFNumber> {
 
 impl NativeFontKey {
     fn new(font: &CTFont) -> Self {
+        let coords = variations(font);
         let attrs = CFDictionary::from_CFType_pairs(&[
             (
                 unsafe { CFString::wrap_under_get_rule(kCTFontSizeAttribute) },
@@ -122,14 +137,78 @@ impl NativeFontKey {
             ),
             (
                 unsafe { CFString::wrap_under_get_rule(kCTFontVariationAttribute) },
-                variations(font).as_CFType(),
+                coords.as_CFType(),
             ),
         ]);
-        Self(
-            font.copy_descriptor()
+        let (tags, values) = coords.get_keys_and_values();
+        let mut coordinates = tags
+            .into_iter()
+            .zip(values)
+            .filter_map(|(tag, value)| {
+                let tag = unsafe { CFNumber::wrap_under_get_rule(tag as _) }.to_i64()?;
+                let value = unsafe { CFNumber::wrap_under_get_rule(value as _) }.to_f64()?;
+                Some((
+                    tag,
+                    if value == 0.0 {
+                        0.0f64.to_bits()
+                    } else {
+                        value.to_bits()
+                    },
+                ))
+            })
+            .collect::<Vec<_>>();
+        coordinates.sort_unstable();
+        Self {
+            descriptor: font
+                .copy_descriptor()
                 .create_copy_with_attributes(attrs.to_untyped())
                 .unwrap(),
-        )
+            coordinates,
+            freeze_variations: false,
+        }
+    }
+}
+
+fn copy_with_descriptor(font: &CTFont, descriptor: &CTFontDescriptor) -> CTFont {
+    // Copy the actual native face. Resolving a shaped font's descriptor afresh
+    // can substitute Helvetica for an embedded face lacking a registered URL.
+    unsafe {
+        CTFont::wrap_under_create_rule(CTFontCreateCopyWithAttributes(
+            font.as_concrete_TypeRef(),
+            font.pt_size(),
+            std::ptr::null(),
+            descriptor.as_concrete_TypeRef(),
+        ))
+    }
+}
+
+fn sized_font(font: &CTFont, size: CGFloat) -> CTFont {
+    let coords = variations(font);
+    if coords.is_empty() {
+        return font.clone_with_font_size(size);
+    }
+    let mut pairs = vec![(
+        unsafe { CFString::wrap_under_get_rule(kCTFontVariationAttribute) },
+        coords.as_CFType(),
+    )];
+    if let Some(optical) = coords.find(&CFNumber::from(u32::from_be_bytes(*b"opsz") as i64)) {
+        pairs.push((
+            unsafe { CFString::wrap_under_get_rule(kCTFontOpticalSizeAttribute) },
+            optical.as_CFType(),
+        ));
+    }
+    let attrs = CFDictionary::from_CFType_pairs(&pairs);
+    let descriptor = font
+        .copy_descriptor()
+        .create_copy_with_attributes(attrs.to_untyped())
+        .unwrap();
+    unsafe {
+        CTFont::wrap_under_create_rule(CTFontCreateCopyWithAttributes(
+            font.as_concrete_TypeRef(),
+            size,
+            std::ptr::null(),
+            descriptor.as_concrete_TypeRef(),
+        ))
     }
 }
 
@@ -168,13 +247,65 @@ fn with_weight(font: &CTFont, weight: FontWeight) -> Result<CTFont> {
                 .copy_descriptor()
                 .create_copy_with_attributes(attrs.to_untyped())
                 .map_err(|_| anyhow!("could not set font weight"))?;
-            return Ok(core_text::font::new_from_descriptor(
-                &descriptor,
-                font.pt_size(),
-            ));
+            return Ok(copy_with_descriptor(font, &descriptor));
         }
     }
     Ok(font.clone())
+}
+
+fn with_variations(font: &CTFont, settings: &gpui::FontVariations) -> Result<CTFont> {
+    let Some(axes) = font.get_variation_axes() else {
+        return Ok(font.clone());
+    };
+    let mut coords = variations(font);
+    let mut changed = false;
+    for axis in axes.iter() {
+        let number = |key| {
+            axis.find(key)
+                .and_then(|v| v.downcast::<CFNumber>())
+                .and_then(|v| v.to_f64())
+        };
+        let Some(identifier) = number(unsafe { kCTFontVariationAxisIdentifierKey }) else {
+            continue;
+        };
+        let Some((_, value)) = settings
+            .settings()
+            .iter()
+            .find(|(tag, _)| u32::from_be_bytes(*tag.as_bytes()) as f64 == identifier)
+        else {
+            continue;
+        };
+        let min = number(unsafe { kCTFontVariationAxisMinimumValueKey })
+            .ok_or_else(|| anyhow!("missing axis minimum"))?;
+        let max = number(unsafe { kCTFontVariationAxisMaximumValueKey })
+            .ok_or_else(|| anyhow!("missing axis maximum"))?;
+        anyhow::ensure!(
+            min.is_finite() && max.is_finite() && min <= max,
+            "invalid axis range"
+        );
+        let key = CFNumber::from(identifier as i64);
+        let target = (*value as f64).clamp(min, max);
+        let current = coords
+            .find(&key)
+            .and_then(|value| value.to_f64())
+            .or_else(|| number(unsafe { kCTFontVariationAxisDefaultValueKey }));
+        if current != Some(target) {
+            coords.set(key, CFNumber::from(target));
+            changed = true;
+        }
+    }
+    if !changed {
+        return Ok(font.clone());
+    }
+    let attrs = CFDictionary::from_CFType_pairs(&[(
+        unsafe { CFString::wrap_under_get_rule(kCTFontVariationAttribute) },
+        coords.as_CFType(),
+    )]);
+    let descriptor = font
+        .copy_descriptor()
+        .create_copy_with_attributes(attrs.to_untyped())
+        .map_err(|_| anyhow!("could not set font variations"))?;
+    Ok(copy_with_descriptor(font, &descriptor))
 }
 
 struct AppleTextSystemState {
@@ -182,6 +313,8 @@ struct AppleTextSystemState {
     system_source: SystemSource,
     fonts: Vec<FontKitFont>,
     font_selections: HashMap<Font, FontId>,
+    requested_variations: HashMap<FontId, (gpui::FontVariations, FontWeight)>,
+    frozen_variation_ids: HashSet<FontId>,
     font_ids_by_native_font: HashMap<NativeFontKey, FontId>,
     font_ids_by_font_key: HashMap<FontKey, SmallVec<[FontId; 4]>>,
     postscript_names_by_font_id: HashMap<FontId, String>,
@@ -195,6 +328,8 @@ impl AppleTextSystem {
             system_source: SystemSource::new(),
             fonts: Vec::new(),
             font_selections: HashMap::default(),
+            requested_variations: HashMap::default(),
+            frozen_variation_ids: HashSet::default(),
             font_ids_by_native_font: HashMap::default(),
             font_ids_by_font_key: HashMap::default(),
             postscript_names_by_font_id: HashMap::default(),
@@ -283,11 +418,97 @@ impl PlatformTextSystem for AppleTextSystem {
 
             let base_id = candidates[ix];
             let native = lock.fonts[base_id.0].native_font();
-            let instance = with_weight(&native, font.weight)?;
-            let font_id = lock.id_for_native_font(instance);
+            let instance = with_variations(&with_weight(&native, font.weight)?, &font.variations)?;
+            let font_id = if font.variations.settings().is_empty() {
+                lock.id_for_native_font(instance, false)
+            } else {
+                // A requested ID must retain axes unsupported by the primary
+                // face: a later fallback face may support them.
+                let id = FontId(lock.fonts.len());
+                lock.postscript_names_by_font_id
+                    .insert(id, instance.postscript_name());
+                lock.fonts
+                    .push(unsafe { FontKitFont::from_native_font(&instance) });
+                lock.requested_variations
+                    .insert(id, (font.variations.clone(), font.weight));
+                lock.frozen_variation_ids.insert(id);
+                id
+            };
             lock.font_selections.insert(font.clone(), font_id);
             Ok(font_id)
         }
+    }
+
+    fn font_capabilities(&self) -> gpui::FontCapabilities {
+        gpui::FontCapabilities {
+            feature_introspection: true,
+            axis_introspection: true,
+            static_variations: true,
+        }
+    }
+
+    fn font_axes(&self, id: FontId) -> Result<gpui::FontQuery<Vec<gpui::VariationAxisInfo>>> {
+        let state = self.0.read();
+        let font = state
+            .fonts
+            .get(id.0)
+            .ok_or_else(|| anyhow!("invalid font ID"))?
+            .native_font();
+        drop(state);
+        let tables = font
+            .get_available_font_tables()
+            .ok_or_else(|| anyhow!("font table enumeration failed"))?;
+        let table = if tables
+            .iter()
+            .any(|tag| *tag == u32::from_be_bytes(*b"fvar"))
+        {
+            Some(
+                font.get_font_table(u32::from_be_bytes(*b"fvar"))
+                    .ok_or_else(|| anyhow!("font table read failed"))?,
+            )
+        } else {
+            None
+        };
+        Ok(gpui::FontQuery::Supported(
+            gpui_font_inspect::variation_axes(table.as_ref().map(|table| table.bytes()))?,
+        ))
+    }
+
+    fn opentype_features(
+        &self,
+        font_id: FontId,
+    ) -> Result<gpui::FontQuery<Vec<gpui::OpenTypeFeatureInfo>>> {
+        let lock = self.0.read();
+        let font = lock
+            .fonts
+            .get(font_id.0)
+            .ok_or_else(|| anyhow!("invalid font ID"))?
+            .native_font();
+        drop(lock);
+        // Enumerate first so a failed read of an advertised table cannot be
+        // mistaken for a font with no OpenType layout tables (e.g. AAT-only).
+        let tables = font
+            .get_available_font_tables()
+            .ok_or_else(|| anyhow!("font table enumeration failed"))?;
+        let read = |tag: &[u8; 4]| -> Result<_> {
+            let tag = u32::from_be_bytes(*tag);
+            if tables.iter().any(|value| *value == tag) {
+                Ok(Some(
+                    font.get_font_table(tag)
+                        .ok_or_else(|| anyhow!("font table read failed"))?,
+                ))
+            } else {
+                Ok(None)
+            }
+        };
+        let gsub = read(b"GSUB")?;
+        let gpos = read(b"GPOS")?;
+        Ok(gpui::FontQuery::Supported(
+            gpui_font_inspect::opentype_features(
+                gsub.as_ref().map(|data| data.bytes()),
+                gpos.as_ref().map(|data| data.bytes()),
+            )?,
+        ))
     }
 
     fn font_metrics(&self, font_id: FontId) -> FontMetrics {
@@ -410,6 +631,64 @@ impl AppleTextSystemState {
             let mut font = font.load()?;
 
             apply_features_and_fallbacks(&mut font, features, fallbacks)?;
+            // Family-only cascade descriptors cannot resolve fonts held solely
+            // by MemSource. Prepend their actual descriptors, keeping system
+            // fallbacks and existing matching behavior for installed families.
+            if let Some(fallbacks) = fallbacks {
+                let mut descriptors = Vec::new();
+                for name in fallbacks.fallback_list() {
+                    let Ok(family) = self.memory_source.select_family_by_name(name) else {
+                        continue;
+                    };
+                    let mut candidates = family
+                        .fonts()
+                        .iter()
+                        .filter_map(|handle| handle.load().ok())
+                        .collect::<Vec<_>>();
+                    let properties = candidates
+                        .iter()
+                        .map(|font| font.properties())
+                        .collect::<Vec<_>>();
+                    if let Ok(ix) =
+                        font_kit::matching::find_best_match(&properties, &font.properties())
+                    {
+                        let mut fallback = candidates.swap_remove(ix);
+                        apply_features_and_fallbacks(&mut fallback, features, None)?;
+                        descriptors.push(fallback.native_font().copy_descriptor());
+                    }
+                }
+                if !descriptors.is_empty() {
+                    let native = font.native_font();
+                    let key = unsafe {
+                        CFString::wrap_under_get_rule(
+                            core_text::font_descriptor::kCTFontCascadeListAttribute,
+                        )
+                    };
+                    if let Some(existing) = native
+                        .copy_descriptor()
+                        .attributes()
+                        .find(&key)
+                        .and_then(|v| v.downcast::<CFArray>())
+                    {
+                        let existing = unsafe {
+                            CFArray::<CTFontDescriptor>::wrap_under_get_rule(
+                                existing.as_concrete_TypeRef(),
+                            )
+                        };
+                        descriptors.extend(existing.iter().map(|descriptor| (*descriptor).clone()));
+                    }
+                    let attrs = CFDictionary::from_CFType_pairs(&[(
+                        key,
+                        CFArray::from_CFTypes(&descriptors).as_CFType(),
+                    )]);
+                    let descriptor = native
+                        .copy_descriptor()
+                        .create_copy_with_attributes(attrs.to_untyped())
+                        .map_err(|_| anyhow!("could not set embedded font cascade"))?;
+                    let native = copy_with_descriptor(&native, &descriptor);
+                    font = unsafe { FontKitFont::from_native_font(&native) };
+                }
+            }
             // This block contains a precautionary fix to guard against loading fonts
             // that might cause panics due to `.unwrap()`s up the chain.
             {
@@ -511,13 +790,17 @@ impl AppleTextSystemState {
         self.fonts[font_id.0].glyph_for_char(ch).map(GlyphId)
     }
 
-    fn id_for_native_font(&mut self, requested_font: CTFont) -> FontId {
-        let key = NativeFontKey::new(&requested_font);
+    fn id_for_native_font(&mut self, requested_font: CTFont, freeze_variations: bool) -> FontId {
+        let mut key = NativeFontKey::new(&requested_font);
+        key.freeze_variations = freeze_variations;
         if let Some(font_id) = self.font_ids_by_native_font.get(&key) {
             *font_id
         } else {
             let font_id = FontId(self.fonts.len());
             self.font_ids_by_native_font.insert(key, font_id);
+            if freeze_variations {
+                self.frozen_variation_ids.insert(font_id);
+            }
             self.postscript_names_by_font_id
                 .insert(font_id, requested_font.postscript_name());
             // Keep variations, features and cascade attributes through rasterization.
@@ -623,17 +906,20 @@ impl AppleTextSystemState {
             } else {
                 cx.set_gray_fill_color(0.0, 1.0);
             }
-            self.fonts[params.font_id.0]
-                .native_font()
-                .clone_with_font_size(f32::from(params.font_size) as CGFloat)
-                .draw_glyphs(
-                    &[params.glyph_id.0 as CGGlyph],
-                    &[CGPoint::new(
-                        (subpixel_shift.x / params.scale_factor) as CGFloat,
-                        (subpixel_shift.y / params.scale_factor) as CGFloat,
-                    )],
-                    cx,
-                );
+            let native = self.fonts[params.font_id.0].native_font();
+            let native = if self.frozen_variation_ids.contains(&params.font_id) {
+                sized_font(&native, f32::from(params.font_size) as CGFloat)
+            } else {
+                native.clone_with_font_size(f32::from(params.font_size) as CGFloat)
+            };
+            native.draw_glyphs(
+                &[params.glyph_id.0 as CGGlyph],
+                &[CGPoint::new(
+                    (subpixel_shift.x / params.scale_factor) as CGFloat,
+                    (subpixel_shift.y / params.scale_factor) as CGFloat,
+                )],
+                cx,
+            );
 
             if params.is_emoji {
                 // Convert from RGBA with premultiplied alpha to BGRA with straight alpha.
@@ -651,6 +937,7 @@ impl AppleTextSystemState {
         let mut string = CFMutableAttributedString::new();
         let mut max_ascent = 0.0f32;
         let mut max_descent = 0.0f32;
+        let mut variation_ranges = Vec::new();
 
         {
             let mut text = text;
@@ -667,6 +954,9 @@ impl AppleTextSystemState {
                 let length = utf16_end - utf16_start;
                 let cf_range = CFRange::init(utf16_start, length);
                 let font = &self.fonts[run.font_id.0];
+                if let Some(settings) = self.requested_variations.get(&run.font_id) {
+                    variation_ranges.push((cf_range, settings.clone()));
+                }
 
                 let font_metrics = font.metrics();
                 let font_scale = f32::from(font_size) / font_metrics.units_per_em as f32;
@@ -682,14 +972,73 @@ impl AppleTextSystemState {
                     string.set_attribute(
                         cf_range,
                         kCTFontAttributeName,
-                        &font.native_font().clone_with_font_size(font_size.into()),
+                        &if self.frozen_variation_ids.contains(&run.font_id) {
+                            sized_font(&font.native_font(), font_size.into())
+                        } else {
+                            font.native_font().clone_with_font_size(font_size.into())
+                        },
                     );
                 }
                 break_ligature = !break_ligature;
             }
         }
         // Retrieve the glyphs from the shaped line, converting UTF16 offsets to UTF8 offsets.
-        let line = CTLine::new_with_attributed_string(string.as_concrete_TypeRef());
+        let mut line = CTLine::new_with_attributed_string(string.as_concrete_TypeRef());
+        if !variation_ranges.is_empty() {
+            let mut changed = false;
+            for run in line.glyph_runs().into_iter() {
+                unsafe extern "C" {
+                    fn CTRunGetStringRange(run: core_text::run::CTRunRef) -> CFRange;
+                }
+                let range = unsafe { CTRunGetStringRange(run.as_concrete_TypeRef()) };
+                let Some(attrs) = run.attributes() else {
+                    continue;
+                };
+                let Some(native) =
+                    (unsafe { attrs.get(kCTFontAttributeName).downcast::<CTFont>() })
+                else {
+                    continue;
+                };
+                for (request_range, (settings, weight)) in &variation_ranges {
+                    let start = range.location.max(request_range.location);
+                    let end = (range.location + range.length)
+                        .min(request_range.location + request_range.length);
+                    if start >= end {
+                        continue;
+                    }
+                    let implicit = if settings
+                        .settings()
+                        .iter()
+                        .any(|(tag, _)| tag.as_bytes() == b"wght")
+                    {
+                        Ok(native.clone())
+                    } else {
+                        with_weight(&native, *weight)
+                    };
+                    let adjusted = implicit.and_then(|font| with_variations(&font, settings));
+                    match adjusted {
+                        Ok(adjusted)
+                            if NativeFontKey::new(&native).coordinates
+                                != NativeFontKey::new(&adjusted).coordinates =>
+                        {
+                            unsafe {
+                                string.set_attribute(
+                                    CFRange::init(start, end - start),
+                                    kCTFontAttributeName,
+                                    &adjusted,
+                                )
+                            };
+                            changed = true;
+                        }
+                        Ok(_) => {}
+                        Err(error) => log::error!("fallback variations rejected: {error}"),
+                    }
+                }
+            }
+            if changed {
+                line = CTLine::new_with_attributed_string(string.as_concrete_TypeRef());
+            }
+        }
         let glyph_runs = line.glyph_runs();
         let mut runs = <Vec<ShapedRun>>::with_capacity(glyph_runs.len() as usize);
         let mut ix_converter = StringIndexConverter::new(text);
@@ -701,7 +1050,19 @@ impl AppleTextSystemState {
                     .downcast::<CTFont>()
                     .unwrap()
             };
-            let font_id = self.id_for_native_font(font);
+            unsafe extern "C" {
+                fn CTRunGetStringRange(run: core_text::run::CTRunRef) -> CFRange;
+            }
+            let range = unsafe { CTRunGetStringRange(run.as_concrete_TypeRef()) };
+            let freeze_variations = variation_ranges.iter().any(|(requested, _)| {
+                range.location < requested.location + requested.length
+                    && requested.location < range.location + range.length
+            });
+            if freeze_variations {
+                max_ascent = max_ascent.max(font.ascent() as f32);
+                max_descent = max_descent.max(font.descent() as f32);
+            }
+            let font_id = self.id_for_native_font(font, freeze_variations);
 
             let glyphs = match runs.last_mut() {
                 Some(run) if run.font_id == font_id => &mut run.glyphs,
@@ -886,6 +1247,271 @@ mod tests {
     use crate::AppleTextSystem;
     use gpui::{FontFallbacks, FontFeatures, FontRun, GlyphId, PlatformTextSystem, font, px};
     use std::sync::Arc;
+
+    fn static_axes(settings: &[(&str, f32)]) -> gpui::FontVariations {
+        gpui::FontVariations::new(
+            settings
+                .iter()
+                .map(|(tag, value)| (tag.parse().unwrap(), *value)),
+        )
+        .unwrap()
+    }
+
+    fn flex_backend() -> AppleTextSystem {
+        let fonts = AppleTextSystem::new();
+        fonts
+            .add_fonts(vec![std::borrow::Cow::Borrowed(include_bytes!(
+                "../../../../extensions/crates/xgpui-parley/tests/fonts/RobotoFlex.ttf"
+            ))])
+            .unwrap();
+        fonts
+    }
+
+    #[test]
+    fn static_axes_preserve_native_instances_and_layout_raster_identity() {
+        let fonts = flex_backend();
+        let mut descriptor = font("Roboto Flex");
+        descriptor.weight = gpui::FontWeight::BOLD;
+        descriptor.variations = static_axes(&[
+            ("wght", 300.25),
+            ("slnt", -10.0),
+            ("wdth", 75.0),
+            ("opsz", 14.0),
+        ]);
+        let narrow = fonts.font_id(&descriptor).unwrap();
+        descriptor.variations = static_axes(&[
+            ("opsz", 14.0),
+            ("wdth", 75.0),
+            ("slnt", -10.0),
+            ("wght", 300.25),
+        ]);
+        assert_eq!(fonts.font_id(&descriptor).unwrap(), narrow);
+        let native = fonts.0.read().fonts[narrow.0].native_font();
+        let coords = super::variations(&native);
+        for (tag, expected) in [("wght", 300.25), ("slnt", -10.0), ("wdth", 75.0)] {
+            let key = core_foundation::number::CFNumber::from(u32::from_be_bytes(
+                tag.as_bytes().try_into().unwrap(),
+            ) as i64);
+            assert_eq!(coords.find(&key).unwrap().to_f64(), Some(expected));
+        }
+        let sized = native.clone_with_font_size(32.0);
+        assert_eq!(
+            super::NativeFontKey::new(&native).coordinates,
+            super::NativeFontKey::new(&sized).coordinates,
+            "resizing must preserve axes"
+        );
+        let glyph = fonts.glyph_for_char(narrow, 'H').unwrap();
+        let params = gpui::RenderGlyphParams {
+            font_id: narrow,
+            glyph_id: glyph,
+            font_size: px(32.0),
+            scale_factor: 1.0,
+            subpixel_variant: gpui::point(0, 0),
+            is_emoji: false,
+            subpixel_rendering: false,
+            dilation: 0,
+        };
+        let bounds = fonts.glyph_raster_bounds(&params).unwrap();
+        let before = fonts.rasterize_glyph(&params, bounds).unwrap();
+        let line = fonts.layout_line(
+            "H",
+            px(32.0),
+            &[FontRun {
+                len: 1,
+                font_id: narrow,
+            }],
+        );
+        let resolved = line.runs[0].font_id;
+        let resolved_native = fonts.0.read().fonts[resolved.0].native_font();
+        let requested_key = super::NativeFontKey::new(&native);
+        let resolved_key = super::NativeFontKey::new(&resolved_native);
+        assert_eq!(
+            requested_key.coordinates, resolved_key.coordinates,
+            "shaping must retain requested effective axes"
+        );
+        let metrics = fonts.font_metrics(resolved);
+        let expected_width =
+            fonts.advance(resolved, glyph).unwrap().width * 32.0 / metrics.units_per_em as f32;
+        assert!((f32::from(line.width) - expected_width).abs() < 0.02);
+        let line2 = fonts.layout_line(
+            "H",
+            px(64.0),
+            &[FontRun {
+                len: 1,
+                font_id: narrow,
+            }],
+        );
+        assert!((f32::from(line2.width) - 2.0 * f32::from(line.width)).abs() < 0.02);
+        descriptor.variations = static_axes(&[("wght", 900.0), ("wdth", 150.0)]);
+        let wide = fonts.font_id(&descriptor).unwrap();
+        assert_ne!(wide, narrow);
+        assert_ne!(
+            fonts.advance(wide, glyph).unwrap().width,
+            fonts.advance(narrow, glyph).unwrap().width
+        );
+        assert_eq!(before, fonts.rasterize_glyph(&params, bounds).unwrap());
+        descriptor.variations = static_axes(&[("wght", 5000.0)]);
+        let clamped = fonts.font_id(&descriptor).unwrap();
+        let native = fonts.0.read().fonts[clamped.0].native_font();
+        let weight = core_foundation::number::CFNumber::from(u32::from_be_bytes(*b"wght") as i64);
+        assert_eq!(
+            super::variations(&native).find(&weight).unwrap().to_f64(),
+            Some(1000.0)
+        );
+        assert!(fonts.font_capabilities().static_variations);
+        let gpui::FontQuery::Supported(axes) = fonts.font_axes(narrow).unwrap() else {
+            panic!("axis query unsupported")
+        };
+        assert!(
+            axes.iter()
+                .any(|axis| axis.tag.to_string() == "slnt" && axis.min_value < 0.0)
+        );
+    }
+
+    #[test]
+    fn static_axes_do_not_change_legacy_sizing_policy() {
+        let fonts = flex_backend();
+        let mut descriptor = font("Roboto Flex");
+        let legacy = fonts.font_id(&descriptor).unwrap();
+        let legacy_line = fonts.layout_line(
+            "H",
+            px(28.0),
+            &[FontRun {
+                len: 1,
+                font_id: legacy,
+            }],
+        );
+        descriptor.variations = static_axes(&[("opsz", 16.0)]);
+        let explicit = fonts.font_id(&descriptor).unwrap();
+        let explicit_line = fonts.layout_line(
+            "H",
+            px(28.0),
+            &[FontRun {
+                len: 1,
+                font_id: explicit,
+            }],
+        );
+        let state = fonts.0.read();
+        assert!(!state.frozen_variation_ids.contains(&legacy));
+        assert!(
+            !state
+                .frozen_variation_ids
+                .contains(&legacy_line.runs[0].font_id)
+        );
+        assert!(state.frozen_variation_ids.contains(&explicit));
+        assert!(
+            state
+                .frozen_variation_ids
+                .contains(&explicit_line.runs[0].font_id)
+        );
+        assert_ne!(legacy_line.runs[0].font_id, explicit_line.runs[0].font_id);
+    }
+
+    #[test]
+    fn static_axes_without_weight_or_optical_overrides_keep_the_actual_face() {
+        let fonts = flex_backend();
+        let mut descriptor = font("Roboto Flex");
+        descriptor.variations = static_axes(&[("wght", 100.0), ("wdth", 50.0), ("slnt", -10.0)]);
+        let id = fonts.font_id(&descriptor).unwrap();
+        let source = fonts.0.read().fonts[id.0].native_font();
+        let resized = super::sized_font(&source, f32::from(px(28.0)).next_up() as f64);
+        assert_eq!(
+            source.family_name(),
+            resized.family_name(),
+            "resized family"
+        );
+        assert_eq!(
+            super::NativeFontKey::new(&source).coordinates,
+            super::NativeFontKey::new(&resized).coordinates,
+            "resized coords"
+        );
+        assert!(fonts.glyph_for_char(id, 'H').is_some());
+        let line = fonts.layout_line(
+            "Hamburgefonts 012345",
+            px(28.0),
+            &[FontRun {
+                len: 19,
+                font_id: id,
+            }],
+        );
+        for run in line.runs {
+            let native = fonts.0.read().fonts[run.font_id.0].native_font();
+            assert_eq!(source.family_name(), native.family_name());
+            assert_eq!(
+                super::NativeFontKey::new(&source).coordinates,
+                super::NativeFontKey::new(&native).coordinates
+            );
+        }
+    }
+
+    #[test]
+    fn static_axes_reach_fallback_faces_even_when_primary_is_static() {
+        let fonts = flex_backend();
+        fonts
+            .add_fonts(vec![std::borrow::Cow::Borrowed(include_bytes!(
+                "../../gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
+            ))])
+            .unwrap();
+        let mut primary = font("IBM Plex Sans");
+        primary.fallbacks = Some(FontFallbacks::from_fonts(vec!["Roboto Flex".into()]));
+        primary.variations = static_axes(&[("slnt", -10.0), ("wght", 800.0)]);
+        let primary_id = fonts.font_id(&primary).unwrap();
+        let fallback_id = fonts.font_id(&font("Roboto Flex")).unwrap();
+        let ch = (0x20..0x3000)
+            .filter_map(char::from_u32)
+            .find(|&ch| {
+                fonts.glyph_for_char(primary_id, ch).is_none()
+                    && fonts.glyph_for_char(fallback_id, ch).is_some()
+            })
+            .expect("fallback-only character");
+        let text = ch.to_string();
+        let line = fonts.layout_line(
+            &text,
+            px(24.0),
+            &[FontRun {
+                len: text.len(),
+                font_id: primary_id,
+            }],
+        );
+        let state = fonts.0.read();
+        let resolved = state.fonts[line.runs[0].font_id.0].native_font();
+        assert!(
+            resolved.family_name().contains("Roboto"),
+            "U+{:04X}: {}",
+            ch as u32,
+            resolved.family_name()
+        );
+        let slant = core_foundation::number::CFNumber::from(u32::from_be_bytes(*b"slnt") as i64);
+        assert_eq!(
+            super::variations(&resolved).find(&slant).unwrap().to_f64(),
+            Some(-10.0)
+        );
+    }
+
+    #[test]
+    fn feature_introspection_reads_pinned_font() {
+        let fonts = AppleTextSystem::new();
+        fonts
+            .add_fonts(vec![std::borrow::Cow::Borrowed(include_bytes!(
+                "../../gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
+            ))])
+            .unwrap();
+        let id = fonts.font_id(&font("IBM Plex Sans")).unwrap();
+        let gpui::FontQuery::Supported(features) = fonts.opentype_features(id).unwrap() else {
+            panic!("Apple feature introspection must be supported")
+        };
+        assert!(
+            features
+                .iter()
+                .any(|f| f.tag.to_string() == "liga" && f.substitution)
+        );
+        assert!(
+            features
+                .iter()
+                .any(|f| f.tag.to_string() == "kern" && f.positioning)
+        );
+        assert!(fonts.opentype_features(gpui::FontId(usize::MAX)).is_err());
+    }
 
     #[test]
     fn test_reload_family_with_features_and_fallbacks() {

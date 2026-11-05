@@ -1,5 +1,4 @@
 use super::*;
-use crate::metal::*;
 use gpui::{Bounds, ContentMask, Corners, CustomContent, ScaledPixels, point};
 use std::sync::Arc;
 

@@ -7641,7 +7641,16 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.21",
  "xgpui",
+ "xgpui-font-inspect",
  "zed-font-kit",
+]
+
+[[package]]
+name = "xgpui-font-inspect"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "xgpui",
 ]
 
 [[package]]
@@ -7847,6 +7856,7 @@ dependencies = [
  "windows-numerics 0.3.1",
  "windows-registry 0.6.1",
  "xgpui",
+ "xgpui-font-inspect",
 ]
 
 [[package]]

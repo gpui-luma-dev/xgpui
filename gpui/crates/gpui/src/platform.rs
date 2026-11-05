@@ -1547,6 +1547,26 @@ pub trait PlatformTextSystem: Send + Sync {
     fn all_font_names(&self) -> Vec<String>;
     /// Get the font ID for a font descriptor.
     fn font_id(&self, descriptor: &Font) -> Result<FontId>;
+    /// Reports support for font inspection and explicit static variations.
+    fn font_capabilities(&self) -> crate::FontCapabilities {
+        crate::FontCapabilities::default()
+    }
+    /// Queries axis ranges on a resolved face, distinguishing unsupported queries.
+    fn font_axes(
+        &self,
+        _font_id: FontId,
+    ) -> Result<crate::FontQuery<Vec<crate::VariationAxisInfo>>> {
+        Ok(crate::FontQuery::Unsupported)
+    }
+    /// Queries feature metadata for a resolved face. Backends that cannot inspect
+    /// the face must return Unsupported, rather than a successful empty list.
+    /// Implementations return errors for invalid IDs or unreadable metadata.
+    fn opentype_features(
+        &self,
+        _font_id: FontId,
+    ) -> Result<crate::FontQuery<Vec<crate::OpenTypeFeatureInfo>>> {
+        Ok(crate::FontQuery::Unsupported)
+    }
     /// Prewarm any system font caches needed to shape text.
     fn prewarm_fonts(&self, _font_ids: &[FontId]) {}
     /// Get metrics for a font.

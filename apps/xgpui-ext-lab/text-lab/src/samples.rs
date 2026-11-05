@@ -87,3 +87,40 @@ mod tests {
         Ok(())
     }
 }
+
+pub const FLEX: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../extensions/crates/xgpui-parley/tests/fonts/RobotoFlex.ttf"
+));
+
+/// Static previews; no continuous scrubbing or unbounded descriptor generation.
+pub fn axis_samples() -> Result<Vec<Sample>> {
+    let mut samples = Vec::new();
+    for (width, slant, optical) in [(50.0, 0.0, 14.0), (100.0, -10.0, 14.0), (150.0, -5.0, 72.0)] {
+        let mut font = font("Roboto Flex");
+        font.variations = gpui::FontVariations::new(
+            [
+                ("wght", 500.25),
+                ("wdth", width),
+                ("slnt", slant),
+                ("opsz", optical),
+            ]
+            .into_iter()
+            .map(|(tag, value)| Ok((tag.parse()?, value)))
+            .collect::<Result<Vec<_>>>()?,
+        )?;
+        samples.push(Sample {
+            label: format!("Roboto Flex / wght=500.25 wdth={width} slnt={slant} opsz={optical}"),
+            text: "Hamburgefonts 012345".into(),
+            font,
+        });
+    }
+    let mut font = font("Inter Variable");
+    font.features = gpui::FontFeatures(std::sync::Arc::new(vec![("cv02".into(), 2)]));
+    samples.push(Sample {
+        label: "Inter / numeric cv02=2".into(),
+        text: "alternate forms 012345".into(),
+        font,
+    });
+    Ok(samples)
+}

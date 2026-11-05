@@ -6534,6 +6534,7 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.21",
  "xgpui",
+ "xgpui-font-inspect",
  "zed-font-kit",
 ]
 
@@ -6595,6 +6596,14 @@ dependencies = [
  "xgpui-web",
  "xgpui-wgpu",
  "xgpui-windows",
+]
+
+[[package]]
+name = "xgpui-font-inspect"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "xgpui",
 ]
 
 [[package]]
@@ -6748,6 +6757,7 @@ dependencies = [
  "skrifa 0.44.0",
  "tiny-skia 0.12.0",
  "xgpui",
+ "xgpui-font-inspect",
 ]
 
 [[package]]
@@ -6876,6 +6886,7 @@ dependencies = [
  "windows-numerics 0.3.1",
  "windows-registry",
  "xgpui",
+ "xgpui-font-inspect",
 ]
 
 [[package]]

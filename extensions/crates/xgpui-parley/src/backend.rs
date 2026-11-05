@@ -336,6 +336,22 @@ impl State {
                 gpui::FontStyle::Oblique => parley::FontStyle::Oblique(None),
             };
             builder.push(StyleProperty::FontStyle(style), range.clone());
+            let variations = font
+                .variations
+                .settings()
+                .iter()
+                .map(|(tag, value)| {
+                    Ok(parley::FontVariation::new(
+                        parley::setting::Tag::parse(&tag.to_string())
+                            .context("invalid axis tag")?,
+                        *value,
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            builder.push(
+                StyleProperty::FontVariations(parley::FontVariations::List(Cow::Owned(variations))),
+                range.clone(),
+            );
             let features = font
                 .features
                 .tag_value_list()
@@ -476,6 +492,67 @@ impl PlatformTextSystem for ParleyTextSystem {
         };
         state.descriptors.insert(descriptor.clone(), id);
         Ok(id)
+    }
+
+    fn font_capabilities(&self) -> gpui::FontCapabilities {
+        gpui::FontCapabilities {
+            feature_introspection: true,
+            axis_introspection: true,
+            static_variations: true,
+        }
+    }
+
+    fn font_axes(&self, id: FontId) -> Result<gpui::FontQuery<Vec<gpui::VariationAxisInfo>>> {
+        let face = self.face(id)?;
+        let data = face.data();
+        let font = skrifa::FontRef::from_index(data.data.data(), data.index)?;
+        let tag = skrifa::Tag::new(b"fvar");
+        let table = if font
+            .table_directory()
+            .table_records()
+            .iter()
+            .any(|record| record.tag() == tag)
+        {
+            Some(font.table_data(tag).context("unreadable fvar table")?)
+        } else {
+            None
+        };
+        Ok(gpui::FontQuery::Supported(
+            gpui_font_inspect::variation_axes(table.as_ref().map(|table| table.as_bytes()))?,
+        ))
+    }
+
+    fn opentype_features(
+        &self,
+        id: FontId,
+    ) -> Result<gpui::FontQuery<Vec<gpui::OpenTypeFeatureInfo>>> {
+        let face = self.face(id)?;
+        let data = face.data();
+        let font = skrifa::FontRef::from_index(data.data.data(), data.index)?;
+        let read = |tag: &[u8; 4]| -> Result<_> {
+            let tag = skrifa::Tag::new(tag);
+            if font
+                .table_directory()
+                .table_records()
+                .iter()
+                .any(|record| record.tag() == tag)
+            {
+                Ok(Some(
+                    font.table_data(tag)
+                        .context("unreadable font layout table")?,
+                ))
+            } else {
+                Ok(None)
+            }
+        };
+        let gsub = read(b"GSUB")?;
+        let gpos = read(b"GPOS")?;
+        Ok(gpui::FontQuery::Supported(
+            gpui_font_inspect::opentype_features(
+                gsub.as_ref().map(|data| data.as_bytes()),
+                gpos.as_ref().map(|data| data.as_bytes()),
+            )?,
+        ))
     }
 
     fn font_metrics(&self, id: FontId) -> FontMetrics {

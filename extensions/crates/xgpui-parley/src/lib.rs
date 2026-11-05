@@ -5,6 +5,9 @@ use anyhow::{Result, ensure};
 use gpui::{FontId, GlyphId, LineLayout, Pixels, ShapedGlyph, ShapedRun, point, px};
 use parley::{Alignment, Layout, PositionedLayoutItem, Run};
 
+mod preview;
+pub use preview::VariationPreview;
+
 mod registry;
 pub use registry::{FaceRegistry, RegisteredFace};
 mod raster;

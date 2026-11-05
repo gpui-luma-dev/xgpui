@@ -13,8 +13,8 @@ impl FontFeatures {
         Self(Arc::new(vec![("calt".into(), 0)]))
     }
 
-    /// Get the tag name list of the font OpenType features
-    /// only enabled or disabled features are returned
+    /// Returns OpenType feature tags and their numeric parameter values.
+    /// Values are preserved, including alternate selectors greater than one.
     pub fn tag_value_list(&self) -> &[(String, u32)] {
         self.0.as_slice()
     }
@@ -151,4 +151,22 @@ impl JsonSchema for FontFeatures {
 
 fn is_valid_feature_tag(tag: &str) -> bool {
     tag.len() == 4 && tag.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numeric_feature_values_survive_round_trip() {
+        let features: FontFeatures =
+            serde_json::from_str(r#"{"cv02":2,"liga":false,"ss01":true}"#).unwrap();
+        assert_eq!(
+            features.tag_value_list(),
+            &[("cv02".into(), 2), ("liga".into(), 0), ("ss01".into(), 1)]
+        );
+        let restored: FontFeatures =
+            serde_json::from_str(&serde_json::to_string(&features).unwrap()).unwrap();
+        assert_eq!(features, restored);
+    }
 }

@@ -27,6 +27,11 @@ pub struct FaceRegistry {
 }
 
 impl FaceRegistry {
+    #[cfg(test)]
+    pub(crate) fn faces_count_for_tests(&self) -> usize {
+        self.faces.len()
+    }
+
     /// Retain the actual resolved face and its normalized variation location.
     /// Faux bold/italic are rejected until metrics and rasterization can apply
     /// identical synthesis. Variable-font weight/slant coordinates are supported.

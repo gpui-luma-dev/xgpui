@@ -263,6 +263,10 @@ impl PlatformTextSystem for WebTextSystem {
     }
 
     fn font_id(&self, font: &Font) -> Result<FontId> {
+        anyhow::ensure!(
+            font.variations.settings().is_empty(),
+            "explicit font variations are unsupported by this backend"
+        );
         let font_id = self.native.font_id(font)?;
         ensure!(
             font_id.0 & CANVAS_FONT_BIT == 0,

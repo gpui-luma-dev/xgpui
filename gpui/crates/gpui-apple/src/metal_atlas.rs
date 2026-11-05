@@ -489,3 +489,155 @@ mod tests {
         atlas.remove(&key);
     }
 }
+
+#[cfg(all(test, feature = "font-kit"))]
+mod variation_diagnostics {
+    use super::*;
+    use gpui::{FontId, FontRun, PlatformTextSystem, RenderGlyphParams, font, point, px};
+    use objc2_metal::MTLResource;
+    use std::{collections::HashSet, time::Instant};
+
+    #[test]
+    #[ignore = "requires a Metal device; explicit atlas allocation diagnostic"]
+    fn static_axis_sweep_measures_live_tiles_and_allocated_pages() -> Result<()> {
+        let device = objc2_metal::MTLCreateSystemDefaultDevice()
+            .context("Metal device required for atlas diagnostic")?;
+        for quantized in [false, true] {
+            let atlas = MetalAtlas::new(device.clone(), true);
+            let fonts = crate::AppleTextSystem::new();
+            fonts.add_fonts(vec![Cow::Borrowed(include_bytes!(
+                "../../../../extensions/crates/xgpui-parley/tests/fonts/RobotoFlex.ttf"
+            ))])?;
+            let mut keys = HashSet::new();
+            let mut requested = HashSet::<FontId>::new();
+            let mut previous = None;
+            let now = Instant::now();
+            let snapshot = |atlas: &MetalAtlas| {
+                let state = atlas.0.lock();
+                state
+                    .backend
+                    .monochrome_textures
+                    .textures
+                    .iter()
+                    .flatten()
+                    .fold((0usize, 0usize, 0usize), |(pages, bytes, tiles), page| {
+                        (
+                            pages + 1,
+                            bytes + page.metal_texture.allocatedSize(),
+                            tiles + page.live_atlas_keys as usize,
+                        )
+                    })
+            };
+            for cycle in 0..3 {
+                for w in 0..8 {
+                    for d in 0..8 {
+                        for s in 0..4 {
+                            let values = [
+                                ("wght", 100.0 + w as f32 * 800.0 / 7.0, 100.0, 1000.0, 400.0),
+                                ("wdth", 50.0 + d as f32 * 100.0 / 7.0, 25.0, 151.0, 50.0),
+                                ("slnt", -10.0 + s as f32 * 10.0 / 3.0, -10.0, 0.0, 5.0),
+                            ];
+                            let mut descriptor = font("Roboto Flex");
+                            descriptor.variations = gpui::FontVariations::new(
+                                values
+                                    .into_iter()
+                                    .map(|(tag, value, min, max, step)| {
+                                        Ok((
+                                            tag.parse()?,
+                                            if quantized {
+                                                (min + ((value - min) / step).round() * step)
+                                                    .clamp(min, max)
+                                            } else {
+                                                value
+                                            },
+                                        ))
+                                    })
+                                    .collect::<Result<Vec<_>>>()?,
+                            )?;
+                            let id = fonts.font_id(&descriptor)?;
+                            requested.insert(id);
+                            let text = "Hamburgefonts 012345";
+                            let line = fonts.layout_line(
+                                text,
+                                px(28.0),
+                                &[FontRun {
+                                    len: text.len(),
+                                    font_id: id,
+                                }],
+                            );
+                            for run in line.runs {
+                                for glyph in run.glyphs {
+                                    let params = RenderGlyphParams {
+                                        font_id: run.font_id,
+                                        glyph_id: glyph.id,
+                                        font_size: px(28.0),
+                                        scale_factor: 1.0,
+                                        subpixel_variant: point(0, 0),
+                                        is_emoji: false,
+                                        subpixel_rendering: false,
+                                        dilation: 0,
+                                    };
+                                    let key = AtlasKey::Glyph(params.clone());
+                                    if keys.insert(key.clone()) {
+                                        atlas.get_or_insert_with(key, &mut || {
+                                            let bounds = fonts.glyph_raster_bounds(&params)?;
+                                            if bounds.size.width.0 <= 0 || bounds.size.height.0 <= 0
+                                            {
+                                                return Ok(None);
+                                            }
+                                            let (size, bytes) =
+                                                fonts.rasterize_glyph(&params, bounds)?;
+                                            Ok(Some((size, Cow::Owned(bytes))))
+                                        })?;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                let current = snapshot(&atlas);
+                println!(
+                    "Metal quantized={quantized} cycle={cycle} requested={} pages={} allocated_bytes={} live_tiles={} elapsed_ms={:.2}",
+                    requested.len(),
+                    current.0,
+                    current.1,
+                    current.2,
+                    now.elapsed().as_secs_f64() * 1000.0
+                );
+                if let Some(previous) = previous {
+                    assert_eq!(current, previous);
+                }
+                previous = Some(current);
+            }
+            anyhow::ensure!(
+                keys.len() > requested.len(),
+                "variation instances unexpectedly collapsed during shaping"
+            );
+            // No scenes or GPU commands reference these tiles. Keep one texture
+            // handle to demonstrate why allocator removal is not GPU reclamation.
+            let retained = {
+                let state = atlas.0.lock();
+                state
+                    .backend
+                    .monochrome_textures
+                    .textures
+                    .iter()
+                    .flatten()
+                    .next()
+                    .context("expected atlas page")?
+                    .metal_texture
+                    .clone()
+            };
+            for key in keys {
+                atlas.remove(&key);
+            }
+            assert_eq!(snapshot(&atlas), (0, 0, 0));
+            println!(
+                "Metal after removal: active_pages=0 active_tiles=0 retained_texture_bytes={}",
+                retained.allocatedSize()
+            );
+            drop(retained);
+        }
+        Ok(())
+    }
+}

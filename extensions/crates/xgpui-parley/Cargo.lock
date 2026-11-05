@@ -333,8 +333,7 @@ dependencies = [
 [[package]]
 name = "async-process"
 version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc50921ec0055cdd8a16de48773bfeec5c972598674347252c0399676be7da75"
+source = "git+https://github.com/zed-industries/async-process.git?rev=0b6d6713570af61806e1e5cb40e0f757cb93fd9d#0b6d6713570af61806e1e5cb40e0f757cb93fd9d"
 dependencies = [
  "async-channel",
  "async-io",
@@ -6404,7 +6403,16 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.21",
  "xgpui",
+ "xgpui-font-inspect",
  "zed-font-kit",
+]
+
+[[package]]
+name = "xgpui-font-inspect"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "xgpui",
 ]
 
 [[package]]
@@ -6526,6 +6534,7 @@ dependencies = [
  "skrifa 0.44.0",
  "tiny-skia 0.12.0",
  "xgpui",
+ "xgpui-font-inspect",
  "xgpui-platform",
 ]
 
@@ -6622,6 +6631,7 @@ dependencies = [
  "windows-numerics 0.3.1",
  "windows-registry",
  "xgpui",
+ "xgpui-font-inspect",
 ]
 
 [[package]]

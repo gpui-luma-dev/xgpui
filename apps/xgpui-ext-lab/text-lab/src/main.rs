@@ -1,4 +1,5 @@
 //! Native and Parley comparison through the same GPUI application/rendering path.
+mod axes;
 #[cfg(test)]
 mod editing_tests;
 mod paragraph;
@@ -56,6 +57,8 @@ struct Lab {
     samples: Vec<samples::Sample>,
     timings: Vec<timings::Timing>,
     setup_ms: f64,
+    inspection: String,
+    live_axes: Option<Entity<axes::AxisLab>>,
     input: Entity<input::TextInput>,
     scroll: Option<Entity<workload::ScrollLab>>,
     paragraph: Option<Entity<paragraph::ParagraphLab>>,
@@ -91,10 +94,12 @@ impl Render for Lab {
                     .text_size(px(24.0))
                     .child(format!("{} text", self.name)),
             )
+            .children(self.live_axes.iter().cloned())
             .child(format!(
                 "Setup {:.2} ms | CPU timings in us, 28px",
                 self.setup_ms
             ))
+            .child(self.inspection.clone())
             .child("Cold (first per sample) / warm median. Shared state across rows.")
             .child("Warm layout = GPUI cache hit; raster = direct mask rebuild.")
             .child("Raster diagnostic scale is printed in the terminal. No GPU timing.")
@@ -174,7 +179,7 @@ fn main() -> Result<()> {
         Backend::Native => platform.text_system(),
         Backend::Parley => {
             let mut fonts = parley::FontContext::new();
-            for data in [samples::INTER, samples::PLEX] {
+            for data in [samples::INTER, samples::PLEX, samples::FLEX] {
                 fonts
                     .collection
                     .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
@@ -195,6 +200,7 @@ fn main() -> Result<()> {
         app.text_system().add_fonts(vec![
             Cow::Borrowed(samples::INTER),
             Cow::Borrowed(samples::PLEX),
+            Cow::Borrowed(samples::FLEX),
         ])?;
     }
     let setup_ms = start.elapsed().as_secs_f64() * 1000.0;
@@ -209,7 +215,42 @@ fn main() -> Result<()> {
     } else {
         None
     };
-    let samples = samples::samples()?;
+    let mut samples = samples::samples()?;
+    let capabilities = backend.font_capabilities();
+    let inspection = if capabilities.static_variations {
+        samples.extend(samples::axis_samples()?);
+        let id = backend.font_id(&font("Roboto Flex"))?;
+        let axes = match backend.font_axes(id)? {
+            FontQuery::Supported(axes) => axes
+                .into_iter()
+                .map(|axis| {
+                    format!(
+                        "{} [{}, {}] default {}",
+                        axis.tag, axis.min_value, axis.max_value, axis.default_value
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; "),
+            FontQuery::Unsupported => "unsupported".into(),
+        };
+        let features = match backend.opentype_features(id)? {
+            FontQuery::Supported(features) => features
+                .into_iter()
+                .map(|feature| feature.tag.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            FontQuery::Unsupported => "unsupported".into(),
+        };
+        format!("Roboto Flex axes: {axes} | GSUB/GPOS tags (applicability varies): {features}")
+    } else {
+        "Explicit axes unavailable on this backend; static axis samples disabled.".into()
+    };
+    let live_axes = if options.workload == Workload::Compare && !options.timings_only {
+        axes::Controls::for_backend(&*backend)?
+    } else {
+        None
+    };
+    println!("{inspection}");
     let name = format!("{:?}", options.backend);
     let lines = if options.workload == Workload::Scroll {
         workload::corpus(options.lines)
@@ -313,6 +354,8 @@ fn main() -> Result<()> {
                     }
                     None
                 };
+                let live_axes = live_axes
+                    .map(|controls| cx.new(|cx| axes::AxisLab::new(name.clone(), controls, cx)));
                 cx.new(|_| Lab {
                     input,
                     scroll,
@@ -321,6 +364,8 @@ fn main() -> Result<()> {
                     samples,
                     timings,
                     setup_ms,
+                    inspection,
+                    live_axes,
                 })
             },
         )

@@ -19,6 +19,7 @@ system-fonts = ["parley/system"]
 native-test = ["dep:gpui-platform"]
 
 [dependencies]
+gpui_font_inspect = { package = "xgpui-font-inspect", path = "../xgpui-font-inspect", version = "=0.1.0" }
 anyhow = "1"
 gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=2.0.1" }
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }

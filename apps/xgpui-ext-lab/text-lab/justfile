@@ -1,7 +1,7 @@
 set working-directory := "../../.."
 set positional-arguments
 manifest := "apps/xgpui-ext-lab/Cargo.toml"
-options := "--locked --offline --config .cargo/validation.toml --manifest-path " + manifest + " --bin text-lab" + " --target-dir target"
+options := "--locked --offline --config .cargo/validation.toml --manifest-path " + manifest + " --bin text-lab" + " --target-dir target --features runtime-shaders"
 default:
     @just --justfile '{{justfile()}}' --list
 ui *args:
@@ -16,7 +16,18 @@ lint:
     cargo clippy {{options}} --all-targets -- -D warnings
 fmt-check:
     cargo fmt --manifest-path {{manifest}} --check -- --config skip_children=true
-    rustfmt --edition 2024 --check --config skip_children=true apps/xgpui-ext-lab/text-lab/src/*.rs apps/xgpui-ext-lab/text-lab/src/paragraph/*.rs gpui/crates/gpui/examples/input.rs
+    rustfmt --edition 2024 --check --config skip_children=true apps/xgpui-ext-lab/text-lab/src/*.rs apps/xgpui-ext-lab/text-lab/src/paragraph/*.rs apps/xgpui-ext-lab/text-lab/src/axes/*.rs gpui/crates/gpui/examples/input.rs
 
 paragraph *args:
     cargo run --release {{options}} -- --workload paragraph "$@"
+
+# Live weight, width, slant and optical-size controls in the comparison windows.
+alias axes := ui
+
+# Pointer, keyboard, preset and preview-budget tests on native and Parley.
+axes-test:
+    cargo test {{options}} axes::tests
+
+# Shared backend table readers, kept outside the core public API.
+font-inspect-test:
+    cargo test --offline --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-font-inspect/Cargo.toml

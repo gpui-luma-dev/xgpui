@@ -22,12 +22,13 @@ default = []
 bench-support = ["gpui/bench-support"]
 test-support = ["gpui/test-support"]
 runtime_shaders = []
-font-kit = ["dep:font-kit", "dep:core-text", "dep:objc2-core-text", "dep:pathfinder_geometry"]
+font-kit = ["dep:gpui_font_inspect", "dep:font-kit", "dep:core-text", "dep:objc2-core-text", "dep:pathfinder_geometry"]
 
 [dependencies]
 gpui = { package = "xgpui", version = "=2.0.1" }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+gpui_font_inspect = { package = "xgpui-font-inspect", path = "../../../extensions/crates/xgpui-font-inspect", version = "=0.1.0", optional = true }
 anyhow = { version = "1.0.86" }
 async-task = { version = "4.7" }
 block2 = { version = "0.6" }

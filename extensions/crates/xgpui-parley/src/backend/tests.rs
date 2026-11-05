@@ -578,3 +578,290 @@ fn overflowing_line_geometry_is_rejected_and_fallback_stays_finite() -> Result<(
     assert!(backend.try_layout_line("normal", px(16.), &[]).is_ok());
     Ok(())
 }
+
+#[test]
+fn feature_introspection_uses_resolved_fixture_and_retains_numeric_controls() -> Result<()> {
+    let backend = Arc::new(ParleyTextSystem::new(fonts(), "IBM Plex Sans")?);
+    let text = TextSystem::new(backend.clone());
+    let mut descriptor = font("Inter Variable");
+    descriptor.features = gpui::FontFeatures(Arc::new(vec![("cv02".into(), 2)]));
+    let id = backend.font_id(&descriptor)?;
+    let gpui::FontQuery::Supported(features) = text.opentype_features(id)? else {
+        panic!("Parley fixture queries must be supported")
+    };
+    assert!(
+        features
+            .iter()
+            .any(|f| f.tag.to_string() == "cv02" && f.substitution)
+    );
+    assert!(
+        features
+            .iter()
+            .any(|f| f.tag.to_string() == "kern" && f.positioning)
+    );
+    assert!(features.windows(2).all(|f| f[0].tag < f[1].tag));
+    assert_eq!(
+        backend.state.lock().unwrap().bindings[&id]
+            .features
+            .tag_value_list(),
+        &[("cv02".into(), 2)]
+    );
+    let layout = backend.try_layout_line(
+        "a",
+        px(16.0),
+        &[FontRun {
+            len: 1,
+            font_id: id,
+        }],
+    )?;
+    assert!(!layout.runs[0].glyphs.is_empty());
+    assert!(text.opentype_features(FontId(usize::MAX)).is_err());
+    Ok(())
+}
+
+pub(super) fn axes(settings: &[(&str, f32)]) -> gpui::FontVariations {
+    gpui::FontVariations::new(
+        settings
+            .iter()
+            .map(|(tag, value)| (tag.parse().unwrap(), *value)),
+    )
+    .unwrap()
+}
+
+#[test]
+fn static_axes_keep_precise_instances_metrics_and_rasterization_consistent() -> Result<()> {
+    let backend = ParleyTextSystem::new(fonts(), "IBM Plex Sans")?;
+    assert!(backend.font_capabilities().static_variations);
+    let mut descriptor = font("Roboto Flex");
+    let plain = backend.font_id(&descriptor)?;
+    let gpui::FontQuery::Supported(available) = backend.font_axes(plain)? else {
+        panic!("axes unsupported")
+    };
+    assert!(
+        available
+            .iter()
+            .any(|axis| axis.tag.to_string() == "slnt" && axis.min_value < 0.0)
+    );
+    descriptor.weight = gpui::FontWeight::BOLD;
+    descriptor.variations = axes(&[
+        ("wght", 300.25),
+        ("wdth", 75.0),
+        ("slnt", -10.0),
+        ("opsz", 14.0),
+    ]);
+    let narrow = backend.font_id(&descriptor)?;
+    let canonical = descriptor.clone();
+    descriptor.variations = axes(&[
+        ("opsz", 14.0),
+        ("slnt", -10.0),
+        ("wdth", 75.0),
+        ("wght", 300.25),
+    ]);
+    assert_eq!(backend.font_id(&descriptor)?, narrow);
+    let face = backend.face(narrow)?;
+    // Explicit wght wins over FontWeight::BOLD; slant remains negative.
+    let font = skrifa::FontRef::from_index(face.data().data.data(), face.data().index)?;
+    use skrifa::MetadataProvider;
+    let expected = font.axes().location([
+        ("wght", 300.25),
+        ("wdth", 75.0),
+        ("slnt", -10.0),
+        ("opsz", 14.0),
+    ]);
+    let coords = expected.coords();
+    assert_eq!(
+        face.normalized_coords(),
+        &coords[..face.normalized_coords().len()]
+    );
+    let h = backend.glyph_for_char(narrow, 'H').unwrap();
+    let render = |id| -> Result<_> {
+        let params = RenderGlyphParams {
+            font_id: id,
+            glyph_id: h,
+            font_size: px(32.0),
+            scale_factor: 1.0,
+            subpixel_variant: point(0, 0),
+            is_emoji: false,
+            subpixel_rendering: false,
+            dilation: 0,
+        };
+        let bounds = backend.glyph_raster_bounds(&params)?;
+        Ok((bounds, backend.rasterize_glyph(&params, bounds)?.1))
+    };
+    let before = render(narrow)?;
+    descriptor.variations = axes(&[
+        ("wght", 900.0),
+        ("wdth", 150.0),
+        ("slnt", 0.0),
+        ("opsz", 14.0),
+    ]);
+    let wide = backend.font_id(&descriptor)?;
+    assert_ne!(wide, narrow);
+    assert_ne!(
+        backend.advance(narrow, h)?.width,
+        backend.advance(wide, h)?.width
+    );
+    assert_ne!(before, render(wide)?);
+    assert_eq!(
+        before,
+        render(narrow)?,
+        "another instance cannot change retained raster output"
+    );
+    let line = backend.try_layout_line(
+        "H",
+        px(32.0),
+        &[FontRun {
+            len: 1,
+            font_id: narrow,
+        }],
+    )?;
+    let advance = backend.advance(line.runs[0].font_id, h)?.width * 32.0
+        / backend.font_metrics(line.runs[0].font_id).units_per_em as f32;
+    assert!((f32::from(line.width) - advance).abs() < 0.02);
+    assert_eq!(backend.font_id(&canonical)?, narrow);
+    descriptor.variations = axes(&[("wght", 5000.0)]);
+    let clamped = backend.font_id(&descriptor)?;
+    descriptor.variations = axes(&[("wght", 1000.0)]);
+    let maximum = backend.font_id(&descriptor)?;
+    assert_eq!(
+        backend.face(clamped)?.normalized_coords(),
+        backend.face(maximum)?.normalized_coords()
+    );
+    assert!(backend.font_axes(FontId(usize::MAX)).is_err());
+    Ok(())
+}
+
+#[test]
+fn unsupported_primary_axes_are_preserved_for_variable_fallback() -> Result<()> {
+    let backend = ParleyTextSystem::new(fonts(), "IBM Plex Sans")?;
+    let mut descriptor = font("IBM Plex Sans");
+    descriptor.fallbacks = Some(gpui::FontFallbacks::from_fonts(vec!["Roboto Flex".into()]));
+    descriptor.variations = axes(&[("wght", 800.0), ("slnt", -10.0)]);
+    let id = backend.font_id(&descriptor)?;
+    // Find a fixture character only the fallback can render.
+    let primary = backend.face(id)?;
+    let flex = backend.font_id(&font("Roboto Flex"))?;
+    let fallback = backend.face(flex)?;
+    let ch = (0x20..0x3000)
+        .filter_map(char::from_u32)
+        .find(|&ch| primary.glyph_for_char(ch).is_none() && fallback.glyph_for_char(ch).is_some())
+        .context("missing fallback-only fixture character")?;
+    let text = ch.to_string();
+    let line = backend.try_layout_line(
+        &text,
+        px(24.0),
+        &[FontRun {
+            len: text.len(),
+            font_id: id,
+        }],
+    )?;
+    let resolved = backend.face(line.runs[0].font_id)?;
+    assert!(
+        !resolved.normalized_coords().is_empty(),
+        "fallback must receive author axes"
+    );
+    assert_ne!(resolved.data().data.id(), primary.data().data.id());
+    Ok(())
+}
+
+#[test]
+#[ignore = "CPU baseline diagnostic; run explicitly with --nocapture"]
+fn multi_axis_sweep_baseline() -> Result<()> {
+    use std::{collections::HashSet, time::Instant};
+    for quantized in [false, true] {
+        let backend = ParleyTextSystem::new(fonts(), "IBM Plex Sans")?;
+        let base = font("Roboto Flex");
+        let id = backend.font_id(&base)?;
+        let gpui::FontQuery::Supported(available) = backend.font_axes(id)? else {
+            unreachable!()
+        };
+        let policies = available.into_iter().filter_map(|axis| {
+            let interval = match axis.tag.to_string().as_str() {
+                "wght" => 400.0,
+                "wdth" => 50.0,
+                "slnt" => 5.0,
+                _ => return None,
+            };
+            Some((axis, interval))
+        });
+        let mut preview = crate::VariationPreview::new(base.clone(), policies, 64)?;
+        let mut glyph_keys = HashSet::new();
+        let mut mask_bytes = 0;
+        let mut previous = None;
+        let now = Instant::now();
+        for cycle in 0..3 {
+            for w in 0..8 {
+                for d in 0..8 {
+                    for s in 0..4 {
+                        let author = axes(&[
+                            ("wght", 100.0 + w as f32 * 800.0 / 7.0),
+                            ("wdth", 50.0 + d as f32 * 100.0 / 7.0),
+                            ("slnt", -10.0 + s as f32 * 10.0 / 3.0),
+                        ]);
+                        let descriptor = if quantized {
+                            preview.font(&author)?
+                        } else {
+                            let mut f = base.clone();
+                            f.variations = author;
+                            f
+                        };
+                        let id = backend.font_id(&descriptor)?;
+                        let text = "Hamburgefonts 012345";
+                        let line = backend.try_layout_line(
+                            text,
+                            px(28.0),
+                            &[FontRun {
+                                len: text.len(),
+                                font_id: id,
+                            }],
+                        )?;
+                        for run in line.runs {
+                            for glyph in run.glyphs {
+                                let params = RenderGlyphParams {
+                                    font_id: run.font_id,
+                                    glyph_id: glyph.id,
+                                    font_size: px(28.0),
+                                    scale_factor: 1.0,
+                                    subpixel_variant: point(0, 0),
+                                    is_emoji: false,
+                                    subpixel_rendering: false,
+                                    dilation: 0,
+                                };
+                                if glyph_keys.insert(params.clone()) {
+                                    let bounds = backend.glyph_raster_bounds(&params)?;
+                                    if bounds.size.width.0 > 0 && bounds.size.height.0 > 0 {
+                                        mask_bytes +=
+                                            backend.rasterize_glyph(&params, bounds)?.1.len();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            let state = backend.state.lock().unwrap();
+            let snapshot = (
+                state.descriptors.len(),
+                backend.faces.read().unwrap().faces_count_for_tests(),
+                glyph_keys.len(),
+                mask_bytes,
+            );
+            println!(
+                "quantized={quantized} cycle={cycle} requested={} registered={} raster_keys={} mask_bytes={} elapsed_ms={:.2}",
+                snapshot.0,
+                snapshot.1,
+                snapshot.2,
+                snapshot.3,
+                now.elapsed().as_secs_f64() * 1000.0
+            );
+            if let Some(previous) = previous {
+                assert_eq!(
+                    snapshot, previous,
+                    "identical sweeps must stop growing after warmup"
+                );
+            }
+            previous = Some(snapshot);
+        }
+    }
+    Ok(())
+}

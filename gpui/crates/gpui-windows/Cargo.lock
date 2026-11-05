@@ -3844,6 +3844,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "xgpui-font-inspect"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "xgpui",
+]
+
+[[package]]
 name = "xgpui-macros"
 version = "1.0.1"
 dependencies = [
@@ -3879,6 +3887,7 @@ dependencies = [
  "windows-numerics 0.3.1",
  "windows-registry",
  "xgpui",
+ "xgpui-font-inspect",
  "zed-scap",
 ]
 
@@ -4064,6 +4073,11 @@ checksum = "27bc9d5b815bc103f142aa054f561d9187d191692ec7c2d1e2b4737f8dbd7296"
 dependencies = [
  "zune-core",
 ]
+
+[[patch.unused]]
+name = "async-process"
+version = "2.5.0"
+source = "git+https://github.com/zed-industries/async-process.git?rev=0b6d6713570af61806e1e5cb40e0f757cb93fd9d#0b6d6713570af61806e1e5cb40e0f757cb93fd9d"
 
 [[patch.unused]]
 name = "xgpui-apple"

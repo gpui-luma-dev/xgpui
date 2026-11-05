@@ -7,9 +7,9 @@ use std::{
 use crate::{
     AbsoluteLength, App, Background, BackgroundTag, BorderStyle, Bounds, ContentMask, Corners,
     CornersRefinement, CursorStyle, DefiniteLength, DevicePixels, Edges, EdgesRefinement, Font,
-    FontFallbacks, FontFeatures, FontStyle, FontWeight, GridLocation, Hsla, Length, Pixels, Point,
-    PointRefinement, Rgba, SharedString, Size, SizeRefinement, Styled, TextRun, Window, black, phi,
-    point, px, quad, rems, size,
+    FontFallbacks, FontFeatures, FontStyle, FontVariations, FontWeight, GridLocation, Hsla, Length,
+    Pixels, Point, PointRefinement, Rgba, SharedString, Size, SizeRefinement, Styled, TextRun,
+    Window, black, phi, point, px, quad, rems, size,
 };
 use collections::HashSet;
 use refineable::Refineable;
@@ -445,6 +445,9 @@ pub struct TextStyle {
     /// The font features to use
     pub font_features: FontFeatures,
 
+    /// Explicit variable-font coordinates inherited by child elements.
+    pub font_variations: FontVariations,
+
     /// The fallback fonts to use
     pub font_fallbacks: Option<FontFallbacks>,
 
@@ -489,6 +492,7 @@ impl Default for TextStyle {
             // todo(linux) make this configurable or choose better default
             font_family: ".SystemUIFont".into(),
             font_features: FontFeatures::default(),
+            font_variations: FontVariations::default(),
             font_fallbacks: None,
             font_size: rems(1.).into(),
             line_height: phi(),
@@ -544,6 +548,7 @@ impl TextStyle {
         Font {
             family: self.font_family.clone(),
             features: self.font_features.clone(),
+            variations: self.font_variations.clone(),
             fallbacks: self.font_fallbacks.clone(),
             weight: self.font_weight,
             style: self.font_style,
@@ -562,6 +567,7 @@ impl TextStyle {
             font: Font {
                 family: self.font_family.clone(),
                 features: self.font_features.clone(),
+                variations: self.font_variations.clone(),
                 fallbacks: self.font_fallbacks.clone(),
                 weight: self.font_weight,
                 style: self.font_style,
@@ -1335,6 +1341,25 @@ mod tests {
     use super::*;
 
     use util_macros::perf;
+
+    #[test]
+    fn explicit_axes_survive_text_style_runs_and_refinement_serialization() {
+        let variations = crate::FontVariations::new([("slnt".parse().unwrap(), -9.125)]).unwrap();
+        let style = TextStyle {
+            font_variations: variations.clone(),
+            ..Default::default()
+        };
+        assert_eq!(style.font().variations, variations);
+        assert_eq!(style.to_run(3).font.variations, variations);
+        let refinement = TextStyleRefinement {
+            font_variations: Some(variations.clone()),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&refinement).unwrap();
+        let restored: TextStyleRefinement = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.font_variations, Some(variations));
+        assert!(TextStyle::default().font_variations.settings().is_empty());
+    }
 
     // Independent upstream-style fix: hidden-axis clipping must leave the visible
     // axis untouched, including native opaque versus transparent border semantics.

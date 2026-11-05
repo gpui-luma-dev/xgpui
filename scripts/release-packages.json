@@ -16,7 +16,8 @@
     "xgpui-shader": "xgpui-shader",
     "xgpui-svg": "xgpui-svg",
     "xgpui-canvas": "xgpui-canvas",
-    "gpui-ios": "xgpui-ios"
+    "gpui-ios": "xgpui-ios",
+    "xgpui-font-inspect": "xgpui-font-inspect"
   },
   "version": "1.0.0",
   "versions": {
@@ -36,6 +37,7 @@
     "xgpui-windows": "2.0.1",
     "xgpui-canvas": "0.3.1",
     "xgpui-ios": "1.26.3",
-    "xgpui-macros": "1.0.1"
+    "xgpui-macros": "1.0.1",
+    "xgpui-font-inspect": "0.1.0"
   }
 }

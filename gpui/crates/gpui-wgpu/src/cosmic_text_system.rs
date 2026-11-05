@@ -188,6 +188,10 @@ impl PlatformTextSystem for CosmicTextSystem {
     }
 
     fn font_id(&self, font: &Font) -> Result<FontId> {
+        anyhow::ensure!(
+            font.variations.settings().is_empty(),
+            "explicit font variations are unsupported by this backend"
+        );
         let mut state = self.0.write();
         let key = FontKey::new(
             font.family.clone(),

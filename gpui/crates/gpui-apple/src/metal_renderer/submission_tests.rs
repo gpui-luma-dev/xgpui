@@ -1,9 +1,7 @@
 use super::*;
 use crate::custom_draw::{MetalCustomContext, MetalCustomOutput};
-use crate::metal;
-use crate::metal::*;
 use gpui::{CustomContent, CustomDraw};
-use objc2::{rc::Retained, runtime::ProtocolObject};
+use objc2::runtime::ProtocolObject;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Debug)]
@@ -64,7 +62,7 @@ fn submission_renderer_reuses_pending_cached_output_without_cpu_wait() {
             .commandBuffer()
             .expect("Metal command buffer allocation failed")
             .to_owned();
-        unsafe { command.encodeWaitForEvent_value(ProtocolObject::from_ref(&*event), 1) };
+        command.encodeWaitForEvent_value(ProtocolObject::from_ref(&*event), 1);
         let pass = RenderPassDescriptor::new();
         let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
         attachment.setTexture(Some(&texture));
