@@ -160,7 +160,7 @@ Windows fixture tests, visual checks, and headless comparison commands.
 
 ```sh
 just text --backend both
-just text-test axes::tests -- --nocapture
+just lab-test axes::tests -- --nocapture
 ```
 
 Drag any slider or focus it and use arrows (Shift for larger steps), Home, or
@@ -176,6 +176,6 @@ previously visited settings, including Default, still work. Restart the lab for
 a fresh session. This is a descriptor admission limit, not a global CPU/GPU
 memory guarantee. Timings-only runs do not construct the live inspector.
 
-`just text-test` runs the text-lab tests with backtraces enabled. The filtered
-command above runs the pointer/keyboard/preset/preview-limit subset against the
-real backends. `just lab-test` also enables backtraces across the lab suite.
+`just lab-test` runs the lab suite with backtraces enabled. The filtered command
+above runs the pointer/keyboard/preset/preview-limit subset against the real
+backends.

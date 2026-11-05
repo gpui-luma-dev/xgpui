@@ -55,7 +55,6 @@ alias paints := lab-paint
 alias gamut := lab-gamut
 alias color := lab-color
 alias text := lab-text
-alias text-test := lab-text-test
 alias svg := lab-svg
 # Parley shares the text comparison lab; select --backend parley for Parley only.
 alias lab-parley := lab-text
@@ -133,7 +132,3 @@ lab-build *args:
 # Run unit and compatibility tests; native window tests remain opt-in.
 lab-test *args:
     RUST_BACKTRACE=1 cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bins --test compatibility --target-dir target "$@"
-
-# Text-lab interaction tests with backtraces, including native and Parley axes.
-lab-text-test *args:
-    RUST_BACKTRACE=1 cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin text-lab --features runtime-shaders --target-dir target "$@"
