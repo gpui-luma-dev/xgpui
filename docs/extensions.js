@@ -91,7 +91,7 @@ function extensionPage(route) {
       : '<p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p>';
   if (route !== 'extensions') {
     const doc = data.extension_documents[route];
-    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'canvas' ? browserDemoLinks('canvas') + browserDemoLinks('mandelbrot') : route === 'typography' ? browserDemoLinks('typography') : route === 'brushes' ? brushDemoLinks() : route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
+    return '<p><a href="#extensions">← Extensions to GPUI</a></p>' + banner + (route === 'font-controls' ? browserDemoLinks('font-controls') : route === 'canvas' ? browserDemoLinks('canvas') + browserDemoLinks('mandelbrot') : route === 'typography' ? browserDemoLinks('typography') : route === 'brushes' ? brushDemoLinks() : route === 'color-math' ? colorDemoLinks() : route === 'svg-rendering' ? browserDemoLinks('svg') : route === 'instanced-wgsl-v2' ? instancedDemoLinks() : '') + '<article class="extension-document">' + doc.html + (route === 'gpui-public-api' ? publicApiSourceLinks() : '') + '</article><p class="evidence">Source: <code>' + escapeHtml(doc.source) + '</code></p>';
   }
   return header('Downstream / opt-in', 'Extensions to GPUI', 'Independent paint, presentation, text and SVG extensions.') + banner +
     '<p><a href="examples/extensions/">Browser extension demos →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p>' +
@@ -200,7 +200,8 @@ function gamutCrateGuide() {
 }
 
 function parleyCrateGuide() {
-  return browserDemoLinks('parley') + '<article class="extension-document">' +
+  return '<div class="cards">' + extensionCard('font-controls', 'Variable fonts and OpenType inspection: typed axes, API examples, backend support and preview limits.') + '</div>' +
+    browserDemoLinks('font-controls') + browserDemoLinks('parley') + '<article class="extension-document">' +
     data.extension_documents['parley-text'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
 }
 
