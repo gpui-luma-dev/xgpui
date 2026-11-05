@@ -58,6 +58,72 @@ signed/fractional axes, clamping, fallback and instance isolation share core's
 `font_capabilities` are available through GPUI's text system. Parley supplies raw
 resolved-face tables through the backend hook; the parsers remain private in core.
 
+### Inspect axes and OpenType features
+
+After registering the font with the selected backend, query it through the
+window's text system:
+
+```rust
+use gpui::{FontQuery, font};
+
+let text_system = window.text_system();
+let capabilities = text_system.font_capabilities();
+let font_id = text_system.resolve_font(&font("Roboto Flex"));
+
+if capabilities.axis_introspection {
+    match text_system.font_axes(font_id)? {
+        FontQuery::Unsupported => { /* Hide the axis inspector. */ }
+        FontQuery::Supported(axes) => {
+            for axis in axes {
+                println!("{}: {} .. {} (default {}, hidden={})",
+                    axis.tag, axis.min_value, axis.max_value,
+                    axis.default_value, axis.hidden);
+            }
+        }
+    }
+}
+
+if capabilities.feature_introspection {
+    match text_system.opentype_features(font_id)? {
+        FontQuery::Unsupported => { /* Hide the feature inspector. */ }
+        FontQuery::Supported(features) => {
+            for feature in features {
+                println!("{}: GSUB={}, GPOS={}",
+                    feature.tag, feature.substitution, feature.positioning);
+            }
+        }
+    }
+}
+```
+
+A successful empty list differs from unsupported inspection; `?` propagates
+read/parsing errors. Results describe the resolved face, including any font
+substitution performed by `resolve_font`. Use IDs from this same text system.
+Feature presence does not guarantee an effect on every script or string.
+
+### Set axes with typed tags
+
+```rust
+use gpui::{FontTag, FontVariations, div, prelude::*};
+
+let axes = FontVariations::new([
+    (FontTag::WEIGHT, 650.0),
+    (FontTag::WIDTH, 85.0),
+    (FontTag::SLANT, -7.5),
+    (FontTag::OPTICAL_SIZE, 14.0),
+])?;
+
+let specimen = div()
+    .font_family("Roboto Flex")
+    .font_variations(axes)
+    .child("Hamburgefonts 012345");
+```
+
+Check `capabilities.static_variations` before offering axis editing. Standard
+tags need no parsing; coordinates remain validated and clamp per resolved face.
+
+### Interactive previews
+
 `VariationPreview` is an optional extension utility for a fixed font descriptor:
 configure axis-specific intervals and a finite capacity, then obtain quantized
 GPUI fonts before resolution. It works with native text backends too. Retain the
