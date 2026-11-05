@@ -1,8 +1,9 @@
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 use anyhow::Result;
 use gpui::*;
 pub fn run() -> Result<()> {
     gpui_platform::application().run(|cx: &mut App| {
-        cx.open_window(
+        cx.open_lab_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                     None,
@@ -12,7 +13,7 @@ pub fn run() -> Result<()> {
                 ..Default::default()
             },
             |window, cx| {
-                window.set_window_title(if cfg!(debug_assertions) {
+                window.set_lab_title(if cfg!(debug_assertions) {
                     "XGPUI Tiled Canvas — DEBUG"
                 } else {
                     "XGPUI Tiled Canvas — RELEASE"

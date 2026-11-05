@@ -1,4 +1,5 @@
 //! Supplied RGBA16F pixels, with explicit mapped preview and native wide output.
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 use anyhow::Result;
 use gpui::{prelude::*, *};
 use xgpui_media::{
@@ -101,6 +102,8 @@ impl Render for FloatLab {
         div().size_full().p_6().flex().flex_col().gap_4().bg(rgb(0x0f172a)).text_color(rgb(0xe2e8f0))
             .child(div().text_xl().child(if cfg!(debug_assertions) { "RGBA16F images · DEBUG" } else { "RGBA16F images · RELEASE" }))
             .child("Generated linear Display P3 pixels · saturated colors / near-black gradient / transparent edges")
+            .when(!accepted, |body| body.child(div().p_3().bg(rgb(0x422006)).text_color(rgb(0xfde68a))
+                .child("Wide-gamut output isn’t available with the current display and graphics setup. Both panels show clipped sRGB previews, not native P3 output. The source pixels and adjustments remain linear Display P3.")))
             .child(format!("Window requested {:?} · effective {:?} · display wide: {:?}",
                 status.requested(),status.effective(),status.display_wide_gamut()))
             .child(div().flex().flex_wrap().gap_2()
@@ -108,13 +111,18 @@ impl Render for FloatLab {
                 .child(button("float-saturation",format!("Saturation ×{:.1}",[1.,0.,1.8][self.saturation])).on_click(cx.listener(|s,_,_,cx|{s.saturation=(s.saturation+1)%3;cx.notify();})))
                 .child(button("float-vignette","Toggle vignette").on_click(cx.listener(|s,_,_,cx|{s.vignette= !s.vignette;cx.notify();})))
                 .child(button("float-opacity","Toggle opacity").on_click(cx.listener(|s,_,_,cx|{s.opacity= !s.opacity;cx.notify();})))
-                .child(button("float-output",if self.wide{"Right: native wide"}else{"Right: sRGB preview"}).on_click(cx.listener(|s,_,_,cx|{s.wide= !s.wide;cx.notify();})))
+                .child(if accepted {
+                    button("float-output",if self.wide{"Right: native wide"}else{"Right: sRGB preview"})
+                        .on_click(cx.listener(|s,_,_,cx|{s.wide= !s.wide;cx.notify();})).into_any_element()
+                } else {
+                    div().px_3().py_2().child("Right: sRGB preview (P3 output unavailable)").into_any_element()
+                })
                 .child(button("float-reset","Reset").on_click(cx.listener(|s,_,_,cx|{s.exposure=0;s.saturation=0;s.vignette=false;s.opacity=false;s.wide=true;cx.notify();}))))
             .child(panels)
             .child(self.image.as_ref().map(|i|format!("1280 × 800 · {:?} · {:?} · preparations {} · {:?}",i.format(),i.source_color(),i.upload_count(),i.upload_status())).unwrap_or_default())
             .child(format!("Staging pool: {:?}",self.loader.staging_pool_stats()))
             .child("Both views share one retained RGBA16F texture. Adjustments run in linear P3; output clips once to the selected gamut.")
-            .child("A screenshot is an sRGB preview, not evidence of the display’s wider gamut. Unsupported native wide presentation is labeled as preview.")
+            .child("A screenshot is an sRGB preview, not evidence of the display’s wider gamut. Panel labels describe the active output, independently of the source color space.")
     }
 }
 pub fn run() -> Result<()> {
@@ -131,7 +139,7 @@ pub fn run() -> Result<()> {
         wide: true,
     };
     gpui_platform::application().run(move |cx: &mut App| {
-        cx.open_window(
+        cx.open_lab_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                     None,
@@ -141,13 +149,13 @@ pub fn run() -> Result<()> {
                 ..Default::default()
             },
             |window, cx| {
-                window.set_window_title(if cfg!(debug_assertions) {
+                window.set_lab_title(if cfg!(debug_assertions) {
                     "XGPUI RGBA16F Lab — DEBUG"
                 } else {
                     "XGPUI RGBA16F Lab — RELEASE"
                 });
-                if let Err(e) = window.set_color_mode(WindowColorMode::WideGamutSdr) {
-                    eprintln!("Wide presentation unavailable: {e:#}");
+                if let Some(notice) = xgpui_ext_lab::negotiate_wide(window) {
+                    eprintln!("{notice}");
                 }
                 cx.new(|_| lab)
             },

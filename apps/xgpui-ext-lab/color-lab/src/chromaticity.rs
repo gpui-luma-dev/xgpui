@@ -189,10 +189,8 @@ impl Lab {
                 s.set_photo();
             }
             s.effects = cfg!(target_os = "macos") && options.effects;
-            match window.set_color_mode(WindowColorMode::WideGamutSdr) {
-                Ok(status) => s.wide = status.effective() == WindowColorMode::WideGamutSdr,
-                Err(e) => s.error = Some(format!("Wide unavailable: {e:#}")),
-            };
+            s.error = xgpui_ext_lab::negotiate_wide(window);
+            s.wide = window.color_status().effective() == WindowColorMode::WideGamutSdr;
         }
         if let Err(error) = metadata::fixtures() {
             s.error = Some(format!("ICC fixtures: {error:#}"));
@@ -323,7 +321,7 @@ impl Lab {
         }
     }
     fn window_mode_controls(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
-        let wide = window.color_status().requested() == WindowColorMode::WideGamutSdr;
+        let wide = window.color_status().effective() == WindowColorMode::WideGamutSdr;
         div()
             .flex()
             .flex_wrap()
@@ -333,10 +331,11 @@ impl Lab {
                 22,
                 cx,
             ))
-            .child(self.button(
-                format!("{} Wide gamut", if wide { "●" } else { "○" }),
-                23,
-                cx,
+            .when(window.color_status().supports_wide_gamut_sdr(), |row| row.child(self.button(
+                format!("{} Wide gamut", if wide { "●" } else { "○" }), 23, cx,
+            )))
+            .when(!window.color_status().supports_wide_gamut_sdr(), |row| row.child(
+                div().px_3().py_2().child("Current setup: standard SDR")
             ))
             .into_any_element()
     }
@@ -393,6 +392,11 @@ impl Lab {
                         }
                     }
                     8 | 22 | 23 => {
+                        if action != 22 && !window.color_status().supports_wide_gamut_sdr() {
+                            s.error = Some("Wide-gamut output isn’t available with the current display and graphics setup. Using standard SDR.".into());
+                            cx.notify();
+                            return;
+                        }
                         let requested = if action == 22
                             || (action == 8
                                 && window.color_status().requested()
@@ -776,7 +780,7 @@ impl Render for Lab {
             .child(div().text_2xl().child("Chromaticity & Color Gamut Lab"))
             .child("Source → transfer decode → explicit storage mapping → FP16 → extended composition → output")
             .child(div().flex().flex_wrap().gap_2().child(self.button(format!("Source: {}",if self.metadata==metadata::Mode::Named {NAMES[self.source]} else {"ICC colorants"}),0,cx)).child(self.button(format!("Patch: {}",if self.rgb==PRESETS[self.preset].1 {PRESETS[self.preset].0} else {"Custom"}),1,cx)).child(self.button(if self.metadata==metadata::Mode::Named {format!("Transfer: {:?}",self.color().transfer)} else {"Transfer: ICC curves".into()},2,cx)).child(self.button(format!("Storage: {}",if self.rec {"Rec.2020"} else {"P3"}),3,cx)).child(self.button(format!("Map: {}",if self.reduce {"reduce chroma"} else {"clip"}),4,cx)).child(self.button(format!("Alpha: {}",self.alpha),5,cx)).child(self.button(if self.uv {"CIE u′v′"} else {"CIE xy"}.into(),6,cx)).child(self.button(format!("Nested captures + blur: {}",self.effects),7,cx)).child(self.window_mode_controls(window,cx)))
-            .child(div().flex().flex_wrap().gap_2().child(self.button(format!("Metadata: {}",self.metadata.label()),16,cx)).child(self.button(format!("Presentation: {}",["off","sRGB preview","native wide"][self.fill_route]),12,cx)).child(self.button(format!("Fill Y: {}",fill::LUMINANCE[self.fill_luminance]),13,cx)).child(self.button(format!("Simulated gamut: {}",NAMES[self.fill_output]),14,cx)).child(self.button(format!("Hatch mapped colors: {}",self.hatch),15,cx)))
+            .child(div().flex().flex_wrap().gap_2().child(self.button(format!("Metadata: {}",self.metadata.label()),16,cx)).child(self.button(format!("Presentation: {}",["off","sRGB preview",if self.wide {"native wide"} else {"sRGB preview (native wide inactive)"}][self.fill_route]),12,cx)).child(self.button(format!("Fill Y: {}",fill::LUMINANCE[self.fill_luminance]),13,cx)).child(self.button(format!("Simulated gamut: {}",NAMES[self.fill_output]),14,cx)).child(self.button(format!("Hatch mapped colors: {}",self.hatch),15,cx)))
             .child(div().text_sm().child(format!("{} • {}. Hatching marks colors outside the selected RGB bounds at fixed relative Y, not measured monitor coverage. Fill Y is before mapping and independent of patch brightness. sRGB preview additionally clips to sRGB.",self.fill_status,if self.fill_route==2 && !self.wide {"native unavailable — showing sRGB preview"} else {"output mapping is explicit"})))
             .child(div().text_sm().child("Wide gamut describes display capability; P3 and Adobe RGB are specific color spaces. Simulated gamut limits the fill; presentation selects sRGB clipping or native wide output. The display profile and panel determine visible colors."))
             .child(div().text_sm().child("Click controls to cycle. RGB steps: 0, 0.0001, 0.001, 0.18, 0.5, 1. Source/Transfer return ICC patches to named metadata. ICC metadata includes synthetic Adobe-primary probes and published Compact v4 sRGB, P3, Adobe-compatible profiles and sampled sRGB2014. Serialized curves and colorants are preserved. Probe presets are intentionally dark; choose Mid gray for visible differences."))

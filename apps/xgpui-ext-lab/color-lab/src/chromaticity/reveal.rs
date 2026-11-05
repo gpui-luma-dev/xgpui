@@ -129,7 +129,7 @@ impl Lab {
         }
         let labels = [
             "sRGB preview",
-            "Display P3 — native wide",
+            if self.wide { "Display P3 — native wide" } else { "Display P3 source — sRGB preview" },
             "Out-of-sRGB mask",
         ];
         let mut body = div().id("gamut-reveal-scroll").size_full().overflow_y_scroll().p_6().bg(rgb(0x858585)).text_color(rgb(0x101010)).flex().flex_col().gap_4()
@@ -143,7 +143,7 @@ impl Lab {
             .child("Choose a thumbnail below. In native P3, look for a ring and X in the red field; in the clipped sRGB preview, the symbol should disappear.")
             .child(format!("Currently showing: {} • effective {:?} • display wide gamut {:?}", labels[self.reveal_selection], window.color_status().effective(), window.color_status().display_wide_gamut()));
         if self.reveal_selection == 1 && !self.wide {
-            body = body.child("Native wide output is unavailable or disabled: showing the sRGB fallback. The symbol is not expected to appear.");
+            body = body.child("Standard SDR output is active. This is an sRGB preview of the P3 source, not native P3 output. The symbol is not expected to appear.");
         }
         if let Some(reveal) = &self.reveal {
             body = body

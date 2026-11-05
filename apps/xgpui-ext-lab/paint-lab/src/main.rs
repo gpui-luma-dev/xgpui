@@ -1,3 +1,4 @@
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 use anyhow::{Result, ensure};
 use clap::{Parser, ValueEnum};
 use gpui::{prelude::*, *};
@@ -923,13 +924,13 @@ fn main() -> Result<()> {
         {
             gpui_platform::application().run(|cx: &mut App| {
                 let bounds = Bounds::centered(None, size(px(1280.), px(780.)), cx);
-                cx.open_window(
+                cx.open_lab_window(
                     WindowOptions {
                         window_bounds: Some(WindowBounds::Windowed(bounds)),
                         ..Default::default()
                     },
                     |window, cx| {
-                        window.set_window_title("Pastel Waves · XGPUI");
+                        window.set_lab_title("Pastel Waves · XGPUI");
                         cx.new(|_| pastel_waves::PastelWaves::default())
                     },
                 )
@@ -943,13 +944,13 @@ fn main() -> Result<()> {
     }
     gpui_platform::application().run(move |cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1500.), px(940.)), cx);
-        cx.open_window(
+        cx.open_lab_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
             |window, cx| {
-                window.set_window_title("XGPUI Paint Lab");
+                window.set_lab_title("XGPUI Paint Lab");
                 cx.new(|_| Lab {
                     mesh: Arc::new(MeshGradient::new(grid(0.).unwrap(), 18).unwrap()),
                     analytic: Arc::new(

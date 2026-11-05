@@ -36,12 +36,18 @@ paths-capture:
 paths-wgpu-capture:
     cargo run {{options}} --features wgpu -- --headless --paths --wgpu --png /tmp/path-effects-wgpu.png
 
-# Open synthetic native video presentation (macOS Metal / Windows D3D11).
+# Open synthetic video surfaces (Metal / D3D11 / Linux Vulkan DMA-BUF).
 video *args:
     cargo run {{options}} -- --video "$@"
 
 video-capture:
     cargo run {{options}} -- --headless --video --png /tmp/video-lab.png
+
+# Linux synthetic video colors, motion, alpha, clipping, cache reuse and lifetimes.
+# Requires a real Vulkan GPU with linear BGRA DMA-BUF export/import.
+[linux]
+video-native-test:
+    WGPU_BACKEND=vulkan WGPU_DEBUG=1 WGPU_VALIDATION=1 cargo test --profile {{profile}} --offline --locked --config .cargo/validation.toml --manifest-path {{manifest}} --target-dir target --features runtime-shaders,portable-shaders,wgpu --bin media-lab video_lab::linux::tests::dma_buf_video_capture_pixels_and_lifetimes -- --ignored --exact --nocapture --test-threads=1
 
 # Execute native Windows surface/import/ownership regressions in release mode.
 [windows]

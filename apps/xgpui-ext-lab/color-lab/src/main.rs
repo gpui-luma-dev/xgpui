@@ -1,5 +1,6 @@
 //! Color swatches and the integrated CIE chromaticity workspace.
 #![recursion_limit = "256"]
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 mod chromaticity;
 mod diagnostics;
 use clap::{Parser, ValueEnum};
@@ -13,11 +14,12 @@ struct ColorLab {
     preset: usize,
     policy: GamutMapping,
     translucent: bool,
-    painter: WidePainter,
+    painter: Option<WidePainter>,
 }
 impl Render for ColorLab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let status = window.color_status();
+        let wide = status.effective() == WindowColorMode::WideGamutSdr && self.painter.is_some();
         let srgb = color_samples::rows(self.preset, self.policy, self.translucent).unwrap();
         let p3 = color_samples::rows_in_space(
             self.preset,
@@ -27,7 +29,7 @@ impl Render for ColorLab {
         )
         .unwrap();
         div().id("native-color").size_full().overflow_y_scroll().p_6().flex().flex_col().gap_4().bg(rgb(0x0f172a)).text_color(rgb(0xe2e8f0))
-            .child(div().text_xl().child("Color swatches · Native P3"))
+            .child(div().text_xl().child("Color swatches · sRGB / optional native P3"))
             .child(format!("Requested: {:?} · Effective: {:?} · Display wide gamut: {:?}", status.requested(), status.effective(), status.display_wide_gamut()))
             .child(div().flex().gap_4()
                 .child(div().id("preset").cursor_pointer().child(format!("Colors: {}", color_samples::PRESETS[self.preset])).on_click(cx.listener(|this,_,_,cx| { this.preset=(this.preset+1)%3; cx.notify(); })))
@@ -38,13 +40,13 @@ impl Render for ColorLab {
                     .child(srgb.label)
                     .child("Mapped sRGB")
                     .child(div().flex().w_full().h(px(46.)).children(srgb.rgba.into_iter().map(|[r,g,b,a]| div().flex_1().h_full().bg(Rgba{r,g,b,a}))))
-                    .child("Native Display P3")
+                    .when(wide, |row| row.child("Native Display P3")
                     .child(div().flex().w_full().h(px(46.)).children(p3.rgba.into_iter().map(|[r,g,b,a]| {
                         let rgb=EncodedRgb::new(RgbSpace::DisplayP3,[r as f64,g as f64,b as f64]).unwrap().decode().unwrap().components();
                         let color=WideColor::linear_p3([rgb[0] as f32,rgb[1] as f32,rgb[2] as f32,a]).unwrap();
-                        let painter=self.painter.clone();
+                        let painter=self.painter.clone().unwrap();
                         div().flex_1().h_full().child(canvas(|_,_,_|(),move |bounds,_,window,_| {painter.paint_color(window,bounds,px(0.),&color).expect("native P3 swatch");}).size_full())
-                    })))
+                    }))))
             }))
             .child("32 discrete reference samples per row, shared with the Wasm demo. P3 samples map to P3; sRGB samples map to sRGB. Alpha composites over the same background. Native P3 requires effective WideGamutSdr; display reporting does not verify calibration.")
     }
@@ -115,6 +117,7 @@ impl Options {
 
 struct Workspace {
     mode: Mode,
+    notice: Option<String>,
     options: Options,
     swatches: Option<Entity<ColorLab>>,
     chromaticity: Option<Entity<chromaticity::Lab>>,
@@ -122,14 +125,13 @@ struct Workspace {
 impl Workspace {
     fn swatch_view(&mut self, cx: &mut Context<Self>) -> AnyElement {
         if self.swatches.is_none() {
-            match WidePainter::new() {
-                Ok(painter) => self.swatches = Some(cx.new(|_| ColorLab {
-                    preset: 1, policy: GamutMapping::Clip, translucent: false, painter,
-                })),
-                Err(error) => return div().size_full().p_6()
-                    .child(format!("Native swatches unavailable: {error}. Select the Chromaticity tab for the portable color workspace."))
-                    .into_any_element(),
+            let painter = if self.notice.is_none() { WidePainter::new().ok() } else { None };
+            if painter.is_none() && self.notice.is_none() {
+                self.notice = Some("Native P3 output isn’t available with the current display and graphics setup. Showing mapped sRGB swatches.".into());
             }
+            self.swatches = Some(cx.new(|_| ColorLab {
+                preset: 1, policy: GamutMapping::Clip, translucent: false, painter,
+            }));
         }
         self.swatches.as_ref().unwrap().clone().into_any_element()
     }
@@ -183,6 +185,7 @@ impl Render for Workspace {
                     }),
                 ),
             )
+            .children(self.notice.iter().cloned().map(|notice| div().px_3().py_2().text_color(rgb(0xfbbf24)).child(notice)))
             .child(div().flex_1().min_h_0().overflow_hidden().child(content))
             .into_any_element()
     }
@@ -200,17 +203,18 @@ fn main() -> anyhow::Result<()> {
         })
         .detach();
         let bounds = Bounds::centered(None, size(px(1220.), px(960.)), cx);
-        cx.open_window(
+        cx.open_lab_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
             |window, cx| {
-                // The actual negotiated status remains visible in each workspace.
-                let _ = window.set_color_mode(WindowColorMode::WideGamutSdr);
-                window.set_window_title("XGPUI Color Lab — Swatches & Chromaticity");
+                let notice = xgpui_ext_lab::negotiate_wide(window);
+                if let Some(notice) = &notice { eprintln!("{notice}"); }
+                window.set_lab_title("XGPUI Color Lab — Swatches & Chromaticity");
                 cx.new(|_| Workspace {
                     mode,
+                    notice,
                     options,
                     swatches: None,
                     chromaticity: None,

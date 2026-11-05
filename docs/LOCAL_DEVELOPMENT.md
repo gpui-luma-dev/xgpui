@@ -148,7 +148,7 @@ controls also remain available in the window.
 Native launch recipes enable `runtime-shaders`, `portable-shaders` and `wgpu`
 so feature-gated app options are available without changing the Cargo command.
 Host/GPU restrictions still apply: media's synthetic video option supports
-macOS Metal (BGRA/NV12) and Windows D3D11 (BGRA only); native wide output
+macOS Metal (BGRA/NV12), Windows D3D11 (BGRA), and Linux Vulkan DMA-BUF (linear BGRA); native wide output
 requires a supported backend/display.
 Select a debug build with `just profile=dev lab-media`. App arguments are not
 Cargo arguments. The app-level justfiles remain available for specialized
@@ -228,6 +228,23 @@ libraries but cannot open the example window.
 just build
 just lab-shader
 ```
+
+Run inside your normal Wayland or X11 desktop session. Native labs provide a
+shared title bar and resize frame when the compositor requires client-side
+decorations (including GNOME Wayland); server-decorated windows retain their
+normal window-manager chrome. The frame follows the desktop button layout and
+is omitted for hidden captures and fullscreen windows.
+
+`lab-gamut` and `lab-color` attempt wide-gamut SDR presentation and fall back to
+standard SDR with a visible notice when it is unavailable. The gamut lab keeps
+its sRGB baseline; the color lab keeps its mapped sRGB swatches and chromaticity
+workspace. Native P3 content and unsupported wide-gamut controls are disabled.
+This fallback does not add native wide-gamut presentation to the Linux backend.
+`just lab-gamut --sdr` still explicitly selects the standard SDR baseline.
+
+For windowing diagnostics only, `env -u WAYLAND_DISPLAY just lab-text` selects
+X11/XWayland when `DISPLAY` is set. Vulkan rendering is independent of that
+window-system selection.
 
 Run inside your normal Wayland or X11 desktop session. The repository's [Linux Vulkan CI workflow](https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/paints-backend.yml) lists the native packages used on Ubuntu if a linker reports
 a missing system library.
@@ -384,3 +401,17 @@ fit the compositor's 1,024-device-pixel limit. `just lab-media --video` also off
 linear adjustments, vignette and blur on generated native macOS Metal frames;
 no video file is needed. See the [media pipeline guide](#media-pipeline) for
 resource reuse, output color and backend limits.
+
+
+## Linux CI coverage
+
+The [Linux extension workflow](https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/linux-extensions.yml) runs all
+seven extension suites, native lab tests, Vulkan image/path captures and real
+window smoke probes under headless Weston and Xvfb/Openbox. Its path filters
+include all lab and shared app code. Existing paint and native font checks remain
+independent. Hosted Mesa results may use software rendering and do not establish
+physical GPU DMA-BUF or desktop input acceptance.
+
+A separate opt-in workflow-dispatch job targets a configured `xgpui-vulkan`
+self-hosted runner and runs strict native DMA-BUF/video checks with synchronization
+validation. See [runner setup and local commands](https://github.com/gpui-luma-dev/xgpui/blob/main/.github/linux/README.md).

@@ -1,0 +1,166 @@
+name: Linux extensions and labs
+
+on:
+  workflow_dispatch:
+    inputs:
+      native_dma_buf:
+        description: Run strict native DMA-BUF checks on a configured xgpui-vulkan runner
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - '.github/workflows/linux-extensions.yml'
+      - '.github/linux/**'
+      - '.cargo/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'apps/**'
+      - 'extensions/crates/**'
+      - 'gpui/crates/**'
+      - 'justfile'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/linux-extensions.yml'
+      - '.github/linux/**'
+      - '.cargo/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'apps/**'
+      - 'extensions/crates/**'
+      - 'gpui/crates/**'
+      - 'justfile'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-extensions-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  extensions:
+    name: Crate suites, Vulkan previews and display smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/linux-ci
+      CARGO_INCREMENTAL: '0'
+      RUST_BACKTRACE: '1'
+      WGPU_BACKEND: vulkan
+      XDG_RUNTIME_DIR: /tmp/xgpui-linux-ci-runtime
+      LINUX_CI_RESULTS: ${{ github.workspace }}/target/linux-ci-results
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target/linux-ci'
+          shared-key: linux-extensions-v1
+      - name: Install native libraries, Mesa and virtual display servers
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev mesa-vulkan-drivers vulkan-tools weston xvfb openbox x11-utils dbus-x11
+          mkdir -p "$XDG_RUNTIME_DIR" "$LINUX_CI_RESULTS"
+          chmod 700 "$XDG_RUNTIME_DIR"
+      - name: Inspect hosted Vulkan adapter
+        timeout-minutes: 2
+        run: |
+          timeout 60s vulkaninfo --summary 2>&1 | tee "$LINUX_CI_RESULTS/vulkaninfo.log"
+      - name: Test all seven extension crates with committed lockfiles
+        run: |
+          run_suite() { local name="$1"; shift; "$@" 2>&1 | tee "$LINUX_CI_RESULTS/$name.log"; }
+          common=(test --locked --config .cargo/validation.toml)
+          run_suite color cargo "${common[@]}" --manifest-path extensions/crates/xgpui-color/Cargo.toml --features icc --lib --tests -- --test-threads=1
+          run_suite canvas cargo "${common[@]}" --manifest-path extensions/crates/xgpui-canvas/Cargo.toml --features gpui --lib -- --test-threads=1
+          run_suite svg cargo "${common[@]}" --manifest-path extensions/crates/xgpui-svg/Cargo.toml --lib -- --test-threads=1
+          run_suite parley cargo "${common[@]}" --manifest-path extensions/crates/xgpui-parley/Cargo.toml --features system-fonts,native-test,gpui-platform/wayland,gpui-platform/x11 --lib --tests -- --test-threads=1
+          run_suite gamut cargo "${common[@]}" --manifest-path extensions/crates/xgpui-gamut/Cargo.toml --features instanced --lib -- --test-threads=1
+          run_suite media cargo "${common[@]}" --manifest-path extensions/crates/xgpui-media/Cargo.toml --features wgpu --lib -- --test-threads=1
+          run_suite shader cargo "${common[@]}" --manifest-path extensions/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib -- --test-threads=1
+      - name: Compile all native labs and run library, application and compatibility tests
+        run: |
+          cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features runtime-shaders,portable-shaders,wgpu --lib --bins --test compatibility -- --test-threads=1 2>&1 | tee "$LINUX_CI_RESULTS/labs.log"
+      - name: Capture portable media images and paths through Vulkan
+        run: |
+          common=(run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features runtime-shaders,portable-shaders,wgpu --bin media-lab)
+          cargo "${common[@]}" -- --headless --wgpu --png "$LINUX_CI_RESULTS/media.png" 2>&1 | tee "$LINUX_CI_RESULTS/media-capture.log"
+          cargo "${common[@]}" -- --headless --paths --wgpu --png "$LINUX_CI_RESULTS/paths.png" 2>&1 | tee "$LINUX_CI_RESULTS/path-capture.log"
+      - name: Compile real display-server smoke probe
+        run: |
+          cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features linux-window-tests,runtime-shaders,portable-shaders,wgpu --test linux_windows --no-run 2>&1 | tee "$LINUX_CI_RESULTS/window-build.log"
+      - name: Exercise default and client-decorated windows under Wayland and X11
+        run: dbus-run-session -- bash .github/linux/window-smoke.sh
+      - name: Record acceptance boundaries
+        if: ${{ !cancelled() }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ## Linux extensions and labs
+          Hosted coverage uses the available Mesa Vulkan adapter, which may be software rendered.
+          Crate/lab suites and Weston/Xvfb smoke do not establish physical GPU DMA-BUF support,
+          GNOME input/IME/accessibility behavior, native P3 output or physical display coverage.
+          Native DMA-BUF checks are a separate, opt-in workflow-dispatch job.
+          SUMMARY
+      - name: Upload test logs, display logs and captures
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-extensions-${{ github.sha }}
+          path: target/linux-ci-results/
+          if-no-files-found: warn
+          retention-days: 14
+
+  native-dma-buf:
+    name: Native Vulkan DMA-BUF and synchronization validation
+    # Hardware runners are opt-in dispatch only, never automatic PR execution.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.native_dma_buf }}
+    runs-on: [self-hosted, linux, x64, xgpui-vulkan]
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/linux-native-ci
+      CARGO_INCREMENTAL: '0'
+      RUST_BACKTRACE: '1'
+      WGPU_BACKEND: vulkan
+      WGPU_DEBUG: '1'
+      WGPU_VALIDATION: '1'
+      VK_INSTANCE_LAYERS: VK_LAYER_KHRONOS_validation
+      VK_LAYER_ENABLES: VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT
+      LINUX_CI_RESULTS: ${{ github.workspace }}/target/linux-native-ci-results
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target/linux-native-ci'
+          shared-key: linux-native-dma-buf-v1
+      - name: Inspect native Vulkan adapter and required validation layer
+        run: |
+          mkdir -p "$LINUX_CI_RESULTS"
+          vulkaninfo --summary 2>&1 | tee "$LINUX_CI_RESULTS/vulkaninfo.log"
+          grep -q VK_LAYER_KHRONOS_validation "$LINUX_CI_RESULTS/vulkaninfo.log"
+      - name: Validate immutable DMA-BUF import, ownership and native lifetimes
+        run: |
+          cargo test --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-wgpu/Cargo.toml --features dma-buf,test-support --lib custom_draw::dma_buf::native_tests::dma_buf_native_generated_snapshot -- --ignored --exact --nocapture --test-threads=1 2>&1 | tee "$LINUX_CI_RESULTS/dma-buf.log"
+      - name: Validate synthetic video snapshots, pixels, motion and source retirement
+        run: |
+          cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features runtime-shaders,portable-shaders,wgpu --bin media-lab video_lab::linux::tests::dma_buf_video_capture_pixels_and_lifetimes -- --ignored --exact --nocapture --test-threads=1 2>&1 | tee "$LINUX_CI_RESULTS/video.log"
+          cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features runtime-shaders,portable-shaders,wgpu --bin media-lab -- --headless --video --wgpu --png "$LINUX_CI_RESULTS/video.png" 2>&1 | tee "$LINUX_CI_RESULTS/video-capture.log"
+      - name: Record native hardware validation scope
+        if: ${{ !cancelled() }}
+        run: |
+          echo 'Native DMA-BUF results apply to the recorded adapter and the immutable linear BGRA fixture; they do not establish decoder, NV12, wide-gamut or sustained playback acceptance.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload native GPU validation evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-native-dma-buf-${{ github.sha }}
+          path: target/linux-native-ci-results/
+          if-no-files-found: warn
+          retention-days: 14

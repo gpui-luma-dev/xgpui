@@ -76,13 +76,13 @@ pub struct Lab {
     pub ui_perf: Option<crate::ui_perf::Run>,
     pub continuous_redraw: bool,
     pub video_mode: bool,
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     pub video_blur: usize,
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     pub video_blurs: [xgpui_media::pipeline::ImageBlur; 4],
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     pub video_format: crate::video_lab::SourceFormat,
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     pub video_demo: Option<crate::video_lab::Demo>,
     pub path_mode: bool,
     pub path_animate: bool,
@@ -122,14 +122,14 @@ impl Lab {
             ui_perf: None,
             continuous_redraw: false,
             video_mode: false,
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             video_blur: 0,
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             video_blurs: [0., 4., 8., 16.]
                 .map(|r| xgpui_media::pipeline::ImageBlur::new(px(r)).unwrap()),
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             video_format: Default::default(),
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             video_demo: None,
             path_mode: false,
             path_animate: false,

@@ -1,6 +1,8 @@
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(any(target_os = "macos", target_os = "windows", test))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux", test))]
 mod pattern;
 #[cfg(target_os = "windows")]
 mod windows;
@@ -10,7 +12,7 @@ use anyhow::Result;
 use gpui::{prelude::*, *};
 use std::path::Path as FilePath;
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SourceFormat {
     #[default]
@@ -24,7 +26,7 @@ pub enum SourceFormat {
     #[cfg(target_os = "macos")]
     Video709,
 }
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 impl SourceFormat {
     const ALL: &'static [Self] = &[
         Self::Bgra,
@@ -67,6 +69,7 @@ impl SourceFormat {
     fn frame(self, index: u64) -> Result<xgpui_media::CoreVideoFrame> {
         macos::frame(self, index)
     }
+    #[cfg(not(target_os = "linux"))]
     fn video_frame(self, index: u64) -> Result<xgpui_media::VideoFrame> {
         let timestamp = std::time::Duration::from_micros(index * 33_333);
         #[cfg(target_os = "macos")]
@@ -83,7 +86,7 @@ impl SourceFormat {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod native {
     use super::*;
     use std::{
@@ -107,11 +110,24 @@ mod native {
     impl Demo {
         pub fn new(format: SourceFormat) -> Result<Self> {
             let (sender, stream) = VideoStream::channel();
-            sender.publish(format.video_frame(0)?)?;
-            let stop = Arc::new(AtomicBool::new(false));
-            let done = stop.clone();
             let error = Arc::new(Mutex::new(None));
             let report = error.clone();
+            #[cfg(target_os = "linux")]
+            let source = linux::Source::new(error.clone());
+            let make_frame = move |index| {
+                #[cfg(target_os = "linux")]
+                {
+                    let _ = format;
+                    source.video_frame(index)
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    format.video_frame(index)
+                }
+            };
+            sender.publish(make_frame(0)?)?;
+            let stop = Arc::new(AtomicBool::new(false));
+            let done = stop.clone();
             let (burst, requests) = mpsc::sync_channel(1);
             let worker = std::thread::Builder::new()
                 .name("media-lab-video".into())
@@ -124,7 +140,7 @@ mod native {
                             if done.load(Ordering::Relaxed) {
                                 break;
                             }
-                            let result = format.video_frame(index).and_then(|f| sender.publish(f));
+                            let result = make_frame(index).and_then(|f| sender.publish(f));
                             if let Err(e) = result {
                                 *report.lock().unwrap() = Some(e.to_string());
                                 return;
@@ -175,6 +191,22 @@ mod native {
             }
         }
         let demo = lab.video_demo.as_ref().unwrap();
+        #[cfg(target_os = "linux")]
+        if demo.error.lock().unwrap().is_some() {
+            demo.stop.store(true, Ordering::Relaxed);
+            if let Some(worker) = &demo.worker {
+                worker.thread().unpark();
+            }
+            return root
+                .child(div().text_xl().child("Video surfaces"))
+                .child("Video surfaces aren’t available with the current graphics setup. This demo needs Vulkan with linear BGRA DMA-BUF export and import on the same GPU. Technical details are in the terminal.")
+                .child(button("video-back", "← Images", false).on_click(cx.listener(|this, _, _, cx| {
+                    this.video_mode = false; this.video_demo = None; cx.notify();
+                })))
+                .child(button("video-retry", "Retry video source", false).on_click(cx.listener(|this, _, _, cx| {
+                    this.video_demo = None; cx.notify();
+                })));
+        }
         let snapshot = demo.stream.snapshot();
         let s = demo.stream.stats();
         if s.playing && !s.closed {
@@ -600,9 +632,9 @@ mod native {
         }
     }
 }
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 pub use native::{Demo, render};
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub fn render(_: &mut Lab, _: &mut Window, cx: &mut Context<Lab>) -> Stateful<Div> {
     div()
         .id("video-unavailable")
@@ -616,10 +648,16 @@ pub fn render(_: &mut Lab, _: &mut Window, cx: &mut Context<Lab>) -> Stateful<Di
         )
 }
 pub fn capture(png: &FilePath, wgpu: bool) -> Result<()> {
+    #[cfg(not(target_os = "linux"))]
     anyhow::ensure!(
         !wgpu,
-        "Native video surfaces require Metal or D3D11, not wgpu"
+        "This platform’s native video capture uses Metal or D3D11, not wgpu"
     );
+    #[cfg(target_os = "linux")]
+    {
+        let _ = wgpu;
+        linux::capture(png)
+    }
     #[cfg(target_os = "macos")]
     {
         native::capture(png)
@@ -628,14 +666,14 @@ pub fn capture(png: &FilePath, wgpu: bool) -> Result<()> {
     {
         windows::capture(png)
     }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = png;
         anyhow::bail!("native video capture requires macOS Metal or Windows D3D11")
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 fn source_label() -> &'static str {
     #[cfg(target_os = "macos")]
     {
@@ -645,9 +683,13 @@ fn source_label() -> &'static str {
     {
         "D3D11 / DXGI"
     }
+    #[cfg(target_os = "linux")]
+    {
+        "Vulkan / DMA-BUF"
+    }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 fn source_note() -> &'static str {
     #[cfg(target_os = "macos")]
     {
@@ -656,5 +698,9 @@ fn source_note() -> &'static str {
     #[cfg(target_os = "windows")]
     {
         "CPU-generated BGRA initializes one immutable D3D11 texture per displayed source frame; native DXGI sampling reuses it for both previews and redraws."
+    }
+    #[cfg(target_os = "linux")]
+    {
+        "CPU-generated BGRA is staged once on a separate Vulkan device, then exported as an immutable DMA-BUF. Both previews reuse the same import. Standard SDR; no decoder, NV12, or wide-gamut output."
     }
 }

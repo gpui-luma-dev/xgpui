@@ -1,3 +1,4 @@
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 mod interaction;
 mod mandelbrot;
 mod minimap;
@@ -355,8 +356,8 @@ impl Render for Lab {
                         this.focus.focus(window, cx);
                         cx.notify();
                     })))
-                .child(if self.fractal.enabled { "P3 Mandelbrot • Drag: pan • Scroll: zoom • F: cards • R: reset" } else { "Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel" })
-                .child(if self.fractal.enabled { if window.color_status().effective() == WindowColorMode::WideGamutSdr { "Display P3 wide SDR • M: preview (adds capture cost)" } else { "Mapped sRGB fallback • M: preview (adds capture cost)" } } else { "Scroll / Pinch: zoom • Background / Space-drag: pan • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view • F: Mandelbrot" })
+                .child(if self.fractal.enabled { if window.color_status().effective() == WindowColorMode::WideGamutSdr { "Mandelbrot · native P3 output • Drag: pan • Scroll: zoom • F: cards • R: reset" } else { "Mandelbrot · P3 source, sRGB preview • Drag: pan • Scroll: zoom • F: cards • R: reset" } } else { "Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel" })
+                .child(if self.fractal.enabled { if window.color_status().effective() == WindowColorMode::WideGamutSdr { "Display P3 wide SDR • M: preview (adds capture cost)" } else { "Standard SDR output — native P3 is not active • M: preview (adds capture cost)" } } else { "Scroll / Pinch: zoom • Background / Space-drag: pan • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view • F: Mandelbrot" })
                 .child(if self.fractal.enabled { format!("{:.1}% • {}", self.camera.zoom() * 100., self.fractal.status()) } else { format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len()) }))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
                 .on_scroll(cx.listener(|this, event: &ScrollEvent, _, cx| {
@@ -501,7 +502,7 @@ fn main() {
             }
         })
         .detach();
-        cx.open_window(
+        cx.open_lab_window(
             WindowOptions {
                 // A bounded timing sweep must not measure the normal inactive
                 // window throttle when a tool or another app takes focus.
@@ -514,9 +515,9 @@ fn main() {
                 ..Default::default()
             },
             move |window, cx| {
-                window.set_window_title("XGPUI Canvas Prototype");
-                if let Err(error) = window.set_color_mode(WindowColorMode::WideGamutSdr) {
-                    eprintln!("Wide SDR unavailable; using sRGB preview: {error}");
+                window.set_lab_title("XGPUI Canvas Prototype");
+                if let Some(notice) = xgpui_ext_lab::negotiate_wide(window) {
+                    eprintln!("{notice}");
                 }
                 cx.new(|cx| {
                     let focus = cx.focus_handle();
