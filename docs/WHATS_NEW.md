@@ -1,12 +1,11 @@
 # What's new
 
-## Latest — November 4, 2026 pre-release
+## Latest — November 4, 2026
 
-Changes since [release-2026-11-03-deba615a1d9c](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-03-deba615a1d9c):
-better keyboard and macOS accessibility focus for selectable typography, a shared
-moving video fixture on Windows and macOS, an integrated native color lab, and
-release checks that catch changed crates needing new versions. **This is a
-pre-release summary of merged changes, not a publication announcement.**
+The [November 4 release](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-04-b35309ab9316)
+is available on crates.io. It improves keyboard and macOS accessibility focus for
+selectable typography, adds a shared moving video fixture on Windows and macOS,
+integrates the native color workspaces, and introduces release-preflight checks.
 
 ### Selectable typography: keyboard focus and VoiceOver
 
@@ -102,12 +101,12 @@ controls remain available. See [canvas](#canvas) and [local development](#local-
   The merged work passed native macOS/Windows/Linux CI, browser shader builds,
   iOS simulator compilation and repository/documentation checks.
 
-### Prepared crate versions
+### Published crate versions
 
-The following patch versions and their internal dependency pins are prepared for
-the next release. **These changes do not themselves publish crates.**
+These compatible patch versions are published and verified on crates.io.
+Update related crate pins together.
 
-| Crates | Prepared version |
+| Crates | Published version |
 | --- | --- |
 | `xgpui`, `xgpui-linux`, `xgpui-platform`, `xgpui-web`, `xgpui-wgpu`, `xgpui-windows` | 2.0.1 |
 | `xgpui-apple`, `xgpui-macos` | 3.0.1 |
@@ -118,8 +117,8 @@ the next release. **These changes do not themselves publish crates.**
 
 `xgpui-color` remains 0.3.0 and `xgpui-macros` remains 1.0.1. Labs remain
 unpublished. External dependency versions and checksums are unchanged by these
-patch-version updates. The release preflight reports all 15 changed candidates
-with unpublished versions and matching pins.
+patch-version updates. All 15 new versions were verified, and a registry-only
+consumer built and ran successfully.
 
 ## November 3, 2026
 
