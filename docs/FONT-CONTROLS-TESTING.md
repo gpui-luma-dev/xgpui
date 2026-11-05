@@ -97,24 +97,26 @@ DirectWrite, fixtures, documentation, and tests. It excludes the unrelated
 untracked `docs/COMPARISON.md`. It is based on commit:
 
 ```text
-74b8e4e6c40bff94d12af94e71ce5014c7d8d49c
+3d2a8484255fdd18473f2f98bf7572a858a9fe64
 ```
 
 Apply it to a clean checkout of that commit, rather than a checkout that already
 contains portions of these changes:
 
 ```powershell
-git switch -c codex/font-controls-test 74b8e4e6c40bff94d12af94e71ce5014c7d8d49c
+git switch -c codex/font-controls-test 3d2a8484255fdd18473f2f98bf7572a858a9fe64
 git apply --check C:\path\to\xgpui-font-controls-windows.patch
 git apply C:\path\to\xgpui-font-controls-windows.patch
 ```
 
 ## Automated tests on macOS
 
-The four raw-table parser tests live in the internal helper crate.
+The private core parser/query tests check table parsing and preserve unsupported,
+missing-table, read-error, and malformed-table results. The pinned-font backend
+tests exercise the complete native-table-access → core-parser query path.
 
 ```sh
-cargo test --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-font-inspect/Cargo.toml
+cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui/Cargo.toml --features gpui_platform/runtime_shaders --lib font_inspection
 cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui/Cargo.toml --lib text_system --features gpui_platform/runtime_shaders
 cargo test --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-parley/Cargo.toml --lib --features native-test,gpui-platform/runtime_shaders
 cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-apple/Cargo.toml --lib text_system::tests --features font-kit,runtime_shaders

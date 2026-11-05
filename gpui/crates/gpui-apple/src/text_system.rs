@@ -447,7 +447,11 @@ impl PlatformTextSystem for AppleTextSystem {
         }
     }
 
-    fn font_axes(&self, id: FontId) -> Result<gpui::FontQuery<Vec<gpui::VariationAxisInfo>>> {
+    fn font_table(
+        &self,
+        id: FontId,
+        tag: gpui::FontTag,
+    ) -> Result<gpui::FontQuery<Option<Vec<u8>>>> {
         let state = self.0.read();
         let font = state
             .fonts
@@ -458,57 +462,18 @@ impl PlatformTextSystem for AppleTextSystem {
         let tables = font
             .get_available_font_tables()
             .ok_or_else(|| anyhow!("font table enumeration failed"))?;
-        let table = if tables
-            .iter()
-            .any(|tag| *tag == u32::from_be_bytes(*b"fvar"))
-        {
+        let tag = u32::from_be_bytes(*tag.as_bytes());
+        let table = if tables.iter().any(|value| *value == tag) {
             Some(
-                font.get_font_table(u32::from_be_bytes(*b"fvar"))
-                    .ok_or_else(|| anyhow!("font table read failed"))?,
+                font.get_font_table(tag)
+                    .ok_or_else(|| anyhow!("font table read failed"))?
+                    .bytes()
+                    .to_vec(),
             )
         } else {
             None
         };
-        Ok(gpui::FontQuery::Supported(
-            gpui_font_inspect::variation_axes(table.as_ref().map(|table| table.bytes()))?,
-        ))
-    }
-
-    fn opentype_features(
-        &self,
-        font_id: FontId,
-    ) -> Result<gpui::FontQuery<Vec<gpui::OpenTypeFeatureInfo>>> {
-        let lock = self.0.read();
-        let font = lock
-            .fonts
-            .get(font_id.0)
-            .ok_or_else(|| anyhow!("invalid font ID"))?
-            .native_font();
-        drop(lock);
-        // Enumerate first so a failed read of an advertised table cannot be
-        // mistaken for a font with no OpenType layout tables (e.g. AAT-only).
-        let tables = font
-            .get_available_font_tables()
-            .ok_or_else(|| anyhow!("font table enumeration failed"))?;
-        let read = |tag: &[u8; 4]| -> Result<_> {
-            let tag = u32::from_be_bytes(*tag);
-            if tables.iter().any(|value| *value == tag) {
-                Ok(Some(
-                    font.get_font_table(tag)
-                        .ok_or_else(|| anyhow!("font table read failed"))?,
-                ))
-            } else {
-                Ok(None)
-            }
-        };
-        let gsub = read(b"GSUB")?;
-        let gpos = read(b"GPOS")?;
-        Ok(gpui::FontQuery::Supported(
-            gpui_font_inspect::opentype_features(
-                gsub.as_ref().map(|data| data.bytes()),
-                gpos.as_ref().map(|data| data.bytes()),
-            )?,
-        ))
+        Ok(gpui::FontQuery::Supported(table))
     }
 
     fn font_metrics(&self, font_id: FontId) -> FontMetrics {

@@ -197,9 +197,11 @@ cargo test --manifest-path gpui/crates/gpui-apple/Cargo.toml --lib static_axis_s
 
 ## Core GPUI public API review ledger
 
-The user approved the API changes below. Raw-table parsers were removed from
-core before completion and now live in the internal `xgpui-font-inspect` helper
-crate, shared by Apple, DirectWrite, and Parley without a core re-export.
+The user approved the API changes below, including the backend table-access
+hook. Raw-table parsing is private inside core GPUI. Default inspection methods
+read table bytes through `PlatformTextSystem::font_table`; Apple, DirectWrite,
+and Parley implement only native table access. There is no helper package,
+copied parser source, synchronization script, or public parser API.
 
 | Public API | Compatibility | Why it is in core / extension alternative |
 | --- | --- | --- |
@@ -216,9 +218,10 @@ crate, shared by Apple, DirectWrite, and Parley without a core re-export.
 | `TextSystem::opentype_features(FontId)` | Additive inherent method | Entry point on the text system applications already own. Moving to an extension trait requires a backend inspection handle or another core access hook. |
 | `TextSystem::font_axes(FontId)` | Additive inherent method | Same inspector-handle alternative. |
 | `TextSystem::font_capabilities()` | Additive inherent method | Same inspector-handle alternative. |
-| `PlatformTextSystem::opentype_features(FontId)` | Additive default trait method; existing implementations compile | Backend extension point. Can move to a separate optional inspector interface with corresponding access/ownership plumbing. |
-| `PlatformTextSystem::font_axes(FontId)` | Additive default trait method | Same optional inspector-interface alternative. |
+| `PlatformTextSystem::opentype_features(FontId)` | Additive default trait method; existing implementations compile | Default implementation reads GSUB/GPOS via `font_table` and parses privately in core. Backend extension point. Can move to a separate optional inspector interface with corresponding access/ownership plumbing. |
+| `PlatformTextSystem::font_axes(FontId)` | Additive default trait method | Default implementation reads `fvar` via `font_table` and parses privately in core. Same optional inspector-interface alternative. |
 | `PlatformTextSystem::font_capabilities()` | Additive default trait method | Defaults to no new support; implementations opt in explicitly. Same interface alternative. |
+| `PlatformTextSystem::font_table(FontId, FontTag) -> Result<FontQuery<Option<Vec<u8>>>>` | Additive default trait method; defaults to `Unsupported`, so existing implementations compile | Backend hook for resolved-face table bytes. `Supported(None)` means absent, `Some(bytes)` means read successfully, and errors mean invalid ID/read failure. Lets core parse metadata privately. An extension-owned reader would require another access hook to backend font handles. |
 | `xgpui-windows --no-default-features` | Feature opt-out behavior fix; ordinary defaults unchanged | The dependency now has `default-features = false`; the existing default feature forwards `gpui/default`. This lets explicit opt-out avoid the core manifest compiler. Cargo feature behavior belongs to the backend crate, not an extension. |
 
 No existing `FontFeatures` signatures or serialized behavior changed; its numeric
@@ -240,7 +243,7 @@ fix: requested embedded fallbacks can now resolve to their actual font.
 
 The user approved finishing #27 with the Apple/Parley static rollout and measured
 previews, tracking later stages separately. This implementation completes that
-scope, with the public API approved and raw parsers moved out of core. Follow-ups:
+scope, with the public API approved and raw parsers private in core. Follow-ups:
 
 - [#139: measured CPU/GPU budgets and frame-safe eviction](https://github.com/gpui-luma-dev/xgpui/issues/139)
 - [#140: DirectWrite static-axis and inspection parity](https://github.com/gpui-luma-dev/xgpui/issues/140)
@@ -269,7 +272,8 @@ review; later stages are tracked in the linked issues.
 
 ## Verification on the implementation host
 
-- Core text-system tests: 50 passed; style/refinement serialization test: passed.
+- Core text-system tests: 52 passed, including six private parser/query tests;
+  style/refinement serialization test: passed.
 - Parley library: 36 passed, one diagnostic ignored in normal runs; that CPU
   diagnostic was run explicitly and passed.
 - Apple text system: 9 passed. Metal allocation diagnostic: passed with native
@@ -310,3 +314,36 @@ A fixed 512-descriptor admission limit holds the previous preview on exhaustion;
 there is no eviction, font-ID reuse, or unbounded reset. The specimen font and
 its advance measurement use the same effective settings. No new core GPUI
 public API was added for these controls.
+
+
+## Unpublished version plan
+
+These versions prepare the font-controls changes for release; they are not a
+claim of publication. Internal dependency requirements are pinned exactly to
+this set. No new crate is published; the parser module is private inside `xgpui`.
+
+| Crate | Previous | Candidate | Rationale |
+| --- | --- | --- | --- |
+| `xgpui` | 2.0.1 | **3.0.0** | Breaking fields on `Font`, `TextStyle`, and `TextStyleRefinement`; other APIs are additive. |
+| `xgpui-apple` | 3.0.1 | **3.1.0** | New static axes and introspection capabilities; existing public signatures remain intact. |
+| `xgpui-windows` | 2.0.1 | **2.1.0** | New static axes and introspection capabilities; existing public signatures remain intact. |
+| `xgpui-parley` | 0.3.1 | **0.4.0** | New axes/introspection capabilities and additive `VariationPreview` API; no removed APIs. |
+| `xgpui-wgpu` | 2.0.1 | **2.0.2** | Reject unsupported explicit axes and update core pin. |
+| `xgpui-web` | 2.0.1 | **2.0.2** | Reject unsupported explicit axes and update core/backend pins. |
+| `xgpui-macos` | 3.0.1 | **3.0.2** | Core and Apple dependency-pin updates only. |
+| `xgpui-ios` | 1.26.3 | **1.26.4** | Core and Apple dependency-pin updates only. |
+| `xgpui-linux` | 2.0.1 | **2.0.2** | Core and wgpu dependency-pin updates only. |
+| `xgpui-platform` | 2.0.1 | **2.0.2** | Matching core and backend dependency-pin updates only. |
+| `xgpui-media` | 0.5.1 | **0.5.2** | Matching core/backend/shader dependency-pin updates only. |
+| `xgpui-shader` | 0.4.1 | **0.4.2** | Matching core/backend dependency-pin updates only. |
+| `xgpui-gamut` | 0.3.1 | **0.3.2** | Matching core/backend/shader dependency-pin updates only. |
+| `xgpui-canvas` | 0.3.1 | **0.3.2** | Matching core/shader dependency-pin updates only. |
+| `xgpui-svg` | 0.3.1 | **0.3.2** | Core dependency-pin updates only. |
+
+`xgpui-color` remains 0.3.0 and `xgpui-macros` remains 1.0.1. The repository's
+versioning policy does not automatically propagate major bumps to dependent
+crates: these dependents retain their public members/signatures. Their GPUI
+inputs, outputs, traits, and re-exports now resolve to the matching 3.0 type
+universe, so consumers must upgrade the pinned stack together; mixing these
+candidates with core 2.x is unsupported. The exhaustive-literal migrations above
+remain necessary wherever applications directly construct the changed core types.

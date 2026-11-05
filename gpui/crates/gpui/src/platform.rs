@@ -1551,21 +1551,38 @@ pub trait PlatformTextSystem: Send + Sync {
     fn font_capabilities(&self) -> crate::FontCapabilities {
         crate::FontCapabilities::default()
     }
-    /// Queries axis ranges on a resolved face, distinguishing unsupported queries.
-    fn font_axes(
+    /// Reads one OpenType table from the resolved face identified by `font_id`.
+    ///
+    /// `Unsupported` means table access is unavailable. `Supported(None)` means
+    /// the face has no such table; `Supported(Some(bytes))` returns its contents.
+    /// Supporting backends return errors for invalid IDs or failed reads, rather
+    /// than treating them as missing tables. Tags are in OpenType byte order;
+    /// platform-specific tag conversion and buffer lifetimes belong to the backend.
+    /// The default inspection methods parse these bytes privately in core GPUI.
+    fn font_table(
         &self,
         _font_id: FontId,
-    ) -> Result<crate::FontQuery<Vec<crate::VariationAxisInfo>>> {
+        _tag: crate::FontTag,
+    ) -> Result<crate::FontQuery<Option<Vec<u8>>>> {
         Ok(crate::FontQuery::Unsupported)
+    }
+    /// Queries axis ranges on a resolved face, distinguishing unsupported queries.
+    /// By default, reads `fvar` through `font_table` and parses it in core.
+    fn font_axes(
+        &self,
+        font_id: FontId,
+    ) -> Result<crate::FontQuery<Vec<crate::VariationAxisInfo>>> {
+        crate::text_system::font_inspection::query_axes(|tag| self.font_table(font_id, tag))
     }
     /// Queries feature metadata for a resolved face. Backends that cannot inspect
     /// the face must return Unsupported, rather than a successful empty list.
-    /// Implementations return errors for invalid IDs or unreadable metadata.
+    /// The default reads GSUB/GPOS through `font_table` and parses them in core.
+    /// Invalid IDs, failed reads, and malformed metadata return errors.
     fn opentype_features(
         &self,
-        _font_id: FontId,
+        font_id: FontId,
     ) -> Result<crate::FontQuery<Vec<crate::OpenTypeFeatureInfo>>> {
-        Ok(crate::FontQuery::Unsupported)
+        crate::text_system::font_inspection::query_features(|tag| self.font_table(font_id, tag))
     }
     /// Prewarm any system font caches needed to shape text.
     fn prewarm_fonts(&self, _font_ids: &[FontId]) {}

@@ -1,5 +1,6 @@
 mod font_fallbacks;
 mod font_features;
+pub(crate) mod font_inspection;
 mod font_introspection;
 mod font_variations;
 mod line;

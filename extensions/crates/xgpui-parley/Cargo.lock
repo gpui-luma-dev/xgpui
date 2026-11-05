@@ -6301,7 +6301,7 @@ checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
 
 [[package]]
 name = "xgpui"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -6368,7 +6368,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-apple"
-version = "3.0.1"
+version = "3.1.0"
 dependencies = [
  "anyhow",
  "async-task",
@@ -6403,21 +6403,12 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.21",
  "xgpui",
- "xgpui-font-inspect",
  "zed-font-kit",
 ]
 
 [[package]]
-name = "xgpui-font-inspect"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "xgpui",
-]
-
-[[package]]
 name = "xgpui-ios"
-version = "1.26.3"
+version = "1.26.4"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -6437,7 +6428,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-linux"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -6480,7 +6471,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-macos"
-version = "3.0.1"
+version = "3.0.2"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -6527,20 +6518,19 @@ dependencies = [
 
 [[package]]
 name = "xgpui-parley"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "parley",
  "skrifa 0.44.0",
  "tiny-skia 0.12.0",
  "xgpui",
- "xgpui-font-inspect",
  "xgpui-platform",
 ]
 
 [[package]]
 name = "xgpui-platform"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -6554,7 +6544,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-web"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -6582,7 +6572,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-wgpu"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -6607,7 +6597,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-windows"
-version = "2.0.1"
+version = "2.1.0"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -6631,7 +6621,6 @@ dependencies = [
  "windows-numerics 0.3.1",
  "windows-registry",
  "xgpui",
- "xgpui-font-inspect",
 ]
 
 [[package]]

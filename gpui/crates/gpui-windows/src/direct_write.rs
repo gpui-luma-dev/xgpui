@@ -395,7 +395,7 @@ impl PlatformTextSystem for DirectWriteTextSystem {
         }
     }
 
-    fn opentype_features(&self, id: FontId) -> Result<FontQuery<Vec<OpenTypeFeatureInfo>>> {
+    fn font_table(&self, id: FontId, tag: FontTag) -> Result<FontQuery<Option<Vec<u8>>>> {
         let face = self
             .state
             .read()
@@ -404,26 +404,7 @@ impl PlatformTextSystem for DirectWriteTextSystem {
             .context("invalid font ID")?
             .font_face
             .clone();
-        let gsub = font_table(&face, b"GSUB")?;
-        let gpos = font_table(&face, b"GPOS")?;
-        Ok(FontQuery::Supported(gpui_font_inspect::opentype_features(
-            gsub.as_deref(),
-            gpos.as_deref(),
-        )?))
-    }
-
-    fn font_axes(&self, id: FontId) -> Result<FontQuery<Vec<VariationAxisInfo>>> {
-        let face = self
-            .state
-            .read()
-            .fonts
-            .get(id.0)
-            .context("invalid font ID")?
-            .font_face
-            .clone();
-        Ok(FontQuery::Supported(gpui_font_inspect::variation_axes(
-            font_table(&face, b"fvar")?.as_deref(),
-        )?))
+        Ok(FontQuery::Supported(font_table(&face, tag.as_bytes())?))
     }
 
     fn font_metrics(&self, font_id: FontId) -> FontMetrics {

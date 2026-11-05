@@ -502,57 +502,31 @@ impl PlatformTextSystem for ParleyTextSystem {
         }
     }
 
-    fn font_axes(&self, id: FontId) -> Result<gpui::FontQuery<Vec<gpui::VariationAxisInfo>>> {
+    fn font_table(
+        &self,
+        id: FontId,
+        tag: gpui::FontTag,
+    ) -> Result<gpui::FontQuery<Option<Vec<u8>>>> {
         let face = self.face(id)?;
         let data = face.data();
         let font = skrifa::FontRef::from_index(data.data.data(), data.index)?;
-        let tag = skrifa::Tag::new(b"fvar");
+        let tag = skrifa::Tag::new(tag.as_bytes());
         let table = if font
             .table_directory()
             .table_records()
             .iter()
             .any(|record| record.tag() == tag)
         {
-            Some(font.table_data(tag).context("unreadable fvar table")?)
+            Some(
+                font.table_data(tag)
+                    .context("unreadable font table")?
+                    .as_bytes()
+                    .to_vec(),
+            )
         } else {
             None
         };
-        Ok(gpui::FontQuery::Supported(
-            gpui_font_inspect::variation_axes(table.as_ref().map(|table| table.as_bytes()))?,
-        ))
-    }
-
-    fn opentype_features(
-        &self,
-        id: FontId,
-    ) -> Result<gpui::FontQuery<Vec<gpui::OpenTypeFeatureInfo>>> {
-        let face = self.face(id)?;
-        let data = face.data();
-        let font = skrifa::FontRef::from_index(data.data.data(), data.index)?;
-        let read = |tag: &[u8; 4]| -> Result<_> {
-            let tag = skrifa::Tag::new(tag);
-            if font
-                .table_directory()
-                .table_records()
-                .iter()
-                .any(|record| record.tag() == tag)
-            {
-                Ok(Some(
-                    font.table_data(tag)
-                        .context("unreadable font layout table")?,
-                ))
-            } else {
-                Ok(None)
-            }
-        };
-        let gsub = read(b"GSUB")?;
-        let gpos = read(b"GPOS")?;
-        Ok(gpui::FontQuery::Supported(
-            gpui_font_inspect::opentype_features(
-                gsub.as_ref().map(|data| data.as_bytes()),
-                gpos.as_ref().map(|data| data.as_bytes()),
-            )?,
-        ))
+        Ok(gpui::FontQuery::Supported(table))
     }
 
     fn font_metrics(&self, id: FontId) -> FontMetrics {

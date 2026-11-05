@@ -28,6 +28,6 @@ alias axes := ui
 axes-test:
     cargo test {{options}} axes::tests
 
-# Shared backend table readers, kept outside the core public API.
+# Private core font-table readers.
 font-inspect-test:
-    cargo test --offline --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-font-inspect/Cargo.toml
+    cargo test --offline --config .cargo/validation.toml --manifest-path gpui/crates/gpui/Cargo.toml --features gpui_platform/runtime_shaders --lib font_inspection

@@ -3778,7 +3778,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -3844,14 +3844,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "xgpui-font-inspect"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "xgpui",
-]
-
-[[package]]
 name = "xgpui-macros"
 version = "1.0.1"
 dependencies = [
@@ -3863,7 +3855,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-windows"
-version = "2.0.1"
+version = "2.1.0"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -3887,7 +3879,6 @@ dependencies = [
  "windows-numerics 0.3.1",
  "windows-registry",
  "xgpui",
- "xgpui-font-inspect",
  "zed-scap",
 ]
 
@@ -4081,28 +4072,28 @@ source = "git+https://github.com/zed-industries/async-process.git?rev=0b6d671357
 
 [[patch.unused]]
 name = "xgpui-apple"
-version = "3.0.1"
+version = "3.1.0"
 
 [[patch.unused]]
 name = "xgpui-ios"
-version = "1.26.3"
+version = "1.26.4"
 
 [[patch.unused]]
 name = "xgpui-linux"
-version = "2.0.1"
+version = "2.0.2"
 
 [[patch.unused]]
 name = "xgpui-macos"
-version = "3.0.1"
+version = "3.0.2"
 
 [[patch.unused]]
 name = "xgpui-platform"
-version = "2.0.1"
+version = "2.0.2"
 
 [[patch.unused]]
 name = "xgpui-web"
-version = "2.0.1"
+version = "2.0.2"
 
 [[patch.unused]]
 name = "xgpui-wgpu"
-version = "2.0.1"
+version = "2.0.2"

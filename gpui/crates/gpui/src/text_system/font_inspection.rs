@@ -1,15 +1,38 @@
-//! Internal font-table readers shared by GPUI backends. Not part of gpui's API.
-#![doc(hidden)]
+//! Private font-table parsing and inspection orchestration.
 
+use crate::{FontQuery, FontTag, OpenTypeFeatureInfo, VariationAxisInfo};
 use anyhow::{Context, Result, ensure};
-use gpui::{FontTag, OpenTypeFeatureInfo, VariationAxisInfo};
 use std::collections::BTreeMap;
+
+pub(crate) fn query_axes(
+    read: impl FnOnce(FontTag) -> Result<FontQuery<Option<Vec<u8>>>>,
+) -> Result<FontQuery<Vec<VariationAxisInfo>>> {
+    match read("fvar".parse().unwrap())? {
+        FontQuery::Unsupported => Ok(FontQuery::Unsupported),
+        FontQuery::Supported(table) => Ok(FontQuery::Supported(variation_axes(table.as_deref())?)),
+    }
+}
+
+pub(crate) fn query_features(
+    mut read: impl FnMut(FontTag) -> Result<FontQuery<Option<Vec<u8>>>>,
+) -> Result<FontQuery<Vec<OpenTypeFeatureInfo>>> {
+    let FontQuery::Supported(gsub) = read("GSUB".parse().unwrap())? else {
+        return Ok(FontQuery::Unsupported);
+    };
+    let FontQuery::Supported(gpos) = read("GPOS".parse().unwrap())? else {
+        return Ok(FontQuery::Unsupported);
+    };
+    Ok(FontQuery::Supported(opentype_features(
+        gsub.as_deref(),
+        gpos.as_deref(),
+    )?))
+}
 
 /// Reads feature metadata from optional raw GSUB/GPOS tables of one resolved
 /// face. Missing tables are valid; malformed feature metadata is an error.
 /// Tags are sorted and duplicates are merged, retaining both table sources.
 /// Does not validate shaping lookups or determine script/language coverage.
-pub fn opentype_features(
+pub(crate) fn opentype_features(
     gsub: Option<&[u8]>,
     gpos: Option<&[u8]>,
 ) -> Result<Vec<OpenTypeFeatureInfo>> {
@@ -62,7 +85,7 @@ pub fn opentype_features(
 
 /// Reads axis metadata. A missing table means the face has no variable axes.
 /// Localized display names and named instances are not included.
-pub fn variation_axes(table: Option<&[u8]>) -> Result<Vec<VariationAxisInfo>> {
+pub(crate) fn variation_axes(table: Option<&[u8]>) -> Result<Vec<VariationAxisInfo>> {
     let Some(data) = table else {
         return Ok(Vec::new());
     };
@@ -121,6 +144,70 @@ mod tests {
     use super::*;
 
     #[test]
+    fn axis_query_preserves_unsupported_missing_and_failure() {
+        assert_eq!(
+            query_axes(|_| Ok(FontQuery::Unsupported)).unwrap(),
+            FontQuery::Unsupported
+        );
+        assert_eq!(
+            query_axes(|tag| {
+                assert_eq!(tag.to_string(), "fvar");
+                Ok(FontQuery::Supported(None))
+            })
+            .unwrap(),
+            FontQuery::Supported(Vec::new())
+        );
+        assert!(query_axes(|_| Err(anyhow::anyhow!("read failed"))).is_err());
+        assert!(query_axes(|_| Ok(FontQuery::Supported(Some(vec![0])))).is_err());
+    }
+
+    #[test]
+    fn feature_query_reads_both_tables_and_preserves_failure_states() {
+        assert_eq!(
+            query_features(|_| Ok(FontQuery::Unsupported)).unwrap(),
+            FontQuery::Unsupported
+        );
+        let mut tags = Vec::new();
+        let features = query_features(|tag| {
+            tags.push(tag.to_string());
+            Ok(FontQuery::Supported(Some(table(b"kern"))))
+        })
+        .unwrap();
+        assert_eq!(tags, ["GSUB", "GPOS"]);
+        let FontQuery::Supported(features) = features else {
+            panic!("unsupported")
+        };
+        assert_eq!(features.len(), 1);
+        assert!(features[0].substitution && features[0].positioning);
+        assert_eq!(
+            query_features(|_| Ok(FontQuery::Supported(None))).unwrap(),
+            FontQuery::Supported(Vec::new())
+        );
+        assert!(
+            query_features(|tag| {
+                if tag.to_string() == "GPOS" {
+                    Err(anyhow::anyhow!("read failed"))
+                } else {
+                    Ok(FontQuery::Supported(None))
+                }
+            })
+            .is_err()
+        );
+        assert_eq!(
+            query_features(|tag| {
+                Ok(if tag.to_string() == "GPOS" {
+                    FontQuery::Unsupported
+                } else {
+                    FontQuery::Supported(None)
+                })
+            })
+            .unwrap(),
+            FontQuery::Unsupported
+        );
+        assert!(query_features(|_| Ok(FontQuery::Supported(Some(vec![0])))).is_err());
+    }
+
+    #[test]
     fn axis_metadata_preserves_negative_design_units_and_rejects_truncation() {
         let mut table = vec![0, 1, 0, 0, 0, 16, 0, 2, 0, 1, 0, 20, 0, 0, 0, 0];
         table.extend(b"slnt");
@@ -168,29 +255,19 @@ mod tests {
     }
 
     #[test]
-    fn pinned_plex_advertises_features() {
-        let face = ttf_parser::Face::parse(
-            include_bytes!(
-                "../../../../gpui/crates/gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"
-            ),
-            0,
-        )
-        .unwrap();
-        let infos = opentype_features(
-            face.raw_face().table(ttf_parser::Tag::from_bytes(b"GSUB")),
-            face.raw_face().table(ttf_parser::Tag::from_bytes(b"GPOS")),
-        )
-        .unwrap();
-        assert!(
-            infos
-                .iter()
-                .any(|f| f.tag.to_string() == "liga" && f.substitution)
-        );
-        assert!(
-            infos
-                .iter()
-                .any(|f| f.tag.to_string() == "kern" && f.positioning)
-        );
-        assert!(infos.windows(2).all(|pair| pair[0].tag < pair[1].tag));
+    fn rejects_invalid_axis_ranges_and_duplicates() {
+        let mut table = vec![0, 1, 0, 0, 0, 16, 0, 2, 0, 1, 0, 20, 0, 0, 0, 0];
+        table.extend(b"wght");
+        for value in [100i32, 400, 900] {
+            table.extend((value * 65536).to_be_bytes());
+        }
+        table.extend([0, 0, 1, 0]);
+        assert!(variation_axes(Some(&table)).is_ok());
+        let mut invalid = table.clone();
+        invalid[20..24].copy_from_slice(&(500i32 * 65536).to_be_bytes());
+        assert!(variation_axes(Some(&invalid)).is_err());
+        table[9] = 2;
+        table.extend_from_within(16..36);
+        assert!(variation_axes(Some(&table)).is_err());
     }
 }
