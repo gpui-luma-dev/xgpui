@@ -1,5 +1,5 @@
 //! Deterministic BGRA fixture: animated center, fixed color/alpha reference areas.
-//! Shared by CoreVideo and D3D11; independent of either backend so motion and reference coverage run on every host.
+//! Shared by CoreVideo, D3D11 and Linux DMA-BUF; independent of either backend so motion and reference coverage run on every host.
 pub(super) const WIDTH: u32 = 320;
 pub(super) const HEIGHT: u32 = 180;
 pub(super) const COLORS: [[u8; 3]; 4] =

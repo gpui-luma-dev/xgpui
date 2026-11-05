@@ -1,3 +1,4 @@
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 use anyhow::{Context as _, Result, ensure};
 use clap::{Parser, ValueEnum};
 use gpui::{
@@ -380,7 +381,7 @@ impl Render for Viewer {
                 if options.continuous && samples.paint_ms.len() >= 60 {
                     let paint = samples.paint_ms.iter().sum::<f64>() / samples.paint_ms.len() as f64;
                     let cadence = samples.cadence_ms.iter().sum::<f64>() / samples.cadence_ms.len().max(1) as f64;
-                    window.set_window_title(&format!(
+                    window.set_lab_title(&format!(
                         "Quad bench | {:?} | {} quads | CPU paint {paint:.2} ms | callback cadence {cadence:.2} ms",
                         options.pattern, options.count,
                     ));
@@ -428,13 +429,13 @@ impl Render for Viewer {
                             Ok(())
                         })();
                         match result {
-                            Ok(()) => window.set_window_title(&format!(
+                            Ok(()) => window.set_lab_title(&format!(
                                 "DONE | {} frames | callback {:.1} fps | CPU paint median {:.3} ms | quitting in {} s",
                                 report.measured_frames, fps, report.cpu_paint_ms.median, options.exit_delay_secs,
                             )),
                             Err(error) => {
                                 eprintln!("Could not save benchmark report: {error:#}");
-                                window.set_window_title("FAILED to save report | see terminal");
+                                window.set_lab_title("FAILED to save report | see terminal");
                                 // Cocoa termination does not return through main; preserve
                                 // a failing exit status for suite runners.
                                 std::process::exit(1);
@@ -469,7 +470,7 @@ fn main() -> Result<()> {
             size(px(options.width as f32), px(options.height as f32)),
             cx,
         );
-        if let Err(error) = cx.open_window(
+        if let Err(error) = cx.open_lab_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 // A benchmark must not inherit the normal inactive-window 30 Hz cap.

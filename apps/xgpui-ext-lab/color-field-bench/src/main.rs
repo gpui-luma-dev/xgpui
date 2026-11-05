@@ -1,3 +1,4 @@
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 mod workload;
 
 use anyhow::{Context as _, Result, ensure};
@@ -444,7 +445,7 @@ impl Render for Viewer {
                 );
                 if options.continuous {
                     if stats.samples.cpu_paint_ms.len() >= 60 {
-                        window.set_window_title(&format!(
+                        window.set_lab_title(&format!(
                             "SV field | {:?} | {count} quads | continuous",
                             options.method
                         ));
@@ -483,7 +484,7 @@ impl Render for Viewer {
                         }
                         stats.completed = true;
                         drop(stats);
-                        window.set_window_title(&format!(
+                        window.set_lab_title(&format!(
                             "DONE | {:?} | {count} quads | quitting in {} s",
                             options.method, options.exit_delay_secs
                         ));
@@ -530,7 +531,7 @@ fn main() -> Result<()> {
             size(px(options.width as f32), px(options.height as f32)),
             cx,
         );
-        if let Err(error) = cx.open_window(
+        if let Err(error) = cx.open_lab_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 inactive_frame_interval: None,

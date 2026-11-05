@@ -32,3 +32,10 @@ mapped sRGB row and a native Display P3 row, using 32 discrete reference samples
 shared with the Wasm demo. Click the colors, mapping, and alpha controls to compare.
 The default red/green endpoints make the gamut difference especially visible.
 Display capability and effective mode report negotiation, not measured calibration.
+
+## Unsupported wide-gamut backends
+
+On Linux and other backends without native wide-gamut SDR presentation, startup
+falls back to the sRGB baseline and displays a notice. P3 switching is unavailable
+when the backend does not support it. `--sdr` remains an explicit baseline option;
+`--instanced` and `--gradient` do not force unsupported wide output.

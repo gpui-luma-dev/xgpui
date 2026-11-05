@@ -1,3 +1,4 @@
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 mod benchmark;
 mod camera;
 mod gallery;
@@ -516,13 +517,13 @@ fn main() -> Result<()> {
         })
         .detach();
         let bounds = Bounds::centered(None, size(px(1440.), px(760.)), cx);
-        cx.open_window(
+        cx.open_lab_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
             |window, cx| {
-                window.set_window_title("XGPUI SVG Lab");
+                window.set_lab_title("XGPUI SVG Lab");
                 cx.new(|cx| Lab::new(cx).expect("valid bundled SVG fixture"))
             },
         )

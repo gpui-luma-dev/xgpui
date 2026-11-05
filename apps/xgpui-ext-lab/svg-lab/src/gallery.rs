@@ -1,4 +1,5 @@
 //! Native multi-element workload. Measures host frames, not GPU presentation latency.
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 use super::*;
 use serde_json::{Value, json};
 use std::{cell::RefCell, rc::Rc};
@@ -252,13 +253,13 @@ pub fn run(options: benchmark::Options) -> Result<()> {
         })
         .detach();
         let bounds = Bounds::centered(None, size(px(1140.), px(720.)), cx);
-        cx.open_window(
+        cx.open_lab_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
             |window, cx| {
-                window.set_window_title("XGPUI SVG Gallery Stress");
+                window.set_lab_title("XGPUI SVG Gallery Stress");
                 cx.new(|_| Gallery::new(docs, options))
             },
         )

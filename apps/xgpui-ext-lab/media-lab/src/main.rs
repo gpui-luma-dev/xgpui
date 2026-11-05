@@ -1,3 +1,4 @@
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 mod fixtures;
 mod float_lab;
 mod headless;
@@ -38,7 +39,7 @@ struct Options {
     /// Open contour trim and dash examples (or capture them headlessly).
     #[arg(long, conflicts_with = "video")]
     paths: bool,
-    /// Open synthetic native video presentation (macOS Metal / Windows D3D11).
+    /// Open synthetic video surfaces (Metal / D3D11 / Linux Vulkan DMA-BUF).
     #[arg(long)]
     video: bool,
     /// Measure bounded upload CPU work versus cached-source rendering in release.
@@ -133,7 +134,7 @@ fn main() -> Result<()> {
         lab.filters = [2, 2, 2, 0, 0];
     }
     gpui_platform::application().run(move |cx: &mut App| {
-        cx.open_window(
+        cx.open_lab_window(
             WindowOptions {
                 window_min_size: Some(size(px(1200.), px(800.))),
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
@@ -144,7 +145,7 @@ fn main() -> Result<()> {
                 ..Default::default()
             },
             |window, cx| {
-                window.set_window_title(if cfg!(debug_assertions) {
+                window.set_lab_title(if cfg!(debug_assertions) {
                     "XGPUI Media Lab — DEBUG"
                 } else {
                     "XGPUI Media Lab — RELEASE"

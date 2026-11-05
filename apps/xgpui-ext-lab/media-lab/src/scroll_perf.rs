@@ -1,4 +1,5 @@
 //! Real scroll-container stress test; cadence is measured at render start.
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 use anyhow::{Result, ensure};
 use gpui::{prelude::*, *};
 use serde::Serialize;
@@ -394,7 +395,7 @@ impl Render for ScrollPerf {
 pub fn run(path: PathBuf) -> Result<()> {
     let lab = ScrollPerf::new(path)?;
     gpui_platform::application().run(move |cx: &mut App| {
-        cx.open_window(
+        cx.open_lab_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                     None,
@@ -404,7 +405,7 @@ pub fn run(path: PathBuf) -> Result<()> {
                 ..Default::default()
             },
             |window, cx| {
-                window.set_window_title("XGPUI Media Scroll — RELEASE · 60 Hz baseline");
+                window.set_lab_title("XGPUI Media Scroll — RELEASE · 60 Hz baseline");
                 cx.new(|_| lab)
             },
         )

@@ -1,4 +1,5 @@
 //! Native and Parley comparison through the same GPUI application/rendering path.
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 mod axes;
 #[cfg(test)]
 mod editing_tests;
@@ -316,7 +317,12 @@ fn main() -> Result<()> {
     }
     app.run(move |cx| {
         input::bind_keys(cx);
-        let display = cx.primary_display().expect("display").bounds();
+        // Wayland does not expose a primary display; use an available output.
+        let display = cx
+            .primary_display()
+            .or_else(|| cx.displays().into_iter().next())
+            .expect("no display available")
+            .bounds();
         let width = (display.size.width / 2.0 - px(24.0)).min(px(640.0));
         let height = px(1200.0);
         let x = display.origin.x
@@ -326,7 +332,7 @@ fn main() -> Result<()> {
             } else {
                 px(0.0)
             };
-        cx.open_window(
+        cx.open_lab_window(
             WindowOptions {
                 inactive_frame_interval: if options.workload == Workload::Scroll {
                     None
@@ -340,7 +346,7 @@ fn main() -> Result<()> {
                 ..Default::default()
             },
             |window, cx| {
-                window.set_window_title(&format!("Text Lab - {name}"));
+                window.set_lab_title(&format!("Text Lab - {name}"));
                 let input = cx.new(|cx| input::TextInput::new("office café e\u{301} Ångström", cx));
                 let paragraph = paragraph_timings
                     .map(|timings| cx.new(|cx| paragraph::ParagraphLab::new(timings, cx)));

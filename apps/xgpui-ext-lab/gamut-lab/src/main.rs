@@ -1,4 +1,5 @@
 //! Wide SDR content surfaces and native sRGB controls.
+use xgpui_ext_lab::{LabApp, LabWindowTitle};
 use anyhow::{Result, ensure};
 use clap::Parser;
 use gpui::{prelude::*, *};
@@ -36,6 +37,7 @@ struct Options {
 }
 struct Lab {
     wide: bool,
+    notice: Option<String>,
     overlay: bool,
     opacity: f32,
     dark: bool,
@@ -139,6 +141,7 @@ impl Lab {
 }
 impl Render for Lab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.wide = window.color_status().effective() == WindowColorMode::WideGamutSdr;
         let mode = if self.wide {
             if self.painter.is_some() {
                 if self.gradient {
@@ -205,23 +208,22 @@ impl Render for Lab {
             .py_2()
             .rounded_md()
             .bg(rgb(0x374151))
-            .hover(|s| s.bg(rgb(0x4b5563)))
+            .when(status.supports_wide_gamut_sdr(), |s| s.hover(|s| s.bg(rgb(0x4b5563))))
             .on_click(cx.listener(|this, _, window, cx| {
-                let mode = if this.wide {
-                    WindowColorMode::Default
+                if !window.color_status().supports_wide_gamut_sdr() { return; }
+                this.notice = if this.wide {
+                    window.set_color_mode(WindowColorMode::Default).err()
+                        .map(|error| format!("SDR request failed: {error}"))
                 } else {
-                    WindowColorMode::WideGamutSdr
+                    xgpui_ext_lab::negotiate_wide(window)
                 };
-                match window.set_color_mode(mode) {
-                    Ok(_) => {
-                        this.wide = !this.wide;
-                        cx.notify();
-                    }
-                    Err(error) => eprintln!("Presentation request failed: {error:#}"),
-                }
+                this.wide = window.color_status().effective() == WindowColorMode::WideGamutSdr;
+                cx.notify();
             }))
             .child(if self.wide {
                 "Switch to sRGB"
+            } else if !status.supports_wide_gamut_sdr() {
+                "Current setup: standard SDR"
             } else {
                 "Switch to P3"
             });
@@ -255,9 +257,12 @@ impl Render for Lab {
             ));
         div().size_full().flex().flex_col().gap_4().p_6()
             .bg(rgb(0x202025)).text_color(white())
-            .child(div().text_xl().child("Gamut Lab — wide SDR composition"))
+            .child(div().text_xl().child(if self.wide { "Gamut Lab — wide SDR composition" } else { "Gamut Lab — standard SDR baseline" }))
             .child(div().child(mode))
             .child(div().text_sm().child(format!("Requested: {:?} · Effective: {:?} · Display wide gamut: {:?}", status.requested(), status.effective(), status.display_wide_gamut())))
+            .when(!self.wide, |body| body.child(div().text_color(rgb(0xfbbf24)).child(
+                self.notice.clone().unwrap_or_else(|| "Standard SDR output is active. These are sRGB baseline colors, not native P3 output.".into())
+            )))
             .child(controls)
             .child(canvas)
             .child(div().text_sm().child("Controls remain sRGB. Overlays use linear composition at surface boundaries. HDR is off."))
@@ -269,18 +274,13 @@ fn main() -> Result<()> {
         (1..=10000).contains(&options.frames),
         "frames must be 1..=10000"
     );
-    let painter = if options.instanced {
-        Some(WidePainter::new()?)
-    } else {
-        None
-    };
     let completion = Rc::new(RefCell::new(None));
     let capture_result = completion.clone();
     let headless = options.headless;
     gpui_platform::application().run(move |cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1100.), px(920.)), cx);
         let window = cx
-            .open_window(
+            .open_lab_window(
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
                     show: !options.headless,
@@ -288,22 +288,34 @@ fn main() -> Result<()> {
                     ..Default::default()
                 },
                 |window, cx| {
-                    let mode = if options.sdr {
-                        WindowColorMode::Default
+                    let mut notice = if options.sdr {
+                        None
                     } else {
-                        WindowColorMode::WideGamutSdr
+                        xgpui_ext_lab::negotiate_wide(window)
                     };
-                    window
-                        .set_color_mode(mode)
-                        .expect("color presentation negotiation");
-                    window.set_window_title("XGPUI Gamut Lab — wide SDR");
+                    let mut wide = window.color_status().effective() == WindowColorMode::WideGamutSdr;
+                    let painter = if window.color_status().supports_wide_gamut_sdr() && options.instanced {
+                        match WidePainter::new() {
+                            Ok(painter) => Some(painter),
+                            Err(error) => {
+                                eprintln!("Wide-gamut producer diagnostic: {error}");
+                                notice = Some("Wide-gamut output isn’t available with the current display and graphics setup. Using standard SDR.".into());
+                                let _ = window.set_color_mode(WindowColorMode::Default);
+                                wide = false;
+                                None
+                            }
+                        }
+                    } else { None };
+                    if let Some(notice) = &notice { eprintln!("{notice}"); }
+                    window.set_lab_title("XGPUI Gamut Lab — color comparison");
                     cx.new(|_| Lab {
-                        wide: !options.sdr,
+                        wide,
+                        notice,
                         overlay: true,
                         opacity: 1.,
                         dark: true,
                         reverse: false,
-                        painter: painter.clone(),
+                        painter,
                         gradient: options.gradient,
                     })
                 },

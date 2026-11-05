@@ -12,6 +12,9 @@ autoexamples = false
 autobenches = false
 default-run = "shader-examples"
 
+[lib]
+path = "shared/lib.rs"
+
 [workspace]
 
 [features]
@@ -19,6 +22,7 @@ default = ["native"]
 native = []
 web = ["xgpui-color/icc"]
 native-window-tests = ["native"]
+linux-window-tests = ["native"]
 # Enable the tests in the shared GPUI input example reused by text-lab.
 test-support = ["gpui/test-support"]
 portable-shaders = ["xgpui-shader/portable-shaders"]
@@ -60,6 +64,9 @@ tempfile = "3"
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
 xgpui-media = { path = "../../extensions/crates/xgpui-media", version = "=0.5.2", features = ["wgpu"] , package = "xgpui-media" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ash = { version = "0.38", default-features = false }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 gpui-windows = { package = "xgpui-windows", path = "../../gpui/crates/gpui-windows", version = "=2.1.0" }
@@ -170,3 +177,9 @@ required-features = ["web"]
 name = "italy-photo"
 path = "extensions-web/src/italy.rs"
 required-features = ["web"]
+
+[[test]]
+name = "linux_windows"
+path = "tests/linux_windows.rs"
+harness = false
+required-features = ["linux-window-tests"]

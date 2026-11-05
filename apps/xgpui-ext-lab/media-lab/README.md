@@ -338,3 +338,38 @@ reused, but custom media captures refresh each paint. Native `just lab-media --v
 also offers exposure, saturation, vignette and blur on generated BGRA/NV12
 surfaces. Native imports are not available in Wasm; test portable blur via
 `?demo=media-tiles&backend=webgpu` and `?demo=media-tiles&backend=webgl`.
+
+
+### Linux synthetic video surfaces
+
+`just lab-media --video` supports an animated BGRA source on Linux through
+Vulkan DMA-BUF import. The existing pause/resume, burst, stop/restart, original
+and adjusted previews, opacity, corners and blur controls share one imported
+snapshot. The UI identifies this as standard SDR, independently of P3 output.
+
+CPU generation runs on the source worker. Only displayed snapshots allocate
+Vulkan resources: a separate producer device on the renderer’s physical GPU
+stages BGRA pixels, completes a fence and releases ownership to EXTERNAL in
+GENERAL layout before exporting the DMA-BUF. Each snapshot is immutable, and
+both previews/redraws reuse its import. This includes a CPU upload into the
+producer; it is not a zero-copy decoder or recycled surface pool. The producer
+never submits raw commands on wgpu’s queue.
+
+A Vulkan 1.2+ GPU/driver with linear BGRA DMA-BUF export/import is required.
+GL, multi-plane NV12, general GBM/EGL exports and decoding are outside this
+fixture. If the current graphics setup cannot supply that contract, the window
+shows a notice with Retry and Images controls; technical details go to the
+terminal. To explicitly select Vulkan and run the headless pixel/lifetime check:
+
+```sh
+WGPU_BACKEND=vulkan just lab-media --headless --video --wgpu --png /tmp/linux-video.png
+just --justfile apps/xgpui-ext-lab/media-lab/justfile video-native-test
+```
+
+The native check is opt-in and requires GPU access. It verifies generated colors,
+alpha, corners, clipping, motion, exposure, repeated placement/import reuse and
+source retirement. CPU tests separately exercise lazy allocation, pause/burst,
+shutdown and recovery notification without requiring a graphics device. Vulkan
+validation can additionally be enabled with `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation`
+when the validation layer is installed. Pixel checks alone do not establish
+absence of synchronization errors or sustained playback performance.
