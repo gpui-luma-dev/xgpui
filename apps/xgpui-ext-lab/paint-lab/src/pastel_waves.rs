@@ -331,9 +331,13 @@ fn brushes() -> Rc<WaveBrushes> {
     BRUSHES.with(Rc::clone)
 }
 
+/// One radial tint field: normalized center, normalized radii, RGB color and
+/// peak alpha.
+type Field = ([f32; 2], [f32; 2], [f32; 3], f32);
+
 // Fixed, overlapping veils make the pale background carry color even above
 // the ribbons. Each radial field fades completely into the underlying surface.
-const FIELDS: [([f32; 2], [f32; 2], [f32; 3], f32); 9] = [
+const FIELDS: [Field; 9] = [
     ([0.09, 0.13], [0.42, 0.48], [0.82, 0.68, 0.97], 0.20),
     ([0.29, 0.32], [0.37, 0.30], [0.95, 0.72, 0.86], 0.18),
     ([0.44, 0.06], [0.30, 0.32], [1., 0.84, 0.77], 0.16),
