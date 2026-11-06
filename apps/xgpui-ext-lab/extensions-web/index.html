@@ -3,7 +3,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
-<title>xgpui WebAssembly demos</title>
+<meta name="description" content="Interactive XGPUI demos in the browser over WebGPU and WebGL2: brushes and gradients, layer effects, wide-gamut color, variable fonts, SVG, canvas and media.">
+<meta name="theme-color" content="#111827">
+<link rel="canonical" href="https://xgpui.dev/examples/extensions/">
+<meta property="og:type" content="website"><meta property="og:site_name" content="XGPUI - Extended GPUI">
+<meta property="og:title" content="WebAssembly demos · XGPUI - Extended GPUI"><meta property="og:description" content="Interactive XGPUI demos in the browser over WebGPU and WebGL2: brushes and gradients, layer effects, wide-gamut color, variable fonts, SVG, canvas and media.">
+<meta property="og:url" content="https://xgpui.dev/examples/extensions/">
+<meta property="og:image" content="https://xgpui.dev/images/pastel-waves-metal-120hz.webp"><meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="WebAssembly demos · XGPUI - Extended GPUI"><meta name="twitter:description" content="Interactive XGPUI demos in the browser over WebGPU and WebGL2: brushes and gradients, layer effects, wide-gamut color, variable fonts, SVG, canvas and media.">
+<meta name="twitter:image" content="https://xgpui.dev/images/pastel-waves-metal-120hz.webp">
+<title>WebAssembly demos · XGPUI - Extended GPUI</title>
 <link rel="stylesheet" href="gallery.css">
 <link rel="stylesheet" href="italy.css">
 <style>
@@ -123,7 +132,7 @@ if (canonical) {
         await mountItaly(bindings);
       }
       status.hidden = !failed;
-      document.title = `${demo === "italy" ? "Italy photo comparison" : demo === "canvas" ? "Spatial card canvas" : demo === "mandelbrot" ? "Mandelbrot explorer" : demo === "media-tiles" ? "Progressive tiled canvas" : demo === "media-float" ? "RGBA16F / P3" : demo === "media-filters" ? "Image filters" : demo === "mipmaps" ? "Mipmapping" : demo === "path-effects" ? "Trim / dash" : demo === "font-controls" ? "Variable fonts" : demo === "typography" ? "Selectable typography" : demo === "hermite" ? "Hermite editor" : demo === "brushes" ? "Universal brushes" : demo === "layers" ? "Layer effects" : demo === "shader" ? "Shader paints" : demo === "svg" ? "Progressive SVG" : demo === "chromaticity" ? "Chromaticity & gamut" : demo === "pixel-metadata" ? "Pixels + metadata" : demo === "color" ? "Color / Gamut" : "Parley paragraphs"} · xgpui`;
+      document.title = `${demo === "italy" ? "Italy photo comparison" : demo === "canvas" ? "Spatial card canvas" : demo === "mandelbrot" ? "Mandelbrot explorer" : demo === "media-tiles" ? "Progressive tiled canvas" : demo === "media-float" ? "RGBA16F / P3" : demo === "media-filters" ? "Image filters" : demo === "mipmaps" ? "Mipmapping" : demo === "path-effects" ? "Trim / dash" : demo === "font-controls" ? "Variable fonts" : demo === "typography" ? "Selectable typography" : demo === "hermite" ? "Hermite editor" : demo === "brushes" ? "Universal brushes" : demo === "layers" ? "Layer effects" : demo === "shader" ? "Shader paints" : demo === "svg" ? "Progressive SVG" : demo === "chromaticity" ? "Chromaticity & gamut" : demo === "pixel-metadata" ? "Pixels + metadata" : demo === "color" ? "Color / Gamut" : "Parley paragraphs"} · XGPUI - Extended GPUI`;
     } catch (error) { showError(error); }
   }
 }

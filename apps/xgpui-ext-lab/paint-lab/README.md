@@ -126,8 +126,21 @@ gentle forward/reverse motion with eased turns, **Pause** freezes it,
 and **Reset** restores the initial still composition. A small bottom-right label
 shows the render frame count, measured render FPS, and direction. FPS is not a
 GPU presentation measurement. Resize the window to check
-that the artwork follows its bounds. Ribbon geometry uses native path coverage
-to reuse shader programs while animating. The demo lives in `src/pastel_waves.rs`.
+that the artwork follows its bounds. The demo lives in `src/pastel_waves.rs`.
+
+**Renderer** cycles three implementations of the same composition:
+
+| Label | Implementation |
+| --- | --- |
+| `metal` / `d3d11` / `wgpu` | Native producer, chosen at build time by target: a compute pass evaluates every ribbon curve once per pixel column, then one fragment pass shades the target. Metal uses `src/pastel_waves/pastel_waves.metal`; D3D11 (Windows) and wgpu (Linux) share `src/pastel_waves/producer.wgsl`, translated to HLSL shader model 5.0 with naga for D3D11. |
+| `wgsl` | One portable instanced WGSL draw (`src/pastel_waves.wgsl`). |
+| `paths` | The original brush and native path-coverage reference. |
+
+The native producer is the default on macOS. On Windows and Linux the default
+stays `wgsl` until the native producers are verified on that hardware; select
+them with **Renderer**. `just wgpu-test` checks that the wgpu producer matches
+the Metal producer (on macOS), and the HLSL translation is tested on every
+desktop target.
 
 ### Visual reference attribution
 
