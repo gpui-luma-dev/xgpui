@@ -83,7 +83,8 @@ fn path_brush_fields_match_rect_fields_times_native_coverage() {
         vec![Box::new(gpui_wgpu::WgpuHeadlessRenderer::new().unwrap())];
     #[cfg(target_os = "macos")]
     renderers.push(Box::new(
-        gpui_apple::metal_renderer::MetalHeadlessRenderer::new(),
+        gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
     ));
     #[cfg(target_os = "windows")]
     if std::env::var("XGPUI_BRUSH_NATIVE").as_deref() == Ok("1") {
@@ -287,7 +288,8 @@ fn path_masks_do_not_bleed_between_draws_and_native_siblings() {
         vec![Box::new(gpui_wgpu::WgpuHeadlessRenderer::new().unwrap())];
     #[cfg(target_os = "macos")]
     renderers.push(Box::new(
-        gpui_apple::metal_renderer::MetalHeadlessRenderer::new(),
+        gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
     ));
     #[cfg(target_os = "windows")]
     if std::env::var("XGPUI_BRUSH_NATIVE").as_deref() == Ok("1") {
@@ -386,7 +388,8 @@ fn disjoint_path_batches_preserve_pixels() {
         vec![Box::new(gpui_wgpu::WgpuHeadlessRenderer::new().unwrap())];
     #[cfg(target_os = "macos")]
     renderers.push(Box::new(
-        gpui_apple::metal_renderer::MetalHeadlessRenderer::new(),
+        gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
     ));
     for renderer in &mut renderers {
         let extent = size(DevicePixels(360), DevicePixels(90));

@@ -12,9 +12,16 @@ pub(super) struct Alphabet {
     pub glyphs: Vec<Replacement>,
 }
 impl Alphabet {
-    pub fn prepare(font: FontId, size: Pixels, window: &Window) -> Self {
+    pub fn prepare(font: FontId, size: Pixels, source_font: &Font, window: &Window) -> Self {
         let mut glyphs = Vec::new();
-        if let Some(resolved) = window.text_system().get_font_for_id(font) {
+        // Native shaping can produce a size-specific face not present in the
+        // reverse font cache. Re-shape the original request in that case, and
+        // retain the exact face check below before accepting any replacement.
+        let resolved = window
+            .text_system()
+            .get_font_for_id(font)
+            .unwrap_or_else(|| source_font.clone());
+        {
             for character in "0123456789ABCDEF".chars() {
                 let text: SharedString = character.to_string().into();
                 let run = TextRun {

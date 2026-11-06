@@ -91,10 +91,10 @@ custom backends inherit unsupported defaults. See the
 | Crates | Version |
 | --- | --- |
 | `xgpui` | **3.0.0** |
-| `xgpui-apple` | **3.1.0** |
+| `xgpui-apple` | **4.0.0** |
 | `xgpui-windows` | **2.1.0** |
 | `xgpui-parley` | **0.4.0** |
-| `xgpui-macos` | 3.0.2 |
+| `xgpui-macos` | **4.0.0** |
 | `xgpui-ios` | 1.26.4 |
 | `xgpui-linux`, `xgpui-platform`, `xgpui-web` | 2.0.2 |
 | `xgpui-wgpu` | **2.1.0** |
@@ -102,10 +102,14 @@ custom backends inherit unsupported defaults. See the
 | `xgpui-media` | 0.5.2 |
 | `xgpui-shader` | 0.4.2 |
 
-Apple, Windows and wgpu receive minor capability releases; Parley's new APIs use a
+The selected versions combine font controls with the GPUI 1.27.0 sync. Apple
+and macOS receive major releases for breaking renderer constructors and the
+Apple thermal-module migration. Windows and wgpu receive minor capability releases; Parley's new APIs use a
 pre-1.0 minor release. The remaining affected crates receive patch updates for
 backend fixes or matching exact dependency pins. `xgpui-color` stays at 0.3.0 and
-`xgpui-macros` at 1.0.1.
+`xgpui-macros` at 1.0.1. See the [combined release version review](upstream/1.27.0-integration.md#selected-crate-versions)
+for the full rationale. These versions are prepared locally; publication and final
+public API approval remain pending.
 
 ## November 4, 2026
 

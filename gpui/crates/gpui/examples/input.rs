@@ -785,7 +785,7 @@ impl Render for InputExample {
             .children(self.recent_keystrokes.iter().rev().map(|ks| {
                 format!(
                     "{:} {}",
-                    ks.unparse(),
+                    ks.unparse(cx.platform_info().os),
                     if let Some(key_char) = ks.key_char.as_ref() {
                         format!("-> {:?}", key_char)
                     } else {
@@ -798,11 +798,7 @@ impl Render for InputExample {
 
 /// Install the example editor's shortcuts without claiming application-wide keys.
 pub fn bind_keys(cx: &mut App) {
-    let modifier = if cfg!(target_os = "macos") {
-        "cmd"
-    } else {
-        "ctrl"
-    };
+    let is_mac = cx.platform_info().is_mac();
     cx.bind_keys([
         KeyBinding::new("backspace", Backspace, Some("TextInput")),
         KeyBinding::new("delete", Delete, Some("TextInput")),
@@ -810,10 +806,26 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("right", Right, Some("TextInput")),
         KeyBinding::new("shift-left", SelectLeft, Some("TextInput")),
         KeyBinding::new("shift-right", SelectRight, Some("TextInput")),
-        KeyBinding::new(&format!("{modifier}-a"), SelectAll, Some("TextInput")),
-        KeyBinding::new(&format!("{modifier}-v"), Paste, Some("TextInput")),
-        KeyBinding::new(&format!("{modifier}-c"), Copy, Some("TextInput")),
-        KeyBinding::new(&format!("{modifier}-x"), Cut, Some("TextInput")),
+        KeyBinding::new(
+            if is_mac { "cmd-a" } else { "ctrl-a" },
+            SelectAll,
+            Some("TextInput"),
+        ),
+        KeyBinding::new(
+            if is_mac { "cmd-v" } else { "ctrl-v" },
+            Paste,
+            Some("TextInput"),
+        ),
+        KeyBinding::new(
+            if is_mac { "cmd-c" } else { "ctrl-c" },
+            Copy,
+            Some("TextInput"),
+        ),
+        KeyBinding::new(
+            if is_mac { "cmd-x" } else { "ctrl-x" },
+            Cut,
+            Some("TextInput"),
+        ),
         KeyBinding::new("home", Home, Some("TextInput")),
         KeyBinding::new("end", End, Some("TextInput")),
         KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, Some("TextInput")),

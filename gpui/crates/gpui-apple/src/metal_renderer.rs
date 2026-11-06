@@ -49,21 +49,18 @@ const MAX_INSTANCE_BUFFER_SIZE: usize = 256 * 1024 * 1024;
 pub type Context = Arc<Mutex<InstanceBufferPool>>;
 pub type Renderer = MetalRenderer;
 
-pub unsafe fn new_renderer(
+pub fn new_renderer(
     context: self::Context,
-    _native_window: *mut c_void,
-    _native_view: *mut c_void,
-    _bounds: gpui::Size<f32>,
     transparent: bool,
     use_display_p3: bool,
-) -> Renderer {
-    let mut renderer = MetalRenderer::new(context, transparent);
+) -> Result<Renderer> {
+    let mut renderer = MetalRenderer::new(context, transparent)?;
     if use_display_p3 {
         if let Err(error) = renderer.set_color_mode(gpui::WindowColorMode::WideGamutSdr) {
             log::warn!("Display P3 presentation unavailable: {error:#}");
         }
     }
-    renderer
+    Ok(renderer)
 }
 
 pub struct InstanceBufferPool {
@@ -172,8 +169,11 @@ pub struct PathRasterizationVertex {
 
 impl MetalRenderer {
     /// Creates a new MetalRenderer with a CAMetalLayer for window-based rendering.
-    pub fn new(instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>, transparent: bool) -> Self {
-        let device = Self::create_device();
+    pub fn new(
+        instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>,
+        transparent: bool,
+    ) -> Result<Self> {
+        let device = Self::create_device()?;
         let layer = metal::CAMetalLayer::new();
         Self::configure_layer(&layer, &device, transparent);
         Self::new_internal(device, Some(layer), !transparent, instance_buffer_pool)
@@ -235,8 +235,8 @@ impl MetalRenderer {
         instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>,
         layer: &objc2_quartz_core::CAMetalLayer,
         transparent: bool,
-    ) -> Self {
-        let device = Self::create_device();
+    ) -> Result<Self> {
+        let device = Self::create_device()?;
         // Retain the platform-owned backing layer for the renderer lifetime.
         let layer = layer.retain();
         Self::configure_layer(&layer, &device, transparent);
@@ -288,13 +288,13 @@ impl MetalRenderer {
     /// This renderer can render scenes to images without requiring a CAMetalLayer,
     /// window, or AppKit. Use `render_scene_to_image()` to render scenes.
     #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
-    pub fn new_headless(instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>) -> Self {
-        let device = Self::create_device();
+    pub fn new_headless(instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>) -> Result<Self> {
+        let device = Self::create_device()?;
         Self::new_internal(device, None, true, instance_buffer_pool)
     }
 
     #[cfg(target_os = "macos")]
-    fn create_device() -> metal::Device {
+    fn create_device() -> Result<metal::Device> {
         // Prefer low‐power integrated GPUs on Intel Mac. On Apple
         // Silicon, there is only ever one GPU, so this is equivalent to
         // `MTLCreateSystemDefaultDevice()`.
@@ -303,7 +303,7 @@ impl MetalRenderer {
             .into_iter()
             .min_by_key(|d| (d.isRemovable(), !d.isLowPower()))
         {
-            d
+            Ok(d)
         } else {
             // For some reason `all()` can return an empty list, see https://github.com/zed-industries/zed/issues/37689
             // In that case, we fall back to the system default device.
@@ -315,15 +315,12 @@ impl MetalRenderer {
     }
 
     #[cfg(target_os = "ios")]
-    fn create_device() -> metal::Device {
+    fn create_device() -> Result<metal::Device> {
         Self::system_default_device()
     }
 
-    fn system_default_device() -> metal::Device {
-        MTLCreateSystemDefaultDevice().unwrap_or_else(|| {
-            log::error!("unable to access a compatible graphics device");
-            std::process::exit(1);
-        })
+    fn system_default_device() -> Result<metal::Device> {
+        MTLCreateSystemDefaultDevice().context("accessing a compatible Metal device")
     }
 
     fn new_internal(
@@ -331,20 +328,20 @@ impl MetalRenderer {
         layer: Option<metal::MetalLayer>,
         opaque: bool,
         instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>,
-    ) -> Self {
+    ) -> Result<Self> {
         #[cfg(feature = "runtime_shaders")]
         let library = device
             .newLibraryWithSource_options_error(
                 &objc2_foundation::NSString::from_str(&SHADERS_SOURCE_FILE),
                 Some(&metal::CompileOptions::new()),
             )
-            .expect("error building metal library");
+            .context("building Metal library")?;
         #[cfg(not(feature = "runtime_shaders"))]
         let library = device
             .newLibraryWithData_error(&dispatch2::DispatchData::from_static_bytes(
                 SHADERS_METALLIB,
             ))
-            .expect("error building metal library");
+            .context("building Metal library")?;
 
         fn to_float2_bits(point: PointF) -> u64 {
             let mut output = point.y.to_bits() as u64;
@@ -385,7 +382,7 @@ impl MetalRenderer {
                         MTLResourceOptions::StorageModeManaged
                     },
                 )
-                .expect("Metal buffer allocation failed")
+                .context("allocating Metal unit vertices")?
         };
 
         let paths_rasterization_pipeline_state = build_path_rasterization_pipeline_state(
@@ -396,7 +393,7 @@ impl MetalRenderer {
             "path_rasterization_fragment",
             MTLPixelFormat::BGRA8Unorm,
             PATH_SAMPLE_COUNT,
-        );
+        )?;
         let path_sprites_pipeline_state = build_path_sprite_pipeline_state(
             &device,
             &library,
@@ -404,7 +401,7 @@ impl MetalRenderer {
             "path_sprite_vertex",
             "path_sprite_fragment",
             MTLPixelFormat::BGRA8Unorm,
-        );
+        )?;
         let shadows_pipeline_state = build_pipeline_state(
             &device,
             &library,
@@ -412,7 +409,7 @@ impl MetalRenderer {
             "shadow_vertex",
             "shadow_fragment",
             MTLPixelFormat::BGRA8Unorm,
-        );
+        )?;
         let quads_pipeline_state = build_pipeline_state(
             &device,
             &library,
@@ -420,7 +417,7 @@ impl MetalRenderer {
             "quad_vertex",
             "quad_fragment",
             MTLPixelFormat::BGRA8Unorm,
-        );
+        )?;
         let underlines_pipeline_state = build_pipeline_state(
             &device,
             &library,
@@ -428,7 +425,7 @@ impl MetalRenderer {
             "underline_vertex",
             "underline_fragment",
             MTLPixelFormat::BGRA8Unorm,
-        );
+        )?;
         let monochrome_sprites_pipeline_state = build_pipeline_state(
             &device,
             &library,
@@ -436,7 +433,7 @@ impl MetalRenderer {
             "monochrome_sprite_vertex",
             "monochrome_sprite_fragment",
             MTLPixelFormat::BGRA8Unorm,
-        );
+        )?;
         let polychrome_sprites_pipeline_state = build_pipeline_state(
             &device,
             &library,
@@ -444,7 +441,7 @@ impl MetalRenderer {
             "polychrome_sprite_vertex",
             "polychrome_sprite_fragment",
             MTLPixelFormat::BGRA8Unorm,
-        );
+        )?;
         let surfaces_pipeline_state = build_pipeline_state(
             &device,
             &library,
@@ -452,7 +449,7 @@ impl MetalRenderer {
             "surface_vertex",
             "surface_fragment",
             MTLPixelFormat::BGRA8Unorm,
-        );
+        )?;
 
         let bgra_surfaces_pipeline_state = build_pipeline_state(
             &device,
@@ -461,10 +458,10 @@ impl MetalRenderer {
             "surface_vertex",
             "surface_bgra_fragment",
             MTLPixelFormat::BGRA8Unorm,
-        );
+        )?;
         let command_queue = device
             .newCommandQueue()
-            .expect("Metal queue allocation failed");
+            .context("allocating Metal command queue")?;
         let supports_shared_storage = cfg!(target_os = "ios") || is_apple_gpu;
         let sprite_atlas = Arc::new(MetalAtlas::new(device.clone(), supports_shared_storage));
         let core_video_texture_cache = unsafe {
@@ -476,14 +473,16 @@ impl MetalRenderer {
                 None,
                 ptr::NonNull::from(&mut cache),
             );
-            assert_eq!(
-                status, kCVReturnSuccess,
-                "failed to create CoreVideo Metal texture cache"
+            ensure!(
+                status == kCVReturnSuccess,
+                "failed to create CoreVideo Metal texture cache: {status}"
             );
-            CFRetained::from_raw(ptr::NonNull::new(cache).expect("CoreVideo returned a null cache"))
+            CFRetained::from_raw(
+                ptr::NonNull::new(cache).context("CoreVideo returned a null cache")?,
+            )
         };
 
-        Self {
+        Ok(Self {
             #[cfg(target_os = "macos")]
             wide_sdr: None,
             custom_compositor: None,
@@ -514,7 +513,7 @@ impl MetalRenderer {
             path_sample_count: PATH_SAMPLE_COUNT,
             #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
             headless_render_target: None,
-        }
+        })
     }
 
     pub fn layer(&self) -> Option<&metal::MetalLayerRef> {
@@ -2164,15 +2163,15 @@ fn build_pipeline_state(
     vertex_fn_name: &str,
     fragment_fn_name: &str,
     pixel_format: metal::MTLPixelFormat,
-) -> metal::RenderPipelineState {
+) -> Result<metal::RenderPipelineState> {
     let vertex_fn = library
         .newFunctionWithName(&objc2_foundation::NSString::from_str(vertex_fn_name))
         .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
-        .expect("error locating vertex function");
+        .context("locating Metal vertex function")?;
     let fragment_fn = library
         .newFunctionWithName(&objc2_foundation::NSString::from_str(fragment_fn_name))
         .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
-        .expect("error locating fragment function");
+        .context("locating Metal fragment function")?;
 
     let descriptor = metal::RenderPipelineDescriptor::new();
     descriptor.setLabel(Some(&objc2_foundation::NSString::from_str(label)));
@@ -2190,7 +2189,7 @@ fn build_pipeline_state(
 
     device
         .newRenderPipelineStateWithDescriptor_error(&descriptor)
-        .expect("could not create render pipeline state")
+        .context("creating Metal render pipeline state")
 }
 
 fn build_path_sprite_pipeline_state(
@@ -2200,15 +2199,15 @@ fn build_path_sprite_pipeline_state(
     vertex_fn_name: &str,
     fragment_fn_name: &str,
     pixel_format: metal::MTLPixelFormat,
-) -> metal::RenderPipelineState {
+) -> Result<metal::RenderPipelineState> {
     let vertex_fn = library
         .newFunctionWithName(&objc2_foundation::NSString::from_str(vertex_fn_name))
         .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
-        .expect("error locating vertex function");
+        .context("locating Metal vertex function")?;
     let fragment_fn = library
         .newFunctionWithName(&objc2_foundation::NSString::from_str(fragment_fn_name))
         .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
-        .expect("error locating fragment function");
+        .context("locating Metal fragment function")?;
 
     let descriptor = metal::RenderPipelineDescriptor::new();
     descriptor.setLabel(Some(&objc2_foundation::NSString::from_str(label)));
@@ -2226,7 +2225,7 @@ fn build_path_sprite_pipeline_state(
 
     device
         .newRenderPipelineStateWithDescriptor_error(&descriptor)
-        .expect("could not create render pipeline state")
+        .context("creating Metal render pipeline state")
 }
 
 fn build_path_rasterization_pipeline_state(
@@ -2237,15 +2236,15 @@ fn build_path_rasterization_pipeline_state(
     fragment_fn_name: &str,
     pixel_format: metal::MTLPixelFormat,
     path_sample_count: u32,
-) -> metal::RenderPipelineState {
+) -> Result<metal::RenderPipelineState> {
     let vertex_fn = library
         .newFunctionWithName(&objc2_foundation::NSString::from_str(vertex_fn_name))
         .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
-        .expect("error locating vertex function");
+        .context("locating Metal vertex function")?;
     let fragment_fn = library
         .newFunctionWithName(&objc2_foundation::NSString::from_str(fragment_fn_name))
         .ok_or_else(|| anyhow::anyhow!("Metal function missing"))
-        .expect("error locating fragment function");
+        .context("locating Metal fragment function")?;
 
     let descriptor = metal::RenderPipelineDescriptor::new();
     descriptor.setLabel(Some(&objc2_foundation::NSString::from_str(label)));
@@ -2267,7 +2266,7 @@ fn build_path_rasterization_pipeline_state(
 
     device
         .newRenderPipelineStateWithDescriptor_error(&descriptor)
-        .expect("could not create render pipeline state")
+        .context("creating Metal render pipeline state")
 }
 
 #[derive(Clone)]
@@ -2644,10 +2643,10 @@ impl MetalHeadlessRenderer {
         self.renderer.render_scene_to_linear_p3(scene, extent)
     }
 
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         let instance_buffer_pool = Arc::new(Mutex::new(InstanceBufferPool::default()));
-        let renderer = MetalRenderer::new_headless(instance_buffer_pool);
-        Self { renderer }
+        let renderer = MetalRenderer::new_headless(instance_buffer_pool)?;
+        Ok(Self { renderer })
     }
 }
 
@@ -2736,7 +2735,8 @@ mod tests {
         drop(image_buffer);
         scene.finish();
 
-        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())))
+            .expect("Metal renderer initialization");
         let image = renderer
             .render_scene_to_image(&scene, size(DevicePixels(16), DevicePixels(16)))
             .unwrap();
@@ -2763,7 +2763,8 @@ mod tests {
         });
         drop(frame);
         scene.finish();
-        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())))
+            .expect("Metal renderer initialization");
         let image = renderer
             .render_scene_to_image(&scene, size(DevicePixels(32), DevicePixels(18)))
             .unwrap();
@@ -2805,7 +2806,8 @@ mod tests {
             image_buffer: buffer,
         });
         scene.finish();
-        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())))
+            .expect("Metal renderer initialization");
         let error = renderer
             .render_scene_to_image(&scene, size(DevicePixels(16), DevicePixels(16)))
             .unwrap_err();
@@ -2842,7 +2844,8 @@ mod tests {
                     scene.finish();
                     drop(frame);
                     let mut renderer =
-                        MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+                        MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())))
+                            .expect("Metal renderer initialization");
                     let cache = renderer.core_video_texture_cache.clone();
                     let extent = size(DevicePixels(32), DevicePixels(18));
                     // This fixture reads the final compositor target on the CPU.
@@ -2940,7 +2943,8 @@ mod tests {
                 });
                 scene.finish();
                 let mut renderer =
-                    MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+                    MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())))
+                        .expect("Metal renderer initialization");
                 let extent = size(DevicePixels(32), DevicePixels(18));
                 let target = crate::custom_draw::texture(&renderer.device, extent).unwrap();
                 let command = renderer.render_frame(&scene, &target, extent).unwrap();

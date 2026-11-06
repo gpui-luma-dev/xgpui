@@ -67,7 +67,8 @@ impl CustomContent for Patch {
     }
 }
 fn renderer() -> MetalRenderer {
-    let mut r = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+    let mut r = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())))
+        .expect("Metal renderer initialization");
     r.set_color_mode(gpui::WindowColorMode::WideGamutSdr)
         .unwrap();
     r
@@ -81,17 +82,8 @@ fn display_p3_window_option_negotiates_existing_color_modes() {
         (false, true, gpui::WindowColorMode::WideGamutSdr),
         (true, true, gpui::WindowColorMode::Default),
     ] {
-        // The Metal constructor uses its own layer; window/view pointers are unused.
-        let renderer = unsafe {
-            crate::metal_renderer::new_renderer(
-                pool.clone(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                size(32., 32.),
-                transparent,
-                requested,
-            )
-        };
+        let renderer = crate::metal_renderer::new_renderer(pool.clone(), transparent, requested)
+            .expect("Metal renderer initialization");
         assert_eq!(renderer.color_status().effective(), expected);
     }
 }
@@ -512,8 +504,9 @@ fn wide_sdr_typed_output_rejects_an_8bit_texture() -> Result<()> {
 fn wide_sdr_renderer_isolation_mode_switches_and_queued_resources() -> Result<()> {
     objc2::rc::autoreleasepool(|_| {
         let pool = Arc::new(Mutex::new(Default::default()));
-        let mut a = MetalRenderer::new(pool.clone(), false);
-        let mut b_renderer = MetalRenderer::new(pool, false);
+        let mut a = MetalRenderer::new(pool.clone(), false).expect("Metal renderer initialization");
+        let mut b_renderer =
+            MetalRenderer::new(pool, false).expect("Metal renderer initialization");
         assert_eq!(a.color_status().requested(), gpui::WindowColorMode::Default);
         a.set_color_mode(gpui::WindowColorMode::WideGamutSdr)?;
         let pipeline = a.wide_sdr.as_ref().unwrap().compose.as_ptr();
@@ -574,7 +567,8 @@ fn wide_sdr_renderer_isolation_mode_switches_and_queued_resources() -> Result<()
 #[test]
 fn wide_sdr_transparency_failure_preserves_configuration() -> Result<()> {
     objc2::rc::autoreleasepool(|_| {
-        let mut r = MetalRenderer::new(Arc::new(Mutex::new(Default::default())), true);
+        let mut r = MetalRenderer::new(Arc::new(Mutex::new(Default::default())), true)
+            .expect("Metal renderer initialization");
         let status = r.color_status();
         assert!(
             r.set_color_mode(gpui::WindowColorMode::WideGamutSdr)

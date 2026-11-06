@@ -340,19 +340,19 @@ public API was added for these controls.
 
 ## Release versions
 
-The font-controls release uses these versions and exact internal dependency
-requirements. No new crate is published; the parser module is private inside `xgpui`.
+The combined font-controls and GPUI 1.27.0 release uses these selected versions
+and exact internal dependency requirements. No new crate is published; the parser module is private inside `xgpui`.
 
 | Crate | Previous | Version | Rationale |
 | --- | --- | --- | --- |
-| `xgpui` | 2.0.1 | **3.0.0** | Breaking fields on `Font`, `TextStyle`, and `TextStyleRefinement`; other APIs are additive. |
-| `xgpui-apple` | 3.0.1 | **3.1.0** | New static axes and introspection capabilities; existing public signatures remain intact. |
+| `xgpui` | 2.0.1 | **3.0.0** | Breaking fields on `Font`, `TextStyle`, and `TextStyleRefinement`, plus GPUI 1.27.0 keystroke, window-text and platform contract changes. |
+| `xgpui-apple` | 3.0.1 | **4.0.0** | Static axes and introspection plus GPUI 1.27.0 integration: renderer constructors become fallible, the factory drops unused arguments, and thermal observation moves to `process_info`. |
 | `xgpui-windows` | 2.0.1 | **2.1.0** | New static axes and introspection capabilities; existing public signatures remain intact. |
 | `xgpui-parley` | 0.3.1 | **0.4.0** | New axes/introspection capabilities and additive `VariationPreview` API; no removed APIs. |
 | `xgpui-wgpu` | 2.0.1 | **2.1.0** | Adds Cosmic feature/axis inspection; arbitrary axis application remains rejected. |
 | `xgpui-web` | 2.0.1 | **2.0.2** | Reject unsupported explicit axes and update core/backend pins. |
-| `xgpui-macos` | 3.0.1 | **3.0.2** | Core and Apple dependency-pin updates only. |
-| `xgpui-ios` | 1.26.3 | **1.26.4** | Core and Apple dependency-pin updates only. |
+| `xgpui-macos` | 3.0.1 | **4.0.0** | Typed AppKit integration, macOS 12 minimum, and a fallible constructor on the public headless-renderer re-export. |
+| `xgpui-ios` | 1.26.3 | **1.26.4** | Core/Apple pins and upstream UIKit initialization updates. |
 | `xgpui-linux` | 2.0.1 | **2.0.2** | Core and wgpu dependency-pin updates only. |
 | `xgpui-platform` | 2.0.1 | **2.0.2** | Matching core and backend dependency-pin updates only. |
 | `xgpui-media` | 0.5.1 | **0.5.2** | Matching core/backend/shader dependency-pin updates only. |
@@ -363,7 +363,8 @@ requirements. No new crate is published; the parser module is private inside `xg
 
 `xgpui-color` remains 0.3.0 and `xgpui-macros` remains 1.0.1. The repository's
 versioning policy does not automatically propagate major bumps to dependent
-crates: these dependents retain their public members/signatures. Their GPUI
+crates. Apple and macOS receive majors for their changed public constructors;
+the other dependents retain their public members/signatures. Their GPUI
 inputs, outputs, traits, and re-exports now resolve to the matching 3.0 type
 universe, so consumers must upgrade the pinned stack together; mixing this
 release family with core 2.x is unsupported. The exhaustive-literal migrations above

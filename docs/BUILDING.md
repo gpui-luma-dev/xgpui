@@ -12,7 +12,7 @@ cargo build --locked
 
 The private root harness builds GPUI and the selected platform backend by
 default. Nine framework/backend crates remain local. Seventeen supporting crates
-come from the published `gpui-unofficial` release, currently pinned to `=1.26.2`.
+come from the published `gpui-unofficial` release, currently pinned to `=1.27.0`.
 Optional integrations and development-only support are not direct default build
 inputs. Metal shaders compile at build time
 by default. The harness launches nothing.
@@ -56,6 +56,7 @@ root output directory, as the lab recipes already do.
 - Rust with the 2024 edition; tested with Rust 1.99.0 on Apple Silicon macOS.
 - Xcode selected as the active developer directory, with the Metal compiler
   installed, for the default macOS shader build.
+- macOS 12.0 or later for the native Apple backend.
 - Rust for downstream normalization and build-manifest generation. The existing
   raw import workflow retains its current importer.
 
@@ -172,14 +173,15 @@ pulls of the upstream framework alongside the local fork.
 version overrides for ten framework/backend crates and seven extensions.
 Normalization applies those versions while keeping directory names, library names
 and dependency aliases stable. The helper package version follows the captured
-`release/1.26.2` provenance independently. `upstream.json` records both sets.
+`release/1.27.0` provenance independently. `upstream.json` records both sets.
 
 For example, the local `gpui` crate is packaged as `xgpui`; applications retain
 `use gpui::*` through a Cargo alias. Internal dependencies use exact requirements
 from the release map. Supporting packages retain their upstream identities and
-`=1.26.2` requirements. The published family includes `xgpui-ios` 1.26.2 alongside the core 2.0
-family. iOS follows upstream versioning while its implementation remains
-unchanged; interactive simulator/device validation remains pending.
+`=1.27.0` requirements. The selected downstream family uses core 3.0.0 and Apple/macOS 4.0.0, with
+matching exact pins. The integration still requires final public API review
+before release.
+Interactive iOS simulator/device validation remains pending.
 
 ## Extension lab package
 

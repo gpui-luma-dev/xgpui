@@ -796,9 +796,9 @@ dependencies = [
 
 [[package]]
 name = "collections-gpui-unofficial"
-version = "1.26.2"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcad6a8653eef4fb2a70e9853e8a237fcb1ef60791f49e08862b9f6f70f4efce"
+checksum = "86f9ccea73bb80ed24a00835330d2887f3ea865ab1bdd81eb213a416ac2b9c17"
 dependencies = [
  "gpui-util-gpui-unofficial",
  "indexmap",
@@ -1080,9 +1080,9 @@ checksum = "9e9de72ce2ad1f90dc62fa25f0f430ef85eb4b0d8fa0be4f30373bc40a21d28e"
 
 [[package]]
 name = "derive-refineable-gpui-unofficial"
-version = "1.26.2"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8428f59d2b5f2e5f6eaa1e50d49e2824f331f2c32ea994fe12d589a9f1c9f987"
+checksum = "0cfe23b2b79265f3e9273e580db4a609e0efb6c6fed61b986185499d81334c71"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1776,9 +1776,9 @@ dependencies = [
 
 [[package]]
 name = "gpui-shared-string-gpui-unofficial"
-version = "1.26.2"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bc1c6fc120be36da02e7841c9720ca560fa5ec96296a6f579c0ce3a8acab93b"
+checksum = "4ed38316644af534da4c4e9f7e62db48fbcde4f3eebdc4ddbe83065577bc66ac"
 dependencies = [
  "schemars",
  "serde",
@@ -1787,9 +1787,9 @@ dependencies = [
 
 [[package]]
 name = "gpui-util-gpui-unofficial"
-version = "1.26.2"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58f5174db768d01efbea5a1b57e25572811e02a95c30f54fb38cb3db0e0e66f2"
+checksum = "4a98b054bec16c1aeb4c5b7d474939efa93f861b812e59038e8c7a1b152e8b55"
 dependencies = [
  "anyhow",
  "log",
@@ -1930,9 +1930,9 @@ dependencies = [
 
 [[package]]
 name = "http-client-gpui-unofficial"
-version = "1.26.2"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17ebd82030de97594988794a0b5bc8d28a85bc2b896065e881a98268bef3f28a"
+checksum = "1bb5311f8baa37ac3ce716df18a45650558d90c5509b9a212683a05e35175372"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2843,6 +2843,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-foundation 0.3.2",
+ "objc2-uniform-type-identifiers",
 ]
 
 [[package]]
@@ -3038,6 +3039,16 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
  "objc2-quartz-core 0.3.2",
+]
+
+[[package]]
+name = "objc2-uniform-type-identifiers"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7902ac02859fc1f7045f8b598c63f1ae0cc7efeaa06a9bc9f3d9a3c955974fa4"
+dependencies = [
+ "objc2 0.6.5",
+ "objc2-foundation 0.3.2",
 ]
 
 [[package]]
@@ -3772,9 +3783,9 @@ dependencies = [
 
 [[package]]
 name = "refineable-gpui-unofficial"
-version = "1.26.2"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d01c8567a30374d4229164f90f36ad48f2c307e9ec753de2a7e8e3f1d5fd66dd"
+checksum = "4fff23f48d9c4109ea64667124fb38453ac012b7d9ec6aad1bfff03f7ed0929a"
 dependencies = [
  "derive-refineable-gpui-unofficial",
 ]
@@ -3936,9 +3947,9 @@ dependencies = [
 
 [[package]]
 name = "scheduler-gpui-unofficial"
-version = "1.26.2"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa582f77940be6852618d19535d655caeb44776d320d78d22128006d0a79515a"
+checksum = "558743bac61b4edd86e0c762dce0c304b861dcad7d55fdbfda329bc6a6cffd14"
 dependencies = [
  "async-task",
  "backtrace",
@@ -4354,9 +4365,9 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "sum-tree-gpui-unofficial"
-version = "1.26.2"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d18b0a9518af6a47bc43a25772eecd64fed4f2a7b78b85032fcafb8f5f2a443"
+checksum = "9899b8749aa0254126814f182a8f94fb48af41ec248cf368115ccaae373de1bf"
 dependencies = [
  "heapless",
  "rayon",
@@ -4449,11 +4460,10 @@ dependencies = [
 
 [[package]]
 name = "taffy"
-version = "0.13.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c034e05f6ee85a12daa63863c2245797715075c70649947aa0da54f3f2ab1d0f"
+checksum = "3c8480887e8803986d96a7173729565520d4bbb721ad6b7ad6941a22897207aa"
 dependencies = [
- "arrayvec",
  "serde",
  "slotmap",
  "smallvec",
@@ -5975,7 +5985,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-apple"
-version = "3.1.0"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "async-task",
@@ -5989,7 +5999,6 @@ dependencies = [
  "derive_more",
  "dispatch2",
  "etagere",
- "foreign-types",
  "futures",
  "gpui-util-gpui-unofficial",
  "image",
@@ -6094,7 +6103,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-macos"
-version = "3.0.2"
+version = "4.0.0"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -6114,9 +6123,11 @@ dependencies = [
  "log",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
+ "objc2-core-graphics",
  "objc2-core-video",
  "objc2-foundation 0.3.2",
  "objc2-quartz-core 0.3.2",
+ "objc2-uniform-type-identifiers",
  "objc2-user-notifications",
  "parking_lot",
  "raw-window-handle",
@@ -6607,9 +6618,9 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "ztracing-gpui-unofficial"
-version = "1.26.2"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38a6514321e36610ed9b79140ba172629a085c623accc968232d5db244c829ed"
+checksum = "593f4eb8240edd602278e73b468f02c480e46569a3d3aa7d444a8cbef883a01a"
 dependencies = [
  "tracing",
  "ztracing-macro-gpui-unofficial",
@@ -6617,9 +6628,9 @@ dependencies = [
 
 [[package]]
 name = "ztracing-macro-gpui-unofficial"
-version = "1.26.2"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4949229ad2ed0f0cdca2b94f5647b420dd40040d98ab24d9ee1a575534fded91"
+checksum = "02cc4b3e06ae3996fe9d19a94040cb75c62345d4a3fcba4f06f3601c333ad7a3"
 
 [[package]]
 name = "zune-core"

@@ -374,6 +374,7 @@ impl Element for TextLine {
                             .push(Rc::new(scramble::Alphabet::prepare(
                                 run.font_id,
                                 line.font_size,
+                                &style.font(),
                                 window,
                             )));
                     }
@@ -699,7 +700,11 @@ mod interaction_tests {
         // A fast reverse drag can release beyond the last delivered move event.
         // The release coordinate, rather than that stale move, must win.
         let end = text.read_with(cx, |text, _| {
-            bounds.origin + point(px(*text.geometry.as_ref().unwrap().carets.last().unwrap() + 4.), px(0.))
+            bounds.origin
+                + point(
+                    px(*text.geometry.as_ref().unwrap().carets.last().unwrap() + 4.),
+                    px(0.),
+                )
         });
         cx.simulate_mouse_down(end, MouseButton::Left, Modifiers::default());
         cx.simulate_mouse_move(

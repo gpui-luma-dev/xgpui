@@ -198,7 +198,15 @@ impl Lab {
         if let Some(photo) = &mut self.photo {
             photo.poll(window);
         }
-        let labels = ["sRGB", if self.wide { "Display P3 — native wide" } else { "Display P3 source — sRGB preview" }, "Out of sRGB areas (source mask)"];
+        let labels = [
+            "sRGB",
+            if self.wide {
+                "Display P3 — native wide"
+            } else {
+                "Display P3 source — sRGB preview"
+            },
+            "Out of sRGB areas (source mask)",
+        ];
         let mut body = div().id("photo-gamut-scroll").size_full().overflow_y_scroll().p_6().bg(rgb(0x202833)).text_color(rgb(0xe2eaf3)).flex().flex_col().gap_4()
             .when(self.standalone_navigation, |body| body.child(self.button("← Chromaticity & metadata".into(), 27, cx)))
             .child(div().text_2xl().child("Italy — WebKit photographic gamut comparison"))
@@ -321,7 +329,7 @@ mod tests {
             });
         }
         scene.finish();
-        let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+        let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()?;
         renderer.set_color_mode(WindowColorMode::WideGamutSdr)?;
         let frame = loop {
             let frame = renderer.render_scene_to_linear_p3(

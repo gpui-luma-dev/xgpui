@@ -27,7 +27,7 @@ test-support = ["gpui/test-support", "dep:image"]
 gpui = { package = "xgpui", version = "=3.0.0" }
 anyhow = { version = "1.0.86" }
 bytemuck = { version = "1" }
-collections = { package = "collections-gpui-unofficial", version = "=1.26.2" }
+collections = { package = "collections-gpui-unofficial", version = "=1.27.0" }
 cosmic-text = "0.19.0"
 etagere = { version = "0.2" }
 itertools = { version = "0.14.0" }
@@ -57,7 +57,7 @@ ttf-parser = "0.25"
 unicode-bidi = { version = "0.3.18", default-features = false, features = [
     "hardcoded-data"] }
 unicode-segmentation = { version = "1.10" }
-gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.26.2" }
+gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.27.0" }
 font-kit = { version = "0.14.1-zed", package = "zed-font-kit", default-features = false, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -93,7 +93,7 @@ image = { version = "0.25.1", default-features = false, features = [
     "tiff",
     "webp"] }
 # Validate shaders with the same Naga revision that wgpu uses at runtime.
-naga = { git = "https://github.com/gfx-rs/wgpu", rev = "3b3506ea31154edc04de64debda0e780cba2639c", features = ["wgsl-in"] }
+naga = { git = "https://github.com/gfx-rs/wgpu", rev = "cddb2f5d80dc0009b2ef6767635140cacf90a007", features = ["wgsl-in"] }
 
 [[bench]]
 name = "layout_line"

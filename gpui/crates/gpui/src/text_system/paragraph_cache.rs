@@ -98,8 +98,9 @@ impl LineLayoutCache {
             // Keep previous-frame entries until normal frame eviction. A failed
             // backend/reflow request must not consume reusable cached results.
             let (shape, layout) = {
-                let current = self.current_frame.read();
-                let previous = self.previous_frame.lock();
+                let state = self.state.borrow();
+                let current = &state.current_frame;
+                let previous = &state.previous_frame;
                 let shape = current
                     .paragraphs
                     .shapes
@@ -166,7 +167,8 @@ impl LineLayoutCache {
                     )
                 }
             };
-            let mut current = self.current_frame.write();
+            let mut state = self.state.borrow_mut();
+            let current = &mut state.current_frame;
             // Do not publish a result built across a concurrent font registration.
             if self.font_generation.load(Ordering::Acquire) != generation
                 || self.cached_font_generation.load(Ordering::Acquire) != generation
@@ -260,7 +262,8 @@ mod tests {
         });
         let layout: Arc<dyn PlatformParagraphLayout> = Arc::new(Probe);
         {
-            let mut frame = cache.current_frame.write();
+            let mut state = cache.state.borrow_mut();
+            let frame = &mut state.current_frame;
             frame
                 .paragraphs
                 .shapes
@@ -275,16 +278,27 @@ mod tests {
         let end = cache.layout_index();
         // A discarded speculative paint range does not become a reusable range.
         cache.truncate_layouts(start.clone());
-        assert_eq!(cache.current_frame.read().paragraphs.index().layouts, 0);
+        assert_eq!(
+            cache
+                .state
+                .borrow()
+                .current_frame
+                .paragraphs
+                .index()
+                .layouts,
+            0
+        );
         cache
+            .state
+            .borrow_mut()
             .current_frame
-            .write()
             .paragraphs
             .used_shapes
             .push(shape_key);
         cache
+            .state
+            .borrow_mut()
             .current_frame
-            .write()
             .paragraphs
             .used_layouts
             .push(layout_key);
@@ -301,7 +315,15 @@ mod tests {
         assert!(Arc::ptr_eq(&layout, &cached));
         generation.fetch_add(1, Ordering::AcqRel);
         cache.reuse_layouts(start..end); // Old ranges must never resurrect old layouts.
-        assert!(cache.current_frame.read().paragraphs.layouts.is_empty());
+        assert!(
+            cache
+                .state
+                .borrow()
+                .current_frame
+                .paragraphs
+                .layouts
+                .is_empty()
+        );
         assert!(
             cache
                 .layout_paragraph("probe".into(), px(16.0), &[], px(100.0))
@@ -319,8 +341,9 @@ mod tests {
             force_width: None,
         });
         cache
+            .state
+            .borrow_mut()
             .current_frame
-            .write()
             .paragraphs
             .shapes
             .insert(key, Arc::new(Probe));
@@ -339,22 +362,25 @@ mod tests {
     }
 
     #[test]
-    fn reflow_runs_without_locks_and_does_not_publish_across_font_registration() {
+    fn reflow_releases_cache_borrow_and_does_not_publish_across_font_registration() {
+        thread_local! {
+            static REFLOW_CACHE: std::cell::RefCell<std::rc::Weak<LineLayoutCache>> = Default::default();
+        }
         struct ChangingShape {
-            cache: std::sync::Weak<LineLayoutCache>,
             generation: Arc<AtomicUsize>,
         }
         impl PlatformParagraphShape for ChangingShape {
             fn layout(&self, _: Pixels) -> anyhow::Result<Arc<dyn PlatformParagraphLayout>> {
-                let cache = self.cache.upgrade().unwrap();
-                assert!(cache.current_frame.try_write().is_some());
-                assert!(cache.previous_frame.try_lock().is_some());
+                REFLOW_CACHE.with(|slot| {
+                    let cache = slot.borrow().upgrade().unwrap();
+                    assert!(cache.state.try_borrow_mut().is_ok());
+                });
                 self.generation.fetch_add(1, Ordering::AcqRel);
                 Ok(Arc::new(Probe))
             }
         }
         let generation = Arc::new(AtomicUsize::new(0));
-        let cache = Arc::new(LineLayoutCache::new(
+        let cache = std::rc::Rc::new(LineLayoutCache::new(
             Arc::new(NoopTextSystem),
             generation.clone(),
         ));
@@ -365,13 +391,14 @@ mod tests {
             wrap_width: None,
             force_width: None,
         });
-        cache.current_frame.write().paragraphs.shapes.insert(
-            key,
-            Arc::new(ChangingShape {
-                cache: Arc::downgrade(&cache),
-                generation,
-            }),
-        );
+        REFLOW_CACHE.with(|slot| *slot.borrow_mut() = std::rc::Rc::downgrade(&cache));
+        cache
+            .state
+            .borrow_mut()
+            .current_frame
+            .paragraphs
+            .shapes
+            .insert(key, Arc::new(ChangingShape { generation }));
         // The first reflow crosses a generation; retry reaches Noop's Unsupported
         // hook. Its obsolete successful result must never enter either frame map.
         assert!(
@@ -379,7 +406,23 @@ mod tests {
                 .layout_paragraph("probe".into(), px(16.0), &[], px(100.0))
                 .is_err()
         );
-        assert!(cache.current_frame.read().paragraphs.layouts.is_empty());
-        assert!(cache.previous_frame.lock().paragraphs.layouts.is_empty());
+        assert!(
+            cache
+                .state
+                .borrow()
+                .current_frame
+                .paragraphs
+                .layouts
+                .is_empty()
+        );
+        assert!(
+            cache
+                .state
+                .borrow()
+                .previous_frame
+                .paragraphs
+                .layouts
+                .is_empty()
+        );
     }
 }

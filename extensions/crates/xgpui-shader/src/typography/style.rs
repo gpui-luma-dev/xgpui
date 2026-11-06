@@ -201,7 +201,10 @@ mod render_tests {
                 Arc::new(()),
                 move || {
                     let renderer: Box<dyn PlatformHeadlessRenderer> = if native {
-                        Box::new(gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+                        Box::new(
+                            gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+                                .expect("Metal renderer initialization"),
+                        )
                     } else {
                         Box::new(gpui_wgpu::WgpuHeadlessRenderer::new()?)
                     };

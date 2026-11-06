@@ -777,6 +777,7 @@ fn generate(root: &Path) -> Result<()> {
         ),
         ("shader-producers", "docs/extensions/shader-producers.md"),
         ("gpui-public-api", "docs/extensions/gpui-public-api.md"),
+        ("gpui-1.27-migration", "docs/upstream/1.27.0-integration.md"),
         ("extension-paints", "docs/extensions/extension-paints.md"),
         (
             "paint-contract-hardening",

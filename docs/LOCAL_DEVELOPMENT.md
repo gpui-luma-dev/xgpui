@@ -24,14 +24,14 @@ XGPUI keeps ten framework and backend crates in `gpui/crates/`: `gpui`,
 `gpui-windows`, `gpui-web`, `gpui-wgpu` and `gpui-ios`. The seven XGPUI extension crates live
 under `extensions/crates/`.
 
-Downstream versions vary by package. The unchanged iOS implementation follows the captured upstream version, 1.26.2; other packages retain their existing independent version histories. Local directory names and Rust import names stay stable; Cargo package
+Downstream versions vary by package. The iOS implementation follows the captured upstream 1.27.0 source, with XGPUI package wiring; other packages retain their existing independent version histories. Local directory names and Rust import names stay stable; Cargo package
 names use the XGPUI prefix:
 
 | Local directory / import name | Release package |
 | --- | --- |
 | `gpui` | `xgpui` |
 | `gpui-apple` | `xgpui-apple` |
-| `gpui-ios` | `xgpui-ios` (1.26.2) |
+| `gpui-ios` | `xgpui-ios` (1.26.4) |
 | `gpui-linux` | `xgpui-linux` |
 | `gpui-macos` | `xgpui-macos` |
 | `gpui-macros` | `xgpui-macros` |
@@ -49,7 +49,7 @@ The supporting crates below are dependencies from the published
 They are no longer copied into this repository. Cargo downloads them from
 crates.io; manifests keep familiar Rust import names using dependency aliases.
 For example, the `collections` dependency uses the package
-`collections-gpui-unofficial`, currently at `=1.26.2` to match the captured upstream release, rather than the
+`collections-gpui-unofficial`, currently at `=1.27.0` to match the captured upstream release, rather than the
 independent downstream package versions.
 
 | Former local crate names | Published crates.io packages |
@@ -156,9 +156,10 @@ captures and benchmarks.
 
 ## iOS backend
 
-`xgpui-ios` follows the captured upstream version while its iOS implementation remains unchanged.
-Version 1.26.2 is published on crates.io. Simulator compilation and packaging
-are checked; interactive simulator/device validation remains pending.
+The iOS source now follows captured upstream 1.27.0 with XGPUI package and shared
+renderer integration. Its selected downstream version is 1.26.4, with core 3.0.0 and Apple 4.0.0
+pins; final public API review and publication remain pending. Simulator compilation is checked; interactive
+simulator/device validation remains pending.
 Install Xcode, select its developer directory, and add the simulator target:
 
 ```sh

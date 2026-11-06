@@ -28,10 +28,10 @@ unicode-segmentation = { version = "1.10" }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gpui = { package = "xgpui", version = "=3.0.0" }
-scheduler = { package = "scheduler-gpui-unofficial", version = "=1.26.2" }
+scheduler = { package = "scheduler-gpui-unofficial", version = "=1.27.0" }
 parking_lot = { version = "0.12.1", features = ["nightly"] }
 gpui_wgpu = { package = "xgpui-wgpu", version = "=2.1.0" }
-http_client = { package = "http-client-gpui-unofficial", version = "=1.26.2" }
+http_client = { package = "http-client-gpui-unofficial", version = "=1.27.0" }
 anyhow = { version = "1.0.86" }
 async-channel = { version = "2.5", default-features = false }
 futures = { version = "0.3.34" }

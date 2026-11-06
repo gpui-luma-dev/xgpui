@@ -1,6 +1,27 @@
 # GPUI public API changes
 
-Compared with pre-feature main `9b64657`. **Opt-in usage does not mean zero SDK changes.**
+## Breaking changes to XGPUI API
+
+XGPUI extends GPUI through optional extension crates and a maintained set of core
+integration points. This page documents **our changes to GPUI**: font controls,
+color and rendering contracts, paragraph layout, and the backend interfaces
+needed by those extensions. Optional feature usage can still require changes to
+an application's core GPUI code when public structs, traits or resource handles
+change.
+
+Check each compatibility section when upgrading. In particular, exhaustive font
+and style literals need new fields, and custom renderers or text backends must
+follow the documented ownership and backend contracts. Constructors and defaults
+preserve existing behavior where the individual section says they do.
+
+The [GPUI 1.27.0 migration and API review](../upstream/1.27.0-integration.md)
+separately identifies upstream changes carried into XGPUI and adaptations to our
+existing APIs. That integration is awaiting final public API approval. Its
+[upstream release reference](https://github.com/gpui-archipelago/gpui-release-notes/issues/3#issue-5034140647)
+links the original GPUI commits and pull requests.
+
+The maintained XGPUI feature changes below are compared with pre-feature main
+`9b64657`.
 
 ## Font axes and inspection: core 3.0
 

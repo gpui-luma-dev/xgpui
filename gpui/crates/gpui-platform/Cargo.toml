@@ -30,6 +30,11 @@ wayland = ["gpui_linux/wayland"]
 x11 = ["gpui_linux/x11"]
 
 [[bench]]
+name = "atlas_upload"
+harness = false
+required-features = ["bench-support"]
+
+[[bench]]
 name = "focus_cleanup"
 harness = false
 required-features = ["bench-support"]
@@ -52,7 +57,7 @@ gpui = { package = "xgpui", version = "=3.0.0" }
 criterion = { version = "0.8.2", features = ["html_reports"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-gpui_macos = { package = "xgpui-macos", version = "=3.0.2" }
+gpui_macos = { package = "xgpui-macos", version = "=4.0.0" }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 gpui_ios = { package = "xgpui-ios", version = "=1.26.4" }
@@ -61,7 +66,7 @@ gpui_ios = { package = "xgpui-ios", version = "=1.26.4" }
 gpui_windows = { package = "xgpui-windows", version = "=2.1.0" }
 gpui = { package = "xgpui", version = "=3.0.0", features = ["windows-manifest"] }
 
-[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+[target.'cfg(all(any(target_os = "linux", target_os = "freebsd"), not(target_env = "ohos")))'.dependencies]
 gpui_linux = { package = "xgpui-linux", version = "=2.0.2" }
 
 [target.'cfg(target_os = "linux")'.dependencies]

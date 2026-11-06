@@ -42,7 +42,8 @@ fn wide_instances_match_typed_producers_and_reject_default_mode() {
     use gpui::{CustomDraw, DevicePixels, PlatformHeadlessRenderer, WindowColorMode};
     let wide = ShaderProgram::<EffectInstance>::new_linear_p3("struct Parameters { color: vec4<f32>, effect: vec4<f32>, } fn shade(input: ShaderInput, p: Parameters) -> vec4<f32> { return p.color; }").unwrap();
     #[cfg(target_os = "macos")]
-    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+        .expect("Metal renderer initialization");
     #[cfg(target_os = "windows")]
     let mut renderer = gpui_windows::Dx11HeadlessRenderer::new().unwrap();
     let make_scene = |instanced: bool, alpha: f32, opacity: f32| {

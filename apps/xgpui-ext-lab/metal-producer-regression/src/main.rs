@@ -121,7 +121,7 @@ mod native {
     }
 
     pub fn run(options: &Options) -> Result<()> {
-        let mut renderer = MetalHeadlessRenderer::new();
+        let mut renderer = MetalHeadlessRenderer::new()?;
         renderer.set_color_mode(WindowColorMode::WideGamutSdr)?;
         let count = if options.control {
             1

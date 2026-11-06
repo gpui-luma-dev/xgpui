@@ -209,7 +209,8 @@ fn renderers() -> Vec<Box<dyn TestRenderer>> {
         vec![Box::new(gpui_wgpu::WgpuHeadlessRenderer::new().unwrap())];
     #[cfg(target_os = "macos")]
     result.push(Box::new(
-        gpui_apple::metal_renderer::MetalHeadlessRenderer::new(),
+        gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
     ));
     #[cfg(target_os = "windows")]
     if std::env::var("XGPUI_BRUSH_NATIVE").as_deref() == Ok("1") {
