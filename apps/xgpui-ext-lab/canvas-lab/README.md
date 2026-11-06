@@ -63,8 +63,10 @@ center. Zoom is bounded to 0.01–64. Projection converts to f32 only at the GPU
 boundary.
 
 The grid uses one procedural shader quad, with fading minor/major lines or
-dots. This first experiment excludes rotation, custom inertia, incremental scene insertion/removal,
-and web integration. It does not establish arbitrary subtree scaling. Dense
+dots. The beta excludes rotation, custom inertia and incremental scene
+insertion/removal; browser companions live in `extensions-web` (see
+[docs/extensions/canvas.md](../../../docs/extensions/canvas.md)). It does not
+establish arbitrary subtree scaling. Dense
 overviews still record one native quad per proxy; spatial indexing does not
 reduce that paint cost. Aggregated proxies and cached per-entity LOD thumbnails remain follow-ups.
 

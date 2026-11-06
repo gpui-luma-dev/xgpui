@@ -85,10 +85,21 @@ avoids that cost.
 
 Local macOS measurements averaged 16.7 ms/frame in normal card views and
 23.3 ms in the dense 100k overview. These are observations, not guarantees.
-The original native smoke checkpoint recorded 19 core tests and three fractal
-tests; the native frame redesign adds scheduler/precision tests and Metal pixel
-comparison with the f64 reference. Both browser demos were checked in Chromium with WebGPU and WebGL2. Native Windows/Linux
-runtime validation remains outstanding.
+`xgpui-canvas` has 19 unit tests (camera, scene/BVH, snapping, overview, input
+and grid). The `canvas-lab` binary adds 13 tests covering navigation, launch
+validation, CPU Mandelbrot scheduling/precision and, on macOS, Metal pixel
+comparison with the f64 reference; a manual GPU timing test is ignored by
+default. Run them with:
+
+```sh
+cargo test --manifest-path extensions/crates/xgpui-canvas/Cargo.toml --all-features
+cargo test --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin canvas-lab
+```
+
+Both browser demos were checked in Chromium with WebGPU and WebGL2. Native
+runtime acceptance: macOS arm64 smoke and visual checks recorded; Windows native
+labs and `just lab-test` owner-confirmed on 2026-11-04. Linux runtime acceptance
+is deferred until a Linux environment is available.
 
 Rotation, isometric grids, general subtree transforms, reusable selection/map
 widgets and large-scene indexing/rendering improvements remain follow-ups in
