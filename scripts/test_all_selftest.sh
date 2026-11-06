@@ -12,7 +12,7 @@ mkdir -p "$fake"
 
 cat >"$fake/uname" <<'EOF'
 #!/usr/bin/env bash
-echo Linux
+echo "${FAKE_UNAME:-Linux}"
 EOF
 # Records its arguments and the Vulkan/wgpu environment, one file per call,
 # and fails when an argument matches FAKE_CARGO_FAIL.
@@ -112,6 +112,29 @@ check "benchmark suite enables CI features" has "--features bench-support,test-s
 run gpui-bench-build FAKE_CARGO_FAIL=--benches
 check "benchmark compilation failure fails the runner" [ "$status" -ne 0 ]
 check "benchmark compilation failure appears in the summary" has "FAIL  gpui-bench-build" "$output"
+
+# 8. Every host includes CI's full native-library gate, with failures propagated.
+for host in Linux Darwin MINGW64_NT; do
+  run native-libraries FAKE_UNAME="$host"
+  check "$host includes the full native-library gate" has "--features full-capture,runtime-shaders" "$(recorded)"
+  run gpui-bench-build FAKE_UNAME="$host"
+  check "$host includes platform benchmark compilation" has "--benches" "$(recorded)"
+done
+run native-libraries FAKE_CARGO_FAIL=full-capture
+check "native compilation failure fails the runner" [ "$status" -ne 0 ]
+check "native compilation failure appears in the summary" has "FAIL  native-libraries" "$output"
+
+# 9. Use the CI feature variants, rather than passing only default-feature tests.
+run color
+check "color tests include ICC" has "--features icc" "$(recorded)"
+run canvas
+check "canvas tests include GPUI integration" has "--features gpui" "$(recorded)"
+run media
+check "media tests include wgpu" has "--features wgpu" "$(recorded)"
+run parley
+check "Linux Parley includes system font coverage" has "system-fonts,native-test,gpui-platform/wayland,gpui-platform/x11" "$(recorded)"
+run media-minimal
+check "Linux checks media without GPU backends" has "--no-default-features --lib" "$(recorded)"
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures runner self-test check(s) failed."

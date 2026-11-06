@@ -43,7 +43,7 @@ static axes on Linux. See the [font-controls guide](https://xgpui.dev/#font-cont
 
 - [Local development and platform prerequisites](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md)
 - [xgpui API additions and compatibility](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md)
-- [Release preparation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/PUBLISHING.md)
+- [Release preparation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md)
 - [Repository](https://github.com/gpui-luma-dev/xgpui) · [Website](https://xgpui.dev/)
 
 ## Versioning and provenance

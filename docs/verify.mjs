@@ -222,7 +222,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 29);
+assert.equal(Object.keys(data.extension_documents).length, 30);
 assert.match(index, /href="#performance-study">Performance study/);
 assert.match(run('extensionPage("performance-study")'), /Problem 3: every pixel shades every ribbon/);
 assert.match(data.extension_documents['performance-study'].html, /href="#extension-lab"/);
@@ -265,7 +265,7 @@ assert.match(data.extension_documents['high-gamut-windows'].html, /xgpui-gamut/)
 assert.match(run('extensionPage("extensions")'), /Downstream extensions to GPUI/);
 assert.ok(!index.includes('<a href="#extensions">Extensions to GPUI</a>'), 'extensions belong in the crate group');
 for (const [route, doc] of Object.entries(data.extension_documents)) {
-  assert.equal(doc.source, route === 'local-development' ? 'docs/LOCAL_DEVELOPMENT.md' : route === 'whats-new' ? 'docs/WHATS_NEW.md' : route === 'gpui-1.27-migration' ? 'docs/upstream/1.27.0-integration.md' : 'docs/extensions/' + route + '.md');
+  assert.equal(doc.source, route === 'releasing' ? 'docs/RELEASING.md' : route === 'local-development' ? 'docs/LOCAL_DEVELOPMENT.md' : route === 'whats-new' ? 'docs/WHATS_NEW.md' : route === 'gpui-1.27-migration' ? 'docs/upstream/1.27.0-integration.md' : 'docs/extensions/' + route + '.md');
   await readFile(new URL('../' + doc.source, import.meta.url));
   context.location.hash = '#' + route;
   run('render()');

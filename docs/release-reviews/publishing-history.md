@@ -1,3 +1,15 @@
+# Historical publication inventory and evidence
+
+Archived during release-guide consolidation on 2026-11-06. The material below
+records earlier work and point-in-time results; its versions, blockers, approval
+scopes and next steps are historical. It does not authorize another publication
+or describe current release readiness. Temporary report paths are retained as
+historical references and may no longer exist.
+
+For the current process, use [Releasing XGPUI](../RELEASING.md).
+
+---
+
 # Crates.io release preparation
 
 Tracking: [issue #49](https://github.com/gpui-luma-dev/xgpui/issues/49).

@@ -33,10 +33,14 @@ upstream utility and test tools. Neither mode enables every optional feature or
 standalone test, benchmark, example, or binary target. Windows and Linux still
 require their own native checks.
 
-`just test` includes the same platform-benchmark compilation check as CI, in
-addition to benchmark library tests. Run it separately with
-`just test --only gpui-bench-build`. Local results cover the current host;
-platform-specific tests still require their native operating system.
+`just test` runs CI's full native-library and platform-benchmark compilation
+gates before its runtime suites. The extension suites enable ICC, canvas GPUI
+integration and media wgpu coverage; Linux additionally checks media without
+GPU backends and Parley with system fonts. Use `just test --only native-libraries`
+or `just test --only gpui-bench-build` to isolate compilation failures.
+Local results cover the current host; platform-specific tests still require
+their native operating system. The release/version preflight checks package
+versions and pins; its success does not establish that builds or tests passed.
 
 ## Requirements and options
 
