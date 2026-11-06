@@ -5,6 +5,15 @@ use gpui::{prelude::*, *};
 use linux::*;
 use std::{cell::RefCell, collections::HashMap};
 
+#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
+fn activation_key(event: &KeyDownEvent) -> bool {
+    matches!(event.keystroke.key.as_str(), "enter" | "space")
+        && !event.keystroke.modifiers.control
+        && !event.keystroke.modifiers.alt
+        && !event.keystroke.modifiers.platform
+        && !event.is_held
+}
+
 thread_local! {
     // Platform title reads are macOS-only. Keep the shell chrome's title locally.
     static SHELL_TITLES: RefCell<HashMap<WindowId, String>> = RefCell::new(HashMap::new());
@@ -440,13 +449,6 @@ mod linux {
             _ => (),
         }
     }
-    pub(super) fn activation_key(event: &KeyDownEvent) -> bool {
-        matches!(event.keystroke.key.as_str(), "enter" | "space")
-            && !event.keystroke.modifiers.control
-            && !event.keystroke.modifiers.alt
-            && !event.keystroke.modifiers.platform
-            && !event.is_held
-    }
     #[derive(Clone, Copy)]
     pub(super) struct Palette {
         pub(super) header: u32,
@@ -583,20 +585,6 @@ mod linux {
             );
         }
         #[::core::prelude::v1::test]
-        fn activation_keys_do_not_consume_modified_shortcuts_or_repeats() {
-            let key = |text: &str, held| KeyDownEvent {
-                keystroke: Keystroke::parse(text).unwrap(),
-                is_held: held,
-                prefer_character_input: false,
-            };
-            assert!(activation_key(&key("enter", false)));
-            assert!(activation_key(&key("space", false)));
-            assert!(!activation_key(&key("ctrl-enter", false)));
-            assert!(!activation_key(&key("alt-space", false)));
-            assert!(!activation_key(&key("enter", true)));
-            assert!(!activation_key(&key("a", false)));
-        }
-        #[::core::prelude::v1::test]
         fn invalid_text_scales_cannot_break_layout() {
             assert_eq!(shell_scale(f32::NAN), 1.);
             assert_eq!(shell_scale(f32::INFINITY), 1.);
@@ -604,6 +592,26 @@ mod linux {
             assert_eq!(shell_scale(1.5), 1.5);
             assert_eq!(shell_scale(100.), 3.);
         }
+    }
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+
+    #[::core::prelude::v1::test]
+    fn activation_keys_do_not_consume_modified_shortcuts_or_repeats() {
+        let key = |text: &'static str, held| KeyDownEvent {
+            keystroke: Keystroke::parse(text).unwrap(),
+            is_held: held,
+            prefer_character_input: false,
+        };
+        assert!(activation_key(&key("enter", false)));
+        assert!(activation_key(&key("space", false)));
+        assert!(!activation_key(&key("ctrl-enter", false)));
+        assert!(!activation_key(&key("alt-space", false)));
+        assert!(!activation_key(&key("enter", true)));
+        assert!(!activation_key(&key("a", false)));
     }
 }
 

@@ -100,6 +100,8 @@ suite svg all "$ct --manifest-path extensions/crates/xgpui-svg/Cargo.toml --lib 
 suite shader all "$ct --manifest-path extensions/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib {cargo}"
 suite shell all "$ct --manifest-path extensions/crates/xgpui-shell/Cargo.toml --lib {cargo}"
 suite gpui-core all "$ct --manifest-path gpui/crates/gpui/Cargo.toml --features test-support --lib {cargo}"
+# Compile every platform benchmark as CI does; library tests do not discover benches.
+suite gpui-bench-build all "cargo check --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-platform/Cargo.toml --features bench-support,test-support,runtime_shaders --benches {cargo}"
 # CRITERION_HOME stops Criterion's fallback `cargo metadata` call, which ignores
 # the validation config and would rewrite gpui's Cargo.lock (as in validate.yml).
 bench="CRITERION_HOME=target/criterion-tests $ct --manifest-path gpui/crates/gpui/Cargo.toml --features bench-support,test-support,gpui_platform/runtime_shaders --lib {cargo}"

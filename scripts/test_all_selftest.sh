@@ -104,6 +104,15 @@ check "non-GPU suite passes" [ "$status" -eq 0 ]
 check "non-GPU suite gets no validation layer" has "VK_INSTANCE_LAYERS=<unset>" "$(recorded)"
 check "non-GPU suite gets no WGPU_VALIDATION" has "WGPU_VALIDATION=<unset>" "$(recorded)"
 
+# 7. Platform benchmark compilation is part of the local runner, as in CI.
+run gpui-bench-build
+check "benchmark build suite passes" [ "$status" -eq 0 ]
+check "benchmark suite compiles every benchmark" has "--benches" "$(recorded)"
+check "benchmark suite enables CI features" has "--features bench-support,test-support,runtime_shaders" "$(recorded)"
+run gpui-bench-build FAKE_CARGO_FAIL=--benches
+check "benchmark compilation failure fails the runner" [ "$status" -ne 0 ]
+check "benchmark compilation failure appears in the summary" has "FAIL  gpui-bench-build" "$output"
+
 if [ "$failures" -ne 0 ]; then
   echo "$failures runner self-test check(s) failed."
   exit 1

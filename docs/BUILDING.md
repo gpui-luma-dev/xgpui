@@ -33,6 +33,11 @@ upstream utility and test tools. Neither mode enables every optional feature or
 standalone test, benchmark, example, or binary target. Windows and Linux still
 require their own native checks.
 
+`just test` includes the same platform-benchmark compilation check as CI, in
+addition to benchmark library tests. Run it separately with
+`just test --only gpui-bench-build`. Local results cover the current host;
+platform-specific tests still require their native operating system.
+
 ## Requirements and options
 
 ### Cleaning build outputs
