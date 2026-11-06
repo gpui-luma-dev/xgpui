@@ -222,7 +222,7 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 28);
+assert.equal(Object.keys(data.extension_documents).length, 30);
 assert.match(index, /href="#performance-study">Performance study/);
 assert.match(run('extensionPage("performance-study")'), /Problem 3: every pixel shades every ribbon/);
 assert.match(data.extension_documents['performance-study'].html, /href="#extension-lab"/);
@@ -265,7 +265,7 @@ assert.match(data.extension_documents['high-gamut-windows'].html, /xgpui-gamut/)
 assert.match(run('extensionPage("extensions")'), /Downstream extensions to GPUI/);
 assert.ok(!index.includes('<a href="#extensions">Extensions to GPUI</a>'), 'extensions belong in the crate group');
 for (const [route, doc] of Object.entries(data.extension_documents)) {
-  assert.equal(doc.source, route === 'local-development' ? 'docs/LOCAL_DEVELOPMENT.md' : route === 'whats-new' ? 'docs/WHATS_NEW.md' : 'docs/extensions/' + route + '.md');
+  assert.equal(doc.source, route === 'releasing' ? 'docs/RELEASING.md' : route === 'local-development' ? 'docs/LOCAL_DEVELOPMENT.md' : route === 'whats-new' ? 'docs/WHATS_NEW.md' : route === 'gpui-1.27-migration' ? 'docs/upstream/1.27.0-integration.md' : 'docs/extensions/' + route + '.md');
   await readFile(new URL('../' + doc.source, import.meta.url));
   context.location.hash = '#' + route;
   run('render()');
@@ -352,6 +352,15 @@ assert.ok(!shaderCrate.dependencies.some(d => d.package === 'xgpui-gamut'));
 console.log('Verified extension crate navigation, individual code-first guides, filtering and source links.');
 
 const apiChanges = data.extension_documents['gpui-public-api'].html;
+const gpuiMigration = data.extension_documents['gpui-1.27-migration'].html;
+assert.match(index, /href="#gpui-1\.27-migration">GPUI 1\.27 migration/);
+assert.match(run('overview()'), /href="#gpui-1\.27-migration"/);
+assert.match(apiChanges, /id="breaking-changes-to-xgpui-api"/);
+assert.match(apiChanges, /href="#gpui-1\.27-migration"/);
+assert.match(gpuiMigration, /id="breaking-changes-to-xgpui-api"/);
+assert.match(gpuiMigration, /gpui-release-notes\/issues\/3#issue-5034140647/);
+assert.match(gpuiMigration, /our GPUI interfaces/);
+
 for (const term of ['Scene', 'custom_draws', 'PrimitiveBatch', 'CustomContent', 'PreparationRequest', 'CustomGeometry', 'CustomCoverage', 'CustomDraw', 'paint_custom', 'MetalCustomContext', 'WgpuCustomContext', 'Dx11CustomContext', 'source compatibility risks', 'WindowColorMode', 'WindowColorStatus', 'MetalWideSdrOutput', 'Dx11WideSdrOutput', 'set_color_mode', 'ParsedSvg::size()', 'xgpui-svg']) assert.ok(apiChanges.includes(term), term);
 assert.match(index, /href="#gpui-public-api"/);
 assert.match(run('extensionPage("extensions")'), /href="#gpui-public-api"/);

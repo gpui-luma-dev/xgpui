@@ -57,7 +57,8 @@ fn preview(p3: [f64; 4]) -> [u8; 4] {
     [encoded[0], encoded[1], encoded[2], a].map(|v| (v * 255.).round() as u8)
 }
 fn renderer() -> gpui_apple::metal_renderer::MetalHeadlessRenderer {
-    let mut r = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+    let mut r = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+        .expect("Metal renderer initialization");
     assert_eq!(
         r.set_color_mode(WindowColorMode::WideGamutSdr)
             .unwrap()

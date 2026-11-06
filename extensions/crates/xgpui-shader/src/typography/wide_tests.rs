@@ -24,7 +24,8 @@ fn metal_wide_typography_glow_and_shadow_keep_canonical_selection() {
         Arc::new(gpui_apple::AppleTextSystem::new()),
         Arc::new(()),
         || {
-            let mut r = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+            let mut r = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+                .expect("Metal renderer initialization");
             assert_eq!(
                 r.set_color_mode(WindowColorMode::WideGamutSdr)?.effective(),
                 WindowColorMode::WideGamutSdr
@@ -149,7 +150,8 @@ fn sustained_typography_resource_observation() {
         Arc::new(gpui_apple::AppleTextSystem::new()),
         Arc::new(()),
         move || {
-            let renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+            let renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+                .expect("Metal renderer initialization");
             *captured.borrow_mut() = Some(renderer.validation_context().device);
             Ok(Some(Box::new(renderer)))
         },

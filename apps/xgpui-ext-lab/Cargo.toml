@@ -78,7 +78,7 @@ gpui-windows = { package = "xgpui-windows", path = "../../gpui/crates/gpui-windo
 windows = { version = "0.62", features = ["Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D_Fxc", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi_Common"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-gpui-apple = { package = "xgpui-apple", path = "../../gpui/crates/gpui-apple", version = "=3.1.0", features = ["test-support", "font-kit"] }
+gpui-apple = { package = "xgpui-apple", path = "../../gpui/crates/gpui-apple", version = "=4.0.0", features = ["test-support", "font-kit"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSString"] }
 
 objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFDictionary", "CFBase"] }

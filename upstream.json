@@ -1,5 +1,5 @@
 {
-  "commit": "bb63411a365ac328a7780ba7101d72ec91625be8",
+  "commit": "f98d4e26ca850515c1682ae4cd6e2b8277dae6e7",
   "destination": "gpui",
   "distribution": {
     "packages": {
@@ -24,13 +24,13 @@
     "version": "1.0.0",
     "versions": {
       "xgpui": "3.0.0",
-      "xgpui-apple": "3.1.0",
+      "xgpui-apple": "4.0.0",
       "xgpui-canvas": "0.3.2",
       "xgpui-color": "0.3.0",
       "xgpui-gamut": "0.3.2",
       "xgpui-ios": "1.26.4",
       "xgpui-linux": "2.0.2",
-      "xgpui-macos": "3.0.2",
+      "xgpui-macos": "4.0.0",
       "xgpui-macros": "1.0.1",
       "xgpui-media": "0.5.2",
       "xgpui-parley": "0.4.0",
@@ -86,7 +86,7 @@
     "gpui-wgpu": "gpui/crates/gpui-wgpu",
     "gpui-windows": "gpui/crates/gpui-windows"
   },
-  "ref": "release/1.26.2",
+  "ref": "release/1.27.0",
   "registry_packages": {
     "packages": {
       "collections": "collections-gpui-unofficial",
@@ -107,7 +107,7 @@
       "ztracing": "ztracing-gpui-unofficial",
       "ztracing-macro": "ztracing-macro-gpui-unofficial"
     },
-    "version": "1.26.2"
+    "version": "1.27.0"
   },
   "repository": "https://github.com/gpui-archipelago/gpui-unofficial",
   "source_packages": {
@@ -139,6 +139,6 @@
     "ztracing-gpui-unofficial": "gpui/crates/ztracing-gpui-unofficial",
     "ztracing-macro-gpui-unofficial": "gpui/crates/ztracing-macro-gpui-unofficial"
   },
-  "zed_commit": "c4273271092b0287f7d181f616bd5171e0a2f70c",
-  "zed_tag": "v1.26.2"
+  "zed_commit": "c84af5b99cbc366d675064e52b23664a015b6e35",
+  "zed_tag": "v1.27.0"
 }

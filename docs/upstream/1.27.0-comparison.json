@@ -1,0 +1,1607 @@
+{
+  "release": "1.27.0",
+  "base_commit": "8ed97a3e3a49f6fa505cb52e287ad67f64c9e535",
+  "source_commit": "f98d4e26ca850515c1682ae4cd6e2b8277dae6e7",
+  "previous_source_commit": "bb63411a365ac328a7780ba7101d72ec91625be8",
+  "entries": [
+    {
+      "path": "gpui/crates/gpui-apple/Cargo.toml",
+      "kind": "cargo",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/README.md",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/build.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-apple/gpui/src/platform.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-apple/gpui/src/scene.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-apple/gpui/src/window.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw.metal",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw/core_video.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw/coverage_cache.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw/coverage_cache/tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw/submission_tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw/wide_output_tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/gpui_apple.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/keychain.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_atlas.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/backdrop.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/backdrop/groups.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/submission_tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr.metal",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr/rec2020_reference.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr/tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/process_info.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "added",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/shaders.metal",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/text_system.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/thermal.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "deleted",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-ios/Cargo.lock",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-ios/Cargo.toml",
+      "kind": "cargo",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-ios/README.md",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-ios/examples/ios/build-simulator.sh",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-ios/src/ios/application.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-ios/src/ios/display.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-ios/src/ios/platform.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-ios/src/ios/window.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-linux/Cargo.toml",
+      "kind": "cargo",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-linux/README.md",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/platform.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/power.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "added",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-macos/Cargo.toml",
+      "kind": "cargo",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macos/README.md",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/display.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/display_link.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/events.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/gpui_macos.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/keyboard.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/native_appkit.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/pasteboard.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/platform.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/window.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/window_appearance.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macros/Cargo.toml",
+      "kind": "cargo",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-macros/README.md",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-platform/Cargo.lock",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-platform/Cargo.toml",
+      "kind": "cargo",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-platform/README.md",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-platform/benches/atlas_upload.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "added",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-platform/benches/focus_cleanup.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-platform/benches/randomized_element_tree.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-platform/src/gpui_platform.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-web/Cargo.toml",
+      "kind": "cargo",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-web/README.md",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-web/src/events.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-web/src/platform.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-web/src/text_system.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/Cargo.lock",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/Cargo.toml",
+      "kind": "cargo",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/README.md",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/backdrop.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/backdrop/groups.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/cosmic_text_system.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw.wgsl",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/coverage_cache.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/coverage_cache/tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/dma_buf.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/dma_buf/native_tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/gpui_wgpu.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/surface_frame.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/wgpu_context.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/wgpu_renderer.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/Cargo.lock",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/Cargo.toml",
+      "kind": "cargo",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/README.md",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw.hlsl",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/backdrop.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/backdrop/groups.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/coverage_cache.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/coverage_cache/tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/dxgi.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/instanced.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/wide_output.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/wide_output/tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/direct_write.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/color_presentation.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/color_presentation/policy.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/color_presentation/tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr.hlsl",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr/grayscale.hlsl",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr/reference.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr/tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/events.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/gpui_windows.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/platform.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/window.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/.gitignore",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/Cargo.lock",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/Cargo.toml",
+      "kind": "cargo",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/README.md",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/bench-metrics-provenance.json",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/examples/input.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/examples/window_positioning.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/action.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/app.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/app/bench_context.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/app/context.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/app/entity_map.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/app/test_app.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/app/test_context.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/app/visual_test_context.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/backdrop.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/backdrop_cache.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/bench.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "added",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/bench_metrics.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/colors.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/element.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/elements/animation.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/elements/div.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/elements/image_cache.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/elements/list.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/elements/text.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/elements/uniform_list.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/gpui.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/image_texture.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/key_dispatch.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/keymap.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/keymap/binding.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/keymap/context.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/layer_effect.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform/color_presentation.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform/keystroke.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform/platform_info.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "added",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform/test/platform.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform/test/window.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform/visual_test.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/profiler.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/profiler/hang.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/profiler/journal.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/queue.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/randomized_element_tree.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/scene.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/scene/preparation_tests.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/style.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/styled.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/subscription.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/svg_renderer.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/taffy.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/font_features.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/font_inspection.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/font_introspection.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/font_variations.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/line.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/line_layout.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/line_wrapper.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/paragraph.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/paragraph_cache.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "deleted",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/view.rs",
+      "kind": "code",
+      "retain_local": true,
+      "change": "modified",
+      "upstream_changed": false,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/gpui/src/window.rs",
+      "kind": "code",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": true
+    },
+    {
+      "path": "gpui/crates/transform-metadata.json",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    },
+    {
+      "path": "upstream.json",
+      "kind": "metadata",
+      "retain_local": false,
+      "change": "modified",
+      "upstream_changed": true,
+      "downstream_overlap": false
+    }
+  ],
+  "local_commit": "8ed97a3",
+  "method": "Existing release_review.compare after release-sync normalization; no proposal applied. Signatures omitted.",
+  "textual_merge_feasibility": [
+    {
+      "path": "gpui/crates/gpui-apple/src/gpui_apple.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_atlas.rs",
+      "status": "textual conflicts",
+      "conflicts": 9
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer.rs",
+      "status": "textual conflicts",
+      "conflicts": 67
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/display.rs",
+      "status": "textual conflicts",
+      "conflicts": 5
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/display_link.rs",
+      "status": "textual conflicts",
+      "conflicts": 1
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/events.rs",
+      "status": "textual conflicts",
+      "conflicts": 15
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/gpui_macos.rs",
+      "status": "textual conflicts",
+      "conflicts": 3
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/keyboard.rs",
+      "status": "textual conflicts",
+      "conflicts": 1
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/pasteboard.rs",
+      "status": "textual conflicts",
+      "conflicts": 16
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/platform.rs",
+      "status": "textual conflicts",
+      "conflicts": 49
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/window.rs",
+      "status": "textual conflicts",
+      "conflicts": 154
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/window_appearance.rs",
+      "status": "textual conflicts",
+      "conflicts": 3
+    },
+    {
+      "path": "gpui/crates/gpui-platform/src/gpui_platform.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/cosmic_text_system.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/direct_write.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/window.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui/examples/input.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui/src/app.rs",
+      "status": "textual conflicts",
+      "conflicts": 1
+    },
+    {
+      "path": "gpui/crates/gpui/src/gpui.rs",
+      "status": "textual conflicts",
+      "conflicts": 2
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform/test/platform.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui/src/profiler/journal.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui/src/scene.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui/src/style.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui/src/styled.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui/src/svg_renderer.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system.rs",
+      "status": "textual conflicts",
+      "conflicts": 1
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/line_layout.rs",
+      "status": "textual conflicts",
+      "conflicts": 2
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/line_wrapper.rs",
+      "status": "clean textual merge",
+      "conflicts": 0
+    },
+    {
+      "path": "gpui/crates/gpui/src/window.rs",
+      "status": "textual conflicts",
+      "conflicts": 1
+    }
+  ]
+}

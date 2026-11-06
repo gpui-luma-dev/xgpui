@@ -101,7 +101,8 @@ fn glyph_atlas_mask_multiplies_alpha_and_uses_full_text_bounds() {
         vec![Box::new(gpui_wgpu::WgpuHeadlessRenderer::new().unwrap())];
     #[cfg(target_os = "macos")]
     renderers.push(Box::new(
-        gpui_apple::metal_renderer::MetalHeadlessRenderer::new(),
+        gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
     ));
     #[cfg(target_os = "windows")]
     if std::env::var("XGPUI_BRUSH_NATIVE").as_deref() == Ok("1") {
@@ -331,7 +332,10 @@ fn real_text_wrapping_nested_and_deferred_scopes_leave_emoji_and_plain_text_nati
             Arc::new(()),
             move || {
                 let inner: Box<dyn PlatformHeadlessRenderer> = if native {
-                    Box::new(gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+                    Box::new(
+                        gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+                            .expect("Metal renderer initialization"),
+                    )
                 } else {
                     Box::new(gpui_wgpu::WgpuHeadlessRenderer::new()?)
                 };

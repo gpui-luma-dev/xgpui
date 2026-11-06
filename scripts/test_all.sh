@@ -68,7 +68,7 @@ lab="--manifest-path apps/xgpui-ext-lab/Cargo.toml"
 win="--manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support"
 wgpu="--manifest-path gpui/crates/gpui-wgpu/Cargo.toml"
 parley="--manifest-path extensions/crates/xgpui-parley/Cargo.toml"
-linux_parley="--features native-test,gpui-platform/wayland,gpui-platform/x11"
+linux_parley="--features system-fonts,native-test,gpui-platform/wayland,gpui-platform/x11"
 
 names=()
 commands=()
@@ -91,11 +91,15 @@ suite() {
 # Shared: tools, CPU extensions, labs and core benchmarks.
 suite runner-selftest all "bash scripts/test_all_selftest.sh"
 suite release-sync all "cargo test --locked --manifest-path tools/release-sync/Cargo.toml {cargo}"
-suite color all "$ct --manifest-path extensions/crates/xgpui-color/Cargo.toml {cargo}"
+# Match native CI's compilation gates before starting the runtime suites.
+suite native-libraries all "cargo check --locked --features full-capture,runtime-shaders {cargo}"
+suite gpui-bench-build all "cargo check --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-platform/Cargo.toml --features bench-support,test-support,runtime_shaders --benches {cargo}"
+suite media-minimal linux "cargo check --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-media/Cargo.toml --no-default-features --lib {cargo}"
+suite color all "$ct --manifest-path extensions/crates/xgpui-color/Cargo.toml --features icc {cargo}"
 suite gamut all "$ct --manifest-path extensions/crates/xgpui-gamut/Cargo.toml {cargo}"
 suite gamut-instanced all "$ct --manifest-path extensions/crates/xgpui-gamut/Cargo.toml --features instanced {cargo}"
-suite canvas all "$ct --manifest-path extensions/crates/xgpui-canvas/Cargo.toml --lib {cargo}"
-suite media all "$ct --manifest-path extensions/crates/xgpui-media/Cargo.toml --lib {cargo}"
+suite canvas all "$ct --manifest-path extensions/crates/xgpui-canvas/Cargo.toml --features gpui --lib {cargo}"
+suite media all "$ct --manifest-path extensions/crates/xgpui-media/Cargo.toml --features wgpu --lib {cargo}"
 suite svg all "$ct --manifest-path extensions/crates/xgpui-svg/Cargo.toml --lib {cargo}"
 suite shader all "$ct --manifest-path extensions/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib {cargo}"
 suite shell all "$ct --manifest-path extensions/crates/xgpui-shell/Cargo.toml --lib {cargo}"

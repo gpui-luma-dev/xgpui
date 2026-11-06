@@ -337,7 +337,10 @@ mod tests {
         let painter = ShadowPainter::new().unwrap();
         let bounds = Bounds::new(point(px(24.), px(24.)), size(px(32.), px(24.)));
         let mut renderers: Vec<Box<dyn PlatformHeadlessRenderer>> = vec![
-            Box::new(gpui_apple::metal_renderer::MetalHeadlessRenderer::new()),
+            Box::new(
+                gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+                    .expect("Metal renderer initialization"),
+            ),
             Box::new(gpui_wgpu::WgpuHeadlessRenderer::new().unwrap()),
         ];
         for renderer in &mut renderers {

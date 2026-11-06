@@ -94,7 +94,8 @@ fn validates_uploads_and_degenerate_axis() {
 fn native_gradients_match_cpu_mapping_alpha_hue_clip_and_rounding() {
     use gpui::{DevicePixels, PlatformHeadlessRenderer, Quad, WindowColorMode};
     #[cfg(target_os = "macos")]
-    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+        .expect("Metal renderer initialization");
     #[cfg(target_os = "windows")]
     let mut renderer = gpui_windows::Dx11HeadlessRenderer::new().unwrap();
     renderer
@@ -186,7 +187,8 @@ fn compare_producer_allocations_and_frame_readback() {
         time::Instant,
     };
     #[cfg(target_os = "macos")]
-    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+        .expect("Metal renderer initialization");
     #[cfg(target_os = "windows")]
     let mut renderer = gpui_windows::Dx11HeadlessRenderer::new().unwrap();
     #[cfg(target_os = "macos")]

@@ -130,9 +130,9 @@
   "gpui-ios": {
     "short": "gpui-ios",
     "group": "Platforms & rendering",
-    "role": "Upstream-derived UIKit backend for iOS application lifecycle, windows, touch and native text input; published as xgpui-ios 1.26.2.",
+    "role": "Upstream-derived UIKit backend for iOS application lifecycle, windows, touch and native text input; currently versioned as xgpui-ios 1.26.4.",
     "surface": "IosPlatform and current_platform on iOS, StatusBarContentStyle, and iOS status-bar controls.",
-    "review": "Implementation files follow captured upstream 1.26.2 unchanged; package wiring is adapted to XGPUI. Simulator compilation, linking and app packaging pass. Interactive simulator/device validation remains pending; wide-SDR presentation remains macOS-only.",
+    "review": "Implementation files follow captured upstream 1.27.0; package wiring and shared rendering integration are adapted to XGPUI. Simulator compilation, linking and app packaging pass. Interactive simulator/device validation remains pending; wide-SDR presentation remains macOS-only.",
     "entry": "src/gpui_ios.rs"
   }
 }

@@ -11,7 +11,8 @@ use xgpui_gamut::WideColor;
 
 #[test]
 fn extension_producer_preserves_p3_association_over_native_ui() -> anyhow::Result<()> {
-    let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+    let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())))
+        .expect("Metal renderer initialization");
     renderer.set_color_mode(WindowColorMode::WideGamutSdr)?;
     let bounds = Bounds::new(
         point(ScaledPixels(0.), ScaledPixels(0.)),

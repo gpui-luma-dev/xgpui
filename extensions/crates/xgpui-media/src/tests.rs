@@ -247,9 +247,13 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
 #[cfg(target_os = "macos")]
 #[test]
 fn metal_mips_clipping_and_resize_reuse() -> Result<()> {
-    let image = check_rendering(&mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new())?;
+    let image = check_rendering(
+        &mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
+    )?;
     render_ready(
-        &mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new(),
+        &mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
         &image,
         &image_scene(&image, 8., false),
         size(DevicePixels(24), DevicePixels(24)),
@@ -509,7 +513,8 @@ fn verify_frame_limits(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()
 #[cfg(target_os = "macos")]
 #[test]
 fn metal_completion_pool_refills_and_frame_limits() -> Result<()> {
-    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+        .expect("Metal renderer initialization");
     verify_pool_reuse(&mut renderer)?;
     verify_frame_limits(&mut renderer)
 }
@@ -587,7 +592,10 @@ fn check_linear_adjustments(renderer: &mut dyn PlatformHeadlessRenderer) -> Resu
 #[cfg(target_os = "macos")]
 #[test]
 fn metal_linear_adjustments_match_cpu_and_reuse_uploads() -> Result<()> {
-    check_linear_adjustments(&mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+    check_linear_adjustments(
+        &mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
+    )
 }
 #[cfg(feature = "wgpu")]
 #[test]
@@ -670,7 +678,10 @@ fn check_float_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()
 #[cfg(target_os = "macos")]
 #[test]
 fn metal_rgba16f_matches_cpu_and_reuses_source() -> Result<()> {
-    check_float_preview(&mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+    check_float_preview(
+        &mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
+    )
 }
 #[cfg(feature = "wgpu")]
 #[test]
@@ -697,7 +708,8 @@ fn wgpu_rgba16f_matches_cpu_and_reuses_source() -> Result<()> {
 #[test]
 fn metal_rgba16f_wide_requires_opt_in_and_maps_after_linear_blending() -> Result<()> {
     use pipeline::*;
-    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+        .expect("Metal renderer initialization");
     let rgba = [0.8, 0.12, 0.02, 0.5];
     let mut job =
         MediaLoader::default().load_rgba16f(64, 32, vec![rgba; 64 * 32], ImageColor::LINEAR_P3)?;
@@ -753,7 +765,8 @@ fn metal_rgba16f_wide_requires_opt_in_and_maps_after_linear_blending() -> Result
 fn native_surface_adjustments_follow_conversion_preserve_identity_and_import_once() -> Result<()> {
     use gpui_apple::custom_draw::core_video::{Nv12Matrix, test_frame, test_nv12_frame};
     use pipeline::*;
-    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+    let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+        .expect("Metal renderer initialization");
     let bounds = gpui::Bounds::new(
         point(ScaledPixels(0.), ScaledPixels(0.)),
         size(ScaledPixels(320.), ScaledPixels(180.)),
@@ -875,7 +888,10 @@ fn check_adobe_rgb_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Resul
 #[cfg(target_os = "macos")]
 #[test]
 fn metal_adobe_rgb_input_with_explicit_mapping() -> Result<()> {
-    check_adobe_rgb_preview(&mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+    check_adobe_rgb_preview(
+        &mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
+    )
 }
 #[cfg(feature = "wgpu")]
 #[test]
@@ -955,7 +971,10 @@ fn check_rec2020_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<
 #[cfg(target_os = "macos")]
 #[test]
 fn metal_rec2020_storage_and_preview() -> Result<()> {
-    check_rec2020_preview(&mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+    check_rec2020_preview(
+        &mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
+    )
 }
 #[cfg(feature = "wgpu")]
 #[test]
@@ -983,7 +1002,8 @@ fn wgpu_rec2020_storage_and_preview() -> Result<()> {
 #[test]
 fn adobe_rec2020_wide_blends_before_mapping_and_reuses_uploads() -> Result<()> {
     use pipeline::*;
-    let mut r = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+    let mut r = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+        .expect("Metal renderer initialization");
     let mut job = MediaLoader::default().load_rec2020_rgba16f(
         3,
         1,

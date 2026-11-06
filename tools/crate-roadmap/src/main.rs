@@ -758,12 +758,16 @@ fn generate(root: &Path) -> Result<()> {
     let document_sources = [
         ("whats-new", "docs/WHATS_NEW.md"),
         ("local-development", "docs/LOCAL_DEVELOPMENT.md"),
+        ("releasing", "docs/RELEASING.md"),
         ("extension-lab", "docs/extensions/extension-lab.md"),
         ("performance-study", "docs/extensions/performance-study.md"),
         ("canvas", "docs/extensions/canvas.md"),
         ("color-math", "docs/extensions/color-math.md"),
         ("color-workflows", "docs/extensions/color-workflows.md"),
-        ("pixels-and-metadata", "docs/extensions/pixels-and-metadata.md"),
+        (
+            "pixels-and-metadata",
+            "docs/extensions/pixels-and-metadata.md",
+        ),
         ("color-labs", "docs/extensions/color-labs.md"),
         ("icc-profiles", "docs/extensions/icc-profiles.md"),
         ("media-images", "docs/extensions/media-images.md"),
@@ -777,6 +781,7 @@ fn generate(root: &Path) -> Result<()> {
         ),
         ("shader-producers", "docs/extensions/shader-producers.md"),
         ("gpui-public-api", "docs/extensions/gpui-public-api.md"),
+        ("gpui-1.27-migration", "docs/upstream/1.27.0-integration.md"),
         ("extension-paints", "docs/extensions/extension-paints.md"),
         (
             "paint-contract-hardening",
@@ -861,6 +866,35 @@ fn generate(root: &Path) -> Result<()> {
                             format!("benchmarks/{report}").into()
                         } else if let Some(example) = dest_url.strip_prefix("../examples/") {
                             format!("examples/{example}").into()
+                        } else if !dest_url.contains(':') && !dest_url.starts_with('#') {
+                            // Repository files without an embedded route need a web URL.
+                            let mut target = PathBuf::from(file);
+                            target.pop();
+                            for component in
+                                Path::new(dest_url.split('#').next().unwrap_or("")).components()
+                            {
+                                match component {
+                                    std::path::Component::ParentDir => {
+                                        target.pop();
+                                    }
+                                    std::path::Component::CurDir => {}
+                                    other => target.push(other.as_os_str()),
+                                }
+                            }
+                            let kind = if root.join(&target).is_dir() {
+                                "tree"
+                            } else {
+                                "blob"
+                            };
+                            let section = dest_url
+                                .split_once('#')
+                                .map(|(_, section)| format!("#{section}"))
+                                .unwrap_or_default();
+                            format!(
+                                "https://github.com/gpui-luma-dev/xgpui/{kind}/main/{}{section}",
+                                target.display()
+                            )
+                            .into()
                         } else {
                             dest_url
                         }

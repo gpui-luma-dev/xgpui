@@ -87,7 +87,10 @@ fn helper_preserves_layout_masks_opacity_and_background_child_order() {
             Arc::new(()),
             move || {
                 let inner: Box<dyn PlatformHeadlessRenderer> = if metal {
-                    Box::new(gpui_apple::metal_renderer::MetalHeadlessRenderer::new())
+                    Box::new(
+                        gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+                            .expect("Metal renderer initialization"),
+                    )
                 } else {
                     Box::new(gpui_wgpu::WgpuHeadlessRenderer::new()?)
                 };

@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-macos"
-version = "3.0.2"
+version = "4.0.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -22,7 +22,7 @@ bench-support = ["gpui/bench-support", "gpui_apple/bench-support"]
 test-support = ["gpui/test-support", "gpui_apple/test-support"]
 runtime_shaders = ["gpui_apple/runtime_shaders"]
 font-kit = ["gpui_apple/font-kit"]
-screen-capture = ["gpui/screen-capture", "dep:objc2-core-graphics", "dep:objc2-core-media", "dep:objc2-screen-capture-kit"]
+screen-capture = ["gpui/screen-capture", "dep:objc2-core-media", "dep:objc2-screen-capture-kit"]
 
 [dependencies]
 gpui = { package = "xgpui", version = "=3.0.0" }
@@ -32,7 +32,7 @@ accesskit = { version = "0.24.0", features = ["enumn"] }
 accesskit_macos = { version = "0.26.0" }
 anyhow = { version = "1.0.86" }
 block2 = { version = "0.6" }
-collections = { package = "collections-gpui-unofficial", version = "=1.26.2" }
+collections = { package = "collections-gpui-unofficial", version = "=1.27.0" }
 core-foundation = { version = "0.10" }
 core-foundation-sys = { version = "0.8.6" }
 core-graphics = { version = "0.24" }
@@ -40,8 +40,8 @@ ctor = { version = "1.0.12" }
 dispatch2 = { version = "0.3", default-features = false, features = ["std", "block2", "objc2"] }
 foreign-types = { version = "0.5" }
 futures = { version = "0.3.34" }
-gpui_apple = { package = "xgpui-apple", version = "=3.1.0" }
-gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.26.2" }
+gpui_apple = { package = "xgpui-apple", version = "=4.0.0" }
+gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.27.0" }
 image = { version = "0.25.1", default-features = false, features = [
     "bmp",
     "dds",
@@ -61,94 +61,18 @@ image = { version = "0.25.1", default-features = false, features = [
 itertools = { version = "0.14.0" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 objc2 = { version = "0.6" }
-objc2-app-kit = { version = "=0.3.2", default-features = false, features = [
-    "NSAccessibility",
-    "NSAlert",
-    "NSAppearance",
-    "NSApplication",
-    "NSAttributedString",
-    "NSButton",
-    "NSColor",
-    "NSColorSpace",
-    "NSControl",
-    "NSCursor",
-    "NSDocumentController",
-    "NSDraggingItem",
-    "NSEvent",
-    "NSGraphics",
-    "NSImage",
-    "NSMenu",
-    "NSMenuItem",
-    "NSOpenPanel",
-    "NSPanel",
-    "NSPasteboard",
-    "NSResponder",
-    "NSRunningApplication",
-    "NSSavePanel",
-    "NSScreen",
-    "NSScroller",
-    "NSTextField",
-    "NSTextInputClient",
-    "NSTextInputContext",
-    "NSTextView",
-    "NSTrackingArea",
-    "NSView",
-    "NSVisualEffectView",
-    "NSWindow",
-    "NSWorkspace",
-    "block2",
-    "objc2-core-foundation",
-    "objc2-core-graphics",
-    "std",
-] }
-objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["CGDirectDisplay"], optional = true }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSAccessibility", "NSAlert", "NSAppearance", "NSApplication", "NSAttributedString", "NSButton", "NSCell", "NSColor", "NSColorSpace", "NSControl", "NSCursor", "NSDocumentController", "NSDragging", "NSDraggingItem", "NSEvent", "NSGraphics", "NSImage", "NSMenu", "NSMenuItem", "NSOpenPanel", "NSPanel", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSSavePanel", "NSScreen", "NSScroller", "NSTextField", "NSTextInputClient", "NSTextInputContext", "NSTextView", "NSTrackingArea", "NSView", "NSVisualEffectView", "NSWindow", "NSWorkspace", "block2", "objc2-core-foundation", "objc2-core-graphics", "objc2-uniform-type-identifiers", "std"] }
+objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["CGColor", "CGDirectDisplay", "objc2"] }
 objc2-core-media = { version = "=0.3.2", default-features = false, features = ["CMSampleBuffer", "objc2-core-video"], optional = true }
-objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVBuffer", "CVImageBuffer", "CVHostTime"] }
+objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVBuffer", "CVHostTime", "CVImageBuffer"] }
 objc2-quartz-core = "=0.3.2"
-objc2-foundation = { version = "=0.3.2", default-features = false, features = [
-    "NSArray",
-    "NSAttributedString",
-    "NSAutoreleasePool",
-    "NSBundle",
-    "NSData",
-    "NSDictionary",
-    "NSError",
-    "NSKeyedArchiver",
-    "NSObject",
-    "NSProcessInfo",
-    "NSRange",
-    "NSSet",
-    "NSString",
-    "NSThread",
-    "NSURL",
-    "NSUserDefaults",
-    "block2",
-    "objc2-core-foundation",
-    "std",
-] }
-objc2-screen-capture-kit = { version = "=0.3.2", default-features = false, features = [
-    "block2",
-    "dispatch2",
-    "objc2-core-graphics",
-    "objc2-core-media",
-    "SCShareableContent",
-    "SCStream",
-    "std"
-], optional = true }
-objc2-user-notifications = { version = "0.3", default-features = false, features = [
-    "std",
-    "block2",
-    "UNNotification",
-    "UNNotificationAction",
-    "UNNotificationCategory",
-    "UNNotificationContent",
-    "UNNotificationRequest",
-    "UNNotificationResponse",
-    "UNNotificationTrigger",
-    "UNUserNotificationCenter"] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSArray", "NSAttributedString", "NSAutoreleasePool", "NSBundle", "NSCoder", "NSData", "NSDate", "NSDictionary", "NSEnumerator", "NSError", "NSGeometry", "NSKeyedArchiver", "NSNull", "NSObjCRuntime", "NSObject", "NSProcessInfo", "NSRange", "NSRunLoop", "NSSet", "NSString", "NSThread", "NSURL", "NSUserDefaults", "NSValue", "block2", "objc2-core-foundation", "std"] }
+objc2-screen-capture-kit = { version = "=0.3.2", default-features = false, features = ["SCShareableContent", "SCStream", "block2", "dispatch2", "objc2-core-graphics", "objc2-core-media", "std"], optional = true }
+objc2-uniform-type-identifiers = { version = "0.3", default-features = false, features = ["UTCoreTypes", "UTType", "std"] }
+objc2-user-notifications = { version = "0.3", default-features = false, features = ["UNNotification", "UNNotificationAction", "UNNotificationCategory", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationTrigger", "UNUserNotificationCenter", "block2", "std"] }
 parking_lot = { version = "0.12.1" }
 raw-window-handle = { version = "0.6" }
-scheduler = { package = "scheduler-gpui-unofficial", version = "=1.26.2" }
+scheduler = { package = "scheduler-gpui-unofficial", version = "=1.27.0" }
 semver = { version = "1.0", features = ["serde"] }
 smallvec = { version = "1.6", features = ["union", "const_new"] }
 strum = { version = "0.28", features = ["derive"] }
@@ -159,7 +83,7 @@ uuid = { version = "1.1", features = ["serde"] }
 # `cfg(test)`, so dev-dependencies enable those APIs only for test builds.
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui = { package = "xgpui", version = "=3.0.0", features = ["test-support"] }
-gpui_apple = { package = "xgpui-apple", version = "=3.1.0", features = ["test-support"] }
+gpui_apple = { package = "xgpui-apple", version = "=4.0.0", features = ["test-support"] }
 
 [lints]
 rust = { unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }, deprecated = "allow" }

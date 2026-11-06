@@ -49,7 +49,8 @@ impl Drop for ReleaseEvent {
 #[test]
 fn submission_renderer_reuses_pending_cached_output_without_cpu_wait() {
     objc2::rc::autoreleasepool(|_| {
-        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
+        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())))
+            .expect("Metal renderer initialization");
         let extent = size(DevicePixels(8), DevicePixels(8));
         let texture = crate::custom_draw::texture(&renderer.device, extent).unwrap();
         let event = renderer

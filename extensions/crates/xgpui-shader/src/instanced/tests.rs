@@ -127,7 +127,8 @@ fn metal_and_wgpu_instances_clip_opacity_and_native_interleaving() {
     });
     scene.finish();
     let extent = size(DevicePixels(64), DevicePixels(64));
-    let mut metal = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+    let mut metal = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+        .expect("Metal renderer initialization");
     let mut wgpu = gpui_wgpu::WgpuHeadlessRenderer::new().unwrap();
     for image in [
         metal.render_scene_to_image(&scene, extent).unwrap(),

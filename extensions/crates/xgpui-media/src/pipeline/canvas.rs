@@ -1546,7 +1546,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn metal_tiled_halos_clipping_and_transparency_match_reference() -> Result<()> {
-        let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new();
+        let mut renderer = gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization");
         gpu_canvas(&mut renderer, 1.)?;
         gpu_canvas(&mut renderer, 64.)
     }

@@ -196,7 +196,8 @@ fn noise_pixels_match_cpu_across_blends_dpi_clipping_and_backends() {
         vec![Box::new(gpui_wgpu::WgpuHeadlessRenderer::new().unwrap())];
     #[cfg(target_os = "macos")]
     renderers.push(Box::new(
-        gpui_apple::metal_renderer::MetalHeadlessRenderer::new(),
+        gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
     ));
     #[cfg(target_os = "windows")]
     if std::env::var("XGPUI_BRUSH_NATIVE").as_deref() == Ok("1") {
@@ -381,7 +382,8 @@ fn worley_f1_f2_dense_pixels_match_sorted_larger_neighborhood() {
         vec![Box::new(gpui_wgpu::WgpuHeadlessRenderer::new().unwrap())];
     #[cfg(target_os = "macos")]
     renderers.push(Box::new(
-        gpui_apple::metal_renderer::MetalHeadlessRenderer::new(),
+        gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
+            .expect("Metal renderer initialization"),
     ));
     #[cfg(target_os = "windows")]
     if std::env::var("XGPUI_BRUSH_NATIVE").as_deref() == Ok("1") {
