@@ -57,7 +57,7 @@ function extensionPage(route) {
   if (route === 'whats-new') {
     return '<p><a href="#overview">← Overview</a></p><article class="extension-document">' + data.extension_documents[route].html + '</article>';
   }
-  if (route === 'local-development' || route === 'extension-lab') {
+  if (route === 'local-development' || route === 'extension-lab' || route === 'performance-study') {
     const doc = data.extension_documents[route];
     return '<p><a href="#overview">← Overview</a></p><article class="extension-document">' + doc.html + '</article>';
   }

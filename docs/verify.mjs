@@ -222,7 +222,11 @@ console.log('Verified scene ordering, clipping, layers, sprite texture boundarie
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 27);
+assert.equal(Object.keys(data.extension_documents).length, 28);
+assert.match(index, /href="#performance-study">Performance study/);
+assert.match(run('extensionPage("performance-study")'), /Problem 3: every pixel shades every ribbon/);
+assert.match(data.extension_documents['performance-study'].html, /href="#extension-lab"/);
+assert.match(data.extension_documents['performance-study'].html, /Dx11CustomContext/);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');

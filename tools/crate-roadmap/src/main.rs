@@ -759,6 +759,7 @@ fn generate(root: &Path) -> Result<()> {
         ("whats-new", "docs/WHATS_NEW.md"),
         ("local-development", "docs/LOCAL_DEVELOPMENT.md"),
         ("extension-lab", "docs/extensions/extension-lab.md"),
+        ("performance-study", "docs/extensions/performance-study.md"),
         ("canvas", "docs/extensions/canvas.md"),
         ("color-math", "docs/extensions/color-math.md"),
         ("color-workflows", "docs/extensions/color-workflows.md"),
