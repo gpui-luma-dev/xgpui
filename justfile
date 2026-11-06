@@ -90,11 +90,11 @@ release-check *args:
 
 # Preview all ignored Cargo outputs, including standalone crates and old app paths.
 clean-preview:
-    {{ python }} scripts/clean_build_outputs.py
+    bash scripts/clean_build_outputs.sh
 
 # Remove all ignored Cargo target directories in this checkout.
 clean:
-    {{ python }} scripts/clean_build_outputs.py --apply
+    bash scripts/clean_build_outputs.sh --apply
 
 # Experimental spatial viewport with 10,000 selectable cards.
 lab-canvas *args:

@@ -42,7 +42,7 @@ standalone crates too, so root `cargo clean` removes normal build outputs.
 Older branches or explicit overrides can still leave nested target directories.
 Stop active builds, then run `just clean-preview` to list all of them and
 `just clean` to remove them. Without Just, use
-`python3 scripts/clean_build_outputs.py` and add `--apply` to delete.
+`bash scripts/clean_build_outputs.sh` and add `--apply` to delete.
 The cleaner skips symlinks and refuses directories containing tracked files or
 not ignored by Git. It leaves source assets intact. Web bundles (`target/web/`)
 and staged deployment
