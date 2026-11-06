@@ -6592,6 +6592,7 @@ dependencies = [
  "xgpui-parley",
  "xgpui-platform",
  "xgpui-shader",
+ "xgpui-shell",
  "xgpui-svg",
  "xgpui-web",
  "xgpui-wgpu",
@@ -6785,6 +6786,14 @@ dependencies = [
  "xgpui-apple",
  "xgpui-wgpu",
  "xgpui-windows",
+]
+
+[[package]]
+name = "xgpui-shell"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "xgpui",
 ]
 
 [[package]]

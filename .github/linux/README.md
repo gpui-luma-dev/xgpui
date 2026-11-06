@@ -11,6 +11,7 @@ The Ubuntu job uses committed lockfiles and a shared Cargo target/cache. It runs
 
 - All seven extension library suites, color/ICC integration tests and the native
   Parley construction/interop tests, with the relevant Linux features enabled.
+- Experimental `xgpui-shell` appearance, capability and title-lifecycle tests.
 - All native lab test binaries, the shared lab library and compatibility tests.
 - Vulkan image and path captures, saved with per-suite logs and adapter details.
 - A dedicated real-window probe under Weston nested in Xvfb, and directly under
