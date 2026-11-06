@@ -2651,12 +2651,16 @@ mod font_variation_tests {
         primary.variations = axes(&[("slnt", -10.0), ("wght", 800.0)]);
         let id = fonts.font_id(&primary)?;
         let fallback = fonts.font_id(&font("Roboto Flex"))?;
+        // DirectWrite reports a missing glyph as `Some(GlyphId(0))` (.notdef),
+        // not `None`, so treat glyph 0 as absent.
+        let has_glyph = |font_id, ch| {
+            fonts
+                .glyph_for_char(font_id, ch)
+                .is_some_and(|glyph| glyph != GlyphId(0))
+        };
         let ch = (0x20..0x3000)
             .filter_map(char::from_u32)
-            .find(|&ch| {
-                fonts.glyph_for_char(id, ch).is_none()
-                    && fonts.glyph_for_char(fallback, ch).is_some()
-            })
+            .find(|&ch| !has_glyph(id, ch) && has_glyph(fallback, ch))
             .context("no fallback-only fixture character")?;
         let text = ch.to_string();
         let fallback_line = line(&fonts, id, &text, 24.0)?;

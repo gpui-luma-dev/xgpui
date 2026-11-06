@@ -31,9 +31,6 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-python=python3
-command -v python3 >/dev/null 2>&1 || python=python
-
 ct="cargo test --locked --config .cargo/validation.toml"
 lab="--manifest-path apps/xgpui-ext-lab/Cargo.toml"
 win="--manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support"
@@ -61,8 +58,6 @@ suite() {
 
 # Shared: tools, CPU extensions, labs and core benchmarks.
 suite release-sync all "cargo test --locked --manifest-path tools/release-sync/Cargo.toml {cargo}"
-suite python-scripts all "$python -m unittest discover -s scripts -p 'test_*.py'"
-suite python-paints all "$python -m unittest discover -s .github/paints -p 'test_*.py'"
 suite color all "$ct --manifest-path extensions/crates/xgpui-color/Cargo.toml {cargo}"
 suite gamut all "$ct --manifest-path extensions/crates/xgpui-gamut/Cargo.toml {cargo}"
 suite gamut-instanced all "$ct --manifest-path extensions/crates/xgpui-gamut/Cargo.toml --features instanced {cargo}"
@@ -86,7 +81,7 @@ apple_lock=gpui/crates/gpui-apple/Cargo.lock
 suite apple-text macos "keep=0; [ -e $apple_lock ] && keep=1; cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-apple/Cargo.toml --features test-support,font-kit,runtime_shaders --lib {cargo} text_system::; status=\$?; [ \$keep = 1 ] || rm -f $apple_lock; exit \$status"
 suite ios-compile macos "$ct --manifest-path gpui/crates/gpui-ios/Cargo.toml --features runtime_shaders --target aarch64-apple-ios-sim --test text_input --no-run {cargo}"
 
-# Linux: Cosmic/Parley text, wgpu, DMA-BUF, window build, Vulkan paints.
+# Linux: Cosmic/Parley text, wgpu, DMA-BUF, window build, Vulkan paint suites.
 suite cosmic-text linux "$ct $wgpu --lib {cargo} cosmic_text_system::tests"
 suite parley linux "$ct $parley --lib $linux_parley {cargo}"
 suite parley-construction linux "$ct $parley --test construction $linux_parley {cargo}"
@@ -94,16 +89,26 @@ suite text-lab-axes linux "$ct $lab --bin text-lab --features runtime-shaders {c
 suite wgpu-dma-buf linux "$ct $wgpu --features dma-buf,test-support --lib {cargo} custom_draw::dma_buf::native_tests::dma_buf_native_generated_snapshot -- --ignored --exact --nocapture --test-threads=1"
 suite media-dma-buf-video linux "$ct $lab --features runtime-shaders,portable-shaders,wgpu --bin media-lab {cargo} video_lab::linux::tests::dma_buf_video_capture_pixels_and_lifetimes -- --ignored --exact --nocapture --test-threads=1"
 suite linux-windows-build linux "$ct $lab --features linux-window-tests,runtime-shaders,portable-shaders,wgpu --test linux_windows --no-run {cargo}"
-suite paints-linux-vulkan linux "WGPU_BACKEND=vulkan XGPUI_BRUSH_NATIVE=0 $python .github/paints/run.py --backend linux-vulkan --scope full"
 
-# Windows: DirectWrite fonts, DirectX renderer, Windows apps, D3D paints.
+# Paint GPU suites from .github/paints/commands.json (CI runs them through
+# run.py; keep the two lists in step). Steps already covered above are not
+# repeated: paint-lab wgpu checks run in "labs", brush tests in "shader", and
+# gpui-windows coverage/DX11/wide-gamut tests in "windows-backend".
+suite wgpu-coverage-cache linux "WGPU_BACKEND=vulkan $ct $wgpu --features test-support --lib {cargo} coverage_cache"
+suite wgpu-custom-draw linux "WGPU_BACKEND=vulkan $ct $wgpu --features test-support --lib {cargo} wgpu_custom -- --nocapture"
+
+# Windows: DirectWrite fonts, DirectX renderer, Windows apps, paint GPU suites.
 suite directwrite-fonts windows "$ct $win --lib {cargo} font_variation_tests -- --test-threads=1"
 suite windows-backend windows "$ct $win --lib {cargo} -- --test-threads=1 --skip font_variation_tests"
 suite color-lab windows "$ct $lab --bin color-lab {cargo} -- --test-threads=1"
 suite gamut-lab windows "$ct $lab --bin gamut-lab --test compatibility {cargo}"
 suite media-lab-video windows "$ct $lab --bin media-lab {cargo} video_lab:: -- --test-threads=1"
-suite paints-windows-native windows "WGPU_BACKEND=dx12 XGPUI_BRUSH_NATIVE=1 $python .github/paints/run.py --backend windows-native --scope full"
-suite paints-windows-wgpu windows "WGPU_BACKEND=dx12 XGPUI_BRUSH_NATIVE=0 $python .github/paints/run.py --backend windows-wgpu --scope full"
+suite wgpu-coverage-cache windows "WGPU_BACKEND=dx12 $ct $wgpu --features test-support --lib {cargo} coverage_cache"
+suite wgpu-custom-draw windows "WGPU_BACKEND=dx12 $ct $wgpu --features test-support --lib {cargo} wgpu_custom -- --nocapture"
+suite paint-lab-check windows "cargo check --locked --config .cargo/validation.toml $lab --bin paint-lab --features portable-shaders {cargo}"
+suite paint-lab-portable windows "WGPU_BACKEND=dx12 $ct $lab --bin paint-lab --features wgpu,portable-shaders {cargo} -- --nocapture"
+suite shader-brush-native windows "XGPUI_BRUSH_NATIVE=1 $ct --manifest-path extensions/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib {cargo} brush::tests -- --nocapture"
+suite paint-dx11-capture windows "cargo run --locked --config .cargo/validation.toml $lab --bin paint-lab --features portable-shaders {cargo} -- --headless --effect mesh --frames 3 --png target/test-logs/native-dx11-mesh.png"
 
 if [ ${#names[@]} -eq 0 ]; then
   echo "test_all: no suites match${only:+ \"$only\"} on $os" >&2
