@@ -311,5 +311,3 @@ path = "examples/toggle_headless.rs"
 
 [lints]
 rust = { unexpected_cfgs = { level = "warn", check-cfg = ["cfg(rust_analyzer)"] } }
-
-[workspace]

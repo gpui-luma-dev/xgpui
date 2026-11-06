@@ -12,8 +12,6 @@ keywords = ["xgpui", "gpui", "gui", "canvas", "graphics"]
 categories = ["gui", "graphics"]
 publish = ["crates-io"]
 
-[workspace]
-
 [features]
 gpui = ["dep:gpui", "dep:xgpui-shader", "dep:bytemuck", "dep:anyhow"]
 

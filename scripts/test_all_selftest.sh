@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Self-test for scripts/test_all.sh: environment propagation, prerequisite
-# handling and continue-after-failure. Runs test_all.sh as a Linux host with
-# fake uname, cargo and vulkaninfo, so it needs no GPU or Rust build.
+# handling, the shared build and continue-after-failure. Runs test_all.sh as a
+# Linux host with fake uname, cargo, test executables and vulkaninfo, so it
+# needs no GPU or Rust build (Python 3 indexes the fake build output).
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,17 +16,55 @@ cat >"$fake/uname" <<'EOF'
 echo "${FAKE_UNAME:-Linux}"
 EOF
 # Records its arguments and the Vulkan/wgpu environment, one file per call,
-# and fails when an argument matches FAKE_CARGO_FAIL.
+# and fails when an argument matches FAKE_CARGO_FAIL. For the shared build
+# (--message-format) it also reports a fake test executable for each target
+# of every requested package, as Cargo's JSON messages would.
 cat >"$fake/cargo" <<'EOF'
 #!/usr/bin/env bash
 n=$(ls "$SELFTEST_RECORD" | wc -l | tr -d ' ')
 {
-  echo "args=$*"
+  echo "cargo args=$*"
   for var in WGPU_BACKEND WGPU_DEBUG WGPU_VALIDATION VK_INSTANCE_LAYERS VK_LAYER_ENABLES; do
     echo "$var=${!var-<unset>}"
   done
 } >"$SELFTEST_RECORD/$n.txt"
 if [ -n "${FAKE_CARGO_FAIL:-}" ] && [[ "$*" == *"$FAKE_CARGO_FAIL"* ]]; then exit 1; fi
+if [[ "$*" == *--message-format* ]]; then
+  while [ $# -gt 0 ]; do
+    if [ "$1" = -p ]; then
+      package=$2
+      mkdir -p "$SELFTEST_PACKAGES/$package"
+      for target in lib:x bin:media-lab bin:text-lab bin:color-lab bin:gamut-lab bin:paint-lab \
+        test:compatibility test:linux_windows test:construction \
+        bench:atlas_upload bench:focus_cleanup bench:inspector_render bench:randomized_element_tree; do
+        kind=${target%%:*} name=${target#*:}
+        exe="$SELFTEST_PACKAGES/$package/$kind-$name"
+        printf '#!/usr/bin/env bash\nexec "%s" "%s" "$@"\n' "$SELFTEST_TESTEXE" "$package" >"$exe"
+        chmod +x "$exe"
+        printf '{"reason":"compiler-artifact","package_id":"path+file://%s#0.1.0","manifest_path":"%s/Cargo.toml","target":{"kind":["%s"],"name":"%s"},"profile":{"test":true},"executable":"%s"}\n' \
+          "$SELFTEST_PACKAGES/$package" "$SELFTEST_PACKAGES/$package" "$kind" "$name" "$exe"
+      done
+      shift
+    fi
+    shift
+  done
+fi
+exit 0
+EOF
+# Fake test executable: records package, arguments, working directory and the
+# Vulkan/wgpu environment; fails when "<package> <args>" matches FAKE_TEST_FAIL.
+cat >"$fake/testexe" <<'EOF'
+#!/usr/bin/env bash
+package=$1
+shift
+n=$(ls "$SELFTEST_RECORD" | wc -l | tr -d ' ')
+{
+  echo "test package=$package args=$* cwd=$(pwd)"
+  for var in WGPU_BACKEND WGPU_DEBUG WGPU_VALIDATION VK_INSTANCE_LAYERS VK_LAYER_ENABLES; do
+    echo "$var=${!var-<unset>}"
+  done
+} >"$SELFTEST_RECORD/$n.txt"
+if [ -n "${FAKE_TEST_FAIL:-}" ] && [[ "$package $*" == *"$FAKE_TEST_FAIL"* ]]; then exit 1; fi
 exit 0
 EOF
 cat >"$fake/vulkaninfo" <<'EOF'
@@ -48,15 +87,20 @@ check() { # check <description> <command...>
 run() {
   local only=$1
   shift
-  rm -rf "$tmp/record" "$tmp/logs"
-  mkdir -p "$tmp/record"
+  rm -rf "$tmp/record" "$tmp/logs" "$tmp/packages"
+  mkdir -p "$tmp/record" "$tmp/packages"
   output=$(env -u VK_INSTANCE_LAYERS -u VK_LAYER_ENABLES -u WGPU_BACKEND -u WGPU_DEBUG -u WGPU_VALIDATION \
     PATH="$fake:$PATH" SELFTEST_RECORD="$tmp/record" TEST_ALL_LOG_DIR="$tmp/logs" \
+    SELFTEST_PACKAGES="$tmp/packages" SELFTEST_TESTEXE="$fake/testexe" \
     "$@" bash "$root/scripts/test_all.sh" --only "$only" --fake-arg 2>&1)
   status=$?
 }
 recorded() { cat "$tmp/record"/*.txt 2>/dev/null; }
+# Records of test executables only (the shared build always calls cargo).
+tests_run() { grep -l '^test package=' "$tmp/record"/*.txt 2>/dev/null | xargs cat 2>/dev/null; }
+cargo_calls() { grep -h '^cargo args=' "$tmp/record"/*.txt 2>/dev/null; }
 has() { grep -qF -- "$1" <<<"$2"; }
+lacks() { ! has "$@"; }
 has_line() { grep -qxF -- "$1" <<<"$2"; }
 
 # 1. Validation environment reaches the native GPU suite; layer default applied.
@@ -67,7 +111,11 @@ check "WGPU_DEBUG=1" has "WGPU_DEBUG=1" "$(recorded)"
 check "WGPU_VALIDATION=1" has "WGPU_VALIDATION=1" "$(recorded)"
 check "VK_INSTANCE_LAYERS defaults to the Khronos layer" has "VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation" "$(recorded)"
 check "VK_LAYER_ENABLES defaults to sync validation" has "VK_LAYER_ENABLES=VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT" "$(recorded)"
-check "forwarded cargo arguments reach cargo" has "--fake-arg" "$(recorded)"
+check "forwarded cargo arguments reach the shared build" has "--fake-arg" "$(cargo_calls)"
+check "GPU environment reaches the test executable" has "WGPU_VALIDATION=1" "$(tests_run)"
+check "suite arguments reach the test executable" has "args=custom_draw::dma_buf::native_tests::dma_buf_native_generated_snapshot --ignored --exact" "$(tests_run)"
+check "test executable runs from its package directory" has "cwd=$tmp/packages/xgpui-wgpu" "$(tests_run)"
+check "forwarded cargo arguments do not reach test executables" lacks "--fake-arg" "$(tests_run)"
 
 # 2. User-configured layers and settings are preserved.
 run wgpu-dma-buf VULKANINFO="$fake/vulkaninfo" FAKE_VULKANINFO_OUTPUT="$layer_present" \
@@ -81,18 +129,18 @@ check "Khronos layer is not added twice" has_line "VK_INSTANCE_LAYERS=VK_LAYER_K
 # 3. Missing validation layer: no cargo call, PREREQ in summary, non-zero exit.
 run wgpu-dma-buf VULKANINFO="$fake/vulkaninfo" FAKE_VULKANINFO_OUTPUT="Instance Layers: count = 0"
 check "missing layer fails the run" [ "$status" -ne 0 ]
-check "missing layer does not invoke cargo" [ -z "$(recorded)" ]
+check "missing layer does not run the test executable" [ -z "$(tests_run)" ]
 check "missing layer is reported as PREREQ" has "PREREQ wgpu-dma-buf" "$output"
 check "missing layer log gives an install hint" has "vulkan-validation-layers" "$(cat "$tmp/logs/wgpu-dma-buf.log")"
 
 # 4. Missing vulkaninfo: same handling, with its own install hint.
 run wgpu-dma-buf VULKANINFO="$tmp/no-such-vulkaninfo"
 check "missing vulkaninfo fails the run" [ "$status" -ne 0 ]
-check "missing vulkaninfo does not invoke cargo" [ -z "$(recorded)" ]
+check "missing vulkaninfo does not run the test executable" [ -z "$(tests_run)" ]
 check "missing vulkaninfo log gives an install hint" has "vulkan-tools" "$(cat "$tmp/logs/wgpu-dma-buf.log")"
 
 # 5. A failing suite does not stop later suites; each keeps its own log.
-run dma-buf VULKANINFO="$fake/vulkaninfo" FAKE_VULKANINFO_OUTPUT="$layer_present" FAKE_CARGO_FAIL=gpui-wgpu
+run dma-buf VULKANINFO="$fake/vulkaninfo" FAKE_VULKANINFO_OUTPUT="$layer_present" FAKE_TEST_FAIL=xgpui-wgpu
 check "run fails when one suite fails" [ "$status" -ne 0 ]
 check "failing suite is reported" has "FAIL  wgpu-dma-buf" "$output"
 check "later suite still runs and passes" has "PASS  media-dma-buf-video" "$output"
@@ -108,9 +156,12 @@ check "non-GPU suite gets no WGPU_VALIDATION" has "WGPU_VALIDATION=<unset>" "$(r
 run gpui-bench-build
 check "benchmark build suite passes" [ "$status" -eq 0 ]
 check "benchmark suite compiles every benchmark" has "--benches" "$(recorded)"
-check "benchmark suite enables CI features" has "--features bench-support,test-support,runtime_shaders" "$(recorded)"
+for feature in xgpui-platform/bench-support xgpui-platform/test-support xgpui-platform/runtime_shaders; do
+  check "shared build enables $feature" has "$feature" "$(cargo_calls)"
+done
 run gpui-bench-build FAKE_CARGO_FAIL=--benches
 check "benchmark compilation failure fails the runner" [ "$status" -ne 0 ]
+check "shared build failure appears in the summary" has "FAIL  (shared build)" "$output"
 check "benchmark compilation failure appears in the summary" has "FAIL  gpui-bench-build" "$output"
 
 # 8. Every host includes CI's full native-library gate, with failures propagated.
@@ -126,13 +177,25 @@ check "native compilation failure appears in the summary" has "FAIL  native-libr
 
 # 9. Use the CI feature variants, rather than passing only default-feature tests.
 run color
-check "color tests include ICC" has "--features icc" "$(recorded)"
+check "color tests include ICC" has "xgpui-color/icc" "$(cargo_calls)"
+check "color doctests run with ICC" has "--features icc --doc" "$(cargo_calls)"
 run canvas
-check "canvas tests include GPUI integration" has "--features gpui" "$(recorded)"
+check "canvas tests include GPUI integration" has "xgpui-canvas/gpui" "$(cargo_calls)"
 run media
-check "media tests include wgpu" has "--features wgpu" "$(recorded)"
+check "media tests include wgpu" has "xgpui-media/wgpu" "$(cargo_calls)"
 run parley
-check "Linux Parley includes system font coverage" has "system-fonts,native-test,gpui-platform/wayland,gpui-platform/x11" "$(recorded)"
+for feature in xgpui-parley/system-fonts xgpui-parley/native-test xgpui-platform/wayland xgpui-platform/x11; do
+  check "Linux Parley build includes $feature" has "$feature" "$(cargo_calls)"
+done
+
+# 10. One shared build serves every suite; a failed build fails them all.
+run gpui
+check "shared build runs once for several suites" [ "$(cargo_calls | grep -c -- --message-format)" -eq 1 ]
+check "every gpui suite runs" has "PASS  gpui-bench-context" "$output"
+run gpui FAKE_CARGO_FAIL=--message-format
+check "failed shared build fails the run" [ "$status" -ne 0 ]
+check "suites fail rather than pass after a failed build" has "FAIL  gpui-core" "$output"
+check "no test executable runs after a failed build" [ -z "$(tests_run)" ]
 run media-minimal
 check "Linux checks media without GPU backends" has "--no-default-features --lib" "$(recorded)"
 

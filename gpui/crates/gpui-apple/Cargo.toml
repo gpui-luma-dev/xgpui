@@ -84,5 +84,3 @@ objc2-core-video = { version = "=0.3.2", default-features = false, features = ["
 
 [lints]
 rust = { unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }, deprecated = "allow" }
-
-[workspace]

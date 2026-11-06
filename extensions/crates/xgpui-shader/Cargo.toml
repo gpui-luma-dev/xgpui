@@ -12,8 +12,6 @@ readme = "README.md"
 keywords = ["xgpui", "gpui", "graphics", "wgsl", "shaders"]
 categories = ["gui", "graphics"]
 
-[workspace]
-
 [features]
 default = []
 wgpu = ["dep:gpui-wgpu", "dep:bytemuck"]

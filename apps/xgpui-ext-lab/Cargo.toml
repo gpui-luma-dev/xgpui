@@ -15,8 +15,6 @@ default-run = "shader-examples"
 [lib]
 path = "shared/lib.rs"
 
-[workspace]
-
 [features]
 default = ["native"]
 native = []

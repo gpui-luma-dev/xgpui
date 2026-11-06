@@ -52,7 +52,5 @@ anyhow = { version = "1.0.86" }
 gpui = { package = "xgpui", version = "=3.0.0" }
 smallvec = { version = "1.6", features = ["union", "const_new"] }
 
-[workspace]
-
 [package.metadata.cargo-shear]
 ignored = ["scheduler"]

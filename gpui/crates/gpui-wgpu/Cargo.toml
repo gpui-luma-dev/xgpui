@@ -98,5 +98,3 @@ naga = { git = "https://github.com/gfx-rs/wgpu", rev = "cddb2f5d80dc0009b2ef6767
 [[bench]]
 name = "layout_line"
 harness = false
-
-[workspace]
