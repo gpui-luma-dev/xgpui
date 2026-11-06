@@ -1,8 +1,8 @@
 use std::{borrow::Cow, hint::black_box, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
-use bench_metrics::MetricReport;
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput};
+use gpui::bench_metrics::MetricReport;
 use gpui::{
     AtlasKey, AtlasTextureId, AtlasTextureKind, AtlasTile, BenchMeasurement, Bounds, ContentMask,
     Corners, DevicePixels, Hsla, ImageId, MonochromeSprite, PaddedBool32, PlatformAtlas,
