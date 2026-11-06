@@ -79,7 +79,8 @@ function render() {
   const content=document.getElementById('content');
   content.innerHTML=c?cratePage(c,route.tab):route.pkg?header('Not found','Unknown crate','Choose a captured crate from the navigation.'):isExtensionRoute(route.global)?extensionPage(route.global):route.global==='pipeline'?pipelinePage():route.global==='architecture'?architecturePage():route.global==='review'?review():overview();
   window.enhanceCodeExamples?.(content);
-  document.title=(c?short(c.package):isExtensionRoute(route.global)?extensionTitle(route.global):route.global==='pipeline'?'Rendering pipeline explorer':route.global==='architecture'?'Architecture overview':route.global==='review'?'API review roadmap':'Code roadmap')+' · xgpui';
+  const pageTitle=(c?short(c.package):isExtensionRoute(route.global)?extensionTitle(route.global):route.global==='pipeline'?'Rendering pipeline explorer':route.global==='architecture'?'Architecture overview':route.global==='review'?'API review roadmap':'');
+  document.title=pageTitle?pageTitle+' · XGPUI - Extended GPUI':'XGPUI - Extended GPUI';
   sidebar();
   if(route.section && isExtensionRoute(route.global)) {
     const target = document.getElementById(route.section);

@@ -703,7 +703,7 @@ fn generate(root: &Path) -> Result<()> {
                 })
                 .collect();
             let page = format!(
-                "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{0} · source</title><style>body{{background:#111111;color:#dddddd;font:14px/1.65 ui-monospace,monospace;margin:24px}}h1{{font:16px system-ui}}pre{{tab-size:4}}.line{{display:block;white-space:pre}}.line a{{display:inline-block;width:5em;color:#999999;text-decoration:none;user-select:none}}.line:target{{background:#333333;color:white}}a{{color:#cccccc}}</style><h1>{0}</h1><p>Source snapshot, Apache-2.0. Line anchors are one-based. <a href=\"javascript:history.back()\">Back to roadmap</a></p><div>{1}</div></html>",
+                "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"Source of {0} in XGPUI, the extended GPUI Rust UI framework.\"><title>{0} · source · XGPUI - Extended GPUI</title><style>body{{background:#111111;color:#dddddd;font:14px/1.65 ui-monospace,monospace;margin:24px}}h1{{font:16px system-ui}}pre{{tab-size:4}}.line{{display:block;white-space:pre}}.line a{{display:inline-block;width:5em;color:#999999;text-decoration:none;user-select:none}}.line:target{{background:#333333;color:white}}a{{color:#cccccc}}</style><h1>{0}</h1><p>Source snapshot, Apache-2.0. Line anchors are one-based. <a href=\"javascript:history.back()\">Back to roadmap</a></p><div>{1}</div></html>",
                 html(file),
                 lines
             );
@@ -872,6 +872,22 @@ fn generate(root: &Path) -> Result<()> {
                     id,
                 })
             }
+            // Guide images are relative to the guide in Markdown (so they also
+            // render on GitHub); embedded guide HTML is served from the docs root.
+            pulldown_cmark::Event::Start(pulldown_cmark::Tag::Image {
+                link_type,
+                dest_url,
+                title,
+                id,
+            }) => pulldown_cmark::Event::Start(pulldown_cmark::Tag::Image {
+                link_type,
+                dest_url: dest_url
+                    .strip_prefix("../images/")
+                    .map(|image| format!("images/{image}").into())
+                    .unwrap_or(dest_url),
+                title,
+                id,
+            }),
             other => other,
         });
         let mut html = String::new();

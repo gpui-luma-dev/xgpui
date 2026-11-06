@@ -227,6 +227,8 @@ assert.match(index, /href="#performance-study">Performance study/);
 assert.match(run('extensionPage("performance-study")'), /Problem 3: every pixel shades every ribbon/);
 assert.match(data.extension_documents['performance-study'].html, /href="#extension-lab"/);
 assert.match(data.extension_documents['performance-study'].html, /Dx11CustomContext/);
+assert.match(data.extension_documents['performance-study'].html, /<img src="images\/pastel-waves-metal-120hz\.webp"/);
+assert.ok((await readFile(new URL('images/pastel-waves-metal-120hz.webp', site))).length > 0);
 assert.equal(data.extension_packages['xgpui-parley'], 'extensions/crates/xgpui-parley');
 assert.ok(!data.provenance.packages['xgpui-parley']);
 const extensionOverview = run('extensionPage("extensions")');
