@@ -6,7 +6,8 @@
 #   just test --list          print the suites without running them
 #   just test --only <text>   run only suites whose name contains <text>
 #
-# Logs: target/test-logs/<suite>.log. Exit status is non-zero if any suite failed.
+# Logs: target/test-logs/<suite>.log (override with TEST_ALL_LOG_DIR). Exit
+# status is non-zero if any suite failed or lacked a prerequisite (PREREQ).
 # GPU, display and window suites expect a real desktop session on the host.
 set -uo pipefail
 
@@ -30,6 +31,37 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+logs=${TEST_ALL_LOG_DIR:-target/test-logs}
+
+# A suite exits with this status when a host prerequisite is missing. It is
+# reported as PREREQ and counted as a failure, never as a pass.
+prereq_status=77
+
+# Strict Vulkan validation for native Linux GPU suites, matching the
+# native-dma-buf job in linux-extensions.yml. The Khronos layer is appended to
+# any VK_INSTANCE_LAYERS already set; a VK_LAYER_ENABLES already set is kept.
+# Checks for the layer first and explains how to install it if it is missing.
+# VULKANINFO overrides the vulkaninfo executable (used by the runner self-test).
+vulkan_validation() {
+  export WGPU_BACKEND=vulkan WGPU_DEBUG=1 WGPU_VALIDATION=1
+  case ":${VK_INSTANCE_LAYERS-}:" in
+    *:VK_LAYER_KHRONOS_validation:*) ;;
+    *) export VK_INSTANCE_LAYERS="${VK_INSTANCE_LAYERS:+$VK_INSTANCE_LAYERS:}VK_LAYER_KHRONOS_validation" ;;
+  esac
+  export VK_LAYER_ENABLES="${VK_LAYER_ENABLES:-VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT}"
+  local vulkaninfo=${VULKANINFO:-vulkaninfo}
+  if ! command -v "$vulkaninfo" >/dev/null 2>&1; then
+    echo "PREREQ: vulkaninfo not found. Install Vulkan tools (Fedora: sudo dnf install vulkan-tools; Debian/Ubuntu: sudo apt install vulkan-tools)." >&2
+    return 1
+  fi
+  if ! "$vulkaninfo" --summary 2>&1 | grep -q VK_LAYER_KHRONOS_validation; then
+    echo "PREREQ: Khronos validation layer VK_LAYER_KHRONOS_validation not reported by vulkaninfo. Install it (Fedora: sudo dnf install vulkan-validation-layers; Debian/Ubuntu: sudo apt install vulkan-validationlayers)." >&2
+    return 1
+  fi
+}
+export -f vulkan_validation
+vk="vulkan_validation || exit $prereq_status;"
 
 ct="cargo test --locked --config .cargo/validation.toml"
 lab="--manifest-path apps/xgpui-ext-lab/Cargo.toml"
@@ -57,6 +89,7 @@ suite() {
 }
 
 # Shared: tools, CPU extensions, labs and core benchmarks.
+suite runner-selftest all "bash scripts/test_all_selftest.sh"
 suite release-sync all "cargo test --locked --manifest-path tools/release-sync/Cargo.toml {cargo}"
 suite color all "$ct --manifest-path extensions/crates/xgpui-color/Cargo.toml {cargo}"
 suite gamut all "$ct --manifest-path extensions/crates/xgpui-gamut/Cargo.toml {cargo}"
@@ -86,8 +119,9 @@ suite cosmic-text linux "$ct $wgpu --lib {cargo} cosmic_text_system::tests"
 suite parley linux "$ct $parley --lib $linux_parley {cargo}"
 suite parley-construction linux "$ct $parley --test construction $linux_parley {cargo}"
 suite text-lab-axes linux "$ct $lab --bin text-lab --features runtime-shaders {cargo} axes::tests"
-suite wgpu-dma-buf linux "$ct $wgpu --features dma-buf,test-support --lib {cargo} custom_draw::dma_buf::native_tests::dma_buf_native_generated_snapshot -- --ignored --exact --nocapture --test-threads=1"
-suite media-dma-buf-video linux "$ct $lab --features runtime-shaders,portable-shaders,wgpu --bin media-lab {cargo} video_lab::linux::tests::dma_buf_video_capture_pixels_and_lifetimes -- --ignored --exact --nocapture --test-threads=1"
+suite wgpu-dma-buf linux "$vk $ct $wgpu --features dma-buf,test-support --lib {cargo} custom_draw::dma_buf::native_tests::dma_buf_native_generated_snapshot -- --ignored --exact --nocapture --test-threads=1"
+suite media-dma-buf-video linux "$vk $ct $lab --features runtime-shaders,portable-shaders,wgpu --bin media-lab {cargo} video_lab::linux::tests::dma_buf_video_capture_pixels_and_lifetimes -- --ignored --exact --nocapture --test-threads=1"
+suite media-video-capture linux "$vk cargo run --locked --config .cargo/validation.toml $lab --features runtime-shaders,portable-shaders,wgpu --bin media-lab {cargo} -- --headless --video --wgpu --png $logs/media-video.png"
 suite linux-windows-build linux "$ct $lab --features linux-window-tests,runtime-shaders,portable-shaders,wgpu --test linux_windows --no-run {cargo}"
 
 # Paint GPU suites from .github/paints/commands.json (CI runs them through
@@ -108,7 +142,7 @@ suite wgpu-custom-draw windows "WGPU_BACKEND=dx12 $ct $wgpu --features test-supp
 suite paint-lab-check windows "cargo check --locked --config .cargo/validation.toml $lab --bin paint-lab --features portable-shaders {cargo}"
 suite paint-lab-portable windows "WGPU_BACKEND=dx12 $ct $lab --bin paint-lab --features wgpu,portable-shaders {cargo} -- --nocapture"
 suite shader-brush-native windows "XGPUI_BRUSH_NATIVE=1 $ct --manifest-path extensions/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib {cargo} brush::tests -- --nocapture"
-suite paint-dx11-capture windows "cargo run --locked --config .cargo/validation.toml $lab --bin paint-lab --features portable-shaders {cargo} -- --headless --effect mesh --frames 3 --png target/test-logs/native-dx11-mesh.png"
+suite paint-dx11-capture windows "cargo run --locked --config .cargo/validation.toml $lab --bin paint-lab --features portable-shaders {cargo} -- --headless --effect mesh --frames 3 --png $logs/native-dx11-mesh.png"
 
 if [ ${#names[@]} -eq 0 ]; then
   echo "test_all: no suites match${only:+ \"$only\"} on $os" >&2
@@ -127,7 +161,6 @@ if [ $list_only -eq 1 ]; then
   exit 0
 fi
 
-logs=target/test-logs
 mkdir -p "$logs"
 export RUST_BACKTRACE=1
 results=()
@@ -145,6 +178,9 @@ for i in "${!names[@]}"; do
   elapsed=$((SECONDS - start))
   if [ "$status" -eq 0 ]; then
     results+=("$(printf 'PASS  %-24s %5ss' "$name" "$elapsed")")
+  elif [ "$status" -eq "$prereq_status" ]; then
+    results+=("$(printf 'PREREQ %-23s %5ss  (missing prerequisite, see %s)' "$name" "$elapsed" "$log")")
+    failed=$((failed + 1))
   else
     results+=("$(printf 'FAIL  %-24s %5ss  (exit %s, %s)' "$name" "$elapsed" "$status" "$log")")
     failed=$((failed + 1))
@@ -153,5 +189,5 @@ done
 
 printf '\n==== Test summary (%s, %ss) ====\n' "$os" $((SECONDS - start_all))
 printf '%s\n' "${results[@]}"
-printf '%d of %d suites failed.\n' "$failed" ${#names[@]}
+printf '%d of %d suites failed or lacked prerequisites.\n' "$failed" ${#names[@]}
 [ "$failed" -eq 0 ]
