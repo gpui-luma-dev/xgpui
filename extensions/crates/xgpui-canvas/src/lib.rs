@@ -1,4 +1,7 @@
-//! Experimental camera math. Screen coordinates are viewport-local logical pixels.
+//! BETA spatial viewport: f64 camera, retained scene culling, snapping and
+//! procedural grids. Expect significant API changes.
+//!
+//! Screen coordinates are viewport-local logical pixels.
 //! World coordinates stay in f64; convert to f32 only after projection.
 
 #[cfg(feature = "gpui")]
