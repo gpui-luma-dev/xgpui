@@ -1,3 +1,6 @@
 # Preserve byte-exact upstream CIE data and its original CRLF line endings.
 apps/xgpui-ext-lab/extensions-web/assets/colorimetry/CIE_cc_1931_2deg.csv -text whitespace=cr-at-eol
 apps/xgpui-ext-lab/extensions-web/assets/colorimetry/CIE_cc_1931_2deg.csv_metadata.json -text whitespace=cr-at-eol
+
+# Paint commands are consumed by Bash on every platform.
+.github/paints/commands.tsv text eol=lf
