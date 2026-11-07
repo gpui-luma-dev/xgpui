@@ -26,7 +26,7 @@ changes to existing GPUI callers.
 ```toml
 [dependencies]
 gpui = { package = "xgpui", version = "=3.0.0" }
-xgpui-parley = { version = "=0.4.0", features = ["system-fonts"] }
+xgpui-parley = { version = "=0.5.0", features = ["system-fonts"] }
 ```
 
 ```rust
