@@ -230,6 +230,10 @@ suite native-libraries all "cargo_capture check --locked --features full-capture
 # fragile-send-sync-non-atomic-wasm feature masks invalid Send/Sync bounds (#166).
 # Clear inherited native linker flags; requires the wasm32-unknown-unknown target.
 suite wgpu-wasm-compile all "unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS; cargo_capture check --locked --config .cargo/validation.toml -p xgpui-wgpu --lib --target wasm32-unknown-unknown {cargo}"
+# Compile the browser demos as built for the website (extensions-web/build.sh,
+# shader-examples/build.sh). They use xgpui-shader, xgpui-media and xgpui-parley
+# in the browser, which the backend check above does not compile.
+suite web-demos-wasm-compile all "unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS; cargo_capture check --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin extensions-web --bin shader-examples --no-default-features --features web --target wasm32-unknown-unknown {cargo}"
 # Platform benchmarks compile in the shared build (bench-support, test-support).
 suite gpui-bench-build all "built xgpui-platform bench:atlas_upload,bench:focus_cleanup,bench:inspector_render,bench:randomized_element_tree"
 # Isolated: media without optional GPU backends.
