@@ -20,7 +20,7 @@ wgpu = ["dep:gpui-wgpu", "gpui-wgpu/dma-buf"]
 anyhow = "1"
 half = "2.7"
 xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"] , package = "xgpui-shader", version = "=0.4.2" }
-xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "=0.3.0" }
+xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "=0.3.1" }
 refineable = { package = "refineable-gpui-unofficial", version = "=1.27.0" }
 gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=3.0.0" }
 gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", optional = true , package = "xgpui-wgpu", version = "=2.1.0" }
