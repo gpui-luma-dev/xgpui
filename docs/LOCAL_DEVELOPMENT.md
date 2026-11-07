@@ -295,8 +295,9 @@ all extension libraries and labs.** The labs share the separate `xgpui-ext-lab` 
 and repository tools retain their own workspaces. Select a lab with
 `--manifest-path apps/xgpui-ext-lab/Cargo.toml --bin <name>`.
 
-The checked-in `.cargo/config.toml` maps the ten retained framework/backend
-crate names to local source. Supporting crates retain their published identities
+The generated root `Cargo.toml` patches the ten retained framework/backend
+crate names to local source. Workspace patches apply only inside the root
+workspace, so the standalone tools under `tools/` don't see them. Supporting crates retain their published identities
 and are not overridden.
 Standalone commands also pass `.cargo/validation.toml` for the pinned
 compatibility overrides used by CI. Run from the root so Cargo discovers the

@@ -76,13 +76,11 @@ Rust edits when resolving conflicts; do not replace main's capture with a fresh
 generated snapshot as a substitute for merging. The first normalization is a
 directory/package migration; later releases use the same stable paths.
 
-After integration, run from the repository root. Refresh the standalone tools'
-lockfiles too when captured versions change, because Cargo records unused local
-patches in them:
+After integration, run from the repository root. The local-source patches live
+in the root workspace manifest, so the standalone tools' lockfiles don't record
+them and need no refresh when captured versions change:
 
 ```sh
-cargo generate-lockfile --manifest-path tools/release-sync/Cargo.toml
-cargo generate-lockfile --manifest-path tools/crate-roadmap/Cargo.toml
 cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- normalize --check
 cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests
 cargo check
@@ -102,7 +100,9 @@ at the captured release version. Only the retained framework/backend crates are
 locally overridden; see [build details](BUILDING.md#published-supporting-dependencies).
 
 For standalone checks, continue invoking Cargo from the repository root so it
-discovers `.cargo/config.toml`. For example, on macOS:
+discovers `.cargo/config.toml` (the shared target directory). The captured
+crates are root workspace members, so the root manifest's local-source patches
+apply. For example, on macOS:
 
 ```sh
 cargo check --config .cargo/validation.toml \
