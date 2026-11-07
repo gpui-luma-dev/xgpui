@@ -453,3 +453,36 @@ fn truncation_keeps_the_full_texts_auto_direction() {
     spec.options.direction = TextDirection::RightToLeft;
     assert!(fixture.fit(&spec, width).shaped.shape.is_rtl());
 }
+
+#[test]
+fn ltr_isolates_keep_values_with_units_together_in_rtl_text() {
+    let fixture = Fixture::new();
+    // Visual x of the first glyph for `target` in a single-line RTL layout.
+    let x_of = |text: &str, target: char| {
+        let mut spec = nowrap(fixture.spec(text), None);
+        spec.options.direction = TextDirection::RightToLeft;
+        let fitted = fixture.fit(&spec, AvailableSpace::MaxContent);
+        let layout = fixture
+            .engine
+            .layout(&fitted.shaped, None, fitted.align)
+            .unwrap();
+        let index = text.find(target).unwrap();
+        let glyphs: Vec<_> = layout.runs().iter().flat_map(|run| &run.glyphs).collect();
+        assert!(
+            glyphs.iter().all(|glyph| glyph.id.0 != 0),
+            "no missing glyphs in {text:?}"
+        );
+        glyphs
+            .iter()
+            .find(|glyph| glyph.index == index)
+            .unwrap()
+            .position
+            .x
+    };
+    // Unisolated, the bidi algorithm splits "536.6 us" around the space: "us 536.6".
+    let plain = "ראשון 536.6 us";
+    assert!(x_of(plain, 'u') < x_of(plain, '5'));
+    // A left-to-right isolate (U+2066…U+2069) keeps the value in reading order.
+    let isolated = "ראשון \u{2066}536.6 us\u{2069}";
+    assert!(x_of(isolated, '5') < x_of(isolated, 'u'));
+}

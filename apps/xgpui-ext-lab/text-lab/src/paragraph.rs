@@ -396,20 +396,27 @@ impl Render for ParagraphLab {
             .child(self.text(ui.select_help))
             .child(self.text(ui.edit_help))
             .child(controls)
-            .child(self.text(format!("{label} | {} {:.0}px", ui.width, f32::from(width))))
             .child(self.text(format!(
-                "{} {:.1} us | {} {:.2} us | {} {:.1} us",
-                ui.first, timing.first, ui.warm, timing.warm, ui.reflow, timing.reflow
+                "{label} | {} {}",
+                ui.width,
+                ltr(format_args!("{:.0}px", f32::from(width)))
+            )))
+            .child(self.text(format!(
+                "{} {} | {} {} | {} {}",
+                ui.first,
+                ltr(format_args!("{:.1} us", timing.first)),
+                ui.warm,
+                ltr(format_args!("{:.2} us", timing.warm)),
+                ui.reflow,
+                ltr(format_args!("{:.1} us", timing.reflow))
             )))
             .child(self.text(ui.cpu_note))
             .child(self.text(format!(
-                "{} {} {:?} | {} {} {:?}",
+                "{} {} | {} {}",
                 ui.anchor,
-                self.anchor.byte_index,
-                self.anchor.affinity,
+                ltr(format_args!("{} {:?}", self.anchor.byte_index, self.anchor.affinity)),
                 ui.caret,
-                self.caret.byte_index,
-                self.caret.affinity
+                ltr(format_args!("{} {:?}", self.caret.byte_index, self.caret.affinity))
             )));
         match layout {
             Ok(layout) => {
@@ -547,6 +554,12 @@ impl Render for ParagraphLab {
         }
         root.child(self.typeset_section())
     }
+}
+
+/// Wrap a value (number, unit, identifier) in a left-to-right isolate, so a
+/// right-to-left UI keeps "536.6 us" in reading order instead of "us 536.6".
+fn ltr(value: impl std::fmt::Display) -> String {
+    format!("\u{2066}{value}\u{2069}")
 }
 
 impl ParagraphLab {
