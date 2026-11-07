@@ -42,6 +42,8 @@ struct State {
     fonts: FontContext,
     layout: LayoutContext<()>,
     default_family: String,
+    /// Registered color emoji families, appended as last-resort fallbacks.
+    emoji_families: Vec<String>,
     // Identity bindings, not a second layout/raster cache. Old bindings remain
     // valid for in-flight layouts after GPUI invalidates its font generation.
     bindings: HashMap<FontId, Font>,
@@ -69,6 +71,7 @@ impl ParleyTextSystem {
         let mut state = State {
             fonts,
             default_family,
+            emoji_families: Vec::new(),
             layout: LayoutContext::new(),
             bindings: HashMap::new(),
             aliases: HashMap::new(),
@@ -79,6 +82,7 @@ impl ParleyTextSystem {
             #[cfg(test)]
             shape_calls: 0,
         };
+        state.refresh_emoji_families();
         // Resolve once, in the same registry as every shaped/rasterized face.
         // Construction fails if the explicit default cannot provide real metrics.
         let layout = state.shape(" ", px(16.0), &[])?;
@@ -123,6 +127,18 @@ impl ParleyTextSystem {
     /// fallible through `try_layout_line`; only GPUI's infallible hook substitutes.
     pub fn set_layout_error_handler(&self, handler: LayoutErrorHandler) {
         self.state.lock().unwrap().layout_error_handler = handler;
+    }
+
+    /// Number of Parley layout builds, for cache tests.
+    #[cfg(test)]
+    pub(crate) fn shape_calls(&self) -> usize {
+        self.state.lock().unwrap().shape_calls
+    }
+
+    /// Report a rejection through the installed handler, outside the state lock.
+    pub(crate) fn report_layout_error(&self, error: &anyhow::Error) {
+        let handler = self.state.lock().unwrap().layout_error_handler.clone();
+        handler(error);
     }
 
     fn rejected_line(&self, text: &str, size: Pixels) -> LineLayout {
@@ -228,13 +244,26 @@ impl ParleyTextSystem {
         size: Pixels,
         runs: &[FontRun],
     ) -> Result<crate::ParagraphShape> {
+        self.prepare_paragraph_with_options(text, size, runs, Default::default())
+    }
+
+    /// Like [`Self::prepare_paragraph`], with an explicit base direction and
+    /// content language. The language applies to the whole paragraph and selects
+    /// language-specific shaping and line breaking where fonts support it.
+    pub fn prepare_paragraph_with_options(
+        &self,
+        text: &str,
+        size: Pixels,
+        runs: &[FontRun],
+        options: crate::ParagraphOptions,
+    ) -> Result<crate::ParagraphShape> {
         ensure!(
             !text.contains(['\n', '\r', '\u{2029}']),
             "expected one logical paragraph"
         );
         let mut state = self.state.lock().unwrap();
         let styles = state.styles(text, runs)?;
-        let mut layout = state.build(text, size, &styles)?;
+        let mut layout = state.build(text, size, &styles, options)?;
         layout.break_all_lines(None);
         layout.align(Alignment::Start, AlignmentOptions::default());
         crate::validate_layout_geometry(&layout)?;
@@ -263,7 +292,56 @@ impl ParleyTextSystem {
     }
 }
 
+/// The primary family, explicit fallbacks, then any emoji families not listed.
+fn family_list<'a>(
+    primary: &'a str,
+    fallbacks: &'a [String],
+    emoji: &'a [String],
+) -> Vec<FontFamilyName<'a>> {
+    let mut families = Vec::with_capacity(1 + fallbacks.len() + emoji.len());
+    families.push(FontFamilyName::named(primary));
+    families.extend(fallbacks.iter().map(|name| FontFamilyName::named(name)));
+    for name in emoji {
+        let listed = name == primary || fallbacks.contains(name);
+        if !listed {
+            families.push(FontFamilyName::named(name));
+        }
+    }
+    families
+}
+
 impl State {
+    /// Parley's script fallback does not reach color emoji fonts, so registered
+    /// emoji families (named "…Emoji…" and carrying COLR or color bitmaps) are
+    /// appended to every family list. Other color fonts never become fallbacks.
+    fn refresh_emoji_families(&mut self) {
+        let names: Vec<String> = self
+            .fonts
+            .collection
+            .family_names()
+            .filter(|name| name.to_lowercase().contains("emoji"))
+            .map(str::to_owned)
+            .collect();
+        let mut emoji: Vec<String> = names
+            .into_iter()
+            .filter(|name| {
+                self.fonts
+                    .collection
+                    .family_by_name(name)
+                    .is_some_and(|family| {
+                        family.fonts().iter().any(|font| {
+                            font.load(None).is_some_and(|blob| {
+                                crate::raster::color::ColorProbe::new(blob.data(), font.index())
+                                    .is_some()
+                            })
+                        })
+                    })
+            })
+            .collect();
+        emoji.sort();
+        self.emoji_families = emoji;
+    }
+
     fn styles(&self, text: &str, runs: &[FontRun]) -> Result<Vec<(Font, Range<usize>)>> {
         let mut start: usize = 0;
         let mut styles = Vec::with_capacity(runs.len());
@@ -292,6 +370,7 @@ impl State {
         text: &str,
         size: Pixels,
         styles: &[(Font, Range<usize>)],
+        options: crate::ParagraphOptions,
     ) -> Result<Layout<()>> {
         ensure!(
             f32::from(size).is_finite() && size > px(0.0),
@@ -302,9 +381,22 @@ impl State {
             self.shape_calls += 1;
         }
         let mut builder = self.layout.ranged_builder(&mut self.fonts, text, 1.0, true);
-        builder.push_default(StyleProperty::FontFamily(FontFamily::named(
-            &self.default_family,
-        )));
+        builder.set_base_direction(options.direction.into());
+        if let Some(language) = options.language {
+            builder.push_default(StyleProperty::Locale(Some(language.parley())));
+        }
+        if let Some(line_height) = options.line_height {
+            ensure!(
+                f32::from(line_height).is_finite() && line_height > px(0.0),
+                "invalid line height"
+            );
+            builder.push_default(StyleProperty::LineHeight(parley::LineHeight::Absolute(
+                f32::from(line_height),
+            )));
+        }
+        builder.push_default(StyleProperty::FontFamily(FontFamily::List(Cow::Owned(
+            family_list(&self.default_family, &[], &self.emoji_families),
+        ))));
         builder.push_default(StyleProperty::FontSize(f32::from(size)));
         for (font, range) in styles {
             let primary = if font.family.as_ref() == ".SystemUIFont" {
@@ -317,14 +409,11 @@ impl State {
                 .as_ref()
                 .map(|f| f.fallback_list())
                 .unwrap_or(&[]);
-            let family = if fallbacks.is_empty() {
-                FontFamily::named(primary)
-            } else {
-                let mut families = Vec::with_capacity(1 + fallbacks.len());
-                families.push(FontFamilyName::named(primary));
-                families.extend(fallbacks.iter().map(|name| FontFamilyName::named(name)));
-                FontFamily::List(Cow::Owned(families))
-            };
+            let family = FontFamily::List(Cow::Owned(family_list(
+                primary,
+                fallbacks,
+                &self.emoji_families,
+            )));
             builder.push(StyleProperty::FontFamily(family), range.clone());
             builder.push(
                 StyleProperty::FontWeight(parley::FontWeight::new(font.weight.0)),
@@ -381,7 +470,7 @@ impl State {
             !text.contains(['\n', '\r', '\u{2028}', '\u{2029}']),
             "expected a single logical line"
         );
-        let mut layout = self.build(text, size, styles)?;
+        let mut layout = self.build(text, size, styles, crate::ParagraphOptions::default())?;
         layout.break_all_lines(None);
         layout.align(Alignment::Start, AlignmentOptions::default());
         Ok(layout)
@@ -433,6 +522,7 @@ impl PlatformTextSystem for ParleyTextSystem {
                 state.fonts.collection.register_fonts(blob, None);
             }
         }
+        state.refresh_emoji_families();
         state.generation += 1;
         state.descriptors.clear();
         Ok(())
@@ -578,6 +668,7 @@ impl PlatformTextSystem for ParleyTextSystem {
         &self,
         request: gpui::ParagraphRequest<'_>,
     ) -> Result<Arc<dyn gpui::PlatformParagraphShape>> {
+        // GPUI's request carries no options; explicit options use the extension API.
         Ok(Arc::new(self.prepare_paragraph(
             request.text,
             request.font_size,

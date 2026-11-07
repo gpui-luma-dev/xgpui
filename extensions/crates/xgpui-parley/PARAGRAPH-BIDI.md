@@ -2,7 +2,8 @@
 
 Implemented: optional core hook, immutable shape/reflow results, visual glyph
 painting, GPUI caches, and a paragraph editing/IME lab. Current scope is automatic
-base direction, start alignment, one size, multiple font runs and U+2028 breaks.
+base direction through GPUI, explicit base direction and paragraph language through
+the extension API, start alignment, one size, multiple font runs and U+2028 breaks.
 
 ## Interfaces
 
@@ -21,6 +22,32 @@ move_visual(position, direction); selection_bounds(anchor, focus);
 
 struct ParagraphPosition { byte_index: usize, affinity: TextAffinity }
 ```
+
+## Direction and language (extension only)
+
+GPUI's `ParagraphRequest` carries no shaping options, so the core hook always
+uses automatic direction. Explicit options are an xgpui-parley API; GPUI core is
+unchanged:
+
+```rust,ignore
+ParleyTextSystem::prepare_paragraph_with_options(text, size, runs, ParagraphOptions)
+    -> Result<ParagraphShape>;   // ParagraphShape::layout(width) reflows as before
+
+struct ParagraphOptions { direction: TextDirection, language: Option<TextLanguage> }
+enum TextDirection { Auto, LeftToRight, RightToLeft }
+```
+
+`TextDirection::Auto` uses the first strong character (left-to-right if none).
+An explicit direction sets the paragraph level and start edge; mixed runs are
+still reordered by the Unicode Bidirectional Algorithm. `TextLanguage` wraps
+Parley's language tag: the normalized `language[-Script][-REGION]` prefix of a
+BCP 47 tag. It applies to the whole paragraph and selects language-specific
+shaping (`locl`) and line breaking where fonts support it.
+
+Callers using this API hold the installed `Arc<ParleyTextSystem>` (its font IDs
+must match GPUI's resolved fonts) and own their caching: GPUI's paragraph cache
+is keyed without options. The text lab keeps one shape per text/options pair and
+one reflow per width.
 
 Native text backends default to Unsupported. Finite sizes/widths and covering
 UTF-8 font runs are validated. Published results are immutable. The adapter
@@ -64,7 +91,8 @@ not a union across BiDi fragments. Stale geometry is unavailable until repaint.
 
 ## Remaining work
 
-Explicit direction/language/alignment; broader BiDi/UAX #14 conformance; paragraph
+Explicit alignment; per-run languages and font sizes; `typeset()` selection and
+interactive ranges; broader BiDi/UAX #14 conformance; paragraph
 conversion IMEs; Windows/Linux runtime and accessibility validation. Inline
-widgets, vertical text, ellipsis, justification, hyphenation and color emoji
-remain outside scope. [Validation and timing definitions](../../../apps/xgpui-ext-lab/text-lab/README.md).
+widgets, vertical text, ellipsis, justification and hyphenation remain outside
+scope. Color emoji are painted through `paint_emoji` (see the crate README). [Validation and timing definitions](../../../apps/xgpui-ext-lab/text-lab/README.md).

@@ -30,7 +30,7 @@ Paragraph mode selects Parley; explicit native requests return Unsupported.
 | --- | --- | --- |
 | Compare | Bundled Plex/Inter; ligatures, combining marks, real fallback, weights 100/400/900; shared single-line editor | Selection, clipboard, grapheme deletion, IME, horizontal caret scrolling |
 | Scroll | GPUI `uniform_list`; 100–100,000 distinct lines; normal caches/atlas | Run/pause, 18/24px, weights 400/900 |
-| Paragraph | Mixed Arabic/Hebrew/Latin, numbers, wrapping, U+2028, NBSP/ZWSP; bundled RTL fonts | Click/drag, visual arrows, Shift selection, typing, clipboard, IME, width toggle |
+| Paragraph | Mixed Arabic/Hebrew/Latin, numbers, wrapping, U+2028, NBSP/ZWSP, Persian/Urdu digits; bundled RTL fonts | Click/drag, visual arrows, Shift selection, typing, clipboard, IME, width toggle, base direction (Auto/RTL/LTR), language (none/ar/fa/ur/he); `typeset()` cells (end/start/middle truncation), tooltip and two-line clamp; UI language (en/he/ar/fa/ur) for every label and control, mirroring the panel for right-to-left languages |
 
 The scroll script advances eight rows/frame through 18/400, 24/400, 24/900,
 18/400. Reported row counts include virtualizer measurement/overscan. UI mode

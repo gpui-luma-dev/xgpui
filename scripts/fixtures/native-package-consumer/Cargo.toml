@@ -16,6 +16,6 @@ gpui_wgpu = { package = "xgpui-wgpu", version = "=2.2.0" }
 xgpui-color = "=0.3.1"
 xgpui-gamut = { version = "=0.3.2", features = ["instanced"] }
 xgpui-media = "=0.5.2"
-xgpui-parley = "=0.4.0"
+xgpui-parley = "=0.5.0"
 xgpui-shader = { version = "=0.4.2", features = ["portable-shaders"] }
 xgpui-svg = "=0.3.2"

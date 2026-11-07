@@ -9,7 +9,7 @@ paragraph layout. GPUI retains native input, frame caches and glyph atlas owners
 ```toml
 [dependencies]
 gpui = { package = "xgpui", version = "=3.0.0" }
-xgpui-parley = "=0.4.0"
+xgpui-parley = "=0.5.0"
 ```
 
 ## Select the backend
@@ -61,8 +61,9 @@ for styling, fallback, backend support and migration.
 
 | Path | Supported behavior |
 | --- | --- |
-| Flat line | One size, LTR, unwrapped, start-aligned; UTF-8 indices and baseline-relative positions. |
-| Paragraph | Automatic direction, multiple descriptor runs, reflow, hit testing, carets and selection geometry. |
+| Flat line | One size, LTR, unwrapped, start-aligned; UTF-8 indices and baseline-relative positions. Plain GPUI text uses this path, so right-to-left text is rejected. |
+| `typeset()` | Element over the paragraph path: inherited GPUI text style, direction/language, wrapping, truncation and line clamps. |
+| Paragraph | Automatic direction through GPUI; explicit base direction and paragraph language through `prepare_paragraph_with_options`; multiple descriptor runs, reflow, hit testing, carets and selection geometry. |
 
 Use `window.text_system().layout_paragraph(...)` and `gpui::paint_paragraph`
 for paragraph integration. Colors, backgrounds, decorations and editing behavior
@@ -74,12 +75,72 @@ The fallible line API reports unsupported input. GPUI's infallible line hook
 uses finite `.notdef` fallback geometry and exposes an error-handler hook;
 a fallback result should not be mistaken for complete shaping support.
 
+## The `typeset()` element
+
+`typeset("…")` is a text element shaped by this backend. Install the backend
+once, then use it wherever GPUI text would go:
+
+```rust,ignore
+// Inside Application::run, with the same Arc passed to with_platform_and_text_system:
+xgpui_parley::typeset::install(backend.clone(), cx);
+
+div()
+    .w(px(150.0))
+    .truncate() // inherited: nowrap + end ellipsis, as for GPUI text
+    .child(xgpui_parley::typeset("דוח הכנסות report").rtl().with_id("cell"))
+```
+
+It inherits the parent's text style: font, size, line height, color,
+`white_space`, the three `text_overflow` modes, `line_clamp` and `text_align`
+(`Left`/`Right` act as start/end, so they mirror for right-to-left text). It adds
+`.direction(..)`/`.rtl()`/`.ltr()` and `.language(..)`. `.with_id(..)` exposes it
+to screen readers as a label, as with `gpui::Text`.
+
+- **Sizing:** wrapping text reports Parley's min-content and max-content widths
+  to layout, so it can shrink to its longest word in flex layouts (native GPUI
+  text reports its single-line width for both).
+- **Truncation:** cuts are logical and checked by reshaping, so joined scripts and
+  kerning measure correctly and the base direction puts the ellipsis on the
+  correct side. Wrapped text with `line_clamp` truncates at the end.
+- **Placement:** unbroken lines are positioned by the element (right edge for
+  right-to-left start alignment); wrapped lines use Parley's alignment.
+- **Caching:** shapes, reflows and fits live in the installed engine (a GPUI
+  global), bounded by a least-recently-used policy.
+- **Fallback:** without `install`, it renders as plain GPUI text.
+
+- **Mixed styles:** `.with_highlights([(range, HighlightStyle)])` restyles byte
+  ranges over the inherited style, and `.with_runs(Vec<TextRun>)` replaces it,
+  as on `StyledText`. Runs may change font family, weight, style, features and
+  variations (shaped per run), color, background, underline and strikethrough.
+  Truncated text maps back to its source runs, so styles follow the kept text and
+  the affix takes its neighbor's style. Decorations use GPUI's own placement.
+  Runs share the inherited font size, and weights and styles need real faces.
+
+Not yet supported: selection, editing and interactive ranges (links).
+Plain GPUI text under this backend uses the flat-line path, which rejects
+right-to-left text; use `typeset()` for it.
+
+## Color emoji
+
+Glyphs the resolved face has color data for are painted as GPUI emoji sprites,
+in plain GPUI text and in `typeset()`. Supported formats: COLR v0 layers, COLR v1
+paint graphs (solid, linear, radial and sweep fills, transforms, clips and
+composite modes) and color bitmap strikes (sbix, as in Apple Color Emoji, and
+CBDT, as in Noto Color Emoji). Register the platform emoji font like any other
+font; families named "…Emoji…" with color tables become automatic last-resort
+fallbacks, so text styles need not list them.
+
 ## Current limits
 
-Synthetic styles, color/bitmap-only emoji, LCD rasterization, dilation, inline
-boxes, vertical layout and split-style cluster fragments are unsupported.
+Synthetic styles, LCD rasterization, dilation, inline boxes, vertical layout and
+split-style cluster fragments are unsupported. Color glyphs use the font's first
+palette and black for the foreground color; monochrome bitmap strikes are not
+drawn. COLR sweep and radial gradients are implemented but not yet verified
+against a real font.
 Raster requests above 4096 pixels per device dimension are rejected.
-Explicit paragraph direction/language and advanced styling remain follow-ups.
+Languages apply per paragraph, not per run. Explicit alignment and advanced
+styling remain follow-ups. An empty right-to-left paragraph places its caret
+slightly inside the right edge, following Parley's nominal empty-line advance.
 
 Retained face IDs are not recycled, and old layouts remain rasterizable after
 font loading. Pin fonts, fallback, variation settings and shaping versions for

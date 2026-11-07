@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-parley"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -21,7 +21,7 @@ anyhow = "1"
 gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "3.0.0" }
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
 skrifa = "=0.44.0"
-tiny-skia = { version = "=0.12.0", default-features = false, features = ["std", "simd"] }
+tiny-skia = { version = "=0.12.0", default-features = false, features = ["std", "simd", "png-format"] }
 gpui-platform = { path = "../../../gpui/crates/gpui-platform", optional = true , package = "xgpui-platform", version = "2.0.2" }
 
 [[test]]
@@ -31,3 +31,4 @@ required-features = ["native-test"]
 
 [dev-dependencies]
 gpui = { path = "../../../gpui/crates/gpui", features = ["test-support"] , package = "xgpui", version = "3.0.0" }
+write-fonts = { version = "0.55.0", features = ["read"] }

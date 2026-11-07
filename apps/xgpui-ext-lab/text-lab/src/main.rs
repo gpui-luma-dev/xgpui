@@ -176,6 +176,8 @@ fn main() -> Result<()> {
     }
     let start = Instant::now();
     let platform = gpui_platform::current_platform(options.timings_only);
+    // The paragraph lab calls the Parley extension directly, so keep its typed handle.
+    let mut parley_backend = None;
     let backend: Arc<dyn PlatformTextSystem> = match options.backend {
         Backend::Native => platform.text_system(),
         Backend::Parley => {
@@ -185,6 +187,13 @@ fn main() -> Result<()> {
                     .collection
                     .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
             }
+            // Color emoji come from the platform's emoji font when it is installed;
+            // xgpui-parley adds registered emoji families as automatic fallbacks.
+            if let Some(emoji) = system_emoji_font() {
+                fonts
+                    .collection
+                    .register_fonts(parley::fontique::Blob::new(Arc::new(emoji)), None);
+            }
             if options.workload == Workload::Paragraph {
                 for data in paragraph::FONTS {
                     fonts
@@ -192,7 +201,9 @@ fn main() -> Result<()> {
                         .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
                 }
             }
-            Arc::new(ParleyTextSystem::new(fonts, "IBM Plex Sans")?)
+            let parley = Arc::new(ParleyTextSystem::new(fonts, "IBM Plex Sans")?);
+            parley_backend = Some(parley.clone());
+            parley
         }
         Backend::Both => unreachable!(),
     };
@@ -212,7 +223,10 @@ fn main() -> Result<()> {
             std::env::consts::ARCH,
             !cfg!(debug_assertions)
         );
-        Some(paragraph::measure(app.text_system(), options.iterations)?)
+        let parley = parley_backend
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("paragraph mode requires the Parley backend"))?;
+        Some((paragraph::measure(app.text_system(), options.iterations)?, parley))
     } else {
         None
     };
@@ -349,7 +363,9 @@ fn main() -> Result<()> {
                 window.set_lab_title(&format!("Text Lab - {name}"));
                 let input = cx.new(|cx| input::TextInput::new("office café e\u{301} Ångström", cx));
                 let paragraph = paragraph_timings
-                    .map(|timings| cx.new(|cx| paragraph::ParagraphLab::new(timings, cx)));
+                    .map(|(timings, parley)| {
+                        cx.new(|cx| paragraph::ParagraphLab::new(timings, parley, cx))
+                    });
                 if let Some(paragraph) = &paragraph {
                     window.focus(&paragraph.focus_handle(cx), cx);
                 }
@@ -451,4 +467,18 @@ fn launch_pair(options: &Options) -> Result<()> {
         ensure!(first.success() && second.success(), "text lab child failed");
     }
     Ok(())
+}
+
+/// The platform color emoji font, if installed: sbix on macOS, COLR on Windows,
+/// CBDT on most Linux distributions.
+fn system_emoji_font() -> Option<Vec<u8>> {
+    [
+        "/System/Library/Fonts/Apple Color Emoji.ttc",
+        r"C:\Windows\Fonts\seguiemj.ttf",
+        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf",
+    ]
+    .into_iter()
+    .find_map(|path| std::fs::read(path).ok())
 }

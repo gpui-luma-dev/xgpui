@@ -136,9 +136,11 @@ fn launch() -> anyhow::Result<()> {
     let platform = Rc::new(WebPlatform::new_with_backend(false, backend));
     let http = Arc::new(platform.fetch_http_client());
     let mut font_demo = None;
+    // The paragraph demo calls the Parley extension directly, so keep its typed handle.
+    let mut parley_text = None;
     let app = if parley || font_controls {
         let mut fonts = parley::FontContext::new();
-        for data in [PLEX, paragraph::FONTS[0], paragraph::FONTS[1]] {
+        for data in std::iter::once(PLEX).chain(paragraph::FONTS) {
             fonts
                 .collection
                 .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
@@ -154,6 +156,7 @@ fn launch() -> anyhow::Result<()> {
         if font_controls {
             font_demo = Some(font_controls::Prepared::new(&*text_system)?);
         }
+        parley_text = Some(text_system.clone());
         Application::with_platform_and_text_system(platform, text_system)
     } else {
         let app = Application::with_platform(platform);
@@ -192,7 +195,8 @@ fn launch() -> anyhow::Result<()> {
             let timings = paragraph::measure(cx.text_system().clone(), 5)
                 .expect("paragraph layout diagnostics");
             cx.open_window(options, |window, cx| {
-                let view = cx.new(|cx| paragraph::ParagraphLab::new(timings, cx));
+                let parley = parley_text.take().expect("Parley text system");
+                let view = cx.new(|cx| paragraph::ParagraphLab::new(timings, parley, cx));
                 window.focus(&view.focus_handle(cx), cx);
                 view
             })

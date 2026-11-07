@@ -26,7 +26,7 @@ changes to existing GPUI callers.
 ```toml
 [dependencies]
 gpui = { package = "xgpui", version = "=3.0.0" }
-xgpui-parley = { version = "=0.4.0", features = ["system-fonts"] }
+xgpui-parley = { version = "=0.5.0", features = ["system-fonts"] }
 ```
 
 ```rust
@@ -142,6 +142,16 @@ let hit = paragraph.hit_test(mouse_position - bounds.origin)?;
 let caret = paragraph.caret_bounds(hit)?;
 let fragments = paragraph.selection_bounds(anchor, hit)?;
 
+// Explicit base direction and language use the extension API directly.
+// `parley` is the Arc<ParleyTextSystem> installed as the app's text backend.
+let options = xgpui_parley::ParagraphOptions {
+    direction: xgpui_parley::TextDirection::RightToLeft,
+    language: Some(xgpui_parley::TextLanguage::parse("ur")?),
+};
+let urdu = parley
+    .prepare_paragraph_with_options(&text, gpui::px(24.0), &font_runs, options)?
+    .layout(width)?; // Cache shapes/reflows yourself; GPUI's cache has no options.
+
 // During element paint:
 window.handle_input(&focus, gpui::ElementInputHandler::new(bounds, entity), cx);
 gpui::paint_paragraph(paragraph.as_ref(), bounds.origin, color_at, window)?;
@@ -151,6 +161,33 @@ The input entity implements `EntityInputHandler`. It translates UTF-16 edits to
 source UTF-8 and uses the painted paragraph for IME geometry. Candidate anchors
 use the requested caret/fragment; marked text uses selection fragments. Edits
 invalidate geometry until repaint. Apply origin/scrolling once at the UI edge.
+
+## The typeset() element
+
+`typeset("…")` wraps the paragraph path as an ordinary GPUI element, using only
+public GPUI APIs (`Window::request_measured_layout`, a GPUI global and
+`paint_paragraph`). Install it with the backend, then use it like text:
+
+```rust
+xgpui_parley::typeset::install(backend.clone(), cx); // the installed Arc<ParleyTextSystem>
+
+div().w(px(150.0)).truncate().child(
+    xgpui_parley::typeset("تقرير الإيرادات").rtl().language("ar".parse()?),
+)
+```
+
+It inherits GPUI's text style, including `white_space`, all three
+`text_overflow` modes, `line_clamp` and `text_align` (Left/Right act as
+start/end). Mixed styles use GPUI's model: `with_highlights` and `with_runs`, as
+on `StyledText`, including per-run fonts, colors, backgrounds, underlines and
+strikethroughs; styles follow truncated text. Wrapping text reports min-content and max-content widths, as in
+taffy's Parley example. Truncation is logical and verified by reshaping. Shapes,
+reflows and fits are cached in the engine. Without `install` it renders as GPUI
+text. Under this backend, plain GPUI text uses the left-to-right-only flat-line
+path, so right-to-left text needs `typeset()`. The text lab's Paragraph panel
+draws every label with `typeset()`: truncated cells, a tooltip and a clamp, plus
+a UI-language toggle (en/he/ar/fa/ur) that mirrors the panel for right-to-left
+languages.
 
 ## GPUI versus extension APIs
 
@@ -165,7 +202,9 @@ invalidate geometry until repaint. Apply origin/scrolling once at the UI edge.
 | `paint_paragraph(layout, origin, color_at, window)` | Visual glyph painting through the existing atlas |
 
 `ParleyTextSystem`, `FaceRegistry`, `RegisteredFace`, `GlyphRasterizer`,
-`ParagraphShape`, `ParagraphLayout` and `VariationPreview` belong to **xgpui-parley**, not GPUI.
+`ParagraphShape`, `ParagraphLayout`, `VariationPreview`, `ParagraphOptions`,
+`TextDirection`, `TextLanguage`, `Typeset` and `typeset::install` belong to **xgpui-parley**, not GPUI.
+Explicit paragraph direction and language add no GPUI API.
 Parley/HarfRust/Skrifa types do not enter the core signatures.
 
 The paragraph additions change no existing public struct fields or required trait
@@ -203,13 +242,16 @@ Flat-line compatibility requires LTR, one size, scale 1 and start alignment.
 `try_layout_line` returns errors; the infallible hook substitutes `.notdef` with
 original indices and reports rejection outside the backend lock.
 
-Paragraphs support mixed LTR/RTL, automatic direction, start alignment, one size,
+Paragraphs support mixed LTR/RTL, automatic direction (explicit direction and a
+paragraph language through `prepare_paragraph_with_options`), start alignment, one size,
 multiple font runs and U+2028 hard breaks. Callers split document paragraphs;
 the lab normalizes pasted line endings to U+2028.
 
-Synthetic styles, color/bitmap emoji, LCD, dilation, inline boxes, vertical text
-and split-style cluster fragments are unsupported. Raster size/bounds are capped
-at 4096 device pixels. Explicit direction/language/alignment, advanced styling,
+Color emoji (COLR v0/v1, sbix and CBDT) are supported in plain GPUI text and
+`typeset()`; registered emoji families are automatic fallbacks. Synthetic styles,
+LCD, dilation, inline boxes, vertical text and split-style cluster fragments are
+unsupported. Raster size/bounds are capped
+at 4096 device pixels. Explicit alignment, per-run languages, advanced styling,
 accessibility and broader BiDi/UAX #14 conformance remain follow-ups.
 
 ## Lab and validation
