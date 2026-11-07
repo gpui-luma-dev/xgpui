@@ -25,21 +25,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
       - uses: dtolnay/rust-toolchain@stable
       - name: Prepare version proposals and generated manifests
         env:
           BASELINE: ${{ inputs.baseline }}
         run: |
-          python3 scripts/daily_release.py prepare --baseline "${BASELINE:-$(git describe --tags --match 'release-*' --abbrev=0)}" --apply --report "$RUNNER_TEMP/preparation.json" --notes "$RUNNER_TEMP/release-notes.md"
+          cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- daily prepare --baseline "${BASELINE:-$(git describe --tags --match 'release-*' --abbrev=0)}" --apply --report "$RUNNER_TEMP/preparation.json" --notes "$RUNNER_TEMP/release-notes.md"
       - name: Refresh local lockfile identities without dependency upgrades
         run: |
-          python3 scripts/daily_release.py refresh-locks
+          cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- daily refresh-locks
       - name: Test release tooling and canonical manifests
         run: |
-          python3 -m unittest discover -s scripts -p 'test_*.py'
+          cargo test --locked --manifest-path tools/release-sync/Cargo.toml
           cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- normalize --check
           cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests --check
           git diff --check
