@@ -12,8 +12,6 @@ readme = "README.md"
 keywords = ["xgpui", "gpui", "graphics", "color", "gamut"]
 categories = ["gui", "graphics"]
 
-[workspace]
-
 [features]
 default = []
 instanced = ["dep:xgpui-shader", "dep:bytemuck"]

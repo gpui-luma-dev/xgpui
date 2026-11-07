@@ -38,9 +38,45 @@ gates before its runtime suites. The extension suites enable ICC, canvas GPUI
 integration and media wgpu coverage; Linux additionally checks media without
 GPU backends and Parley with system fonts. Use `just test --only native-libraries`
 or `just test --only gpui-bench-build` to isolate compilation failures.
+Hosted Linux extensions/labs, Windows lab applications, and the three platform
+paint workflows are manual-only (`workflow_dispatch`). Run them from Actions →
+the selected workflow → Run workflow when hosted verification is needed.
+`Validate repository tooling` is also manual-only, including its tooling checks,
+macOS/Linux/Windows native-library matrix, iOS compilation and WASM build.
+PR acceptance is verified in the local test environments;
+record the tested commit SHA, command and result in the PR.
+
 Local results cover the current host; platform-specific tests still require
 their native operating system. The release/version preflight checks package
 versions and pins; its success does not establish that builds or tests passed.
+
+The test runner uses Bash and a small Rust helper built from `tools/release-sync`;
+warning capture and artifact indexing require no Python. The helper reuses the
+release tool's dependencies. Its bootstrap build retains text diagnostics in
+`cargo/bootstrap.stderr.log`; subsequent Cargo invocations retain structured JSON.
+
+`just test` keeps warnings visible and writes a combined report to
+`target/test-logs/warnings.log`, with structured records in `warnings.jsonl`.
+The summary prints the unique warning count and report paths, including on failed
+runs. Shared and isolated Cargo invocations retain raw JSON messages and stderr
+under `target/test-logs/cargo/`. Set `TEST_ALL_LOG_DIR` to retain a run elsewhere;
+the next run replaces the Cargo diagnostics and warning reports in that directory.
+
+Compiler warnings are deduplicated by package, target and complete diagnostic
+(including source spans), ignoring rendered formatting. Records retain occurrence
+counts and the contributing build/suite names. Cargo stderr warnings are grouped
+with their continuation text and deduplicated by that text; they may lack package
+or source locations. Cargo's compiler-warning count summaries are omitted from
+the combined count because the individual structured diagnostics already cover
+them. Raw stderr remains available. Runtime output stays in the suite logs;
+warning-prefixed stderr from programs launched by Cargo can also appear in the
+stderr warning report. Warnings do not change the build/test exit status.
+
+The benchmark compilation gate checks that every requested executable was
+produced and exists; it does not launch benchmarks, including with `--help`.
+Forwarded arguments to `just test` are Cargo options, applied to the shared build
+and isolated Cargo invocations. They are not forwarded to prebuilt test binaries.
+The runner owns Cargo's `--message-format` option for diagnostic capture.
 
 ## Requirements and options
 

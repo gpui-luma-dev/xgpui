@@ -66,7 +66,5 @@ scap = { version = "0.0.8-zed", package = "zed-scap", default-features = false, 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 windows-registry = { version = "0.6.0" }
 
-[workspace]
-
 [package.metadata.cargo-shear]
 ignored = ["scap"]

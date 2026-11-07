@@ -12,8 +12,6 @@ readme = "README.md"
 keywords = ["xgpui", "gpui", "text", "shaping", "parley"]
 categories = ["gui", "text-processing"]
 
-[workspace]
-
 [features]
 system-fonts = ["parley/system"]
 native-test = ["dep:gpui-platform"]

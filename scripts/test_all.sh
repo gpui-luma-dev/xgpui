@@ -6,12 +6,26 @@
 #   just test --list          print the suites without running them
 #   just test --only <text>   run only suites whose name contains <text>
 #
-# Logs: target/test-logs/<suite>.log (override with TEST_ALL_LOG_DIR). Exit
-# status is non-zero if any suite failed or lacked a prerequisite (PREREQ).
+# Most suites share one workspace build: a single `cargo test --no-run` over
+# every tested package with one feature set, so GPUI and its dependencies are
+# compiled once. Suites then run the prebuilt test executables with their own
+# filters, thread limits and GPU environment. Deliberately isolated
+# configurations (default-feature gamut, media without GPU backends, the
+# portable-only paint lab, cross-target iOS) keep their own cargo invocations.
+#
+# Forwarded arguments are cargo options. They are passed to the shared build
+# and to every isolated cargo invocation, not to the test executables.
+#
+# Logs: target/test-logs/<suite>.log, plus build.log (compiler output for the
+# shared build) and cargo/*.jsonl (raw Cargo messages), cargo/*.stderr.log, and combined
+# warnings.log / warnings.jsonl reports. Override the directory
+# with TEST_ALL_LOG_DIR. Exit status is non-zero if the build or any suite
+# failed or lacked a prerequisite (PREREQ).
 # GPU, display and window suites expect a real desktop session on the host.
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
+root=$(pwd)
 
 case "$(uname -s)" in
   Darwin) os=macos ;;
@@ -33,6 +47,7 @@ while [ $# -gt 0 ]; do
 done
 
 logs=${TEST_ALL_LOG_DIR:-target/test-logs}
+case "$logs" in /* | [A-Za-z]:*) ;; *) logs="$root/$logs" ;; esac
 
 # A suite exits with this status when a host prerequisite is missing. It is
 # reported as PREREQ and counted as a failure, never as a pass.
@@ -63,17 +78,129 @@ vulkan_validation() {
 export -f vulkan_validation
 vk="vulkan_validation || exit $prereq_status;"
 
-ct="cargo test --locked --config .cargo/validation.toml"
-lab="--manifest-path apps/xgpui-ext-lab/Cargo.toml"
-win="--manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support"
-wgpu="--manifest-path gpui/crates/gpui-wgpu/Cargo.toml"
-parley="--manifest-path extensions/crates/xgpui-parley/Cargo.toml"
-linux_parley="--features system-fonts,native-test,gpui-platform/wayland,gpui-platform/x11"
+# --- Shared workspace build -------------------------------------------------
+# Every package and feature tested on this host, compiled together so Cargo
+# unifies features once. Changing this list changes the feature set for every
+# shared suite; keep it a superset of what each suite needs.
+packages=(xgpui xgpui-platform xgpui-color xgpui-gamut xgpui-canvas xgpui-media xgpui-svg xgpui-shader xgpui-shell xgpui-ext-lab)
+features=(
+  xgpui/test-support xgpui/bench-support
+  xgpui-platform/test-support xgpui-platform/bench-support xgpui-platform/runtime_shaders
+  xgpui-color/icc xgpui-gamut/instanced xgpui-canvas/gpui xgpui-media/wgpu
+  xgpui-shader/wgpu xgpui-shader/portable-shaders
+  xgpui-ext-lab/runtime-shaders xgpui-ext-lab/portable-shaders xgpui-ext-lab/wgpu
+)
+case "$os" in
+  macos)
+    packages+=(xgpui-apple)
+    features+=(xgpui-apple/test-support xgpui-apple/font-kit xgpui-apple/runtime_shaders)
+    ;;
+  linux)
+    packages+=(xgpui-wgpu xgpui-parley)
+    features+=(
+      xgpui-wgpu/test-support xgpui-wgpu/dma-buf
+      xgpui-parley/system-fonts xgpui-parley/native-test
+      xgpui-platform/wayland xgpui-platform/x11
+      xgpui-ext-lab/linux-window-tests
+    )
+    ;;
+  windows)
+    packages+=(xgpui-windows xgpui-wgpu)
+    features+=(xgpui-windows/test-support xgpui-wgpu/test-support)
+    ;;
+esac
+build_args=(test --no-run --locked --config .cargo/validation.toml )
+for package in "${packages[@]}"; do build_args+=(-p "$package"); done
+build_args+=(--features "$(IFS=,; echo "${features[*]}")" --tests --benches)
+
+# Executable index written after the shared build: one tab-separated line per
+# test executable: package, target kind (lib, bin, test, bench), target name,
+# executable, package directory.
+export TEST_ALL_ARTIFACTS="$logs/artifacts.tsv"
+
+# run_tests <package> <targets> [test arguments...]
+# Runs the prebuilt test executables of <package> selected by <targets>, a
+# comma-separated list of: all, lib, bins, bin:<name>, test:<name>,
+# bench:<name>. Executables run from the package directory, as under
+# `cargo test`. Every selected executable runs; any failure fails the suite.
+run_tests() {
+  local package=$1 targets=$2
+  shift 2
+  local status=0 found=0 p kind name exe dir selected spec
+  if [ ! -s "$TEST_ALL_ARTIFACTS" ]; then
+    echo "run_tests: shared build produced no test executables; see build.log" >&2
+    return 1
+  fi
+  while IFS=$'\t' read -r p kind name exe dir; do
+    [ "$p" = "$package" ] || continue
+    selected=0
+    for spec in ${targets//,/ }; do
+      case "$spec" in
+        all) selected=1 ;;
+        lib) [ "$kind" = lib ] && selected=1 ;;
+        bins) [ "$kind" = bin ] && selected=1 ;;
+        *:*) [ "$spec" = "$kind:$name" ] && selected=1 ;;
+      esac
+    done
+    [ $selected -eq 1 ] || continue
+    found=1
+    printf '     Running %s %s (%s)\n' "$kind" "$name" "$exe"
+    (
+      cd "$dir" || exit 1
+      export CARGO_MANIFEST_DIR="$dir" CARGO_PKG_NAME="$p"
+      "$exe" "$@" </dev/null
+    ) || status=1
+  done <"$TEST_ALL_ARTIFACTS"
+  if [ $found -eq 0 ]; then
+    echo "run_tests: no test executable for $package ($targets)" >&2
+    return 1
+  fi
+  return $status
+}
+export -f run_tests
+
+# built <package> <targets>: pass when the shared build produced the selected
+# executables. Used for compile-only coverage such as benchmarks.
+built() {
+  local package=$1 targets=$2 spec p kind name exe dir found
+  [ -s "$TEST_ALL_ARTIFACTS" ] || { echo "built: missing artifact index" >&2; return 1; }
+  for spec in ${targets//,/ }; do
+    found=0
+    while IFS=$'\t' read -r p kind name exe dir; do
+      [ "$p" = "$package" ] || continue
+      case "$spec" in
+        all) ;;
+        lib) [ "$kind" = lib ] || continue ;;
+        bins) [ "$kind" = bin ] || continue ;;
+        *) [ "$spec" = "$kind:$name" ] || continue ;;
+      esac
+      [ -f "$exe" ] || { echo "built: missing executable $exe" >&2; return 1; }
+      found=1
+    done <"$TEST_ALL_ARTIFACTS"
+    [ "$found" = 1 ] || { echo "built: no artifact for $package $spec" >&2; return 1; }
+  done
+}
+export -f built
+
+# Capture every explicit Cargo invocation while preserving its exit status.
+# The helper reuses the release tool's existing Rust dependencies; no GPUI build.
+if [ -z "${TEST_ALL_HELPER:-}" ]; then
+  TEST_ALL_HELPER="$root/target/debug/xgpui-test-support"
+  [ "$os" != windows ] || TEST_ALL_HELPER="$TEST_ALL_HELPER.exe"
+fi
+export TEST_ALL_HELPER
+export TEST_ALL_CARGO_LOGS="$logs/cargo"
+cargo_capture() {
+  "$TEST_ALL_HELPER" run "$TEST_ALL_CARGO_LOGS" "$TEST_ALL_SUITE" "$@"
+}
+export -f cargo_capture
 
 names=()
 commands=()
+shared=()
 # suite <name> <all|macos|linux|windows|unix> <command...>
 # A "{cargo}" word in the command is replaced by any forwarded cargo arguments.
+# Commands using run_tests or built need the shared build.
 suite() {
   local name=$1 where=$2
   shift 2
@@ -86,67 +213,74 @@ suite() {
   if [ -n "$only" ] && [[ "$name" != *"$only"* ]]; then return; fi
   names+=("$name")
   commands+=("$*")
+  case " $* " in *" run_tests "* | *" built "*) shared+=(1) ;; *) shared+=(0) ;; esac
 }
+
+ct="cargo_capture test --locked --config .cargo/validation.toml"
+lab="--manifest-path apps/xgpui-ext-lab/Cargo.toml"
 
 # Shared: tools, CPU extensions, labs and core benchmarks.
 suite runner-selftest all "bash scripts/test_all_selftest.sh"
-suite release-sync all "cargo test --locked --manifest-path tools/release-sync/Cargo.toml {cargo}"
-# Match native CI's compilation gates before starting the runtime suites.
-suite native-libraries all "cargo check --locked --features full-capture,runtime-shaders {cargo}"
-suite gpui-bench-build all "cargo check --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-platform/Cargo.toml --features bench-support,test-support,runtime_shaders --benches {cargo}"
-suite media-minimal linux "cargo check --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-media/Cargo.toml --no-default-features --lib {cargo}"
-suite color all "$ct --manifest-path extensions/crates/xgpui-color/Cargo.toml --features icc {cargo}"
+suite release-sync all "cargo_capture test --locked --manifest-path tools/release-sync/Cargo.toml {cargo}"
+# Match native CI's compilation gate: platform libraries with release features.
+suite native-libraries all "cargo_capture check --locked --features full-capture,runtime-shaders {cargo}"
+# Platform benchmarks compile in the shared build (bench-support, test-support).
+suite gpui-bench-build all "built xgpui-platform bench:atlas_upload,bench:focus_cleanup,bench:inspector_render,bench:randomized_element_tree"
+# Isolated: media without optional GPU backends.
+suite media-minimal linux "cargo_capture check --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-media/Cargo.toml --no-default-features --lib {cargo}"
+# Doctests are not part of `--no-run`; xgpui-color has a small graph of its own.
+suite color all "run_tests xgpui-color all && $ct --manifest-path extensions/crates/xgpui-color/Cargo.toml --features icc --doc {cargo}"
+# Isolated: gamut with default features (the shared build enables instanced).
 suite gamut all "$ct --manifest-path extensions/crates/xgpui-gamut/Cargo.toml {cargo}"
-suite gamut-instanced all "$ct --manifest-path extensions/crates/xgpui-gamut/Cargo.toml --features instanced {cargo}"
-suite canvas all "$ct --manifest-path extensions/crates/xgpui-canvas/Cargo.toml --features gpui --lib {cargo}"
-suite media all "$ct --manifest-path extensions/crates/xgpui-media/Cargo.toml --features wgpu --lib {cargo}"
-suite svg all "$ct --manifest-path extensions/crates/xgpui-svg/Cargo.toml --lib {cargo}"
-suite shader all "$ct --manifest-path extensions/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib {cargo}"
-suite shell all "$ct --manifest-path extensions/crates/xgpui-shell/Cargo.toml --lib {cargo}"
-suite gpui-core all "$ct --manifest-path gpui/crates/gpui/Cargo.toml --features test-support --lib {cargo}"
-# CRITERION_HOME stops Criterion's fallback `cargo metadata` call, which ignores
-# the validation config and would rewrite gpui's Cargo.lock (as in validate.yml).
-bench="CRITERION_HOME=target/criterion-tests $ct --manifest-path gpui/crates/gpui/Cargo.toml --features bench-support,test-support,gpui_platform/runtime_shaders --lib {cargo}"
-suite gpui-bench-metrics all "$bench bench_metrics:: -- --test-threads=1"
-suite gpui-bench-context all "$bench app::bench_context:: -- --test-threads=1"
-suite labs all "$ct $lab --features runtime-shaders,portable-shaders,wgpu --lib --bins --test compatibility {cargo} -- --test-threads=1"
+suite gamut-instanced all "run_tests xgpui-gamut all"
+suite canvas all "run_tests xgpui-canvas lib"
+suite media all "run_tests xgpui-media lib"
+suite svg all "run_tests xgpui-svg lib"
+suite shader all "run_tests xgpui-shader lib"
+suite shell all "run_tests xgpui-shell lib"
+# The shared build enables bench-support; its collectors run single-threaded below.
+suite gpui-core all "run_tests xgpui lib --skip bench_metrics:: --skip app::bench_context::"
+# CRITERION_HOME stops Criterion's fallback `cargo metadata` call.
+suite gpui-bench-metrics all "CRITERION_HOME=$root/target/criterion-tests run_tests xgpui lib bench_metrics:: --test-threads=1"
+suite gpui-bench-context all "CRITERION_HOME=$root/target/criterion-tests run_tests xgpui lib app::bench_context:: --test-threads=1"
+suite labs all "run_tests xgpui-ext-lab lib,bins,test:compatibility --test-threads=1"
 
-# macOS: CoreText font backend and iOS simulator compile check.
-# gpui-apple has no checked-in lockfile, so it cannot use --locked; remove the
-# lockfile cargo generates so the run leaves the checkout clean.
-apple_lock=gpui/crates/gpui-apple/Cargo.lock
-suite apple-text macos "keep=0; [ -e $apple_lock ] && keep=1; cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-apple/Cargo.toml --features test-support,font-kit,runtime_shaders --lib {cargo} text_system::; status=\$?; [ \$keep = 1 ] || rm -f $apple_lock; exit \$status"
+# macOS: CoreText font backend and iOS simulator compile check (isolated target).
+suite apple-text macos "run_tests xgpui-apple lib text_system::"
 suite ios-compile macos "$ct --manifest-path gpui/crates/gpui-ios/Cargo.toml --features runtime_shaders --target aarch64-apple-ios-sim --test text_input --no-run {cargo}"
 
 # Linux: Cosmic/Parley text, wgpu, DMA-BUF, window build, Vulkan paint suites.
-suite cosmic-text linux "$ct $wgpu --lib {cargo} cosmic_text_system::tests"
-suite parley linux "$ct $parley --lib $linux_parley {cargo}"
-suite parley-construction linux "$ct $parley --test construction $linux_parley {cargo}"
-suite text-lab-axes linux "$ct $lab --bin text-lab --features runtime-shaders {cargo} axes::tests"
-suite wgpu-dma-buf linux "$vk $ct $wgpu --features dma-buf,test-support --lib {cargo} custom_draw::dma_buf::native_tests::dma_buf_native_generated_snapshot -- --ignored --exact --nocapture --test-threads=1"
-suite media-dma-buf-video linux "$vk $ct $lab --features runtime-shaders,portable-shaders,wgpu --bin media-lab {cargo} video_lab::linux::tests::dma_buf_video_capture_pixels_and_lifetimes -- --ignored --exact --nocapture --test-threads=1"
-suite media-video-capture linux "$vk cargo run --locked --config .cargo/validation.toml $lab --features runtime-shaders,portable-shaders,wgpu --bin media-lab {cargo} -- --headless --video --wgpu --png $logs/media-video.png"
-suite linux-windows-build linux "$ct $lab --features linux-window-tests,runtime-shaders,portable-shaders,wgpu --test linux_windows --no-run {cargo}"
+suite cosmic-text linux "run_tests xgpui-wgpu lib cosmic_text_system::tests"
+suite parley linux "run_tests xgpui-parley lib"
+suite parley-construction linux "run_tests xgpui-parley test:construction"
+suite text-lab-axes linux "run_tests xgpui-ext-lab bin:text-lab axes::tests"
+suite wgpu-dma-buf linux "$vk run_tests xgpui-wgpu lib custom_draw::dma_buf::native_tests::dma_buf_native_generated_snapshot --ignored --exact --nocapture --test-threads=1"
+suite media-dma-buf-video linux "$vk run_tests xgpui-ext-lab bin:media-lab video_lab::linux::tests::dma_buf_video_capture_pixels_and_lifetimes --ignored --exact --nocapture --test-threads=1"
+suite media-video-capture linux "$vk cargo_capture run --locked --config .cargo/validation.toml $lab --features runtime-shaders,portable-shaders,wgpu --bin media-lab {cargo} -- --headless --video --wgpu --png $logs/media-video.png"
+suite linux-windows-build linux "built xgpui-ext-lab test:linux_windows"
 
 # Paint GPU suites from .github/paints/commands.json (CI runs them through
 # run.py; keep the two lists in step). Steps already covered above are not
 # repeated: paint-lab wgpu checks run in "labs", brush tests in "shader", and
 # gpui-windows coverage/DX11/wide-gamut tests in "windows-backend".
-suite wgpu-coverage-cache linux "WGPU_BACKEND=vulkan $ct $wgpu --features test-support --lib {cargo} coverage_cache"
-suite wgpu-custom-draw linux "WGPU_BACKEND=vulkan $ct $wgpu --features test-support --lib {cargo} wgpu_custom -- --nocapture"
+suite wgpu-coverage-cache linux "WGPU_BACKEND=vulkan run_tests xgpui-wgpu lib coverage_cache"
+suite wgpu-custom-draw linux "WGPU_BACKEND=vulkan run_tests xgpui-wgpu lib wgpu_custom --nocapture"
 
 # Windows: DirectWrite fonts, DirectX renderer, Windows apps, paint GPU suites.
-suite directwrite-fonts windows "$ct $win --lib {cargo} font_variation_tests -- --test-threads=1"
-suite windows-backend windows "$ct $win --lib {cargo} -- --test-threads=1 --skip font_variation_tests"
-suite color-lab windows "$ct $lab --bin color-lab {cargo} -- --test-threads=1"
-suite gamut-lab windows "$ct $lab --bin gamut-lab --test compatibility {cargo}"
-suite media-lab-video windows "$ct $lab --bin media-lab {cargo} video_lab:: -- --test-threads=1"
-suite wgpu-coverage-cache windows "WGPU_BACKEND=dx12 $ct $wgpu --features test-support --lib {cargo} coverage_cache"
-suite wgpu-custom-draw windows "WGPU_BACKEND=dx12 $ct $wgpu --features test-support --lib {cargo} wgpu_custom -- --nocapture"
-suite paint-lab-check windows "cargo check --locked --config .cargo/validation.toml $lab --bin paint-lab --features portable-shaders {cargo}"
-suite paint-lab-portable windows "WGPU_BACKEND=dx12 $ct $lab --bin paint-lab --features wgpu,portable-shaders {cargo} -- --nocapture"
-suite shader-brush-native windows "XGPUI_BRUSH_NATIVE=1 $ct --manifest-path extensions/crates/xgpui-shader/Cargo.toml --features wgpu,portable-shaders --lib {cargo} brush::tests -- --nocapture"
-suite paint-dx11-capture windows "cargo run --locked --config .cargo/validation.toml $lab --bin paint-lab --features portable-shaders {cargo} -- --headless --effect mesh --frames 3 --png $logs/native-dx11-mesh.png"
+suite directwrite-fonts windows "run_tests xgpui-windows lib font_variation_tests --test-threads=1"
+suite windows-backend windows "run_tests xgpui-windows lib --test-threads=1 --skip font_variation_tests"
+suite color-lab windows "run_tests xgpui-ext-lab bin:color-lab --test-threads=1"
+suite gamut-lab windows "run_tests xgpui-ext-lab bin:gamut-lab,test:compatibility"
+suite media-lab-video windows "run_tests xgpui-ext-lab bin:media-lab video_lab:: --test-threads=1"
+suite wgpu-coverage-cache windows "WGPU_BACKEND=dx12 run_tests xgpui-wgpu lib coverage_cache"
+suite wgpu-custom-draw windows "WGPU_BACKEND=dx12 run_tests xgpui-wgpu lib wgpu_custom --nocapture"
+# Isolated: the paint lab with portable shaders only (no wgpu). The check and
+# the DX11 capture use the same cargo selection, so the capture reuses it.
+paint_portable="--locked --config .cargo/validation.toml $lab --bin paint-lab --features portable-shaders"
+suite paint-lab-check windows "cargo_capture build $paint_portable {cargo}"
+suite paint-lab-portable windows "WGPU_BACKEND=dx12 run_tests xgpui-ext-lab bin:paint-lab --nocapture"
+suite shader-brush-native windows "XGPUI_BRUSH_NATIVE=1 run_tests xgpui-shader lib brush::tests --nocapture"
+suite paint-dx11-capture windows "cargo_capture run $paint_portable {cargo} -- --headless --effect mesh --frames 3 --png $logs/native-dx11-mesh.png"
 
 if [ ${#names[@]} -eq 0 ]; then
   echo "test_all: no suites match${only:+ \"$only\"} on $os" >&2
@@ -158,7 +292,13 @@ if [ ${#cargo_args[@]} -gt 0 ]; then
   forwarded=$(printf '%q ' "${cargo_args[@]}")
 fi
 
+needs_build=0
+for flag in "${shared[@]}"; do [ "$flag" = 1 ] && needs_build=1; done
+
 if [ $list_only -eq 1 ]; then
+  if [ $needs_build -eq 1 ]; then
+    printf '%-24s %s\n' "(shared build)" "cargo $(printf '%q ' "${build_args[@]}")$forwarded"
+  fi
   for i in "${!names[@]}"; do
     printf '%-24s %s\n' "${names[$i]}" "${commands[$i]//\{cargo\}/$forwarded}"
   done
@@ -166,10 +306,48 @@ if [ $list_only -eq 1 ]; then
 fi
 
 mkdir -p "$logs"
+rm -rf "$logs/cargo"
+mkdir -p "$logs/cargo"
+
+# Bootstrap once with the same Rust toolchain used by all tests. Self-tests
+# provide the already-built helper so fake Cargo never has to compile it.
+if [ "${TEST_ALL_HELPER_READY:-0}" != 1 ]; then
+cargo build --locked --manifest-path tools/release-sync/Cargo.toml --bin xgpui-test-support --target-dir "$root/target" 2>&1 | tee "$logs/cargo/bootstrap.stderr.log"
+  bootstrap_status=${PIPESTATUS[0]}
+  [ "$bootstrap_status" -eq 0 ] || exit "$bootstrap_status"
+fi
+export TEST_ALL_HELPER_READY=1
 export RUST_BACKTRACE=1
 results=()
 failed=0
 start_all=$SECONDS
+
+# index_artifacts <cargo-json> <tsv>: list test executables from Cargo's JSON.
+index_artifacts() {
+  "$TEST_ALL_HELPER" index "$1" "$2"
+}
+
+if [ $needs_build -eq 1 ]; then
+  printf '\n==> shared build (%d packages)\n    cargo %s%s\n' ${#packages[@]} "$(printf '%q ' "${build_args[@]}")" "$forwarded"
+  start=$SECONDS
+  rm -f "$TEST_ALL_ARTIFACTS"
+  # Retain raw messages separately; stream rendered diagnostics to build.log.
+  export TEST_ALL_SUITE=build
+  eval "cargo_capture $(printf '%q ' "${build_args[@]}") $forwarded" 2>&1 | tee "$logs/build.log"
+  build_status=${PIPESTATUS[0]}
+  if [ $build_status -eq 0 ] && ! index_artifacts "$logs/cargo/build.jsonl" "$TEST_ALL_ARTIFACTS"; then
+    echo "test_all: could not index test executables from $logs/cargo/build.jsonl" >&2
+    build_status=1
+  fi
+  elapsed=$((SECONDS - start))
+  if [ $build_status -eq 0 ]; then
+    results+=("$(printf 'PASS  %-24s %5ss' "(shared build)" "$elapsed")")
+  else
+    results+=("$(printf 'FAIL  %-24s %5ss  (exit %s, %s)' "(shared build)" "$elapsed" "$build_status" "$logs/build.log")")
+    failed=$((failed + 1))
+    rm -f "$TEST_ALL_ARTIFACTS"
+  fi
+fi
 
 for i in "${!names[@]}"; do
   name=${names[$i]}
@@ -177,6 +355,7 @@ for i in "${!names[@]}"; do
   log="$logs/$name.log"
   printf '\n==> [%d/%d] %s\n    %s\n' $((i + 1)) ${#names[@]} "$name" "$command"
   start=$SECONDS
+  export TEST_ALL_SUITE="$name"
   bash -c "$command" 2>&1 | tee "$log"
   status=${PIPESTATUS[0]}
   elapsed=$((SECONDS - start))
@@ -191,7 +370,12 @@ for i in "${!names[@]}"; do
   fi
 done
 
+total=$(( ${#names[@]} + needs_build ))
 printf '\n==== Test summary (%s, %ss) ====\n' "$os" $((SECONDS - start_all))
 printf '%s\n' "${results[@]}"
-printf '%d of %d suites failed or lacked prerequisites.\n' "$failed" ${#names[@]}
+printf '%d of %d steps failed or lacked prerequisites.\n' "$failed" "$total"
+if ! "$TEST_ALL_HELPER" summary "$logs"; then
+  echo "Warning report generation failed" >&2
+  failed=$((failed + 1))
+fi
 [ "$failed" -eq 0 ]

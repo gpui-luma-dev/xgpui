@@ -12,8 +12,6 @@ readme = "README.md"
 keywords = ["xgpui", "gpui", "graphics", "image", "textures"]
 categories = ["gui", "graphics", "multimedia::images"]
 
-[workspace]
-
 [features]
 default = []
 wgpu = ["dep:gpui-wgpu", "gpui-wgpu/dma-buf"]

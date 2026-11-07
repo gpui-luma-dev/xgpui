@@ -12,8 +12,6 @@ readme = "README.md"
 keywords = ["xgpui", "gpui", "gui", "svg", "graphics"]
 categories = ["gui", "graphics", "multimedia::images"]
 
-[workspace]
-
 [dependencies]
 anyhow = "1"
 web-time = "1"

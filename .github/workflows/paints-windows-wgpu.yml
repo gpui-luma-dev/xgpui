@@ -1,5 +1,6 @@
 name: Paints windows-wgpu
 
+# Native Linux/Windows acceptance is verified locally; hosted runs are opt-in.
 on:
   workflow_dispatch:
     inputs:
@@ -13,18 +14,6 @@ on:
         type: choice
         options: [warm, cold]
         default: warm
-  pull_request:
-    paths:
-      - '.github/workflows/paints-*.yml'
-      - '.github/workflows/portable-paints.yml'
-      - '.github/paints/**'
-      - '.cargo/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'gpui/crates/**'
-      - 'extensions/crates/**'
-      - 'apps/xgpui-ext-lab/paint-lab/**'
-      - 'apps/xgpui-ext-lab/Cargo.*'
 
 permissions:
   contents: read

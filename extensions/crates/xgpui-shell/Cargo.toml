@@ -6,8 +6,6 @@ license = "Apache-2.0"
 description = "Experimental desktop-aware window shell for XGPUI applications"
 publish = false
 
-[workspace]
-
 [dependencies]
 gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "=3.0.0" }
 anyhow = "1"

@@ -87,5 +87,3 @@ gpui_apple = { package = "xgpui-apple", version = "=4.0.0", features = ["test-su
 
 [lints]
 rust = { unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }, deprecated = "allow" }
-
-[workspace]
