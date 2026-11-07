@@ -312,6 +312,9 @@ impl WgpuCustomContext {
             .lock()
             .unwrap()
             .push(ImageCopyCompletion {
+                #[cfg(target_family = "wasm")]
+                _resource: OwnerThread(staged.allocation.clone()),
+                #[cfg(not(target_family = "wasm"))]
                 _resource: staged.allocation.clone(),
                 _admission: guard,
             });
@@ -394,11 +397,36 @@ struct ImageCopyCompletion {
     // Browser resources stay on their owner thread in browser_completions.
     // Native queue callbacks move these guards and require Send + Sync.
     #[cfg(target_family = "wasm")]
-    _resource: Arc<dyn std::any::Any>,
+    _resource: OwnerThread,
     #[cfg(not(target_family = "wasm"))]
     _resource: Arc<dyn Send + Sync>,
     _admission: Option<Arc<dyn Send + Sync>>,
 }
+
+/// A browser upload resource (a thread-affine `wgpu::Buffer` allocation) held
+/// until its copy completes; `browser_completions` drops it on the owner thread.
+#[cfg(target_family = "wasm")]
+struct OwnerThread(#[allow(dead_code)] Arc<dyn std::any::Any>);
+
+// SAFETY: wasm32 without the `atomics` target feature has no shared-memory
+// threads, so the resource can never be observed or dropped off its owner
+// thread. This is the condition under which wgpu's own
+// `fragile-send-sync-non-atomic-wasm` treats browser handles as Send + Sync; it
+// keeps `Recording` (and `WgpuCustomOutput`, held by `CustomContent` producers)
+// no less thread-safe than wgpu's own types. Atomic builds get no such impls.
+#[cfg(all(target_family = "wasm", not(target_feature = "atomics")))]
+unsafe impl Send for OwnerThread {}
+#[cfg(all(target_family = "wasm", not(target_feature = "atomics")))]
+unsafe impl Sync for OwnerThread {}
+
+// `Recording` must add no thread-affinity of its own wherever wgpu's handles can
+// be Send + Sync: native, and wasm without atomics (#166 regressed this).
+#[cfg(any(not(target_family = "wasm"), not(target_feature = "atomics")))]
+const _: () = {
+    const fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<ImageCopyCompletion>();
+    assert_send_sync::<Recording>();
+};
 struct StagedMip {
     offset: u64,
     row: u32,
