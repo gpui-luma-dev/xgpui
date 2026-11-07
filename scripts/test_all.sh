@@ -221,6 +221,7 @@ lab="--manifest-path apps/xgpui-ext-lab/Cargo.toml"
 
 # Shared: tools, CPU extensions, labs and core benchmarks.
 suite runner-selftest all "bash scripts/test_all_selftest.sh"
+suite paints-selftest all "bash .github/paints/run_selftest.sh"
 suite release-sync all "cargo_capture test --locked --manifest-path tools/release-sync/Cargo.toml {cargo}"
 # Match native CI's compilation gate: platform libraries with release features.
 suite native-libraries all "cargo_capture check --locked --features full-capture,runtime-shaders {cargo}"
@@ -259,8 +260,8 @@ suite media-dma-buf-video linux "$vk run_tests xgpui-ext-lab bin:media-lab video
 suite media-video-capture linux "$vk cargo_capture run --locked --config .cargo/validation.toml $lab --features runtime-shaders,portable-shaders,wgpu --bin media-lab {cargo} -- --headless --video --wgpu --png $logs/media-video.png"
 suite linux-windows-build linux "built xgpui-ext-lab test:linux_windows"
 
-# Paint GPU suites from .github/paints/commands.json (CI runs them through
-# run.py; keep the two lists in step). Steps already covered above are not
+# Paint GPU suites from .github/paints/commands.tsv (CI runs them through
+# run.sh; keep the two lists in step). Steps already covered above are not
 # repeated: paint-lab wgpu checks run in "labs", brush tests in "shader", and
 # gpui-windows coverage/DX11/wide-gamut tests in "windows-backend".
 suite wgpu-coverage-cache linux "WGPU_BACKEND=vulkan run_tests xgpui-wgpu lib coverage_cache"

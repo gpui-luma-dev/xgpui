@@ -54,8 +54,9 @@ gh workflow run paints-linux-vulkan.yml --ref YOUR_BRANCH -f scope=producer-cach
 All backends additionally run the main-pass brush library tests in full/parity scope.
 The native Windows job enables D3D11/WARP brush parity alongside wgpu.
 
-`.github/paints/commands.json` is the single acceptance command inventory;
-`.github/paints/run.py` selects scopes and runs it. Before each test, it executes
+`.github/paints/commands.tsv` is the single acceptance command inventory
+(tab-separated: backend, scope, name, command);
+`.github/paints/run.sh` selects scopes and runs it. Before each test, it executes
 the same Cargo command with `--no-run` to measure compilation separately. Capture
 similarly runs `cargo build` before the original `cargo run`. Test/capture time
 includes Cargo's warm fingerprint check and process startup. No test command or
@@ -127,6 +128,6 @@ run while waiting for the same backend/scope on the same branch.
 To check orchestration locally without a GPU:
 
 ```sh
-python3 -m unittest discover -s .github/paints -p 'test_*.py'
-python3 .github/paints/run.py --backend windows-native --scope full --dry-run
+bash .github/paints/run_selftest.sh
+bash .github/paints/run.sh --backend windows-native --scope full --dry-run
 ```

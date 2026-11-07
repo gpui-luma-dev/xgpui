@@ -28,24 +28,17 @@ impl RenderWork {
     }
 }
 
+// gpui compiles the inspector only with debug assertions, and these benchmarks
+// require a release profile, so they measure the never-opened inspector.
 struct ClosedInspectorInput {
     scale: usize,
     unit: &'static str,
-    open_close_cycles: usize,
-    other_window_inspected: bool,
 }
 
 impl fmt::Display for ClosedInspectorInput {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{}-{}-{}-cycles",
-            self.scale, self.unit, self.open_close_cycles
-        )?;
-        if self.other_window_inspected {
-            write!(formatter, "-other-window")?;
-        }
-        Ok(())
+        // "-0-cycles" keeps case names stable for existing Criterion baselines.
+        write!(formatter, "{}-{}-0-cycles", self.scale, self.unit)
     }
 }
 
@@ -53,25 +46,9 @@ fn closed_inspector_inputs(
     unit: &'static str,
     scales: impl IntoIterator<Item = usize>,
 ) -> Vec<ClosedInspectorInput> {
-    let lifecycles = if cfg!(feature = "inspector") {
-        vec![(0, false), (2, false), (0, true), (2, true)]
-    } else {
-        vec![(0, false)]
-    };
     scales
         .into_iter()
-        .flat_map(|scale| {
-            lifecycles
-                .iter()
-                .map(
-                    move |&(open_close_cycles, other_window_inspected)| ClosedInspectorInput {
-                        scale,
-                        unit,
-                        open_close_cycles,
-                        other_window_inspected,
-                    },
-                )
-        })
+        .map(|scale| ClosedInspectorInput { scale, unit })
         .collect()
 }
 
@@ -126,35 +103,6 @@ fn measure_closed_inspector<V: Render + 'static>(
         window.replace_root(cx, |_, _| build_view(work.clone()))
     });
     cx.run_until_idle();
-    for _ in 0..input.open_close_cycles {
-        for open in [true, false] {
-            window.update(|window, cx| {
-                #[cfg(feature = "inspector")]
-                window.toggle_inspector(cx);
-                assert_eq!(window.is_inspector_picking(cx), open);
-                window.refresh();
-            });
-            cx.run_until_idle();
-        }
-    }
-    let mut other_window = input.other_window_inspected.then(|| {
-        let mut window = cx.add_empty_window();
-        window.update(|window, cx| {
-            #[cfg(feature = "inspector")]
-            window.toggle_inspector(cx);
-            assert!(window.is_inspector_picking(cx));
-        });
-        window
-    });
-    cx.run_until_idle();
-    let other_frames_before = other_window.as_mut().map(|window| {
-        window.update(|window, _| {
-            window
-                .frame_duration_snapshot()
-                .draw_duration_histogram
-                .len()
-        })
-    });
     assert!(work.rendered_frames.get() > 0);
     assert_eq!(
         work.prepainted_children.get(),
@@ -176,16 +124,6 @@ fn measure_closed_inspector<V: Render + 'static>(
         window.frame_duration_snapshot()
     });
 
-    let other_frames_after = other_window.as_mut().map(|window| {
-        window.update(|window, cx| {
-            assert!(window.is_inspector_picking(cx));
-            window
-                .frame_duration_snapshot()
-                .draw_duration_histogram
-                .len()
-        })
-    });
-    assert_eq!(other_frames_after, other_frames_before);
     assert!(updated_frames > 0);
     assert_eq!(work.rendered_frames.get(), updated_frames);
     assert_eq!(

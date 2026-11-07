@@ -396,6 +396,8 @@ impl MetalWideSdrOutput {
         self.validate_resources(context)?;
         validate_commands(context, &self.output.commands)
     }
+    // Wide-gamut SDR presentation exists only on macOS.
+    #[cfg(target_os = "macos")]
     pub(crate) fn into_output(self) -> MetalCustomOutput {
         self.output
     }

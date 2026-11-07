@@ -1,7 +1,6 @@
 use super::*;
 use crate::{Gradient, GradientStop, MeshGradient, MeshGrid, SolidColor};
 use gpui::{CustomContent, size};
-use gpui_apple::metal::*;
 use std::sync::Arc;
 
 fn context() -> MetalCustomContext {
