@@ -1,9 +1,10 @@
 use super::*;
+use crate::{ParagraphLayout, ParagraphOptions, TextDirection, TextLanguage};
 use crate::{
     TextPosition, VisualDirection,
     test_support::{INTER, fonts},
 };
-use gpui::TextAffinity as Affinity;
+use gpui::{PlatformParagraphLayout as _, TextAffinity as Affinity};
 
 fn backend() -> Result<ParleyTextSystem> {
     let mut fonts = fonts();
@@ -458,5 +459,171 @@ fn explicit_axes_change_wrapping_carets_and_selection_with_retained_faces() -> R
             .x
             < results[1].2
     );
+    Ok(())
+}
+
+fn options(direction: TextDirection, language: Option<&str>) -> ParagraphOptions {
+    ParagraphOptions {
+        direction,
+        language: language.map(|tag| TextLanguage::parse(tag).unwrap()),
+        ..Default::default()
+    }
+}
+
+/// Horizontal extent of a whole-paragraph selection on a single line.
+fn selection_extent(layout: &ParagraphLayout, text: &str) -> Result<(Pixels, Pixels)> {
+    let rects = layout.selection_bounds(
+        at(0, Affinity::Downstream),
+        at(text.len(), Affinity::Upstream),
+    )?;
+    let left = rects
+        .iter()
+        .map(|r| r.origin.x)
+        .fold(px(f32::MAX), Pixels::min);
+    let right = rects
+        .iter()
+        .map(|r| r.origin.x + r.size.width)
+        .fold(px(f32::MIN), Pixels::max);
+    Ok((left, right))
+}
+
+#[test]
+fn explicit_direction_overrides_first_strong_and_sets_the_start_edge() -> Result<()> {
+    use TextDirection::*;
+    let backend = backend()?;
+    let width = px(500.0);
+    let layout = |text: &str, direction| -> Result<ParagraphLayout> {
+        backend
+            .prepare_paragraph_with_options(
+                text,
+                px(24.0),
+                &runs(&backend, text)?,
+                options(direction, None),
+            )?
+            .layout(width)
+    };
+    // Latin first, Hebrew first, and neutral-only text: explicit direction wins.
+    for text in ["abc אבג", "אבג abc", "123 456"] {
+        let auto_rtl = text.starts_with('א');
+        assert_eq!(
+            layout(text, Auto)?.parley_layout().is_rtl(),
+            auto_rtl,
+            "{text}"
+        );
+        for (direction, rtl) in [(LeftToRight, false), (RightToLeft, true)] {
+            let paragraph = layout(text, direction)?;
+            assert_eq!(
+                paragraph.parley_layout().is_rtl(),
+                rtl,
+                "{text} {direction:?}"
+            );
+            // Start alignment follows the base direction: the start edge is right for RTL.
+            let (left, right) = selection_extent(&paragraph, text)?;
+            if rtl {
+                assert!(
+                    (right - width).abs() < px(0.5),
+                    "{text}: right edge {right:?}"
+                );
+                assert!(left > px(1.0));
+            } else {
+                assert!(left.abs() < px(0.5), "{text}: left edge {left:?}");
+                assert!(right < width - px(1.0));
+            }
+        }
+    }
+    // An empty paragraph places its caret at the start edge of its direction.
+    // Parley gives the empty line a small nominal advance (about a space) and
+    // places the RTL caret on that advance's left side, so it is near, not on, the edge.
+    let empty = |direction| -> Result<_> {
+        backend
+            .prepare_paragraph_with_options("", px(24.0), &[], options(direction, None))?
+            .layout(width)?
+            .caret_bounds(at(0, Affinity::Downstream))
+    };
+    assert!(empty(LeftToRight)?.origin.x < px(1.0));
+    assert!(empty(RightToLeft)?.origin.x > width - px(12.0));
+    Ok(())
+}
+
+#[test]
+fn forced_rtl_keeps_logical_edges_affinity_and_visual_movement() -> Result<()> {
+    let backend = backend()?;
+    let text = "abc אבג";
+    let layout = backend
+        .prepare_paragraph_with_options(
+            text,
+            px(24.0),
+            &runs(&backend, text)?,
+            options(TextDirection::RightToLeft, None),
+        )?
+        .layout(px(500.0))?;
+    // In an RTL paragraph the first logical run ("abc") is visually rightmost and
+    // the Hebrew run, which ends the text, is leftmost.
+    let start = layout.caret_bounds(at(0, Affinity::Downstream))?;
+    let end = layout.caret_bounds(at(text.len(), Affinity::Upstream))?;
+    assert!(end.origin.x < start.origin.x);
+    let (left, _) = selection_extent(&layout, text)?;
+    assert!((end.origin.x - left).abs() < px(1.0));
+    let hit = layout.hit_test(point(end.origin.x, end.origin.y + end.size.height / 2.0))?;
+    assert_eq!(hit.byte_index, text.len());
+    // Inside the LTR run, visual right still moves logically forward.
+    let moved = layout.move_visual(at(1, Affinity::Downstream), VisualDirection::Right)?;
+    assert_eq!(moved.byte_index, 2);
+    // Selecting only the Latin run stays within the right part of the line.
+    let rects = layout.selection_bounds(at(0, Affinity::Downstream), at(3, Affinity::Upstream))?;
+    assert_eq!(rects.len(), 1);
+    assert!(rects[0].origin.x > end.origin.x);
+    Ok(())
+}
+
+#[test]
+fn default_options_match_the_automatic_entry_point() -> Result<()> {
+    let backend = backend()?;
+    let text = "office אבג 123 مرحبا";
+    let font_runs = runs(&backend, text)?;
+    let auto = backend
+        .prepare_paragraph(text, px(24.0), &font_runs)?
+        .layout(px(240.0))?;
+    let explicit = backend
+        .prepare_paragraph_with_options(text, px(24.0), &font_runs, ParagraphOptions::default())?
+        .layout(px(240.0))?;
+    let glyphs = |layout: &ParagraphLayout| {
+        layout
+            .runs()
+            .iter()
+            .flat_map(|run| run.glyphs.iter().map(|g| (g.id, g.index, g.position)))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(glyphs(&auto), glyphs(&explicit));
+    Ok(())
+}
+
+#[test]
+fn language_selects_locale_specific_shaping() -> Result<()> {
+    let backend = backend()?;
+    // Extended Arabic-Indic digits four to seven have distinct Persian and Urdu forms.
+    let text = "۴۵۶۷";
+    let glyph_ids = |language| -> Result<Vec<u32>> {
+        let layout = backend
+            .prepare_paragraph_with_options(
+                text,
+                px(24.0),
+                &runs(&backend, text)?,
+                options(TextDirection::Auto, language),
+            )?
+            .layout(px(500.0))?;
+        Ok(layout
+            .runs()
+            .iter()
+            .flat_map(|run| run.glyphs.iter().map(|g| g.id.0))
+            .collect())
+    };
+    let persian = glyph_ids(Some("fa"))?;
+    let urdu = glyph_ids(Some("ur"))?;
+    assert_eq!(persian.len(), 4);
+    assert!(persian.iter().chain(&urdu).all(|&id| id != 0));
+    assert_ne!(persian, urdu, "Urdu digit forms differ from Persian");
+    // Region and script subtags are accepted and normalized before Parley sees them.
+    assert_eq!(glyph_ids(Some("ur-arab-pk"))?, urdu);
     Ok(())
 }

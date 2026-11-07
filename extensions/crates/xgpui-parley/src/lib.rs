@@ -14,6 +14,10 @@ mod raster;
 pub use raster::GlyphRasterizer;
 mod backend;
 pub use backend::{LayoutErrorHandler, ParleyTextSystem};
+mod options;
+pub use options::{ParagraphOptions, TextDirection, TextLanguage};
+pub mod typeset;
+pub use typeset::{Typeset, typeset};
 
 #[cfg(test)]
 mod test_support;

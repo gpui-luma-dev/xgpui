@@ -50,13 +50,68 @@ impl ParagraphShape {
     /// Width must be finite and nonnegative. Zero preserves content with a zero
     /// available width; unbreakable glyphs may overflow, as at other narrow widths.
     pub fn layout(&self, width: Pixels) -> Result<ParagraphLayout> {
-        ensure!(
-            f32::from(width).is_finite() && width >= px(0.0),
-            "invalid paragraph width"
-        );
+        self.layout_with(Some(width), Alignment::Start)
+    }
+
+    /// Narrowest width (every soft break taken) and widest single-line width.
+    /// These are the min-content and max-content sizes used by flex layout.
+    pub fn content_widths(&self) -> (Pixels, Pixels) {
+        let widths = self.layout.calculate_content_widths();
+        (px(widths.min), px(widths.max))
+    }
+
+    /// Whether the resolved base direction is right-to-left.
+    pub fn is_rtl(&self) -> bool {
+        self.layout.is_rtl()
+    }
+
+    /// Original unmodified source.
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    /// Clusters in logical order with their advances, from the unbroken layout.
+    pub(crate) fn logical_clusters(&self) -> Vec<(Range<usize>, f32)> {
+        let mut clusters: Vec<_> = self
+            .layout
+            .lines()
+            .flat_map(|line| {
+                line.runs()
+                    .flat_map(|run| {
+                        run.clusters()
+                            .map(|cluster| (cluster.text_range(), cluster.advance()))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        clusters.sort_by_key(|(range, _)| range.start);
+        clusters
+    }
+
+    /// Reflow with an optional break width. Without one, lines break only at hard
+    /// breaks and are left in place (`Alignment::Left`): Parley aligns within the
+    /// break width, so callers place unbroken lines inside their own bounds.
+    pub(crate) fn layout_with(
+        &self,
+        break_width: Option<Pixels>,
+        alignment: Alignment,
+    ) -> Result<ParagraphLayout> {
+        if let Some(width) = break_width {
+            ensure!(
+                f32::from(width).is_finite() && width >= px(0.0),
+                "invalid paragraph width"
+            );
+        }
         let mut layout = self.layout.clone();
-        layout.break_all_lines(Some(f32::from(width)));
-        layout.align(Alignment::Start, AlignmentOptions::default());
+        layout.break_all_lines(break_width.map(f32::from));
+        let alignment = if break_width.is_some() {
+            alignment
+        } else {
+            Alignment::Left
+        };
+        layout.align(alignment, AlignmentOptions::default());
+        let width = break_width.unwrap_or(px(layout.width()));
         crate::validate_layout_geometry(&layout)?;
         let mut runs = Vec::new();
         for line in layout.lines().filter(|_| !self.source.is_empty()) {
@@ -118,6 +173,14 @@ impl ParagraphLayout {
     /// Read-only inspection for the prototype, not an export into GPUI core.
     pub fn parley_layout(&self) -> &Layout<()> {
         &self.layout
+    }
+    /// Widest line, excluding trailing whitespace.
+    pub fn content_width(&self) -> Pixels {
+        px(self.layout.width())
+    }
+    /// Number of laid-out lines.
+    pub fn line_count(&self) -> usize {
+        self.layout.len()
     }
     pub fn source(&self) -> &str {
         &self.source

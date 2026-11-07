@@ -304,7 +304,8 @@ mod tests {
                 .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
         }
         let backend = Arc::new(xgpui_parley::ParleyTextSystem::new(fonts, "IBM Plex Sans")?);
-        let mut cx = TestAppContext::build_with_text_system(TestDispatcher::new(0), None, backend);
+        let mut cx =
+            TestAppContext::build_with_text_system(TestDispatcher::new(0), None, backend.clone());
         let window = cx.open_window(size(px(580.0), px(1000.0)), |_, cx| {
             ParagraphLab::new(
                 vec![
@@ -315,6 +316,7 @@ mod tests {
                     };
                     TEXTS.len()
                 ],
+                backend.clone(),
                 cx,
             )
         });

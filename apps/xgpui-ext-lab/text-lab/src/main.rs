@@ -176,6 +176,8 @@ fn main() -> Result<()> {
     }
     let start = Instant::now();
     let platform = gpui_platform::current_platform(options.timings_only);
+    // The paragraph lab calls the Parley extension directly, so keep its typed handle.
+    let mut parley_backend = None;
     let backend: Arc<dyn PlatformTextSystem> = match options.backend {
         Backend::Native => platform.text_system(),
         Backend::Parley => {
@@ -192,7 +194,9 @@ fn main() -> Result<()> {
                         .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
                 }
             }
-            Arc::new(ParleyTextSystem::new(fonts, "IBM Plex Sans")?)
+            let parley = Arc::new(ParleyTextSystem::new(fonts, "IBM Plex Sans")?);
+            parley_backend = Some(parley.clone());
+            parley
         }
         Backend::Both => unreachable!(),
     };
@@ -212,7 +216,10 @@ fn main() -> Result<()> {
             std::env::consts::ARCH,
             !cfg!(debug_assertions)
         );
-        Some(paragraph::measure(app.text_system(), options.iterations)?)
+        let parley = parley_backend
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("paragraph mode requires the Parley backend"))?;
+        Some((paragraph::measure(app.text_system(), options.iterations)?, parley))
     } else {
         None
     };
@@ -349,7 +356,9 @@ fn main() -> Result<()> {
                 window.set_lab_title(&format!("Text Lab - {name}"));
                 let input = cx.new(|cx| input::TextInput::new("office café e\u{301} Ångström", cx));
                 let paragraph = paragraph_timings
-                    .map(|timings| cx.new(|cx| paragraph::ParagraphLab::new(timings, cx)));
+                    .map(|(timings, parley)| {
+                        cx.new(|cx| paragraph::ParagraphLab::new(timings, parley, cx))
+                    });
                 if let Some(paragraph) = &paragraph {
                     window.focus(&paragraph.focus_handle(cx), cx);
                 }
