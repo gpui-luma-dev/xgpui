@@ -67,6 +67,14 @@ Apply this policy during preparation, starting with the next release:
 - **Major:** deliberate breaking changes to supported public APIs.
 - **Before 1.0:** use a minor bump for breaking changes or new capabilities; use a patch for compatible fixes, internal changes and packaged docs. State whether a minor release contains breaking changes.
 - **Dependent crates:** bump only when packaged content or dependency requirements change. Do not automatically propagate a major bump; review whether changed dependency types affect the crate's public API.
+- **Internal requirements:** use full stable compatible requirements (for example,
+  `3.0.0` or `0.4.0`) for XGPUI libraries. Preserve an existing minimum when it
+  admits the candidate version; raise it when code needs a newer API or fix.
+  Normalization and release preparation must not raise compatible minimums just
+  because a dependency releases. Exact requirements remain appropriate in
+  registry verification fixtures. Upstream helper pins remain unchanged.
+  Release tools support full stable caret/default, tilde and exact requirements;
+  other syntax requires explicit review.
 - **Compatibility review:** inspect removed or renamed APIs, signatures, exhaustive enum variants, features and minimum supported Rust version. Explain their impact and the proposed version in the PR.
 - **Exceptions:** obtain explicit user approval and record the compatibility impact in the release notes.
 

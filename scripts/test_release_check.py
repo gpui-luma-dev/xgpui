@@ -70,16 +70,27 @@ class ReleaseCheckTests(unittest.TestCase):
         self.assertEqual(result['counts']['unchanged'], 3)
         self.assertFalse(result['uploads_enabled'])
 
-    def test_changed_crate_and_dependent_need_bumps_including_local_edits(self):
+    def test_changed_crate_needs_bump_before_dependency_requirements_change(self):
         self.edit()
         result = self.check()
         self.assertFalse(result['version_preflight_passed'])
         rows = {r['name']: r for r in result['packages']}
         self.assertEqual(rows['a']['status'], 'version-bump-required')
         self.assertEqual(rows['a']['changed_files'], ['crates/a/src/lib.rs'])
-        self.assertEqual(rows['b']['status'], 'version-bump-required')
-        self.assertEqual(rows['b']['dependency_changes'], ['a'])
+        self.assertEqual(rows['b']['status'], 'unchanged')
+        self.assertEqual(rows['b']['dependency_changes'], [])
         self.assertEqual(rows['c']['status'], 'unchanged')
+
+    def test_compatible_dependency_does_not_force_a_dependent_release(self):
+        path = self.root / 'crates/b/Cargo.toml'
+        path.write_text(path.read_text().replace('=1.0.0', '1.0.0'))
+        self.commit()
+        self.git('tag', '-f', 'release-epoch')
+        self.edit()
+        self.bump('a', '1.0.1')
+        rows = {r['name']: r for r in self.check()['packages']}
+        self.assertEqual(rows['b']['status'], 'unchanged')
+        self.assertEqual(rows['b']['pin_updates'], [])
 
     def test_bumps_and_matching_pins_make_changes_eligible(self):
         self.edit()
@@ -138,11 +149,17 @@ class ReleaseCheckTests(unittest.TestCase):
         self.commit()
         self.git('tag', '-f', 'release-epoch')
         self.edit()
-        self.assertEqual(self.check()['counts']['version-bump-required'], 2)
+        self.assertEqual(self.check()['counts']['version-bump-required'], 1)
+        self.bump('a', '1.0.1')
+        path_only = next(r for r in self.check()['packages'] if r['name'] == 'c')
+        self.assertEqual(path_only['status'], 'unchanged')
+        self.assertEqual(path_only['dependency_changes'], [])
         path.write_text(path.read_text().replace('path="../a"', 'path="../a", version="=1.0.0"'))
         result = self.check()
         row = next(r for r in result['packages'] if r['name'] == 'c')
         self.assertIn('a', row['dependency_changes'])
+        self.assertEqual(row['pin_updates'], [
+            {'dependency': 'a', 'current': '=1.0.0', 'required': '1.0.1'}])
 
     def test_epoch_must_be_an_existing_ancestor_tag(self):
         with patch('release_changes.release_history', return_value=[]):

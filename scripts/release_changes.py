@@ -12,6 +12,7 @@ import tomllib
 
 from publish_extensions import fetch
 from publish_preflight import dependencies
+from internal_requirements import matches
 
 
 def git(root, *args):
@@ -154,22 +155,29 @@ def change_plan(root, epoch, repository):
     graph = {row['name']: {dep['package'] for dep in dependencies(row['document'])
                           if dep['package'] in names and dep.get('version')}
              for row in rows}
+    versions = {row['name']: row['version'] for row in rows}
+    incompatible = {
+        row['name']: {dep['package'] for dep in dependencies(row['document'])
+                      if dep['package'] in names and dep.get('version')
+                      and not matches(dep['version'], versions[dep['package']])}
+        for row in rows
+    }
     selected = {row['name'] for row in rows if row['reasons']}
     while True:
-        added = {name for name, deps in graph.items() if name not in selected and deps & selected}
+        added = {name for name, deps in incompatible.items() if name not in selected and deps & selected}
         if not added:
             break
         selected.update(added)
     versions = {row['name']: row['version'] for row in rows}
     for row in rows:
-        row['dependency_changes'] = sorted(graph[row['name']] & selected)
+        row['dependency_changes'] = sorted(incompatible[row['name']] & selected)
         if row['dependency_changes']:
             row['reasons'].append('internal dependency changes require version/pin review')
         row['changed'] = row['name'] in selected
         row['pin_updates'] = [
-            {'dependency': dep['package'], 'current': dep['version'], 'required': '=' + versions[dep['package']]}
+            {'dependency': dep['package'], 'current': dep['version'], 'required': versions[dep['package']]}
             for dep in dependencies(row['document'])
             if dep['package'] in selected and dep.get('version')
-            and dep['version'] != '=' + versions[dep['package']]]
+            and not matches(dep['version'], versions[dep['package']])]
         row['publish_policy'] = row.pop('document')['package'].get('publish', True)
     return {'epoch': epoch, 'epoch_commit': base, 'packages': rows}
