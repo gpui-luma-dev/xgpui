@@ -86,7 +86,7 @@ list-all-labs:
 
 # Detect changed crates needing version bumps or dependency pin updates.
 release-check *args:
-    {{ python }} scripts/release_check.py "$@"
+    cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-check "$@"
 
 # Preview all ignored Cargo outputs, including standalone crates and old app paths.
 clean-preview:

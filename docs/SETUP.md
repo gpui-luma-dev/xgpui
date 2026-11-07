@@ -92,8 +92,7 @@ cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manife
 
 `build-manifests` reads the package map and preserves native target selection,
 standalone workspace exclusions and the compatibility patches. It supersedes the
-legacy `scripts/update_build.py` generator, which is retained but is not the
-normalized build path. Review and retain the root lockfile.
+removed Python `update_build.py` compatibility entry point. Review and retain the root lockfile.
 
 Supporting crates listed in `scripts/registry-crates.json` resolve from crates.io
 at the captured release version. Only the retained framework/backend crates are

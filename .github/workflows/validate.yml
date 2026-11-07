@@ -11,11 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Test import replacement and provenance
-        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
-
-      - name: Test downstream normalization and native manifest generation
+      - name: Test Rust release tooling and manifest generation
         run: cargo test --locked --manifest-path tools/release-sync/Cargo.toml
+      - name: Test optional website staging
+        run: python3 -m unittest discover -s scripts -p 'test_stage_website.py'
       - name: Check normalized capture and generated manifests
         run: |
           cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- normalize --check
@@ -62,7 +61,7 @@ jobs:
         shell: bash
         run: |
           cargo metadata --locked --format-version 1 > "$RUNNER_TEMP/xgpui-metadata.json"
-          python scripts/check_local_dependencies.py "$RUNNER_TEMP/xgpui-metadata.json"
+          cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- check-local-dependencies --metadata "$RUNNER_TEMP/xgpui-metadata.json"
       - name: Check benchmark support and all platform benchmarks
         run: cargo check --locked --manifest-path gpui/crates/gpui-platform/Cargo.toml --config .cargo/validation.toml --features bench-support,test-support,runtime_shaders --benches
       - name: Test benchmark metrics and application context

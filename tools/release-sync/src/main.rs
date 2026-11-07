@@ -1,4 +1,4 @@
-//! Repeatable downstream naming and native harness generation, without publishing.
+//! Downstream normalization, release preparation, verification and explicitly confirmed publication.
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value as Json, json};
 use std::{
@@ -8,6 +8,8 @@ use std::{
 };
 use toml_edit::{DocumentMut, Item, Value};
 use walkdir::WalkDir;
+
+mod release;
 
 type Names = BTreeMap<String, String>;
 
@@ -212,29 +214,27 @@ fn prepare_manifest(
         .and_then(|p| p.get("name"))
         .and_then(Item::as_str)
         .map(str::to_owned)
-    {
-        if let Some((local, published)) = release
+        && let Some((local, published)) = release
             .iter()
             .find(|(local, published)| **local == name || **published == name)
-        {
-            document["package"]["name"] = toml_edit::value(published.as_str());
-            document["package"]["version"] = toml_edit::value(
-                versions
-                    .get(published)
-                    .map(String::as_str)
-                    .unwrap_or(release_version),
-            );
-            document["package"]["repository"] =
-                toml_edit::value("https://github.com/gpui-luma-dev/xgpui");
-            // Library names and dependency aliases preserve existing source imports.
-            if local.starts_with("gpui") {
-                document["lib"]["name"] = toml_edit::value(local.replace('-', "_"));
-            }
-            // Platform depends on core and iOS. Keep their test/example-only
-            // reverse edges local so Cargo omits them from registry manifests.
-            if matches!(local.as_str(), "gpui" | "gpui-ios") {
-                localize_platform_development_dependency(document.as_item_mut());
-            }
+    {
+        document["package"]["name"] = toml_edit::value(published.as_str());
+        document["package"]["version"] = toml_edit::value(
+            versions
+                .get(published)
+                .map(String::as_str)
+                .unwrap_or(release_version),
+        );
+        document["package"]["repository"] =
+            toml_edit::value("https://github.com/gpui-luma-dev/xgpui");
+        // Library names and dependency aliases preserve existing source imports.
+        if local.starts_with("gpui") {
+            document["lib"]["name"] = toml_edit::value(local.replace('-', "_"));
+        }
+        // Platform depends on core and iOS. Keep their test/example-only
+        // reverse edges local so Cargo omits them from registry manifests.
+        if matches!(local.as_str(), "gpui" | "gpui-ios") {
+            localize_platform_development_dependency(document.as_item_mut());
         }
     }
     Ok(())
@@ -798,6 +798,12 @@ fn build_manifests(root: &Path, check: bool) -> Result<()> {
 
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.iter().any(|s| s == "--help" || s == "-h") {
+        println!(
+            "xgpui-release: normalize, build-manifests, preflight, prepare-registry, registry-release, release-check, daily, import, review, context, review-notes, verify-packages, verify-color, check-local-dependencies.\nSee docs/RELEASING.md for options and publication approval requirements."
+        );
+        return Ok(());
+    }
     let value = |flag: &str| {
         args.iter()
             .position(|a| a == flag)
@@ -816,9 +822,7 @@ fn main() -> Result<()> {
             println!("{}", normalize(&root, &names, check)?);
         }
         Some("build-manifests") => build_manifests(&root, check)?,
-        _ => bail!(
-            "Usage: xgpui-release normalize|build-manifests [--root PATH] [--map PATH] [--check]"
-        ),
+        _ => release::command(&root, &args)?,
     }
     Ok(())
 }
