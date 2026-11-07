@@ -1,4 +1,9 @@
 //! Admission for background GPU preparation, staging lifetime and frame handoffs.
+// Unused without a GPU backend (Linux/BSD without `wgpu`); see texture.rs.
+#![cfg_attr(
+    not(any(target_os = "macos", target_os = "windows", feature = "wgpu")),
+    allow(dead_code)
+)]
 use anyhow::{Result, ensure};
 use std::sync::{Arc, Mutex};
 

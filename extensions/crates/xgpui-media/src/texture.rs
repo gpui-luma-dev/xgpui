@@ -1,3 +1,9 @@
+// Without a GPU backend (Linux/BSD without `wgpu`) the upload path still compiles
+// so the API is the same everywhere, but nothing drives it.
+#![cfg_attr(
+    not(any(target_os = "macos", target_os = "windows", feature = "wgpu")),
+    allow(dead_code, unused_variables, unused_mut, unreachable_code)
+)]
 #[cfg(any(target_os = "macos", feature = "wgpu"))]
 use crate::upload::BackendPool;
 use crate::{

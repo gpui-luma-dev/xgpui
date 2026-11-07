@@ -205,6 +205,8 @@ impl TestRenderer for gpui_windows::Dx11HeadlessRenderer {
 }
 #[cfg(feature = "wgpu")]
 fn renderers() -> Vec<Box<dyn TestRenderer>> {
+    // Only macOS adds a second renderer.
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut result: Vec<Box<dyn TestRenderer>> =
         vec![Box::new(gpui_wgpu::WgpuHeadlessRenderer::new().unwrap())];
     #[cfg(target_os = "macos")]

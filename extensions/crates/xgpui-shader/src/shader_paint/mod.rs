@@ -129,6 +129,11 @@ impl ShaderProgram {
 
 struct Snapshot {
     program: ShaderProgram,
+    // Read only by the Metal, DirectX 11 and wgpu adapters.
+    #[cfg_attr(
+        not(any(target_os = "macos", target_os = "windows", feature = "wgpu")),
+        allow(dead_code)
+    )]
     bytes: Vec<u8>,
     #[cfg(target_os = "macos")]
     metal: metal::OutputCache,
@@ -182,6 +187,11 @@ impl CustomContent for Snapshot {
         )?;
         self.prepare_with_request(backend, &request)
     }
+    // Without a GPU backend only the final error remains.
+    #[cfg_attr(
+        not(any(target_os = "macos", target_os = "windows", feature = "wgpu")),
+        allow(unused_variables)
+    )]
     fn prepare_with_request(
         &self,
         backend: &dyn std::any::Any,
@@ -232,6 +242,10 @@ impl CustomContent for Snapshot {
     }
 }
 impl Snapshot {
+    #[cfg_attr(
+        not(any(target_os = "macos", target_os = "windows", feature = "wgpu")),
+        allow(dead_code)
+    )]
     fn geometry(&self, request: &PreparationRequest) -> [f32; 4] {
         [
             f32::from(request.logical_size().width),

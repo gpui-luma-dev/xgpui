@@ -78,6 +78,26 @@ vulkan_validation() {
 export -f vulkan_validation
 vk="vulkan_validation || exit $prereq_status;"
 
+# Browser compile suites need the active toolchain's wasm32 standard library.
+# Checks the sysroot directly (works with or without rustup); Git Bash on
+# Windows needs the Windows sysroot path converted first.
+wasm_target() {
+  local sysroot
+  sysroot=$(rustc --print sysroot 2>/dev/null) || {
+    echo "PREREQ: rustc not found." >&2
+    return 1
+  }
+  if command -v cygpath >/dev/null 2>&1; then
+    sysroot=$(cygpath -u "$sysroot")
+  fi
+  if [ ! -d "$sysroot/lib/rustlib/wasm32-unknown-unknown/lib" ]; then
+    echo "PREREQ: the wasm32-unknown-unknown target is not installed for $(rustc --version). Install it: rustup target add wasm32-unknown-unknown" >&2
+    return 1
+  fi
+}
+export -f wasm_target
+wasm="wasm_target || exit $prereq_status;"
+
 # --- Shared workspace build -------------------------------------------------
 # Every package and feature tested on this host, compiled together so Cargo
 # unifies features once. Changing this list changes the feature set for every
@@ -229,11 +249,11 @@ suite native-libraries all "cargo_capture check --locked --features full-capture
 # Compile the browser backend separately: the lab's
 # fragile-send-sync-non-atomic-wasm feature masks invalid Send/Sync bounds (#166).
 # Clear inherited native linker flags; requires the wasm32-unknown-unknown target.
-suite wgpu-wasm-compile all "unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS; cargo_capture check --locked --config .cargo/validation.toml -p xgpui-wgpu --lib --target wasm32-unknown-unknown {cargo}"
+suite wgpu-wasm-compile all "$wasm unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS; cargo_capture check --locked --config .cargo/validation.toml -p xgpui-wgpu --lib --target wasm32-unknown-unknown {cargo}"
 # Compile the browser demos as built for the website (extensions-web/build.sh,
 # shader-examples/build.sh). They use xgpui-shader, xgpui-media and xgpui-parley
 # in the browser, which the backend check above does not compile.
-suite web-demos-wasm-compile all "unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS; cargo_capture check --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin extensions-web --bin shader-examples --no-default-features --features web --target wasm32-unknown-unknown {cargo}"
+suite web-demos-wasm-compile all "$wasm unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS; cargo_capture check --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin extensions-web --bin shader-examples --no-default-features --features web --target wasm32-unknown-unknown {cargo}"
 # Platform benchmarks compile in the shared build (bench-support, test-support).
 suite gpui-bench-build all "built xgpui-platform bench:atlas_upload,bench:focus_cleanup,bench:inspector_render,bench:randomized_element_tree"
 # Isolated: media without optional GPU backends.
