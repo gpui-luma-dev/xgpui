@@ -65,7 +65,7 @@ collections = { package = "collections-gpui-unofficial", version = "=1.27.0" }
 futures = { version = "0.3.34" }
 gpui = { package = "xgpui", version = "=3.0.0" }
 gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.27.0" }
-gpui_wgpu = { package = "xgpui-wgpu", version = "=2.1.0", features = ["font-kit"], optional = true }
+gpui_wgpu = { package = "xgpui-wgpu", version = "=2.2.0", features = ["font-kit"], optional = true }
 http_client = { package = "http-client-gpui-unofficial", version = "=1.27.0" }
 libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
