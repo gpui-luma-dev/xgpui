@@ -41,6 +41,17 @@ for backend in linux-vulkan windows-wgpu windows-native; do
 done
 
 # 2. Dry run: phases and scope selection.
+fixture="$tmp/fixture/.github/paints"
+mkdir -p "$fixture"
+cp "$runner" "$fixture/run.sh"
+lf_inventory=$(tr -d '\r' <"$inventory")
+printf '%s\n' "$lf_inventory" >"$fixture/commands.tsv"
+lf_plan=$(bash "$fixture/run.sh" --backend windows-native --dry-run)
+printf '%s\n' "$lf_inventory" | sed 's/$/\r/' >"$fixture/commands.tsv"
+crlf_plan=$(bash "$fixture/run.sh" --backend windows-native --dry-run)
+check "LF and CRLF inventories produce identical phases" [ "$lf_plan" = "$crlf_plan" ]
+check "CRLF inventory leaves no carriage returns in commands" test "${crlf_plan//$'\r'/}" = "$crlf_plan"
+
 plan=$(bash "$runner" --backend windows-native --scope full --dry-run)
 check "test steps build with --no-run before testing" has "build	cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-color/Cargo.toml --no-run" "$plan"
 check "test arguments after -- are not built" has "build	cargo test --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib dx11_custom --no-run" "$plan"
@@ -61,6 +72,9 @@ mkdir -p "$fake"
 cat >"$fake/cargo" <<'EOF'
 #!/usr/bin/env bash
 echo "fake cargo $*"
+for arg in "$@"; do
+  if [[ "$arg" == *$'\r'* ]]; then echo "unexpected carriage return in cargo argument" >&2; exit 9; fi
+done
 if [ -n "${FAKE_CARGO_FAIL:-}" ] && [[ "$*" == *"$FAKE_CARGO_FAIL"* ]]; then exit 7; fi
 exit 0
 EOF

@@ -41,6 +41,8 @@ while IFS=$'\t' read -r step_backend step_scope name command; do
   [[ "$step_backend" == "#"* ]] && continue
   [ "$step_backend" = "$backend" ] || continue
   [ "$scope" = full ] || [ "$step_scope" = "$scope" ] || continue
+  # Git checkouts and downloaded inventories can use Windows line endings.
+  command=${command%$'\r'}
   names+=("$name")
   commands+=("$command")
 done <"$inventory"
