@@ -161,7 +161,7 @@ cargo build --locked
 ```
 
 CI checks `xgpui-release build-manifests --check` to detect a stale harness.
-`python3 scripts/update_build.py --check` delegates to the same Rust generator.
+`cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests --check` delegates to the same Rust generator.
 Review its platform classification when upstream adds a backend.
 Keep the root Cargo.lock committed for reproducible native builds.
 
@@ -206,7 +206,7 @@ Verify resolved package identities from the repository root:
 
 ```sh
 cargo metadata --locked --format-version 1 > /tmp/xgpui-metadata.json
-python3 scripts/check_local_dependencies.py /tmp/xgpui-metadata.json
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- check-local-dependencies --metadata /tmp/xgpui-metadata.json
 ```
 
 This checks local framework sources, pinned registry helpers, and accidental

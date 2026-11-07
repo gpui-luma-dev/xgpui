@@ -391,8 +391,8 @@ pub struct WgpuImageUploadContext {
     queue: Arc<wgpu::Queue>,
 }
 struct ImageCopyCompletion {
-    // Browser GPU resources stay on the owner thread in browser_completions.
-    // Native queue callbacks move these guards and still require Send + Sync.
+    // Browser resources stay on their owner thread in browser_completions.
+    // Native queue callbacks move these guards and require Send + Sync.
     #[cfg(target_family = "wasm")]
     _resource: Arc<dyn std::any::Any>,
     #[cfg(not(target_family = "wasm"))]

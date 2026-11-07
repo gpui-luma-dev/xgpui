@@ -7,8 +7,8 @@ description = "Experimental desktop-aware window shell for XGPUI applications"
 publish = false
 
 [dependencies]
-gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "=3.0.0" }
+gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "3.0.0" }
 anyhow = "1"
 
 [dev-dependencies]
-gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "=3.0.0", features = ["test-support"] }
+gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "3.0.0", features = ["test-support"] }

@@ -18,11 +18,11 @@ native-test = ["dep:gpui-platform"]
 
 [dependencies]
 anyhow = "1"
-gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=3.0.0" }
+gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "3.0.0" }
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
 skrifa = "=0.44.0"
 tiny-skia = { version = "=0.12.0", default-features = false, features = ["std", "simd", "png-format"] }
-gpui-platform = { path = "../../../gpui/crates/gpui-platform", optional = true , package = "xgpui-platform", version = "=2.0.2" }
+gpui-platform = { path = "../../../gpui/crates/gpui-platform", optional = true , package = "xgpui-platform", version = "2.0.2" }
 
 [[test]]
 name = "construction"
@@ -30,5 +30,5 @@ harness = false
 required-features = ["native-test"]
 
 [dev-dependencies]
-gpui = { path = "../../../gpui/crates/gpui", features = ["test-support"] , package = "xgpui", version = "=3.0.0" }
+gpui = { path = "../../../gpui/crates/gpui", features = ["test-support"] , package = "xgpui", version = "3.0.0" }
 write-fonts = { version = "0.55.0", features = ["read"] }

@@ -43,7 +43,7 @@ Linux and macOS build/run commands, or [build harness details](docs/BUILDING.md)
 
 ## Crate release preflight
 
-Run `just release-check` (Python 3.11+) while developing or before asking an
+Run `just release-check` (Rust tooling; requires Git and curl) while developing or before asking an
 agent to prepare a release. It detects crate changes, including staged,
 unstaged and non-ignored new files, and checks crates.io for versions that
 would prevent those changes from being published.
@@ -86,7 +86,7 @@ verification remain separate release steps.
 The check reads public GitHub release metadata and crates.io metadata without
 publication credentials. Use `just release-check --report /tmp/xgpui-release-check.json`
 to save the machine-readable report outside the checkout, or `--json` for JSON
-on stdout. Without just, run `python3 scripts/release_check.py`.
+on stdout. Without just, run `cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-check`.
 
 ## Documentation website
 

@@ -38,7 +38,7 @@
       "xgpui-shader": "0.4.2",
       "xgpui-svg": "0.3.2",
       "xgpui-web": "2.0.2",
-      "xgpui-wgpu": "2.1.0",
+      "xgpui-wgpu": "2.2.0",
       "xgpui-windows": "2.1.0"
     }
   },

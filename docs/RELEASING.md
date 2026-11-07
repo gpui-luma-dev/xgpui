@@ -67,6 +67,14 @@ Apply this policy during preparation, starting with the next release:
 - **Major:** deliberate breaking changes to supported public APIs.
 - **Before 1.0:** use a minor bump for breaking changes or new capabilities; use a patch for compatible fixes, internal changes and packaged docs. State whether a minor release contains breaking changes.
 - **Dependent crates:** bump only when packaged content or dependency requirements change. Do not automatically propagate a major bump; review whether changed dependency types affect the crate's public API.
+- **Internal requirements:** use full stable compatible requirements (for example,
+  `3.0.0` or `0.4.0`) for XGPUI libraries. Preserve an existing minimum when it
+  admits the candidate version; raise it when code needs a newer API or fix.
+  Normalization and release preparation must not raise compatible minimums just
+  because a dependency releases. Exact requirements remain appropriate in
+  registry verification fixtures. Upstream helper pins remain unchanged.
+  Release tools support full stable caret/default, tilde and exact requirements;
+  other syntax requires explicit review.
 - **Compatibility review:** inspect removed or renamed APIs, signatures, exhaustive enum variants, features and minimum supported Rust version. Explain their impact and the proposed version in the PR.
 - **Exceptions:** obtain explicit user approval and record the compatibility impact in the release notes.
 
@@ -99,14 +107,17 @@ just docs-check
 git diff --check
 ```
 
-Python-based test runners are deprecated. Native Windows validation must not
-require installing Python; `just test` remains the host test entry point. Until
-the remaining release-tool tests are migrated, run them on an existing
-Python-equipped maintenance host or CI:
+Release tooling and its regression tests live in `tools/release-sync` and run
+through `just test` on every host, without Python. To run only that suite:
+
+```sh
+just test --only release-sync
+```
+
+Registry checks are a separate read-only network operation:
 
 ```sh
 just release-check
-python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
 `just release-check` checks changed packages, versions and dependency pins against
@@ -143,20 +154,20 @@ Its automatic version proposals still require the compatibility review above.
 For local preparation, choose new report paths outside the checkout:
 
 ```sh
-python3 scripts/daily_release.py prepare --baseline APPROVED_COMPLETED_RELEASE_TAG \
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- daily prepare --baseline APPROVED_COMPLETED_RELEASE_TAG \
   --report /tmp/xgpui-release-preparation.json --notes /tmp/xgpui-release-notes.md
 ```
 
 This previews the proposal. Add `--apply` to update versions, then run
-`python3 scripts/daily_release.py refresh-locks` and review the resulting diff.
+`cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- daily refresh-locks` and review the resulting diff.
 
 The [Prepare registry release workflow](../.github/workflows/prepare-registry-release.yml)
 checks out the selected dispatch commit and uses the release map. Local no-upload
 equivalents, each with a new output directory outside the checkout:
 
 ```sh
-python3 scripts/publish_registry_release.py --mode plan --out /tmp/xgpui-release-plan
-python3 scripts/publish_registry_release.py --mode dry-run --out /tmp/xgpui-release-dry-run
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode plan --out /tmp/xgpui-release-plan
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode dry-run --out /tmp/xgpui-release-dry-run
 ```
 
 - **plan** inspects candidate archives and registry versions, reporting
@@ -182,17 +193,17 @@ matching published versions. Unknown upload outcomes stop; investigate before
 retrying. Never change an uploaded version's source or move its release tag.
 Complete the registry-only consumer verification before declaring success.
 
-The older `publish_extensions.py` helper is specific to the historical six-crate
-0.2.0 release and is not the current release entry point. The inventory helpers
-`publish_preflight.py` and `prepare_registry_release.py` do not establish build
-or publication readiness. Isolated archive/consumer checks are available through
-`verify_release_packages.py` and `verify_color_package.py`; their historical scope
-and evidence are preserved in the archive. Archive generation with
-`--no-verify --exclude-lockfile` is not registry-backed build verification.
+The obsolete six-extension 0.2.0 publisher has been removed. Historical
+publication evidence remains in the archive. Use `xgpui-release preflight` and
+`prepare-registry` for manifest inventory and offline archive inspection;
+`verify-packages` and `verify-color` run isolated archive/consumer checks.
+Archive generation with `--no-verify --exclude-lockfile` is not registry-backed
+build verification. Release commands require Cargo and Git; registry requests
+also require curl, and GitHub context/finalization requires the gh CLI.
 
 ## Workflow limitations and release records
 
-The registry workflow invokes `daily_release.py finalize` after successful
+The registry workflow invokes `xgpui-release daily finalize` after successful
 uploads. That helper may create a missing tag and replaces release notes with a
 verification table. Create and verify the approved tag and draft beforehand;
 retain the reviewed notes outside the release record and restore them with the

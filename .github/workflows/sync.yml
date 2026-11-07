@@ -44,13 +44,13 @@ jobs:
           args=(prepare --release "$RELEASE" --snapshot "$RUNNER_TEMP/incoming" --report "$RUNNER_TEMP/review.json"
             --normalizer "$RUNNER_TEMP/normalization-target/release/xgpui-release" --map scripts/crate-names.json)
           if [[ -n "$EXPECTED_SHA" ]]; then args+=(--expected-sha "$EXPECTED_SHA"); fi
-          python3 scripts/release_review.py "${args[@]}"
+          "$RUNNER_TEMP/normalization-target/release/xgpui-release" review "${args[@]}"
           count="$(jq '[.entries[] | select(.retain_local != true)] | length' "$RUNNER_TEMP/review.json")"
           echo "REVIEW_COUNT=$count" >> "$GITHUB_ENV"
       - name: Collect exact Zed release context
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/release_context.py --report "$RUNNER_TEMP/review.json" --output "$RUNNER_TEMP/zed-context.md" --json-output "$RUNNER_TEMP/zed-context.json"
+        run: cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- context --report "$RUNNER_TEMP/review.json" --output "$RUNNER_TEMP/zed-context.md" --json-output "$RUNNER_TEMP/zed-context.json"
       - name: Create a fresh review branch and separate commits
         if: env.REVIEW_COUNT != '0'
         env:
@@ -64,7 +64,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           for kind in code cargo metadata; do
-            python3 scripts/release_review.py "$kind" --snapshot "$RUNNER_TEMP/incoming" --report "$RUNNER_TEMP/review.json"
+            "$RUNNER_TEMP/normalization-target/release/xgpui-release" review "$kind" --snapshot "$RUNNER_TEMP/incoming" --report "$RUNNER_TEMP/review.json"
             git add --all -- gpui .cargo/config.toml upstream.json
             commit=""
             if ! git diff --cached --quiet; then
@@ -79,38 +79,9 @@ jobs:
         if: env.REVIEW_COUNT != '0'
         shell: bash
         run: |
-          python3 - <<'PY'
-          import json, os, pathlib
-          report = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'review.json').read_text())
-          proposed = [e for e in report['entries'] if not e.get('retain_local')]
-          retained = [e for e in report['entries'] if e.get('retain_local')]
-          code = [e for e in proposed if e['kind'] == 'code']
-          cargo = [e for e in proposed if e['kind'] == 'cargo']
-          metadata = [e for e in proposed if e['kind'] == 'metadata']
-          lines = [f"Incoming gpui-unofficial {report['release']} tree proposal.",
-                   f"Source commit: `{report['source_commit']}`.", "",
-                   "Unintegrated proposal: complete incoming files, not resolved patches. main is unchanged.",
-                   "Downstream overlaps require manual decisions before merging. No platform validation is performed.", "",
-                   f"## Code differences ({len(code)})", ""]
-          for entry in code:
-              label = 'upstream changed' if entry['upstream_changed'] else 'upstream unchanged; downstream-only difference'
-              if entry.get('retain_local'): label += '; RETAINED: not applied'
-              elif entry['downstream_overlap']: label += '; MANUAL REVIEW: downstream differs'
-              lines.append(f"- `{entry['path']}` — {entry['change']}; {label}")
-          lines += ['', f"## Retained downstream changes ({len(retained)})", '',
-                    'Upstream did not change these files; local code, manifests and metadata are retained.', '']
-          lines.extend(f"- `{entry['path']}` ({entry['kind']})" for entry in retained)
-          lines += ["", f"## Cargo versions and dependencies ({len(cargo)})", "",
-                    "Separate commit: package versions and dependency requirements, excluding the removed staging mirror.", "",
-                    f"## Generated metadata/artifacts ({len(metadata)})", "",
-                    "Separate commit: generated READMEs, provenance and other retained capture metadata.", ""]
-          for kind in ('CODE', 'CARGO', 'METADATA'):
-              commit = os.environ.get(kind + '_COMMIT')
-              if commit:
-                  lines.append(f"- [{kind.lower()} commit](https://github.com/{os.environ['GITHUB_REPOSITORY']}/commit/{commit})")
-          lines += ['', (pathlib.Path(os.environ['RUNNER_TEMP']) / 'zed-context.md').read_text()]
-          (pathlib.Path(os.environ['RUNNER_TEMP']) / 'review-pr.md').write_text('\n'.join(lines) + '\n')
-          PY
+          "$RUNNER_TEMP/normalization-target/release/xgpui-release" review-notes \
+            --report "$RUNNER_TEMP/review.json" --context "$RUNNER_TEMP/zed-context.md" \
+            --output "$RUNNER_TEMP/review-pr.md"
       - name: Create a new draft PR
         if: env.REVIEW_COUNT != '0'
         env:

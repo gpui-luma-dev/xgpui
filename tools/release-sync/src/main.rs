@@ -1,4 +1,4 @@
-//! Repeatable downstream naming and native harness generation, without publishing.
+//! Downstream normalization, release preparation, verification and explicitly confirmed publication.
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value as Json, json};
 use std::{
@@ -8,6 +8,8 @@ use std::{
 };
 use toml_edit::{DocumentMut, Item, Value};
 use walkdir::WalkDir;
+
+mod release;
 
 type Names = BTreeMap<String, String>;
 
@@ -212,29 +214,27 @@ fn prepare_manifest(
         .and_then(|p| p.get("name"))
         .and_then(Item::as_str)
         .map(str::to_owned)
-    {
-        if let Some((local, published)) = release
+        && let Some((local, published)) = release
             .iter()
             .find(|(local, published)| **local == name || **published == name)
-        {
-            document["package"]["name"] = toml_edit::value(published.as_str());
-            document["package"]["version"] = toml_edit::value(
-                versions
-                    .get(published)
-                    .map(String::as_str)
-                    .unwrap_or(release_version),
-            );
-            document["package"]["repository"] =
-                toml_edit::value("https://github.com/gpui-luma-dev/xgpui");
-            // Library names and dependency aliases preserve existing source imports.
-            if local.starts_with("gpui") {
-                document["lib"]["name"] = toml_edit::value(local.replace('-', "_"));
-            }
-            // Platform depends on core and iOS. Keep their test/example-only
-            // reverse edges local so Cargo omits them from registry manifests.
-            if matches!(local.as_str(), "gpui" | "gpui-ios") {
-                localize_platform_development_dependency(document.as_item_mut());
-            }
+    {
+        document["package"]["name"] = toml_edit::value(published.as_str());
+        document["package"]["version"] = toml_edit::value(
+            versions
+                .get(published)
+                .map(String::as_str)
+                .unwrap_or(release_version),
+        );
+        document["package"]["repository"] =
+            toml_edit::value("https://github.com/gpui-luma-dev/xgpui");
+        // Library names and dependency aliases preserve existing source imports.
+        if local.starts_with("gpui") {
+            document["lib"]["name"] = toml_edit::value(local.replace('-', "_"));
+        }
+        // Platform depends on core and iOS. Keep their test/example-only
+        // reverse edges local so Cargo omits them from registry manifests.
+        if matches!(local.as_str(), "gpui" | "gpui-ios") {
+            localize_platform_development_dependency(document.as_item_mut());
         }
     }
     Ok(())
@@ -258,6 +258,36 @@ fn localize_platform_development_dependency(item: &mut Item) {
     }
 }
 
+// Internal requirements deliberately use full stable versions. Reject unfamiliar
+// syntax rather than silently changing a maintainer's compatibility contract.
+fn internal_requirement_matches(requirement: &str, version: &str) -> Result<bool> {
+    fn parse(value: &str) -> Result<[u64; 3]> {
+        let parts = value
+            .split('.')
+            .map(str::parse)
+            .collect::<std::result::Result<Vec<u64>, _>>()?;
+        parts
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Expected full stable version: {value}"))
+    }
+    let minimum = requirement
+        .strip_prefix('=')
+        .or_else(|| requirement.strip_prefix('^'))
+        .or_else(|| requirement.strip_prefix('~'))
+        .unwrap_or(requirement);
+    let base = parse(minimum)?;
+    let candidate = parse(version)?;
+    if requirement.starts_with('=') {
+        return Ok(candidate == base);
+    }
+    let boundary = if requirement.starts_with('~') {
+        1
+    } else {
+        base.iter().position(|part| *part != 0).unwrap_or(2)
+    };
+    Ok(candidate >= base && candidate[..=boundary] == base[..=boundary])
+}
+
 fn externalize(item: &mut Item, registry: &Names, version: &str, remove_paths: bool) -> Result<()> {
     if let Some(table) = item.as_table_like_mut() {
         for (key, value) in table.iter_mut() {
@@ -277,8 +307,9 @@ fn externalize(item: &mut Item, registry: &Names, version: &str, remove_paths: b
                             .or_else(|| registry.values().find(|name| **name == package))
                         {
                             if dependency.is_str() {
+                                let current = dependency.as_str().unwrap().to_owned();
                                 let mut options = toml_edit::InlineTable::new();
-                                options.insert("version", Value::from(format!("={version}")));
+                                options.insert("version", Value::from(current));
                                 *dependency = Item::Value(Value::InlineTable(options));
                             }
                             let options = dependency
@@ -290,7 +321,20 @@ fn externalize(item: &mut Item, registry: &Names, version: &str, remove_paths: b
                                 }
                             }
                             options.insert("package", toml_edit::value(published.as_str()));
-                            options.insert("version", toml_edit::value(format!("={version}")));
+                            let requirement = if remove_paths {
+                                format!("={version}")
+                            } else {
+                                let current = options.get("version").and_then(Item::as_str);
+                                match current {
+                                    Some(requirement)
+                                        if internal_requirement_matches(requirement, version)? =>
+                                    {
+                                        requirement.trim_start_matches('=').to_owned()
+                                    }
+                                    _ => version.to_owned(),
+                                }
+                            };
+                            options.insert("version", toml_edit::value(requirement));
                         }
                     }
                 }
@@ -754,6 +798,12 @@ fn build_manifests(root: &Path, check: bool) -> Result<()> {
 
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.iter().any(|s| s == "--help" || s == "-h") {
+        println!(
+            "xgpui-release: normalize, build-manifests, preflight, prepare-registry, registry-release, release-check, daily, import, review, context, review-notes, verify-packages, verify-color, check-local-dependencies.\nSee docs/RELEASING.md for options and publication approval requirements."
+        );
+        return Ok(());
+    }
     let value = |flag: &str| {
         args.iter()
             .position(|a| a == flag)
@@ -772,9 +822,7 @@ fn main() -> Result<()> {
             println!("{}", normalize(&root, &names, check)?);
         }
         Some("build-manifests") => build_manifests(&root, check)?,
-        _ => bail!(
-            "Usage: xgpui-release normalize|build-manifests [--root PATH] [--map PATH] [--check]"
-        ),
+        _ => release::command(&root, &args)?,
     }
     Ok(())
 }
@@ -1031,6 +1079,31 @@ mod tests {
     }
 
     #[test]
+    fn compatible_internal_minimum_survives_normalization() {
+        let mut manifest = "[package]\nname='xgpui-color'\nversion='1.0.0'\n[dependencies]\ncore={package='xgpui',version='3.0.0'}\n".parse::<DocumentMut>().unwrap();
+        let release = BTreeMap::from([("gpui".into(), "xgpui".into())]);
+        let versions = BTreeMap::from([("xgpui".into(), "3.1.0".into())]);
+        prepare_manifest(
+            &mut manifest,
+            &Names::new(),
+            "1.27.0",
+            &release,
+            "1.0.0",
+            &versions,
+        )
+        .unwrap();
+        assert_eq!(
+            manifest["dependencies"]["core"]["version"].as_str(),
+            Some("3.0.0")
+        );
+        assert!(internal_requirement_matches("0.4.0", "0.4.9").unwrap());
+        assert!(!internal_requirement_matches("0.4.0", "0.5.0").unwrap());
+        assert!(!internal_requirement_matches("0.0.3", "0.0.4").unwrap());
+        assert!(!internal_requirement_matches("~2.2.0", "2.3.0").unwrap());
+        assert!(internal_requirement_matches(">=2", "2.2.0").is_err());
+    }
+
+    #[test]
     fn extension_versions_are_independent_of_framework_dependencies() {
         let release = BTreeMap::from([
             ("gpui".into(), "xgpui".into()),
@@ -1054,7 +1127,7 @@ mod tests {
         assert_eq!(manifest["package"]["version"].as_str(), Some("0.2.0"));
         assert_eq!(
             manifest["dependencies"]["gpui"]["version"].as_str(),
-            Some("=1.0.0")
+            Some("1.0.0")
         );
         assert_eq!(
             manifest["dependencies"]["gpui"]["path"].as_str(),
@@ -1062,7 +1135,7 @@ mod tests {
         );
         assert_eq!(
             manifest["dependencies"]["xgpui-color"]["version"].as_str(),
-            Some("=0.2.0")
+            Some("0.2.0")
         );
         let first = manifest.to_string();
         prepare_manifest(
