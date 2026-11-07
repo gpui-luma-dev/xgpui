@@ -3,6 +3,7 @@ name = "xgpui-release"
 version = "0.0.0"
 edition = "2024"
 publish = false
+default-run = "xgpui-release"
 
 [workspace]
 

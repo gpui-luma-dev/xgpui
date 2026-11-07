@@ -2,10 +2,16 @@
 # Self-test for scripts/test_all.sh: environment propagation, prerequisite
 # handling, the shared build and continue-after-failure. Runs test_all.sh as a
 # Linux host with fake uname, cargo, test executables and vulkaninfo, so it
-# needs no GPU or Rust build (Python 3 indexes the fake build output).
+# needs no GPU; the small Rust helper is reused after its initial build.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+export TEST_ALL_HELPER="${TEST_ALL_HELPER:-$root/target/debug/xgpui-test-support}"
+case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) export TEST_ALL_HELPER="${TEST_ALL_HELPER%.exe}.exe" ;; esac
+if [ "${TEST_ALL_HELPER_READY:-0}" != 1 ]; then
+  cargo build --locked --manifest-path "$root/tools/release-sync/Cargo.toml" --bin xgpui-test-support --target-dir "$root/target" || exit $?
+fi
+export TEST_ALL_HELPER_READY=1
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 fake="$tmp/bin"
@@ -28,6 +34,12 @@ n=$(ls "$SELFTEST_RECORD" | wc -l | tr -d ' ')
     echo "$var=${!var-<unset>}"
   done
 } >"$SELFTEST_RECORD/$n.txt"
+if [ "${FAKE_WARNINGS:-0}" = 1 ]; then
+  printf '%s\n' '{"reason":"compiler-message","package_id":"pkg@1","target":{"name":"pkg","kind":["lib"]},"message":{"level":"warning","message":"example","rendered":"warning: example\n","spans":[]}}'
+  echo 'warning: Cargo notice' >&2
+  echo '  explanation' >&2
+  echo 'test stdout preserved'
+fi
 if [ -n "${FAKE_CARGO_FAIL:-}" ] && [[ "$*" == *"$FAKE_CARGO_FAIL"* ]]; then exit 1; fi
 if [[ "$*" == *--message-format* ]]; then
   while [ $# -gt 0 ]; do
@@ -37,6 +49,7 @@ if [[ "$*" == *--message-format* ]]; then
       for target in lib:x bin:media-lab bin:text-lab bin:color-lab bin:gamut-lab bin:paint-lab \
         test:compatibility test:linux_windows test:construction \
         bench:atlas_upload bench:focus_cleanup bench:inspector_render bench:randomized_element_tree; do
+        [ "${FAKE_MISSING_TARGET:-}" != "$target" ] || continue
         kind=${target%%:*} name=${target#*:}
         exe="$SELFTEST_PACKAGES/$package/$kind-$name"
         printf '#!/usr/bin/env bash\nexec "%s" "%s" "$@"\n' "$SELFTEST_TESTEXE" "$package" >"$exe"
@@ -154,6 +167,7 @@ check "non-GPU suite gets no WGPU_VALIDATION" has "WGPU_VALIDATION=<unset>" "$(r
 
 # 7. Platform benchmark compilation is part of the local runner, as in CI.
 run gpui-bench-build
+check "benchmark executables are never launched" [ -z "$(tests_run)" ]
 check "benchmark build suite passes" [ "$status" -eq 0 ]
 check "benchmark suite compiles every benchmark" has "--benches" "$(recorded)"
 for feature in xgpui-platform/bench-support xgpui-platform/test-support xgpui-platform/runtime_shaders; do
@@ -163,6 +177,9 @@ run gpui-bench-build FAKE_CARGO_FAIL=--benches
 check "benchmark compilation failure fails the runner" [ "$status" -ne 0 ]
 check "shared build failure appears in the summary" has "FAIL  (shared build)" "$output"
 check "benchmark compilation failure appears in the summary" has "FAIL  gpui-bench-build" "$output"
+
+run gpui-bench-build FAKE_MISSING_TARGET=bench:focus_cleanup
+check "missing individual benchmark fails the runner" [ "$status" -ne 0 ]
 
 # 8. Every host includes CI's full native-library gate, with failures propagated.
 for host in Linux Darwin MINGW64_NT; do
@@ -198,6 +215,20 @@ check "suites fail rather than pass after a failed build" has "FAIL  gpui-core" 
 check "no test executable runs after a failed build" [ -z "$(tests_run)" ]
 run media-minimal
 check "Linux checks media without GPU backends" has "--no-default-features --lib" "$(recorded)"
+
+
+# Warning capture covers both the shared build and isolated Cargo invocations.
+run color FAKE_WARNINGS=1
+check "warning capture passes across shared and isolated Cargo" [ "$status" -eq 0 ]
+check "compiler warnings are rendered" has "warning: example" "$output"
+check "ordinary stdout is preserved" has "test stdout preserved" "$output"
+check "reports deduplicate shared and isolated warnings" has "Warnings: 2 unique" "$output"
+check "warning report retains both invocations" has '"invocations":["build","color"]' "$(cat "$tmp/logs/warnings.jsonl")"
+check "raw shared diagnostics retained" [ -s "$tmp/logs/cargo/build.jsonl" ]
+check "raw isolated diagnostics retained" [ -s "$tmp/logs/cargo/color.jsonl" ]
+run release-sync FAKE_WARNINGS=1 FAKE_CARGO_FAIL=--fake-arg
+check "captured Cargo failure remains a failure" [ "$status" -ne 0 ]
+check "warnings survive Cargo failure" has "Warnings: 2 unique" "$output"
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures runner self-test check(s) failed."
