@@ -112,10 +112,23 @@ Not yet supported: per-run styles (highlights, links), underline/strikethrough,
 background color, selection and editing. Plain GPUI text under this backend uses
 the flat-line path, which rejects right-to-left text; use `typeset()` for it.
 
+## Color emoji
+
+Glyphs the resolved face has color data for are painted as GPUI emoji sprites,
+in plain GPUI text and in `typeset()`. Supported formats: COLR v0 layers, COLR v1
+paint graphs (solid, linear, radial and sweep fills, transforms, clips and
+composite modes) and color bitmap strikes (sbix, as in Apple Color Emoji, and
+CBDT, as in Noto Color Emoji). Register the platform emoji font like any other
+font; families named "…Emoji…" with color tables become automatic last-resort
+fallbacks, so text styles need not list them.
+
 ## Current limits
 
-Synthetic styles, color/bitmap-only emoji, LCD rasterization, dilation, inline
-boxes, vertical layout and split-style cluster fragments are unsupported.
+Synthetic styles, LCD rasterization, dilation, inline boxes, vertical layout and
+split-style cluster fragments are unsupported. Color glyphs use the font's first
+palette and black for the foreground color; monochrome bitmap strikes are not
+drawn. COLR sweep and radial gradients are implemented but not yet verified
+against a real font.
 Raster requests above 4096 pixels per device dimension are rejected.
 Languages apply per paragraph, not per run. Explicit alignment and advanced
 styling remain follow-ups. An empty right-to-left paragraph places its caret

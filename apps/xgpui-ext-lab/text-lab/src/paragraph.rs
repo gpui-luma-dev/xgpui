@@ -34,7 +34,7 @@ pub const FONTS: [&[u8]; 2] = [
 const TEXTS: [(&str, &str); 4] = [
     (
         "LTR base / mixed scripts",
-        "office café אבג 123 مرحبا e\u{301} — mixed text wraps across lines, with Latin, Hebrew and Arabic fallback. Select across script boundaries.",
+        "office café אבג 123 مرحبا e\u{301} — mixed text wraps across lines, with Latin, Hebrew and Arabic fallback. Select across script boundaries. Emoji 😀👍🏽🇮🇹 join in.",
     ),
     (
         "RTL base / Latin and numbers",
@@ -60,10 +60,10 @@ const CELLS: [&str; 4] = [
     "Quarterly revenue report for the northern region",
     "דוח הכנסות רבעוני לאזור הצפון והמרכז",
     "تقرير الإيرادات الفصلي للمنطقة الشمالية",
-    "office אבג 123 مرحبا — mixed cell label",
+    "office אבג 123 مرحبا 🎉 — mixed cell label 😀",
 ];
 const CELL_WIDTH: f32 = 150.0;
-const TOOLTIP: &str = "Tooltips wrap within a maximum width: שלום עולם, مرحبا بالعالم, and Latin text share one paragraph.";
+const TOOLTIP: &str = "Tooltips wrap within a maximum width: שלום עולם 👋, مرحبا بالعالم 🌍, and Latin text share one paragraph ✅.";
 /// Content languages in button order; `None` leaves the language unspecified.
 const LANGUAGES: [Option<&str>; 5] = [None, Some("ar"), Some("fa"), Some("ur"), Some("he")];
 

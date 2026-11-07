@@ -187,6 +187,13 @@ fn main() -> Result<()> {
                     .collection
                     .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
             }
+            // Color emoji come from the platform's emoji font when it is installed;
+            // xgpui-parley adds registered emoji families as automatic fallbacks.
+            if let Some(emoji) = system_emoji_font() {
+                fonts
+                    .collection
+                    .register_fonts(parley::fontique::Blob::new(Arc::new(emoji)), None);
+            }
             if options.workload == Workload::Paragraph {
                 for data in paragraph::FONTS {
                     fonts
@@ -460,4 +467,18 @@ fn launch_pair(options: &Options) -> Result<()> {
         ensure!(first.success() && second.success(), "text lab child failed");
     }
     Ok(())
+}
+
+/// The platform color emoji font, if installed: sbix on macOS, COLR on Windows,
+/// CBDT on most Linux distributions.
+fn system_emoji_font() -> Option<Vec<u8>> {
+    [
+        "/System/Library/Fonts/Apple Color Emoji.ttc",
+        r"C:\Windows\Fonts\seguiemj.ttf",
+        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf",
+    ]
+    .into_iter()
+    .find_map(|path| std::fs::read(path).ok())
 }

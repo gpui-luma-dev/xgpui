@@ -11,6 +11,7 @@ use skrifa::{
 };
 use std::sync::Arc;
 
+pub(crate) mod color;
 mod hints;
 use hints::HintCache;
 use tiny_skia::{FillRule, Mask, Path, PathBuilder, Transform};
@@ -26,7 +27,7 @@ struct HintKey {
     ppem: u32,
 }
 
-/// Grayscale outline rasterization. Retain one instance per backend/scaler thread.
+/// Grayscale outline and color glyph rasterization. Retain one instance per backend/scaler thread.
 /// Retains 64 hinting instances and one prepared outline for bounds-to-raster reuse.
 /// GPUI's TextSystem and sprite atlas retain bounds and final glyph bitmaps.
 #[derive(Default)]
@@ -44,8 +45,15 @@ struct PreparedOutline {
     blob: u64,
     index: u32,
     coords: Arc<[NormalizedCoord]>,
-    path: Option<Path>,
+    content: Content,
     bounds: Bounds<DevicePixels>,
+}
+
+enum Content {
+    /// A coverage outline; `None` for empty glyphs.
+    Outline(Option<Path>),
+    /// BGRA straight-alpha pixels for a color glyph.
+    Color(Vec<u8>),
 }
 
 impl GlyphRasterizer {
@@ -68,8 +76,8 @@ impl GlyphRasterizer {
         Ok(self.prepared.as_ref().unwrap().bounds)
     }
 
-    /// Produce a one-byte-per-pixel coverage mask matching previously measured bounds.
-    /// Color emoji, LCD rendering and native dilation are explicitly unsupported.
+    /// Produce a one-byte-per-pixel coverage mask, or BGRA pixels for emoji requests,
+    /// matching previously measured bounds. LCD rendering and dilation are unsupported.
     pub fn rasterize_glyph(
         &mut self,
         faces: &FaceRegistry,
@@ -86,10 +94,14 @@ impl GlyphRasterizer {
         expected: Bounds<DevicePixels>,
     ) -> Result<(Size<DevicePixels>, Vec<u8>)> {
         self.prepare_cached(face, params)?;
-        let PreparedOutline { path, bounds, .. } = self.prepared.take().unwrap();
+        let PreparedOutline {
+            content, bounds, ..
+        } = self.prepared.take().unwrap();
         ensure!(bounds == expected, "glyph raster bounds changed");
-        let Some(path) = path else {
-            return Ok((bounds.size, Vec::new()));
+        let path = match content {
+            Content::Color(bgra) => return Ok((bounds.size, bgra)),
+            Content::Outline(None) => return Ok((bounds.size, Vec::new())),
+            Content::Outline(Some(path)) => path,
         };
         let mut mask = Mask::new(bounds.size.width.0 as u32, bounds.size.height.0 as u32)
             .context("unable to allocate glyph mask")?;
@@ -113,16 +125,47 @@ impl GlyphRasterizer {
         }
         // Drop the previous outline before allocating its replacement.
         self.prepared = None;
-        let (path, bounds) = self.prepare(face, params)?;
+        let (content, bounds) = if params.is_emoji {
+            self.prepare_color(face, params)?
+        } else {
+            let (path, bounds) = self.prepare(face, params)?;
+            (Content::Outline(path), bounds)
+        };
         self.prepared = Some(PreparedOutline {
             params: params.clone(),
             blob: face.data().data.id(),
             index: face.data().index,
             coords: face.coordinate_handle(),
-            path,
+            content,
             bounds,
         });
         Ok(())
+    }
+
+    /// Color glyphs ignore subpixel variants: GPUI places emoji at integer origins.
+    fn prepare_color(
+        &mut self,
+        face: &RegisteredFace,
+        params: &RenderGlyphParams,
+    ) -> Result<(Content, Bounds<DevicePixels>)> {
+        let ppem = valid_ppem(params)?;
+        ensure!(
+            !params.subpixel_rendering && params.dilation == 0,
+            "color glyphs support neither LCD rendering nor dilation"
+        );
+        let font = FontRef::from_index(face.data().data.data(), face.data().index)?;
+        let raster = color::render(&font, face.normalized_coords(), params.glyph_id.0, ppem)?
+            .context("glyph has no color data")?;
+        Ok((
+            Content::Color(raster.bgra),
+            Bounds {
+                origin: point(DevicePixels(raster.left), DevicePixels(raster.top)),
+                size: size(
+                    DevicePixels(raster.width as i32),
+                    DevicePixels(raster.height as i32),
+                ),
+            },
+        ))
     }
 
     fn prepare(
@@ -130,17 +173,9 @@ impl GlyphRasterizer {
         face: &RegisteredFace,
         params: &RenderGlyphParams,
     ) -> Result<(Option<Path>, Bounds<DevicePixels>)> {
-        let ppem = f32::from(params.font_size) * params.scale_factor;
+        let ppem = valid_ppem(params)?;
         ensure!(
-            f32::from(params.font_size) > 0.0
-                && params.scale_factor > 0.0
-                && ppem > 0.0
-                && ppem.is_finite()
-                && ppem <= MAX_EXTENT,
-            "invalid or excessive glyph size"
-        );
-        ensure!(
-            !params.is_emoji && !params.subpixel_rendering && params.dilation == 0,
+            !params.subpixel_rendering && params.dilation == 0,
             "only grayscale outline masks without dilation are supported"
         );
         ensure!(
@@ -218,6 +253,19 @@ impl GlyphRasterizer {
             },
         ))
     }
+}
+
+fn valid_ppem(params: &RenderGlyphParams) -> Result<f32> {
+    let ppem = f32::from(params.font_size) * params.scale_factor;
+    ensure!(
+        f32::from(params.font_size) > 0.0
+            && params.scale_factor > 0.0
+            && ppem > 0.0
+            && ppem.is_finite()
+            && ppem <= MAX_EXTENT,
+        "invalid or excessive glyph size"
+    );
+    Ok(ppem)
 }
 
 // Font outlines are y-up; GPUI raster images use y-down coordinates.

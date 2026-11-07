@@ -245,8 +245,10 @@ paragraph language through `prepare_paragraph_with_options`), start alignment, o
 multiple font runs and U+2028 hard breaks. Callers split document paragraphs;
 the lab normalizes pasted line endings to U+2028.
 
-Synthetic styles, color/bitmap emoji, LCD, dilation, inline boxes, vertical text
-and split-style cluster fragments are unsupported. Raster size/bounds are capped
+Color emoji (COLR v0/v1, sbix and CBDT) are supported in plain GPUI text and
+`typeset()`; registered emoji families are automatic fallbacks. Synthetic styles,
+LCD, dilation, inline boxes, vertical text and split-style cluster fragments are
+unsupported. Raster size/bounds are capped
 at 4096 device pixels. Explicit alignment, per-run languages, advanced styling,
 accessibility and broader BiDi/UAX #14 conformance remain follow-ups.
 

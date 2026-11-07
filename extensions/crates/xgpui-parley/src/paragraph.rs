@@ -130,14 +130,18 @@ impl ParagraphShape {
                     .map(|(_, id)| *id)
                     .ok_or_else(|| anyhow::anyhow!("unregistered paragraph run"))?;
                 let run = item.run();
+                // Emoji are glyphs the resolved face has color data for, as in native
+                // backends; Unicode emoji presentation alone does not imply color.
+                let color =
+                    crate::raster::color::ColorProbe::new(run.font().data.data(), run.font().index);
                 let mut indices = run.visual_clusters().flat_map(|cluster| {
                     let index = cluster.text_range().start;
-                    let emoji = cluster.is_emoji();
-                    cluster.glyphs().map(move |_| (index, emoji))
+                    cluster.glyphs().map(move |_| index)
                 });
                 let glyph_count = item.glyphs().count();
                 let mut glyphs = Vec::with_capacity(glyph_count);
-                for (glyph, (index, is_emoji)) in item.positioned_glyphs().zip(indices.by_ref()) {
+                for (glyph, index) in item.positioned_glyphs().zip(indices.by_ref()) {
+                    let is_emoji = color.as_ref().is_some_and(|color| color.has(glyph.id));
                     ensure!(
                         glyph.x.is_finite() && glyph.y.is_finite(),
                         "nonfinite glyph position"

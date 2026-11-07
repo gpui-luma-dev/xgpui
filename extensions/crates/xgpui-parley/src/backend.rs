@@ -42,6 +42,8 @@ struct State {
     fonts: FontContext,
     layout: LayoutContext<()>,
     default_family: String,
+    /// Registered color emoji families, appended as last-resort fallbacks.
+    emoji_families: Vec<String>,
     // Identity bindings, not a second layout/raster cache. Old bindings remain
     // valid for in-flight layouts after GPUI invalidates its font generation.
     bindings: HashMap<FontId, Font>,
@@ -69,6 +71,7 @@ impl ParleyTextSystem {
         let mut state = State {
             fonts,
             default_family,
+            emoji_families: Vec::new(),
             layout: LayoutContext::new(),
             bindings: HashMap::new(),
             aliases: HashMap::new(),
@@ -79,6 +82,7 @@ impl ParleyTextSystem {
             #[cfg(test)]
             shape_calls: 0,
         };
+        state.refresh_emoji_families();
         // Resolve once, in the same registry as every shaped/rasterized face.
         // Construction fails if the explicit default cannot provide real metrics.
         let layout = state.shape(" ", px(16.0), &[])?;
@@ -288,7 +292,56 @@ impl ParleyTextSystem {
     }
 }
 
+/// The primary family, explicit fallbacks, then any emoji families not listed.
+fn family_list<'a>(
+    primary: &'a str,
+    fallbacks: &'a [String],
+    emoji: &'a [String],
+) -> Vec<FontFamilyName<'a>> {
+    let mut families = Vec::with_capacity(1 + fallbacks.len() + emoji.len());
+    families.push(FontFamilyName::named(primary));
+    families.extend(fallbacks.iter().map(|name| FontFamilyName::named(name)));
+    for name in emoji {
+        let listed = name == primary || fallbacks.contains(name);
+        if !listed {
+            families.push(FontFamilyName::named(name));
+        }
+    }
+    families
+}
+
 impl State {
+    /// Parley's script fallback does not reach color emoji fonts, so registered
+    /// emoji families (named "…Emoji…" and carrying COLR or color bitmaps) are
+    /// appended to every family list. Other color fonts never become fallbacks.
+    fn refresh_emoji_families(&mut self) {
+        let names: Vec<String> = self
+            .fonts
+            .collection
+            .family_names()
+            .filter(|name| name.to_lowercase().contains("emoji"))
+            .map(str::to_owned)
+            .collect();
+        let mut emoji: Vec<String> = names
+            .into_iter()
+            .filter(|name| {
+                self.fonts
+                    .collection
+                    .family_by_name(name)
+                    .is_some_and(|family| {
+                        family.fonts().iter().any(|font| {
+                            font.load(None).is_some_and(|blob| {
+                                crate::raster::color::ColorProbe::new(blob.data(), font.index())
+                                    .is_some()
+                            })
+                        })
+                    })
+            })
+            .collect();
+        emoji.sort();
+        self.emoji_families = emoji;
+    }
+
     fn styles(&self, text: &str, runs: &[FontRun]) -> Result<Vec<(Font, Range<usize>)>> {
         let mut start: usize = 0;
         let mut styles = Vec::with_capacity(runs.len());
@@ -341,9 +394,9 @@ impl State {
                 f32::from(line_height),
             )));
         }
-        builder.push_default(StyleProperty::FontFamily(FontFamily::named(
-            &self.default_family,
-        )));
+        builder.push_default(StyleProperty::FontFamily(FontFamily::List(Cow::Owned(
+            family_list(&self.default_family, &[], &self.emoji_families),
+        ))));
         builder.push_default(StyleProperty::FontSize(f32::from(size)));
         for (font, range) in styles {
             let primary = if font.family.as_ref() == ".SystemUIFont" {
@@ -356,14 +409,11 @@ impl State {
                 .as_ref()
                 .map(|f| f.fallback_list())
                 .unwrap_or(&[]);
-            let family = if fallbacks.is_empty() {
-                FontFamily::named(primary)
-            } else {
-                let mut families = Vec::with_capacity(1 + fallbacks.len());
-                families.push(FontFamilyName::named(primary));
-                families.extend(fallbacks.iter().map(|name| FontFamilyName::named(name)));
-                FontFamily::List(Cow::Owned(families))
-            };
+            let family = FontFamily::List(Cow::Owned(family_list(
+                primary,
+                fallbacks,
+                &self.emoji_families,
+            )));
             builder.push(StyleProperty::FontFamily(family), range.clone());
             builder.push(
                 StyleProperty::FontWeight(parley::FontWeight::new(font.weight.0)),
@@ -472,6 +522,7 @@ impl PlatformTextSystem for ParleyTextSystem {
                 state.fonts.collection.register_fonts(blob, None);
             }
         }
+        state.refresh_emoji_families();
         state.generation += 1;
         state.descriptors.clear();
         Ok(())

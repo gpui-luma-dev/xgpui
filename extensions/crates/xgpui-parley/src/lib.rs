@@ -103,6 +103,7 @@ pub fn line_layout(
     let mut x = metrics.offset;
     for run in line.runs() {
         let font_id = resolve_face(&run)?;
+        let color = raster::color::ColorProbe::new(run.font().data.data(), run.font().index);
         let mut glyphs = Vec::new();
         for cluster in run.visual_clusters() {
             for glyph in cluster.glyphs() {
@@ -115,7 +116,8 @@ pub fn line_layout(
                     id: GlyphId(glyph.id),
                     position,
                     index: cluster.text_range().start,
-                    is_emoji: cluster.is_emoji(),
+                    // GPUI paints glyphs with color data as emoji sprites.
+                    is_emoji: color.as_ref().is_some_and(|color| color.has(glyph.id)),
                 });
                 x += glyph.advance;
             }
