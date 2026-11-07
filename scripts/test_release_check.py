@@ -149,11 +149,17 @@ class ReleaseCheckTests(unittest.TestCase):
         self.commit()
         self.git('tag', '-f', 'release-epoch')
         self.edit()
-        self.assertEqual(self.check()['counts']['version-bump-required'], 2)
+        self.assertEqual(self.check()['counts']['version-bump-required'], 1)
+        self.bump('a', '1.0.1')
+        path_only = next(r for r in self.check()['packages'] if r['name'] == 'c')
+        self.assertEqual(path_only['status'], 'unchanged')
+        self.assertEqual(path_only['dependency_changes'], [])
         path.write_text(path.read_text().replace('path="../a"', 'path="../a", version="=1.0.0"'))
         result = self.check()
         row = next(r for r in result['packages'] if r['name'] == 'c')
         self.assertIn('a', row['dependency_changes'])
+        self.assertEqual(row['pin_updates'], [
+            {'dependency': 'a', 'current': '=1.0.0', 'required': '1.0.1'}])
 
     def test_epoch_must_be_an_existing_ancestor_tag(self):
         with patch('release_changes.release_history', return_value=[]):
