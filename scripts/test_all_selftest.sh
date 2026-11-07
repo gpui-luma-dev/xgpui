@@ -85,6 +85,15 @@ cat >"$fake/vulkaninfo" <<'EOF'
 printf '%s\n' "${FAKE_VULKANINFO_OUTPUT:-}"
 EOF
 chmod +x "$fake"/*
+# The runner calls Cargo through the Rust helper, which ignores Bash's PATH
+# lookup of extensionless scripts on Windows; name the fake (and bash) directly.
+fake_cargo="$fake/cargo"
+fake_shell="$(command -v bash)"
+case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*)
+  fake_cargo="$(cygpath -w "$fake_cargo")"
+  fake_shell="$(cygpath -w "$fake_shell")"
+  ;;
+esac
 
 layer_present='Instance Layers: count = 1
 	VK_LAYER_KHRONOS_validation  Khronos Validation Layer'
@@ -105,6 +114,7 @@ run() {
   output=$(env -u VK_INSTANCE_LAYERS -u VK_LAYER_ENABLES -u WGPU_BACKEND -u WGPU_DEBUG -u WGPU_VALIDATION \
     PATH="$fake:$PATH" SELFTEST_RECORD="$tmp/record" TEST_ALL_LOG_DIR="$tmp/logs" \
     SELFTEST_PACKAGES="$tmp/packages" SELFTEST_TESTEXE="$fake/testexe" \
+    TEST_ALL_CARGO="$fake_cargo" TEST_ALL_SHELL="$fake_shell" \
     "$@" bash "$root/scripts/test_all.sh" --only "$only" --fake-arg 2>&1)
   status=$?
 }

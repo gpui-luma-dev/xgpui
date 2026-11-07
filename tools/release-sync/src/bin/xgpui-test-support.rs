@@ -11,6 +11,27 @@ use std::{
     thread,
 };
 
+/// Cargo to run: `TEST_ALL_CARGO`, or `cargo` from PATH. The runner self-test
+/// sets it to a fake Bash script. Windows can only start that through an
+/// interpreter, so a program without an `.exe` extension runs under
+/// `TEST_ALL_SHELL` there (not a PATH lookup, which can reach WSL's bash).
+fn cargo_command() -> Result<Command> {
+    let Some(program) = env::var_os("TEST_ALL_CARGO") else {
+        return Ok(Command::new("cargo"));
+    };
+    let is_exe = Path::new(&program)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"));
+    if cfg!(windows) && !is_exe {
+        let shell = env::var_os("TEST_ALL_SHELL")
+            .context("TEST_ALL_SHELL must name bash to run a TEST_ALL_CARGO script on Windows")?;
+        let mut command = Command::new(shell);
+        command.arg(program);
+        return Ok(command);
+    }
+    Ok(Command::new(program))
+}
+
 fn capture(dir: &Path, name: &str, args: &[String]) -> Result<i32> {
     fs::create_dir_all(dir)?;
     let split = args.iter().position(|s| s == "--").unwrap_or(args.len());
@@ -22,7 +43,7 @@ fn capture(dir: &Path, name: &str, args: &[String]) -> Result<i32> {
     }
     let mut raw = File::create(dir.join(format!("{name}.jsonl")))?;
     let mut stderr_log = File::create(dir.join(format!("{name}.stderr.log")))?;
-    let mut child = Command::new("cargo")
+    let mut child = cargo_command()?
         .args(&args[..split])
         .arg("--message-format=json")
         .args(&args[split..])
