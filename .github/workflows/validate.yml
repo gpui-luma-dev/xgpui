@@ -101,6 +101,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - name: Check browser backend without application Send/Sync overrides
+        run: >-
+          env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS
+          cargo check --locked --config .cargo/validation.toml
+          -p xgpui-wgpu --lib --target wasm32-unknown-unknown
       - name: Install WASM packaging tool
         run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
       - name: Build all six browser shader examples
