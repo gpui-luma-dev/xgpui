@@ -32,7 +32,7 @@ xgpui-shell = { path = "../../extensions/crates/xgpui-shell" }
 xgpui-canvas = { path = "../../extensions/crates/xgpui-canvas", features = ["gpui"] , package = "xgpui-canvas", version = "=0.3.2" }
 anyhow = "1"
 gpui = { package = "xgpui", path = "../../gpui/crates/gpui", version = "=3.0.0" }
-xgpui-color = { path = "../../extensions/crates/xgpui-color", version = "=0.3.0", package = "xgpui-color", features = ["icc"] }
+xgpui-color = { path = "../../extensions/crates/xgpui-color", version = "=0.3.1", package = "xgpui-color", features = ["icc"] }
 xgpui-gamut = { path = "../../extensions/crates/xgpui-gamut", version = "=0.3.2", features = ["instanced"] , package = "xgpui-gamut" }
 xgpui-media = { path = "../../extensions/crates/xgpui-media", version = "=0.5.2", package = "xgpui-media" }
 xgpui-svg = { path = "../../extensions/crates/xgpui-svg", version = "=0.3.2", package = "xgpui-svg" }

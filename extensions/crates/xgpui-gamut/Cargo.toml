@@ -19,7 +19,7 @@ instanced = ["dep:xgpui-shader", "dep:bytemuck"]
 [dependencies]
 xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"], optional = true , package = "xgpui-shader", version = "=0.4.2" }
 bytemuck = { version = "1", features = ["derive"], optional = true }
-xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "=0.3.0" }
+xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "=0.3.1" }
 anyhow = "1"
 gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=3.0.0" }
 
