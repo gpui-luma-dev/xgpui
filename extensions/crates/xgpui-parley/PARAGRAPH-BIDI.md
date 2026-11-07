@@ -91,8 +91,8 @@ not a union across BiDi fragments. Stale geometry is unavailable until repaint.
 
 ## Remaining work
 
-Explicit alignment; per-run languages; `typeset()` styled runs, decorations and
-selection; broader BiDi/UAX #14 conformance; paragraph
+Explicit alignment; per-run languages and font sizes; `typeset()` selection and
+interactive ranges; broader BiDi/UAX #14 conformance; paragraph
 conversion IMEs; Windows/Linux runtime and accessibility validation. Inline
 widgets, vertical text, ellipsis, justification and hyphenation remain outside
 scope. Color emoji are painted through `paint_emoji` (see the crate README). [Validation and timing definitions](../../../apps/xgpui-ext-lab/text-lab/README.md).

@@ -48,7 +48,10 @@ impl Fixture {
     fn spec(&self, text: &str) -> TypesetSpec {
         TypesetSpec {
             text: text.to_owned().into(),
-            font: self.font,
+            fonts: Arc::new([FontRun {
+                len: text.len(),
+                font_id: self.font,
+            }]),
             font_size: px(16.0),
             line_height: LINE_HEIGHT,
             options: ParagraphOptions {
@@ -93,7 +96,7 @@ fn wrapped_text_reports_min_and_max_content_like_taffys_parley_example() {
     let spec = fixture.spec("alpha beta gamma delta");
     let (min, max) = fixture
         .engine
-        .shape(&spec, &spec.text)
+        .shape(&spec, &spec.text, spec.fonts.clone())
         .unwrap()
         .shape
         .content_widths();
@@ -121,8 +124,20 @@ fn wrapped_text_reports_min_and_max_content_like_taffys_parley_example() {
 #[test]
 fn unwrapped_text_keeps_one_line_per_hard_break() {
     let fixture = Fixture::new();
-    let text = hard_breaks(&"one\ntwo\r\nthree".into());
+    // Two runs: run lengths follow the normalized text.
+    let style = gpui::TextStyle::default();
+    let (text, runs) = hard_breaks(
+        &"one\ntwo\r\nthree".into(),
+        vec![
+            style.to_run("one\n".len()),
+            style.to_run("two\r\nthree".len()),
+        ],
+    );
     assert_eq!(text.as_ref(), "one\u{2028}two\u{2028}three");
+    assert_eq!(
+        runs.iter().map(|run| run.len).collect::<Vec<_>>(),
+        ["one\u{2028}".len(), "two\u{2028}three".len()]
+    );
     let fitted = fixture.fit(
         &nowrap(fixture.spec(&text), None),
         AvailableSpace::Definite(px(10.0)),
@@ -485,4 +500,255 @@ fn ltr_isolates_keep_values_with_units_together_in_rtl_text() {
     // A left-to-right isolate (U+2066…U+2069) keeps the value in reading order.
     let isolated = "ראשון \u{2066}536.6 us\u{2069}";
     assert!(x_of(isolated, '5') < x_of(isolated, 'u'));
+}
+
+/// Inter is variable, so bold is a real instance (synthetic bold is unsupported).
+fn inter(fixture: &Fixture, weight: gpui::FontWeight) -> FontId {
+    let mut font = gpui::font("Inter Variable");
+    font.weight = weight;
+    fixture.engine.parley.font_id(&font).unwrap()
+}
+
+fn bold_font(fixture: &Fixture) -> FontId {
+    inter(fixture, gpui::FontWeight::BOLD)
+}
+
+fn two_runs(fixture: &Fixture, text: &str, split: usize) -> TypesetSpec {
+    let mut spec = fixture.spec(text);
+    spec.fonts = Arc::new([
+        FontRun {
+            len: split,
+            font_id: inter(fixture, gpui::FontWeight::NORMAL),
+        },
+        FontRun {
+            len: text.len() - split,
+            font_id: bold_font(fixture),
+        },
+    ]);
+    spec
+}
+
+#[test]
+fn styled_runs_shape_with_their_own_fonts_and_cache_separately() {
+    let fixture = Fixture::new();
+    let text = "regular then bold text";
+    let mut plain = fixture.spec(text);
+    plain.fonts = Arc::new([FontRun {
+        len: text.len(),
+        font_id: inter(&fixture, gpui::FontWeight::NORMAL),
+    }]);
+    let plain = fixture.fit(&nowrap(plain, None), AvailableSpace::MaxContent);
+    let styled = fixture.fit(
+        &nowrap(two_runs(&fixture, text, "regular ".len()), None),
+        AvailableSpace::MaxContent,
+    );
+    assert!(!Arc::ptr_eq(&plain.shaped.shape, &styled.shaped.shape));
+    assert!(
+        styled.size.width > plain.size.width,
+        "bold glyphs are wider"
+    );
+    let layout = fixture
+        .engine
+        .layout(&styled.shaped, None, styled.align)
+        .unwrap();
+    let fonts: Vec<_> = layout.runs().iter().map(|run| run.font_id).collect();
+    assert!(fonts.len() >= 2 && fonts.windows(2).any(|pair| pair[0] != pair[1]));
+}
+
+#[test]
+fn truncation_maps_shown_text_back_to_styled_runs() {
+    let fixture = Fixture::new();
+    let split = "The quick ".len();
+    let bold = bold_font(&fixture);
+    for overflow in [
+        OverflowKey::End(ellipsis()),
+        OverflowKey::Start(ellipsis()),
+        OverflowKey::Middle(ellipsis()),
+    ] {
+        let spec = nowrap(two_runs(&fixture, FOX, split), Some(overflow.clone()));
+        let fitted = fixture.fit(&spec, AvailableSpace::Definite(px(140.0)));
+        let shown = fitted.shaped.shape.source().to_owned();
+        let pieces = &fitted.pieces;
+        // Pieces cover the shown text without gaps.
+        let mut end = 0;
+        for piece in pieces.iter() {
+            assert_eq!(piece.shown.start, end, "{overflow:?}");
+            end = piece.shown.end;
+        }
+        assert_eq!(end, shown.len());
+        // Copied pieces reproduce the source bytes they claim.
+        for piece in pieces.iter().filter(|piece| piece.copied) {
+            assert_eq!(
+                &shown[piece.shown.clone()],
+                &FOX[piece.source..piece.source + piece.shown.len()]
+            );
+        }
+        // Fonts follow the source runs: the affix takes its neighbor's font.
+        let fonts = mapped_fonts(&spec.fonts, pieces);
+        assert_eq!(fonts.iter().map(|run| run.len).sum::<usize>(), shown.len());
+        let affix = shown.find('…').unwrap();
+        let affix_font = font_at(&fonts, affix);
+        assert_eq!(
+            affix_font,
+            font_at(&spec.fonts, source_index(pieces, affix))
+        );
+        // Every shown character keeps the font of the source character it maps to.
+        for (index, _) in shown.char_indices() {
+            assert_eq!(
+                font_at(&fonts, index),
+                font_at(&spec.fonts, source_index(pieces, index)),
+                "{overflow:?}: {shown} at {index}"
+            );
+        }
+        // Start and middle cuts keep the bold tail ("…lazy dog").
+        if !matches!(overflow, OverflowKey::End(_)) {
+            assert_eq!(font_at(&fonts, shown.len() - 1), bold, "{shown}");
+        }
+        // The bold source range maps to exactly the shown bytes in the bold font,
+        // apart from an affix inside it.
+        let bold_shown: usize = shown_ranges(pieces, split..FOX.len())
+            .iter()
+            .map(|range| range.len())
+            .sum();
+        let bold_bytes: usize = fonts
+            .iter()
+            .filter(|run| run.font_id == bold)
+            .map(|run| run.len)
+            .sum();
+        assert_eq!(bold_shown, bold_bytes, "{overflow:?}: {shown}");
+    }
+}
+
+#[test]
+fn highlights_merge_over_the_inherited_style() {
+    let base = gpui::TextStyle {
+        color: gpui::black(),
+        ..Default::default()
+    };
+    let red = gpui::red();
+    let highlights = [
+        (
+            4..9,
+            HighlightStyle {
+                font_weight: Some(gpui::FontWeight::BOLD),
+                ..Default::default()
+            },
+        ),
+        (
+            10..15,
+            HighlightStyle {
+                color: Some(red),
+                underline: Some(UnderlineStyle {
+                    thickness: px(1.0),
+                    ..Default::default()
+                }),
+                background_color: Some(gpui::yellow()),
+                ..Default::default()
+            },
+        ),
+    ];
+    let runs = typeset("The quick brown fox")
+        .with_highlights(highlights)
+        .source_runs(&base);
+    let lens: Vec<_> = runs.iter().map(|run| run.len).collect();
+    assert_eq!(lens, [4, 5, 1, 5, 4]);
+    assert_eq!(runs[1].font.weight, gpui::FontWeight::BOLD);
+    assert_eq!(runs[0].font.weight, base.font_weight);
+    assert_eq!(runs[3].color, base.color.blend(red));
+    assert!(runs[3].underline.is_some() && runs[3].background_color.is_some());
+    assert!(runs[2].underline.is_none());
+    // Explicit runs replace the inherited style.
+    let explicit = vec![
+        base.to_run(3),
+        base.clone()
+            .highlight(HighlightStyle {
+                color: Some(red),
+                ..Default::default()
+            })
+            .to_run(16),
+    ];
+    assert_eq!(
+        typeset("The quick brown fox")
+            .with_runs(explicit.clone())
+            .source_runs(&base),
+        explicit
+    );
+}
+
+fn draw_styled(visual: &mut VisualTestContext) {
+    visual.draw(
+        point(px(0.0), px(0.0)),
+        size(
+            AvailableSpace::Definite(px(600.0)),
+            AvailableSpace::MinContent,
+        ),
+        |_, _| {
+            let bold = HighlightStyle {
+                font_weight: Some(gpui::FontWeight::BOLD),
+                ..Default::default()
+            };
+            let decorated = HighlightStyle {
+                color: Some(gpui::red()),
+                background_color: Some(gpui::yellow()),
+                underline: Some(UnderlineStyle {
+                    thickness: px(1.0),
+                    ..Default::default()
+                }),
+                strikethrough: Some(gpui::StrikethroughStyle {
+                    thickness: px(1.0),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            let cell = |selector: &'static str| {
+                div()
+                    .debug_selector(move || selector.into())
+                    .font_family("Inter Variable")
+                    .text_size(px(16.0))
+                    .line_height(LINE_HEIGHT)
+                    .whitespace_nowrap()
+            };
+            div()
+                .flex()
+                .flex_col()
+                .items_start()
+                .child(cell("plain").child(typeset(FOX)))
+                .child(cell("bold").child(typeset(FOX).with_highlights([(4..15, bold)])))
+                .child(
+                    cell("decorated")
+                        .w(px(140.0))
+                        .truncate()
+                        .child(typeset(FOX).with_highlights([(4..9, bold), (10..15, decorated)])),
+                )
+        },
+    );
+}
+
+#[test]
+fn element_shapes_and_paints_highlighted_runs() {
+    let parley = backend();
+    let mut cx =
+        TestAppContext::build_with_text_system(TestDispatcher::new(0), None, parley.clone());
+    cx.update(|cx| install(parley.clone(), cx));
+    let visual = cx.add_empty_window();
+    draw_styled(visual);
+    let plain = visual.debug_bounds("plain").unwrap().size;
+    let bold = visual.debug_bounds("bold").unwrap().size;
+    assert!(bold.width > plain.width, "bold highlight reaches shaping");
+    assert_eq!(bold.height, plain.height);
+    assert_eq!(
+        visual.debug_bounds("decorated").unwrap().size,
+        size(px(140.0), LINE_HEIGHT),
+        "decorated, truncated cell paints without errors"
+    );
+    // Without an engine the same highlights render through StyledText.
+    let mut cx = TestAppContext::build_with_text_system(
+        TestDispatcher::new(0),
+        None,
+        backend() as Arc<dyn gpui::PlatformTextSystem>,
+    );
+    let visual = cx.add_empty_window();
+    draw_styled(visual);
+    let fallback = visual.debug_bounds("bold").unwrap().size;
+    assert!(fallback.width > visual.debug_bounds("plain").unwrap().size.width);
 }

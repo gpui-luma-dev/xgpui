@@ -108,9 +108,17 @@ to screen readers as a label, as with `gpui::Text`.
   global), bounded by a least-recently-used policy.
 - **Fallback:** without `install`, it renders as plain GPUI text.
 
-Not yet supported: per-run styles (highlights, links), underline/strikethrough,
-background color, selection and editing. Plain GPUI text under this backend uses
-the flat-line path, which rejects right-to-left text; use `typeset()` for it.
+- **Mixed styles:** `.with_highlights([(range, HighlightStyle)])` restyles byte
+  ranges over the inherited style, and `.with_runs(Vec<TextRun>)` replaces it,
+  as on `StyledText`. Runs may change font family, weight, style, features and
+  variations (shaped per run), color, background, underline and strikethrough.
+  Truncated text maps back to its source runs, so styles follow the kept text and
+  the affix takes its neighbor's style. Decorations use GPUI's own placement.
+  Runs share the inherited font size, and weights and styles need real faces.
+
+Not yet supported: selection, editing and interactive ranges (links).
+Plain GPUI text under this backend uses the flat-line path, which rejects
+right-to-left text; use `typeset()` for it.
 
 ## Color emoji
 

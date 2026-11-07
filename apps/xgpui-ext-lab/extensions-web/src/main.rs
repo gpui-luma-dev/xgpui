@@ -140,7 +140,7 @@ fn launch() -> anyhow::Result<()> {
     let mut parley_text = None;
     let app = if parley || font_controls {
         let mut fonts = parley::FontContext::new();
-        for data in [PLEX, paragraph::FONTS[0], paragraph::FONTS[1]] {
+        for data in std::iter::once(PLEX).chain(paragraph::FONTS) {
             fonts
                 .collection
                 .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);

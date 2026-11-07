@@ -23,12 +23,24 @@ use std::{cell::RefCell, hint::black_box, sync::Arc};
 #[cfg(target_family = "wasm")]
 use web_time::Instant;
 
-pub const FONTS: [&[u8]; 2] = [
+/// Fonts the paragraph panel needs beyond the shared samples: right-to-left
+/// scripts and real Plex weights/styles for mixed-style text (synthetic bold and
+/// italic are unsupported).
+pub const FONTS: [&[u8]; 5] = [
     include_bytes!(
         "../../../../extensions/crates/xgpui-parley/tests/fonts/NotoSansArabic.ttf"
     ),
     include_bytes!(
         "../../../../extensions/crates/xgpui-parley/tests/fonts/NotoSansHebrew.ttf"
+    ),
+    include_bytes!(
+        "../../../../gpui/crates/gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-SemiBold.ttf"
+    ),
+    include_bytes!(
+        "../../../../gpui/crates/gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Italic.ttf"
+    ),
+    include_bytes!(
+        "../../../../gpui/crates/gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-SemiBoldItalic.ttf"
     ),
 ];
 const TEXTS: [(&str, &str); 4] = [
@@ -63,6 +75,9 @@ const CELLS: [&str; 4] = [
     "office אבג 123 مرحبا 🎉 — mixed cell label 😀",
 ];
 const CELL_WIDTH: f32 = 150.0;
+/// Mixed-style sample. Hebrew and Arabic come from regular-only Noto faces, so
+/// they get color, background and underline but no weight or italic changes.
+const STYLED: &str = "Search hits for report in שלום עולם and مرحبا: open the link. Old price 40 € now 32 €.";
 const TOOLTIP: &str = "Tooltips wrap within a maximum width: שלום עולם 👋, مرحبا بالعالم 🌍, and Latin text share one paragraph ✅.";
 /// Content languages in button order; `None` leaves the language unspecified.
 const LANGUAGES: [Option<&str>; 5] = [None, Some("ar"), Some("fa"), Some("ur"), Some("he")];
@@ -598,6 +613,61 @@ impl ParagraphLab {
             .child(self.text(label))
     }
 
+    /// [`STYLED`] with a highlight for each style the element supports.
+    fn styled(&self) -> Typeset {
+        let range = |word: &str| {
+            let start = STYLED.find(word).unwrap();
+            start..start + word.len()
+        };
+        let style = |configure: fn(&mut gpui::HighlightStyle)| {
+            let mut style = gpui::HighlightStyle::default();
+            configure(&mut style);
+            style
+        };
+        self.typeset(STYLED).with_highlights([
+            (range("hits"), style(|s| s.font_weight = Some(gpui::FontWeight::SEMIBOLD))),
+            (
+                range("report"),
+                style(|s| {
+                    s.background_color = Some(rgb(0xfde68a).into());
+                    s.color = Some(rgb(0x111827).into());
+                }),
+            ),
+            (range("שלום"), style(|s| s.color = Some(rgb(0x7dd3fc).into()))),
+            (
+                range("مرحبا"),
+                style(|s| s.background_color = Some(rgb(0x14532d).into())),
+            ),
+            (
+                range("link"),
+                style(|s| {
+                    s.color = Some(rgb(0x93c5fd).into());
+                    s.underline = Some(gpui::UnderlineStyle {
+                        thickness: px(1.0),
+                        ..Default::default()
+                    });
+                }),
+            ),
+            (
+                range("40 €"),
+                style(|s| {
+                    s.color = Some(rgb(0x9ca3af).into());
+                    s.strikethrough = Some(gpui::StrikethroughStyle {
+                        thickness: px(1.0),
+                        ..Default::default()
+                    });
+                }),
+            ),
+            (
+                range("32 €"),
+                style(|s| {
+                    s.font_weight = Some(gpui::FontWeight::SEMIBOLD);
+                    s.font_style = Some(gpui::FontStyle::Italic);
+                }),
+            ),
+        ])
+    }
+
     /// One `typeset()` element with the panel's direction and language.
     fn typeset(&self, text: &'static str) -> xgpui_parley::Typeset {
         let options = self.options();
@@ -686,6 +756,31 @@ impl ParagraphLab {
             .child(self.text(ui.typeset_note))
             .child(self.text(ui.chrome_note))
             .child(table)
+            .child(self.text(ui.mixed_styles))
+            .child(
+                self.row()
+                    .flex_wrap()
+                    .items_start()
+                    .gap_3()
+                    .child(
+                        div()
+                            .debug_selector(|| "typeset-styled".into())
+                            .max_w(px(360.0))
+                            .p_2()
+                            .rounded_md()
+                            .bg(rgb(0x0b1220))
+                            .child(self.styled()),
+                    )
+                    .child(
+                        div()
+                            .debug_selector(|| "typeset-styled-cell".into())
+                            .w(px(240.0))
+                            .px_1()
+                            .bg(rgb(0x1f2937))
+                            .truncate()
+                            .child(self.styled()),
+                    ),
+            )
             .child(
                 // Wrap instead of shrinking: typeset() reports a real min-content
                 // width and would otherwise narrow first.
@@ -707,12 +802,18 @@ mod tests {
     #[test]
     fn paragraph_lab_click_drag_visual_keys_and_width_controls() -> Result<()> {
         let mut fonts = parley::FontContext::new();
-        for data in [crate::samples::PLEX, FONTS[0], FONTS[1]] {
+        for data in std::iter::once(crate::samples::PLEX).chain(FONTS) {
             fonts
                 .collection
                 .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
         }
         let backend = Arc::new(xgpui_parley::ParleyTextSystem::new(fonts, "IBM Plex Sans")?);
+        // Every label, weight and style must shape: record any rejection.
+        let errors = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        backend.set_layout_error_handler({
+            let errors = errors.clone();
+            Arc::new(move |error| errors.lock().unwrap().push(format!("{error:#}")))
+        });
         let mut cx =
             TestAppContext::build_with_text_system(TestDispatcher::new(0), None, backend.clone());
         let window = cx.open_window(size(px(580.0), px(1000.0)), |_, cx| {
@@ -759,6 +860,13 @@ mod tests {
         let clamp = visual.debug_bounds("typeset-clamp").unwrap();
         assert!(clamp.size.height < tooltip.size.height, "clamped to two lines");
         assert!(clamp.size.height > line, "two lines");
+        // Mixed styles wrap in their box and truncate in a one-line cell.
+        let styled = visual.debug_bounds("typeset-styled").unwrap();
+        assert!(styled.size.width <= px(360.0) && styled.size.height > line * 2.0);
+        let styled_cell = visual.debug_bounds("typeset-styled-cell").unwrap();
+        assert_eq!(styled_cell.size.width, px(240.0));
+        let errors_now = errors.lock().unwrap().clone();
+        assert!(errors_now.is_empty(), "layout errors: {errors_now:?}");
         let click = bounds.origin + point(px(1.0), px(12.0));
         visual.simulate_click(click, Modifiers::default());
         visual.simulate_keystrokes("right shift-right");

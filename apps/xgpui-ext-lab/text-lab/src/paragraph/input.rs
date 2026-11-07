@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn paragraph_ime_edits_utf16_and_wrapped_candidate_geometry() -> Result<()> {
         let mut fonts = parley::FontContext::new();
-        for data in [crate::samples::PLEX, FONTS[0], FONTS[1]] {
+        for data in std::iter::once(crate::samples::PLEX).chain(FONTS) {
             fonts
                 .collection
                 .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);

@@ -178,7 +178,9 @@ div().w(px(150.0)).truncate().child(
 
 It inherits GPUI's text style, including `white_space`, all three
 `text_overflow` modes, `line_clamp` and `text_align` (Left/Right act as
-start/end). Wrapping text reports min-content and max-content widths, as in
+start/end). Mixed styles use GPUI's model: `with_highlights` and `with_runs`, as
+on `StyledText`, including per-run fonts, colors, backgrounds, underlines and
+strikethroughs; styles follow truncated text. Wrapping text reports min-content and max-content widths, as in
 taffy's Parley example. Truncation is logical and verified by reshaping. Shapes,
 reflows and fits are cached in the engine. Without `install` it renders as GPUI
 text. Under this backend, plain GPUI text uses the left-to-right-only flat-line

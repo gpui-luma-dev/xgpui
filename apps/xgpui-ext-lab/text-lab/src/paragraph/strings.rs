@@ -35,6 +35,8 @@ pub struct UiStrings {
     pub cut_end: &'static str,
     pub cut_start: &'static str,
     pub cut_middle: &'static str,
+    /// Heading for the mixed-style samples.
+    pub mixed_styles: &'static str,
     /// Labels for the editable paragraph samples, in sample order.
     pub samples: [&'static str; 4],
 }
@@ -70,6 +72,7 @@ pub const UI: [UiStrings; 5] = [
         cut_end: "end",
         cut_start: "start",
         cut_middle: "middle",
+        mixed_styles: "Mixed styles: with_highlights() sets weight, italic, color, background, underline and strikethrough per range.",
         samples: [
             "LTR base / mixed scripts",
             "RTL base / Latin and numbers",
@@ -107,6 +110,7 @@ pub const UI: [UiStrings; 5] = [
         cut_end: "סוף",
         cut_start: "התחלה",
         cut_middle: "אמצע",
+        mixed_styles: "סגנונות מעורבים: with_highlights()‎ קובע משקל, נטוי, צבע, רקע, קו תחתון וקו חוצה לכל טווח.",
         samples: [
             "בסיס LTR / כתבים מעורבים",
             "בסיס RTL / לטינית ומספרים",
@@ -144,6 +148,7 @@ pub const UI: [UiStrings; 5] = [
         cut_end: "النهاية",
         cut_start: "البداية",
         cut_middle: "الوسط",
+        mixed_styles: "أنماط مختلطة: يحدد with_highlights()‎ الوزن والميل واللون والخلفية والتسطير والشطب لكل نطاق.",
         samples: [
             "أساس LTR / نصوص مختلطة",
             "أساس RTL / لاتينية وأرقام",
@@ -181,6 +186,7 @@ pub const UI: [UiStrings; 5] = [
         cut_end: "پایان",
         cut_start: "آغاز",
         cut_middle: "میانه",
+        mixed_styles: "سبک‌های آمیخته: with_highlights()‎ وزن، کج، رنگ، پس‌زمینه، زیرخط و خط‌خوردگی را برای هر بازه تعیین می‌کند.",
         samples: [
             "پایهٔ LTR / خط‌های آمیخته",
             "پایهٔ RTL / لاتین و اعداد",
@@ -218,6 +224,7 @@ pub const UI: [UiStrings; 5] = [
         cut_end: "اختتام",
         cut_start: "آغاز",
         cut_middle: "درمیان",
+        mixed_styles: "ملے جلے انداز: with_highlights()‎ ہر حصے کے لیے وزن، ترچھا پن، رنگ، پس منظر، زیر خط اور کاٹ کی لکیر مقرر کرتا ہے۔",
         samples: [
             "LTR بنیاد / مخلوط رسم الخط",
             "RTL بنیاد / لاطینی اور اعداد",
