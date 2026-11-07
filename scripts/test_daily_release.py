@@ -39,7 +39,8 @@ xgpui = "1.1.0"
 '''
         updated = release.rewrite_manifest(text, {'xgpui': '1.1.1'})
         self.assertIn('external = "1.1.0"', updated)
-        self.assertEqual(updated.count('"1.1.1"'), 3)
+        self.assertEqual(updated.count('"1.1.1"'), 1)
+        self.assertIn('version = "1.1.0", path', updated)
 
     def test_dependency_closure_and_docs_exclusion(self):
         rows = [dict(name='a', version='1.0.0', manifest='crates/a/Cargo.toml', dependencies=[]),
@@ -49,10 +50,22 @@ xgpui = "1.1.0"
             if args[0] == 'diff':
                 return 'crates/a/src/lib.rs\ndocs/WHATS_NEW.md'
             return SHA
-        with patch.object(release, 'git', side_effect=fake_git), patch.object(release, 'release_plan', return_value={'packages': rows}):
+        with patch.object(release, 'git', side_effect=fake_git), patch.object(release, 'release_plan', return_value={'packages': rows}), \
+             patch.object(Path, 'read_text', return_value='[dependencies]\na = "=1.0.0"\n'):
             plan = release.prepare(Path('/unused'), 'release-baseline')
         self.assertEqual([(r['name'], r['new']) for r in plan['packages']], [('a', '1.0.1'), ('b', '0.2.1')])
-        self.assertEqual(plan['packages'][1]['reason'], 'dependency version changes')
+        self.assertEqual(plan['packages'][1]['reason'], 'dependency requirement changes')
+
+    def test_compatible_requirement_avoids_release_cascade(self):
+        rows = [dict(name='a', version='1.0.0', manifest='crates/a/Cargo.toml', dependencies=[]),
+                dict(name='b', version='1.0.0', manifest='crates/b/Cargo.toml', dependencies=['a'])]
+        def fake_git(root, *args):
+            return 'crates/a/src/lib.rs' if args[0] == 'diff' else SHA
+        with patch.object(release, 'git', side_effect=fake_git), \
+             patch.object(release, 'release_plan', return_value={'packages': rows}), \
+             patch.object(Path, 'read_text', return_value='[dependencies]\na = "1.0.0"\n'):
+            plan = release.prepare(Path('/unused'), 'release-baseline')
+        self.assertEqual([r['name'] for r in plan['packages']], ['a'])
 
     def test_existing_tag_cannot_be_retargeted(self):
         with patch.object(release, 'git', side_effect=[SHA, '2026-10-30T11:00:00+00:00', 'b' * 40 + '\trefs/tags/release-2026-10-30-aaaaaaaaaaaa']), self.assertRaisesRegex(ValueError, 'different commit'):
@@ -70,7 +83,7 @@ class PreparationEdgeTests(unittest.TestCase):
     def test_unsupported_multiline_pin_stops_preparation(self):
         text = '[dependencies.gpui]\npackage = "xgpui"\nversion = "1.1.0"\n'
         with self.assertRaisesRegex(ValueError, 'Unsupported internal'):
-            release.rewrite_manifest(text, {'xgpui': '1.1.1'})
+            release.rewrite_manifest(text, {'xgpui': '2.0.0'})
 
     def test_commit_date_stabilizes_retry_tag(self):
         original = DailyReleaseTests().report()

@@ -68,7 +68,7 @@ derive_more = { version = "2.1", features = ["deref", "deref_mut", "from_str", "
 etagere = { version = "0.2" }
 futures = { version = "0.3.34" }
 futures-concurrency = { version = "7.7.1", optional = true }
-gpui_macros = { package = "xgpui-macros", version = "=1.0.2" }
+gpui_macros = { package = "xgpui-macros", version = "1.0.2" }
 gpui_shared_string = { package = "gpui-shared-string-gpui-unofficial", version = "=1.27.0" }
 http_client = { package = "http-client-gpui-unofficial", version = "=1.27.0" }
 image = { version = "0.25.1", default-features = false, features = [

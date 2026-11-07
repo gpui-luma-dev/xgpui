@@ -10,6 +10,7 @@ import tomllib
 
 from prepare_registry_release import release_plan
 from publish_preflight import dependencies
+from internal_requirements import matches
 
 
 def git(root, *args):
@@ -31,9 +32,21 @@ def prepare(root, baseline=None):
     if changed & {'scripts/release-packages.json', 'scripts/publish_registry_release.py',
                   'scripts/prepare_registry_release.py', 'scripts/publish_preflight.py', 'upstream.json'}:
         selected.update({r['name']: 'shared release inputs changed' for r in plan['packages']})
+    by_name = {row['name']: row for row in plan['packages']}
+    def needs_requirement_update(row):
+        document = tomllib.loads((root / row['manifest']).read_text())
+        for dep in dependencies(document):
+            if dep['package'] not in selected or not dep.get('version'):
+                continue
+            old = by_name[dep['package']]['version']
+            major, minor, patch = map(int, old.split('.'))
+            if not matches(dep['version'], f'{major}.{minor}.{patch + 1}'):
+                return True
+        return False
     while True:
-        added = {r['name']: 'dependency version changes' for r in plan['packages']
-                 if r['name'] not in selected and set(r['dependencies']) & selected.keys()}
+        added = {r['name']: 'dependency requirement changes' for r in plan['packages']
+                 if r['name'] not in selected and set(r['dependencies']) & selected.keys()
+                 and needs_requirement_update(r)}
         if not added:
             break
         selected.update(added)
@@ -69,7 +82,9 @@ def rewrite_manifest(text, versions):
                 alias, value = match.groups()
                 identity = re.search(r'package\s*=\s*"([^"]+)"', value)
                 name = identity[1] if identity else alias
-                if name in versions:
+                if name in versions and (value.startswith('"') or 'version' in value) and not matches(
+                        (re.search(r'version\s*=\s*"([^"]+)"', value)[1]
+                         if 'version' in value else value.strip().strip('"')), versions[name]):
                     if value.startswith('"'):
                         line = re.sub(r'(=\s*)"([=~^]?)[^"]+"', lambda m: m[1] + '"' + m[2] + versions[name] + '"', line, count=1)
                     elif 'version' in value:
@@ -82,7 +97,7 @@ def rewrite_manifest(text, versions):
     specs = list(dependencies(parsed)) + list(dependencies(parsed.get('workspace', {})))
     for spec in specs:
         if spec['package'] in versions and spec.get('version'):
-            if spec['version'].lstrip('=~^') != versions[spec['package']]:
+            if not matches(spec['version'], versions[spec['package']]):
                 raise ValueError('Unsupported internal dependency syntax; edit manually: ' + spec['alias'])
     return updated
 

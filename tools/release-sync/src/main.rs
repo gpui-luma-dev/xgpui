@@ -258,6 +258,36 @@ fn localize_platform_development_dependency(item: &mut Item) {
     }
 }
 
+// Internal requirements deliberately use full stable versions. Reject unfamiliar
+// syntax rather than silently changing a maintainer's compatibility contract.
+fn internal_requirement_matches(requirement: &str, version: &str) -> Result<bool> {
+    fn parse(value: &str) -> Result<[u64; 3]> {
+        let parts = value
+            .split('.')
+            .map(str::parse)
+            .collect::<std::result::Result<Vec<u64>, _>>()?;
+        parts
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Expected full stable version: {value}"))
+    }
+    let minimum = requirement
+        .strip_prefix('=')
+        .or_else(|| requirement.strip_prefix('^'))
+        .or_else(|| requirement.strip_prefix('~'))
+        .unwrap_or(requirement);
+    let base = parse(minimum)?;
+    let candidate = parse(version)?;
+    if requirement.starts_with('=') {
+        return Ok(candidate == base);
+    }
+    let boundary = if requirement.starts_with('~') {
+        1
+    } else {
+        base.iter().position(|part| *part != 0).unwrap_or(2)
+    };
+    Ok(candidate >= base && candidate[..=boundary] == base[..=boundary])
+}
+
 fn externalize(item: &mut Item, registry: &Names, version: &str, remove_paths: bool) -> Result<()> {
     if let Some(table) = item.as_table_like_mut() {
         for (key, value) in table.iter_mut() {
@@ -277,8 +307,9 @@ fn externalize(item: &mut Item, registry: &Names, version: &str, remove_paths: b
                             .or_else(|| registry.values().find(|name| **name == package))
                         {
                             if dependency.is_str() {
+                                let current = dependency.as_str().unwrap().to_owned();
                                 let mut options = toml_edit::InlineTable::new();
-                                options.insert("version", Value::from(format!("={version}")));
+                                options.insert("version", Value::from(current));
                                 *dependency = Item::Value(Value::InlineTable(options));
                             }
                             let options = dependency
@@ -290,7 +321,20 @@ fn externalize(item: &mut Item, registry: &Names, version: &str, remove_paths: b
                                 }
                             }
                             options.insert("package", toml_edit::value(published.as_str()));
-                            options.insert("version", toml_edit::value(format!("={version}")));
+                            let requirement = if remove_paths {
+                                format!("={version}")
+                            } else {
+                                let current = options.get("version").and_then(Item::as_str);
+                                match current {
+                                    Some(requirement)
+                                        if internal_requirement_matches(requirement, version)? =>
+                                    {
+                                        requirement.trim_start_matches('=').to_owned()
+                                    }
+                                    _ => version.to_owned(),
+                                }
+                            };
+                            options.insert("version", toml_edit::value(requirement));
                         }
                     }
                 }
@@ -1031,6 +1075,31 @@ mod tests {
     }
 
     #[test]
+    fn compatible_internal_minimum_survives_normalization() {
+        let mut manifest = "[package]\nname='xgpui-color'\nversion='1.0.0'\n[dependencies]\ncore={package='xgpui',version='3.0.0'}\n".parse::<DocumentMut>().unwrap();
+        let release = BTreeMap::from([("gpui".into(), "xgpui".into())]);
+        let versions = BTreeMap::from([("xgpui".into(), "3.1.0".into())]);
+        prepare_manifest(
+            &mut manifest,
+            &Names::new(),
+            "1.27.0",
+            &release,
+            "1.0.0",
+            &versions,
+        )
+        .unwrap();
+        assert_eq!(
+            manifest["dependencies"]["core"]["version"].as_str(),
+            Some("3.0.0")
+        );
+        assert!(internal_requirement_matches("0.4.0", "0.4.9").unwrap());
+        assert!(!internal_requirement_matches("0.4.0", "0.5.0").unwrap());
+        assert!(!internal_requirement_matches("0.0.3", "0.0.4").unwrap());
+        assert!(!internal_requirement_matches("~2.2.0", "2.3.0").unwrap());
+        assert!(internal_requirement_matches(">=2", "2.2.0").is_err());
+    }
+
+    #[test]
     fn extension_versions_are_independent_of_framework_dependencies() {
         let release = BTreeMap::from([
             ("gpui".into(), "xgpui".into()),
@@ -1054,7 +1123,7 @@ mod tests {
         assert_eq!(manifest["package"]["version"].as_str(), Some("0.2.0"));
         assert_eq!(
             manifest["dependencies"]["gpui"]["version"].as_str(),
-            Some("=1.0.0")
+            Some("1.0.0")
         );
         assert_eq!(
             manifest["dependencies"]["gpui"]["path"].as_str(),
@@ -1062,7 +1131,7 @@ mod tests {
         );
         assert_eq!(
             manifest["dependencies"]["xgpui-color"]["version"].as_str(),
-            Some("=0.2.0")
+            Some("0.2.0")
         );
         let first = manifest.to_string();
         prepare_manifest(

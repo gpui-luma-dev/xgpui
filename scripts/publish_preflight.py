@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 import tomllib
 
+from internal_requirements import matches
+
 
 KINDS = ("dependencies", "build-dependencies", "dev-dependencies")
 
@@ -87,9 +89,9 @@ def audit(root):
                 development_graph[name].add(dep["package"])
                 if dep["kind"] != "dev-dependencies":
                     graph[name].add(dep["package"])
-                # Registry-bound internal edges use exact version pins.
+                # Registry-bound internal requirements must admit the local candidate.
                 wanted = release.get("versions", {}).get(dep["package"], release["version"])
-                if not local_dev and dep.get("version") != "=" + wanted:
+                if not local_dev and not matches(dep.get("version", ""), wanted):
                     problems.append(f"internal-version-mismatch:{context}")
                 if "path" in dep and (path.parent / dep["path"] / "Cargo.toml").resolve() != manifests[dep["package"]].resolve():
                     problems.append(f"internal-path-mismatch:{context}")

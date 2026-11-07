@@ -70,16 +70,27 @@ class ReleaseCheckTests(unittest.TestCase):
         self.assertEqual(result['counts']['unchanged'], 3)
         self.assertFalse(result['uploads_enabled'])
 
-    def test_changed_crate_and_dependent_need_bumps_including_local_edits(self):
+    def test_changed_crate_needs_bump_before_dependency_requirements_change(self):
         self.edit()
         result = self.check()
         self.assertFalse(result['version_preflight_passed'])
         rows = {r['name']: r for r in result['packages']}
         self.assertEqual(rows['a']['status'], 'version-bump-required')
         self.assertEqual(rows['a']['changed_files'], ['crates/a/src/lib.rs'])
-        self.assertEqual(rows['b']['status'], 'version-bump-required')
-        self.assertEqual(rows['b']['dependency_changes'], ['a'])
+        self.assertEqual(rows['b']['status'], 'unchanged')
+        self.assertEqual(rows['b']['dependency_changes'], [])
         self.assertEqual(rows['c']['status'], 'unchanged')
+
+    def test_compatible_dependency_does_not_force_a_dependent_release(self):
+        path = self.root / 'crates/b/Cargo.toml'
+        path.write_text(path.read_text().replace('=1.0.0', '1.0.0'))
+        self.commit()
+        self.git('tag', '-f', 'release-epoch')
+        self.edit()
+        self.bump('a', '1.0.1')
+        rows = {r['name']: r for r in self.check()['packages']}
+        self.assertEqual(rows['b']['status'], 'unchanged')
+        self.assertEqual(rows['b']['pin_updates'], [])
 
     def test_bumps_and_matching_pins_make_changes_eligible(self):
         self.edit()
