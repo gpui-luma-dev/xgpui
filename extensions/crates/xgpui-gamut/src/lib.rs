@@ -10,7 +10,9 @@ use anyhow::{Result, ensure};
 use gpui::{CustomContent, DevicePixels, Size};
 use std::any::Any;
 
+// Counted by the Metal and DirectX 11 producers only.
 #[cfg(test)]
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 static PRODUCER_ALLOCATIONS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
@@ -28,6 +30,11 @@ mod metal;
 /// Preparation allocates a texture; output caching/pooling is not provided yet.
 #[derive(Debug)]
 pub struct WideColor {
+    // Read by the Metal, DirectX 11 and instanced producers.
+    #[cfg_attr(
+        not(any(target_os = "macos", target_os = "windows", feature = "instanced")),
+        allow(dead_code)
+    )]
     rgba: [f32; 4],
 }
 impl WideColor {

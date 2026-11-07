@@ -73,6 +73,10 @@ pub(crate) struct Reservation {
     bytes: usize,
 }
 impl Reservation {
+    #[cfg_attr(
+        not(any(target_os = "macos", target_os = "windows", feature = "wgpu")),
+        allow(dead_code)
+    )]
     pub(crate) fn uploads(&self) -> Arc<UploadScheduler> {
         self.pool.uploads.clone()
     }
