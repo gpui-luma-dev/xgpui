@@ -23,7 +23,7 @@ unicode-bidi = "0.3"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 naga = { version = "30.0.1", optional = true, features = ["wgsl-in", "msl-out", "spv-out", "hlsl-out"] }
-gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", optional = true , package = "xgpui-wgpu", version = "=2.1.0" }
+gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", optional = true , package = "xgpui-wgpu", version = "=2.2.0" }
 bytemuck = { version = "1", optional = true, features = ["derive"] }
 gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "=3.0.0" }
 refineable = { package = "refineable-gpui-unofficial", version = "=1.27.0" }
@@ -36,7 +36,7 @@ objc2-metal = { version = "0.3", default-features = false, features = ["MTLComma
 
 [dev-dependencies]
 image = { version = "0.25.1", default-features = false }
-gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", features = ["test-support"] , package = "xgpui-wgpu", version = "=2.1.0" }
+gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", features = ["test-support"] , package = "xgpui-wgpu", version = "=2.2.0" }
 naga = { version = "30.0.1", features = ["wgsl-in", "spv-out", "hlsl-out"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

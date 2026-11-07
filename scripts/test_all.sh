@@ -225,6 +225,10 @@ suite paints-selftest all "bash .github/paints/run_selftest.sh"
 suite release-sync all "cargo_capture test --locked --manifest-path tools/release-sync/Cargo.toml {cargo}"
 # Match native CI's compilation gate: platform libraries with release features.
 suite native-libraries all "cargo_capture check --locked --features full-capture,runtime-shaders {cargo}"
+# Compile the browser backend separately: the lab's
+# fragile-send-sync-non-atomic-wasm feature masks invalid Send/Sync bounds (#166).
+# Clear inherited native linker flags; requires the wasm32-unknown-unknown target.
+suite wgpu-wasm-compile all "unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS; cargo_capture check --locked --config .cargo/validation.toml -p xgpui-wgpu --lib --target wasm32-unknown-unknown {cargo}"
 # Platform benchmarks compile in the shared build (bench-support, test-support).
 suite gpui-bench-build all "built xgpui-platform bench:atlas_upload,bench:focus_cleanup,bench:inspector_render,bench:randomized_element_tree"
 # Isolated: media without optional GPU backends.
