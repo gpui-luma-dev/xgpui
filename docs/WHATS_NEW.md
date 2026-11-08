@@ -49,8 +49,8 @@ xgpui_parley::typeset("تقرير الإيرادات").rtl()
 ### Release scope
 
 Parley **0.5.0** and wgpu **2.2.0** are already prepared. Thirteen other crates
-need proposed patch bumps for packaged fixes or changed dependency requirements;
-**macros 1.0.2 and color 0.3.1 are unchanged**. Version review and registry
+now have approved patch bumps for packaged fixes or changed dependency requirements;
+**macros 1.0.2 and color 0.3.1 are unchanged**. Final API review and registry
 verification are still required; these updates are not yet published.
 
 ## November 5, 2026 — variable fonts

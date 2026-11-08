@@ -8,13 +8,13 @@ Scope: CI/test-runner reliability, Rust release tooling, browser compatibility,
 and very-alpha Parley paragraph/typeset/emoji work. See [What's new](../WHATS_NEW.md).
 No new upstream sync or core text descriptor migration is included.
 
-## Version proposal — not applied
+## Approved version plan — applied
 
-Parley and wgpu are already bumped on main. The remaining proposals cover actual
+Parley and wgpu are already bumped on main. The approved patch bumps cover actual
 packaged changes, primarily compatible dependency requirements replacing exact
 pins. A dependency update does not automatically require a major bump.
 
-| Crate | Published | Proposed | Reason |
+| Crate | Published | Approved | Reason |
 | --- | --- | --- | --- |
 | xgpui | 3.0.0 | 3.0.1 | Compatible macros requirement; core Rust code unchanged. |
 | xgpui-apple | 4.0.0 | 4.0.1 | Compatible internal dependency requirements. |
@@ -34,8 +34,10 @@ pins. A dependency update does not automatically require a major bump.
 | xgpui-color | 0.3.1 | unchanged | No packaged changes since the completed release. |
 | xgpui-macros | 1.0.2 | unchanged | No packaged changes since the completed release. |
 
-`xgpui-shell` and the lab remain unpublished. No versions are changed by this
-review/documentation PR, and nothing is merged, tagged, published or deployed.
+`xgpui-shell` and the lab remain unpublished. The 13 approved patch bumps are applied in this PR, with lockfile identities,
+exact consumer requirements and release metadata refreshed. Compatible dependency
+minimums remain unchanged where they already accept the new versions. Macros and
+color are not bumped. Nothing is merged, tagged, published or deployed.
 
 ## Non-extension GPUI public API review
 
@@ -62,8 +64,11 @@ approve it for publication.
   previous/candidate version table plus verification prose. Its initial 15-bump
   result was therefore overbroad. Use the explicit completed baseline until the
   history parser supports that release-note format. This PR does not alter the parser.
-- Final registry payload/build checks must follow approved version updates.
-  A version audit alone does not establish publish readiness.
+- After the approved updates, the explicit-baseline release audit passes: 15
+  unpublished candidate versions, 2 unchanged crates, no missing bumps or pin
+  updates. External dependency identities in tracked lockfiles are unchanged.
+- Registry payload verification is rerun on this PR; publish-time builds remain
+  separate. A version audit alone does not establish publish readiness.
 - Parley library regressions: **71 passed, 1 ignored**, including paragraph,
   typeset/font-generation, hard-break and color-emoji tests (macOS maintenance host).
 - Rust release-tooling unit/integration/CLI tests passed.
