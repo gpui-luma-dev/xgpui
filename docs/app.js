@@ -33,7 +33,7 @@ function overview() {
   return header('XGPUI / Extensions / GPUI','GPUI architecture and extensions','A source map of GPUI: responsibilities, runtime boundaries and downstream extensions.')+
     '<p class="muted">Upstream source baseline: gpui-unofficial '+escapeHtml(data.provenance.ref)+'. XGPUI packages use independent versions.</p>'+
     '<section aria-label="Why XGPUI?"><h2>Why XGPUI?</h2><p>XGPUI adds richer graphics, text and rendering features through opt-in extensions and small integration seams, keeping changes to GPUI’s public API focused and minimal. The aim is to make those features easier to evolve while keeping upstream updates from <a href="https://github.com/zed-industries/zed">Zed</a> and <a href="https://github.com/gpui-archipelago/gpui-unofficial">gpui-unofficial</a> straightforward to adopt.</p></section>'+liveDemoOverview()+
-    '<nav class="overview-guides" aria-label="Start reading"><h2>Start here</h2><dl><dt><a href="#whats-new">What’s new →</a></dt><dd>Variable fonts, OpenType inspection, core 3.0 migration and recent fixes.</dd><dt><a href="#local-development">Local Development →</a></dt><dd>Build on Windows, Linux and macOS; run native labs and preview the docs.</dd><dt><a href="#releasing">Releasing XGPUI →</a></dt><dd>Prepare versions, validate changes, review and publish a release.</dd><dt><a href="#extension-lab">xgpui-ext-lab →</a></dt><dd>Unpublished labs, benchmarks and browser demos; what they contain and how to run them.</dd><dt><a href="#color-workflows">Color &amp; wide gamut →</a></dt><dd>Interpret pixels, choose storage, enable native wide output and test with browser or desktop labs.</dd><dt><a href="#gpui-1.27-migration">GPUI 1.27 migration →</a></dt><dd>Breaking XGPUI API changes, upstream release references and migration requirements.</dd><dt><a href="#font-controls">Fonts &amp; OpenType →</a></dt><dd>Set variable-font axes, inspect features, run the Wasm font lab and migrate to core 3.0.</dd><dt><a href="#architecture">Architecture →</a></dt><dd>Ownership, element lifecycle and renderer contracts.</dd><dt><a href="#pipeline">Rendering pipeline →</a></dt><dd>Explore clipping, layers, primitive ordering and batches.</dd><dt><a href="#extensions">Extensions to GPUI →</a></dt><dd>Shader, wide-gamut, Parley and SVG APIs, integration and backend ownership.</dd></dl></nav>'+
+    '<nav class="overview-guides" aria-label="Start reading"><h2>Start here</h2><dl><dt><a href="#whats-new">What’s new →</a></dt><dd>Variable fonts, OpenType inspection, core 3.0 migration and recent fixes.</dd><dt><a href="#local-development">Local Development →</a></dt><dd>Build on Windows, Linux and macOS; run native labs and preview the docs.</dd><dt><a href="#releasing">Releasing XGPUI →</a></dt><dd>Prepare versions, validate changes, review and publish a release.</dd><dt><a href="#extension-lab">xgpui-ext-lab →</a></dt><dd>Unpublished labs, benchmarks and browser demos; what they contain and how to run them.</dd><dt><a href="#color-workflows">Color &amp; wide gamut →</a></dt><dd>Interpret pixels, choose storage, enable native wide output and test with browser or desktop labs.</dd><dt><a href="#gpui-1.27-migration">GPUI 1.27 migration →</a></dt><dd>Breaking XGPUI API changes, upstream release references and migration requirements.</dd><dt><a href="#font-controls">Fonts &amp; OpenType →</a></dt><dd>Set variable-font axes, inspect features, run the Wasm font lab and migrate to core 3.0.</dd><dt><a href="#extensions">Extensions to GPUI →</a></dt><dd>Shader, wide-gamut, Parley and SVG APIs, integration and backend ownership.</dd></dl></nav>'+
     '<section class="overview-reading"><h2>Rendering changes</h2><p>'+crateLink('gpui')+' → '+crateLink('gpui-platform')+' → platform implementation → '+crateLink('gpui-apple')+' / '+crateLink('gpui-wgpu')+'</p><p>Trace scene and window contracts, then surface formats, shaders and color handling in the selected renderer.</p></section>'+
     '<div class="crate-directory">'+groups.map(g=>'<section><h2>'+escapeHtml(g)+'</h2><dl>'+crates.filter(c=>notes[c.package].group===g).map(c=>'<dt>'+crateLink(c.package)+'</dt><dd>'+escapeHtml(notes[c.package].role)+'</dd>').join('')+'</dl></section>').join('')+'</div>';
 }
@@ -72,14 +72,13 @@ function renderInventory(c) {
   document.getElementById('next').onclick=()=>{page++;renderInventory(c);};
 }
 function render() {
-  stopPipeline();
   const route=parseRoute(location.hash);
   const c=crates.find(c=>c.package===route.pkg);
   page=0;
   const content=document.getElementById('content');
-  content.innerHTML=c?cratePage(c,route.tab):route.pkg?header('Not found','Unknown crate','Choose a captured crate from the navigation.'):isExtensionRoute(route.global)?extensionPage(route.global):route.global==='pipeline'?pipelinePage():route.global==='architecture'?architecturePage():route.global==='review'?review():overview();
+  content.innerHTML=c?cratePage(c,route.tab):route.pkg?header('Not found','Unknown crate','Choose a captured crate from the navigation.'):isExtensionRoute(route.global)?extensionPage(route.global):route.global==='review'?review():overview();
   window.enhanceCodeExamples?.(content);
-  const pageTitle=(c?short(c.package):isExtensionRoute(route.global)?extensionTitle(route.global):route.global==='pipeline'?'Rendering pipeline explorer':route.global==='architecture'?'Architecture overview':route.global==='review'?'API review roadmap':'');
+  const pageTitle=(c?short(c.package):isExtensionRoute(route.global)?extensionTitle(route.global):route.global==='review'?'API review roadmap':'');
   document.title=pageTitle?pageTitle+' · XGPUI - Extended GPUI':'XGPUI - Extended GPUI';
   sidebar();
   if(route.section && isExtensionRoute(route.global)) {
@@ -89,7 +88,6 @@ function render() {
     }
     target?.scrollIntoView?.();
   }
-  if(route.global==='pipeline' && !c && !route.pkg) bindPipeline();
   if(c && route.tab==='surface') {
     for(const id of ['api-search','api-kind','api-root']) document.getElementById(id).addEventListener('input',()=>{page=0;renderInventory(c);});
     renderInventory(c);
