@@ -79,8 +79,8 @@ export -f vulkan_validation
 vk="vulkan_validation || exit $prereq_status;"
 
 # Browser compile suites need the active toolchain's wasm32 standard library.
-# Checks the sysroot directly (works with or without rustup); Git Bash on
-# Windows needs the Windows sysroot path converted first.
+# Install it automatically with rustup when missing. Check the sysroot directly
+# so custom toolchains still work; Git Bash needs Windows paths converted first.
 wasm_target() {
   local sysroot
   sysroot=$(rustc --print sysroot 2>/dev/null) || {
@@ -91,8 +91,15 @@ wasm_target() {
     sysroot=$(cygpath -u "$sysroot")
   fi
   if [ ! -d "$sysroot/lib/rustlib/wasm32-unknown-unknown/lib" ]; then
-    echo "PREREQ: the wasm32-unknown-unknown target is not installed for $(rustc --version). Install it: rustup target add wasm32-unknown-unknown" >&2
-    return 1
+    echo "Installing missing wasm32-unknown-unknown target for $(rustc --version)..."
+    if ! command -v rustup >/dev/null 2>&1 || ! rustup target add wasm32-unknown-unknown; then
+      echo "PREREQ: could not install wasm32-unknown-unknown. Ensure rustup and network access are available, or install the target for the active rustc toolchain manually." >&2
+      return 1
+    fi
+    if [ ! -d "$sysroot/lib/rustlib/wasm32-unknown-unknown/lib" ]; then
+      echo "PREREQ: rustup did not install wasm32-unknown-unknown for the active rustc sysroot ($sysroot). Install it for this toolchain manually." >&2
+      return 1
+    fi
   fi
 }
 export -f wasm_target

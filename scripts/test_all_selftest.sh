@@ -240,6 +240,41 @@ run release-sync FAKE_WARNINGS=1 FAKE_CARGO_FAIL=--fake-arg
 check "captured Cargo failure remains a failure" [ "$status" -ne 0 ]
 check "warnings survive Cargo failure" has "Warnings: 2 unique" "$output"
 
+# WASM prerequisites bootstrap automatically, once for both browser checks.
+# Fake the toolchain so this never installs components on the developer's host.
+cat >"$fake/rustc" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = --print ]; then printf '%s\n' "$SELFTEST_SYSROOT"; else echo 'rustc selftest'; fi
+EOF
+cat >"$fake/rustup" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$SELFTEST_SYSROOT/install.log"
+[ "${FAKE_RUSTUP_FAIL:-0}" = 0 ] || exit 1
+[ "${FAKE_RUSTUP_NO_TARGET:-0}" = 0 ] || exit 0
+mkdir -p "$SELFTEST_SYSROOT/lib/rustlib/wasm32-unknown-unknown/lib"
+EOF
+chmod +x "$fake/rustc" "$fake/rustup"
+for host in Linux MINGW64_NT; do
+  sysroot="$tmp/sysroot-$host"
+  mkdir -p "$sysroot"
+  run wasm-compile FAKE_UNAME="$host" SELFTEST_SYSROOT="$sysroot"
+  check "$host installs missing WASM target and passes both suites" [ "$status" -eq 0 ]
+  check "$host installs WASM target only once" [ "$(wc -l <"$sysroot/install.log")" -eq 1 ]
+  check "$host installs the expected target" has_line 'target add wasm32-unknown-unknown' "$(cat "$sysroot/install.log")"
+  check "$host runs both WASM compile checks" [ "$(cargo_calls | wc -l)" -eq 2 ]
+  run wasm-compile FAKE_UNAME="$host" SELFTEST_SYSROOT="$sysroot"
+  check "$host reuses the installed target" [ "$(wc -l <"$sysroot/install.log")" -eq 1 ]
+done
+sysroot="$tmp/sysroot-failed"
+mkdir -p "$sysroot"
+run wasm-compile SELFTEST_SYSROOT="$sysroot" FAKE_RUSTUP_FAIL=1
+check "WASM installation failure fails the run" [ "$status" -ne 0 ]
+check "WASM installation failure is reported as PREREQ" has 'PREREQ wgpu-wasm-compile' "$output"
+check "WASM installation failure never invokes Cargo" [ -z "$(cargo_calls)" ]
+run wasm-compile SELFTEST_SYSROOT="$sysroot" FAKE_RUSTUP_NO_TARGET=1
+check "WASM installation verifies the active sysroot" has 'PREREQ wgpu-wasm-compile' "$output"
+check "wrong-toolchain installation never invokes Cargo" [ -z "$(cargo_calls)" ]
+
 if [ "$failures" -ne 0 ]; then
   echo "$failures runner self-test check(s) failed."
   exit 1
