@@ -3,8 +3,9 @@
 /// Desktop preferences exposed by the platform, independent of a particular toolkit.
 ///
 /// `None` means unavailable or unset, not an instruction to override an app's defaults.
-/// Linux reads supported Settings portal keys; other platforms currently return an empty
-/// snapshot. Color scheme and button placement retain their existing separate APIs.
+/// Linux reads Settings portal keys with optional native desktop fallbacks; other
+/// platforms currently return an empty snapshot. Color scheme and button placement
+/// retain their existing separate APIs.
 /// These preferences do not change application styling or behavior automatically.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DesktopPreferences {
