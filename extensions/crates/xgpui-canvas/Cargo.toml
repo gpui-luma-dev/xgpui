@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-canvas"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 license = "Apache-2.0"
 description = "Spatial viewport, f64 camera, scene culling and procedural grids for xgpui"
