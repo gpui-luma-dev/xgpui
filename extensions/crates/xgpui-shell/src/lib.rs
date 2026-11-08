@@ -1,7 +1,7 @@
 //! Experimental desktop shell. Linux draws negotiated client decorations; other platforms retain native chrome.
 use gpui::{prelude::*, *};
 
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 use linux::*;
 use std::{cell::RefCell, collections::HashMap};
 
@@ -82,7 +82,12 @@ impl ShellApp for App {
                     .detach();
                 cx.observe_window_bounds(window, |_, window, _| window.refresh())
                     .detach();
+                let shell_entity = cx.entity().downgrade();
+                let preferences_subscription = cx.observe_desktop_preferences(move |app| {
+                    let _ = shell_entity.update(app, |_, cx| cx.notify());
+                });
                 ShellWindow {
+                    _preferences_subscription: preferences_subscription,
                     shell,
                     content,
                     show_chrome,
@@ -94,6 +99,7 @@ impl ShellApp for App {
 }
 
 pub struct ShellWindow {
+    _preferences_subscription: Subscription,
     shell: ShellOptions,
     content: AnyView,
     show_chrome: bool,
@@ -114,18 +120,19 @@ impl Drop for ShellWindow {
 impl Render for ShellWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let content = self.content.clone();
-        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+        #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
         if self.show_chrome
             && !window.is_fullscreen()
             && let Decorations::Client { tiling } = window.window_decorations()
         {
             let maximized = window.is_maximized();
+            let preferences = self.shell.resolve(&cx.desktop_preferences());
             let palette = Palette::new(
                 window.appearance(),
                 window.is_window_active(),
-                self.shell.high_contrast,
+                preferences.high_contrast,
             );
-            let scale = shell_scale(self.shell.text_scale);
+            let scale = preferences.text_scale;
             let button_size = px(33. * scale);
             let mut controls = window.window_controls();
             controls.minimize &= window.is_minimizable();
@@ -159,10 +166,10 @@ impl Render for ShellWindow {
                             button.id(),
                             label,
                             palette,
-                            if self.shell.high_contrast {
+                            if preferences.high_contrast {
                                 palette.text
                             } else {
-                                self.shell.accent
+                                preferences.accent
                             },
                             button_size,
                         )
@@ -238,19 +245,22 @@ impl Render for ShellWindow {
                         .items_center()
                         .justify_center()
                         .on_mouse_down(MouseButton::Left, {
-                            let action = self.shell.double_click_action;
+                            let action = preferences.double_click_action;
                             move |event, window, _| {
                                 if event.click_count == 2 {
-                                    action.perform(window);
+                                    action.perform_at(window, event.position);
                                 } else {
                                     window.start_window_move();
                                 }
                             }
                         })
-                        .on_mouse_down(MouseButton::Right, |event, window, _| {
-                            if window.window_controls().window_menu {
-                                window.show_window_menu(event.position);
-                            }
+                        .on_mouse_down(MouseButton::Right, {
+                            let action = preferences.right_click_action;
+                            move |event, window, _| action.perform_at(window, event.position)
+                        })
+                        .on_mouse_down(MouseButton::Middle, {
+                            let action = preferences.middle_click_action;
+                            move |event, window, _| action.perform_at(window, event.position)
                         })
                         .child(
                             div()
@@ -359,36 +369,105 @@ impl Render for ShellWindow {
     }
 }
 
-/// Application overrides for preferences not yet exposed by GPUI's Linux platform API.
-/// Light/dark appearance and button layout always follow the live platform values.
+/// Optional per-window overrides. `None` follows desktop preferences, then built-in fallbacks.
+///
+/// Unlike the initial experimental API, these fields are optional: wrap explicit values in
+/// `Some(...)`. This preserves explicit `false` and `TitlebarAction::None` overrides.
+/// Light/dark appearance and button placement retain the platform's existing APIs.
+#[derive(Default)]
 pub struct ShellOptions {
-    pub high_contrast: bool,
-    pub accent: u32,
-    /// Logical text/target scaling, applied once; device DPI is handled by GPUI.
-    pub text_scale: f32,
-    pub double_click_action: TitlebarAction,
+    /// Override system high contrast.
+    pub high_contrast: Option<bool>,
+    /// Override the sRGB focus accent as 0xRRGGBB.
+    pub accent: Option<u32>,
+    /// Override logical text/target scaling, independent of device DPI.
+    pub text_scale: Option<f32>,
+    /// Override the desktop double-click action; fallback is maximize/restore.
+    pub double_click_action: Option<TitlebarAction>,
+    /// Override the desktop middle-click action; fallback is no action.
+    pub middle_click_action: Option<TitlebarAction>,
+    /// Override the desktop right-click action; fallback is the window menu.
+    pub right_click_action: Option<TitlebarAction>,
 }
-impl Default for ShellOptions {
-    fn default() -> Self {
-        Self {
-            high_contrast: false,
-            accent: 0x3584e4,
-            text_scale: 1.,
-            double_click_action: TitlebarAction::ToggleMaximize,
+
+#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
+struct ResolvedPreferences {
+    high_contrast: bool,
+    accent: u32,
+    text_scale: f32,
+    double_click_action: TitlebarAction,
+    middle_click_action: TitlebarAction,
+    right_click_action: TitlebarAction,
+}
+
+#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
+impl ShellOptions {
+    fn resolve(&self, desktop: &DesktopPreferences) -> ResolvedPreferences {
+        let accent = desktop
+            .accent_color
+            .filter(|c| c.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)))
+            .map(|[r, g, b]| {
+                ((r * 255.).round() as u32) << 16
+                    | ((g * 255.).round() as u32) << 8
+                    | (b * 255.).round() as u32
+            });
+        ResolvedPreferences {
+            high_contrast: self
+                .high_contrast
+                .or(desktop.high_contrast)
+                .unwrap_or(false),
+            accent: self.accent.or(accent).unwrap_or(0x3584e4),
+            text_scale: shell_scale(self.text_scale.or(desktop.text_scale).unwrap_or(1.)),
+            double_click_action: self
+                .double_click_action
+                .or_else(|| {
+                    desktop
+                        .titlebar_double_click
+                        .map(TitlebarAction::from_platform)
+                })
+                .unwrap_or(TitlebarAction::ToggleMaximize),
+            middle_click_action: self
+                .middle_click_action
+                .or_else(|| {
+                    desktop
+                        .titlebar_middle_click
+                        .map(TitlebarAction::from_platform)
+                })
+                .unwrap_or(TitlebarAction::None),
+            right_click_action: self
+                .right_click_action
+                .or_else(|| {
+                    desktop
+                        .titlebar_right_click
+                        .map(TitlebarAction::from_platform)
+                })
+                .unwrap_or(TitlebarAction::Menu),
         }
     }
 }
-/// Configurable title-bar interaction. This is not yet read from desktop settings.
+
+/// Supported title-bar interaction, resolved from desktop preferences or an explicit override.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TitlebarAction {
     #[default]
     ToggleMaximize,
     Minimize,
     None,
+    /// Display the platform window menu when supported.
+    Menu,
 }
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 impl TitlebarAction {
-    fn perform(self, window: &mut Window) {
+    fn from_platform(action: gpui::TitlebarAction) -> Self {
+        match action {
+            gpui::TitlebarAction::None => Self::None,
+            gpui::TitlebarAction::ToggleMaximize => Self::ToggleMaximize,
+            gpui::TitlebarAction::Minimize => Self::Minimize,
+            gpui::TitlebarAction::Menu => Self::Menu,
+        }
+    }
+
+    fn perform_at(self, window: &mut Window, position: Point<Pixels>) {
         match self {
             Self::ToggleMaximize if window.window_controls().maximize && window.is_resizable() => {
                 window.zoom_window()
@@ -396,17 +475,18 @@ impl TitlebarAction {
             Self::Minimize if window.window_controls().minimize && window.is_minimizable() => {
                 window.minimize_window()
             }
+            Self::Menu if window.window_controls().window_menu => window.show_window_menu(position),
             _ => (),
         }
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 mod linux {
     use super::*;
     pub(super) fn shell_scale(scale: f32) -> f32 {
         if scale.is_finite() {
-            scale.clamp(1., 3.)
+            scale.clamp(0.5, 4.)
         } else {
             1.
         }
@@ -588,9 +668,9 @@ mod linux {
         fn invalid_text_scales_cannot_break_layout() {
             assert_eq!(shell_scale(f32::NAN), 1.);
             assert_eq!(shell_scale(f32::INFINITY), 1.);
-            assert_eq!(shell_scale(-1.), 1.);
+            assert_eq!(shell_scale(-1.), 0.5);
             assert_eq!(shell_scale(1.5), 1.5);
-            assert_eq!(shell_scale(100.), 3.);
+            assert_eq!(shell_scale(100.), 4.);
         }
     }
 }
@@ -598,6 +678,44 @@ mod linux {
 #[cfg(test)]
 mod input_tests {
     use super::*;
+
+    #[::core::prelude::v1::test]
+    fn desktop_preferences_follow_live_values_and_explicit_overrides_win() {
+        let desktop = DesktopPreferences {
+            high_contrast: Some(true),
+            accent_color: Some([1., 0., 0.]),
+            text_scale: Some(1.5),
+            titlebar_double_click: Some(gpui::TitlebarAction::Minimize),
+            titlebar_middle_click: Some(gpui::TitlebarAction::Menu),
+            ..Default::default()
+        };
+        let inherited = ShellOptions::default().resolve(&desktop);
+        assert!(inherited.high_contrast);
+        assert_eq!(inherited.accent, 0xff0000);
+        assert_eq!(inherited.text_scale, 1.5);
+        assert_eq!(inherited.double_click_action, TitlebarAction::Minimize);
+        assert_eq!(inherited.middle_click_action, TitlebarAction::Menu);
+        assert_eq!(inherited.right_click_action, TitlebarAction::Menu);
+        let overridden = ShellOptions {
+            high_contrast: Some(false),
+            accent: Some(0),
+            text_scale: Some(1.),
+            double_click_action: Some(TitlebarAction::None),
+            middle_click_action: Some(TitlebarAction::None),
+            right_click_action: Some(TitlebarAction::None),
+        }
+        .resolve(&desktop);
+        assert!(!overridden.high_contrast);
+        assert_eq!(overridden.accent, 0);
+        assert_eq!(overridden.text_scale, 1.);
+        assert_eq!(overridden.double_click_action, TitlebarAction::None);
+        assert_eq!(overridden.middle_click_action, TitlebarAction::None);
+        assert_eq!(overridden.right_click_action, TitlebarAction::None);
+        let reset = ShellOptions::default().resolve(&DesktopPreferences::default());
+        assert!(!reset.high_contrast);
+        assert_eq!(reset.text_scale, 1.);
+        assert_eq!(reset.double_click_action, TitlebarAction::ToggleMaximize);
+    }
 
     #[::core::prelude::v1::test]
     fn activation_keys_do_not_consume_modified_shortcuts_or_repeats() {

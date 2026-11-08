@@ -613,6 +613,13 @@ impl X11Client {
                                 window.window.set_appearance(appearance);
                             }
                         }
+                        XDPEvent::DesktopPreferences(preferences) => {
+                            let common = client.0.borrow().common.clone();
+                            crate::linux::LinuxCommon::update_desktop_preferences(
+                                &common,
+                                preferences,
+                            );
+                        }
                         XDPEvent::ButtonLayout(layout_str) => {
                             let layout = WindowButtonLayout::parse(&layout_str)
                                 .log_err()

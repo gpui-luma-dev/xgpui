@@ -73,6 +73,7 @@ pub(crate) struct PlatformHandlers {
     pub(crate) system_wake: Option<Box<dyn FnMut()>>,
     pub(crate) power_mode_change: Option<Box<dyn FnMut()>>,
     pub(crate) displays_changed: Option<Box<dyn FnMut()>>,
+    pub(crate) desktop_preferences_changed: Option<Box<dyn FnMut()>>,
 }
 
 /// A system power change, forwarded from D-Bus to the client's event loop.
@@ -92,6 +93,7 @@ pub(crate) struct LinuxCommon {
     pub(crate) foreground_executor: ForegroundExecutor,
     pub(crate) text_system: Arc<dyn PlatformTextSystem>,
     pub(crate) appearance: WindowAppearance,
+    desktop_preferences: gpui::DesktopPreferences,
     pub(crate) auto_hide_scrollbars: bool,
     pub(crate) button_layout: WindowButtonLayout,
     pub(crate) callbacks: PlatformHandlers,
@@ -142,6 +144,7 @@ impl LinuxCommon {
             foreground_executor: ForegroundExecutor::new(dispatcher),
             text_system,
             appearance: WindowAppearance::Light,
+            desktop_preferences: gpui::DesktopPreferences::default(),
             auto_hide_scrollbars: false,
             button_layout: WindowButtonLayout::linux_default(),
             callbacks,
@@ -159,6 +162,25 @@ impl LinuxCommon {
         };
 
         (common, main_receiver, power_receiver)
+    }
+
+    /// Notify only after dropping state borrows so observers can read the new snapshot.
+    pub(crate) fn update_desktop_preferences(
+        common: &Rc<RefCell<Self>>,
+        preferences: gpui::DesktopPreferences,
+    ) {
+        let callback = {
+            let mut common = common.borrow_mut();
+            if common.desktop_preferences == preferences {
+                return;
+            }
+            common.desktop_preferences = preferences;
+            common.callbacks.desktop_preferences_changed.take()
+        };
+        if let Some(mut callback) = callback {
+            callback();
+            common.borrow_mut().callbacks.desktop_preferences_changed = Some(callback);
+        }
     }
 
     pub(crate) fn start_power_listener(&mut self) {
@@ -1151,6 +1173,14 @@ impl Platform for LinuxPlatform {
 
     fn button_layout(&self) -> Option<WindowButtonLayout> {
         Some(self.with_common(|common| common.button_layout))
+    }
+
+    fn desktop_preferences(&self) -> gpui::DesktopPreferences {
+        self.with_common(|common| common.desktop_preferences.clone())
+    }
+
+    fn on_desktop_preferences_changed(&self, callback: Box<dyn FnMut()>) {
+        self.with_common(|common| common.callbacks.desktop_preferences_changed = Some(callback));
     }
 
     fn register_url_scheme(&self, _: &str) -> Task<anyhow::Result<()>> {
