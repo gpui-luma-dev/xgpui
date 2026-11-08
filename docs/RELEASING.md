@@ -14,12 +14,12 @@ When the user says **“prepare today's release”**:
 
 - Fetch current `main` and identify the last successfully completed release.
 - Compare code, packaged documentation, dependencies and publication changes.
-- Run release preparation and open a PR with proposed old → new crate versions.
-- Prepare release notes with change titles, short summaries, links and the version table.
+- Reuse already prepared version numbers and existing release PRs; do not run an automatic bump over them. Propose only the remaining old → new versions, with a reason for each.
+- Reuse the existing release prose in docs for the GitHub release notes, retaining change titles, short summaries, links and an old → new version table. Keep alpha limits explicit. Do not rewrite docs merely to create the GitHub record.
 - Review automatic version proposals against the versioning policy below. Include a reason for every bump in the PR.
 - Run the validation and no-upload registry checks below; resolve failures and version conflicts. Record source identity, host, commands and results in the release review. Revalidate affected checks after source changes.
 - For each public API addition or change in non-extension GPUI crates, document purpose, source/serialization compatibility, migration requirements and whether it could live in an extension. Present each concrete API change for final user review; implementation approval does not approve the final public API.
-- Present the PR, proposed versions and validation results to the user.
+- Present the PR, versions, validation scope and exact publish/skip counts. Distinguish a version audit, archive payload plan and actual package/build verification.
 
 **User:** review the proposal and approve or revise the version numbers. No commands or manual preparation are required.
 
@@ -27,7 +27,7 @@ When the user says **“prepare today's release”**:
 
 **User:** explicitly approve merging the release PR.
 
-**Agent:** merge the approved PR, remove its branch, record the exact merged commit SHA and confirm the final registry plan applies to that source. Preserve unrelated local edits.
+**Agent:** merge the approved PR and remove its branch, or confirm the merge if the user performed it. Record the full merge commit SHA from GitHub. Preserve unrelated local edits; a local checkout/cleanup failure does not mean the remote merge failed.
 
 ## 3. Create the tag and release record — agent
 
@@ -35,20 +35,21 @@ When the user says **“prepare today's release”**:
 
 - Tag the approved commit as `release-YYYY-MM-DD-COMMIT`, using its UTC commit date and first 12 hex characters.
 - Support multiple releases per day: each distinct approved commit gets its own tag, for example `release-2026-10-31-ed4469267251` and `release-2026-10-31-a1b2c3d4e5f6`. Retries of the same release reuse its tag and record; do not create a new release identity for a retry.
-- Create a draft GitHub release containing the reviewed notes and version table.
-- Verify the remote tag points to the approved commit and present the draft to the user.
+- Create a draft GitHub release containing the reviewed notes and version table. Preserve a copy of its title and body outside the checkout before running publication; the current finalizer overwrites them.
+- Verify the remote tag resolves to the approved full SHA and the record is a draft. Explain if the UTC tag date differs from the user's local date. Run the final no-upload plan against this tag, then present the draft and results to the user.
 
 ## 4. Publish and verify crates — agent, after approval
 
-**User:** explicitly approve crate publication.
+**User:** explicitly approve publication of the stated new versions and any still-pending, individually presented public API changes. Ask plainly: “Publish these N new crate versions? These other versions will be verified and skipped.” Identify any pending API item and its compatibility impact plainly; merging implementation does not itself approve its final public API.
 
 **Agent:**
 
-- Publish the exact tagged commit in dependency order.
+- Dispatch publication against the tag, confirming `publish FULL_COMMIT_SHA`; do not select a moving `main` branch. Publish in dependency order and monitor through completion.
 - Verify and skip matching versions already published; verify each new upload.
-- Confirm all intended versions are verified and a registry-only consumer builds and runs.
-- Add results and the workflow link to the existing release record, preserve its highlights, and publish the draft.
-- Report completion to the user.
+- Inspect the report: the source SHA must match, `release_ready` must be true, and every candidate must be `published-verified` or `already-published` with a registry checksum. Report the actual new/skip counts.
+- Use a fresh consumer outside the checkout, with exact versions for the full release map and no repository patches or credentials. Verify its Cargo metadata resolves those versions from crates.io, then build/run representative APIs, including new extension APIs. State the host and limits; this is not interactive or cross-platform acceptance.
+- Restore the reviewed title and notes after the workflow finalizer runs. Add the publication/consumer results and workflow link. Keep the version history and add the machine-readable verification table described below. Explicitly publish the existing draft and recheck the tag SHA and published state.
+- Report crate publication and release-record completion; say separately that Pages is still undeployed.
 
 **On failure:** retain the tag and draft, diagnose the failure and retry the same commit where safe, skipping verified uploads. Never move a tag after an upload. A source fix requires a new reviewed release source and appropriate versions. Keep the record in draft and hold docs deployment until verification succeeds.
 
@@ -56,11 +57,11 @@ When the user says **“prepare today's release”**:
 
 **User:** approve documentation deployment.
 
-**Agent:** manually dispatch Pages after successful crate publication, monitor it to completion, verify the live site, documented versions, galleries and Wasm bundles, and add the deployment link to the release record. Report the release complete.
+**Agent:** check that the intended docs source describes the published state, replacing stale “in preparation”/“unpublished” wording while retaining alpha warnings. Any source edits go through a PR and explicit merge approval. Then manually dispatch Pages, monitor it to completion, verify the deployed commit, live site, documented versions, galleries and both Wasm bundles, and add the deployment link to the release record. Report docs deployment separately from crate publication.
 
 ## Versioning policy
 
-Apply this policy during preparation, starting with the next release:
+Apply this policy during preparation:
 
 - **Patch:** compatible fixes, internal backend changes, packaged documentation and compatible dependency updates.
 - **Minor:** new capabilities that preserve supported public APIs.
@@ -90,7 +91,7 @@ Documentation inside a published crate archive is different: shipping its update
 
 ## Agent responsibility for automation gaps
 
-The agent performs any steps the workflows do not yet automate. Current workflows create the tag/record after uploads and can replace notes with a version table: create the tag and draft beforehand, preserve the reviewed notes, and restore them before publishing the record.
+The agent performs any steps the workflows do not yet automate. The finalizer can create missing tags/records after uploads and replaces the title and notes with generated text. Create the tag/draft beforehand, preserve the reviewed title/body outside the checkout, and restore them with verification evidence before publishing the record. Updating this guide does not change workflow behavior.
 
 Mark abandoned partial releases **incomplete** or **superseded**, preserving their source tags and publication results. Never use them as completed baselines.
 
@@ -117,11 +118,13 @@ just test --only release-sync
 Registry checks are a separate read-only network operation:
 
 ```sh
-just release-check
+just release-check --epoch LAST_COMPLETED_RELEASE_TAG
 ```
 
 `just release-check` checks changed packages, versions and dependency pins against
 release history and crates.io; it is read-only but requires registry access.
+Pass the completed baseline explicitly: the history parser currently recognizes only the verification table format below and can miss releases recorded only with prose or old/new version tables. A missed baseline can falsely flag unchanged crates. Confirm the actual tag and packaged diff before proposing bumps.
+
 It does not compile or test the code. `just test` runs the current host's suites,
 including native-library and benchmark compilation. Use `just test --list` to
 inspect coverage or `just test --only native-libraries` to isolate a failure.
@@ -158,8 +161,8 @@ cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- daily prepar
   --report /tmp/xgpui-release-preparation.json --notes /tmp/xgpui-release-notes.md
 ```
 
-This previews the proposal. Add `--apply` to update versions, then run
-`cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- daily refresh-locks` and review the resulting diff.
+This previews automatic patch suggestions; it is not needed when versions are already prepared. Apply only the user-approved version plan, preserving compatible requirements. After version changes, run
+`cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- daily refresh-locks` and review the resulting diff. Reject unplanned external dependency changes.
 
 The [Prepare registry release workflow](../.github/workflows/prepare-registry-release.yml)
 checks out the selected dispatch commit and uses the release map. Local no-upload
@@ -204,12 +207,29 @@ also require curl, and GitHub context/finalization requires the gh CLI.
 ## Workflow limitations and release records
 
 The registry workflow invokes `xgpui-release daily finalize` after successful
-uploads. That helper may create a missing tag and replaces release notes with a
-verification table. Create and verify the approved tag and draft beforehand;
-retain the reviewed notes outside the release record and restore them with the
-verification results before publishing the draft. Verify the record's draft or
-published state explicitly. Do not treat the workflow's finalization alone as
-completion of the policy above.
+uploads. It validates the report and tag identity, but overwrites the release
+title/body and does not publish an existing draft. Agent restoration and explicit
+draft publication remain required.
+
+Preserve the human release notes and old/new table. Append a separate three-column
+table containing every mapped crate and its actual report result:
+
+```markdown
+| Crate | Version | Result |
+| --- | --- | --- |
+| `crate-name` | VERSION | published-verified |
+| `unchanged-crate` | VERSION | already-published |
+```
+
+The history checker recognizes exactly `published-verified` and
+`already-published` in the third column. A prose statement or a previous/candidate
+version table alone is not sufficient. Keep this verification table alongside
+the highlights so the next release can identify the completed baseline.
+
+The [maintenance/Parley release](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-08-cb66d2b2238b)
+is an example of this sequence: pre-upload tag and draft, 15 verified new versions,
+2 verified skips, a registry-only consumer, and restored full notes with the
+verification table. Pages remained a separate action.
 
 The [Publish documentation workflow](../.github/workflows/pages.yml) is manually
 dispatched. After deployment approval, select the intended source and monitor its
