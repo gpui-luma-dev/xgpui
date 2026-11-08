@@ -90,8 +90,8 @@ impl ParagraphShape {
     }
 
     /// Reflow with an optional break width. Without one, lines break only at hard
-    /// breaks and are left in place (`Alignment::Left`): Parley aligns within the
-    /// break width, so callers place unbroken lines inside their own bounds.
+    /// breaks and Parley aligns each line within the widest line; callers then
+    /// place that block inside their own bounds.
     pub(crate) fn layout_with(
         &self,
         break_width: Option<Pixels>,
@@ -105,11 +105,6 @@ impl ParagraphShape {
         }
         let mut layout = self.layout.clone();
         layout.break_all_lines(break_width.map(f32::from));
-        let alignment = if break_width.is_some() {
-            alignment
-        } else {
-            Alignment::Left
-        };
         layout.align(alignment, AlignmentOptions::default());
         let width = break_width.unwrap_or(px(layout.width()));
         crate::validate_layout_geometry(&layout)?;

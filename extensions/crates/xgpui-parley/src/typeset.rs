@@ -323,11 +323,14 @@ impl Element for Typeset {
                     let free = (bounds.size.width - layout.content_width()).max(px(0.0));
                     fitted.align.offset(free, fitted.shaped.shape.is_rtl())
                 };
+                let clamp_height = fitted
+                    .line_clamp
+                    .and_then(|clamp| clamp_height(&layout, clamp));
                 Some(Prepared {
                     layout,
                     offset,
                     pieces: fitted.pieces.clone(),
-                    clamp: fitted.line_clamp,
+                    clamp_height,
                 })
             }
             Err(error) => {
@@ -355,9 +358,6 @@ impl Element for Typeset {
             return;
         };
         let layout = prepared.layout.as_ref();
-        let clamped = prepared
-            .clamp
-            .is_some_and(|lines| layout.line_count() > lines);
         let origin = bounds.origin + point(prepared.offset, px(0.0));
         let runs = state.paint_runs.clone();
         let pieces = prepared.pieces.clone();
@@ -371,9 +371,10 @@ impl Element for Typeset {
             }
             paint_decorations(layout, &runs, &pieces, origin, window);
         };
-        if clamped {
-            // Lines beyond the clamp are laid out but must not show.
-            window.with_content_mask(Some(ContentMask { bounds }), paint);
+        if let Some(height) = prepared.clamp_height {
+            let mut visible = bounds;
+            visible.size.height = visible.size.height.min(height);
+            window.with_content_mask(Some(ContentMask { bounds: visible }), paint);
         } else {
             paint(window);
         }
@@ -386,7 +387,15 @@ pub struct Prepared {
     layout: Arc<ParagraphLayout>,
     offset: Pixels,
     pieces: Arc<[Piece]>,
-    clamp: Option<usize>,
+    /// Height of the lines a line clamp allows, when the layout has more.
+    clamp_height: Option<Pixels>,
+}
+
+/// Lines beyond a clamp are laid out but must not show: the height of the
+/// allowed lines when the layout has more, whatever the element's height.
+fn clamp_height(layout: &ParagraphLayout, clamp: usize) -> Option<Pixels> {
+    let first_hidden = layout.parley_layout().lines().nth(clamp)?;
+    Some(px(first_hidden.metrics().block_min_coord))
 }
 
 /// The paint run containing a display index of the untruncated text.
@@ -515,26 +524,39 @@ fn line_metrics(layout: &ParagraphLayout, rect: Bounds<Pixels>) -> Option<LineMe
     })
 }
 
-/// Parley expresses hard line breaks inside a paragraph as U+2028. Run lengths
-/// are adjusted to the normalized text; a CRLF split across runs normalizes per run.
+/// Parley's hard line break inside a paragraph.
+const LINE_SEPARATOR: char = '\u{2028}';
+
+/// Parley expresses hard line breaks inside a paragraph as U+2028. The whole
+/// text is normalized at once, so a CRLF is one break even when a run boundary
+/// falls between `\r` and `\n`; the break takes the style of the run holding
+/// `\r`. Run lengths follow the normalized text, and runs left empty are dropped.
 fn hard_breaks(text: &SharedString, runs: Vec<TextRun>) -> (SharedString, Vec<TextRun>) {
     if !text.contains(['\n', '\r', '\u{2029}']) {
         return (text.clone(), runs);
     }
-    let normalize = |part: &str| {
-        part.replace("\r\n", "\u{2028}")
-            .replace(['\n', '\r', '\u{2029}'], "\u{2028}")
-    };
+    // Normalized offset at each source byte boundary that runs may use.
+    let mut offsets = vec![0; text.len() + 1];
     let mut normalized = String::with_capacity(text.len() + 8);
+    let mut after_cr = false;
+    for (index, ch) in text.char_indices() {
+        offsets[index] = normalized.len();
+        match ch {
+            '\n' if after_cr => {}
+            '\n' | '\r' | '\u{2029}' => normalized.push(LINE_SEPARATOR),
+            ch => normalized.push(ch),
+        }
+        after_cr = ch == '\r';
+    }
+    offsets[text.len()] = normalized.len();
     let mut start = 0;
     let runs = runs
         .into_iter()
-        .map(|mut run| {
-            let part = normalize(&text[start..start + run.len]);
-            start += run.len;
-            run.len = part.len();
-            normalized.push_str(&part);
-            run
+        .filter_map(|mut run| {
+            let end = start + run.len;
+            run.len = offsets[end] - offsets[start];
+            start = end;
+            (run.len > 0).then_some(run)
         })
         .collect();
     (normalized.into(), runs)
@@ -561,6 +583,14 @@ pub(crate) enum OverflowKey {
     End(SharedString),
     Start(SharedString),
     Middle(SharedString),
+}
+
+impl OverflowKey {
+    fn affix(&self) -> &SharedString {
+        match self {
+            Self::End(affix) | Self::Start(affix) | Self::Middle(affix) => affix,
+        }
+    }
 }
 
 impl From<&TextOverflow> for OverflowKey {
@@ -694,9 +724,22 @@ impl<K: Hash + Eq, V: Clone> Lru<K, V> {
 const SHAPE_CAPACITY: usize = 4096;
 
 struct Caches {
+    /// Backend font generation the entries were computed under.
+    generation: u64,
     shapes: Lru<ShapeKey, Shaped>,
     layouts: Lru<(ShapeKey, Option<Pixels>, AlignKey), Arc<ParagraphLayout>>,
     fits: Lru<(TypesetSpec, Option<Pixels>, Option<Pixels>, SpaceKey), Fitted>,
+}
+
+impl Caches {
+    fn new(generation: u64) -> Self {
+        Self {
+            generation,
+            shapes: Lru::new(SHAPE_CAPACITY),
+            layouts: Lru::new(SHAPE_CAPACITY),
+            fits: Lru::new(SHAPE_CAPACITY),
+        }
+    }
 }
 
 /// The installed engine and its caches, stored as a GPUI global.
@@ -709,14 +752,23 @@ impl Global for TypesetEngine {}
 
 impl TypesetEngine {
     pub fn new(parley: Arc<ParleyTextSystem>) -> Self {
+        let generation = parley.font_generation();
         Self {
             parley,
-            caches: RefCell::new(Caches {
-                shapes: Lru::new(SHAPE_CAPACITY),
-                layouts: Lru::new(SHAPE_CAPACITY),
-                fits: Lru::new(SHAPE_CAPACITY),
-            }),
+            caches: RefCell::new(Caches::new(generation)),
         }
+    }
+
+    /// The caches, emptied first if fonts were added since they were filled:
+    /// adding a fallback can keep a descriptor's `FontId` while changing the
+    /// faces its text resolves to, so no cache key would otherwise notice.
+    fn caches(&self) -> std::cell::RefMut<'_, Caches> {
+        let generation = self.parley.font_generation();
+        let mut caches = self.caches.borrow_mut();
+        if caches.generation != generation {
+            *caches = Caches::new(generation);
+        }
+        caches
     }
 
     /// Shape `text` with font runs covering it and the spec's size and options,
@@ -732,7 +784,7 @@ impl TypesetEngine {
             font_size: spec.font_size,
             options: spec.options,
         };
-        if let Some(shaped) = self.caches.borrow_mut().shapes.get(&key) {
+        if let Some(shaped) = self.caches().shapes.get(&key) {
             return Ok(shaped);
         }
         // Shaping runs outside the cache borrow.
@@ -743,8 +795,7 @@ impl TypesetEngine {
             spec.options,
         )?);
         let shaped = Shaped { key, shape };
-        self.caches
-            .borrow_mut()
+        self.caches()
             .shapes
             .insert(shaped.key.clone(), shaped.clone());
         Ok(shaped)
@@ -758,11 +809,11 @@ impl TypesetEngine {
         align: AlignKey,
     ) -> Result<Arc<ParagraphLayout>> {
         let key = (shaped.key.clone(), break_width, align);
-        if let Some(layout) = self.caches.borrow_mut().layouts.get(&key) {
+        if let Some(layout) = self.caches().layouts.get(&key) {
             return Ok(layout);
         }
         let layout = Arc::new(shaped.shape.layout_with(break_width, align.parley())?);
-        self.caches.borrow_mut().layouts.insert(key, layout.clone());
+        self.caches().layouts.insert(key, layout.clone());
         Ok(layout)
     }
 
@@ -779,11 +830,11 @@ impl TypesetEngine {
             known.height,
             SpaceKey::from(available.width),
         );
-        if let Some(fitted) = self.caches.borrow_mut().fits.get(&key) {
+        if let Some(fitted) = self.caches().fits.get(&key) {
             return Ok(fitted);
         }
         let fitted = self.fit_uncached(spec, known, available)?;
-        self.caches.borrow_mut().fits.insert(key, fitted.clone());
+        self.caches().fits.insert(key, fitted.clone());
         Ok(fitted)
     }
 
@@ -822,17 +873,34 @@ impl TypesetEngine {
             }
             (shape, width, lines)
         } else {
-            let mut shape = (full, identity(spec.text.len()));
-            let mut width = max;
-            if let Some(overflow) = &spec.overflow
-                && let Some(limit) = limit
-                && max > limit
-            {
-                shape = self.truncate_line(spec, &shape.0, limit, overflow)?;
-                width = limit;
+            let hard_lines = hard_line_ranges(&spec.text);
+            let clamped = spec.line_clamp.filter(|clamp| hard_lines.len() > *clamp);
+            let kept = clamped.unwrap_or(hard_lines.len());
+            let overflows = limit.is_some_and(|limit| max > limit);
+            match &spec.overflow {
+                Some(overflow) if overflows || clamped.is_some() => {
+                    let shape = self.truncate_hard_lines(
+                        spec,
+                        &full,
+                        &hard_lines[..kept],
+                        limit,
+                        overflow,
+                    )?;
+                    let width = if overflows {
+                        limit.unwrap_or(max)
+                    } else {
+                        shape.0.shape.content_widths().1
+                    };
+                    (shape, known.width.unwrap_or(width.ceil()), kept)
+                }
+                // Without an affix, lines beyond the clamp stay in the layout and
+                // paint masks them to the allowed lines.
+                _ => (
+                    (full, identity(spec.text.len())),
+                    known.width.unwrap_or(max.ceil()),
+                    kept,
+                ),
             }
-            let lines = self.layout(&shape.0, None, spec.align)?.line_count();
-            (shape, known.width.unwrap_or(width.ceil()), lines)
         };
         let (shape, pieces) = shape;
         let height = known
@@ -860,36 +928,124 @@ impl TypesetEngine {
         Ok(self.shape(spec, affix, fonts)?.shape.content_widths().1)
     }
 
-    /// Shorten an unbroken line to fit `limit`, keeping the logical start, end or
-    /// both. Truncation is logical, so the base direction places the affix on the
-    /// correct side. Advances estimate the cut; reshaping confirms it.
-    fn truncate_line(
+    /// Shorten unbroken text line by line. `lines` are the hard-break lines to
+    /// keep; when they are fewer than the text's, the last kept line ends in the
+    /// affix, as wrapped text does under a line clamp. Each line wider than
+    /// `limit` is cut on its own, keeping its logical start, end or both, so a
+    /// cut never removes or merges other lines. Truncation is logical, so the
+    /// base direction places the affix on the correct side.
+    fn truncate_hard_lines(
         &self,
         spec: &TypesetSpec,
         full: &Shaped,
-        limit: Pixels,
+        lines: &[Range<usize>],
+        limit: Option<Pixels>,
         overflow: &OverflowKey,
     ) -> Result<(Shaped, Arc<[Piece]>)> {
         let text = spec.text.as_ref();
+        let spec = &resolved_direction(spec, full);
+        let clusters = full.shape.logical_clusters();
+        let dropped = lines.last().is_some_and(|last| last.end < text.len());
+        let mut shown = String::new();
+        let mut pieces: Vec<Piece> = Vec::new();
+        for (index, line) in lines.iter().enumerate() {
+            if index > 0 {
+                // The separator between this line and the previous one.
+                let separator = lines[index - 1].end..line.start;
+                push_copied(&mut pieces, shown.len(), separator.clone());
+                shown.push_str(&text[separator]);
+            }
+            let ends_clamp = dropped && index + 1 == lines.len();
+            let (line_text, line_pieces) = self.truncate_hard_line(
+                spec,
+                &clusters,
+                line.clone(),
+                limit,
+                overflow,
+                ends_clamp,
+            )?;
+            for piece in line_pieces {
+                let len = piece.shown.len();
+                let start = shown.len() + piece.shown.start;
+                if piece.copied {
+                    push_copied(&mut pieces, start, piece.source..piece.source + len);
+                } else {
+                    pieces.push(Piece {
+                        shown: start..start + len,
+                        ..piece
+                    });
+                }
+            }
+            shown.push_str(&line_text);
+        }
+        let fonts = mapped_fonts(&spec.fonts, &pieces);
+        let shaped = self.shape(spec, &shown, fonts)?;
+        Ok((shaped, pieces.into()))
+    }
+
+    /// One hard-break line of `spec.text`, cut to `limit` if it is wider, or
+    /// ending in the affix if `ends_clamp`. Pieces map back to `spec.text`.
+    fn truncate_hard_line(
+        &self,
+        spec: &TypesetSpec,
+        clusters: &[(Range<usize>, f32)],
+        line: Range<usize>,
+        limit: Option<Pixels>,
+        overflow: &OverflowKey,
+        ends_clamp: bool,
+    ) -> Result<(String, Vec<Piece>)> {
+        let text = &spec.text[line.clone()];
+        let local: Vec<(Range<usize>, f32)> = clusters
+            .iter()
+            .filter(|(range, _)| range.start >= line.start && range.end <= line.end)
+            .map(|(range, advance)| (range.start - line.start..range.end - line.start, *advance))
+            .collect();
+        let natural: f32 = local.iter().map(|(_, advance)| advance).sum();
+        let overflows = limit.is_some_and(|limit| px(natural) > limit);
+        let whole = || {
+            let piece = Piece {
+                shown: 0..text.len(),
+                source: line.start,
+                copied: true,
+            };
+            Ok((text.to_owned(), vec![piece]))
+        };
+        if !overflows && !ends_clamp {
+            return whole();
+        }
+        // A clamp always marks the end of the last kept line, as in wrapped text.
         let (affix, from) = match overflow {
+            _ if ends_clamp => (overflow.affix(), Cut::End),
             OverflowKey::End(affix) => (affix, Cut::End),
             OverflowKey::Start(affix) => (affix, Cut::Start),
             OverflowKey::Middle(affix) => (affix, Cut::Middle),
         };
-        let spec = &resolved_direction(spec, full);
-        let clusters = full.shape.logical_clusters();
+        if ends_clamp && affix.is_empty() && !overflows {
+            return whole();
+        }
         let anchor = match from {
-            Cut::Start => 0,
-            Cut::End | Cut::Middle => text.len().saturating_sub(1),
+            Cut::Start => line.start,
+            Cut::End | Cut::Middle => line.end.saturating_sub(1).max(line.start),
         };
-        let budget = f32::from(limit - self.affix_width(spec, affix, anchor)?);
-        let mut keep = estimate_kept(&clusters, budget, from);
+        let mut keep = match limit {
+            Some(limit) => {
+                let budget = f32::from(limit - self.affix_width(spec, affix, anchor)?);
+                estimate_kept(&local, budget, from)
+            }
+            None => local.len(),
+        };
         loop {
-            let (candidate, pieces) = truncated(text, &clusters, keep, affix, from);
+            let (candidate, mut pieces) = truncated(text, &local, keep, affix, from);
+            for piece in &mut pieces {
+                piece.source += line.start;
+            }
+            let Some(limit) = limit else {
+                return Ok((candidate, pieces));
+            };
             let fonts = mapped_fonts(&spec.fonts, &pieces);
             let shaped = self.shape(spec, &candidate, fonts)?;
             if shaped.shape.content_widths().1 <= limit || keep == 0 {
-                return Ok((shaped, pieces.into()));
+                return Ok((candidate, pieces));
             }
             keep -= 1;
         }
@@ -906,11 +1062,7 @@ impl TypesetEngine {
         overflow: &OverflowKey,
     ) -> Result<(Shaped, Arc<[Piece]>)> {
         let text = spec.text.as_ref();
-        let affix = match overflow {
-            OverflowKey::End(affix) | OverflowKey::Start(affix) | OverflowKey::Middle(affix) => {
-                affix
-            }
-        };
+        let affix = overflow.affix();
         let layout = self.layout(full, Some(width), spec.align)?;
         let last = layout
             .parley_layout()
@@ -997,6 +1149,39 @@ pub(crate) struct Piece {
     pub shown: Range<usize>,
     pub source: usize,
     pub copied: bool,
+}
+
+/// Byte ranges of the hard-break lines in normalized text, without separators.
+fn hard_line_ranges(text: &str) -> Vec<Range<usize>> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    for (index, separator) in text.match_indices(LINE_SEPARATOR) {
+        lines.push(start..index);
+        start = index + separator.len();
+    }
+    lines.push(start..text.len());
+    lines
+}
+
+/// Append a copied piece at `shown_start`, extending the previous piece when
+/// both copy contiguous source text.
+fn push_copied(pieces: &mut Vec<Piece>, shown_start: usize, source: Range<usize>) {
+    if source.is_empty() {
+        return;
+    }
+    if let Some(last) = pieces.last_mut()
+        && last.copied
+        && last.shown.end == shown_start
+        && last.source + last.shown.len() == source.start
+    {
+        last.shown.end += source.len();
+        return;
+    }
+    pieces.push(Piece {
+        shown: shown_start..shown_start + source.len(),
+        source: source.start,
+        copied: true,
+    });
 }
 
 fn identity(len: usize) -> Arc<[Piece]> {
