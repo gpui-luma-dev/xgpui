@@ -135,6 +135,12 @@ impl ParleyTextSystem {
         self.state.lock().unwrap().shape_calls
     }
 
+    /// Font collection generation; it changes whenever `add_fonts` succeeds, so
+    /// shapes cached under an older generation may use stale fallback faces.
+    pub(crate) fn font_generation(&self) -> u64 {
+        self.state.lock().unwrap().generation
+    }
+
     /// Report a rejection through the installed handler, outside the state lock.
     pub(crate) fn report_layout_error(&self, error: &anyhow::Error) {
         let handler = self.state.lock().unwrap().layout_error_handler.clone();

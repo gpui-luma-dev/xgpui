@@ -675,6 +675,303 @@ fn highlights_merge_over_the_inherited_style() {
     );
 }
 
+const HEBREW: &[u8] = include_bytes!("../../tests/fonts/NotoSansHebrew.ttf");
+const SHALOM: &str = "שלום עולם";
+
+fn has_missing_glyphs(layout: &ParagraphLayout) -> bool {
+    layout
+        .runs()
+        .iter()
+        .flat_map(|run| &run.glyphs)
+        .any(|glyph| glyph.id.0 == 0)
+}
+
+/// A backend without the Hebrew fallback its text style names.
+fn backend_without_hebrew() -> Arc<ParleyTextSystem> {
+    Arc::new(ParleyTextSystem::new(fonts(), "IBM Plex Sans").unwrap())
+}
+
+#[test]
+fn adding_a_fallback_font_reshapes_cached_text() {
+    let parley = backend_without_hebrew();
+    let font_id = parley.font_id(&font()).unwrap();
+    let fixture = Fixture {
+        engine: TypesetEngine::new(parley.clone()),
+        font: font_id,
+    };
+    let spec = nowrap(fixture.spec(SHALOM), None);
+    let layout_of = |fitted: &Fitted| {
+        fixture
+            .engine
+            .layout(&fitted.shaped, None, fitted.align)
+            .unwrap()
+    };
+    let before = fixture.fit(&spec, AvailableSpace::MaxContent);
+    assert!(
+        has_missing_glyphs(&layout_of(&before)),
+        "no Hebrew font yet"
+    );
+
+    parley.add_fonts(vec![HEBREW.into()]).unwrap();
+    // The descriptor keeps its FontId, so only the font generation can tell.
+    assert_eq!(parley.font_id(&font()).unwrap(), font_id);
+    let after = fixture.fit(&spec, AvailableSpace::MaxContent);
+    assert!(!Arc::ptr_eq(&before.shaped.shape, &after.shaped.shape));
+    assert!(!has_missing_glyphs(&layout_of(&after)), "fallback applies");
+
+    // The new results are cached again until the next font change.
+    let calls = fixture.shape_calls();
+    fixture.fit(&spec, AvailableSpace::MaxContent);
+    assert_eq!(fixture.shape_calls(), calls);
+}
+
+#[test]
+fn element_redrawn_after_font_loading_uses_the_new_fallback() {
+    let parley = backend_without_hebrew();
+    let mut cx =
+        TestAppContext::build_with_text_system(TestDispatcher::new(0), None, parley.clone());
+    cx.update(|cx| install(parley.clone(), cx));
+    let visual = cx.add_empty_window();
+    let draw = |visual: &mut VisualTestContext| {
+        visual.draw(
+            point(px(0.0), px(0.0)),
+            size(
+                AvailableSpace::Definite(px(400.0)),
+                AvailableSpace::MinContent,
+            ),
+            |_, _| {
+                div().flex().items_start().child(
+                    div()
+                        .debug_selector(|| "hebrew".into())
+                        .font(font())
+                        .text_size(px(16.0))
+                        .line_height(LINE_HEIGHT)
+                        .whitespace_nowrap()
+                        .child(typeset(SHALOM)),
+                )
+            },
+        );
+        visual.debug_bounds("hebrew").unwrap().size.width
+    };
+    let missing = draw(visual);
+    let calls = parley.shape_calls();
+    visual.update(|_, cx| cx.text_system().add_fonts(vec![HEBREW.into()]).unwrap());
+    let loaded = draw(visual);
+    assert!(parley.shape_calls() > calls, "redraw reshapes");
+    assert_ne!(missing, loaded, "Hebrew glyphs replace .notdef boxes");
+}
+
+#[test]
+fn a_crlf_split_by_a_style_boundary_is_one_hard_break() {
+    let style = gpui::TextStyle::default();
+    let bold = style.clone().highlight(HighlightStyle {
+        font_weight: Some(gpui::FontWeight::BOLD),
+        ..Default::default()
+    });
+    // Boundaries between `\r` and `\n`, and a run holding only `\n`.
+    for lens in [[4, 4].as_slice(), &[3, 1, 1, 3], &[3, 2, 3]] {
+        let runs = lens
+            .iter()
+            .enumerate()
+            .map(|(i, len)| if i % 2 == 0 { &style } else { &bold }.to_run(*len))
+            .collect();
+        let (text, runs) = hard_breaks(&"one\r\ntwo".into(), runs);
+        assert_eq!(text.as_ref(), "one\u{2028}two", "{lens:?}");
+        assert_eq!(runs.iter().map(|run| run.len).sum::<usize>(), text.len());
+        assert!(runs.iter().all(|run| run.len > 0), "{lens:?}");
+    }
+    // The break takes the style of the run holding `\r`.
+    let (_, runs) = hard_breaks(
+        &"one\r\ntwo".into(),
+        vec![style.to_run(3), bold.to_run(1), style.to_run(4)],
+    );
+    let lens: Vec<_> = runs.iter().map(|run| run.len).collect();
+    assert_eq!(lens, [3, LINE_SEPARATOR.len_utf8(), 3]);
+    assert_eq!(runs[1].font.weight, gpui::FontWeight::BOLD);
+
+    // A highlight never changes paragraph structure.
+    let fixture = Fixture::new();
+    let plain = typeset("one\r\ntwo").source_runs(&style);
+    let highlighted = typeset("one\r\ntwo")
+        .with_highlights([(3..4, HighlightStyle::default())])
+        .source_runs(&style);
+    for runs in [plain, highlighted] {
+        let (text, _) = hard_breaks(&"one\r\ntwo".into(), runs);
+        let fitted = fixture.fit(
+            &nowrap(fixture.spec(&text), None),
+            AvailableSpace::MaxContent,
+        );
+        assert_eq!(fitted.size.height, LINE_HEIGHT * 2.0);
+    }
+}
+
+const THREE_LINES: &str = "one\u{2028}two\u{2028}three";
+
+#[test]
+fn unwrapped_text_honors_the_line_clamp() {
+    let fixture = Fixture::new();
+    let width = AvailableSpace::Definite(px(200.0));
+    let mut spec = nowrap(fixture.spec(THREE_LINES), None);
+    spec.line_clamp = Some(1);
+    let clipped = fixture.fit(&spec, width);
+    assert_eq!(clipped.size.height, LINE_HEIGHT, "one allowed line");
+    assert_eq!(clipped.shaped.shape.source(), THREE_LINES, "no affix");
+    // Paint masks to the allowed lines, not to the element's height.
+    let layout = fixture
+        .engine
+        .layout(&clipped.shaped, None, clipped.align)
+        .unwrap();
+    assert_eq!(layout.line_count(), 3);
+    assert_eq!(clamp_height(&layout, 1), Some(LINE_HEIGHT));
+    assert_eq!(clamp_height(&layout, 2), Some(LINE_HEIGHT * 2.0));
+    assert_eq!(clamp_height(&layout, 3), None, "nothing hidden");
+
+    // With an overflow affix, hidden lines are dropped and the last kept line
+    // ends in the affix, as for wrapped text.
+    spec.overflow = Some(OverflowKey::End(ellipsis()));
+    spec.line_clamp = Some(2);
+    let truncated = fixture.fit(&spec, width);
+    assert_eq!(truncated.shaped.shape.source(), "one\u{2028}two…");
+    assert_eq!(truncated.size.height, LINE_HEIGHT * 2.0);
+    for overflow in [
+        OverflowKey::Start(ellipsis()),
+        OverflowKey::Middle(ellipsis()),
+    ] {
+        spec.overflow = Some(overflow);
+        let fitted = fixture.fit(&spec, width);
+        assert_eq!(fitted.shaped.shape.source(), "one\u{2028}two…");
+    }
+}
+
+/// Inline start and advance of each laid-out line.
+fn line_extents(layout: &ParagraphLayout) -> Vec<(f32, f32)> {
+    layout
+        .parley_layout()
+        .lines()
+        .map(|line| (line.metrics().offset, line.metrics().advance))
+        .collect()
+}
+
+#[test]
+fn unwrapped_lines_align_individually() {
+    let fixture = Fixture::new();
+    let layout_for = |text: &str, align, direction| {
+        let mut spec = nowrap(fixture.spec(text), None);
+        spec.align = align;
+        spec.options.direction = direction;
+        let fitted = fixture.fit(&spec, AvailableSpace::MaxContent);
+        fixture
+            .engine
+            .layout(&fitted.shaped, None, fitted.align)
+            .unwrap()
+    };
+    let close = |a: f32, b: f32| (a - b).abs() < 0.5;
+
+    let centered = layout_for(
+        "long heading\u{2028}x",
+        AlignKey::Center,
+        TextDirection::Auto,
+    );
+    let width = f32::from(centered.content_width());
+    let lines = line_extents(&centered);
+    for (offset, advance) in &lines {
+        assert!(close(offset + advance / 2.0, width / 2.0), "{lines:?}");
+    }
+    assert!(lines[1].0 > lines[0].0 + 10.0, "short line is inset");
+
+    let rtl = layout_for(
+        "שלום עולם ארוך\u{2028}אב",
+        AlignKey::Start,
+        TextDirection::RightToLeft,
+    );
+    let width = f32::from(rtl.content_width());
+    let lines = line_extents(&rtl);
+    for (offset, advance) in &lines {
+        assert!(close(offset + advance, width), "right edge: {lines:?}");
+    }
+
+    let ltr_end = layout_for("long heading\u{2028}x", AlignKey::End, TextDirection::Auto);
+    let width = f32::from(ltr_end.content_width());
+    for (offset, advance) in line_extents(&ltr_end) {
+        assert!(close(offset + advance, width));
+    }
+    // Start-aligned left-to-right lines share the left edge.
+    let ltr = layout_for(
+        "long heading\u{2028}x",
+        AlignKey::Start,
+        TextDirection::Auto,
+    );
+    assert!(
+        line_extents(&ltr)
+            .iter()
+            .all(|(offset, _)| close(*offset, 0.0))
+    );
+}
+
+#[test]
+fn unwrapped_truncation_cuts_each_hard_line_on_its_own() {
+    let fixture = Fixture::new();
+    let limit = px(140.0);
+    let source = "short\u{2028}very long second line that overflows";
+    let cases = [
+        (OverflowKey::End(ellipsis()), "short\u{2028}very", None),
+        (
+            OverflowKey::Start(ellipsis()),
+            "short\u{2028}…",
+            Some("overflows"),
+        ),
+        (
+            OverflowKey::Middle(ellipsis()),
+            "short\u{2028}very",
+            Some("flows"),
+        ),
+    ];
+    for (overflow, prefix, suffix) in cases {
+        let spec = nowrap(fixture.spec(source), Some(overflow.clone()));
+        let fitted = fixture.fit(&spec, AvailableSpace::Definite(limit));
+        let shown = fitted.shaped.shape.source();
+        assert!(shown.starts_with(prefix), "{overflow:?}: {shown}");
+        if let Some(suffix) = suffix {
+            assert!(shown.ends_with(suffix), "{overflow:?}: {shown}");
+        }
+        assert_eq!(shown.matches('…').count(), 1, "only the long line: {shown}");
+        assert_eq!(fitted.size, size(limit, LINE_HEIGHT * 2.0));
+        let layout = fixture
+            .engine
+            .layout(&fitted.shaped, None, fitted.align)
+            .unwrap();
+        assert_eq!(layout.line_count(), 2);
+        assert!(layout.content_width() <= limit, "{shown}");
+        // Pieces cover the shown text and copy the bytes they claim.
+        let mut end = 0;
+        for piece in fitted.pieces.iter() {
+            assert_eq!(piece.shown.start, end);
+            end = piece.shown.end;
+            if piece.copied {
+                assert_eq!(
+                    &shown[piece.shown.clone()],
+                    &source[piece.source..piece.source + piece.shown.len()]
+                );
+            }
+        }
+        assert_eq!(end, shown.len());
+    }
+    // Every line too long: each keeps its own start.
+    let spec = nowrap(
+        fixture.spec(&format!("{FOX}\u{2028}{FOX}")),
+        Some(OverflowKey::End(ellipsis())),
+    );
+    let shown = fixture.fit(&spec, AvailableSpace::Definite(limit));
+    let shown = shown.shaped.shape.source();
+    let lines: Vec<_> = shown.split('\u{2028}').collect();
+    assert_eq!(lines.len(), 2, "{shown}");
+    assert!(
+        lines
+            .iter()
+            .all(|line| line.starts_with("The") && line.ends_with('…'))
+    );
+}
+
 fn draw_styled(visual: &mut VisualTestContext) {
     visual.draw(
         point(px(0.0), px(0.0)),
