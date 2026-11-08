@@ -1,5 +1,7 @@
 //! Experimental desktop shell. Linux draws negotiated client decorations; other platforms retain native chrome.
 use gpui::{prelude::*, *};
+mod typography;
+pub use typography::ShellTypography;
 
 use frame::*;
 use std::{cell::RefCell, collections::HashMap};
@@ -145,6 +147,7 @@ struct ClientFrameState {
     button_layout: WindowButtonLayout,
     title: SharedString,
     preview_focus: bool,
+    preview_hover: bool,
 }
 
 impl ClientFrameState {
@@ -168,6 +171,7 @@ impl ClientFrameState {
             button_layout: cx.button_layout().unwrap_or_else(fallback_button_layout),
             title: window.shell_title().into(),
             preview_focus: false,
+            preview_hover: false,
         }
     }
 }
@@ -208,6 +212,8 @@ pub struct ClientFramePreview {
     pub button_layout: Option<WindowButtonLayout>,
     /// Visually simulate keyboard focus on the close button without making it actionable.
     pub show_focus: bool,
+    /// Visually simulate hovering over close, without a native window action.
+    pub show_hover: bool,
     content: AnyElement,
 }
 
@@ -228,6 +234,7 @@ impl ClientFramePreview {
             tiling: Tiling::default(),
             button_layout: None,
             show_focus: false,
+            show_hover: false,
             content: content.into_any_element(),
         }
     }
@@ -253,6 +260,7 @@ impl RenderOnce for ClientFramePreview {
                     .unwrap_or_else(fallback_button_layout),
                 title: self.title,
                 preview_focus: self.show_focus,
+                preview_hover: self.show_hover,
             },
             self.content,
             false,
@@ -268,9 +276,10 @@ fn render_client_frame(
     let maximized = state.maximized;
     let preferences = state.preferences;
     let tiling = state.tiling;
-    let palette = Palette::new(state.appearance, state.active, preferences.high_contrast);
+    let look = preferences.resolved_look(state.appearance, state.active);
+    let palette = look.colors;
     let scale = preferences.text_scale;
-    let button_size = px(33. * scale);
+    let button_size = px(look.button_size);
     let controls = state.controls;
     let left_buttons = visible_buttons(state.button_layout.left, controls);
     let right_buttons = visible_buttons(state.button_layout.right, controls);
@@ -289,14 +298,13 @@ fn render_client_frame(
                     button.id(),
                     label,
                     palette,
-                    if preferences.high_contrast {
-                        palette.text
-                    } else {
-                        preferences.accent
-                    },
+                    look.focus,
                     button_size,
                     interactive,
-                    !interactive && state.preview_focus && button == WindowButton::Close,
+                    (
+                        !interactive && state.preview_focus && button == WindowButton::Close,
+                        !interactive && state.preview_hover && button == WindowButton::Close,
+                    ),
                 )
                 .when(interactive, |element| {
                     element
@@ -338,6 +346,8 @@ fn render_client_frame(
                     .into_any_element()
                 } else {
                     div()
+                        .font(gpui::font(".SystemUIFont"))
+                        .text_size(px(14. * scale))
                         .child(match button {
                             WindowButton::Minimize => "−",
                             WindowButton::Maximize if maximized => "▣",
@@ -350,14 +360,14 @@ fn render_client_frame(
     let title = div()
         .id("shell-titlebar")
         .flex_none()
-        .h(px(40. * scale))
+        .h(px(look.titlebar_height))
         .px(px(4. * scale))
         .flex()
         .items_center()
         .bg(rgb(palette.header))
         .text_color(rgb(palette.text))
-        .text_size(px(14. * scale))
-        .font_weight(FontWeight::SEMIBOLD)
+        .font(look.typography.font.clone())
+        .text_size(px(look.typography.size))
         .border_b_1()
         .border_color(rgb(palette.border))
         .child(buttons(left_buttons, false))
@@ -500,6 +510,10 @@ pub struct ShellOptions {
     pub accent: Option<u32>,
     /// Override logical text/target scaling, independent of device DPI.
     pub text_scale: Option<f32>,
+    /// Override client-frame typography; None parses the desktop description or uses system UI.
+    pub typography: Option<ShellTypography>,
+    /// Resolve motion policy for consumers; the current frame has no animations.
+    pub reduced_motion: Option<bool>,
     /// Override the desktop double-click action; fallback is maximize/restore.
     pub double_click_action: Option<TitlebarAction>,
     /// Override the desktop middle-click action; fallback is no action.
@@ -517,7 +531,7 @@ fn shell_scale(scale: f32) -> f32 {
 }
 
 /// The values actually used by the shared client frame after overrides and fallbacks.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedShellPreferences {
     /// Whether the frame uses high-contrast colors.
     pub high_contrast: bool,
@@ -525,6 +539,10 @@ pub struct ResolvedShellPreferences {
     pub accent: u32,
     /// Logical text/target scale, clamped to 0.5–4 independently of device DPI.
     pub text_scale: f32,
+    /// Unscaled client-frame typography.
+    pub typography: ShellTypography,
+    /// Resolved policy; no frame animations are currently implemented.
+    pub reduced_motion: bool,
     /// Effective title-bar double-click action.
     pub double_click_action: TitlebarAction,
     /// Effective title-bar middle-click action.
@@ -552,6 +570,21 @@ impl ShellOptions {
                 .unwrap_or(false),
             accent: self.accent.or(accent).unwrap_or(0x3584e4),
             text_scale: shell_scale(self.text_scale.or(desktop.text_scale).unwrap_or(1.)),
+            typography: self
+                .typography
+                .clone()
+                .or_else(|| {
+                    desktop
+                        .font
+                        .as_deref()
+                        .and_then(ShellTypography::from_desktop_description)
+                })
+                .unwrap_or_default()
+                .normalized(),
+            reduced_motion: self
+                .reduced_motion
+                .or(desktop.reduced_motion)
+                .unwrap_or(false),
             double_click_action: self
                 .double_click_action
                 .or_else(|| {
@@ -576,6 +609,52 @@ impl ShellOptions {
                         .map(TitlebarAction::from_platform)
                 })
                 .unwrap_or(TitlebarAction::Menu),
+        }
+    }
+}
+
+/// Client-frame colors after appearance, activation and contrast resolution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShellColors {
+    pub header: u32,
+    pub text: u32,
+    pub border: u32,
+    pub hover: u32,
+}
+
+/// The exact logical style tokens consumed by the shared frame renderer.
+/// Does not theme application content or native/server decorations.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedShellLook {
+    pub colors: ShellColors,
+    /// Effective focus-ring color (foreground in high contrast).
+    pub focus: u32,
+    /// Typography with logical text scaling already applied once.
+    pub typography: ShellTypography,
+    pub titlebar_height: f32,
+    pub button_size: f32,
+    /// Motion policy only; current hover/focus changes are instantaneous.
+    pub reduced_motion: bool,
+}
+
+impl ResolvedShellPreferences {
+    /// Resolve the same style tokens used by the native client frame and its preview.
+    pub fn resolved_look(&self, appearance: WindowAppearance, active: bool) -> ResolvedShellLook {
+        let colors = ShellColors::new(appearance, active, self.high_contrast);
+        let mut typography = self.typography.clone();
+        typography.size *= self.text_scale;
+        ResolvedShellLook {
+            colors,
+            focus: if self.high_contrast {
+                colors.text
+            } else {
+                self.accent
+            },
+            titlebar_height: (40.0 * self.text_scale)
+                .max(typography.size * 1.5 + 12.0 * self.text_scale),
+            button_size: 33.0 * self.text_scale,
+            typography,
+            reduced_motion: self.reduced_motion,
         }
     }
 }
@@ -654,13 +733,7 @@ mod frame {
             _ => (),
         }
     }
-    #[derive(Clone, Copy)]
-    pub(super) struct Palette {
-        pub(super) header: u32,
-        pub(super) text: u32,
-        pub(super) border: u32,
-        pub(super) hover: u32,
-    }
+    pub(super) type Palette = ShellColors;
     impl Palette {
         pub(super) fn new(appearance: WindowAppearance, active: bool, contrast: bool) -> Self {
             let dark = matches!(
@@ -727,7 +800,7 @@ mod frame {
         accent: u32,
         size: Pixels,
         interactive: bool,
-        preview_focus: bool,
+        (preview_focus, preview_hover): (bool, bool),
     ) -> Stateful<Div> {
         div()
             .id(id)
@@ -751,6 +824,7 @@ mod frame {
             .border_2()
             .border_color(transparent_black())
             .when(preview_focus, |s| s.border_color(rgb(accent)))
+            .when(preview_hover, |s| s.bg(rgb(palette.hover)))
             .when(interactive, |s| {
                 s.cursor_pointer().hover(move |s| s.bg(rgb(palette.hover)))
             })
@@ -841,6 +915,7 @@ mod input_tests {
             double_click_action: Some(TitlebarAction::None),
             middle_click_action: Some(TitlebarAction::None),
             right_click_action: Some(TitlebarAction::None),
+            ..Default::default()
         }
         .resolved_preferences(&desktop);
         assert!(!overridden.high_contrast);
@@ -853,6 +928,44 @@ mod input_tests {
         assert!(!reset.high_contrast);
         assert_eq!(reset.text_scale, 1.);
         assert_eq!(reset.double_click_action, TitlebarAction::ToggleMaximize);
+    }
+
+    #[::core::prelude::v1::test]
+    fn look_resolution_applies_typography_scale_once_and_preserves_explicit_policy() {
+        let desktop = DesktopPreferences {
+            font: Some("Noto Sans 12".into()),
+            text_scale: Some(1.5),
+            reduced_motion: Some(true),
+            ..Default::default()
+        };
+        let resolved = ShellOptions::default().resolved_preferences(&desktop);
+        assert_eq!(resolved.typography.size, 16.0);
+        let look = resolved.resolved_look(WindowAppearance::Light, true);
+        assert_eq!(look.typography.size, 24.0);
+        assert!(look.titlebar_height >= look.typography.size * 1.5);
+        assert!(look.reduced_motion);
+        let options = ShellOptions {
+            typography: Some(ShellTypography {
+                font: font("Explicit Family"),
+                size: 24.0,
+            }),
+            reduced_motion: Some(false),
+            high_contrast: Some(true),
+            accent: Some(0xff0000),
+            ..Default::default()
+        };
+        let look = options
+            .resolved_preferences(&desktop)
+            .resolved_look(WindowAppearance::Dark, false);
+        assert_eq!(look.typography.font.family.as_ref(), "Explicit Family");
+        assert_eq!(look.typography.size, 36.0);
+        assert_eq!(look.focus, look.colors.text);
+        assert!(!look.reduced_motion);
+        let reset = ShellOptions::default().resolved_preferences(&DesktopPreferences {
+            font: Some("Sans Condensed 12".into()),
+            ..Default::default()
+        });
+        assert_eq!(reset.typography, ShellTypography::default());
     }
 
     #[::core::prelude::v1::test]
@@ -942,6 +1055,46 @@ mod preview_tests {
                 div().size_full().child("Content"),
             ))
         }
+    }
+
+    struct ContentStyleHost(std::rc::Rc<RefCell<Option<SharedString>>>);
+    impl Render for ContentStyleHost {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let observed = self.0.clone();
+            div()
+                .size_full()
+                .font_family("Content Typeface")
+                .child(ClientFramePreview::new(
+                    "Different chrome typography",
+                    ShellOptions {
+                        typography: Some(ShellTypography {
+                            font: font("Frame Typeface"),
+                            size: 30.0,
+                        }),
+                        ..Default::default()
+                    },
+                    canvas(
+                        move |_, window, _| {
+                            *observed.borrow_mut() = Some(window.text_style().font_family);
+                        },
+                        |_, _, _, _| (),
+                    )
+                    .size_full(),
+                ))
+        }
+    }
+
+    #[gpui::test]
+    fn client_frame_typography_does_not_leak_into_application_content(cx: &mut TestAppContext) {
+        let observed = std::rc::Rc::new(RefCell::new(None));
+        let copy = observed.clone();
+        let host = cx.open_window(size(px(600.), px(240.)), move |_, _| ContentStyleHost(copy));
+        let mut test_window = VisualTestContext::from_window(host.into(), cx);
+        test_window.update(|window, app| window.draw(app).clear(app));
+        assert_eq!(
+            observed.borrow().as_ref().map(|s| s.as_ref()),
+            Some("Content Typeface")
+        );
     }
 
     #[gpui::test]

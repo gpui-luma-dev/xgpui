@@ -8,7 +8,8 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 use xgpui_shell::{
-    ClientFramePreview, ShellApp, ShellOptions, ShellWindow, ShellWindowTitle, TitlebarAction,
+    ClientFramePreview, ShellApp, ShellOptions, ShellTypography, ShellWindow, ShellWindowTitle,
+    TitlebarAction,
 };
 
 #[derive(Parser)]
@@ -27,6 +28,8 @@ struct Overrides {
     contrast: Option<bool>,
     accent: Option<u32>,
     scale: Option<f32>,
+    typography: Option<TypographyPreset>,
+    reduced_motion: Option<bool>,
     double_click: Option<TitlebarAction>,
     middle_click: Option<TitlebarAction>,
     right_click: Option<TitlebarAction>,
@@ -37,6 +40,8 @@ impl Overrides {
             high_contrast: self.contrast,
             accent: self.accent,
             text_scale: self.scale,
+            typography: self.typography.map(TypographyPreset::typography),
+            reduced_motion: self.reduced_motion,
             double_click_action: self.double_click,
             middle_click_action: self.middle_click,
             right_click_action: self.right_click,
@@ -48,6 +53,8 @@ impl Overrides {
             Action::Contrast(value) => self.contrast = value,
             Action::Accent(value) => self.accent = value,
             Action::Scale(value) => self.scale = value,
+            Action::Typography(value) => self.typography = value,
+            Action::ReducedMotion(value) => self.reduced_motion = value,
             Action::Titlebar(Click::Double, value) => self.double_click = value,
             Action::Titlebar(Click::Middle, value) => self.middle_click = value,
             Action::Titlebar(Click::Right, value) => self.right_click = value,
@@ -70,6 +77,8 @@ enum Action {
     Contrast(Option<bool>),
     Accent(Option<u32>),
     Scale(Option<f32>),
+    Typography(Option<TypographyPreset>),
+    ReducedMotion(Option<bool>),
     Titlebar(Click, Option<TitlebarAction>),
     Reset,
     Refresh,
@@ -86,7 +95,30 @@ enum Action {
     PreviewAppearance(Option<WindowAppearance>),
     PreviewActive(bool),
     PreviewFocus(bool),
+    PreviewHover(bool),
     PreviewLayout(PreviewLayout),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TypographyPreset {
+    SystemUi,
+    Large,
+    Serif,
+}
+impl TypographyPreset {
+    fn typography(self) -> ShellTypography {
+        match self {
+            Self::SystemUi => ShellTypography::default(),
+            Self::Large => ShellTypography {
+                font: font(".SystemUIFont").bold(),
+                size: 24.0,
+            },
+            Self::Serif => ShellTypography {
+                font: font("Georgia"),
+                size: 18.0,
+            },
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -125,6 +157,7 @@ struct Lab {
     preview_appearance: Option<WindowAppearance>,
     preview_active: bool,
     preview_focus: bool,
+    preview_hover: bool,
     preview_layout: PreviewLayout,
     events: VecDeque<String>,
     _subscriptions: Vec<Subscription>,
@@ -185,6 +218,7 @@ impl Lab {
             preview_appearance: None,
             preview_active: true,
             preview_focus: true,
+            preview_hover: false,
             preview_layout: PreviewLayout::default(),
             events: VecDeque::from(["Lab opened; following desktop preferences".into()]),
             _subscriptions: subscriptions,
@@ -295,6 +329,10 @@ impl Lab {
                 self.preview_active = active;
                 self.record("Changed simulated preview activation only");
             }
+            Action::PreviewHover(hover) => {
+                self.preview_hover = hover;
+                self.record("Changed simulated preview hover only");
+            }
             Action::PreviewFocus(focus) => {
                 self.preview_focus = focus;
                 self.record("Changed simulated preview focus only");
@@ -396,6 +434,68 @@ impl Lab {
             .child(div().flex().flex_wrap().gap_2().children(choices))
             .into_any_element()
     }
+    fn look_inspector(&self, window: &Window, cx: &Context<Self>) -> AnyElement {
+        let desktop = cx.desktop_preferences();
+        let resolved = self
+            .overrides
+            .shell_options()
+            .resolved_preferences(&desktop);
+        let look = resolved.resolved_look(
+            self.preview_appearance
+                .unwrap_or_else(|| window.appearance()),
+            self.preview_active,
+        );
+        let font_source = if self.overrides.typography.is_some() {
+            "explicit override"
+        } else if desktop
+            .font
+            .as_deref()
+            .and_then(ShellTypography::from_desktop_description)
+            .is_some()
+        {
+            "desktop description"
+        } else {
+            "built-in fallback (missing or unsupported description)"
+        };
+        let colors = [
+            ("Header", look.colors.header),
+            ("Text", look.colors.text),
+            ("Border", look.colors.border),
+            ("Hover", look.colors.hover),
+            ("Focus", look.focus),
+        ];
+        let swatches = div()
+            .flex()
+            .flex_wrap()
+            .gap_2()
+            .children(colors.into_iter().map(|(name, color)| {
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .size(px(18.))
+                            .bg(rgb(color))
+                            .border_1()
+                            .border_color(rgb(0x94a3b8)),
+                    )
+                    .child(format!("{name} #{color:06X}"))
+            }))
+            .into_any_element();
+        section("How the look is applied", [
+            div().child("Detected preferences → this window's overrides → resolved tokens → client-frame elements. These tokens match the simulated appearance/activation selected above.").into_any_element(),
+            swatches,
+            property("Title typography requested", format!("{} · {:.1} logical px · weight {} · {:?}; source: {font_source}", look.typography.font.family, look.typography.size, look.typography.font.weight, look.typography.font.style)),
+            property("Font availability", "Requested family; the text system may substitute an installed font. This inspector does not claim an exact matched face."),
+            property("Title and controls", format!("Header {:.1}px; button target {:.1}px. Logical scale {:.0}% is applied once; device DPI is separate. Icons keep a stable system font or vector shape.", look.titlebar_height, look.button_size, resolved.text_scale * 100.)),
+            property("Focus and hover", "Header/text/border follow appearance, activation and contrast. Accent colors keyboard focus; high contrast uses foreground instead. Hover changes the button background instantly. Use the simulated close icon above."),
+            property("Title-bar behavior", format!("Double {:?}; middle {:?}; right {:?}. Real dispatch checks window capabilities; preview controls never dispatch.", resolved.double_click_action, resolved.middle_click_action, resolved.right_click_action)),
+            property("Reduced motion", format!("{} · resolved policy only. This frame has no animation; hover/focus changes are already instantaneous.", look.reduced_motion)),
+            property("Application content", "Keeps its own fonts, colors and behavior. The sample body and lab controls are styled independently; shell preferences only style client-frame chrome. Native/server chrome remains controlled by the OS."),
+        ])
+    }
+
     fn preview(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let appearance = self
             .preview_appearance
@@ -419,6 +519,7 @@ impl Lab {
         preview.maximized = self.preview_mode == PreviewMode::Maximized;
         preview.fullscreen = self.preview_mode == PreviewMode::Fullscreen;
         preview.show_focus = self.preview_focus;
+        preview.show_hover = self.preview_hover;
         preview.tiling = if self.preview_mode == PreviewMode::Tiled {
             Tiling {
                 top: true,
@@ -500,6 +601,14 @@ impl Lab {
             Action::PreviewFocus(!self.preview_focus),
             cx,
         ));
+        controls.push(self.button(
+            "preview-hover",
+            "Show hover",
+            self.preview_hover,
+            true,
+            Action::PreviewHover(!self.preview_hover),
+            cx,
+        ));
         for (i, (name, layout)) in [
             ("Platform / fallback buttons", PreviewLayout::Platform),
             ("Close only", PreviewLayout::CloseOnly),
@@ -517,15 +626,15 @@ impl Lab {
                 cx,
             ));
         }
-        let scale = self
+        let look = self
             .overrides
             .shell_options()
             .resolved_preferences(&cx.desktop_preferences())
-            .text_scale;
+            .resolved_look(appearance, self.preview_active);
         section("Client-frame preview — simulation", [
             div().child("Visual preview of the shared client-frame renderer. State, appearance and button-layout choices here are simulated; detected preferences and your native window are unchanged. Frame buttons, dragging and resizing are non-interactive.").into_any_element(),
             div().flex().flex_wrap().gap_2().children(controls).into_any_element(),
-            div().id("client-frame-preview").w_full().h(px(120. + 80. * scale)).min_h(px(180.)).flex_shrink_0().mt_2().child(preview).into_any_element(),
+            div().id("client-frame-preview").w_full().h(px(look.titlebar_height + 140.)).min_h(px(180.)).flex_shrink_0().mt_2().child(preview).into_any_element(),
         ])
     }
 }
@@ -716,19 +825,60 @@ impl Render for Lab {
                 choices,
             ));
         }
-        preferences.push(property(
-            "Font description",
+        let typography = [
+            ("System", None),
+            ("System UI 14px", Some(TypographyPreset::SystemUi)),
+            ("Large bold 24px", Some(TypographyPreset::Large)),
+            ("Georgia 18px", Some(TypographyPreset::Serif)),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(i, (name, value))| {
+            self.button(
+                ("typography", i),
+                name,
+                self.overrides.typography == value,
+                true,
+                Action::Typography(value),
+                cx,
+            )
+        })
+        .collect();
+        preferences.push(self.preference(
+            "Frame typography",
+            detected(desktop.font.clone()),
             format!(
-                "{} (reported only; not yet applied to frame typography)",
-                detected(desktop.font)
+                "{} · {:.1}px before logical scaling · {:?} · weight {}",
+                resolved.typography.font.family,
+                resolved.typography.size,
+                resolved.typography.font.style,
+                resolved.typography.font.weight
             ),
+            typography,
         ));
-        preferences.push(property(
-            "Reduced motion",
-            format!(
-                "{} (reported only; this frame has no animation)",
-                detected(desktop.reduced_motion)
-            ),
+        let motion = [
+            ("System", None),
+            ("Normal", Some(false)),
+            ("Reduce", Some(true)),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(i, (name, value))| {
+            self.button(
+                ("motion", i),
+                name,
+                self.overrides.reduced_motion == value,
+                true,
+                Action::ReducedMotion(value),
+                cx,
+            )
+        })
+        .collect();
+        preferences.push(self.preference(
+            "Reduced motion policy (frame has no animation)",
+            detected(desktop.reduced_motion),
+            resolved.reduced_motion.to_string(),
+            motion,
         ));
         let native = !linux_window_operations(cx.platform_info());
         let frame_note = if native {
@@ -883,6 +1033,7 @@ impl Render for Lab {
                             .flex_col()
                             .gap_4()
                             .child(self.preview(window, cx))
+                            .child(self.look_inspector(window, cx))
                             .child(state)
                             .child(section(
                                 "Recent events",
@@ -984,6 +1135,32 @@ fn main() {
 mod tests {
     use super::*;
     use ::core::prelude::v1::test;
+
+    #[test]
+    fn typography_and_motion_overrides_reset_without_changing_another_window() {
+        let mut one = Overrides::default();
+        let two = Overrides::default();
+        assert!(one.apply(Action::Typography(Some(TypographyPreset::Large))));
+        assert!(one.apply(Action::ReducedMotion(Some(false))));
+        let desktop = DesktopPreferences {
+            reduced_motion: Some(true),
+            ..Default::default()
+        };
+        let look = one
+            .shell_options()
+            .resolved_preferences(&desktop)
+            .resolved_look(WindowAppearance::Light, true);
+        assert_eq!(look.typography.size, 24.0);
+        assert!(!look.reduced_motion);
+        assert_eq!(two, Overrides::default());
+        assert!(one.apply(Action::Reset));
+        assert_eq!(one, two);
+        assert!(
+            one.shell_options()
+                .resolved_preferences(&desktop)
+                .reduced_motion
+        );
+    }
 
     #[test]
     fn linux_only_operations_are_unavailable_for_mac_and_browser_backends() {
