@@ -1,6 +1,59 @@
 # What's new
 
-## Latest — November 5, 2026
+## Latest — November 7, 2026 — small release in preparation
+
+This update focuses on **test/build reliability and very-alpha Parley text work**.
+The previous release's GPUI 1.27 integration and core 3.0 font APIs remain the
+baseline; this is not another core API migration.
+
+### Parley paragraphs — very alpha
+
+`xgpui-parley 0.5.0` adds explicit paragraph direction and language, plus
+`typeset()` for using the paragraph path as a GPUI element. It inherits text
+styles and supports mixed styled runs, wrapping, truncation and line clamps.
+The Paragraph lab adds multilingual labels and an en/he/ar/fa/ur UI toggle;
+numbers retain reading order inside right-to-left labels.
+
+Color emoji now use the existing GPUI atlas, with COLR v0/v1, sbix and CBDT
+support. Recent fixes invalidate `typeset()` caches after font registration and
+correct no-wrap hard breaks, split CRLFs, per-line alignment/truncation and clamps.
+
+**Treat this as experimental, not a finished text widget.** Plain GPUI text still
+uses the flat LTR path under Parley; use `typeset()` for RTL paragraphs. Selection
+and interactive ranges in `typeset()`, broader BiDi/line-breaking conformance,
+conversion IMEs and cross-platform accessibility acceptance remain follow-ups.
+COLR sweep/radial gradients still lack real-font validation. The API and behavior
+may change. See the [Parley guide](#parley-text) for setup and limits.
+
+```rust
+// Use the same backend Arc installed in the application.
+xgpui_parley::typeset::install(backend.clone(), cx);
+// Add as a child of a styled GPUI element:
+xgpui_parley::typeset("تقرير الإيرادات").rtl()
+```
+
+### Browser builds and test runners
+
+- **Wasm checks:** compile the bare wgpu backend and both browser applications
+  separately, catching thread-safety problems hidden by application feature
+  flags. Browser image completion guards retain resources on their owner thread;
+  custom outputs retain `Send + Sync` support for non-atomic Wasm builds.
+- **Prerequisites and Windows:** missing Wasm targets are installed when possible;
+  failures are reported as `PREREQ`, not passes. Paint inventories tolerate CRLF,
+  and the Bash runner handles Windows paths/toolchain setup more reliably.
+- **Release maintenance:** preparation, version/dependency audits, archive checks
+  and publication tooling now live in Rust. Internal crate dependencies use
+  compatible requirements instead of exact pins, allowing compatible updates
+  without forcing every consumer onto one exact version.
+
+### Release scope
+
+Parley **0.5.0** and wgpu **2.2.0** are already prepared. Thirteen other crates
+need proposed patch bumps for packaged fixes or changed dependency requirements;
+**macros 1.0.2 and color 0.3.1 are unchanged**. Version review and registry
+verification are still required; these updates are not yet published.
+
+## November 5, 2026 — variable fonts
 
 **Variable fonts now work through the full text pipeline on macOS and Windows.**
 `xgpui 3.0.0` adds precise axis settings and OpenType inspection;
@@ -106,10 +159,9 @@ The selected versions combine font controls with the GPUI 1.27.0 sync. Apple
 and macOS receive major releases for breaking renderer constructors and the
 Apple thermal-module migration. Windows and wgpu receive minor capability releases; Parley's new APIs use a
 pre-1.0 minor release. The remaining affected crates receive patch updates for
-backend fixes or matching exact dependency pins. `xgpui-color` stays at 0.3.0 and
-`xgpui-macros` at 1.0.1. See the [combined release version review](upstream/1.27.0-integration.md#selected-crate-versions)
-for the full rationale. These versions are prepared locally; publication and final
-public API approval remain pending.
+backend fixes or matching exact dependency pins. `xgpui-color` shipped at 0.3.1 and
+`xgpui-macros` at 1.0.2 after packaged README updates. See the [combined release version review](upstream/1.27.0-integration.md#selected-crate-versions)
+for the full rationale. This version family shipped in [the previous release](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-07-4d980860fda6).
 
 ## November 4, 2026
 
