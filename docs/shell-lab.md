@@ -51,6 +51,29 @@ workspace and its dependencies.
 All interactive buttons support pointer activation, Tab focus, Enter/Space and
 accessible click actions. Unsupported operations are dimmed and do not dispatch.
 
+## Client-frame preview on Mac (or any host)
+
+The left pane contains a clearly labeled **simulation**, using the same renderer
+as the production client frame. The right pane scrolls independently, keeping the
+preview visible while changing per-window overrides.
+
+- Change contrast, accent and logical scale in the right pane to inspect their
+  rendered result. Show Focus Ring simulates focus on the decorative close icon
+  so accent changes remain visible without making preview controls actionable.
+- Select Floating, Maximized, Tiled or Fullscreen, Light/Dark/native appearance,
+  Active/Inactive, and alternate button layouts in the preview controls.
+- Toggle the long title in Window Operations to inspect truncation in the preview.
+- Preview buttons are decorative images; clicks, double-clicks, drag regions and
+  resize borders do not close, move, resize or change the host window. Use the
+  separate native Window Operations controls to operate the real window.
+- Simulated choices are never stored in the detected platform snapshot. They do
+  not claim to validate Linux compositor behavior or real desktop integration.
+
+Window Menu and decoration requests are disabled on macOS/Windows, where the
+current backend operations are no-ops. Dispatch guards enforce the same rule as
+the buttons, even if an unsupported action is invoked programmatically. The
+Linux-only `--client-decorations` startup option is ignored on these platforms.
+
 ## Manual Linux check
 
 1. Start the client-decorated lab on Fedora GNOME or Ubuntu GNOME. Confirm the
@@ -72,8 +95,8 @@ accessible click actions. Unsupported operations are dimmed and do not dispatch.
    text scale. Repeat with server decorations and another desktop/compositor.
 
 On Windows/macOS, native window chrome remains in place. The inspector and state
-controls are available, but resolved client-frame overrides do not alter native
-window buttons. No desktop-specific behavior is selected by the displayed distro
+controls are available, but resolved client-frame overrides only affect the
+visual preview, not native window buttons. No desktop-specific behavior is selected by the displayed distro
 or desktop name.
 
 ## Build and headless tests
@@ -88,7 +111,9 @@ cargo test --locked --config .cargo/validation.toml -p xgpui-shell --lib
 
 The lab's headless tests verify per-window override/reset isolation and rejection
 of unavailable fixed-window operations. Shared shell tests cover preference
-resolution. These do not establish real GNOME/KDE input, rendering, accessibility,
+resolution. New headless tests verify Mac operation guards, simulation-state
+isolation and that clicks/double-clicks on rendered preview controls preserve the
+host window, its bounds, decorations and insets. These do not establish real GNOME/KDE input, rendering, accessibility,
 portal service behavior or resolution of the recorded Wayland frame stall.
 
 The lab adds no core platform public API beyond the separate #182 prerequisite.

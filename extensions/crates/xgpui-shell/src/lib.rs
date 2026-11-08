@@ -1,11 +1,9 @@
 //! Experimental desktop shell. Linux draws negotiated client decorations; other platforms retain native chrome.
 use gpui::{prelude::*, *};
 
-#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
-use linux::*;
+use frame::*;
 use std::{cell::RefCell, collections::HashMap};
 
-#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 fn activation_key(event: &KeyDownEvent) -> bool {
     matches!(event.keystroke.key.as_str(), "enter" | "space")
         && !event.keystroke.modifiers.control
@@ -123,56 +121,185 @@ impl Render for ShellWindow {
         #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
         if self.show_chrome
             && !window.is_fullscreen()
-            && let Decorations::Client { tiling } = window.window_decorations()
+            && let Decorations::Client { .. } = window.window_decorations()
         {
-            let maximized = window.is_maximized();
-            let preferences = self.shell.resolved_preferences(&cx.desktop_preferences());
-            let palette = Palette::new(
-                window.appearance(),
-                window.is_window_active(),
-                preferences.high_contrast,
-            );
-            let scale = preferences.text_scale;
-            let button_size = px(33. * scale);
-            let mut controls = window.window_controls();
-            controls.minimize &= window.is_minimizable();
-            controls.maximize &= window.is_resizable();
-            let left_buttons = visible_buttons(
-                cx.button_layout()
-                    .unwrap_or_else(WindowButtonLayout::linux_default)
-                    .left,
-                controls,
-            );
-            let right_buttons = visible_buttons(
-                cx.button_layout()
-                    .unwrap_or_else(WindowButtonLayout::linux_default)
-                    .right,
-                controls,
-            );
-            let side_width =
-                px((left_buttons.len().max(right_buttons.len()) as f32 * 33. + 8.) * scale);
-            let inset = if maximized { px(0.) } else { px(5.) };
-            window.set_client_inset(inset);
-            let buttons = |side: Vec<WindowButton>, right: bool| {
-                div()
-                    .flex()
-                    .items_center()
-                    .flex_none()
-                    .min_w(side_width)
-                    .when(right, |s| s.justify_end())
-                    .children(side.into_iter().map(|button| {
-                        let label = control_label(button, maximized);
-                        control_button(
-                            button.id(),
-                            label,
-                            palette,
-                            if preferences.high_contrast {
-                                palette.text
-                            } else {
-                                preferences.accent
-                            },
-                            button_size,
-                        )
+            let state = ClientFrameState::for_window(&self.shell, window, cx);
+            window.set_client_inset(if state.maximized { px(0.) } else { px(5.) });
+            return render_client_frame(state, content.into_any_element(), true);
+        }
+        // Clear any prior client frame when switching to server chrome/fullscreen.
+        window.set_client_inset(px(0.));
+        let _ = (cx, self.show_chrome, &self.shell);
+        content.into_any_element()
+    }
+}
+
+struct ClientFrameState {
+    preferences: ResolvedShellPreferences,
+    appearance: WindowAppearance,
+    active: bool,
+    maximized: bool,
+    tiling: Tiling,
+    controls: WindowControls,
+    resizable: bool,
+    button_layout: WindowButtonLayout,
+    title: SharedString,
+    preview_focus: bool,
+}
+
+impl ClientFrameState {
+    #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
+    fn for_window(options: &ShellOptions, window: &Window, cx: &App) -> Self {
+        let tiling = match window.window_decorations() {
+            Decorations::Client { tiling } => tiling,
+            Decorations::Server => Tiling::default(),
+        };
+        let mut controls = window.window_controls();
+        controls.minimize &= window.is_minimizable();
+        controls.maximize &= window.is_resizable();
+        Self {
+            preferences: options.resolved_preferences(&cx.desktop_preferences()),
+            appearance: window.appearance(),
+            active: window.is_window_active(),
+            maximized: window.is_maximized(),
+            tiling,
+            controls,
+            resizable: window.is_resizable(),
+            button_layout: cx.button_layout().unwrap_or_else(fallback_button_layout),
+            title: window.shell_title().into(),
+            preview_focus: false,
+        }
+    }
+}
+
+fn fallback_button_layout() -> WindowButtonLayout {
+    WindowButtonLayout {
+        left: [None; MAX_BUTTONS_PER_SIDE],
+        right: [
+            Some(WindowButton::Minimize),
+            Some(WindowButton::Maximize),
+            Some(WindowButton::Close),
+        ],
+    }
+}
+
+/// A visual-only client-frame preview inside an application's content area.
+///
+/// Uses the production frame renderer and resolver, but attaches no window actions,
+/// drag/resize regions or focusable frame buttons. It never changes the host window's
+/// decorations, insets or state. Simulated state is not detected desktop information.
+#[derive(IntoElement)]
+pub struct ClientFramePreview {
+    /// Displayed preview title.
+    pub title: SharedString,
+    /// Per-window overrides to preview against the current desktop snapshot.
+    pub options: ShellOptions,
+    /// Simulated appearance, independent of native window appearance.
+    pub appearance: WindowAppearance,
+    /// Simulated activation state.
+    pub active: bool,
+    /// Simulated maximization state.
+    pub maximized: bool,
+    /// Hide preview chrome, as a real fullscreen client frame does.
+    pub fullscreen: bool,
+    /// Simulated tiled edges.
+    pub tiling: Tiling,
+    /// Preview button layout; None uses the current platform layout or the shell fallback.
+    pub button_layout: Option<WindowButtonLayout>,
+    /// Visually simulate keyboard focus on the close button without making it actionable.
+    pub show_focus: bool,
+    content: AnyElement,
+}
+
+impl ClientFramePreview {
+    /// Construct an active, floating, light preview. Give its parent a bounded size.
+    pub fn new(
+        title: impl Into<SharedString>,
+        options: ShellOptions,
+        content: impl IntoElement,
+    ) -> Self {
+        Self {
+            title: title.into(),
+            options,
+            appearance: WindowAppearance::Light,
+            active: true,
+            maximized: false,
+            fullscreen: false,
+            tiling: Tiling::default(),
+            button_layout: None,
+            show_focus: false,
+            content: content.into_any_element(),
+        }
+    }
+}
+
+impl RenderOnce for ClientFramePreview {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        if self.fullscreen {
+            return self.content;
+        }
+        render_client_frame(
+            ClientFrameState {
+                preferences: self.options.resolved_preferences(&cx.desktop_preferences()),
+                appearance: self.appearance,
+                active: self.active,
+                maximized: self.maximized,
+                tiling: self.tiling,
+                controls: WindowControls::default(),
+                resizable: true,
+                button_layout: self
+                    .button_layout
+                    .or_else(|| cx.button_layout())
+                    .unwrap_or_else(fallback_button_layout),
+                title: self.title,
+                preview_focus: self.show_focus,
+            },
+            self.content,
+            false,
+        )
+    }
+}
+
+fn render_client_frame(
+    state: ClientFrameState,
+    content: AnyElement,
+    interactive: bool,
+) -> AnyElement {
+    let maximized = state.maximized;
+    let preferences = state.preferences;
+    let tiling = state.tiling;
+    let palette = Palette::new(state.appearance, state.active, preferences.high_contrast);
+    let scale = preferences.text_scale;
+    let button_size = px(33. * scale);
+    let controls = state.controls;
+    let left_buttons = visible_buttons(state.button_layout.left, controls);
+    let right_buttons = visible_buttons(state.button_layout.right, controls);
+    let side_width = px((left_buttons.len().max(right_buttons.len()) as f32 * 33. + 8.) * scale);
+    let inset = if maximized { px(0.) } else { px(5.) };
+    let buttons = |side: Vec<WindowButton>, right: bool| {
+        div()
+            .flex()
+            .items_center()
+            .flex_none()
+            .min_w(side_width)
+            .when(right, |s| s.justify_end())
+            .children(side.into_iter().map(|button| {
+                let label = control_label(button, maximized);
+                control_button(
+                    button.id(),
+                    label,
+                    palette,
+                    if preferences.high_contrast {
+                        palette.text
+                    } else {
+                        preferences.accent
+                    },
+                    button_size,
+                    interactive,
+                    !interactive && state.preview_focus && button == WindowButton::Close,
+                )
+                .when(interactive, |element| {
+                    element
                         .on_click(move |_, window, cx| {
                             cx.stop_propagation();
                             activate_control(button, window);
@@ -186,64 +313,66 @@ impl Render for ShellWindow {
                         .on_a11y_action(AccessibleAction::Click, move |_, window, _| {
                             activate_control(button, window)
                         })
-                        .child(if button == WindowButton::Close {
-                            // Draw around the geometric center, independent of font baselines.
-                            canvas(
-                                |_, _, _| (),
-                                move |bounds, _, window, _| {
-                                    let margin = px(2. * scale);
-                                    let start = bounds.origin + point(margin, margin);
-                                    let end = bounds.bottom_right() - point(margin, margin);
-                                    for (a, b) in [
-                                        (start, end),
-                                        (point(start.x, end.y), point(end.x, start.y)),
-                                    ] {
-                                        let mut path = PathBuilder::stroke(px(2. * scale));
-                                        path.move_to(a);
-                                        path.line_to(b);
-                                        if let Ok(path) = path.build() {
-                                            window.paint_path(path, rgb(palette.text));
-                                        }
-                                    }
-                                },
-                            )
-                            .size(px(20. * scale))
-                            .into_any_element()
-                        } else {
-                            div()
-                                .child(match button {
-                                    WindowButton::Minimize => "−",
-                                    WindowButton::Maximize if maximized => "▣",
-                                    _ => "□",
-                                })
-                                .into_any_element()
+                })
+                .child(if button == WindowButton::Close {
+                    // Draw around the geometric center, independent of font baselines.
+                    canvas(
+                        |_, _, _| (),
+                        move |bounds, _, window, _| {
+                            let margin = px(2. * scale);
+                            let start = bounds.origin + point(margin, margin);
+                            let end = bounds.bottom_right() - point(margin, margin);
+                            for (a, b) in
+                                [(start, end), (point(start.x, end.y), point(end.x, start.y))]
+                            {
+                                let mut path = PathBuilder::stroke(px(2. * scale));
+                                path.move_to(a);
+                                path.line_to(b);
+                                if let Ok(path) = path.build() {
+                                    window.paint_path(path, rgb(palette.text));
+                                }
+                            }
+                        },
+                    )
+                    .size(px(20. * scale))
+                    .into_any_element()
+                } else {
+                    div()
+                        .child(match button {
+                            WindowButton::Minimize => "−",
+                            WindowButton::Maximize if maximized => "▣",
+                            _ => "□",
                         })
-                    }))
-            };
-            let title = div()
-                .id("shell-titlebar")
-                .flex_none()
-                .h(px(40. * scale))
-                .px(px(4. * scale))
+                        .into_any_element()
+                })
+            }))
+    };
+    let title = div()
+        .id("shell-titlebar")
+        .flex_none()
+        .h(px(40. * scale))
+        .px(px(4. * scale))
+        .flex()
+        .items_center()
+        .bg(rgb(palette.header))
+        .text_color(rgb(palette.text))
+        .text_size(px(14. * scale))
+        .font_weight(FontWeight::SEMIBOLD)
+        .border_b_1()
+        .border_color(rgb(palette.border))
+        .child(buttons(left_buttons, false))
+        .child(
+            div()
+                .id("shell-title-drag")
+                .flex_1()
+                .min_w_0()
+                .overflow_hidden()
+                .h_full()
                 .flex()
                 .items_center()
-                .bg(rgb(palette.header))
-                .text_color(rgb(palette.text))
-                .text_size(px(14. * scale))
-                .font_weight(FontWeight::SEMIBOLD)
-                .border_b_1()
-                .border_color(rgb(palette.border))
-                .child(buttons(left_buttons, false))
-                .child(
-                    div()
-                        .id("shell-title-drag")
-                        .flex_1()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .h_full()
-                        .flex()
-                        .items_center()
-                        .justify_center()
+                .justify_center()
+                .when(interactive, |title| {
+                    title
                         .on_mouse_down(MouseButton::Left, {
                             let action = preferences.double_click_action;
                             move |event, window, _| {
@@ -262,111 +391,100 @@ impl Render for ShellWindow {
                             let action = preferences.middle_click_action;
                             move |event, window, _| action.perform_at(window, event.position)
                         })
-                        .child(
-                            div()
-                                .w_full()
-                                .truncate()
-                                .text_center()
-                                .child(window.shell_title()),
-                        ),
-                )
-                .child(buttons(right_buttons, true));
-            // The inset handles resizing; content events must not initiate window moves.
-            let mut frame = div()
-                .id("shell-frame")
+                })
+                .child(div().w_full().truncate().text_center().child(state.title)),
+        )
+        .child(buttons(right_buttons, true));
+    // The inset handles resizing; content events must not initiate window moves.
+    let mut frame = div()
+        .id("shell-frame")
+        .size_full()
+        .relative()
+        .bg(rgb(palette.border));
+    let edges = [
+        (ResizeEdge::Top, !tiling.top, CursorStyle::ResizeUpDown),
+        (
+            ResizeEdge::Bottom,
+            !tiling.bottom,
+            CursorStyle::ResizeUpDown,
+        ),
+        (ResizeEdge::Left, !tiling.left, CursorStyle::ResizeLeftRight),
+        (
+            ResizeEdge::Right,
+            !tiling.right,
+            CursorStyle::ResizeLeftRight,
+        ),
+        (
+            ResizeEdge::TopLeft,
+            !tiling.top && !tiling.left,
+            CursorStyle::ResizeUpLeftDownRight,
+        ),
+        (
+            ResizeEdge::TopRight,
+            !tiling.top && !tiling.right,
+            CursorStyle::ResizeUpRightDownLeft,
+        ),
+        (
+            ResizeEdge::BottomLeft,
+            !tiling.bottom && !tiling.left,
+            CursorStyle::ResizeUpRightDownLeft,
+        ),
+        (
+            ResizeEdge::BottomRight,
+            !tiling.bottom && !tiling.right,
+            CursorStyle::ResizeUpLeftDownRight,
+        ),
+    ];
+    frame = frame
+        .when(!maximized && !tiling.top, |s| s.pt(inset))
+        .when(!maximized && !tiling.bottom, |s| s.pb(inset))
+        .when(!maximized && !tiling.left, |s| s.pl(inset))
+        .when(!maximized && !tiling.right, |s| s.pr(inset))
+        .child(
+            div()
                 .size_full()
-                .relative()
-                .bg(rgb(palette.border));
-            let edges = [
-                (ResizeEdge::Top, !tiling.top, CursorStyle::ResizeUpDown),
-                (
-                    ResizeEdge::Bottom,
-                    !tiling.bottom,
-                    CursorStyle::ResizeUpDown,
-                ),
-                (ResizeEdge::Left, !tiling.left, CursorStyle::ResizeLeftRight),
-                (
-                    ResizeEdge::Right,
-                    !tiling.right,
-                    CursorStyle::ResizeLeftRight,
-                ),
-                (
-                    ResizeEdge::TopLeft,
-                    !tiling.top && !tiling.left,
-                    CursorStyle::ResizeUpLeftDownRight,
-                ),
-                (
-                    ResizeEdge::TopRight,
-                    !tiling.top && !tiling.right,
-                    CursorStyle::ResizeUpRightDownLeft,
-                ),
-                (
-                    ResizeEdge::BottomLeft,
-                    !tiling.bottom && !tiling.left,
-                    CursorStyle::ResizeUpRightDownLeft,
-                ),
-                (
-                    ResizeEdge::BottomRight,
-                    !tiling.bottom && !tiling.right,
-                    CursorStyle::ResizeUpLeftDownRight,
-                ),
-            ];
-            frame = frame
-                .when(!maximized && !tiling.top, |s| s.pt(inset))
-                .when(!maximized && !tiling.bottom, |s| s.pb(inset))
-                .when(!maximized && !tiling.left, |s| s.pl(inset))
-                .when(!maximized && !tiling.right, |s| s.pr(inset))
+                .flex()
+                .flex_col()
+                .when(!maximized && !tiling.is_tiled(), |s| {
+                    s.rounded(px(10.)).overflow_hidden()
+                })
+                .child(title)
                 .child(
                     div()
-                        .size_full()
-                        .flex()
-                        .flex_col()
-                        .when(!maximized && !tiling.is_tiled(), |s| {
-                            s.rounded(px(10.)).overflow_hidden()
-                        })
-                        .child(title)
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_h_0()
-                                .min_w_0()
-                                .overflow_hidden()
-                                .child(content),
-                        ),
-                );
-            if !maximized && window.is_resizable() {
-                for (index, (edge, enabled, cursor)) in edges.into_iter().enumerate() {
-                    if !enabled {
-                        continue;
-                    }
-                    let region = div()
-                        .id(("shell-resize", index))
-                        .absolute()
-                        .cursor(cursor)
-                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                            cx.stop_propagation();
-                            window.start_window_resize(edge);
-                        });
-                    let region = match edge {
-                        ResizeEdge::Top => region.top_0().left(inset).right(inset).h(inset),
-                        ResizeEdge::Bottom => region.bottom_0().left(inset).right(inset).h(inset),
-                        ResizeEdge::Left => region.left_0().top(inset).bottom(inset).w(inset),
-                        ResizeEdge::Right => region.right_0().top(inset).bottom(inset).w(inset),
-                        ResizeEdge::TopLeft => region.top_0().left_0().size(inset),
-                        ResizeEdge::TopRight => region.top_0().right_0().size(inset),
-                        ResizeEdge::BottomLeft => region.bottom_0().left_0().size(inset),
-                        ResizeEdge::BottomRight => region.bottom_0().right_0().size(inset),
-                    };
-                    frame = frame.child(region);
-                }
+                        .flex_1()
+                        .min_h_0()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .child(content),
+                ),
+        );
+    if interactive && !maximized && state.resizable {
+        for (index, (edge, enabled, cursor)) in edges.into_iter().enumerate() {
+            if !enabled {
+                continue;
             }
-            return frame.into_any_element();
+            let region = div()
+                .id(("shell-resize", index))
+                .absolute()
+                .cursor(cursor)
+                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                    cx.stop_propagation();
+                    window.start_window_resize(edge);
+                });
+            let region = match edge {
+                ResizeEdge::Top => region.top_0().left(inset).right(inset).h(inset),
+                ResizeEdge::Bottom => region.bottom_0().left(inset).right(inset).h(inset),
+                ResizeEdge::Left => region.left_0().top(inset).bottom(inset).w(inset),
+                ResizeEdge::Right => region.right_0().top(inset).bottom(inset).w(inset),
+                ResizeEdge::TopLeft => region.top_0().left_0().size(inset),
+                ResizeEdge::TopRight => region.top_0().right_0().size(inset),
+                ResizeEdge::BottomLeft => region.bottom_0().left_0().size(inset),
+                ResizeEdge::BottomRight => region.bottom_0().right_0().size(inset),
+            };
+            frame = frame.child(region);
         }
-        // Clear any prior client frame when switching to server chrome/fullscreen.
-        window.set_client_inset(px(0.));
-        let _ = (cx, self.show_chrome, &self.shell);
-        content.into_any_element()
     }
+    frame.into_any_element()
 }
 
 /// Optional per-window overrides. `None` follows desktop preferences, then built-in fallbacks.
@@ -482,7 +600,6 @@ impl TitlebarAction {
         }
     }
 
-    #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
     fn perform_at(self, window: &mut Window, position: Point<Pixels>) {
         match self {
             Self::ToggleMaximize if window.window_controls().maximize && window.is_resizable() => {
@@ -497,8 +614,7 @@ impl TitlebarAction {
     }
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
-mod linux {
+mod frame {
     use super::*;
     pub(super) fn visible_buttons(
         side: [Option<WindowButton>; MAX_BUTTONS_PER_SIDE],
@@ -610,13 +726,22 @@ mod linux {
         palette: Palette,
         accent: u32,
         size: Pixels,
+        interactive: bool,
+        preview_focus: bool,
     ) -> Stateful<Div> {
         div()
             .id(id)
-            .role(Role::Button)
-            .aria_label(label)
-            .focusable()
-            .tab_stop(true)
+            .role(if interactive {
+                Role::Button
+            } else {
+                Role::Image
+            })
+            .aria_label(if interactive {
+                label.to_owned()
+            } else {
+                format!("Preview: {label}")
+            })
+            .when(interactive, |s| s.focusable().tab_stop(true))
             .size(size)
             .flex_none()
             .flex()
@@ -625,11 +750,15 @@ mod linux {
             .rounded_full()
             .border_2()
             .border_color(transparent_black())
-            .cursor_pointer()
-            .hover(move |s| s.bg(rgb(palette.hover)))
+            .when(preview_focus, |s| s.border_color(rgb(accent)))
+            .when(interactive, |s| {
+                s.cursor_pointer().hover(move |s| s.bg(rgb(palette.hover)))
+            })
             .focus_visible(move |s| s.border_color(rgb(accent)))
-            .tooltip(move |_, cx| cx.new(|_| ControlTooltip(label)).into())
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .when(interactive, |s| {
+                s.tooltip(move |_, cx| cx.new(|_| ControlTooltip(label)).into())
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            })
     }
 
     #[cfg(test)]
@@ -796,5 +925,75 @@ mod lifecycle_tests {
             .unwrap();
         cx.run_until_parked();
         SHELL_TITLES.with(|titles| assert!(!titles.borrow().contains_key(&two_id)));
+    }
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+    use ::core::prelude::v1::test;
+
+    struct PreviewHost;
+    impl Render for PreviewHost {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(ClientFramePreview::new(
+                "Preview only",
+                ShellOptions::default(),
+                div().size_full().child("Content"),
+            ))
+        }
+    }
+
+    #[gpui::test]
+    fn preview_pointer_events_do_not_change_or_close_the_host(cx: &mut TestAppContext) {
+        let host = cx.open_window(size(px(600.), px(200.)), |_, _| PreviewHost);
+        let mut test_window = VisualTestContext::from_window(host.into(), cx);
+        test_window.update(|window, app| window.draw(app).clear(app));
+        let before = cx
+            .update_window(*host, |_, window, _| {
+                (
+                    window.window_bounds(),
+                    window.window_decorations(),
+                    window.client_inset(),
+                    window.is_maximized(),
+                    window.is_fullscreen(),
+                )
+            })
+            .unwrap();
+        // The three preview window controls, title drag area, and resize edge must
+        // all remain decorative even though they share the real frame's renderer.
+        for position in [
+            point(px(575.), px(20.)),
+            point(px(542.), px(20.)),
+            point(px(509.), px(20.)),
+            point(px(300.), px(20.)),
+            point(px(2.), px(80.)),
+        ] {
+            test_window.simulate_click(position, Modifiers::default());
+        }
+        test_window.simulate_event(MouseDownEvent {
+            position: point(px(300.), px(20.)),
+            button: MouseButton::Left,
+            click_count: 2,
+            first_mouse: false,
+            modifiers: Modifiers::default(),
+        });
+        test_window.simulate_mouse_up(
+            point(px(300.), px(20.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        let after = cx
+            .update_window(*host, |_, window, _| {
+                (
+                    window.window_bounds(),
+                    window.window_decorations(),
+                    window.client_inset(),
+                    window.is_maximized(),
+                    window.is_fullscreen(),
+                )
+            })
+            .expect("preview close must not close the real window");
+        assert_eq!(before, after);
     }
 }

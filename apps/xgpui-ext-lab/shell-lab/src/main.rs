@@ -7,7 +7,9 @@ use std::{
     rc::Rc,
     sync::atomic::{AtomicUsize, Ordering},
 };
-use xgpui_shell::{ShellApp, ShellOptions, ShellWindow, ShellWindowTitle, TitlebarAction};
+use xgpui_shell::{
+    ClientFramePreview, ShellApp, ShellOptions, ShellWindow, ShellWindowTitle, TitlebarAction,
+};
 
 #[derive(Parser)]
 #[command(about = "Inspect desktop preferences and test per-window xgpui-shell overrides")]
@@ -80,6 +82,36 @@ enum Action {
     NormalSize,
     RequestDecorations(WindowDecorations),
     NewWindow { fixed: bool },
+    PreviewMode(PreviewMode),
+    PreviewAppearance(Option<WindowAppearance>),
+    PreviewActive(bool),
+    PreviewFocus(bool),
+    PreviewLayout(PreviewLayout),
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum PreviewMode {
+    #[default]
+    Floating,
+    Maximized,
+    Tiled,
+    Fullscreen,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum PreviewLayout {
+    #[default]
+    Platform,
+    CloseOnly,
+    Left,
+}
+
+fn linux_window_operations(platform: PlatformInfo) -> bool {
+    platform.target == PlatformTarget::Native
+        && matches!(
+            platform.os,
+            OperatingSystem::Linux | OperatingSystem::FreeBsd
+        )
 }
 
 static NEXT_WINDOW: AtomicUsize = AtomicUsize::new(1);
@@ -89,6 +121,11 @@ struct Lab {
     overrides: Overrides,
     requested: WindowDecorations,
     long_title: bool,
+    preview_mode: PreviewMode,
+    preview_appearance: Option<WindowAppearance>,
+    preview_active: bool,
+    preview_focus: bool,
+    preview_layout: PreviewLayout,
     events: VecDeque<String>,
     _subscriptions: Vec<Subscription>,
     session: String,
@@ -144,6 +181,11 @@ impl Lab {
             overrides: Overrides::default(),
             requested,
             long_title: false,
+            preview_mode: PreviewMode::default(),
+            preview_appearance: None,
+            preview_active: true,
+            preview_focus: true,
+            preview_layout: PreviewLayout::default(),
             events: VecDeque::from(["Lab opened; following desktop preferences".into()]),
             _subscriptions: subscriptions,
             session: format!(
@@ -214,7 +256,11 @@ impl Lab {
                 window.toggle_fullscreen();
                 self.record("Requested fullscreen toggle");
             }
-            Action::WindowMenu if controls.window_menu => window.show_window_menu(position),
+            Action::WindowMenu
+                if linux_window_operations(cx.platform_info()) && controls.window_menu =>
+            {
+                window.show_window_menu(position)
+            }
             Action::CompactSize | Action::NormalSize
                 if window.is_resizable() && !window.is_fullscreen() && !window.is_maximized() =>
             {
@@ -226,7 +272,7 @@ impl Lab {
                 window.resize(dimensions);
                 self.record("Requested windowed size; compositor may constrain it");
             }
-            Action::RequestDecorations(mode) => {
+            Action::RequestDecorations(mode) if linux_window_operations(cx.platform_info()) => {
                 self.requested = mode;
                 window.request_decorations(mode);
                 self.record(format!(
@@ -237,6 +283,26 @@ impl Lab {
                 Ok(_) => self.record("Opened an independent window with system defaults"),
                 Err(error) => self.record(format!("Could not open window: {error:#}")),
             },
+            Action::PreviewMode(mode) => {
+                self.preview_mode = mode;
+                self.record("Changed simulated preview state only");
+            }
+            Action::PreviewAppearance(appearance) => {
+                self.preview_appearance = appearance;
+                self.record("Changed simulated preview appearance only");
+            }
+            Action::PreviewActive(active) => {
+                self.preview_active = active;
+                self.record("Changed simulated preview activation only");
+            }
+            Action::PreviewFocus(focus) => {
+                self.preview_focus = focus;
+                self.record("Changed simulated preview focus only");
+            }
+            Action::PreviewLayout(layout) => {
+                self.preview_layout = layout;
+                self.record("Changed simulated preview button layout only");
+            }
             _ => self.record("Operation unavailable in this window state"),
         }
         cx.notify();
@@ -330,6 +396,138 @@ impl Lab {
             .child(div().flex().flex_wrap().gap_2().children(choices))
             .into_any_element()
     }
+    fn preview(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+        let appearance = self
+            .preview_appearance
+            .unwrap_or_else(|| window.appearance());
+        let dark = matches!(
+            appearance,
+            WindowAppearance::Dark | WindowAppearance::VibrantDark
+        );
+        let sample = div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .bg(rgb(if dark { 0x17202a } else { 0xfafafa }))
+            .text_color(rgb(if dark { 0xe2e8f0 } else { 0x1e293b }))
+            .child("Application content — preview only");
+        let mut preview =
+            ClientFramePreview::new(window.shell_title(), self.overrides.shell_options(), sample);
+        preview.appearance = appearance;
+        preview.active = self.preview_active;
+        preview.maximized = self.preview_mode == PreviewMode::Maximized;
+        preview.fullscreen = self.preview_mode == PreviewMode::Fullscreen;
+        preview.show_focus = self.preview_focus;
+        preview.tiling = if self.preview_mode == PreviewMode::Tiled {
+            Tiling {
+                top: true,
+                left: true,
+                bottom: true,
+                right: false,
+            }
+        } else {
+            Tiling::default()
+        };
+        preview.button_layout = match self.preview_layout {
+            PreviewLayout::Platform => None,
+            PreviewLayout::CloseOnly => Some(WindowButtonLayout {
+                left: [None; 3],
+                right: [Some(WindowButton::Close), None, None],
+            }),
+            PreviewLayout::Left => Some(WindowButtonLayout {
+                left: [
+                    Some(WindowButton::Close),
+                    Some(WindowButton::Minimize),
+                    Some(WindowButton::Maximize),
+                ],
+                right: [None; 3],
+            }),
+        };
+        let mut controls = Vec::new();
+        for (i, mode) in [
+            PreviewMode::Floating,
+            PreviewMode::Maximized,
+            PreviewMode::Tiled,
+            PreviewMode::Fullscreen,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            controls.push(self.button(
+                ("preview-mode", i),
+                &format!("{mode:?}"),
+                self.preview_mode == mode,
+                true,
+                Action::PreviewMode(mode),
+                cx,
+            ));
+        }
+        for (i, (name, appearance)) in [
+            ("Native appearance", None),
+            ("Light", Some(WindowAppearance::Light)),
+            ("Dark", Some(WindowAppearance::Dark)),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            controls.push(self.button(
+                ("preview-appearance", i),
+                name,
+                self.preview_appearance == appearance,
+                true,
+                Action::PreviewAppearance(appearance),
+                cx,
+            ));
+        }
+        controls.push(self.button(
+            "preview-active",
+            if self.preview_active {
+                "Active preview"
+            } else {
+                "Inactive preview"
+            },
+            self.preview_active,
+            true,
+            Action::PreviewActive(!self.preview_active),
+            cx,
+        ));
+        controls.push(self.button(
+            "preview-focus",
+            "Show focus ring",
+            self.preview_focus,
+            true,
+            Action::PreviewFocus(!self.preview_focus),
+            cx,
+        ));
+        for (i, (name, layout)) in [
+            ("Platform / fallback buttons", PreviewLayout::Platform),
+            ("Close only", PreviewLayout::CloseOnly),
+            ("Buttons on left", PreviewLayout::Left),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            controls.push(self.button(
+                ("preview-layout", i),
+                name,
+                self.preview_layout == layout,
+                true,
+                Action::PreviewLayout(layout),
+                cx,
+            ));
+        }
+        let scale = self
+            .overrides
+            .shell_options()
+            .resolved_preferences(&cx.desktop_preferences())
+            .text_scale;
+        section("Client-frame preview — simulation", [
+            div().child("Visual preview of the shared client-frame renderer. State, appearance and button-layout choices here are simulated; detected preferences and your native window are unchanged. Frame buttons, dragging and resizing are non-interactive.").into_any_element(),
+            div().flex().flex_wrap().gap_2().children(controls).into_any_element(),
+            div().id("client-frame-preview").w_full().h(px(120. + 80. * scale)).min_h(px(180.)).flex_shrink_0().mt_2().child(preview).into_any_element(),
+        ])
+    }
 }
 
 fn property(label: &str, value: impl Into<String>) -> AnyElement {
@@ -352,6 +550,7 @@ fn section(title: &str, rows: impl IntoIterator<Item = AnyElement>) -> AnyElemen
     div()
         .flex()
         .flex_col()
+        .flex_shrink_0()
         .gap_1()
         .p_4()
         .rounded_lg()
@@ -531,9 +730,9 @@ impl Render for Lab {
                 detected(desktop.reduced_motion)
             ),
         ));
-        let native = !cfg!(any(target_os = "linux", target_os = "freebsd"));
+        let native = !linux_window_operations(cx.platform_info());
         let frame_note = if native {
-            "Native platform chrome is retained. Overrides below describe the client frame and do not recolor native window controls."
+            "Native platform chrome is retained. Use the simulated client-frame preview to inspect styling; overrides do not change your native window controls. Window Menu and decoration requests are unsupported here."
         } else if window.is_fullscreen() {
             "Fullscreen: the client frame is hidden. Exit fullscreen to inspect its styling."
         } else if matches!(window.window_decorations(), Decorations::Server) {
@@ -559,7 +758,15 @@ impl Render for Lab {
                     "Fullscreen / resizable",
                     format!("{} / {}", window.is_fullscreen(), window.is_resizable()),
                 ),
-                property("Capabilities", format!("{controls:?}")),
+                property("Backend capabilities", format!("{controls:?}")),
+                property(
+                    "Window menu in this lab",
+                    if controls.window_menu && !native {
+                        "available"
+                    } else {
+                        "unsupported on this platform"
+                    },
+                ),
                 property("Window bounds", format!("{:?}", window.window_bounds())),
                 property("Content viewport", format!("{:?}", window.viewport_size())),
                 property(
@@ -591,7 +798,11 @@ impl Render for Lab {
                 Action::Fullscreen,
                 controls.fullscreen,
             ),
-            ("Window menu", Action::WindowMenu, controls.window_menu),
+            (
+                "Window menu",
+                Action::WindowMenu,
+                controls.window_menu && !native,
+            ),
             (
                 "Compact size",
                 Action::CompactSize,
@@ -631,20 +842,80 @@ impl Render for Lab {
                 )
             })
             .collect::<Vec<_>>();
-        div().id("shell-lab").size_full().overflow_y_scroll().bg(rgb(0x0f172a)).text_color(rgb(0xe2e8f0))
-            .text_size(px(13.)).p_4().flex().flex_col().gap_4()
-            .child(div().text_size(px(26.)).font_weight(FontWeight::BOLD).child(format!("Shell Lab — Window {}", self.id)))
+        let operations = section("Window operations", [
+            div().flex().flex_wrap().gap_2().children(actions).into_any_element(),
+            div().flex().flex_wrap().gap_2().mt_2().children(decoration_buttons).into_any_element(),
+            div().mt_2().child("Tiling is controlled by your desktop. Restore minimized windows through the desktop. New windows start with independent system defaults.").into_any_element(),
+        ]);
+        // Keep the preview visible while independently scrolling the override controls.
+        div()
+            .id("shell-lab")
+            .size_full()
+            .bg(rgb(0x0f172a))
+            .text_color(rgb(0xe2e8f0))
+            .text_size(px(13.))
+            .p_4()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(
+                div()
+                    .text_size(px(26.))
+                    .font_weight(FontWeight::BOLD)
+                    .child(format!("Shell Lab — Window {}", self.id)),
+            )
             .child(self.session.clone())
             .child(div().p_3().bg(rgb(0x1e293b)).rounded_md().child(frame_note))
-            .child(section("Window operations", [
-                div().flex().flex_wrap().gap_2().children(actions).into_any_element(),
-                div().flex().flex_wrap().gap_2().mt_2().children(decoration_buttons).into_any_element(),
-                div().mt_2().child("Tiling is controlled by your desktop: use its snap/tiling gestures. Restore minimized windows through the desktop. New windows start with independent system defaults.").into_any_element(),
-            ]))
-            .child(state)
-            .child(section("Detected preferences and per-window overrides", preferences))
-            .child(self.button("reset", "Reset this window to system defaults", false, true, Action::Reset, cx))
-            .child(section("Recent events", self.events.iter().rev().map(|event| div().py_1().child(event.clone()).into_any_element())))
+            .child(
+                div()
+                    .flex()
+                    .flex_1()
+                    .min_h_0()
+                    .gap_4()
+                    .child(
+                        div()
+                            .id("preview-pane")
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .overflow_y_scroll()
+                            .flex()
+                            .flex_col()
+                            .gap_4()
+                            .child(self.preview(window, cx))
+                            .child(state)
+                            .child(section(
+                                "Recent events",
+                                self.events.iter().rev().map(|event| {
+                                    div().py_1().child(event.clone()).into_any_element()
+                                }),
+                            )),
+                    )
+                    .child(
+                        div()
+                            .id("controls-pane")
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .overflow_y_scroll()
+                            .flex()
+                            .flex_col()
+                            .gap_4()
+                            .child(operations)
+                            .child(section(
+                                "Detected preferences and per-window overrides",
+                                preferences,
+                            ))
+                            .child(self.button(
+                                "reset",
+                                "Reset this window to system defaults",
+                                false,
+                                true,
+                                Action::Reset,
+                                cx,
+                            )),
+                    ),
+            )
     }
 }
 
@@ -694,11 +965,12 @@ fn main() {
             }
         })
         .detach();
-        let decorations = if options.client_decorations {
-            WindowDecorations::Client
-        } else {
-            WindowDecorations::Server
-        };
+        let decorations =
+            if options.client_decorations && linux_window_operations(cx.platform_info()) {
+                WindowDecorations::Client
+            } else {
+                WindowDecorations::Server
+            };
         if let Err(error) = open_lab(cx, decorations, options.fixed_size) {
             eprintln!("Could not open shell lab: {error:#}");
             cx.quit();
@@ -712,6 +984,91 @@ fn main() {
 mod tests {
     use super::*;
     use ::core::prelude::v1::test;
+
+    #[test]
+    fn linux_only_operations_are_unavailable_for_mac_and_browser_backends() {
+        let native = |os| PlatformInfo {
+            os,
+            target: PlatformTarget::Native,
+        };
+        assert!(!linux_window_operations(native(OperatingSystem::Mac)));
+        assert!(!linux_window_operations(native(OperatingSystem::Windows)));
+        assert!(linux_window_operations(native(OperatingSystem::Linux)));
+        assert!(linux_window_operations(native(OperatingSystem::FreeBsd)));
+        assert!(!linux_window_operations(PlatformInfo {
+            os: OperatingSystem::Linux,
+            target: PlatformTarget::Web
+        }));
+    }
+
+    #[gpui::test]
+    fn mac_dispatch_guards_and_preview_simulation_preserve_native_state(cx: &mut TestAppContext) {
+        cx.set_platform_info(PlatformInfo {
+            os: OperatingSystem::Mac,
+            target: PlatformTarget::Native,
+        });
+        let (handle, content) =
+            cx.update(|app| open_lab(app, WindowDecorations::Server, false).unwrap());
+        cx.update_window(*handle, |_, window, app| {
+            let before = (
+                window.window_bounds(),
+                window.window_decorations(),
+                window.client_inset(),
+                window.is_maximized(),
+                window.is_fullscreen(),
+                app.desktop_preferences(),
+            );
+            content.update(app, |lab, cx| {
+                lab.dispatch(Action::WindowMenu, Point::default(), window, cx);
+                assert_eq!(
+                    lab.events.back().unwrap(),
+                    "Operation unavailable in this window state"
+                );
+                lab.dispatch(
+                    Action::RequestDecorations(WindowDecorations::Client),
+                    Point::default(),
+                    window,
+                    cx,
+                );
+                assert_eq!(lab.requested, WindowDecorations::Server);
+                lab.dispatch(
+                    Action::PreviewMode(PreviewMode::Maximized),
+                    Point::default(),
+                    window,
+                    cx,
+                );
+                lab.dispatch(
+                    Action::PreviewAppearance(Some(WindowAppearance::Dark)),
+                    Point::default(),
+                    window,
+                    cx,
+                );
+                lab.dispatch(Action::PreviewActive(false), Point::default(), window, cx);
+                lab.dispatch(
+                    Action::PreviewLayout(PreviewLayout::Left),
+                    Point::default(),
+                    window,
+                    cx,
+                );
+                assert_eq!(lab.preview_mode, PreviewMode::Maximized);
+                assert_eq!(lab.preview_appearance, Some(WindowAppearance::Dark));
+                assert!(!lab.preview_active);
+                assert_eq!(lab.preview_layout, PreviewLayout::Left);
+            });
+            assert_eq!(
+                before,
+                (
+                    window.window_bounds(),
+                    window.window_decorations(),
+                    window.client_inset(),
+                    window.is_maximized(),
+                    window.is_fullscreen(),
+                    app.desktop_preferences()
+                )
+            );
+        })
+        .unwrap();
+    }
 
     #[gpui::test]
     fn overrides_and_reset_are_local_to_the_selected_window(cx: &mut TestAppContext) {
