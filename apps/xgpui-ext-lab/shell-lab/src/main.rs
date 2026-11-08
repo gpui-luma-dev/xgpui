@@ -434,6 +434,42 @@ impl Lab {
             .child(div().flex().flex_wrap().gap_2().children(choices))
             .into_any_element()
     }
+    fn platform_preferences(&self, window: &Window, cx: &Context<Self>) -> AnyElement {
+        let desktop = cx.desktop_preferences();
+        let coverage = if linux_window_operations(cx.platform_info()) {
+            "Linux portal preferences plus optional GNOME/KDE fallbacks. Not reported means unavailable, unsupported or still pending; it does not mean the OS has no preference."
+        } else {
+            "Desktop preference detection is currently implemented only for Linux. On this platform, accent/font/contrast/motion/title-bar action detection is not implemented. Appearance and actual window state are available separately. The preview uses fallback values or your overrides."
+        };
+        section(
+            "Platform preferences — actual readings",
+            [
+                div().child(coverage).into_any_element(),
+                property("Platform", format!("{:?}", cx.platform_info())),
+                property("Appearance", format!("{:?}", window.appearance())),
+                property("Platform button layout", layout(cx.button_layout())),
+                property("Accent", detected(desktop.accent_color)),
+                property("High contrast", detected(desktop.high_contrast)),
+                property("Reduced motion", detected(desktop.reduced_motion)),
+                property("Font description", detected(desktop.font)),
+                property("Text scale", detected(desktop.text_scale)),
+                property(
+                    "Title-bar actions",
+                    format!(
+                        "double {}; middle {}; right {}",
+                        detected(desktop.titlebar_double_click),
+                        detected(desktop.titlebar_middle_click),
+                        detected(desktop.titlebar_right_click)
+                    ),
+                ),
+                property(
+                    "Native decoration theme",
+                    "Not exposed by this API. The OS/window manager draws native/server decorations; the client frame uses xgpui-shell's look.",
+                ),
+            ],
+        )
+    }
+
     fn look_inspector(&self, window: &Window, cx: &Context<Self>) -> AnyElement {
         let desktop = cx.desktop_preferences();
         let resolved = self
@@ -595,17 +631,17 @@ impl Lab {
         ));
         controls.push(self.button(
             "preview-focus",
-            "Show focus ring",
+            "Simulate Close focus",
             self.preview_focus,
-            true,
+            self.preview_mode != PreviewMode::Fullscreen,
             Action::PreviewFocus(!self.preview_focus),
             cx,
         ));
         controls.push(self.button(
             "preview-hover",
-            "Show hover",
+            "Simulate Close hover",
             self.preview_hover,
-            true,
+            self.preview_mode != PreviewMode::Fullscreen,
             Action::PreviewHover(!self.preview_hover),
             cx,
         ));
@@ -634,6 +670,8 @@ impl Lab {
         section("Client-frame preview — simulation", [
             div().child("Visual preview of the shared client-frame renderer. State, appearance and button-layout choices here are simulated; detected preferences and your native window are unchanged. Frame buttons, dragging and resizing are non-interactive.").into_any_element(),
             div().flex().flex_wrap().gap_2().children(controls).into_any_element(),
+            property("Close hover simulation", if self.preview_mode == PreviewMode::Fullscreen { "No title bar in Fullscreen. Choose Floating, Maximized or Tiled.".to_owned() } else { format!("{} — only the Close icon background changes: header #{:06X} → hover #{:06X}. This is a simulated state, not an enable/disable switch for mouse input.", if self.preview_hover { "ON" } else { "OFF" }, look.colors.header, look.colors.hover) }),
+            property("Title-bar icons", "xgpui-shell artwork: vector X, fixed minimize/maximize/restore symbols. Platform preferences supply button placement and availability, not icon artwork. These are not macOS traffic lights or the desktop's native decoration theme."),
             div().id("client-frame-preview").w_full().h(px(look.titlebar_height + 140.)).min_h(px(180.)).flex_shrink_0().mt_2().child(preview).into_any_element(),
         ])
     }
@@ -1052,6 +1090,7 @@ impl Render for Lab {
                             .flex()
                             .flex_col()
                             .gap_4()
+                            .child(self.platform_preferences(window, cx))
                             .child(operations)
                             .child(section(
                                 "Detected preferences and per-window overrides",

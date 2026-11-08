@@ -186,3 +186,18 @@ Strict shell library/test Clippy and focused shell-lab binary Clippy passed, as
 did shell Cargo formatting, lab rustfmt, `git diff --check` and the lab build.
 Using `--tests` for Clippy in the shared lab package also selects unrelated lab
 binaries and hits existing media-lab warnings; those files were not changed.
+
+### Platform readings, icon source and hover target
+
+The right pane now starts with **Platform preferences — actual readings**. On
+macOS/Windows it explicitly says desktop font/accent/contrast/motion/title-bar
+action detection is not implemented; empty readings are not native OS defaults.
+Appearance and window state are still reported. The API currently has no native
+decoration-theme or icon-artwork preference. Client-frame icons are xgpui-shell
+artwork; platform button layout controls placement/availability, not their shape.
+
+**Simulate Close hover** forces the close icon's hover background; it does not
+enable pointer interactions. An adjacent ON/OFF readout identifies the exact
+header and hover colors. Fullscreen hides chrome, so hover/focus simulation
+controls are disabled in that mode. A regression checks that simulated hover
+sets the control background; existing preview tests keep actions noninteractive.

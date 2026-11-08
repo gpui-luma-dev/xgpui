@@ -859,6 +859,31 @@ mod frame {
             );
         }
         #[::core::prelude::v1::test]
+        fn simulated_hover_reaches_the_control_background_without_enabling_actions() {
+            let palette = Palette::new(WindowAppearance::Light, true, false);
+            let mut normal = control_button(
+                "normal",
+                "Close",
+                palette,
+                0x3584e4,
+                px(33.),
+                false,
+                (false, false),
+            );
+            let mut hovered = control_button(
+                "hovered",
+                "Close",
+                palette,
+                0x3584e4,
+                px(33.),
+                false,
+                (false, true),
+            );
+            assert!(normal.style().background.is_none());
+            assert!(hovered.style().background.is_some());
+        }
+
+        #[::core::prelude::v1::test]
         fn light_dark_inactive_and_contrast_have_distinct_tokens() {
             let light = Palette::new(WindowAppearance::Light, true, false);
             let dark = Palette::new(WindowAppearance::Dark, true, false);
