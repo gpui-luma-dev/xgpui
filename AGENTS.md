@@ -1,5 +1,13 @@
 # Repository instructions
 
+## Git workflow (Epic Branch Pattern)
+
+- Never push directly to `main` without explicit user approval.
+- When working on an assigned issue (`<ISSUE_ID>`), isolate all related work under `issue-<ISSUE_ID>/epic`.
+- Check if `origin/issue-<ISSUE_ID>/epic` exists. If not, create it from `origin/main` and push it.
+- Branch subtasks from the epic branch using: `issue-<ISSUE_ID>/<short-task-slug>`.
+- Always set the PR base target to `issue-<ISSUE_ID>/epic` (never target `main` directly).
+
 ## Git approval
 
 - Do not merge pull requests without the user's explicit approval.
