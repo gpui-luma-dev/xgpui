@@ -33,14 +33,9 @@ function overview() {
   return header('XGPUI / Extensions / GPUI','GPUI architecture and extensions','A source map of GPUI: responsibilities, runtime boundaries and downstream extensions.')+
     '<p class="muted">Upstream source baseline: gpui-unofficial '+escapeHtml(data.provenance.ref)+'. XGPUI packages use independent versions.</p>'+
     '<section aria-label="Why XGPUI?"><h2>Why XGPUI?</h2><p>XGPUI adds richer graphics, text and rendering features through opt-in extensions and small integration seams, keeping changes to GPUI’s public API focused and minimal. The aim is to make those features easier to evolve while keeping upstream updates from <a href="https://github.com/zed-industries/zed">Zed</a> and <a href="https://github.com/gpui-archipelago/gpui-unofficial">gpui-unofficial</a> straightforward to adopt.</p></section>'+liveDemoOverview()+
-    '<nav class="overview-guides" aria-label="Start reading"><h2>Start here</h2><dl><dt><a href="#whats-new">What’s new →</a></dt><dd>Variable fonts, OpenType inspection, core 3.0 migration and recent fixes.</dd><dt><a href="#local-development">Local Development →</a></dt><dd>Build on Windows, Linux and macOS; run native labs and preview the docs.</dd><dt><a href="#releasing">Releasing XGPUI →</a></dt><dd>Prepare versions, validate changes, review and publish a release.</dd><dt><a href="#extension-lab">xgpui-ext-lab →</a></dt><dd>Unpublished labs, benchmarks and browser demos; what they contain and how to run them.</dd><dt><a href="#color-workflows">Color &amp; wide gamut →</a></dt><dd>Interpret pixels, choose storage, enable native wide output and test with browser or desktop labs.</dd><dt><a href="#gpui-1.27-migration">GPUI 1.27 migration →</a></dt><dd>Breaking XGPUI API changes, upstream release references and migration requirements.</dd><dt><a href="#font-controls">Fonts &amp; OpenType →</a></dt><dd>Set variable-font axes, inspect features, run the Wasm font lab and migrate to core 3.0.</dd><dt><a href="#architecture">Architecture →</a></dt><dd>Ownership, element lifecycle and renderer contracts.</dd><dt><a href="#pipeline">Rendering pipeline →</a></dt><dd>Explore clipping, layers, primitive ordering and batches.</dd><dt><a href="#extensions">Extensions to GPUI →</a></dt><dd>Shader, wide-gamut, Parley and SVG APIs, integration and backend ownership.</dd></dl></nav>'+
+    '<nav class="overview-guides" aria-label="Start reading"><h2>Start here</h2><dl><dt><a href="#whats-new">What’s new →</a></dt><dd>Variable fonts, OpenType inspection, core 3.0 migration and recent fixes.</dd><dt><a href="#local-development">Local Development →</a></dt><dd>Build on Windows, Linux and macOS; run native labs and preview the docs.</dd><dt><a href="#releasing">Releasing XGPUI →</a></dt><dd>Prepare versions, validate changes, review and publish a release.</dd><dt><a href="#extension-lab">xgpui-ext-lab →</a></dt><dd>Unpublished labs, benchmarks and browser demos; what they contain and how to run them.</dd><dt><a href="#color-workflows">Color &amp; wide gamut →</a></dt><dd>Interpret pixels, choose storage, enable native wide output and test with browser or desktop labs.</dd><dt><a href="#gpui-1.27-migration">GPUI 1.27 migration →</a></dt><dd>Breaking XGPUI API changes, upstream release references and migration requirements.</dd><dt><a href="#font-controls">Fonts &amp; OpenType →</a></dt><dd>Set variable-font axes, inspect features, run the Wasm font lab and migrate to core 3.0.</dd><dt><a href="#extensions">Extensions to GPUI →</a></dt><dd>Shader, wide-gamut, Parley and SVG APIs, integration and backend ownership.</dd></dl></nav>'+
     '<section class="overview-reading"><h2>Rendering changes</h2><p>'+crateLink('gpui')+' → '+crateLink('gpui-platform')+' → platform implementation → '+crateLink('gpui-apple')+' / '+crateLink('gpui-wgpu')+'</p><p>Trace scene and window contracts, then surface formats, shaders and color handling in the selected renderer.</p></section>'+
     '<div class="crate-directory">'+groups.map(g=>'<section><h2>'+escapeHtml(g)+'</h2><dl>'+crates.filter(c=>notes[c.package].group===g).map(c=>'<dt>'+crateLink(c.package)+'</dt><dd>'+escapeHtml(notes[c.package].role)+'</dd>').join('')+'</dl></section>').join('')+'</div>';
-}
-function review() {
-  return header('Review','API review','Review notes by subsystem, with links to the relevant source.')+
-    '<div class="notice">A package dependency is not proof that a symbol is used. An unused-looking declaration is not proof that downstream applications can lose it.</div>'+
-    groups.map(g=>'<h2>'+escapeHtml(g)+'</h2>'+crates.filter(c=>notes[c.package].group===g).map(c=>'<article class="card"><h3>'+crateLink(c.package)+'</h3><p>'+escapeHtml(notes[c.package].review)+'</p>'+sourceLink(c.entry,1,'Read crate entrypoint')+'</article>').join('')).join('');
 }
 function tabs(c,active) {return '<nav class="tabs" aria-label="Crate sections">'+[['overview',notes[c.package].group === 'Extensions' ? 'Use' : 'Role & sources'],...(notes[c.package].group === 'Extensions' ? [['sources','Role & sources']] : []),['surface','API inventory'],['dependencies','Dependencies'],['review','Trim review']].map(([id,label])=>'<a '+(active===id?'aria-current="page" ':'')+'href="'+crateUrl(c.package,id)+'">'+label+'</a>').join('')+'</nav>';}
 function cratePage(c,tab) {
@@ -54,7 +49,7 @@ function cratePage(c,tab) {
     const edge=(d,inbound)=>'<div class="dependency">'+crateLink(inbound?d.from:d.package)+' '+tag(d.kind)+(d.optional?tag('optional'):'')+(d.target?tag(d.target):'')+'<small> · manifest alias: <code>'+escapeHtml(d.alias)+'</code></small></div>';
     body='<p>Captured-package manifest edges, including conditional, optional, development and build dependencies. External packages and resolved feature activation are outside this graph.</p><h2>Depends on · '+c.dependencies.length+'</h2>'+(c.dependencies.map(d=>edge(d,false)).join('')||'<p>No captured-package dependencies.</p>')+'<h2>Referenced by · '+incoming.length+'</h2>'+(incoming.map(d=>edge(d,true)).join('')||'<p>No captured-package incoming edges.</p>')+'<h2>Declared features</h2><pre><code>'+escapeHtml(JSON.stringify(c.features,null,2))+'</code></pre>';
   } else if(tab==='review') {
-    body='<h2>Boundary to investigate</h2><div class="notice">Review hypothesis. No visibility changes or removal decisions have been made.</div><p class="lead">'+escapeHtml(n.review)+'</p><p>Follow '+sourceLink(c.entry,1,'the entrypoint')+' and inspect incoming dependencies. Then check expanded macros, re-exports and actual downstream consumers before narrowing the API.</p><p><a href="#review">Read the overall review sequence →</a></p>';
+    body='<h2>Boundary to investigate</h2><div class="notice">Review hypothesis. No visibility changes or removal decisions have been made.</div><p class="lead">'+escapeHtml(n.review)+'</p><p>Follow '+sourceLink(c.entry,1,'the entrypoint')+' and inspect incoming dependencies. Then check expanded macros, re-exports and actual downstream consumers before narrowing the API.</p>';
   } else if(notes[c.package].group === 'Extensions' && tab === 'overview') {
     body=c.package === 'xgpui-canvas' ? canvasCrateGuide() : c.package === 'xgpui-color' ? colorCrateGuide() : c.package === 'xgpui-shader' ? shaderCrateGuide() : c.package === 'xgpui-parley' ? parleyCrateGuide() : c.package === 'xgpui-svg' ? svgCrateGuide() : c.package === 'xgpui-media' ? mediaCrateGuide() : gamutCrateGuide();
   } else {
@@ -72,14 +67,13 @@ function renderInventory(c) {
   document.getElementById('next').onclick=()=>{page++;renderInventory(c);};
 }
 function render() {
-  stopPipeline();
   const route=parseRoute(location.hash);
   const c=crates.find(c=>c.package===route.pkg);
   page=0;
   const content=document.getElementById('content');
-  content.innerHTML=c?cratePage(c,route.tab):route.pkg?header('Not found','Unknown crate','Choose a captured crate from the navigation.'):isExtensionRoute(route.global)?extensionPage(route.global):route.global==='pipeline'?pipelinePage():route.global==='architecture'?architecturePage():route.global==='review'?review():overview();
+  content.innerHTML=c?cratePage(c,route.tab):route.pkg?header('Not found','Unknown crate','Choose a captured crate from the navigation.'):isExtensionRoute(route.global)?extensionPage(route.global):overview();
   window.enhanceCodeExamples?.(content);
-  const pageTitle=(c?short(c.package):isExtensionRoute(route.global)?extensionTitle(route.global):route.global==='pipeline'?'Rendering pipeline explorer':route.global==='architecture'?'Architecture overview':route.global==='review'?'API review roadmap':'');
+  const pageTitle=(c?short(c.package):isExtensionRoute(route.global)?extensionTitle(route.global):'');
   document.title=pageTitle?pageTitle+' · XGPUI - Extended GPUI':'XGPUI - Extended GPUI';
   sidebar();
   if(route.section && isExtensionRoute(route.global)) {
@@ -89,7 +83,6 @@ function render() {
     }
     target?.scrollIntoView?.();
   }
-  if(route.global==='pipeline' && !c && !route.pkg) bindPipeline();
   if(c && route.tab==='surface') {
     for(const id of ['api-search','api-kind','api-root']) document.getElementById(id).addEventListener('input',()=>{page=0;renderInventory(c);});
     renderInventory(c);

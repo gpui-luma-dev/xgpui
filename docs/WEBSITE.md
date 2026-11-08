@@ -48,8 +48,7 @@ node docs/verify.mjs
 The JavaScript verifier checks the generated artifact and interaction logic
 without opening a GUI. It does not perform visual browser validation.
 
-Website source: `index.html`, `style.css`, `app.js`, `guides.js`, `extensions.js`, `notes.json`.
-The architecture reference lives in `guides.js`; review its source references after syncing.
+Website source: `index.html`, `style.css`, `app.js`, `extensions.js`, `notes.json`.
 The [font-controls guide](extensions/font-controls.md) is embedded at
 `#font-controls` and linked from What's new, the extension overview, Parley,
 typography and core API migration pages. It documents core 3.0 axes, private
@@ -62,12 +61,6 @@ uses release mode by default and provides `docs`, `docs-check`, `docs-serve` and
 `web-build` recipes. The guide retains direct Cargo commands as a fallback.
 Build harness details remain in [BUILDING.md](BUILDING.md).
 Generator source: `tools/crate-roadmap` (independent Cargo workspace).
-
-The rendering explorer lives in `pipeline.js`. It uses SVG and a deliberately
-small scene model, not the native renderer. Its model tests cover overlap
-ordering, clipping, explicit layers, batch texture boundaries and replay.
-Playback is opt-in, stops after one sequence, and is cleaned up on navigation.
-Reduced-motion preferences suppress SVG movement.
 
 Inventory routes and local directories use normalized local names. Each crate
 page displays its downstream package identity and version from the manifest.

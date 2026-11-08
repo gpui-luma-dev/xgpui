@@ -7,8 +7,6 @@ const source = await readFile(new URL('app.js', site), 'utf8');
 const inventory = await readFile(new URL('data.js', site), 'utf8');
 const context = vm.createContext({ window: {}, URLSearchParams });
 vm.runInContext(inventory, context);
-vm.runInContext(await readFile(new URL("guides.js", site), "utf8"), context);
-vm.runInContext(await readFile(new URL("pipeline.js", site), "utf8"), context);
 vm.runInContext(await readFile(new URL("extensions.js", site), "utf8"), context);
 vm.runInContext(source, context);
 const run = code => vm.runInContext(code, context);
@@ -31,8 +29,6 @@ assert.ok(gpuiInventory.files.includes('gpui/crates/gpui/src/text_system/paragra
 assert.ok(!gpuiInventory.warnings.some(w => w.includes('paragraph_cache')));
 assert.ok(data.crates.find(c => c.package === 'gpui-windows').warnings.some(w => w.includes('Unexpanded include! at gpui/crates/gpui-windows/')));
 
-assert.match(run('review()'), /<h1>API review<\/h1>/);
-assert.doesNotMatch(run('review()'), /Make the contract deliberate|Suggested order of work/);
 const pages = new Map();
 for (const c of data.crates) {
   assert.ok(data.notes[c.package].role);
@@ -79,7 +75,7 @@ for (const c of data.crates) {
     }
   }
 }
-for (const route of ['#extensions', ...Object.keys(data.extension_documents).map(route => '#' + route), '#pipeline', '#architecture', '#review', '#crate=unknown']) {
+for (const route of ['#extensions', ...Object.keys(data.extension_documents).map(route => '#' + route), '#crate=unknown']) {
   context.location.hash = route;
   run('render()');
   assert.ok(element('content').innerHTML.length);
@@ -99,7 +95,7 @@ for (const demo of ['canvas', 'mandelbrot', 'shader', 'brushes', 'layers', 'herm
   }
 }
 
-for (const asset of ['favicon.svg', 'favicon.ico', 'style.css', 'extensions.js', 'guides.js', 'pipeline.js', 'app.js', 'data.js']) {
+for (const asset of ['favicon.svg', 'favicon.ico', 'style.css', 'extensions.js', 'app.js', 'data.js']) {
   assert.ok(index.includes(asset));
   await readFile(new URL(asset, site));
 }
@@ -139,86 +135,18 @@ for (const root of ['https://xgpui.dev/', 'http://localhost:8000/', 'https://exa
   }
 }
 
-for (const [fn, title, sections] of [["architecturePage", "The architecture of GPUI", 8]]) {
- const html = run(fn + "()");
- assert.ok(html.includes(title));
- assert.equal((html.match(/class="guide-section"/g) || []).length, sections);
- assert.ok(!html.includes('class="guide-flow"'));
- assert.ok(!html.includes("undefined"));
- for (const match of html.matchAll(/href="source\/([^"#]+)\.html#L(\d+)"/g)) {
-  const file = decodeURIComponent(match[1]);
-  assert.ok(pages.has(file), file);
-  assert.ok(pages.get(file).includes('id="L' + match[2] + '"'), file + ":" + match[2]);
- }
+// Retired guide bookmarks fall back to the overview; navigation and assets
+// must not point at pages that are no longer shipped.
+assert.doesNotMatch(index, /href="#(?:architecture|pipeline|review)"/);
+assert.doesNotMatch(index, /src="(?:guides|pipeline)\.js"/);
+assert.doesNotMatch(run('overview()'), /href="#(?:architecture|pipeline|review)"/);
+for (const retired of ['architecture', 'pipeline', 'review']) {
+  context.location.hash = '#' + retired;
+  run('render()');
+  assert.match(element('content').innerHTML, /GPUI architecture and extensions/);
+  assert.equal(context.document.title, 'XGPUI - Extended GPUI');
 }
-console.log("Verified architecture guide and its source references.");
-
-// Source-grounded fixtures for the illustrative scene model.
-const basePipeline = run('composePipeline(pipelineState)');
-assert.equal(basePipeline.primitives.length, 7);
-assert.equal(basePipeline.rejected.length, 1);
-assert.equal(basePipeline.batches.length, 6);
-assert.equal(basePipeline.primitives.find(p=>p.id==='photo').bounds.w, 205);
-assert.equal(basePipeline.primitives.find(p=>p.id==='photo').clipped.w, 170);
-assert.equal(run('composePipeline({...pipelineState,atlas:true}).batches.length'), 7);
-assert.equal(run('composePipeline({...pipelineState,mask:false}).primitives.length'), 8);
-assert.equal(run('composePipeline({...pipelineState,badgeX:232}).primitives.find(p=>p.id==="badge").order'), 2);
-assert.equal(basePipeline.primitives.find(p=>p.id==='badge').order, 3);
-assert.equal(run('new Set(composePipeline({...pipelineState,layer:true}).primitives.filter(p=>p.layer).map(p=>p.order)).size'), 1);
-assert.equal(run('composePipeline({...pipelineState,layer:true}).operations.length'), 9);
-assert.equal(run('pipelineOverlap({x:0,y:0,w:10,h:10},{x:10,y:0,w:10,h:10})'), false);
-for(const badgeX of [60,190,232]) for(const mask of [true,false]) for(const layer of [true,false]) for(const atlas of [true,false]) {
-  context.fixture={badgeX,mask,layer,atlas,stage:4,selected:'photo',backend:'metal'};
-  const model=run('composePipeline(fixture)');
-  const all=model.batches.flatMap(b=>b.items);
-  assert.equal(all.length,model.primitives.length);
-  assert.equal(new Set(all.map(p=>p.id)).size,model.primitives.length);
-  assert.equal(model.replayed.map(p=>p.id+':'+p.order).join(),model.primitives.map(p=>p.id+':'+p.order).join());
-  for(let i=0;i<model.primitives.length;i++) for(let j=i+1;j<model.primitives.length;j++) {
-    const a=model.primitives[i], b=model.primitives[j];
-    context.pair={a,b};
-    if(run('pipelineOverlap(pair.a.clipped,pair.b.clipped)') && !(a.layer && b.layer)) assert.ok(b.order>a.order);
-  }
-  for(const batch of model.batches) if(batch.kind.endsWith('Sprite')) assert.equal(new Set(batch.items.map(p=>p.texture)).size,1);
-}
-context.location.hash='#pipeline';
-run('render()');
-assert.match(element('content').innerHTML,/From elements to pixels/);
-assert.match(element('pipeline-preview').innerHTML,/<svg/);
-for(let stage=0;stage<8;stage++) {
-  element('pipeline-stage-'+stage).onclick();
-  assert.equal(run('pipelineState.stage'),stage);
-  assert.match(element('pipeline-caption').innerHTML,new RegExp(run('pipelineStages['+stage+'][0]').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-}
-element('pipeline-layer').checked=true;element('pipeline-layer').onchange();
-assert.equal(run('pipelineState.layer'),true);
-element('pipeline-overlap').value='232';element('pipeline-overlap').oninput();
-assert.equal(run('pipelineState.badgeX'),232);
-assert.match(element('pipeline-preview').innerHTML,/<animateTransform/);
-context.window.matchMedia=()=>({matches:true});
-element('pipeline-overlap').value='190';element('pipeline-overlap').oninput();
-assert.ok(!element('pipeline-preview').innerHTML.includes('<animate'));
-let tick=null;
-context.setInterval=callback=>{tick=callback;return 1;};
-context.clearInterval=()=>{tick=null;};
-element('pipeline-play').onclick();
-assert.equal(run('pipelineState.stage'),0);
-for(let i=0;i<7;i++) {assert.ok(tick);tick();}
-assert.equal(run('pipelineState.stage'),7);
-assert.equal(tick,null);
-element('pipeline-play').onclick();
-context.location.hash='#overview';run('render()');
-assert.equal(tick,null);
-context.location.hash='#pipeline';run('render()');
-element('pipeline-reset').onclick();
-assert.equal(run('pipelineState.stage'),0);
-assert.equal(run('pipelineState.layer'),false);
-for(const match of run('pipelinePage()').matchAll(/href="source\/([^"#]+)\.html#L(\d+)"/g)) {
- const file=decodeURIComponent(match[1]);
- assert.ok(pages.has(file),file);
- assert.ok(pages.get(file).includes('id="L'+match[2]+'"'),file+':'+match[2]);
-}
-console.log('Verified scene ordering, clipping, layers, sprite texture boundaries, replay, SVG, reduced motion and playback cleanup.');
+console.log('Verified retired architecture, pipeline and review roadmap pages are absent and old bookmarks remain usable.');
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
