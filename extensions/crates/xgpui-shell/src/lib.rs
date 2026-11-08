@@ -126,7 +126,7 @@ impl Render for ShellWindow {
             && let Decorations::Client { tiling } = window.window_decorations()
         {
             let maximized = window.is_maximized();
-            let preferences = self.shell.resolve(&cx.desktop_preferences());
+            let preferences = self.shell.resolved_preferences(&cx.desktop_preferences());
             let palette = Palette::new(
                 window.appearance(),
                 window.is_window_active(),
@@ -390,19 +390,35 @@ pub struct ShellOptions {
     pub right_click_action: Option<TitlebarAction>,
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
-struct ResolvedPreferences {
-    high_contrast: bool,
-    accent: u32,
-    text_scale: f32,
-    double_click_action: TitlebarAction,
-    middle_click_action: TitlebarAction,
-    right_click_action: TitlebarAction,
+fn shell_scale(scale: f32) -> f32 {
+    if scale.is_finite() {
+        scale.clamp(0.5, 4.)
+    } else {
+        1.
+    }
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
+/// The values actually used by the shared client frame after overrides and fallbacks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ResolvedShellPreferences {
+    /// Whether the frame uses high-contrast colors.
+    pub high_contrast: bool,
+    /// Encoded sRGB focus accent, 0xRRGGBB.
+    pub accent: u32,
+    /// Logical text/target scale, clamped to 0.5–4 independently of device DPI.
+    pub text_scale: f32,
+    /// Effective title-bar double-click action.
+    pub double_click_action: TitlebarAction,
+    /// Effective title-bar middle-click action.
+    pub middle_click_action: TitlebarAction,
+    /// Effective title-bar right-click action.
+    pub right_click_action: TitlebarAction,
+}
+
 impl ShellOptions {
-    fn resolve(&self, desktop: &DesktopPreferences) -> ResolvedPreferences {
+    /// Resolve the same values used by the client frame. This does not apply them to
+    /// native/server decorations or alter desktop settings. Useful for diagnostics.
+    pub fn resolved_preferences(&self, desktop: &DesktopPreferences) -> ResolvedShellPreferences {
         let accent = desktop
             .accent_color
             .filter(|c| c.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)))
@@ -411,7 +427,7 @@ impl ShellOptions {
                     | ((g * 255.).round() as u32) << 8
                     | (b * 255.).round() as u32
             });
-        ResolvedPreferences {
+        ResolvedShellPreferences {
             high_contrast: self
                 .high_contrast
                 .or(desktop.high_contrast)
@@ -456,7 +472,6 @@ pub enum TitlebarAction {
     /// Display the platform window menu when supported.
     Menu,
 }
-#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 impl TitlebarAction {
     fn from_platform(action: gpui::TitlebarAction) -> Self {
         match action {
@@ -467,6 +482,7 @@ impl TitlebarAction {
         }
     }
 
+    #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
     fn perform_at(self, window: &mut Window, position: Point<Pixels>) {
         match self {
             Self::ToggleMaximize if window.window_controls().maximize && window.is_resizable() => {
@@ -484,13 +500,6 @@ impl TitlebarAction {
 #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 mod linux {
     use super::*;
-    pub(super) fn shell_scale(scale: f32) -> f32 {
-        if scale.is_finite() {
-            scale.clamp(0.5, 4.)
-        } else {
-            1.
-        }
-    }
     pub(super) fn visible_buttons(
         side: [Option<WindowButton>; MAX_BUTTONS_PER_SIDE],
         controls: WindowControls,
@@ -689,7 +698,7 @@ mod input_tests {
             titlebar_middle_click: Some(gpui::TitlebarAction::Menu),
             ..Default::default()
         };
-        let inherited = ShellOptions::default().resolve(&desktop);
+        let inherited = ShellOptions::default().resolved_preferences(&desktop);
         assert!(inherited.high_contrast);
         assert_eq!(inherited.accent, 0xff0000);
         assert_eq!(inherited.text_scale, 1.5);
@@ -704,14 +713,14 @@ mod input_tests {
             middle_click_action: Some(TitlebarAction::None),
             right_click_action: Some(TitlebarAction::None),
         }
-        .resolve(&desktop);
+        .resolved_preferences(&desktop);
         assert!(!overridden.high_contrast);
         assert_eq!(overridden.accent, 0);
         assert_eq!(overridden.text_scale, 1.);
         assert_eq!(overridden.double_click_action, TitlebarAction::None);
         assert_eq!(overridden.middle_click_action, TitlebarAction::None);
         assert_eq!(overridden.right_click_action, TitlebarAction::None);
-        let reset = ShellOptions::default().resolve(&DesktopPreferences::default());
+        let reset = ShellOptions::default().resolved_preferences(&DesktopPreferences::default());
         assert!(!reset.high_contrast);
         assert_eq!(reset.text_scale, 1.);
         assert_eq!(reset.double_click_action, TitlebarAction::ToggleMaximize);
