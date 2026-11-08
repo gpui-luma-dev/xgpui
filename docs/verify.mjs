@@ -29,8 +29,6 @@ assert.ok(gpuiInventory.files.includes('gpui/crates/gpui/src/text_system/paragra
 assert.ok(!gpuiInventory.warnings.some(w => w.includes('paragraph_cache')));
 assert.ok(data.crates.find(c => c.package === 'gpui-windows').warnings.some(w => w.includes('Unexpanded include! at gpui/crates/gpui-windows/')));
 
-assert.match(run('review()'), /<h1>API review<\/h1>/);
-assert.doesNotMatch(run('review()'), /Make the contract deliberate|Suggested order of work/);
 const pages = new Map();
 for (const c of data.crates) {
   assert.ok(data.notes[c.package].role);
@@ -77,7 +75,7 @@ for (const c of data.crates) {
     }
   }
 }
-for (const route of ['#extensions', ...Object.keys(data.extension_documents).map(route => '#' + route), '#review', '#crate=unknown']) {
+for (const route of ['#extensions', ...Object.keys(data.extension_documents).map(route => '#' + route), '#crate=unknown']) {
   context.location.hash = route;
   run('render()');
   assert.ok(element('content').innerHTML.length);
@@ -139,16 +137,16 @@ for (const root of ['https://xgpui.dev/', 'http://localhost:8000/', 'https://exa
 
 // Retired guide bookmarks fall back to the overview; navigation and assets
 // must not point at pages that are no longer shipped.
-assert.doesNotMatch(index, /href="#(?:architecture|pipeline)"/);
+assert.doesNotMatch(index, /href="#(?:architecture|pipeline|review)"/);
 assert.doesNotMatch(index, /src="(?:guides|pipeline)\.js"/);
-assert.doesNotMatch(run('overview()'), /href="#(?:architecture|pipeline)"/);
-for (const retired of ['architecture', 'pipeline']) {
+assert.doesNotMatch(run('overview()'), /href="#(?:architecture|pipeline|review)"/);
+for (const retired of ['architecture', 'pipeline', 'review']) {
   context.location.hash = '#' + retired;
   run('render()');
   assert.match(element('content').innerHTML, /GPUI architecture and extensions/);
   assert.equal(context.document.title, 'XGPUI - Extended GPUI');
 }
-console.log('Verified retired architecture and pipeline pages are absent and old bookmarks remain usable.');
+console.log('Verified retired architecture, pipeline and review roadmap pages are absent and old bookmarks remain usable.');
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.

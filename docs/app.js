@@ -37,11 +37,6 @@ function overview() {
     '<section class="overview-reading"><h2>Rendering changes</h2><p>'+crateLink('gpui')+' → '+crateLink('gpui-platform')+' → platform implementation → '+crateLink('gpui-apple')+' / '+crateLink('gpui-wgpu')+'</p><p>Trace scene and window contracts, then surface formats, shaders and color handling in the selected renderer.</p></section>'+
     '<div class="crate-directory">'+groups.map(g=>'<section><h2>'+escapeHtml(g)+'</h2><dl>'+crates.filter(c=>notes[c.package].group===g).map(c=>'<dt>'+crateLink(c.package)+'</dt><dd>'+escapeHtml(notes[c.package].role)+'</dd>').join('')+'</dl></section>').join('')+'</div>';
 }
-function review() {
-  return header('Review','API review','Review notes by subsystem, with links to the relevant source.')+
-    '<div class="notice">A package dependency is not proof that a symbol is used. An unused-looking declaration is not proof that downstream applications can lose it.</div>'+
-    groups.map(g=>'<h2>'+escapeHtml(g)+'</h2>'+crates.filter(c=>notes[c.package].group===g).map(c=>'<article class="card"><h3>'+crateLink(c.package)+'</h3><p>'+escapeHtml(notes[c.package].review)+'</p>'+sourceLink(c.entry,1,'Read crate entrypoint')+'</article>').join('')).join('');
-}
 function tabs(c,active) {return '<nav class="tabs" aria-label="Crate sections">'+[['overview',notes[c.package].group === 'Extensions' ? 'Use' : 'Role & sources'],...(notes[c.package].group === 'Extensions' ? [['sources','Role & sources']] : []),['surface','API inventory'],['dependencies','Dependencies'],['review','Trim review']].map(([id,label])=>'<a '+(active===id?'aria-current="page" ':'')+'href="'+crateUrl(c.package,id)+'">'+label+'</a>').join('')+'</nav>';}
 function cratePage(c,tab) {
   const n=notes[c.package];
@@ -54,7 +49,7 @@ function cratePage(c,tab) {
     const edge=(d,inbound)=>'<div class="dependency">'+crateLink(inbound?d.from:d.package)+' '+tag(d.kind)+(d.optional?tag('optional'):'')+(d.target?tag(d.target):'')+'<small> · manifest alias: <code>'+escapeHtml(d.alias)+'</code></small></div>';
     body='<p>Captured-package manifest edges, including conditional, optional, development and build dependencies. External packages and resolved feature activation are outside this graph.</p><h2>Depends on · '+c.dependencies.length+'</h2>'+(c.dependencies.map(d=>edge(d,false)).join('')||'<p>No captured-package dependencies.</p>')+'<h2>Referenced by · '+incoming.length+'</h2>'+(incoming.map(d=>edge(d,true)).join('')||'<p>No captured-package incoming edges.</p>')+'<h2>Declared features</h2><pre><code>'+escapeHtml(JSON.stringify(c.features,null,2))+'</code></pre>';
   } else if(tab==='review') {
-    body='<h2>Boundary to investigate</h2><div class="notice">Review hypothesis. No visibility changes or removal decisions have been made.</div><p class="lead">'+escapeHtml(n.review)+'</p><p>Follow '+sourceLink(c.entry,1,'the entrypoint')+' and inspect incoming dependencies. Then check expanded macros, re-exports and actual downstream consumers before narrowing the API.</p><p><a href="#review">Read the overall review sequence →</a></p>';
+    body='<h2>Boundary to investigate</h2><div class="notice">Review hypothesis. No visibility changes or removal decisions have been made.</div><p class="lead">'+escapeHtml(n.review)+'</p><p>Follow '+sourceLink(c.entry,1,'the entrypoint')+' and inspect incoming dependencies. Then check expanded macros, re-exports and actual downstream consumers before narrowing the API.</p>';
   } else if(notes[c.package].group === 'Extensions' && tab === 'overview') {
     body=c.package === 'xgpui-canvas' ? canvasCrateGuide() : c.package === 'xgpui-color' ? colorCrateGuide() : c.package === 'xgpui-shader' ? shaderCrateGuide() : c.package === 'xgpui-parley' ? parleyCrateGuide() : c.package === 'xgpui-svg' ? svgCrateGuide() : c.package === 'xgpui-media' ? mediaCrateGuide() : gamutCrateGuide();
   } else {
@@ -76,9 +71,9 @@ function render() {
   const c=crates.find(c=>c.package===route.pkg);
   page=0;
   const content=document.getElementById('content');
-  content.innerHTML=c?cratePage(c,route.tab):route.pkg?header('Not found','Unknown crate','Choose a captured crate from the navigation.'):isExtensionRoute(route.global)?extensionPage(route.global):route.global==='review'?review():overview();
+  content.innerHTML=c?cratePage(c,route.tab):route.pkg?header('Not found','Unknown crate','Choose a captured crate from the navigation.'):isExtensionRoute(route.global)?extensionPage(route.global):overview();
   window.enhanceCodeExamples?.(content);
-  const pageTitle=(c?short(c.package):isExtensionRoute(route.global)?extensionTitle(route.global):route.global==='review'?'API review roadmap':'');
+  const pageTitle=(c?short(c.package):isExtensionRoute(route.global)?extensionTitle(route.global):'');
   document.title=pageTitle?pageTitle+' · XGPUI - Extended GPUI':'XGPUI - Extended GPUI';
   sidebar();
   if(route.section && isExtensionRoute(route.global)) {
