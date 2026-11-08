@@ -1,4 +1,5 @@
 //! Interactive diagnostics for the shared shell; no desktop settings are written.
+mod titlebar;
 use anyhow::{Context as _, Result};
 use clap::Parser;
 use gpui::{prelude::*, *};
@@ -7,6 +8,7 @@ use std::{
     rc::Rc,
     sync::atomic::{AtomicUsize, Ordering},
 };
+use titlebar::{HeaderAssets, LabTitleBar};
 use xgpui_shell::{
     ClientFramePreview, ShellApp, ShellOptions, ShellTypography, ShellWindow, ShellWindowTitle,
     TitlebarAction,
@@ -82,6 +84,7 @@ enum Action {
     Titlebar(Click, Option<TitlebarAction>),
     Reset,
     Refresh,
+    TogglePlatformReadings,
     LongTitle,
     Maximize,
     Minimize,
@@ -153,6 +156,7 @@ struct Lab {
     overrides: Overrides,
     requested: WindowDecorations,
     long_title: bool,
+    show_platform_readings: bool,
     preview_mode: PreviewMode,
     preview_appearance: Option<WindowAppearance>,
     preview_active: bool,
@@ -214,6 +218,7 @@ impl Lab {
             overrides: Overrides::default(),
             requested,
             long_title: false,
+            show_platform_readings: true,
             preview_mode: PreviewMode::default(),
             preview_appearance: None,
             preview_active: true,
@@ -262,6 +267,10 @@ impl Lab {
         }
         let controls = window.window_controls();
         match action {
+            Action::TogglePlatformReadings => {
+                self.show_platform_readings = !self.show_platform_readings;
+                self.record("Toggled platform readings using an app-owned title-bar control");
+            }
             Action::Refresh => {
                 self.record("Refreshed displayed snapshot (does not force a portal read)")
             }
@@ -439,7 +448,7 @@ impl Lab {
         let coverage = if linux_window_operations(cx.platform_info()) {
             "Linux portal preferences plus optional GNOME/KDE fallbacks. Not reported means unavailable, unsupported or still pending; it does not mean the OS has no preference."
         } else {
-            "Desktop preference detection is currently implemented only for Linux. On this platform, accent/font/contrast/motion/title-bar action detection is not implemented. Appearance and actual window state are available separately. The preview uses fallback values or your overrides."
+            "Desktop preference detection is currently implemented only for Linux. On this platform, accent/font/contrast/motion/title-bar action detection is not implemented. Appearance and actual window state are available separately. The app bar and preview use fallback values or your overrides."
         };
         section(
             "Platform preferences — actual readings",
@@ -528,7 +537,7 @@ impl Lab {
             property("Focus and hover", "Header/text/border follow appearance, activation and contrast. Accent colors keyboard focus; high contrast uses foreground instead. Hover changes the button background instantly. Use the simulated close icon above."),
             property("Title-bar behavior", format!("Double {:?}; middle {:?}; right {:?}. Real dispatch checks window capabilities; preview controls never dispatch.", resolved.double_click_action, resolved.middle_click_action, resolved.right_click_action)),
             property("Reduced motion", format!("{} · resolved policy only. This frame has no animation; hover/focus changes are already instantaneous.", look.reduced_motion)),
-            property("Application content", "Keeps its own fonts, colors and behavior. The sample body and lab controls are styled independently; shell preferences only style client-frame chrome. Native/server chrome remains controlled by the OS."),
+            property("Application content", "Keeps its own fonts, colors and behavior. The sample body and lab controls are styled independently; shell preferences style the shell header and client-frame chrome. Native/server decorations remain controlled by the OS."),
         ])
     }
 
@@ -920,7 +929,7 @@ impl Render for Lab {
         ));
         let native = !linux_window_operations(cx.platform_info());
         let frame_note = if native {
-            "Native platform chrome is retained. Use the simulated client-frame preview to inspect styling; overrides do not change your native window controls. Window Menu and decoration requests are unsupported here."
+            "The real title/app bar above is composed by this app. macOS retains native traffic lights; Windows uses shell window controls. The panel below previews Linux frame defaults. Desktop preference detection, Window Menu and decoration requests remain unsupported here."
         } else if window.is_fullscreen() {
             "Fullscreen: the client frame is hidden. Exit fullscreen to inspect its styling."
         } else if matches!(window.window_decorations(), Decorations::Server) {
@@ -1090,7 +1099,9 @@ impl Render for Lab {
                             .flex()
                             .flex_col()
                             .gap_4()
-                            .child(self.platform_preferences(window, cx))
+                            .when(self.show_platform_readings, |s| {
+                                s.child(self.platform_preferences(window, cx))
+                            })
                             .child(operations)
                             .child(section(
                                 "Detected preferences and per-window overrides",
@@ -1116,7 +1127,7 @@ fn open_lab(
 ) -> Result<(WindowHandle<ShellWindow>, Entity<Lab>)> {
     let id = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
     let mut content = None;
-    let handle = cx.open_shell_window(
+    let handle = cx.open_shell_window_with_titlebar(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                 None,
@@ -1137,7 +1148,8 @@ fn open_lab(
         |window, cx| {
             let lab = cx.new(|cx| Lab::new(id, decorations, window, cx));
             content = Some(lab.clone());
-            lab
+            let titlebar = cx.new(|cx| LabTitleBar::new(lab.clone(), cx));
+            (titlebar, lab)
         },
     )?;
     Ok((
@@ -1148,32 +1160,55 @@ fn open_lab(
 
 fn main() {
     let options = Options::parse();
-    gpui_platform::application().run(move |cx| {
-        cx.on_window_closed(|cx, _| {
-            if cx.windows().is_empty() {
+    gpui_platform::application()
+        .with_assets(HeaderAssets)
+        .run(move |cx| {
+            cx.on_window_closed(|cx, _| {
+                if cx.windows().is_empty() {
+                    cx.quit();
+                }
+            })
+            .detach();
+            let decorations =
+                if options.client_decorations && linux_window_operations(cx.platform_info()) {
+                    WindowDecorations::Client
+                } else {
+                    WindowDecorations::Server
+                };
+            if let Err(error) = open_lab(cx, decorations, options.fixed_size) {
+                eprintln!("Could not open shell lab: {error:#}");
                 cx.quit();
-            }
-        })
-        .detach();
-        let decorations =
-            if options.client_decorations && linux_window_operations(cx.platform_info()) {
-                WindowDecorations::Client
             } else {
-                WindowDecorations::Server
-            };
-        if let Err(error) = open_lab(cx, decorations, options.fixed_size) {
-            eprintln!("Could not open shell lab: {error:#}");
-            cx.quit();
-        } else {
-            cx.activate(true);
-        }
-    });
+                cx.activate(true);
+            }
+        });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use ::core::prelude::v1::test;
+
+    #[gpui::test]
+    fn app_titlebar_toggle_is_clickable_and_does_not_change_window_bounds(cx: &mut TestAppContext) {
+        cx.set_platform_info(PlatformInfo {
+            os: OperatingSystem::Mac,
+            target: PlatformTarget::Native,
+        });
+        let (handle, lab) =
+            cx.update(|app| open_lab(app, WindowDecorations::Server, false).unwrap());
+        let mut visual = VisualTestContext::from_window(handle.into(), cx);
+        visual.update(|window, app| window.draw(app).clear(app));
+        let button = visual
+            .debug_bounds("header-panel")
+            .expect("app titlebar panel button");
+        let before = visual.update(|window, _| window.window_bounds());
+        visual.simulate_click(button.center(), Modifiers::default());
+        visual.read(|app| assert!(!lab.read(app).show_platform_readings));
+        assert_eq!(visual.update(|window, _| window.window_bounds()), before);
+        visual.simulate_click(button.center(), Modifiers::default());
+        visual.read(|app| assert!(lab.read(app).show_platform_readings));
+    }
 
     #[test]
     fn typography_and_motion_overrides_reset_without_changing_another_window() {

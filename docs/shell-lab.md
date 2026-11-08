@@ -6,7 +6,7 @@ client frame. It never writes desktop settings.
 
 ## Run
 
-From the xgpui repository on `issue-149/shell-look`:
+From the xgpui repository on `issue-149/titlebar-content`:
 
 ```sh
 just profile=dev lab-shell
@@ -19,7 +19,7 @@ just profile=dev lab-shell --client-decorations --fixed-size
 ```
 
 This branch was created from `issue-149/epic` and carries the prerequisites from
-draft PRs #182, #183 and #184 as cherry-picks, without merging those PRs. Reconcile
+draft PRs #182, #183, #184 and #185 as cherry-picks, without merging those PRs. Reconcile
 those prerequisite commits when integrating the epic. Do not target main.
 
 The shell is still experimental. A local path dependency is used; no published
@@ -96,10 +96,10 @@ Linux-only `--client-decorations` startup option is ignored on these platforms.
 7. Move windows between displays and inspect device scale separately from logical
    text scale. Repeat with server decorations and another desktop/compositor.
 
-On Windows/macOS, native window chrome remains in place. The inspector and state
-controls are available, but resolved client-frame overrides only affect the
-visual preview, not native window buttons. No desktop-specific behavior is selected by the displayed distro
-or desktop name.
+On macOS, native traffic lights remain while the app composes the title/app bar.
+On Windows, this composition path uses custom title-bar content and shell controls.
+Overrides style the app bar and simulated frame; they do not change native macOS
+traffic-light artwork. No behavior is selected from the displayed distro name.
 
 ## Build and headless tests
 
@@ -146,7 +146,8 @@ button target size; and the resolved click actions and reduced-motion policy.
 Fonts are **requested**, not reported as actual matched faces. GPUI may substitute
 an installed family or fall back for particular glyphs. The close icon is a vector;
 other control symbols use stable system typography independently of the title.
-Native/server decorations retain OS-controlled typography and colors.
+Native/server decorations retain OS-controlled typography and colors; the app-owned
+bar inside or alongside them can use the shell look or app-supplied styles.
 
 ### Typography contract and limits
 
@@ -201,3 +202,85 @@ enable pointer interactions. An adjacent ON/OFF readout identifies the exact
 header and hover colors. Fullscreen hides chrome, so hover/focus simulation
 controls are disabled in that mode. A regression checks that simulated hover
 sets the control background; existing preview tests keep actions noninteractive.
+
+## App-composed title/app bar
+
+The **real window's top bar**, above the lab panels, now demonstrates the
+`shell-2026` composition model. The app supplies SVG artwork, controls, title and
+spacing. No icon-theme catalog or layout presets are added.
+
+- Reset icon: clear this window's overrides.
+- Panel icon: hide/show the raw platform preference panel.
+- Title/empty space: explicit drag surface, separated from app buttons.
+- Theme icon: toggle the simulated preview's appearance (not desktop settings).
+- Plus icon: open an independent lab window.
+
+On macOS, the real native traffic lights remain at the left, with reserved space;
+the app bar fills the transparent title area. On Windows the app-composed bar
+uses the shell's window controls and native hit-test regions. On Linux a negotiated
+client frame wraps the app bar with window controls and resize edges. If the
+compositor supplies server decorations, the app bar sits inside the native frame
+and does not duplicate window controls. In fullscreen the app bar remains useful
+while window controls and native traffic-light clearance are omitted.
+
+The separate **client-frame preview** still shows built-in frame defaults; it is
+not a clone of the actionable app toolbar. Its decorative buttons remain inert.
+
+### Developer entry point
+
+Use `ShellApp::open_shell_window_with_titlebar` instead of `open_shell_window`:
+
+```rust
+cx.open_shell_window_with_titlebar(
+    window_options,
+    ShellOptions::default(),
+    |window, cx| {
+        let header = cx.new(|cx| MyHeader::new(window, cx));
+        let content = cx.new(|cx| MyContent::new(window, cx));
+        (header, content)
+    },
+)?;
+```
+
+`MyHeader` is an ordinary GPUI `Render` entity. Luma can supply its own SDK controls,
+look, icons and layout there. The shell wraps that content with its default
+background/typography and platform controls; child elements can supply their own
+styles. Use `ShellDragRegion::new(id, content)` for title text/empty drag surfaces,
+and keep interactive controls as siblings. A drag begins after a four-logical-pixel
+threshold; release clears tracking. Default macOS double click delegates to the
+native preference. `.options(...)` on the region can provide the window's explicit
+action overrides. Windows delegates dragging/control hit tests to the native path.
+
+The original `open_shell_window` API is unchanged and still uses default chrome.
+The new method configures transparent/custom title-bar options on macOS/Windows;
+macOS traffic lights are positioned for the resolved header height. Apps that need
+further native positioning can use existing GPUI window APIs from their header.
+Linux decoration requests continue to be negotiated with the compositor.
+
+This is an extension-only addition (`ShellApp` method and `ShellDragRegion`);
+no new core GPUI public API or serialization changes. Implementers of the
+experimental `ShellApp` trait need the new method; application callers using the
+existing method need no changes. Prerequisite #182 core API review remains separate.
+
+### Final manual acceptance
+
+From this branch, run `just profile=dev lab-shell` on macOS/Windows, and also
+`just profile=dev lab-shell --client-decorations` on Linux. Check:
+
+1. App icons render; each action works with pointer, Tab/Enter/Space and accessibility.
+2. Native traffic lights (macOS) or frame controls stay usable and do not overlap app controls.
+3. Dragging the title moves the window. Clicking an app button does not start a drag.
+4. Double click honors the native/resolved action. Test maximize, fullscreen/restore,
+   minimized restore, fixed-size windows and multi-display DPI changes.
+5. Linux client/server decoration modes do not draw duplicate headers or controls.
+
+Headless checks validate app/header layout, native traffic-light clearance,
+click isolation, platform option setup, app toolbar toggling, SVG rasterization and
+all earlier preview safety/override regressions. They do not replace native
+macOS/Windows/Linux interaction and visual checks. No GUI launch is performed.
+
+This completes the currently requested implementation scope; platform acceptance
+is the next step. It is not a declaration that the experimental crate is publishable.
+
+Titlebar-composition checks: 16 shell and seven lab tests passed, focused strict
+Clippy passed, formatting and diff checks passed, and the lab built without launch.
