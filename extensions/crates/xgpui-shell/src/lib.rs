@@ -190,6 +190,7 @@ impl Render for ShellWindow {
                     right: [None; 3],
                 };
             }
+            #[cfg(target_os = "macos")]
             if mac_native && !window.is_fullscreen() {
                 let height = state
                     .preferences
