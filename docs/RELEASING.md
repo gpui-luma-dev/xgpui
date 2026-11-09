@@ -16,6 +16,7 @@ When the user says **“prepare today's release”**:
 - Compare code, packaged documentation, dependencies and publication changes.
 - Reuse already prepared version numbers and existing release PRs; do not run an automatic bump over them. Propose only the remaining old → new versions, with a reason for each.
 - Reuse the existing release prose in docs for the GitHub release notes, retaining change titles, short summaries, links and an old → new version table. Keep alpha limits explicit. Do not rewrite docs merely to create the GitHub record.
+- For a first publication, check the crate is in the release map, enable crates.io publication, and verify package metadata, README and the actual `LICENSE-APACHE` file. A manifest license declaration alone is insufficient. Inspect the candidate archive before tagging; a package file listing is a quick check, not full archive/build verification. Raise internal dependency minimums when the new crate uses newly added APIs.
 - Review automatic version proposals against the versioning policy below. Include a reason for every bump in the PR.
 - Run the validation and no-upload registry checks below; resolve failures and version conflicts. Record source identity, host, commands and results in the release review. Revalidate affected checks after source changes.
 - For each public API addition or change in non-extension GPUI crates, document purpose, source/serialization compatibility, migration requirements and whether it could live in an extension. Present each concrete API change for final user review; implementation approval does not approve the final public API.
@@ -27,16 +28,17 @@ When the user says **“prepare today's release”**:
 
 **User:** explicitly approve merging the release PR.
 
-**Agent:** merge the approved PR and remove its branch, or confirm the merge if the user performed it. Record the full merge commit SHA from GitHub. Preserve unrelated local edits; a local checkout/cleanup failure does not mean the remote merge failed.
+**Agent:** verify relevant CI tests, lint and builds pass, then merge the approved PR and remove its branch, or confirm the merge if the user performed it. Record the full merge commit SHA from GitHub. Preserve unrelated local edits; a local checkout/cleanup failure does not mean the remote merge failed.
 
 ## 3. Create the tag and release record — agent
 
 **Before any crates.io upload:**
 
+- Create the remote Git tag explicitly, then verify its full SHA before creating the draft. Creating a draft release with a tag name does not necessarily create the Git ref; workflow dispatch requires the real ref.
 - Tag the approved commit as `release-YYYY-MM-DD-COMMIT`, using its UTC commit date and first 12 hex characters.
 - Support multiple releases per day: each distinct approved commit gets its own tag, for example `release-2026-10-31-ed4469267251` and `release-2026-10-31-a1b2c3d4e5f6`. Retries of the same release reuse its tag and record; do not create a new release identity for a retry.
-- Create a draft GitHub release containing the reviewed notes and version table. Preserve a copy of its title and body outside the checkout before running publication; the current finalizer overwrites them.
-- Verify the remote tag resolves to the approved full SHA and the record is a draft. Explain if the UTC tag date differs from the user's local date. Run the final no-upload plan against this tag, then present the draft and results to the user.
+- Create a draft GitHub release containing the reviewed notes and version table. Preserve a copy of its title and body in the named release-artifacts directory before running publication; the current finalizer overwrites them.
+- Verify the remote tag resolves to the approved full SHA and the record is a draft. Explain if the UTC tag date differs from the user's local date. Run the final no-upload plan against this tag, download its report and check the exact source SHA, publish/skip counts and payload conflicts. A successful plan has uploads disabled and may still report `release_ready: false`; only completed publication verification must report true. Present the draft and results to the user.
 
 ## 4. Publish and verify crates — agent, after approval
 
@@ -47,11 +49,11 @@ When the user says **“prepare today's release”**:
 - Dispatch publication against the tag, confirming `publish FULL_COMMIT_SHA`; do not select a moving `main` branch. Publish in dependency order and monitor through completion.
 - Verify and skip matching versions already published; verify each new upload.
 - Inspect the report: the source SHA must match, `release_ready` must be true, and every candidate must be `published-verified` or `already-published` with a registry checksum. Report the actual new/skip counts.
-- Use a fresh consumer outside the checkout, with exact versions for the full release map and no repository patches or credentials. Verify its Cargo metadata resolves those versions from crates.io, then build/run representative APIs, including new extension APIs. State the host and limits; this is not interactive or cross-platform acceptance.
+- Use a fresh consumer outside the checkout, with exact versions for the full release map and no repository patches or credentials. Verify its Cargo metadata resolves those versions from crates.io, then build/run representative APIs, including new extension APIs. Use the actual Rust library name, which may differ from the package name (`xgpui` exposes `gpui`), and exercise new behavior rather than only importing types. State the host and limits; this is not interactive or cross-platform acceptance.
 - Restore the reviewed title and notes after the workflow finalizer runs. Add the publication/consumer results and workflow link. Keep the version history and add the machine-readable verification table described below. Explicitly publish the existing draft and recheck the tag SHA and published state.
 - Report crate publication and release-record completion; say separately that Pages is still undeployed.
 
-**On failure:** retain the tag and draft, diagnose the failure and retry the same commit where safe, skipping verified uploads. Never move a tag after an upload. A source fix requires a new reviewed release source and appropriate versions. Keep the record in draft and hold docs deployment until verification succeeds.
+**On failure:** retain the tag and draft, diagnose the failure and retry the same commit where safe, skipping verified uploads. Never move a tag after an upload. A source fix requires a repair PR with explicit merge approval, then a new commit-derived tag/draft and another tagged plan. Preserve the old tag and mark its draft superseded. Before any upload, unchanged candidate versions can be reused if still available; after an upload, do not reuse that version for changed contents. Keep the record in draft and hold docs deployment until verification succeeds.
 
 ## 5. Deploy documentation — agent, after approval
 
@@ -145,6 +147,14 @@ are documented in [Setup](SETUP.md) and [Building](BUILDING.md).
 
 ## Preparation and publication tools
 
+Work in the normal repository checkout. Keep builds and downloaded workflow
+reports under `target/`. Use a named, persistent release-artifacts directory
+outside the checkout for isolated consumers and tools that require external
+outputs; do not create `/tmp` checkouts or scatter release files there. The agent
+creates that directory and sets `XGPUI_RELEASE_ARTIFACTS` to its absolute path
+before using the examples below. Keep edits local until the user requests a
+branch push or PR.
+
 The version source of truth is [`scripts/release-packages.json`](../scripts/release-packages.json).
 Do not maintain a second current-version table in this guide. Release notes carry
 the reviewed old → new versions and a rationale for each changed crate.
@@ -158,7 +168,7 @@ For local preparation, choose new report paths outside the checkout:
 
 ```sh
 cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- daily prepare --baseline APPROVED_COMPLETED_RELEASE_TAG \
-  --report /tmp/xgpui-release-preparation.json --notes /tmp/xgpui-release-notes.md
+  --report "$XGPUI_RELEASE_ARTIFACTS/preparation.json" --notes "$XGPUI_RELEASE_ARTIFACTS/notes.md"
 ```
 
 This previews automatic patch suggestions; it is not needed when versions are already prepared. Apply only the user-approved version plan, preserving compatible requirements. After version changes, run
@@ -169,8 +179,8 @@ checks out the selected dispatch commit and uses the release map. Local no-uploa
 equivalents, each with a new output directory outside the checkout:
 
 ```sh
-cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode plan --out /tmp/xgpui-release-plan
-cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode dry-run --out /tmp/xgpui-release-dry-run
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode plan --out "$XGPUI_RELEASE_ARTIFACTS/plan"
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode dry-run --out "$XGPUI_RELEASE_ARTIFACTS/dry-run"
 ```
 
 - **plan** inspects candidate archives and registry versions, reporting
