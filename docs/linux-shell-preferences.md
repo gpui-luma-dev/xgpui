@@ -21,33 +21,67 @@ native window chrome is unchanged.
 
 ## Providers and fallbacks
 
-| Preference | Provider | Fallback |
+Values resolve per field: standardized portal value, desktop portal extension,
+optional native desktop reader, then the consumer's default. Explicit window
+options continue to override that result. False, black and `TitlebarAction::None`
+are values, not missing settings.
+
+| Preference | Portal sources | Optional native fallback / final default |
 | --- | --- | --- |
-| Accent | `org.freedesktop.appearance/accent-color` | Shell blue focus accent |
-| Contrast | `org.freedesktop.appearance/contrast` | Normal contrast |
-| Reduced motion | `org.freedesktop.appearance/reduced-motion`, then GNOME `enable-animations` | Unset; this static shell has no animations to disable |
-| Text scale | GNOME `text-scaling-factor`, when exposed by the portal | 1; shell clamps logical target/text scale to 0.5–4 |
-| Font description | GNOME `font-name`, when exposed by the portal | Unset; typography integration is a later subtask |
-| Title-bar actions | GNOME `action-*-click-titlebar`, when exposed by the portal | Double: maximize/restore; middle: none; right: platform menu |
+| Accent | freedesktop appearance `accent-color` | No guessed theme palette; shell blue |
+| Contrast | freedesktop appearance `contrast` | GNOME accessibility `high-contrast`; normal |
+| Reduced motion | freedesktop `reduced-motion`, GNOME `enable-animations`, KDE `AnimationDurationFactor` | GNOME animation flag or KDE duration factor; unset |
+| Text scale | GNOME `text-scaling-factor` | GNOME text scale; 1, shell clamps to 0.5–4 |
+| Font description | GNOME `font-name`, KDE General `font` | Native GNOME/KDE font; unset |
+| Title-bar actions | GNOME `action-*-click-titlebar` | GNOME actions or portable subset of KWin actions; maximize / none / menu |
+| Light/dark | freedesktop `color-scheme` | GNOME `color-scheme`; existing appearance API |
+| Button layout, cursors | GNOME portal extensions | GNOME native settings; existing platform defaults |
 
-Only the freedesktop appearance keys are standardized. GNOME namespaces are
-optional provider extensions, not promises about KDE or other desktops. This
-subtask does not shell out to `gsettings` or parse private KDE configuration.
-Unsupported actions are left unset. Requesting a supported action still checks
-the window's current capabilities before dispatch.
+The native reader is selected by colon-separated `XDG_CURRENT_DESKTOP` tokens:
+GNOME/Unity (including `ubuntu:GNOME`) or KDE. Other desktops use the portal and
+consumer defaults. Merely installing GNOME schemas on KDE does not activate the
+GNOME native reader. KDE/GNOME portal extensions remain optional; they are not
+freedesktop standards.
 
-The platform subscribes before reading an initial snapshot, deduplicates repeated
-snapshots and checks again every 15 seconds. Portal operations have a five-second
-timeout; failed sessions retry after five seconds. This runs in the background
-and does not block window creation. On failure the extra optional preferences
-are cleared; existing light/dark, layout and cursor values retain their last-known
-values until a new snapshot is available. A successful empty snapshot restores
-the documented appearance/layout defaults. GNOME cursor size is validated before
-conversion; a missing theme/size retains the previous platform cursor selection.
+GNOME uses three concurrent, read-only `gsettings list-recursively` schema reads.
+KDE uses concurrent `kreadconfig6` queries, with `kreadconfig5` as an optional
+fallback, for `kdeglobals` font/animation preferences and KWin title-bar actions.
+KConfig handles config search paths, escaping and inheritance; the toolkit does
+not parse private INI files. No command uses a shell or writes preferences.
+Commands run in the background with five-second deadlines and kill-on-drop;
+missing tools, denied sandbox access, invalid values and failed queries leave
+individual preferences unavailable. Applications need no command or D-Bus code.
 
-Invalid types, non-finite/out-of-range accents and invalid text scales become
-unset. Removing a previously present optional preference clears it; explicit
-window overrides continue to win across updates and reconnects.
+The portal subscribes before reading, deduplicates across reconnects, refreshes
+every 15 seconds and retries failed sessions after five seconds. Native results
+are cached for 15 seconds during a healthy portal session, so portal signals do
+not launch commands repeatedly. During outages native preferences are still read
+on retries. Appearance/layout/cursor values retain their last-known values only
+when the failing portal and native reader cannot supply them. Extra optional
+preferences clear when unavailable. Successful empty snapshots reveal native
+fallbacks or restore consumer defaults. Explicit window overrides survive both.
+
+KDE font descriptions retain QFont serialization; GNOME descriptions retain Pango
+syntax. Neither is a family name. KDE display DPI is deliberately not converted
+to logical text scale (that would risk double scaling). Unsupported KWin actions,
+such as shading or vertical-only maximization, remain unavailable. KDE native
+button-layout, palette and cursor config are not guessed; their existing portal
+or consumer defaults apply. No app-wide fonts, animations or theme are changed.
+
+### Applying the look (follow-up)
+
+Before issue 149 is ready for final Linux validation, demonstrate the complete
+path in the shell lab: detected preferences → explicit overrides → resolved shell
+style → title, controls and focus/hover/inactive states. Show where font family,
+size, colors, contrast and motion policy are actually applied, and label values
+that are detected but not consumed. Shell chrome and application content must be
+shown separately; detecting a desktop preference does not theme every app element.
+Typography and this visual walkthrough are follow-up work, not claimed here.
+
+Provider contracts checked against upstream sources:
+[GNOME interface schema](https://github.com/GNOME/gsettings-desktop-schemas/blob/master/schemas/org.gnome.desktop.interface.gschema.xml.in),
+[KDE portal settings](https://github.com/KDE/xdg-desktop-portal-kde/blob/master/src/settings.cpp),
+and [KWin settings](https://github.com/KDE/kwin/blob/master/src/kwin.kcfg).
 
 ## Experimental shell migration
 
@@ -105,3 +139,21 @@ No GUI launch or publication is authorized by this document.
   strict core clippy additionally reports existing warnings. These are not changed here.
 - Full Linux backend builds, real portal restart tests and native GUI acceptance
   have not been run in this macOS environment.
+
+### Desktop fallback subtask
+
+Branch `issue-149/desktop-fallbacks` starts from `issue-149/epic` and carries
+the prerequisite preference commit from PR #182 without merging either PR.
+This subtask adds no public API beyond that separately documented prerequisite;
+the native readers and merge policy are private Linux backend details.
+
+Host checks compile the actual Linux source using an isolated Cargo harness
+with ashpd, calloop, smol and the local core crate. They cover native normalization,
+missing tools, portal precedence, removal, outage behavior and deduplication.
+This does not establish live GNOME/KDE behavior or constitute a full Linux build.
+Final native validation remains scheduled for the end of issue 149.
+
+Checks for this subtask: 10 actual-source Linux preference tests and six shell
+headless tests passed; strict preference-module Clippy passed (only unused-code
+warnings caused by the isolated harness were allowed); `cargo fmt` for the Linux
+crate, changed core-module rustfmt and `git diff --check` passed. No GUI launched.

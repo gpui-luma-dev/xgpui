@@ -7,7 +7,13 @@ use calloop::channel::{Channel, Sender};
 use calloop::{EventSource, Poll, PostAction, Readiness, Token, TokenFactory};
 use futures::future::{Either, select};
 use futures::{StreamExt, pin_mut};
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+
+#[path = "desktop_settings.rs"]
+mod desktop_settings;
 
 use gpui::{BackgroundExecutor, Task, WindowAppearance};
 
@@ -45,36 +51,49 @@ impl XDPEventSource {
     }
 }
 
-const NAMESPACES: [&str; 3] = [
+const NAMESPACES: [&str; 5] = [
     "org.freedesktop.appearance",
     "org.gnome.desktop.interface",
     "org.gnome.desktop.wm.preferences",
+    "org.kde.kdeglobals.General",
+    "org.kde.kdeglobals.KDE",
 ];
 
 // Missing or disconnected portal services must not permanently disable live settings.
 async fn listen(sender: Sender<Event>) -> anyhow::Result<()> {
+    let mut previous = None;
     loop {
-        if let Err(error) = listen_session(&sender).await {
+        if let Err(error) = listen_session(&sender, &mut previous).await {
             log::debug!("desktop settings unavailable; retrying: {error:#}");
-            sender.send(Event::DesktopPreferences(
-                gpui::DesktopPreferences::default(),
-            ))?;
+            let snapshot = desktop_settings::read()
+                .await
+                .with_last_known_window_settings(previous.as_ref());
+            snapshot.emit_changes(previous.as_ref(), &sender)?;
+            previous = Some(snapshot);
         }
         smol::Timer::after(Duration::from_secs(5)).await;
     }
 }
 
-async fn listen_session(sender: &Sender<Event>) -> anyhow::Result<()> {
+async fn listen_session(
+    sender: &Sender<Event>,
+    previous: &mut Option<Snapshot>,
+) -> anyhow::Result<()> {
     let settings = bounded(Settings::new()).await??;
     // Subscribe before reading so an intervening preference change is not lost.
     let changes = bounded(settings.receive_setting_changed()).await??;
     pin_mut!(changes);
-    let mut previous = None;
+    let mut fallback = desktop_settings::read().await;
+    let mut refreshed = Instant::now();
     loop {
+        if refreshed.elapsed() >= Duration::from_secs(15) {
+            fallback = desktop_settings::read().await;
+            refreshed = Instant::now();
+        }
         let values = bounded(settings.read_all(&NAMESPACES)).await??;
-        let snapshot = Snapshot::from_values(&values);
+        let snapshot = Snapshot::from_values(&values).with_fallback(&fallback);
         snapshot.emit_changes(previous.as_ref(), sender)?;
-        previous = Some(snapshot);
+        *previous = Some(snapshot);
         // Periodic refresh detects portal owner restarts and removed settings even when
         // no SettingChanged signal is delivered. Unrelated namespaces do not redraw.
         let refresh = smol::Timer::after(Duration::from_secs(15));
@@ -128,7 +147,11 @@ impl Snapshot {
             });
         let high_contrast = preference(value(values, appearance, "contrast"));
         let reduced_motion = preference(value(values, appearance, "reduced-motion"))
-            .or_else(|| value::<bool>(values, interface, "enable-animations").map(|v| !v));
+            .or_else(|| value::<bool>(values, interface, "enable-animations").map(|v| !v))
+            .or_else(|| {
+                value::<String>(values, "org.kde.kdeglobals.KDE", "AnimationDurationFactor")
+                    .and_then(|s| desktop_settings::reduced_motion(&s))
+            });
         let text_scale = value::<f64>(values, interface, "text-scaling-factor")
             .filter(|v| v.is_finite() && *v > 0.0 && *v <= f32::MAX as f64)
             .map(|v| v as f32)
@@ -140,6 +163,7 @@ impl Snapshot {
                 reduced_motion,
                 text_scale,
                 font: value::<String>(values, interface, "font-name")
+                    .or_else(|| value(values, "org.kde.kdeglobals.General", "font"))
                     .filter(|s| !s.trim().is_empty()),
                 titlebar_double_click: action(value(values, wm, "action-double-click-titlebar")),
                 titlebar_middle_click: action(value(values, wm, "action-middle-click-titlebar")),
@@ -156,6 +180,40 @@ impl Snapshot {
                 .map(|size| size as u32),
             button_layout: value(values, wm, "button-layout"),
         }
+    }
+
+    // During a portal outage preserve legacy appearance/layout/cursor state if
+    // the native reader cannot supply it. Optional extra preferences remain honest
+    // about current availability instead of retaining stale accessibility values.
+    fn with_last_known_window_settings(mut self, previous: Option<&Self>) -> Self {
+        if let Some(old) = previous {
+            self.appearance = self.appearance.or(old.appearance);
+            self.button_layout = self.button_layout.or_else(|| old.button_layout.clone());
+            self.cursor_theme = self.cursor_theme.or_else(|| old.cursor_theme.clone());
+            self.cursor_size = self.cursor_size.or(old.cursor_size);
+        }
+        self
+    }
+
+    // Fill each absent value independently. Explicit false, black, and no-action win.
+    fn with_fallback(mut self, fallback: &Self) -> Self {
+        let p = &mut self.preferences;
+        let f = &fallback.preferences;
+        p.accent_color = p.accent_color.or(f.accent_color);
+        p.high_contrast = p.high_contrast.or(f.high_contrast);
+        p.reduced_motion = p.reduced_motion.or(f.reduced_motion);
+        p.text_scale = p.text_scale.or(f.text_scale);
+        p.font = p.font.take().or_else(|| f.font.clone());
+        p.titlebar_double_click = p.titlebar_double_click.or(f.titlebar_double_click);
+        p.titlebar_middle_click = p.titlebar_middle_click.or(f.titlebar_middle_click);
+        p.titlebar_right_click = p.titlebar_right_click.or(f.titlebar_right_click);
+        self.appearance = self.appearance.or(fallback.appearance);
+        self.cursor_theme = self.cursor_theme.or_else(|| fallback.cursor_theme.clone());
+        self.cursor_size = self.cursor_size.or(fallback.cursor_size);
+        self.button_layout = self
+            .button_layout
+            .or_else(|| fallback.button_layout.clone());
+        self
     }
 
     fn emit_changes(&self, previous: Option<&Self>, sender: &Sender<Event>) -> anyhow::Result<()> {
@@ -280,6 +338,101 @@ mod tests {
 
     fn owned(value: impl Into<Value<'static>>) -> OwnedValue {
         value.into().try_into().unwrap()
+    }
+
+    #[test]
+    fn portal_values_win_per_field_and_removal_reveals_fallback() {
+        let fallback = Snapshot {
+            preferences: gpui::DesktopPreferences {
+                accent_color: Some([1.0, 0.0, 0.0]),
+                high_contrast: Some(true),
+                reduced_motion: Some(true),
+                font: Some("Desktop font".into()),
+                titlebar_double_click: Some(gpui::TitlebarAction::ToggleMaximize),
+                ..Default::default()
+            },
+            appearance: Some(WindowAppearance::Dark),
+            ..Default::default()
+        };
+        let portal = Snapshot {
+            preferences: gpui::DesktopPreferences {
+                accent_color: Some([0.0; 3]),
+                high_contrast: Some(false),
+                titlebar_double_click: Some(gpui::TitlebarAction::None),
+                ..Default::default()
+            },
+            appearance: Some(WindowAppearance::Light),
+            ..Default::default()
+        }
+        .with_fallback(&fallback);
+        assert_eq!(portal.preferences.accent_color, Some([0.0; 3]));
+        assert_eq!(portal.preferences.high_contrast, Some(false));
+        assert_eq!(
+            portal.preferences.titlebar_double_click,
+            Some(gpui::TitlebarAction::None)
+        );
+        assert_eq!(portal.preferences.font.as_deref(), Some("Desktop font"));
+        assert_eq!(portal.appearance, Some(WindowAppearance::Light));
+        let removed = Snapshot::default().with_fallback(&fallback);
+        assert_eq!(removed, fallback);
+        let unavailable = Snapshot::default().with_fallback(&Snapshot::default());
+        assert_eq!(unavailable.preferences, gpui::DesktopPreferences::default());
+        let (sender, receiver) = calloop::channel::channel();
+        removed.emit_changes(Some(&portal), &sender).unwrap();
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            Event::DesktopPreferences(_)
+        ));
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            Event::WindowAppearance(WindowAppearance::Dark)
+        ));
+        removed.emit_changes(Some(&removed), &sender).unwrap();
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn outage_retains_legacy_window_settings_but_not_stale_optional_preferences() {
+        let old = Snapshot {
+            appearance: Some(WindowAppearance::Dark),
+            button_layout: Some("close:".into()),
+            preferences: gpui::DesktopPreferences {
+                high_contrast: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let unavailable = Snapshot::default().with_last_known_window_settings(Some(&old));
+        assert_eq!(unavailable.appearance, old.appearance);
+        assert_eq!(unavailable.button_layout, old.button_layout);
+        assert_eq!(unavailable.preferences.high_contrast, None);
+        let local = Snapshot {
+            appearance: Some(WindowAppearance::Light),
+            ..Default::default()
+        }
+        .with_last_known_window_settings(Some(&old));
+        assert_eq!(local.appearance, Some(WindowAppearance::Light));
+    }
+
+    #[test]
+    fn kde_portal_extensions_are_strings_and_standard_values_win() {
+        let values = HashMap::from([
+            (
+                NAMESPACES[0].into(),
+                HashMap::from([("reduced-motion".into(), owned(0_u32))]),
+            ),
+            (
+                "org.kde.kdeglobals.General".into(),
+                HashMap::from([("font".into(), owned("Noto Sans,10,-1,5,50,0,0,0,0,0"))]),
+            ),
+            (
+                "org.kde.kdeglobals.KDE".into(),
+                HashMap::from([("AnimationDurationFactor".into(), owned("0"))]),
+            ),
+        ]);
+        let p = Snapshot::from_values(&values).preferences;
+        assert_eq!(p.reduced_motion, Some(false));
+        assert!(p.font.unwrap().starts_with("Noto Sans,"));
     }
 
     #[test]
