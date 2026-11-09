@@ -897,6 +897,7 @@ pub struct App {
     pub(crate) keyboard_layout_observers: SingleSubscriberSet<Handler>,
     missing_glyph_callback: Rc<MissingGlyphCallbackSlot>,
     pub(crate) thermal_state_observers: SingleSubscriberSet<Handler>,
+    desktop_preferences_observers: SingleSubscriberSet<Handler>,
     pub(crate) display_observers: SingleSubscriberSet<DisplayHandler>,
     /// The connected displays, as of the platform's last display change
     /// notification.
@@ -1052,6 +1053,7 @@ impl App {
                 keyboard_layout_observers: SingleSubscriberSet::new(),
                 missing_glyph_callback: Rc::default(),
                 thermal_state_observers: SingleSubscriberSet::new(),
+                desktop_preferences_observers: SingleSubscriberSet::new(),
                 display_observers: SingleSubscriberSet::new(),
                 displays: read_displays(platform.as_ref()),
                 system_sleep_observers: SingleSubscriberSet::new(),
@@ -1116,6 +1118,19 @@ impl App {
                     cx.thermal_state_observers
                         .clone()
                         .retain(move |callback| (callback)(cx));
+                }
+            }
+        }));
+
+        platform.on_desktop_preferences_changed(Box::new({
+            let app = Rc::downgrade(&app);
+            move || {
+                if let Some(app) = app.upgrade() {
+                    app.borrow_mut().update(|cx| {
+                        cx.desktop_preferences_observers
+                            .clone()
+                            .retain(|callback| callback(cx));
+                    });
                 }
             }
         }));
@@ -1823,6 +1838,24 @@ impl App {
     /// Returns the window button layout configuration when supported.
     pub fn button_layout(&self) -> Option<WindowButtonLayout> {
         self.platform.button_layout()
+    }
+
+    /// Returns optional desktop frame preferences without applying them to application state.
+    pub fn desktop_preferences(&self) -> crate::DesktopPreferences {
+        self.platform.desktop_preferences()
+    }
+
+    /// Observes desktop preference changes. Read the latest snapshot with
+    /// [`Self::desktop_preferences`]. Drop the subscription to stop observing.
+    pub fn observe_desktop_preferences(
+        &self,
+        mut callback: impl FnMut(&mut App) + 'static,
+    ) -> Subscription {
+        self.desktop_preferences_observers
+            .insert(Box::new(move |cx| {
+                callback(cx);
+                true
+            }))
     }
 
     /// Reads data from the platform clipboard.
