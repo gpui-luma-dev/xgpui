@@ -6,7 +6,7 @@ client frame. It never writes desktop settings.
 
 ## Run
 
-From the xgpui repository on `issue-149/titlebar-content`:
+From the xgpui repository on `issue-149/shell-ci`:
 
 ```sh
 just profile=dev lab-shell
@@ -284,3 +284,31 @@ is the next step. It is not a declaration that the experimental crate is publish
 
 Titlebar-composition checks: 16 shell and seven lab tests passed, focused strict
 Clippy passed, formatting and diff checks passed, and the lab built without launch.
+
+## CI and Actions
+
+`Shell and title-bar validation` (`.github/workflows/shell.yml`) runs a focused
+Linux/macOS/Windows matrix for relevant pull requests and pushes to `main` or
+`issue-149/epic`; it also supports manual dispatch when available on the default
+branch. Each host checks formatting, shell and lab headless tests, the core
+preference-observer regression, focused strict Clippy and a native lab build.
+Linux additionally compiles and tests the actual portal/native fallback modules
+with Wayland and X11 enabled. No lab or native GUI is launched.
+
+The existing opt-in **Windows lab applications** workflow now includes `shell-lab`,
+runs its headless tests and uploads its release executable for manual acceptance.
+The existing broad Linux extension workflow already includes shell library tests
+and all lab binaries; it remains opt-in and is not made part of this focused job.
+
+These checks do not establish live GNOME/KDE providers, native traffic-light
+placement, Windows hit testing, accessibility or display-scale behavior. The
+summary records those limits on each matrix job. This CI subtask does not change
+`publish = false`, release inventory, publishing actions or upload authorization.
+
+Branch `issue-149/shell-ci` was created from the epic and carries the existing
+preference/lab/titlebar prerequisite commits without merging their PRs.
+
+Local CI-command verification on macOS: 24 headless tests passed (16 shell,
+seven lab and one core observer), focused strict Clippy and build passed, and
+workflow YAML/run-step syntax, formatting and diff checks passed. Hosted
+Linux/Windows jobs have not yet established native platform results.
