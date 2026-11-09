@@ -68,15 +68,15 @@ such as shading or vertical-only maximization, remain unavailable. KDE native
 button-layout, palette and cursor config are not guessed; their existing portal
 or consumer defaults apply. No app-wide fonts, animations or theme are changed.
 
-### Applying the look (follow-up)
+### Applying the look
 
-Before issue 149 is ready for final Linux validation, demonstrate the complete
-path in the shell lab: detected preferences → explicit overrides → resolved shell
-style → title, controls and focus/hover/inactive states. Show where font family,
-size, colors, contrast and motion policy are actually applied, and label values
-that are detected but not consumed. Shell chrome and application content must be
-shown separately; detecting a desktop preference does not theme every app element.
-Typography and this visual walkthrough are follow-up work, not claimed here.
+The shell-look subtask now applies common desktop font descriptions to the client
+frame title and adds a shell-lab inspector for resolved typography, colors,
+focus/hover, dimensions and click actions. It uses the production renderer's
+style resolver. Application content remains independently styled; reduced motion
+is reported as policy because the frame has no animation. See
+[the walkthrough and parser limits](shell-lab.md#how-the-look-is-applied).
+New visuals remain pending manual acceptance at the end of issue 149.
 
 Provider contracts checked against upstream sources:
 [GNOME interface schema](https://github.com/GNOME/gsettings-desktop-schemas/blob/master/schemas/org.gnome.desktop.interface.gschema.xml.in),
@@ -121,8 +121,7 @@ This macOS environment cannot establish GNOME/KDE behavior. Portal parsing is al
 tested through an isolated host harness including the actual Linux source; that
 is not a full Linux backend build or a live portal/service-restart test.
 
-Issue 149 still requires provider/fallback acceptance on real desktops, typography
-and optional header slots, visual polish, native input/accessibility validation,
+Issue 149 still requires provider/fallback acceptance on real desktops, optional header slots, visual polish, native input/accessibility validation,
 diagnosis of the recorded GNOME frame stall, and a separately reviewed release.
 No GUI launch or publication is authorized by this document.
 
