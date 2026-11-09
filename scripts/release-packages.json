@@ -16,7 +16,8 @@
     "xgpui-shader": "xgpui-shader",
     "xgpui-svg": "xgpui-svg",
     "xgpui-canvas": "xgpui-canvas",
-    "gpui-ios": "xgpui-ios"
+    "gpui-ios": "xgpui-ios",
+    "xgpui-shell": "xgpui-shell"
   },
   "version": "1.0.0",
   "versions": {
@@ -26,16 +27,17 @@
     "xgpui-parley": "0.5.0",
     "xgpui-shader": "0.4.3",
     "xgpui-svg": "0.3.3",
-    "xgpui": "3.0.1",
+    "xgpui": "3.1.0",
     "xgpui-apple": "4.0.1",
     "xgpui-macos": "4.0.1",
-    "xgpui-linux": "2.0.3",
+    "xgpui-linux": "2.1.0",
     "xgpui-platform": "2.0.3",
     "xgpui-wgpu": "2.2.0",
     "xgpui-web": "2.0.3",
     "xgpui-windows": "2.1.1",
     "xgpui-canvas": "0.3.3",
     "xgpui-ios": "1.26.5",
-    "xgpui-macros": "1.0.2"
+    "xgpui-macros": "1.0.2",
+    "xgpui-shell": "0.1.0"
   }
 }

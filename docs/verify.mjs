@@ -150,7 +150,7 @@ console.log('Verified retired architecture, pipeline and review roadmap pages ar
 
 // Every extension contract is part of the offline artifact, with working routes
 // and section targets; all published sources must stay in the web docs tree.
-assert.equal(Object.keys(data.extension_documents).length, 30);
+assert.equal(Object.keys(data.extension_documents).length, 31);
 assert.match(index, /href="#performance-study">Performance study/);
 assert.match(run('extensionPage("performance-study")'), /Problem 3: every pixel shades every ribbon/);
 assert.match(data.extension_documents['performance-study'].html, /href="#extension-lab"/);
@@ -299,6 +299,7 @@ const extensionApiGuides = {
   'xgpui-svg': ['svg-rendering', 'added-svg-viewport-size'],
   'xgpui-media': ['media-images', 'added-source-sized-media-textures'],
   'xgpui-canvas': ['canvas', 'canvas-reuses-existing-gpui-apis'],
+  'xgpui-shell': ['shell', 'desktop-preferences-for-shells'],
 };
 assert.deepEqual(Object.keys(extensionApiGuides).sort(), Object.keys(data.extension_packages).filter(p => p !== 'xgpui-color').sort(), 'every rendering extension needs an API compatibility guide');
 for (const [pkg, [route, section]] of Object.entries(extensionApiGuides)) {
@@ -563,3 +564,5 @@ for (const file of ['Italy-sRGB.jpg', 'Italy-P3.jpg', 'Italy-oog.jpg']) {
   assert.ok(italyUi.includes(file));
 }
 console.log('Verified Italy browser-color comparison and local source assets.');
+
+assert.match(run('cratePage(crates.find(c => c.package === "xgpui-shell"), "overview")'), /ShellDragRegion/);

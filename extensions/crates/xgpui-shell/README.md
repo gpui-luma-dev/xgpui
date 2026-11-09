@@ -1,91 +1,71 @@
 # Experimental desktop shell
 
-Initial implementation for issue #149. This unpublished extension owns the shared
-Linux frame used by the native labs. It renders GPUI elements; it does not load GTK,
-libadwaita or third-party widget themes. No non-extension GPUI APIs are changed.
+> **ALPHA — expect API changes.** `xgpui-shell 0.1.0` is being prepared for its first crates.io release. The code is available locally; publication is still pending.
 
-## Integration
+`xgpui-shell` supplies window chrome built from GPUI elements. Use its shared Linux client frame, or compose your own title bar while retaining native platform structure. It does not load GTK, libadwaita or third-party widget themes.
 
-Add a path dependency on this crate, then import `ShellApp` and `ShellWindowTitle`.
-Replace `App::open_window(options, build)` with
-`App::open_shell_window(options, ShellOptions::default(), build)`. The content
-builder still returns the application's own view. The returned handle refers to
-`ShellWindow`, whose `set_options` method updates that window's overrides.
+## Add to an application
 
-Set the initial title through `WindowOptions.titlebar.title`, or call
-`window.set_shell_title("Document title")` in the builder and whenever it changes.
-The native title and client title stay synchronized. Titles are stored per window
-and removed when its shell entity drops. The labs retain their existing
-`open_lab_window` / `set_lab_title` adapters.
+After publication:
 
-Linux and FreeBSD draw the frame only after the platform negotiates
-`Decorations::Client`, and suppress it in fullscreen. Server decorations and the
-existing Windows/macOS native chrome remain in charge elsewhere. Hidden capture
-windows retain the previous lab behavior of omitting client chrome.
-
-## Implemented preferences and behavior
-
-- Live GPUI window appearance selects light/dark palette tokens; inactive windows
-  use subdued text and header colors. Appearance, button-layout, activation and
-  bounds observers invalidate the frame.
-- Live platform button layout controls both order and omissions. Unsupported or
-  application-disabled minimize/maximize controls are omitted. Fixed-size windows
-  have no resize hit regions. Actions recheck capabilities when invoked.
-- Equal-width side groups center the title independently of the number of buttons.
-  A long title truncates before the controls; the title area remains draggable.
-- Window buttons expose accessible button roles and labels, tooltips, Tab stops,
-  Enter/Space activation and a visible keyboard focus ring. Screen-reader click
-  actions dispatch directly to the corresponding window operation.
-- Right-click on the title opens the platform window menu when supported.
-  Double-click defaults to maximize/restore. Resize edges/corners respect tiling;
-  maximized windows suppress resize edges and insets; tiled/maximized windows have
-  square content corners; fullscreen clears client insets.
-- All sizes are logical pixels. GPUI handles device/fractional scaling. The optional
-  `text_scale` override scales title typography, header height and button targets
-  once (finite values clamped to 1–3).
-
-`ShellOptions` also allows application-supplied high contrast, an RGB accent for
-focus indication, and `TitlebarAction::{ToggleMaximize, Minimize, None}`. These
-values can be changed with `ShellWindow::set_options`. They are **not automatically
-read from desktop preferences** in this first increment.
-
-## Work remaining in #149
-
-- Read/watch contrast, accent, text-scaling and title-bar action settings through
-  supported Linux desktop interfaces, including sensible missing-portal fallbacks.
-- Add optional app action/view-switcher slots and responsive placement, preserving
-  a blank drag region and keeping essential actions available at narrow widths.
-- Replace text control glyphs with consistent drawn symbolic icons; finish frame
-  shadows/outer-corner treatment and contrast-aware focus styling.
-- Extend automated state-transition and keyboard/accessibility acceptance coverage.
-- Perform real GNOME and another desktop's acceptance: runtime preferences,
-  minimize/maximize/fullscreen/tile transitions, drag/resize/menu, mixed DPI and
-  system text scaling, screen-reader announcements, keyboard traversal, text-input
-  focus and app shortcuts. Weston/Xvfb smoke is not equivalent to those checks.
-
-This crate is intentionally absent from the published extension catalog and
-release manifest until its application-facing interface has stabilized.
-
-## Validation
-
-From the repository root:
-
-```sh
-cargo test --locked --config .cargo/validation.toml \
-  --manifest-path extensions/crates/xgpui-shell/Cargo.toml --lib
-just lab-test
+```toml
+[dependencies]
+xgpui = "3.1.0"
+xgpui-shell = "0.1.0"
 ```
 
-The existing Linux real-window smoke uses the labs' adapters and therefore tests
-this shell. Linux CI includes the shell suite; the native platform matrix checks
-that its implementation compiles on Linux, macOS and Windows.
+While reviewing this release, use local path dependencies instead.
 
-### Initial local results (Fedora 44)
+```rust
+use xgpui_shell::{ShellApp, ShellOptions, ShellWindowTitle};
 
-The lab regression suite, shell unit/lifecycle suite, strict shell Clippy and
-workflow actionlint checks pass. The native two-window XWayland smoke passes.
-On the current GNOME Wayland session both the pre-change compiled probe and the
-new shell probe stop after their second rendered frame and time out. This is a
-recorded live-session limitation, not successful GNOME acceptance; investigate
-frame delivery separately before completing #149. Windows/macOS compile checks
-have been added to CI but have not run for this local branch.
+// Inside an App callback; MyView is your application's Render implementation.
+cx.open_shell_window(options, ShellOptions::default(), |window, cx| {
+    window.set_shell_title("My application");
+    cx.new(|_| MyView::new())
+})?;
+```
+
+The returned handle refers to `ShellWindow`. Its `set_options` method updates that window's overrides. Set the initial title through `WindowOptions.titlebar.title`, or keep it synchronized with `set_shell_title`.
+
+## Compose a title bar
+
+Use `ShellApp::open_shell_window_with_titlebar` with a builder returning `(Entity<Titlebar>, Entity<Content>)`. Place title text or empty space inside `ShellDragRegion`; keep interactive buttons and inputs outside that drag region.
+
+macOS retains native traffic lights. Windows uses app-composed content and shell controls. Linux/FreeBSD draw the client frame only when the platform reports client decorations; server decorations remain compositor-owned. Fullscreen suppresses the client frame. A decoration request is not proof that the compositor accepted it.
+
+## Follow desktop preferences
+
+`ShellOptions::default()` follows available desktop values. Explicit optional fields override them per window, including `Some(false)`, a black accent and `Some(TitlebarAction::None)`. Resetting an override restores desktop/default resolution.
+
+The Linux backend reads accent, contrast, reduced motion, logical text scale, font descriptions and supported title-bar actions. Settings portal values take precedence over optional GNOME/KDE native fallbacks. Missing tools or settings leave fields unset. Existing appearance and button-layout APIs remain separate.
+
+Desktop font descriptions style the shell title; logical text scale is clamped to 0.5–4 and stays separate from display DPI. Reduced motion is exposed as policy; the static frame has no animations. Application content retains its own styling.
+
+Core `App::desktop_preferences()` reads the snapshot, and `App::observe_desktop_preferences(...)` subscribes to changes. Keep the returned subscription alive. Other platforms currently return an empty optional snapshot.
+
+## Try the lab
+
+```sh
+just profile=dev lab-shell
+# Linux: request a client frame
+just profile=dev lab-shell --client-decorations
+# Check capabilities on a fixed-size window
+just profile=dev lab-shell --client-decorations --fixed-size
+```
+
+The lab shows detected and resolved preferences, per-window overrides and window state. Its client-frame preview is a simulation: preview controls never move, resize or close the host window.
+
+See the [Shell Lab walkthrough](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/shell-lab.md) and [Linux provider details](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/linux-shell-preferences.md).
+
+## Limits and compatibility
+
+This is the first published interface; APIs may change. Headless macOS, Windows and Linux CI passes, but it does not establish interactive GNOME/KDE acceptance, mixed-DPI behavior or screen-reader acceptance. Unsupported desktop actions remain unavailable; native macOS traffic-light artwork is not restyled.
+
+Compared with the earlier local-only shell, scalar preference options are now optional overrides: use `Some(value)` for an explicit choice, or `..Default::default()` to follow the desktop. The new core APIs are additive, have default platform implementations and introduce no serialization format changes.
+
+## GPUI public API changes: additions and compatibility
+
+The shell uses additive core desktop-preference types, defaulted platform hooks and scoped App subscriptions. Existing platform implementers remain valid; no serialized representation changes. Its rendering and styling remain in this extension. Final API release approval is pending.
+
+See [the core API ledger](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md#desktop-preferences-for-shells) for the individual additions and why the backend seam belongs in core.

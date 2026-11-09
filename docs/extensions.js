@@ -82,6 +82,8 @@ function extensionPage(route) {
     ? '<p class="guide-intro"><strong>Pixel and media pipeline.</strong> Explicit metadata, linear adjustments, RGBA16F sources, progressive tiled canvases, bounded preview blur and native video effects.</p>'
     : route === 'media-images'
     ? '<p class="guide-intro"><strong>Images and video frames.</strong> Practical examples for loading, adjusting and displaying media in GPUI.</p>'
+    : route === 'shell'
+    ? '<p class="notice"><strong>ALPHA:</strong> First release in preparation; expect API changes.</p>'
     : route === 'parley-text'
     ? '<p class="guide-intro"><strong>Text backend extension.</strong> Parley shaping and geometry; GPUI caches, atlas and native input.</p>'
     : route === 'high-gamut-windows'
@@ -127,6 +129,7 @@ just --justfile apps/xgpui-ext-lab/gamut-lab/justfile test`) +
     '<div class="cards">' + extensionCard('color-math', 'CPU types, browser runtime diagnostics, native P3 comparison, dependency boundaries and validation.') + '</div>' +
     '<h2>6. Dedicated media images</h2><p>Display large images at several sizes, adjust their colors, or show frames from a native producer. Start with small examples and the browser demos.</p><div class="cards">' + extensionCard('media-images', 'Examples, loading limits, platform support and test results.') + '</div>' +
     '<h2>7. Spatial canvas</h2><div class="cards">' + extensionCard('canvas', 'Native lab, camera and scene API, controls and known limits. Explore the card canvas and CPU Mandelbrot browser companions.') + '</div>' +
+    '<h2>8. Desktop shell</h2><div class="cards">' + extensionCard('shell', 'Alpha window frames, app-composed title bars, desktop preferences and the native shell lab.') + '</div>' +
     '<h2>Shared GPUI integration</h2><div class="cards">' + extensionCard('gpui-public-api', 'Public additions and altered upstream types, separated by capability.') + '</div>';
 
 }
@@ -222,4 +225,8 @@ function mediaCrateGuide() {
 
 function canvasCrateGuide() {
   return browserDemoLinks('canvas') + browserDemoLinks('mandelbrot') + '<article class="extension-document">' + data.extension_documents['canvas'].html.replace(/^<h1[^>]*>.*?<\/h1>\s*/, '') + '</article>';
+}
+
+function shellCrateGuide() {
+  return '<article class="extension-document">' + data.extension_documents.shell.html + '</article>';
 }

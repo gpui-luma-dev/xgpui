@@ -6,7 +6,7 @@ client frame. It never writes desktop settings.
 
 ## Run
 
-From the xgpui repository on `issue-149/shell-ci`:
+From the xgpui repository:
 
 ```sh
 just profile=dev lab-shell
@@ -18,13 +18,7 @@ just profile=dev lab-shell --client-decorations
 just profile=dev lab-shell --client-decorations --fixed-size
 ```
 
-This branch was created from `issue-149/epic` and carries the prerequisites from
-draft PRs #182, #183, #184 and #185 as cherry-picks, without merging those PRs. Reconcile
-those prerequisite commits when integrating the epic. Do not target main.
-
-The shell is still experimental. A local path dependency is used; no published
-shell crate is required. The first build uses the existing native extension-lab
-workspace and its dependencies.
+The shell is experimental. This release prepares its first crates.io publication; repository builds use the local workspace crate. The first build uses the existing native extension-lab workspace and its dependencies.
 
 ## What to inspect
 
