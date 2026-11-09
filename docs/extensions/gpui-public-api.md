@@ -666,3 +666,18 @@ Start with [color tasks](color-workflows.md) for practical integration. `PixelCo
 `RgbDefinition` supports reference-white adaptation and independent channel curves. `from_relative_xyz_matrix` preserves relative colorants whose sum differs from the declared XYZ reference white. The optional `xgpui-color/icc` parser constructs definitions from a bounded RGB matrix/TRC subset; it does not add image-file decoding or a general ICC transform engine. See [pixels + metadata](pixels-and-metadata.md) and [ICC scope](icc-profiles.md).
 
 The Metal test-support API `Window::render_to_linear_p3` reads FP16 composition values before OS display mapping. The ordinary 8-bit screenshot remains an sRGB preview. [Color labs](color-labs.md) separates CPU conversion, GPU composition, browser preview and physical display claims.
+
+## Desktop preferences for shells
+
+Proposed for core 3.1.0 and Linux 2.1.0; final release approval is pending. The shell's rendering, typography and window overrides live in `xgpui-shell`.
+
+| Core addition | Purpose | Compatibility and migration | Why core |
+| --- | --- | --- | --- |
+| `DesktopPreferences` | Optional accent, contrast, motion, scale, font and title-bar action snapshot | Additive type; unset fields preserve consumer defaults; no serialization implementation | Backend owns the preference provider |
+| `TitlebarAction` | Portable None, ToggleMaximize, Minimize and Menu actions | New enum; qualify imports if colliding with the shell enum | Backend/consumer protocol |
+| `Platform::desktop_preferences()` | Read snapshot | Default empty snapshot preserves platform implementers | Reads private platform state |
+| `Platform::on_desktop_preferences_changed(...)` | Main-thread update notification | Default no-op preserves implementers; callback runs after borrow release | Platform event-loop delivery |
+| `App::desktop_preferences()` | Application snapshot access | Additive; no automatic application styling changes | Shared access for any consumer |
+| `App::observe_desktop_preferences(...)` | Scoped change subscription | Additive; retain Subscription to observe, drop to stop | App observer lifecycle |
+
+Existing `WindowButtonLayout` Linux helpers also become available under `test-support` for host-independent frame tests. Their production platform availability is unchanged. None of these additions changes an existing serialized format or requires existing applications to migrate.

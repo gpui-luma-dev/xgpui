@@ -620,6 +620,7 @@ fn generate(root: &Path) -> Result<()> {
         ("xgpui-parley", "extensions/crates/xgpui-parley"),
         ("xgpui-media", "extensions/crates/xgpui-media"),
         ("xgpui-svg", "extensions/crates/xgpui-svg"),
+        ("xgpui-shell", "extensions/crates/xgpui-shell"),
     ]);
     let mut packages = provenance["packages"]
         .as_object()
@@ -774,6 +775,7 @@ fn generate(root: &Path) -> Result<()> {
         ("media-pipeline", "docs/extensions/media-pipeline.md"),
         ("svg-rendering", "docs/extensions/svg-rendering.md"),
         ("parley-text", "docs/extensions/parley-text.md"),
+        ("shell", "docs/extensions/shell.md"),
         ("font-controls", "docs/extensions/font-controls.md"),
         (
             "high-gamut-windows",

@@ -4,11 +4,17 @@ version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
 description = "Experimental desktop-aware window shell for XGPUI applications"
-publish = false
+repository = "https://github.com/gpui-luma-dev/xgpui"
+homepage = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#shell"
+readme = "README.md"
+keywords = ["xgpui", "gpui", "gui", "desktop", "titlebar"]
+categories = ["gui"]
+publish = ["crates-io"]
 
 [dependencies]
-gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "3.0.0" }
+gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "3.1.0" }
 anyhow = "1"
 
 [dev-dependencies]
-gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "3.0.0", features = ["test-support"] }
+gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "3.1.0", features = ["test-support"] }

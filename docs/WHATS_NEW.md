@@ -1,6 +1,15 @@
 # What's new
 
-## Latest — November 7, 2026
+## In preparation — November 8, 2026
+
+**A desktop-aware shell and app-composed title bars.** The first `xgpui-shell 0.1.0` release adds shared client frames, per-window overrides, desktop typography and explicit drag regions. macOS keeps native traffic lights; a dedicated native lab makes detected preferences and resolved styling inspectable.
+
+`xgpui 3.1.0` adds desktop-preference snapshots and subscriptions. `xgpui-linux 2.1.0` reads the Settings portal with optional GNOME/KDE fallbacks. These are additive changes; other crate versions stay unchanged.
+
+**Alpha:** shell APIs may change. Headless checks do not establish interactive desktop or accessibility acceptance. Publication is pending. Read the [shell guide](#shell), or run `just profile=dev lab-shell` locally.
+
+
+## November 7, 2026
 
 CI/testing and browser-build fixes, plus very-alpha Parley 0.5.0 paragraph, typeset and emoji updates — see the [GitHub release notes](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-08-cb66d2b2238b).
 

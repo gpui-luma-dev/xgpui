@@ -134,5 +134,13 @@
     "surface": "IosPlatform and current_platform on iOS, StatusBarContentStyle, and iOS status-bar controls.",
     "review": "Implementation files follow captured upstream 1.27.0; package wiring and shared rendering integration are adapted to XGPUI. Simulator compilation, linking and app packaging pass. Interactive simulator/device validation remains pending; wide-SDR presentation remains macOS-only.",
     "entry": "src/gpui_ios.rs"
+  },
+  "xgpui-shell": {
+    "short": "xgpui-shell",
+    "group": "Extensions",
+    "role": "Experimental desktop-aware window frames and app-composed title bars.",
+    "surface": "ShellApp, ShellOptions, ShellWindowTitle, ShellDragRegion, ShellTypography and ClientFramePreview.",
+    "review": "First 0.1 release; APIs may change. Native desktop acceptance remains separate from headless tests.",
+    "entry": "src/lib.rs"
   }
 }

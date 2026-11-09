@@ -1,7 +1,6 @@
 # Linux shell desktop preferences — issue 149
 
-This is the first subtask of `issue-149/epic`, not completion of the shell or
-approval to release the new core API. Native desktop acceptance remains pending.
+The shell work is integrated. This release prepares the first shell publication; final core API release approval and native desktop acceptance remain separate gates.
 
 ## Integration
 
@@ -85,7 +84,7 @@ and [KWin settings](https://github.com/KDE/kwin/blob/master/src/kwin.kcfg).
 
 ## Experimental shell migration
 
-The unpublished shell's former scalar options are now optional overrides. Replace
+The earlier local-only shell's scalar options are now optional overrides. Replace
 `high_contrast: true` with `high_contrast: Some(true)`, and similarly wrap explicit
 accent, scale and double-click values. New middle/right-click override fields can
 be omitted with `..Default::default()`. Callers already using `ShellOptions::default()`
