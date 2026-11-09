@@ -1164,6 +1164,15 @@ impl WaylandConnection {
                             }
                         }
                     }
+                    XDPEvent::DesktopPreferences(preferences) => {
+                        if let Some(client) = client.0.upgrade() {
+                            let common = client.borrow().common.clone();
+                            crate::linux::LinuxCommon::update_desktop_preferences(
+                                &common,
+                                preferences,
+                            );
+                        }
+                    }
                     XDPEvent::ButtonLayout(layout_str) => {
                         if let Some(client) = client.0.upgrade() {
                             let layout = WindowButtonLayout::parse(&layout_str)

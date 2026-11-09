@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [gamut-lab, paint-lab, shader-examples, media-lab, color-lab]
+        app: [gamut-lab, paint-lab, shader-examples, media-lab, color-lab, shell-lab]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -32,6 +32,9 @@ jobs:
       - name: Check color and chromaticity numerical/fixture tests
         if: matrix.app == 'color-lab'
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab --target-dir target/windows-apps -- --test-threads=1
+      - name: Run shell lab headless regressions
+        if: matrix.app == 'shell-lab'
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shell-lab --target-dir target/windows-apps -- --test-threads=1
       # Native window tests and physical display checks require a desktop session.
       # The separate portable-paints workflow runs the offscreen D3D11 WARP suite.
       - uses: actions/upload-artifact@v4

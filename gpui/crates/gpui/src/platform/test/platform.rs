@@ -36,6 +36,8 @@ pub(crate) struct TestPlatform {
     pub(crate) active_window: RefCell<Option<TestWindow>>,
     displays: RefCell<Vec<TestDisplay>>,
     displays_changed_callback: RefCell<Option<Box<dyn FnMut()>>>,
+    desktop_preferences: RefCell<crate::DesktopPreferences>,
+    desktop_preferences_callback: RefCell<Option<Box<dyn FnMut()>>>,
     active_cursor: Mutex<CursorStyle>,
     current_clipboard_item: Mutex<Option<ClipboardItem>>,
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
@@ -168,6 +170,16 @@ impl TestPlatform {
         self.displays.borrow_mut().push(display);
     }
 
+    #[cfg(test)]
+    pub(crate) fn simulate_desktop_preferences(&self, preferences: crate::DesktopPreferences) {
+        *self.desktop_preferences.borrow_mut() = preferences;
+        let callback = self.desktop_preferences_callback.borrow_mut().take();
+        if let Some(mut callback) = callback {
+            callback();
+            *self.desktop_preferences_callback.borrow_mut() = Some(callback);
+        }
+    }
+
     pub(crate) fn simulate_display_removed(&self, display_id: DisplayId) {
         self.displays
             .borrow_mut()
@@ -242,6 +254,8 @@ impl TestPlatform {
             active_cursor: Default::default(),
             displays: RefCell::new(vec![TestDisplay::new()]),
             displays_changed_callback: Default::default(),
+            desktop_preferences: Default::default(),
+            desktop_preferences_callback: Default::default(),
             active_window: Default::default(),
             expect_restart: Default::default(),
             current_clipboard_item: Mutex::new(None),
@@ -492,6 +506,14 @@ impl Platform for TestPlatform {
     }
 
     fn on_keyboard_layout_change(&self, _: Box<dyn FnMut()>) {}
+
+    fn desktop_preferences(&self) -> crate::DesktopPreferences {
+        self.desktop_preferences.borrow().clone()
+    }
+
+    fn on_desktop_preferences_changed(&self, callback: Box<dyn FnMut()>) {
+        *self.desktop_preferences_callback.borrow_mut() = Some(callback);
+    }
 
     fn on_thermal_state_change(&self, _: Box<dyn FnMut()>) {}
 

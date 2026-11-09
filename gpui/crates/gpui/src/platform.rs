@@ -1,6 +1,9 @@
 mod color_presentation;
 pub use color_presentation::{WindowColorFallback, WindowColorMode, WindowColorStatus};
 
+mod desktop_preferences;
+pub use desktop_preferences::{DesktopPreferences, TitlebarAction};
+
 mod app_menu;
 mod keyboard;
 mod keystroke;
@@ -48,7 +51,12 @@ use crate::{
     ShapedRun, SharedString, Size, SvgRenderer, SystemWindowTab, Task, Window, WindowControlArea,
     hash, point, px, size,
 };
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(
+    test,
+    feature = "test-support",
+    target_os = "linux",
+    target_os = "freebsd"
+))]
 use anyhow::bail;
 use anyhow::{Context as _, Result};
 use async_task::Runnable;
@@ -445,6 +453,15 @@ pub trait Platform: 'static {
     fn button_layout(&self) -> Option<WindowButtonLayout> {
         None
     }
+
+    /// Returns optional desktop frame preferences. Unsupported platforms return no values.
+    fn desktop_preferences(&self) -> DesktopPreferences {
+        DesktopPreferences::default()
+    }
+
+    /// Registers the main-thread callback for changed desktop preferences.
+    /// Implementations must release platform state borrows before invoking it.
+    fn on_desktop_preferences_changed(&self, _callback: Box<dyn FnMut()>) {}
 
     fn open_url(&self, url: &str);
     fn on_open_urls(&self, callback: Box<dyn FnMut(Vec<String>)>);
@@ -894,7 +911,12 @@ impl WindowButton {
         }
     }
 
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(any(
+        test,
+        feature = "test-support",
+        target_os = "linux",
+        target_os = "freebsd"
+    ))]
     fn index(&self) -> usize {
         match self {
             WindowButton::Minimize => 0,
@@ -919,7 +941,12 @@ pub struct WindowButtonLayout {
     pub right: [Option<WindowButton>; MAX_BUTTONS_PER_SIDE],
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(
+    test,
+    feature = "test-support",
+    target_os = "linux",
+    target_os = "freebsd"
+))]
 impl WindowButtonLayout {
     /// Returns Zed's built-in fallback button layout for Linux titlebars.
     pub fn linux_default() -> Self {

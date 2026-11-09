@@ -1,0 +1,103 @@
+name: Shell and title-bar validation
+
+# Focused, headless coverage. Native desktop interaction remains manual acceptance.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, 'issue-149/epic']
+    paths:
+      - '.github/workflows/shell.yml'
+      - 'extensions/crates/xgpui-shell/**'
+      - 'apps/xgpui-ext-lab/shell-lab/**'
+      - 'apps/xgpui-ext-lab/Cargo.toml'
+      - 'gpui/crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/validation.toml'
+      - 'rust-toolchain*'
+  push:
+    branches: [main, 'issue-149/epic']
+    paths:
+      - '.github/workflows/shell.yml'
+      - 'extensions/crates/xgpui-shell/**'
+      - 'apps/xgpui-ext-lab/shell-lab/**'
+      - 'apps/xgpui-ext-lab/Cargo.toml'
+      - 'gpui/crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/validation.toml'
+      - 'rust-toolchain*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shell-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  RUST_BACKTRACE: '1'
+
+jobs:
+  headless:
+    name: Shell headless (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: shell-headless-v1
+      - name: Install Linux development libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev
+      - name: Check shell and lab formatting
+        run: |
+          cargo fmt --manifest-path extensions/crates/xgpui-shell/Cargo.toml --check
+          rustfmt --check --edition 2024 apps/xgpui-ext-lab/shell-lab/src/main.rs
+      - name: Test shell, app-titlebar composition and preview safety
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-shell --lib -- --test-threads=1
+      - name: Test core desktop preference observer lifecycle
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui --features test-support --lib platform::desktop_preferences::tests -- --test-threads=1
+      - name: Test actual Linux portal and native fallback modules
+        if: runner.os == 'Linux'
+        run: |
+          cargo test --locked --config .cargo/validation.toml -p xgpui-linux --features wayland,x11 --lib linux::xdg_desktop_portal:: -- --test-threads=1
+      - name: Test shell lab without opening a native window
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shell-lab -- --test-threads=1
+      - name: Lint shell library, tests and lab
+        run: |
+          cargo clippy --locked --config .cargo/validation.toml -p xgpui-shell --lib --tests --no-deps -- -D warnings
+          # --tests on the shared lab package selects unrelated lab binaries too.
+          cargo clippy --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shell-lab --no-deps -- -D warnings
+      - name: Build native shell lab without launching it
+        run: cargo build --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shell-lab
+      - name: Record validation boundaries
+        if: ${{ !cancelled() }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ## Shell validation scope
+          Headless tests cover preference normalization, overrides, app-header layout,
+          preview safety and control dispatch guards. Linux also compiles/tests the
+          actual portal and native fallback modules; other OS jobs do not simulate
+          successful GNOME/KDE detection. Builds do not launch the lab.
+          Native traffic-light placement, dragging, Windows hit tests, real desktop
+          preferences, accessibility and display scaling still require manual testing.
+          This workflow never packages, publishes or changes release eligibility.
+          SUMMARY

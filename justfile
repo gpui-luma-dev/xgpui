@@ -20,6 +20,7 @@ list-all-labs:
     Use any lab command with --help to see its full options.
 
     Main interactive labs
+      Linux shell / preferences    just lab-shell
       Canvas / spatial cards       just lab-canvas
       Media / mipmaps              just lab-media
       Paints / gradients           just lab-paint
@@ -95,6 +96,10 @@ clean-preview:
 # Remove all ignored Cargo target directories in this checkout.
 clean:
     bash scripts/clean_build_outputs.sh --apply
+
+# Desktop preference inspector and per-window shell override/state controls.
+lab-shell *args:
+    cargo run {{ options }} --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shell-lab -- "$@"
 
 # Experimental spatial viewport with 10,000 selectable cards.
 lab-canvas *args:
