@@ -121,7 +121,7 @@ This macOS environment cannot establish GNOME/KDE behavior. Portal parsing is al
 tested through an isolated host harness including the actual Linux source; that
 is not a full Linux backend build or a live portal/service-restart test.
 
-Issue 149 still requires provider/fallback acceptance on real desktops, optional header slots, visual polish, native input/accessibility validation,
+Issue 149 still requires provider/fallback acceptance on real desktops, app-composed title-bar native acceptance, visual polish, native input/accessibility validation,
 diagnosis of the recorded GNOME frame stall, and a separately reviewed release.
 No GUI launch or publication is authorized by this document.
 
@@ -156,3 +156,7 @@ Checks for this subtask: 10 actual-source Linux preference tests and six shell
 headless tests passed; strict preference-module Clippy passed (only unused-code
 warnings caused by the isolated harness were allowed); `cargo fmt` for the Linux
 crate, changed core-module rustfmt and `git diff --check` passed. No GUI launched.
+
+The app-composed title-bar subtask now supplies a single app-owned header view
+and an explicit drag-region element; see [the lab and integration example](shell-lab.md#app-composed-titleapp-bar).
+It adds no layout-preset catalog. Native platform acceptance remains outstanding.

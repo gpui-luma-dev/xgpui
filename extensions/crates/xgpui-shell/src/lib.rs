@@ -1,6 +1,9 @@
-//! Experimental desktop shell. Linux draws negotiated client decorations; other platforms retain native chrome.
+//! Experimental desktop shell with app-composed title bars and optional Linux client frames.
+//! macOS retains native traffic lights; apps supply their own title-bar content and look.
 use gpui::{prelude::*, *};
+mod app_titlebar;
 mod typography;
+pub use app_titlebar::ShellDragRegion;
 pub use typography::ShellTypography;
 
 use frame::*;
@@ -53,6 +56,15 @@ pub trait ShellApp {
         shell: ShellOptions,
         build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
     ) -> anyhow::Result<WindowHandle<ShellWindow>>;
+    /// Supply an app-owned title-bar view and a separate content view. Native macOS
+    /// traffic lights remain native; client-frame window controls remain shell-owned.
+    /// Compose arbitrary app controls and use ShellDragRegion only for drag surfaces.
+    fn open_shell_window_with_titlebar<H: Render + 'static, V: Render + 'static>(
+        &mut self,
+        options: WindowOptions,
+        shell: ShellOptions,
+        build: impl FnOnce(&mut Window, &mut App) -> (Entity<H>, Entity<V>),
+    ) -> anyhow::Result<WindowHandle<ShellWindow>>;
 }
 impl ShellApp for App {
     fn open_shell_window<V: Render + 'static>(
@@ -61,47 +73,73 @@ impl ShellApp for App {
         shell: ShellOptions,
         build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
     ) -> anyhow::Result<WindowHandle<ShellWindow>> {
-        let show_chrome = options.show;
-        let initial_title = options
-            .titlebar
-            .as_ref()
-            .and_then(|titlebar| titlebar.title.clone());
-        self.open_window(options, |window, cx| {
-            if let Some(title) = initial_title {
-                window.set_shell_title(&title);
-            }
-            let content = build(window, cx).into();
-            cx.new(|cx| {
-                window
-                    .observe_button_layout_changed(|window, _| window.refresh())
-                    .detach();
-                window
-                    .observe_window_appearance(|window, _| window.refresh())
-                    .detach();
-                cx.observe_window_activation(window, |_, window, _| window.refresh())
-                    .detach();
-                cx.observe_window_bounds(window, |_, window, _| window.refresh())
-                    .detach();
-                let shell_entity = cx.entity().downgrade();
-                let preferences_subscription = cx.observe_desktop_preferences(move |app| {
-                    let _ = shell_entity.update(app, |_, cx| cx.notify());
-                });
-                ShellWindow {
-                    _preferences_subscription: preferences_subscription,
-                    shell,
-                    content,
-                    show_chrome,
-                    window_id: window.window_handle().window_id(),
-                }
-            })
+        open_shell(self, options, shell, |window, cx| {
+            (None, build(window, cx).into())
         })
     }
+
+    fn open_shell_window_with_titlebar<H: Render + 'static, V: Render + 'static>(
+        &mut self,
+        mut options: WindowOptions,
+        shell: ShellOptions,
+        build: impl FnOnce(&mut Window, &mut App) -> (Entity<H>, Entity<V>),
+    ) -> anyhow::Result<WindowHandle<ShellWindow>> {
+        app_titlebar::configure_window(&mut options);
+        open_shell(self, options, shell, |window, cx| {
+            let (titlebar, content) = build(window, cx);
+            (Some(titlebar.into()), content.into())
+        })
+    }
+}
+
+fn open_shell(
+    app: &mut App,
+    options: WindowOptions,
+    shell: ShellOptions,
+    build: impl FnOnce(&mut Window, &mut App) -> (Option<AnyView>, AnyView),
+) -> anyhow::Result<WindowHandle<ShellWindow>> {
+    let show_chrome = options.show;
+    let initial_title = options
+        .titlebar
+        .as_ref()
+        .and_then(|titlebar| titlebar.title.clone());
+    app.open_window(options, |window, cx| {
+        if let Some(title) = initial_title {
+            window.set_shell_title(&title);
+        }
+        let (titlebar, content) = build(window, cx);
+        cx.new(|cx| {
+            window
+                .observe_button_layout_changed(|window, _| window.refresh())
+                .detach();
+            window
+                .observe_window_appearance(|window, _| window.refresh())
+                .detach();
+            cx.observe_window_activation(window, |_, window, _| window.refresh())
+                .detach();
+            cx.observe_window_bounds(window, |_, window, _| window.refresh())
+                .detach();
+            let shell_entity = cx.entity().downgrade();
+            let preferences_subscription = cx.observe_desktop_preferences(move |app| {
+                let _ = shell_entity.update(app, |_, cx| cx.notify());
+            });
+            ShellWindow {
+                _preferences_subscription: preferences_subscription,
+                shell,
+                content,
+                titlebar,
+                show_chrome,
+                window_id: window.window_handle().window_id(),
+            }
+        })
+    })
 }
 
 pub struct ShellWindow {
     _preferences_subscription: Subscription,
     shell: ShellOptions,
     content: AnyView,
+    titlebar: Option<AnyView>,
     show_chrome: bool,
     window_id: WindowId,
 }
@@ -122,16 +160,57 @@ impl Render for ShellWindow {
         let content = self.content.clone();
         #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
         if self.show_chrome
+            && matches!(
+                cx.platform_info().os,
+                OperatingSystem::Linux | OperatingSystem::FreeBsd
+            )
             && !window.is_fullscreen()
             && let Decorations::Client { .. } = window.window_decorations()
         {
             let state = ClientFrameState::for_window(&self.shell, window, cx);
             window.set_client_inset(if state.maximized { px(0.) } else { px(5.) });
-            return render_client_frame(state, content.into_any_element(), true);
+            return render_client_frame(
+                state,
+                content.into_any_element(),
+                self.titlebar.clone().map(IntoElement::into_any_element),
+                true,
+            );
         }
         // Clear any prior client frame when switching to server chrome/fullscreen.
         window.set_client_inset(px(0.));
-        let _ = (cx, self.show_chrome, &self.shell);
+        if self.show_chrome
+            && let Some(titlebar) = self.titlebar.clone()
+        {
+            let mut state = ClientFrameState::for_window(&self.shell, window, cx);
+            let mac_native = cx.platform_info().os == OperatingSystem::Mac;
+            let custom_windows = cx.platform_info().os == OperatingSystem::Windows;
+            if mac_native || !custom_windows || window.is_fullscreen() {
+                state.button_layout = WindowButtonLayout {
+                    left: [None; 3],
+                    right: [None; 3],
+                };
+            }
+            if mac_native && !window.is_fullscreen() {
+                let height = state
+                    .preferences
+                    .resolved_look(state.appearance, state.active)
+                    .titlebar_height;
+                window.set_traffic_light_position(point(px(9.), px((height - 16.).max(0.) / 2.)));
+            }
+            let header = render_titlebar(
+                &state,
+                Some(titlebar.into_any_element()),
+                true,
+                mac_native && !window.is_fullscreen(),
+            );
+            return div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(header)
+                .child(div().flex_1().min_h_0().child(content))
+                .into_any_element();
+        }
         content.into_any_element()
     }
 }
@@ -151,7 +230,6 @@ struct ClientFrameState {
 }
 
 impl ClientFrameState {
-    #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
     fn for_window(options: &ShellOptions, window: &Window, cx: &App) -> Self {
         let tiling = match window.window_decorations() {
             Decorations::Client { tiling } => tiling,
@@ -263,6 +341,7 @@ impl RenderOnce for ClientFramePreview {
                 preview_hover: self.show_hover,
             },
             self.content,
+            None,
             false,
         )
     }
@@ -271,140 +350,17 @@ impl RenderOnce for ClientFramePreview {
 fn render_client_frame(
     state: ClientFrameState,
     content: AnyElement,
+    titlebar: Option<AnyElement>,
     interactive: bool,
 ) -> AnyElement {
     let maximized = state.maximized;
-    let preferences = state.preferences;
     let tiling = state.tiling;
-    let look = preferences.resolved_look(state.appearance, state.active);
-    let palette = look.colors;
-    let scale = preferences.text_scale;
-    let button_size = px(look.button_size);
-    let controls = state.controls;
-    let left_buttons = visible_buttons(state.button_layout.left, controls);
-    let right_buttons = visible_buttons(state.button_layout.right, controls);
-    let side_width = px((left_buttons.len().max(right_buttons.len()) as f32 * 33. + 8.) * scale);
+    let palette = state
+        .preferences
+        .resolved_look(state.appearance, state.active)
+        .colors;
     let inset = if maximized { px(0.) } else { px(5.) };
-    let buttons = |side: Vec<WindowButton>, right: bool| {
-        div()
-            .flex()
-            .items_center()
-            .flex_none()
-            .min_w(side_width)
-            .when(right, |s| s.justify_end())
-            .children(side.into_iter().map(|button| {
-                let label = control_label(button, maximized);
-                control_button(
-                    button.id(),
-                    label,
-                    palette,
-                    look.focus,
-                    button_size,
-                    interactive,
-                    (
-                        !interactive && state.preview_focus && button == WindowButton::Close,
-                        !interactive && state.preview_hover && button == WindowButton::Close,
-                    ),
-                )
-                .when(interactive, |element| {
-                    element
-                        .on_click(move |_, window, cx| {
-                            cx.stop_propagation();
-                            activate_control(button, window);
-                        })
-                        .on_key_down(move |event, window, cx| {
-                            if activation_key(event) {
-                                cx.stop_propagation();
-                                activate_control(button, window);
-                            }
-                        })
-                        .on_a11y_action(AccessibleAction::Click, move |_, window, _| {
-                            activate_control(button, window)
-                        })
-                })
-                .child(if button == WindowButton::Close {
-                    // Draw around the geometric center, independent of font baselines.
-                    canvas(
-                        |_, _, _| (),
-                        move |bounds, _, window, _| {
-                            let margin = px(2. * scale);
-                            let start = bounds.origin + point(margin, margin);
-                            let end = bounds.bottom_right() - point(margin, margin);
-                            for (a, b) in
-                                [(start, end), (point(start.x, end.y), point(end.x, start.y))]
-                            {
-                                let mut path = PathBuilder::stroke(px(2. * scale));
-                                path.move_to(a);
-                                path.line_to(b);
-                                if let Ok(path) = path.build() {
-                                    window.paint_path(path, rgb(palette.text));
-                                }
-                            }
-                        },
-                    )
-                    .size(px(20. * scale))
-                    .into_any_element()
-                } else {
-                    div()
-                        .font(gpui::font(".SystemUIFont"))
-                        .text_size(px(14. * scale))
-                        .child(match button {
-                            WindowButton::Minimize => "−",
-                            WindowButton::Maximize if maximized => "▣",
-                            _ => "□",
-                        })
-                        .into_any_element()
-                })
-            }))
-    };
-    let title = div()
-        .id("shell-titlebar")
-        .flex_none()
-        .h(px(look.titlebar_height))
-        .px(px(4. * scale))
-        .flex()
-        .items_center()
-        .bg(rgb(palette.header))
-        .text_color(rgb(palette.text))
-        .font(look.typography.font.clone())
-        .text_size(px(look.typography.size))
-        .border_b_1()
-        .border_color(rgb(palette.border))
-        .child(buttons(left_buttons, false))
-        .child(
-            div()
-                .id("shell-title-drag")
-                .flex_1()
-                .min_w_0()
-                .overflow_hidden()
-                .h_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .when(interactive, |title| {
-                    title
-                        .on_mouse_down(MouseButton::Left, {
-                            let action = preferences.double_click_action;
-                            move |event, window, _| {
-                                if event.click_count == 2 {
-                                    action.perform_at(window, event.position);
-                                } else {
-                                    window.start_window_move();
-                                }
-                            }
-                        })
-                        .on_mouse_down(MouseButton::Right, {
-                            let action = preferences.right_click_action;
-                            move |event, window, _| action.perform_at(window, event.position)
-                        })
-                        .on_mouse_down(MouseButton::Middle, {
-                            let action = preferences.middle_click_action;
-                            move |event, window, _| action.perform_at(window, event.position)
-                        })
-                })
-                .child(div().w_full().truncate().text_center().child(state.title)),
-        )
-        .child(buttons(right_buttons, true));
+    let title = render_titlebar(&state, titlebar, interactive, false);
     // The inset handles resizing; content events must not initiate window moves.
     let mut frame = div()
         .id("shell-frame")
@@ -495,6 +451,166 @@ fn render_client_frame(
         }
     }
     frame.into_any_element()
+}
+
+fn render_titlebar(
+    state: &ClientFrameState,
+    titlebar: Option<AnyElement>,
+    interactive: bool,
+    mac_native: bool,
+) -> AnyElement {
+    let maximized = state.maximized;
+    let preferences = &state.preferences;
+    let look = preferences.resolved_look(state.appearance, state.active);
+    let palette = look.colors;
+    let scale = preferences.text_scale;
+    let button_size = px(look.button_size);
+    let controls = state.controls;
+    let left_buttons = visible_buttons(state.button_layout.left, controls);
+    let right_buttons = visible_buttons(state.button_layout.right, controls);
+    let side_width = px((left_buttons.len().max(right_buttons.len()) as f32 * 33. + 8.) * scale);
+    let custom_header = titlebar.is_some();
+    let buttons = |side: Vec<WindowButton>, right: bool| {
+        div()
+            .flex()
+            .items_center()
+            .flex_none()
+            .min_w(if custom_header {
+                px((side.len() as f32 * 33. + 8.) * scale)
+            } else {
+                side_width
+            })
+            .when(right, |s| s.justify_end())
+            .children(side.into_iter().map(|button| {
+                let label = control_label(button, maximized);
+                control_button(
+                    button.id(),
+                    label,
+                    palette,
+                    look.focus,
+                    button_size,
+                    interactive,
+                    (
+                        !interactive && state.preview_focus && button == WindowButton::Close,
+                        !interactive && state.preview_hover && button == WindowButton::Close,
+                    ),
+                )
+                .when(interactive && cfg!(target_os = "windows"), |element| {
+                    element.window_control_area(match button {
+                        WindowButton::Close => WindowControlArea::Close,
+                        WindowButton::Minimize => WindowControlArea::Min,
+                        WindowButton::Maximize => WindowControlArea::Max,
+                    })
+                })
+                .when(interactive, |element| {
+                    element
+                        .on_click(move |_, window, cx| {
+                            cx.stop_propagation();
+                            activate_control(button, window);
+                        })
+                        .on_key_down(move |event, window, cx| {
+                            if activation_key(event) {
+                                cx.stop_propagation();
+                                activate_control(button, window);
+                            }
+                        })
+                        .on_a11y_action(AccessibleAction::Click, move |_, window, _| {
+                            activate_control(button, window)
+                        })
+                })
+                .child(if button == WindowButton::Close {
+                    // Draw around the geometric center, independent of font baselines.
+                    canvas(
+                        |_, _, _| (),
+                        move |bounds, _, window, _| {
+                            let margin = px(2. * scale);
+                            let start = bounds.origin + point(margin, margin);
+                            let end = bounds.bottom_right() - point(margin, margin);
+                            for (a, b) in
+                                [(start, end), (point(start.x, end.y), point(end.x, start.y))]
+                            {
+                                let mut path = PathBuilder::stroke(px(2. * scale));
+                                path.move_to(a);
+                                path.line_to(b);
+                                if let Ok(path) = path.build() {
+                                    window.paint_path(path, rgb(palette.text));
+                                }
+                            }
+                        },
+                    )
+                    .size(px(20. * scale))
+                    .into_any_element()
+                } else {
+                    div()
+                        .font(gpui::font(".SystemUIFont"))
+                        .text_size(px(14. * scale))
+                        .child(match button {
+                            WindowButton::Minimize => "−",
+                            WindowButton::Maximize if maximized => "▣",
+                            _ => "□",
+                        })
+                        .into_any_element()
+                })
+            }))
+    };
+    let title = div()
+        .id("shell-titlebar")
+        .debug_selector(|| "shell-titlebar-bounds".into())
+        .flex_none()
+        .h(px(look.titlebar_height))
+        .px(px(4. * scale))
+        .flex()
+        .items_center()
+        .bg(rgb(palette.header))
+        .text_color(rgb(palette.text))
+        .font(look.typography.font.clone())
+        .text_size(px(look.typography.size))
+        .border_b_1()
+        .border_color(rgb(palette.border))
+        .child(buttons(left_buttons, false))
+        .pl(px(if mac_native { 80.0 } else { 0.0 }))
+        .child(
+            div()
+                .id("shell-title-drag")
+                .flex_1()
+                .min_w_0()
+                .overflow_hidden()
+                .h_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .when(interactive && titlebar.is_none(), |title| {
+                    title
+                        .on_mouse_down(MouseButton::Left, {
+                            let action = preferences.double_click_action;
+                            move |event, window, _| {
+                                if event.click_count == 2 {
+                                    action.perform_at(window, event.position);
+                                } else {
+                                    window.start_window_move();
+                                }
+                            }
+                        })
+                        .on_mouse_down(MouseButton::Right, {
+                            let action = preferences.right_click_action;
+                            move |event, window, _| action.perform_at(window, event.position)
+                        })
+                        .on_mouse_down(MouseButton::Middle, {
+                            let action = preferences.middle_click_action;
+                            move |event, window, _| action.perform_at(window, event.position)
+                        })
+                })
+                .child(titlebar.unwrap_or_else(|| {
+                    div()
+                        .w_full()
+                        .truncate()
+                        .text_center()
+                        .child(state.title.clone())
+                        .into_any_element()
+                })),
+        )
+        .child(buttons(right_buttons, true));
+    title.into_any_element()
 }
 
 /// Optional per-window overrides. `None` follows desktop preferences, then built-in fallbacks.
@@ -1173,5 +1289,84 @@ mod preview_tests {
             })
             .expect("preview close must not close the real window");
         assert_eq!(before, after);
+    }
+}
+
+#[cfg(test)]
+mod composition_tests {
+    use super::*;
+    use ::core::prelude::v1::test;
+    use std::{cell::Cell, rc::Rc};
+    struct Header(Rc<Cell<usize>>);
+    impl Render for Header {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let clicks = self.0.clone();
+            div()
+                .size_full()
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .id("app-button")
+                        .debug_selector(|| "app-button".into())
+                        .w(px(32.))
+                        .h_full()
+                        .on_click(move |_, _, _| clicks.set(clicks.get() + 1))
+                        .child("App"),
+                )
+                .child(ShellDragRegion::new(
+                    "app-drag",
+                    div().size_full().child("App title"),
+                ))
+        }
+    }
+    struct Body;
+    impl Render for Body {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .debug_selector(|| "app-body".into())
+                .size_full()
+                .child("Body")
+        }
+    }
+    #[gpui::test]
+    fn composed_mac_header_reserves_native_control_space_and_preserves_app_clicks(
+        cx: &mut TestAppContext,
+    ) {
+        cx.set_platform_info(PlatformInfo {
+            os: OperatingSystem::Mac,
+            target: PlatformTarget::Native,
+        });
+        let clicks = Rc::new(Cell::new(0));
+        let copy = clicks.clone();
+        let handle = cx.update(|app| {
+            app.open_shell_window_with_titlebar(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(Bounds {
+                        origin: Point::default(),
+                        size: size(px(600.), px(240.)),
+                    })),
+                    ..Default::default()
+                },
+                ShellOptions::default(),
+                |_, app| (app.new(|_| Header(copy)), app.new(|_| Body)),
+            )
+            .unwrap()
+        });
+        let mut visual = VisualTestContext::from_window(handle.into(), cx);
+        visual.update(|window, app| window.draw(app).clear(app));
+        let button = visual
+            .debug_bounds("app-button")
+            .expect("app header rendered");
+        let body = visual.debug_bounds("app-body").expect("app body rendered");
+        let header = visual.debug_bounds("shell-titlebar-bounds").unwrap();
+        assert!(
+            button.left() >= px(80.),
+            "reserve native traffic-light space"
+        );
+        assert_eq!(body.top(), header.bottom());
+        visual.simulate_click(button.center(), Modifiers::default());
+        assert_eq!(clicks.get(), 1);
+        assert_eq!(visual.debug_bounds("app-body").unwrap(), body);
     }
 }
