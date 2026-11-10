@@ -618,9 +618,20 @@ fn render_titlebar(
 ///
 /// Unlike the initial experimental API, these fields are optional: wrap explicit values in
 /// `Some(...)`. This preserves explicit `false` and `TitlebarAction::None` overrides.
-/// Light/dark appearance and button placement retain the platform's existing APIs.
+/// Explicit colors take precedence over the desktop/default high-contrast palette;
+/// the application is responsible for their contrast and active/inactive variants.
+/// Native appearance and button placement retain the platform's existing APIs.
 #[derive(Default)]
 pub struct ShellOptions {
+    /// Opaque sRGB 0xRRGGBB background for the entire shared titlebar, including
+    /// reserved control space and padding. Wins over `colors.header`.
+    /// None uses the supplied palette header or the desktop/default header.
+    pub titlebar_background: Option<u32>,
+    /// Explicit shared-frame colors, overriding appearance, activation and the
+    /// default high-contrast palette. Does not theme application content, native
+    /// macOS artwork or compositor decorations, or synchronize native appearance.
+    /// Focus uses `accent`, except in high contrast where it uses `colors.text`.
+    pub colors: Option<ShellColors>,
     /// Override system high contrast.
     pub high_contrast: Option<bool>,
     /// Override the sRGB focus accent as 0xRRGGBB.
@@ -650,6 +661,10 @@ fn shell_scale(scale: f32) -> f32 {
 /// The values actually used by the shared client frame after overrides and fallbacks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedShellPreferences {
+    /// Explicit titlebar background, applied after palette resolution.
+    pub titlebar_background: Option<u32>,
+    /// Explicit palette; None follows appearance, activation and contrast.
+    pub colors: Option<ShellColors>,
     /// Whether the frame uses high-contrast colors.
     pub high_contrast: bool,
     /// Encoded sRGB focus accent, 0xRRGGBB.
@@ -681,6 +696,8 @@ impl ShellOptions {
                     | (b * 255.).round() as u32
             });
         ResolvedShellPreferences {
+            titlebar_background: self.titlebar_background,
+            colors: self.colors,
             high_contrast: self
                 .high_contrast
                 .or(desktop.high_contrast)
@@ -757,7 +774,12 @@ pub struct ResolvedShellLook {
 impl ResolvedShellPreferences {
     /// Resolve the same style tokens used by the native client frame and its preview.
     pub fn resolved_look(&self, appearance: WindowAppearance, active: bool) -> ResolvedShellLook {
-        let colors = ShellColors::new(appearance, active, self.high_contrast);
+        let mut colors = self
+            .colors
+            .unwrap_or_else(|| ShellColors::new(appearance, active, self.high_contrast));
+        if let Some(background) = self.titlebar_background {
+            colors.header = background;
+        }
         let mut typography = self.typography.clone();
         typography.size *= self.text_scale;
         ResolvedShellLook {
@@ -1111,6 +1133,80 @@ mod input_tests {
     }
 
     #[::core::prelude::v1::test]
+    fn color_overrides_and_resets_follow_explicit_precedence() {
+        let desktop = DesktopPreferences {
+            high_contrast: Some(true),
+            ..Default::default()
+        };
+        let palette = ShellColors {
+            header: 0x123456,
+            text: 0xffffff,
+            border: 0x654321,
+            hover: 0xabcdef,
+        };
+        let mut options = ShellOptions {
+            colors: Some(palette),
+            titlebar_background: Some(0),
+            accent: Some(0xff0000),
+            ..Default::default()
+        };
+        for appearance in [WindowAppearance::Light, WindowAppearance::Dark] {
+            for active in [false, true] {
+                let look = options
+                    .resolved_preferences(&desktop)
+                    .resolved_look(appearance, active);
+                assert_eq!(
+                    look.colors,
+                    ShellColors {
+                        header: 0,
+                        ..palette
+                    }
+                );
+                assert_eq!(look.focus, palette.text);
+            }
+        }
+        options.titlebar_background = None;
+        assert_eq!(
+            options
+                .resolved_preferences(&desktop)
+                .resolved_look(WindowAppearance::Light, true)
+                .colors,
+            palette
+        );
+        options.high_contrast = Some(false);
+        assert_eq!(
+            options
+                .resolved_preferences(&desktop)
+                .resolved_look(WindowAppearance::Light, true)
+                .focus,
+            0xff0000
+        );
+        options.colors = None;
+        options.titlebar_background = Some(0);
+        let look = options
+            .resolved_preferences(&desktop)
+            .resolved_look(WindowAppearance::Light, true);
+        assert_eq!(
+            look.colors,
+            ShellColors {
+                header: 0,
+                ..ShellColors::new(WindowAppearance::Light, true, false)
+            }
+        );
+        options.titlebar_background = None;
+        options.high_contrast = None;
+        for active in [false, true] {
+            assert_eq!(
+                options
+                    .resolved_preferences(&desktop)
+                    .resolved_look(WindowAppearance::Dark, active)
+                    .colors,
+                ShellColors::new(WindowAppearance::Dark, active, true)
+            );
+        }
+    }
+
+    #[::core::prelude::v1::test]
     fn activation_keys_do_not_consume_modified_shortcuts_or_repeats() {
         let key = |text: &'static str, held| KeyDownEvent {
             keystroke: Keystroke::parse(text).unwrap(),
@@ -1369,5 +1465,59 @@ mod composition_tests {
         visual.simulate_click(button.center(), Modifiers::default());
         assert_eq!(clicks.get(), 1);
         assert_eq!(visual.debug_bounds("app-body").unwrap(), body);
+        let identities = cx.update(|app| {
+            let shell = handle.read(app).unwrap();
+            (
+                shell.content.entity_id(),
+                shell.titlebar.as_ref().unwrap().entity_id(),
+            )
+        });
+        let focus = visual.update(|window, app| {
+            let focus = app.focus_handle();
+            window.focus(&focus, app);
+            focus
+        });
+        for background in [Some(0), Some(0xececed), Some(0xf0f0f0), None] {
+            cx.update(|app| {
+                handle
+                    .update(app, |shell, _, cx| {
+                        shell.set_options(
+                            ShellOptions {
+                                titlebar_background: background,
+                                ..Default::default()
+                            },
+                            cx,
+                        );
+                        assert_eq!(
+                            (
+                                shell.content.entity_id(),
+                                shell.titlebar.as_ref().unwrap().entity_id()
+                            ),
+                            identities
+                        );
+                    })
+                    .unwrap();
+            });
+            visual.update(|window, app| window.draw(app).clear(app));
+            assert_eq!(visual.debug_bounds("app-body").unwrap(), body);
+            visual.update(|window, _| assert!(focus.is_focused(window)));
+            if let Some(background) = background {
+                visual.update(|window, _| {
+                    let quad = window
+                        .painted_quads()
+                        .into_iter()
+                        .find(|quad| quad.background == rgb(background).into())
+                        .expect("shared header background is painted");
+                    let visible = quad.bounds.intersect(&quad.content_mask.bounds);
+                    assert_eq!(visible, header.scale(window.scale_factor()));
+                });
+            }
+            visual.simulate_click(button.center(), Modifiers::default());
+        }
+        assert_eq!(
+            clicks.get(),
+            5,
+            "one callback per click through option updates"
+        );
     }
 }

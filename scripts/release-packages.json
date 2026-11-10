@@ -38,6 +38,6 @@
     "xgpui-canvas": "0.3.3",
     "xgpui-ios": "1.26.5",
     "xgpui-macros": "1.0.2",
-    "xgpui-shell": "0.1.0"
+    "xgpui-shell": "0.2.0"
   }
 }

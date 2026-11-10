@@ -1,12 +1,19 @@
 # What's new
 
-## In preparation — November 8, 2026
+## In preparation — November 9, 2026
+
+**App-controlled shell colors.** `xgpui-shell 0.2.0` lets applications override the complete shared title-bar background or frame palette, including reserved control space and trailing padding. Overrides can change or reset at runtime without rebuilding content or losing focus. Native macOS artwork and compositor decorations remain platform-owned.
+
+**Compatibility:** exhaustive `ShellOptions` and `ResolvedShellPreferences` literals need the new `titlebar_background` and `colors` fields; options callers can use `..Default::default()`. Explicit palettes override default high contrast, so the app owns contrast and active/inactive variants. Other crate versions stay unchanged. See the [shell guide](#shell).
+
+
+## November 8, 2026 — desktop shell
 
 **A desktop-aware shell and app-composed title bars.** The first `xgpui-shell 0.1.0` release adds shared client frames, per-window overrides, desktop typography and explicit drag regions. macOS keeps native traffic lights; a dedicated native lab makes detected preferences and resolved styling inspectable.
 
 `xgpui 3.1.0` adds desktop-preference snapshots and subscriptions. `xgpui-linux 2.1.0` reads the Settings portal with optional GNOME/KDE fallbacks. These are additive changes; other crate versions stay unchanged.
 
-**Alpha:** shell APIs may change. Headless checks do not establish interactive desktop or accessibility acceptance. Publication is pending. Read the [shell guide](#shell), or run `just profile=dev lab-shell` locally.
+**Alpha:** shell APIs may change. Headless checks do not establish interactive desktop or accessibility acceptance. Published in the [GitHub release](https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-09-acc3ae63894e). Read the [shell guide](#shell), or run `just profile=dev lab-shell` locally.
 
 
 ## November 7, 2026

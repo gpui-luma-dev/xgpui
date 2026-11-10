@@ -1,6 +1,6 @@
 # Experimental desktop shell
 
-> **ALPHA — expect API changes.** `xgpui-shell 0.1.0` is being prepared for its first crates.io release. The code is available locally; publication is still pending.
+> **ALPHA — expect API changes.** `xgpui-shell 0.2.0` is in preparation. Version 0.1.0 is published; the new color overrides require 0.2.0.
 
 `xgpui-shell` supplies window chrome built from GPUI elements. Use its shared Linux client frame, or compose your own title bar while retaining native platform structure. It does not load GTK, libadwaita or third-party widget themes.
 
@@ -11,7 +11,7 @@ After publication:
 ```toml
 [dependencies]
 xgpui = "3.1.0"
-xgpui-shell = "0.1.0"
+xgpui-shell = "0.2.0"
 ```
 
 While reviewing this release, use local path dependencies instead.
@@ -66,6 +66,74 @@ Compared with the earlier local-only shell, scalar preference options are now op
 
 ## GPUI public API changes: additions and compatibility
 
-The shell uses additive core desktop-preference types, defaulted platform hooks and scoped App subscriptions. Existing platform implementers remain valid; no serialized representation changes. Its rendering and styling remain in this extension. Final API release approval is pending.
+The shell uses additive core desktop-preference types, defaulted platform hooks and scoped App subscriptions. Existing platform implementers remain valid; no serialized representation changes. Its rendering and styling remain in this extension. The core 3.1.0 additions were approved and published in the previous release.
 
 See [the core API ledger](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md#desktop-preferences-for-shells) for the individual additions and why the backend seam belongs in core.
+
+## App-owned shared chrome colors (0.2.0 candidate)
+
+Set `titlebar_background` for a background-only override, or `colors` for the
+shared frame palette. Values are opaque sRGB `0xRRGGBB`; `Some(0)` means black.
+
+```rust
+use xgpui_shell::{ShellColors, ShellOptions};
+
+let background_only = ShellOptions {
+    titlebar_background: Some(0xececed),
+    ..Default::default()
+};
+let themed = ShellOptions {
+    colors: Some(ShellColors {
+        header: 0x202020,
+        text: 0xffffff,
+        border: 0x505050,
+        hover: 0x404040,
+    }),
+    accent: Some(0x80bfff),
+    ..Default::default()
+};
+```
+
+Resolution starts with the appearance/activation/high-contrast palette. `colors`
+replaces that palette, then `titlebar_background` replaces its header. Explicit
+colors win even in high contrast: the app owns their contrast. The focus color
+uses the separately resolved accent, or the palette text color in high contrast.
+The palette covers shared frame borders, control foregrounds and hover treatment;
+the header background includes reserved native-control space and trailing padding.
+Application content keeps its own styling.
+
+Resetting `titlebar_background` to `None` exposes `colors.header`, if supplied.
+Resetting `colors` exposes the default palette, retaining any background override.
+Resetting both restores desktop/default color resolution.
+
+Supplied colors are literal values: the shell does not derive active/inactive or
+light/dark variants. Update the returned shell handle on app theme changes and
+window activation, retaining your observer subscriptions. For example, inside an
+app view's setup callback:
+
+```rust,ignore
+let shell = shell_handle; // WindowHandle<ShellWindow> returned when opening
+let activation = cx.observe_window_activation(window, move |_, window, cx| {
+    let background = if window.is_window_active() { 0xececed } else { 0xf0f0f0 };
+    // Use the same operation from your app's theme-change observer.
+    cx.defer(move |cx| {
+        let _ = shell.update(cx, |shell, _, cx| {
+            shell.set_options(ShellOptions {
+                titlebar_background: Some(background),
+                ..Default::default()
+            }, cx);
+        });
+    });
+});
+// Store `activation` in your view so it stays subscribed.
+```
+
+`set_options` replaces all overrides; pass all options you want to retain. It
+redraws the existing content/titlebar entities without rebuilding them. This does
+not recolor native macOS traffic lights, synchronize NSWindow appearance, change
+native-control geometry, or theme compositor-owned decorations.
+
+Compatibility: callers using exhaustive `ShellOptions` or
+`ResolvedShellPreferences` literals must add `titlebar_background: None` and
+`colors: None`. Options callers can instead use `..Default::default()`. There is
+no serialization change and no new core GPUI API.

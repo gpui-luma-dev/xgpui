@@ -4,7 +4,7 @@ name: Shell and title-bar validation
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, 'issue-149/epic']
+    branches: [main, 'issue-149/epic', 'issue-192/epic']
     paths:
       - '.github/workflows/shell.yml'
       - 'extensions/crates/xgpui-shell/**'
@@ -16,7 +16,7 @@ on:
       - '.cargo/validation.toml'
       - 'rust-toolchain*'
   push:
-    branches: [main, 'issue-149/epic']
+    branches: [main, 'issue-149/epic', 'issue-192/epic']
     paths:
       - '.github/workflows/shell.yml'
       - 'extensions/crates/xgpui-shell/**'
