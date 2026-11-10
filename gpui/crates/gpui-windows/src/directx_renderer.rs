@@ -1,5 +1,7 @@
 mod color_presentation;
 mod wide_sdr;
+#[cfg(test)]
+mod headless_retirement_tests;
 
 use std::{
     slice,
@@ -2711,7 +2713,14 @@ impl PlatformHeadlessRenderer for Dx11HeadlessRenderer {
     fn render_scene(&mut self, scene: &Scene, size: Size<DevicePixels>) -> Result<()> {
         self.0.resize(size)?;
         self.0
-            .render(scene, WindowBackgroundAppearance::Transparent)
+            .render(scene, WindowBackgroundAppearance::Transparent)?;
+        // Windowed frames are flushed by Present. Retirement queries are read
+        // with DONOTFLUSH, so an unflushed headless frame would never retire
+        // its custom-content snapshots.
+        if let Some(devices) = &self.0.devices {
+            unsafe { devices.device_context.Flush() };
+        }
+        Ok(())
     }
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas> {
         self.0.sprite_atlas()
