@@ -126,11 +126,14 @@ pub(crate) fn metal_pixel_format(format: SurfaceFormat) -> MTLPixelFormat {
     }
 }
 
+/// The compositor's texture over a slot, keyed by the GPU's registry ID.
+type HostTexture = (u64, Retained<ProtocolObject<dyn MTLTexture>>);
+
 /// One slot's shareable memory plus the compositor's cached view of it.
 #[derive(Debug)]
 pub(crate) struct SlotResources {
     surface: CFRetained<IOSurfaceRef>,
-    host: Mutex<Option<(u64, Retained<ProtocolObject<dyn MTLTexture>>)>>,
+    host: Mutex<Option<HostTexture>>,
 }
 // SAFETY: IOSurface is a thread-safe kernel object and Metal textures may be
 // retained and released on any thread; mutation is limited to the mutex-guarded

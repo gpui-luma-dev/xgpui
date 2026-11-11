@@ -50,6 +50,7 @@ impl Default for HeavyEngine {
     }
 }
 
+#[cfg_attr(not(feature = "wgpu"), allow(dead_code))] // used only by the wgpu targets
 impl HeavyEngine {
     fn validated(self) -> Self {
         let max_hz = if self.max_hz.is_finite() {
@@ -81,6 +82,7 @@ impl HeavyEngine {
 }
 
 /// Pacing and frame-cost state kept by a target in heavy-engine mode.
+#[cfg_attr(not(feature = "wgpu"), allow(dead_code))] // used only by the wgpu targets
 #[derive(Debug)]
 pub(crate) struct Heavy {
     config: HeavyEngine,
@@ -91,6 +93,7 @@ pub(crate) struct Heavy {
     pending: Option<Instant>,
 }
 
+#[cfg_attr(not(feature = "wgpu"), allow(dead_code))] // used only by the wgpu targets
 impl Heavy {
     pub(crate) fn new(config: HeavyEngine) -> Self {
         let config = config.validated();
@@ -171,6 +174,7 @@ pub struct HeavyStatus {
     pub suggested_chunks: u32,
 }
 
+#[cfg_attr(not(feature = "wgpu"), allow(dead_code))] // used only by the wgpu targets
 impl Heavy {
     pub(crate) fn status(&self) -> HeavyStatus {
         HeavyStatus {
