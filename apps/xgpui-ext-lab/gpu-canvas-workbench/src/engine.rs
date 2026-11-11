@@ -167,7 +167,11 @@ pub struct Engine {
     queue: wgpu::Queue,
     target: WgpuSurfaceTarget,
     working: wgpu::Buffer,
+    /// Whole-canvas parameters (generate, publish).
     params: wgpu::Buffer,
+    /// Paint-pass parameters, separate so a paint and a publish can share one
+    /// submission (queued buffer writes apply to the whole submission).
+    paint_params: wgpu::Buffer,
     dab_buffer: wgpu::Buffer,
     generate: wgpu::ComputePipeline,
     paint: wgpu::ComputePipeline,
@@ -188,6 +192,10 @@ pub struct Engine {
     dirty_since: Option<Instant>,
     stats: EngineStats,
     pub latencies_ms: Vec<f32>,
+    /// CPU time of publishing frames: recording, and inside `present`
+    /// (submission and sync signal).
+    pub record_ms: Vec<f32>,
+    pub present_ms: Vec<f32>,
 }
 
 impl Engine {
@@ -247,6 +255,12 @@ impl Engine {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let paint_params = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("workbench_paint_params"),
+            size: 32,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let dab_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("workbench_dabs"),
             size: (MAX_DABS * 32) as u64,
@@ -267,7 +281,7 @@ impl Engine {
             layout: &paint.get_bind_group_layout(0),
             entries: &[
                 entry(0, working.as_entire_binding()),
-                entry(1, params.as_entire_binding()),
+                entry(1, paint_params.as_entire_binding()),
                 entry(2, dab_buffer.as_entire_binding()),
             ],
         });
@@ -284,8 +298,8 @@ impl Engine {
             })
             .collect();
         let stats = EngineStats {
-            // Working image, params, dabs, two bind groups, staging buffers.
-            resources_created: 5 + STAGING as u64,
+            // Working image, two params, dabs, two bind groups, staging.
+            resources_created: 6 + STAGING as u64,
             // The generated image is the first revision to publish.
             revision: 1,
             ..Default::default()
@@ -297,6 +311,7 @@ impl Engine {
             target,
             working,
             params,
+            paint_params,
             dab_buffer,
             generate,
             paint,
@@ -314,6 +329,8 @@ impl Engine {
             dirty_since: Some(Instant::now()),
             stats,
             latencies_ms: Vec::new(),
+            record_ms: Vec::new(),
+            present_ms: Vec::new(),
         })
     }
 
@@ -364,6 +381,8 @@ impl Engine {
         fresh.log = std::mem::take(&mut self.log);
         fresh.pending = fresh.log.clone();
         fresh.latencies_ms = std::mem::take(&mut self.latencies_ms);
+        fresh.record_ms = std::mem::take(&mut self.record_ms);
+        fresh.present_ms = std::mem::take(&mut self.present_ms);
         let replayed = fresh.pending.len() as u64;
         fresh.stats = EngineStats {
             revision: self.stats.revision + 1,
@@ -381,6 +400,22 @@ impl Engine {
 
     pub fn inspections_in_flight(&self) -> usize {
         self.staging.iter().filter(|s| s.request.is_some()).count()
+    }
+
+    /// Edit-to-publish latency counts from `at` (when the edit was made,
+    /// e.g. on the UI thread) if that is earlier than its arrival here.
+    pub fn note_edit_time(&mut self, at: Instant) {
+        if self.dirty_since.is_none_or(|since| at < since) {
+            self.dirty_since = Some(at);
+        }
+    }
+
+    /// Whether work is in flight (edits, publish, inspections, recovery).
+    pub fn busy(&self) -> bool {
+        self.lost
+            || !self.pending.is_empty()
+            || self.inspections_in_flight() > 0
+            || self.stats.revision != self.stats.published_revision
     }
 
     fn touch(&mut self) {
@@ -413,13 +448,18 @@ impl Engine {
         }
     }
 
-    fn write_params(&mut self, origin: [u32; 2], size: [u32; 2], count: u32) {
+    fn write_params(&mut self, paint: bool, origin: [u32; 2], size: [u32; 2], count: u32) {
         let mut bytes = Vec::with_capacity(32);
         for v in [origin[0], origin[1], size[0], size[1], WIDTH, HEIGHT, count] {
             bytes.extend_from_slice(&v.to_ne_bytes());
         }
         bytes.extend_from_slice(&self.exposure.to_ne_bytes());
-        self.queue.write_buffer(&self.params, 0, &bytes);
+        let buffer = if paint {
+            &self.paint_params
+        } else {
+            &self.params
+        };
+        self.queue.write_buffer(buffer, 0, &bytes);
         self.stats.cpu_bytes_uploaded += 32;
     }
 
@@ -428,20 +468,20 @@ impl Engine {
         self.stats.submissions += 1;
     }
 
-    /// Apply the reset and queued dabs (up to `MAX_DABS`), touching only the
-    /// dabs' bounding region. Returns whether anything ran.
-    fn apply_edits(&mut self) -> bool {
+    /// Record the reset and queued dabs (up to `MAX_DABS`) into `encoder`,
+    /// touching only the dabs' bounding region. Returns whether anything was
+    /// recorded. One batch per submission: the dab buffer and paint
+    /// parameters are written by queue writes that apply per submission.
+    fn record_edits(&mut self, encoder: &mut wgpu::CommandEncoder) -> bool {
         let mut ran = false;
         if std::mem::take(&mut self.reset_pending) {
-            self.write_params([0, 0], [WIDTH, HEIGHT], 0);
-            let mut encoder = self.device.create_command_encoder(&Default::default());
+            self.write_params(false, [0, 0], [WIDTH, HEIGHT], 0);
             {
                 let mut pass = encoder.begin_compute_pass(&Default::default());
                 pass.set_pipeline(&self.generate);
                 pass.set_bind_group(0, &self.generate_bind, &[]);
                 pass.dispatch_workgroups(WIDTH.div_ceil(8), HEIGHT.div_ceil(8), 1);
             }
-            self.submit(encoder);
             ran = true;
         }
         if self.pending.is_empty() {
@@ -487,15 +527,13 @@ impl Engine {
         }
         self.queue.write_buffer(&self.dab_buffer, 0, &bytes);
         self.stats.cpu_bytes_uploaded += bytes.len() as u64;
-        self.write_params([x0, y0], [x1 - x0, y1 - y0], batch.len() as u32);
-        let mut encoder = self.device.create_command_encoder(&Default::default());
+        self.write_params(true, [x0, y0], [x1 - x0, y1 - y0], batch.len() as u32);
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(&self.paint);
             pass.set_bind_group(0, &self.paint_bind, &[]);
             pass.dispatch_workgroups((x1 - x0).div_ceil(8), (y1 - y0).div_ceil(8), 1);
         }
-        self.submit(encoder);
         self.stats.paint_passes += 1;
         self.stats.tiles_touched += tiles.len() as u64;
         true
@@ -506,14 +544,29 @@ impl Engine {
     pub fn frame(&mut self) -> Result<()> {
         // A lost device must not be used; edits keep queuing in the log.
         ensure!(!self.lost, AcquireError::Invalidated);
-        while self.apply_edits() && !self.pending.is_empty() {}
+        let started = Instant::now();
+        // Edits and the publish pass share one submission in the common case
+        // (one dab batch); extra batches are submitted ahead of it.
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let mut recorded = self.record_edits(&mut encoder);
+        while !self.pending.is_empty() {
+            self.submit(encoder);
+            encoder = self.device.create_command_encoder(&Default::default());
+            recorded = self.record_edits(&mut encoder);
+        }
         if self.stats.published_revision == self.stats.revision {
+            if recorded {
+                self.submit(encoder);
+            }
             return Ok(());
         }
         let slot = match self.target.surface().acquire() {
             Ok(slot) => slot,
             Err(AcquireError::WouldBlock) => {
                 // The working image keeps the edits; publish next frame.
+                if recorded {
+                    self.submit(encoder);
+                }
                 self.stats.publish_blocked += 1;
                 return Ok(());
             }
@@ -544,15 +597,20 @@ impl Engine {
             self.publish_binds[index] = Some(bind);
             self.stats.resources_created += 1;
         }
-        self.write_params([0, 0], [WIDTH, HEIGHT], 0);
-        let mut encoder = self.device.create_command_encoder(&Default::default());
+        self.write_params(false, [0, 0], [WIDTH, HEIGHT], 0);
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(&self.publish);
             pass.set_bind_group(0, self.publish_binds[index].as_ref().unwrap(), &[]);
             pass.dispatch_workgroups(WIDTH.div_ceil(8), HEIGHT.div_ceil(8), 1);
         }
-        self.target.present(slot, [encoder.finish()])?;
+        let commands = encoder.finish();
+        let presenting = Instant::now();
+        self.record_ms
+            .push((presenting - started).as_secs_f32() * 1000.);
+        self.target.present(slot, [commands])?;
+        self.present_ms
+            .push(presenting.elapsed().as_secs_f32() * 1000.);
         self.stats.submissions += 1;
         self.stats.publishes += 1;
         self.stats.gpu_bytes_published += (WIDTH * HEIGHT) as u64 * 8;
@@ -575,11 +633,16 @@ impl Engine {
         let Some(index) = self.staging.iter().position(|s| s.request.is_none()) else {
             return false;
         };
-        while self.apply_edits() && !self.pending.is_empty() {}
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        self.record_edits(&mut encoder);
+        while !self.pending.is_empty() {
+            self.submit(encoder);
+            encoder = self.device.create_command_encoder(&Default::default());
+            self.record_edits(&mut encoder);
+        }
         let x = x.min(WIDTH - INSPECT);
         let y = y.min(HEIGHT - INSPECT);
         let row = INSPECT as u64 * PIXEL_BYTES;
-        let mut encoder = self.device.create_command_encoder(&Default::default());
         for r in 0..INSPECT {
             let source = ((y + r) * WIDTH + x) as u64 * PIXEL_BYTES;
             encoder.copy_buffer_to_buffer(
@@ -712,7 +775,7 @@ impl Engine {
                 },
             ],
         });
-        self.write_params([0, 0], [WIDTH, HEIGHT], 0);
+        self.write_params(false, [0, 0], [WIDTH, HEIGHT], 0);
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());

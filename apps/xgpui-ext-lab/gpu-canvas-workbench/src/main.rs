@@ -29,6 +29,8 @@ fn main() -> anyhow::Result<()> {
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod check;
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+mod driver;
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod engine;
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod oracle;
@@ -36,7 +38,8 @@ mod oracle;
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod workbench {
     use crate::check::percentile;
-    use crate::engine::{BACKEND, Engine, Inspection};
+    use crate::driver::EngineDriver;
+    use crate::engine::{BACKEND, Inspection};
     use crate::oracle::{Dab, HEIGHT, WIDTH, published};
     use anyhow::{Result, ensure};
     use clap::Parser;
@@ -90,6 +93,10 @@ mod workbench {
         /// replaying its edit log.
         #[arg(long)]
         lose_device_after: Option<f32>,
+        /// Run the engine on the UI thread (for comparison). By default it
+        /// runs on its own thread and the UI never waits for it.
+        #[arg(long)]
+        ui_thread_engine: bool,
         /// Keep GPUI's default animation throttling of unfocused windows
         /// (about 30 fps). By default the workbench animates every window at
         /// the display rate, so measurements reflect compositing, not power
@@ -225,7 +232,7 @@ mod workbench {
     }
 
     struct Workbench {
-        engine: Engine,
+        engine: EngineDriver,
         color: usize,
         radius: f32,
         opacity: f32,
@@ -260,22 +267,14 @@ mod workbench {
 
     impl Workbench {
         fn lose_device(&mut self) {
+            // The driver reports the loss and rebuilds by replay (on the
+            // engine thread by default).
             self.engine.lose_device();
             self.lost_at = Some(Instant::now());
-            println!(
-                "engine device lost at {:.1}s; showing the last frame",
-                self.started.elapsed().as_secs_f32()
-            );
         }
 
         fn busy(&self) -> bool {
-            let stats = self.engine.stats();
-            self.engine.is_lost()
-                || self.demo
-                || self.run_seconds.is_some()
-                || self.engine.pending_dabs() > 0
-                || self.engine.inspections_in_flight() > 0
-                || stats.revision != stats.published_revision
+            self.demo || self.run_seconds.is_some() || self.engine.status().busy()
         }
 
         /// Advance the engine once per display frame, from whichever window
@@ -323,38 +322,12 @@ mod workbench {
             }
             if let Some(after) = self.lose_after
                 && self.lost_at.is_none()
-                && self.engine.stats().recoveries == 0
-                && !self.engine.is_lost()
                 && self.started.elapsed().as_secs_f32() >= after
             {
                 self.lose_device();
             }
-            if self.engine.is_lost() {
-                // Keep showing the last frame briefly, then rebuild on a new
-                // device by replaying the edit log.
-                if self
-                    .lost_at
-                    .is_some_and(|lost| lost.elapsed().as_secs_f32() >= 0.5)
-                {
-                    self.lost_at = None;
-                    match self.engine.rebuild() {
-                        Ok(()) => {
-                            let stats = self.engine.stats();
-                            println!(
-                                "engine rebuilt on generation {}: {} dabs replayed in {:.1} ms",
-                                self.engine.generation(),
-                                stats.replayed_dabs,
-                                stats.replay_ms
-                            );
-                            self.error = None;
-                        }
-                        Err(error) => self.error = Some(format!("rebuild failed: {error:#}")),
-                    }
-                }
-            } else if let Err(error) = self.engine.frame() {
-                self.error = Some(format!("{error:#}"));
-            }
-            if let Some(found) = self.engine.poll_inspections().pop()
+            self.error = self.engine.step().error.clone();
+            if let Some(found) = self.engine.take_inspections().pop()
                 && found.generation == self.engine.generation()
             {
                 self.inspection = Some(found);
@@ -542,7 +515,7 @@ mod workbench {
             let stats = self.engine.stats();
             let surface = self.engine.surface().stats();
             format!(
-                "{:.1}s shown: {} window frames, frame interval ms p50 {:.2} p95 {:.2} p99 {:.2} max {:.2}; revision {} published {}, {} snapshots ({} blocked), {} dabs in {} paint passes ({} tiles), edit-to-publish ms p50 {:.2} p95 {:.2}, {} submissions, {:.1} MiB GPU publish, {:.1} KiB uploaded, {} B read back, {} GPU objects, ring full {}; {} window, {} presentation",
+                "{:.1}s shown: {} window frames, frame interval ms p50 {:.2} p95 {:.2} p99 {:.2} max {:.2}; revision {} published {}, {} snapshots ({} blocked), {} dabs in {} paint passes ({} tiles), edit-to-publish ms p50 {:.2} p95 {:.2} (record p50 {:.2}, present p50 {:.2}), {} submissions, {:.1} MiB GPU publish, {:.1} KiB uploaded, {} B read back, {} GPU objects, ring full {}; {} window, {} presentation, {}",
                 self.started.elapsed().as_secs_f32(),
                 self.frame_times.len() + 1,
                 percentile(&self.frame_times, 0.5),
@@ -556,8 +529,10 @@ mod workbench {
                 stats.dabs_applied,
                 stats.paint_passes,
                 stats.tiles_touched,
-                percentile(&self.engine.latencies_ms, 0.5),
-                percentile(&self.engine.latencies_ms, 0.95),
+                self.engine.status().latency_ms[0],
+                self.engine.status().latency_ms[1],
+                self.engine.status().record_ms,
+                self.engine.status().present_ms,
                 stats.submissions,
                 stats.gpu_bytes_published as f64 / (1024. * 1024.),
                 stats.cpu_bytes_uploaded as f64 / 1024.,
@@ -566,6 +541,11 @@ mod workbench {
                 surface.would_block,
                 if self.wide { "wide" } else { "standard" },
                 self.presentation_label(),
+                if self.engine.threaded() {
+                    "engine thread"
+                } else {
+                    "engine on UI thread"
+                },
             )
         }
 
@@ -815,8 +795,13 @@ mod workbench {
                     self.presentation_label()
                 ),
                 format!(
-                    "Engine: own {} device, {}; {}×{} {:?} slots, storage writes {}",
+                    "Engine: own {} device on {}, {}; {}×{} {:?} slots, storage writes {}",
                     BACKEND.1,
+                    if self.engine.threaded() {
+                        "its own thread"
+                    } else {
+                        "the UI thread"
+                    },
                     if self.engine.gpu_sync() {
                         "GPU-side wait"
                     } else {
@@ -882,8 +867,8 @@ mod workbench {
                 ),
                 format!(
                     "Edit to publish: p50 {:.2} ms · p95 {:.2} ms",
-                    percentile(&self.engine.latencies_ms, 0.5),
-                    percentile(&self.engine.latencies_ms, 0.95)
+                    self.engine.status().latency_ms[0],
+                    self.engine.status().latency_ms[1]
                 ),
             ];
             div()
@@ -1062,7 +1047,9 @@ mod workbench {
                         xgpui_ext_lab::negotiate_wide(window)
                     };
                     let wide = window.color_status().effective() == WindowColorMode::WideGamutSdr;
-                    let engine = Engine::new(options.slots).expect("workbench engine");
+                    let engine =
+                        EngineDriver::new(options.slots, !options.ui_thread_engine, Instant::now())
+                            .expect("workbench engine");
                     window.set_lab_title("XGPUI GPU Canvas Workbench");
                     window.activate_window();
                     let workbench = cx.new(|_| Workbench {

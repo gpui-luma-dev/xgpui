@@ -18,6 +18,7 @@ cargo run --release -p xgpui-ext-lab --bin gpu-canvas-workbench
 | `--second-window` | Open a second window that places the same published revision. |
 | `--minimize-after S` | Minimize the main window after S seconds; the second window keeps stepping the engine. |
 | `--resize-second` | Resize the second window every 0.5 s. This only changes placement; nothing is republished. |
+| `--ui-thread-engine` | Run the engine on the UI thread instead of its own thread, for comparison. |
 | `--lose-device-after S` | Destroy the engine's device after S seconds, then rebuild on a new device by replaying the edit log. |
 | `--throttle-inactive` | Keep GPUI's default 30 fps animation throttle for unfocused windows. |
 
@@ -47,6 +48,17 @@ The code is in `src/engine.rs`.
    - The result carries the revision it was requested at, even when more edits arrive before it completes.
    - Requests are bounded: when all four staging buffers are busy, the request is refused.
 6. **Teardown.** Dropping the engine drops its surface. Slots return once the last scene that samples them is gone.
+
+## Threading
+
+By default the engine runs on its own thread (`src/driver.rs`):
+
+- The UI sends edits, exposure, reset, inspection and device-loss commands over a channel, and places the surface's latest published frame. It never waits for the engine.
+- The engine thread applies all queued commands, then edits and publishes in **one submission** per frame (paint and publish passes together). It recovers from device loss by itself, so a rebuild never blocks the UI.
+- It blocks on its command channel when idle, and waits in 1 ms slices while work is in flight.
+- Edit-to-publish latency counts from the moment the UI made the edit. The status also reports CPU time spent recording and inside `present`.
+
+`--ui-thread-engine` runs the same engine on the UI thread for comparison.
 
 ## Evidence
 
