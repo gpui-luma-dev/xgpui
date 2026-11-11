@@ -1,4 +1,4 @@
-//! Windows transport: shared NT-handle D3D12 textures, CPU-observed readiness.
+//! Windows transport: shared NT-handle D3D12 textures and a shared fence.
 //!
 //! The engine is a wgpu device of its own (D3D12). `WgpuSurfaceTarget` creates
 //! one shared committed resource per slot (`D3D12_HEAP_FLAG_SHARED`,
@@ -8,9 +8,11 @@
 //! copy (issue #198, spike 3).
 //!
 //! Simultaneous access lets a slot decay to the common state when the engine's
-//! command lists complete. The engine waits for that completion on its own
-//! thread before presenting. A GPU-side wait on a shared fence needs a host
-//! immediate-context hook (#197 K3).
+//! command lists complete. The engine signals a shared fence after them and
+//! presents without waiting; the compositor opens the fence once and its
+//! preparation batch issues `ID3D11DeviceContext4::Wait` on the immediate
+//! context (#197 K3). Without a shared fence the engine waits on its own
+//! thread; without D3D11.4 fences, preparation waits on the CPU.
 use crate::{EngineSurface, SurfaceDesc, SurfaceFormat, SurfaceSlot, Unsupported};
 use anyhow::{Context as _, Result, ensure};
 use gpui_windows::custom_draw::Dx11CustomContext;
@@ -19,12 +21,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use wgpu::hal::api::Dx12;
 use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
-use windows::Win32::Graphics::Direct3D11::{ID3D11Device1, ID3D11Texture2D};
+use windows::Win32::Graphics::Direct3D11::{
+    ID3D11Device1, ID3D11Device5, ID3D11Fence, ID3D11Texture2D,
+};
 use windows::Win32::Graphics::Direct3D12::{
-    D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_DESC,
-    D3D12_RESOURCE_DIMENSION_TEXTURE2D, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
-    D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, D3D12_RESOURCE_STATE_COMMON,
-    D3D12_TEXTURE_LAYOUT_UNKNOWN, ID3D12Device, ID3D12Resource,
+    D3D12_FENCE_FLAG_SHARED, D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES,
+    D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_DESC, D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+    D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS,
+    D3D12_RESOURCE_STATE_COMMON, D3D12_TEXTURE_LAYOUT_UNKNOWN, ID3D12Device, ID3D12Fence,
+    ID3D12Resource,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_SAMPLE_DESC,
@@ -35,14 +40,70 @@ use windows::core::{Interface, PCWSTR};
 #[cfg(test)]
 mod tests;
 
-/// Readiness of a presented slot. On Windows the engine observes completion
-/// of its writes before presenting, so the compositor never waits.
-#[derive(Clone, Debug)]
-pub struct SyncPoint(());
+/// Readiness of a presented slot: already complete, or a value on the engine's
+/// shared fence that the compositor waits for on the GPU.
+#[derive(Clone)]
+pub struct SyncPoint(Readiness);
+#[derive(Clone)]
+enum Readiness {
+    Completed,
+    Fence(Arc<SharedFence>, u64),
+}
+impl std::fmt::Debug for SyncPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Readiness::Completed => f.write_str("SyncPoint::Completed"),
+            Readiness::Fence(_, value) => write!(f, "SyncPoint::Fence({value})"),
+        }
+    }
+}
 impl SyncPoint {
     /// The slot's writes have completed on the engine's GPU queue.
     pub fn completed() -> Self {
-        Self(())
+        Self(Readiness::Completed)
+    }
+    /// Whether the compositor waits for this point on the GPU.
+    pub fn is_gpu_wait(&self) -> bool {
+        matches!(self.0, Readiness::Fence(..))
+    }
+}
+
+/// The engine's shared D3D12 fence and the compositor's opened view of it.
+pub(crate) struct SharedFence {
+    fence: ID3D12Fence,
+    handle: SharedHandle,
+    host: Mutex<Option<(usize, Option<ID3D11Fence>)>>,
+}
+impl SharedFence {
+    fn reached(&self, value: u64) -> bool {
+        unsafe { self.fence.GetCompletedValue() >= value }
+    }
+    /// The compositor's fence, or `None` when it lacks D3D11.4 fences.
+    fn host_fence(&self, context: &Dx11CustomContext) -> Result<Option<ID3D11Fence>> {
+        let key = context.cache_key();
+        let mut host = self.host.lock().unwrap();
+        if let Some((cached, fence)) = host.as_ref()
+            && *cached == key
+        {
+            return Ok(fence.clone());
+        }
+        let opened = context
+            .device
+            .cast::<ID3D11Device5>()
+            .ok()
+            .and_then(|device| {
+                let mut fence: Option<ID3D11Fence> = None;
+                unsafe { device.OpenSharedFence(self.handle.0, &mut fence) }.ok()?;
+                fence
+            });
+        *host = Some((key, opened.clone()));
+        Ok(opened)
+    }
+    /// Fallback for a compositor that cannot open the fence.
+    fn cpu_wait(&self, value: u64) -> Result<()> {
+        // A null event makes SetEventOnCompletion block until the value.
+        unsafe { self.fence.SetEventOnCompletion(value, HANDLE::default()) }
+            .context("engine fence wait failed")
     }
 }
 
@@ -116,13 +177,23 @@ impl SlotResources {
 pub(crate) fn prepare_frame(
     _desc: &SurfaceDesc,
     resources: &SlotResources,
-    _sync: &SyncPoint,
+    sync: &SyncPoint,
     backend: &dyn Any,
 ) -> Result<Box<dyn Any>> {
     let context = backend
         .downcast_ref::<Dx11CustomContext>()
         .ok_or_else(|| Unsupported("engine surfaces require the D3D11 compositor".into()))?;
     let texture = resources.host_texture(context)?;
+    if let Readiness::Fence(fence, value) = &sync.0
+        && !fence.reached(*value)
+    {
+        match fence.host_fence(context)? {
+            // SAFETY: opened on the host device from the engine's shared fence,
+            // and the engine submitted the signal before presenting.
+            Some(host) => unsafe { context.wait_for_fence(&host, *value)? },
+            None => fence.cpu_wait(*value)?,
+        }
+    }
     // SAFETY: the texture was opened on the host device; the engine's writes
     // completed before present and simultaneous access needs no transition;
     // the slot's lease keeps it unmodified while this frame can be sampled.
@@ -138,6 +209,8 @@ pub struct WgpuSurfaceTarget {
     device: wgpu::Device,
     queue: wgpu::Queue,
     textures: Vec<wgpu::Texture>,
+    fence: Option<Arc<SharedFence>>,
+    next: u64,
 }
 
 impl WgpuSurfaceTarget {
@@ -155,6 +228,18 @@ impl WgpuSurfaceTarget {
             .clone();
         let luid = unsafe { raw.GetAdapterLuid() };
         let adapter = (luid.LowPart, luid.HighPart);
+        let fence = unsafe { raw.CreateFence::<ID3D12Fence>(0, D3D12_FENCE_FLAG_SHARED) }
+            .ok()
+            .and_then(|fence| {
+                let handle =
+                    unsafe { raw.CreateSharedHandle(&fence, None, GENERIC_ALL.0, PCWSTR::null()) }
+                        .ok()?;
+                Some(Arc::new(SharedFence {
+                    fence,
+                    handle: SharedHandle(handle),
+                    host: Mutex::new(None),
+                }))
+            });
         let heap = D3D12_HEAP_PROPERTIES {
             Type: D3D12_HEAP_TYPE_DEFAULT,
             ..Default::default()
@@ -240,7 +325,15 @@ impl WgpuSurfaceTarget {
             device: device.clone(),
             queue: queue.clone(),
             textures,
+            fence,
+            next: 0,
         })
+    }
+
+    /// Whether frames are handed over with a GPU-side wait (shared fence)
+    /// rather than the engine waiting on its own thread.
+    pub fn gpu_sync(&self) -> bool {
+        self.fence.is_some()
     }
 
     pub fn format(&self) -> wgpu::TextureFormat {
@@ -259,6 +352,17 @@ impl WgpuSurfaceTarget {
         slot: SurfaceSlot,
         commands: impl IntoIterator<Item = wgpu::CommandBuffer>,
     ) -> Result<()> {
+        if let Some(fence) = &self.fence {
+            // Signal after this submission; present only once it is submitted.
+            self.next += 1;
+            unsafe { self.queue.as_hal::<Dx12>() }
+                .context("missing D3D12 engine queue")?
+                .add_signal_fence(fence.fence.clone(), self.next);
+            self.queue.submit(commands);
+            return self
+                .surface
+                .present(slot, SyncPoint(Readiness::Fence(fence.clone(), self.next)));
+        }
         let index = self.queue.submit(commands);
         self.device
             .poll(wgpu::PollType::Wait {

@@ -21,6 +21,9 @@ struct Recording {
     guards: Mutex<Vec<ImageCopyCompletion>>,
     state: AtomicU8,
     batch: Option<Arc<()>>,
+    /// GPU-side waits staged with this recording's host submission.
+    #[cfg(all(target_os = "linux", feature = "external-memory"))]
+    waits: Mutex<Vec<(ash::vk::Semaphore, u64)>>,
 }
 impl Recording {
     fn new(batch: Option<Arc<()>>) -> Self {
@@ -28,6 +31,8 @@ impl Recording {
             guards: Mutex::new(Vec::new()),
             state: AtomicU8::new(PENDING),
             batch,
+            #[cfg(all(target_os = "linux", feature = "external-memory"))]
+            waits: Mutex::new(Vec::new()),
         }
     }
     fn can_reuse(self: &Arc<Self>, output: &Arc<Self>) -> bool {
@@ -166,7 +171,32 @@ impl PreparationBatch {
         Ok(output)
     }
     pub fn submit(mut self) -> Result<()> {
-        if self.pending.iter().any(|(command, _)| command.is_some()) {
+        // Staged waits apply to the next queue submission, so stage them here,
+        // immediately before this batch's submit, never during preparation
+        // (preparation may submit native/coverage subframes in between).
+        #[cfg(all(target_os = "linux", feature = "external-memory"))]
+        let waits: Vec<_> = self
+            .pending
+            .iter()
+            .flat_map(|(_, recording)| std::mem::take(&mut *recording.waits.lock().unwrap()))
+            .collect();
+        #[cfg(all(target_os = "linux", feature = "external-memory"))]
+        let has_waits = !waits.is_empty();
+        #[cfg(not(all(target_os = "linux", feature = "external-memory")))]
+        let has_waits = false;
+        #[cfg(all(target_os = "linux", feature = "external-memory"))]
+        if has_waits {
+            let queue = unsafe { self.queue.as_hal::<wgpu::hal::api::Vulkan>() }
+                .ok_or_else(|| anyhow::anyhow!("semaphore waits require the Vulkan backend"))?;
+            for (semaphore, value) in waits {
+                queue.add_wait_semaphore(
+                    semaphore,
+                    Some(value),
+                    ash::vk::PipelineStageFlags::ALL_COMMANDS,
+                );
+            }
+        }
+        if has_waits || self.pending.iter().any(|(command, _)| command.is_some()) {
             self.queue.submit(
                 self.pending
                     .iter_mut()
@@ -372,6 +402,31 @@ impl WgpuCustomContext {
             _queue: self.queue.clone(),
             recording: self.recording.clone(),
         })
+    }
+    /// Make the host wait on the GPU, before this preparation's commands and the
+    /// composition that follows, until `semaphore` reaches `value`.
+    ///
+    /// The wait is staged together with the host batch submission, so no other
+    /// submission can consume it. Record an ownership acquire or barrier whose
+    /// first scope includes `ALL_COMMANDS` to order later sampling after it.
+    ///
+    /// # Safety
+    /// `semaphore` must be a timeline semaphore valid on this host device (for
+    /// example imported from another device) that outlives the host submission,
+    /// and work that signals it to at least `value` must already be submitted;
+    /// otherwise host submissions can stall on the CPU or the GPU.
+    #[cfg(all(target_os = "linux", feature = "external-memory"))]
+    pub unsafe fn wait_vulkan_semaphore(
+        &self,
+        semaphore: ash::vk::Semaphore,
+        value: u64,
+    ) -> Result<()> {
+        ensure!(
+            self.recording.state.load(Ordering::Acquire) == PENDING,
+            "custom preparation is no longer writable"
+        );
+        self.recording.waits.lock().unwrap().push((semaphore, value));
+        Ok(())
     }
     /// Record preparation commands. Do not submit work or wait on the GPU here.
     /// An encoding error invalidates this transaction, including commands recorded earlier.

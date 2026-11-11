@@ -35,12 +35,15 @@ const STAGED: u8 = 3;
 struct Recording {
     state: AtomicU8,
     batch: Option<Arc<()>>,
+    /// GPU-side fence waits issued before this recording's commands execute.
+    waits: Mutex<Vec<(ID3D11Fence, u64)>>,
 }
 impl Recording {
     fn new(batch: Option<Arc<()>>) -> Self {
         Self {
             state: AtomicU8::new(PENDING),
             batch,
+            waits: Mutex::new(Vec::new()),
         }
     }
     fn can_reuse(self: &Arc<Self>, output: &Arc<Self>) -> bool {
@@ -104,6 +107,16 @@ impl PreparationBatch {
             self.device.GetDeviceRemovedReason()?;
         }
         for (command, recording) in &self.pending {
+            // Deferred contexts cannot wait; the immediate context can, and its
+            // waits gate every later immediate-context command, including the
+            // composition that samples this recording's outputs.
+            let waits = std::mem::take(&mut *recording.waits.lock().unwrap());
+            if !waits.is_empty() {
+                let context: ID3D11DeviceContext4 = self.owner.cast()?;
+                for (fence, value) in waits {
+                    unsafe { context.Wait(&fence, value)? };
+                }
+            }
             if let Some(command) = command {
                 unsafe {
                     self.owner.ExecuteCommandList(command, true);
@@ -241,6 +254,25 @@ impl Dx11CustomContext {
             owner: self.owner.clone(),
             recording: self.recording.clone(),
         })
+    }
+    /// Make the host wait on the GPU, before this preparation's commands and the
+    /// composition that follows, until `fence` reaches `value` (D3D11.4).
+    ///
+    /// # Safety
+    /// `fence` must belong to this host device (for example a shared fence opened
+    /// with `ID3D11Device5::OpenSharedFence`), and work that signals it to at least
+    /// `value` must already be submitted; otherwise host rendering stalls.
+    pub unsafe fn wait_for_fence(&self, fence: &ID3D11Fence, value: u64) -> Result<()> {
+        ensure!(
+            self.recording.state.load(Ordering::Acquire) == PENDING,
+            "DirectX preparation is no longer writable"
+        );
+        self.recording
+            .waits
+            .lock()
+            .unwrap()
+            .push((fence.clone(), value));
+        Ok(())
     }
     /// Worker-safe device handles for source-sized image staging.
     pub fn image_upload_context(&self) -> Dx11ImageUploadContext {

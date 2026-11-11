@@ -250,3 +250,84 @@ fn windows_present_from_engine_thread() {
     drop(target);
     report("PASS frame presented from an engine thread");
 }
+
+/// The compositor waits on the GPU: the engine's frame is held on a fence that
+/// another thread signals after 300 ms, and the composited image must show it.
+#[::core::prelude::v1::test]
+fn windows_gpu_side_wait_holds_composition_until_engine_signals() {
+    let Some((device, queue, mut renderer)) = setup() else {
+        return;
+    };
+    let mut target =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Bgra8Srgb, 3), &device, &queue).unwrap();
+    if !target.gpu_sync() {
+        report("skipped: no shared engine fence (CPU-wait mode)");
+        return;
+    }
+    draw(&mut target, wgpu::Color::RED);
+    renderer
+        .render_scene_to_image(&scene(target.surface().content().unwrap()), viewport())
+        .unwrap();
+    let raw: windows::Win32::Graphics::Direct3D12::ID3D12Device =
+        unsafe { device.as_hal::<Dx12>() }
+            .unwrap()
+            .raw_device()
+            .clone();
+    let gate: ID3D12Fence = unsafe {
+        raw.CreateFence(
+            0,
+            windows::Win32::Graphics::Direct3D12::D3D12_FENCE_FLAG_NONE,
+        )
+    }
+    .unwrap();
+    unsafe { queue.as_hal::<Dx12>() }
+        .unwrap()
+        .add_wait_fence(gate.clone(), 1);
+    draw(&mut target, wgpu::Color::GREEN);
+    let content = target.surface().content().unwrap();
+    struct Gate(ID3D12Fence);
+    // SAFETY: ID3D12Fence is free-threaded; Signal may be called on any thread.
+    unsafe impl Send for Gate {}
+    let opener_gate = Gate(gate.clone());
+    let started = std::time::Instant::now();
+    let opener = std::thread::spawn(move || {
+        let gate = opener_gate;
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        unsafe { gate.0.Signal(1) }.unwrap();
+    });
+    let image = renderer
+        .render_scene_to_image(&scene(content), viewport())
+        .unwrap();
+    let elapsed = started.elapsed();
+    opener.join().unwrap();
+    let pixel = image.get_pixel(16, 8).0;
+    report(format!(
+        "gated frame composited after {elapsed:?}: {pixel:?} (expect green, >= 300 ms)"
+    ));
+    assert!(
+        near(pixel, [0, 255, 0, 255]),
+        "composited stale content: {pixel:?}"
+    );
+    assert!(
+        elapsed >= std::time::Duration::from_millis(250),
+        "composition did not wait for the engine ({elapsed:?})"
+    );
+    report("PASS compositor waited on the GPU for the engine's fence");
+}
+
+#[::core::prelude::v1::test]
+fn windows_reports_sync_mode() {
+    let Some((device, queue, _renderer)) = setup() else {
+        return;
+    };
+    let target =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Bgra8Srgb, 2), &device, &queue).unwrap();
+    report(format!(
+        "sync mode: {}",
+        if target.gpu_sync() {
+            "GPU-side wait (shared fence)"
+        } else {
+            "engine waits on CPU"
+        }
+    ));
+}

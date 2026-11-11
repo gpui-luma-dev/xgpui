@@ -33,12 +33,7 @@ fn engine_device() -> Option<(wgpu::Device, wgpu::Queue)> {
         return None;
     };
     report(format!("engine adapter {:?}", adapter.get_info().name));
-    gpui::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-        label: Some("engine"),
-        required_features: WgpuSurfaceTarget::required_features(),
-        ..Default::default()
-    }))
-    .ok()
+    WgpuSurfaceTarget::request_device(&adapter).ok()
 }
 
 fn host() -> Option<WgpuHeadlessRenderer> {
@@ -234,4 +229,79 @@ fn linux_present_from_engine_thread() {
         .unwrap();
     assert!(near(image.get_pixel(16, 8).0, [0, 0, 255, 255]));
     report("PASS frame presented from an engine thread");
+}
+
+/// The compositor waits on the GPU: the engine's frame is held on a gate that
+/// another thread opens after 300 ms, and the composited image must show it.
+#[test]
+fn linux_gpu_side_wait_holds_composition_until_engine_signals() {
+    let (Some((device, queue)), Some(mut renderer)) = (engine_device(), host()) else {
+        return;
+    };
+    let mut target =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Bgra8Srgb, 3), &device, &queue).unwrap();
+    if !target.gpu_sync() {
+        report("skipped: engine device lacks VK_KHR_external_semaphore_fd (CPU-wait mode)");
+        return;
+    }
+    draw(&mut target, wgpu::Color::RED);
+    renderer
+        .render_scene_to_image(&scene(target.surface().content().unwrap()), viewport())
+        .unwrap();
+    // Gate the next engine submission on a semaphore the CPU signals later.
+    let gate = unsafe { timeline_semaphore(&target.raw, false).unwrap() };
+    unsafe { target.queue.as_hal::<Vulkan>() }
+        .unwrap()
+        .add_wait_semaphore(gate, Some(1), vk::PipelineStageFlags::ALL_COMMANDS);
+    draw(&mut target, wgpu::Color::GREEN);
+    let content = target.surface().content().unwrap();
+    let raw = target.raw.clone();
+    let started = std::time::Instant::now();
+    let opener = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        unsafe {
+            raw.signal_semaphore(&vk::SemaphoreSignalInfo::default().semaphore(gate).value(1))
+                .unwrap()
+        };
+    });
+    let image = renderer
+        .render_scene_to_image(&scene(content), viewport())
+        .unwrap();
+    let elapsed = started.elapsed();
+    opener.join().unwrap();
+    let pixel = image.get_pixel(16, 8).0;
+    report(format!(
+        "gated frame composited after {elapsed:?}: {pixel:?} (expect green, >= 300 ms)"
+    ));
+    assert!(
+        near(pixel, [0, 255, 0, 255]),
+        "composited stale content: {pixel:?}"
+    );
+    assert!(
+        elapsed >= std::time::Duration::from_millis(250),
+        "composition did not wait for the engine ({elapsed:?})"
+    );
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: Some(std::time::Duration::from_secs(5)),
+    });
+    unsafe { target.raw.destroy_semaphore(gate, None) };
+    report("PASS compositor waited on the GPU for the engine's timeline signal");
+}
+
+#[test]
+fn linux_reports_sync_mode() {
+    let Some((device, queue)) = engine_device() else {
+        return;
+    };
+    let target =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Bgra8Srgb, 2), &device, &queue).unwrap();
+    report(format!(
+        "sync mode: {}",
+        if target.gpu_sync() {
+            "GPU-side wait (shared timeline semaphore)"
+        } else {
+            "engine waits on CPU"
+        }
+    ));
 }
