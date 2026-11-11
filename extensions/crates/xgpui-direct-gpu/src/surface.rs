@@ -31,6 +31,9 @@ struct Feedback {
     unshown: std::sync::atomic::AtomicU64,
     /// Present-to-first-composition delay of the latest composited frame, µs.
     latency_us: std::sync::atomic::AtomicU64,
+    /// Why a compositor could not use this surface, latched on the first
+    /// `Unsupported` preparation failure; the surface then offers no frames.
+    unsupported: Mutex<Option<String>>,
 }
 
 /// A ring of shareable slots presented into xgpui (see the crate docs).
@@ -169,7 +172,18 @@ impl EngineSurface {
         self.content_for(false)
     }
 
+    /// Why the compositor could not use this surface (for example, the
+    /// engine and compositor are on different GPUs), once a preparation has
+    /// failed with [`Unsupported`](crate::Unsupported). The surface then
+    /// offers no frames, so it costs at most one failed composition.
+    pub fn unsupported(&self) -> Option<String> {
+        self.0.feedback.unsupported.lock().unwrap().clone()
+    }
+
     fn content_for(&self, wide: bool) -> Option<Arc<dyn CustomContent>> {
+        if self.0.feedback.unsupported.lock().unwrap().is_some() {
+            return None;
+        }
         let (frame, superseded) = {
             let mut frames = self.0.frames.lock().unwrap();
             let newest_ready = frames.iter().rposition(|frame| frame.sync.ready())?;
@@ -328,13 +342,22 @@ impl CustomContent for FrameView {
     }
     fn prepare(&self, backend: &dyn Any, _: Size<DevicePixels>) -> Result<Box<dyn Any>> {
         let frame = &self.frame;
-        frame.note_composited();
-        platform::prepare_frame(
+        let prepared = platform::prepare_frame(
             &frame.desc,
             &frame.resources,
             &frame.sync,
             self.image_color_mode(),
             backend,
-        )
+        );
+        match &prepared {
+            Ok(_) => frame.note_composited(),
+            Err(error) => {
+                if let Some(reason) = error.downcast_ref::<crate::Unsupported>() {
+                    let mut latched = frame.feedback.unsupported.lock().unwrap();
+                    latched.get_or_insert_with(|| reason.0.clone());
+                }
+            }
+        }
+        prepared
     }
 }

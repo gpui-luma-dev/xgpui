@@ -28,9 +28,10 @@ target.surface().paint(window, bounds, radii); // in an element's paint phase
 On Linux and Windows the engine needs feature `wgpu`. Use `WgpuSurfaceTarget::request_device` for Linux engines.
 
 ## Guarantees
-- **Slots are immutable once published.** A presented slot is never rewritten while a retained scene or in-flight composition uses it. It returns to the ring afterwards, even if no further frames are drawn.
+- **Slots are immutable once published.** A presented slot is never rewritten while a retained scene or in-flight composition uses it. It returns to the ring afterwards, even if no further frames are drawn. Size the ring at 3 plus one for each additional window showing the surface: a window that isn't drawing, such as a minimized one, keeps its last frame in its retained scene, and that pins the slot until it draws again.
 - **Colour.** `Bgra8Srgb` works in every window. `Rgba16FloatLinearP3` is shown in wide gamut in a `WideGamutSdr` window and as a mapped sRGB preview elsewhere: `paint` chooses for each window, and `preview_content` / `content` choose explicitly. RGBA16F slots allow storage writes. Colour is verified against a CPU reference on all three platforms.
 - **A misbehaving engine can't stall composition.** The compositor waits on the GPU only for frames whose signal is known to be submitted. Every `WgpuSurfaceTarget` frame qualifies, and so does a macOS frame presented with the `unsafe SyncPoint::submitted`. Any other frame is shown only once its signal has been seen reached, and until then the last ready frame stays on screen. Not covered: submitted work that never finishes (a GPU hang), which ends with the driver's timeout and device-loss handling.
+- **Unsupported compositors.** A compositor that can't use the surface, for example because the engine is on a different GPU, fails the first preparation with `Unsupported`. The surface latches that reason, reported by `EngineSurface::unsupported()`, and offers no further frames.
 - **Recovery.** `EngineSurface::invalidate()` on engine device loss: the last frame keeps showing, and a new surface on a new device recovers. Replacement of the compositor's own device re-imports slots.
 
 ## Feedback and heavy engines

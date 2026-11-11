@@ -1010,3 +1010,29 @@ fn heavy_mode_paces_and_measures_frames() {
         assert!(target.gpu_wait() && target.heavy().is_none());
     });
 }
+
+/// Acceptance item 1: a compositor that cannot use the surface fails with a
+/// typed reason once; the surface then offers no frames.
+#[test]
+fn unsupported_compositor_is_reported_once_and_detaches() {
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Bgra8Srgb, 2)).unwrap();
+        let mut engine = Engine::new();
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [1.0, 0.0, 0.0, 1.0]);
+        let content = surface.content().unwrap();
+        assert!(surface.unsupported().is_none());
+        // Not a Metal compositor context.
+        let error = content
+            .prepare(&(), size(DevicePixels(16), DevicePixels(8)))
+            .unwrap_err();
+        assert!(error.downcast_ref::<Unsupported>().is_some(), "{error:#}");
+        let reason = surface.unsupported().expect("reason latched");
+        assert!(reason.contains("Metal compositor"), "{reason}");
+        assert!(
+            surface.content().is_none(),
+            "no frames after an unsupported compositor"
+        );
+        assert!(surface.preview_content().is_none());
+    });
+}
