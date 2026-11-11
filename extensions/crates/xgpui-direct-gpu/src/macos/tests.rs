@@ -724,3 +724,177 @@ fn compositor_replacement_keeps_compositing() {
         }
     });
 }
+
+/// Write `bytes` into `slot` from the CPU, mark it complete, present it.
+fn present_bytes(
+    engine: &mut Engine,
+    surface: &EngineSurface,
+    slot: SurfaceSlot,
+    bytes: &mut [u8],
+) {
+    let desc = slot.desc();
+    let texture = surface_texture(
+        &engine.device,
+        slot.iosurface(),
+        &desc,
+        MTLTextureUsage::ShaderRead,
+    )
+    .unwrap();
+    let (w, h) = (desc.width as usize, desc.height as usize);
+    unsafe {
+        texture.replaceRegion_mipmapLevel_withBytes_bytesPerRow(
+            objc2_metal::MTLRegion {
+                origin: objc2_metal::MTLOrigin { x: 0, y: 0, z: 0 },
+                size: objc2_metal::MTLSize {
+                    width: w,
+                    height: h,
+                    depth: 1,
+                },
+            },
+            0,
+            std::ptr::NonNull::new(bytes.as_mut_ptr().cast()).unwrap(),
+            w * desc.format.bytes_per_pixel() as usize,
+        );
+    }
+    engine.next += 1;
+    engine.event.setSignaledValue(engine.next);
+    surface
+        .present(slot, SyncPoint::new(engine.event.clone(), engine.next))
+        .unwrap();
+}
+
+/// A strip placed 1:1 at `opacity`.
+fn strip_scene(content: Arc<dyn CustomContent>, width: u32, opacity: f32) -> Scene {
+    use crate::colour_reference::HEIGHT;
+    let bounds = Bounds::new(
+        point(ScaledPixels(0.), ScaledPixels(0.)),
+        size(ScaledPixels(width as f32), ScaledPixels(HEIGHT as f32)),
+    );
+    let mut scene = Scene::default();
+    scene.insert_primitive(CustomDraw {
+        order: 0,
+        bounds,
+        content_mask: ContentMask { bounds },
+        corner_radii: Default::default(),
+        opacity,
+        content,
+        coverage: None,
+    });
+    scene.finish();
+    scene
+}
+
+/// Acceptance (#197): colour through the compositor against an independent
+/// CPU reference. Preview: near-black, out-of-sRGB P3, fractional alpha and
+/// opacity are mapped to clipped sRGB; sRGB controls are unchanged. Wide:
+/// the FP16 linear-P3 composition keeps the values, including out-of-sRGB.
+#[test]
+fn colour_matches_reference_in_preview_and_wide() {
+    use crate::colour_reference::*;
+    objc2::rc::autoreleasepool(|_| {
+        let mut engine = Engine::new();
+        let strip_desc = SurfaceDesc {
+            width: width(),
+            height: HEIGHT,
+            format: SurfaceFormat::Rgba16FloatLinearP3,
+            slots: 2,
+        };
+        let strip = EngineSurface::new(strip_desc).unwrap();
+        let slot = strip.acquire().unwrap();
+        present_bytes(&mut engine, &strip, slot, &mut strip_rgba16f());
+        let controls = EngineSurface::new(SurfaceDesc {
+            width: SRGB_CONTROLS.len() as u32 * STRIPE,
+            format: SurfaceFormat::Bgra8Srgb,
+            ..strip_desc
+        })
+        .unwrap();
+        let slot = controls.acquire().unwrap();
+        present_bytes(&mut engine, &controls, slot, &mut controls_bgra8());
+        let extent = size(DevicePixels(width() as i32), DevicePixels(HEIGHT as i32));
+        let mut failures = Vec::new();
+        let mut worst = 0f64;
+
+        // Preview, standard window.
+        let mut standard = MetalHeadlessRenderer::new().unwrap();
+        for opacity in [1., 0.5] {
+            let image = standard
+                .render_scene_to_image(
+                    &strip_scene(strip.preview_content().unwrap(), width(), opacity),
+                    extent,
+                )
+                .unwrap();
+            for (i, (name, patch)) in PATCHES.iter().enumerate() {
+                let actual = image.get_pixel(centre(i), HEIGHT / 2).0;
+                let expected = preview(*patch, opacity);
+                let d = distance(actual, expected);
+                worst = worst.max(d);
+                eprintln!("preview {name} @ {opacity}: {actual:?} expected {expected:.1?}");
+                if d > 2.5 {
+                    failures.push(format!(
+                        "preview {name} @ {opacity}: {actual:?} vs {expected:.1?}"
+                    ));
+                }
+            }
+            let image = standard
+                .render_scene_to_image(
+                    &strip_scene(
+                        controls.content().unwrap(),
+                        SRGB_CONTROLS.len() as u32 * STRIPE,
+                        opacity,
+                    ),
+                    extent,
+                )
+                .unwrap();
+            for (i, (name, rgba)) in SRGB_CONTROLS.iter().enumerate() {
+                let actual = image.get_pixel(centre(i), HEIGHT / 2).0;
+                let expected = control(*rgba, opacity);
+                let d = distance(actual, expected);
+                worst = worst.max(d);
+                eprintln!("control {name} @ {opacity}: {actual:?} expected {expected:.1?}");
+                if d > 2.5 {
+                    failures.push(format!(
+                        "control {name} @ {opacity}: {actual:?} vs {expected:.1?}"
+                    ));
+                }
+            }
+        }
+
+        // Wide: the FP16 composition keeps linear P3, scaled by opacity.
+        let mut wide = MetalHeadlessRenderer::new().unwrap();
+        wide.set_color_mode(WindowColorMode::WideGamutSdr).unwrap();
+        for opacity in [1., 0.5] {
+            let image = wide
+                .render_scene_to_linear_p3(
+                    &strip_scene(strip.content().unwrap(), width(), opacity),
+                    extent,
+                )
+                .unwrap();
+            for (i, (name, patch)) in PATCHES.iter().enumerate() {
+                let texel = image.pixels[(HEIGHT / 2 * width() + centre(i)) as usize];
+                let actual: Vec<f32> = texel
+                    .iter()
+                    .map(|&bits| crate::colour_reference_f16(bits))
+                    .collect();
+                // Associated linear P3 over the opaque black background.
+                let expected: Vec<f32> = patch[..3].iter().map(|v| v * opacity).collect();
+                let d = actual[..3]
+                    .iter()
+                    .zip(&expected)
+                    .map(|(a, e)| (a - e).abs())
+                    .fold(0f32, f32::max);
+                eprintln!("wide {name} @ {opacity}: {actual:.4?} expected {expected:.4?}");
+                if d > 2e-3 {
+                    failures.push(format!(
+                        "wide {name} @ {opacity}: {actual:.4?} vs {expected:.4?}"
+                    ));
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "colour mismatches:\n{}",
+            failures.join("\n")
+        );
+        eprintln!("colour: all patches within tolerance (worst 8-bit distance {worst:.2})");
+    });
+}
