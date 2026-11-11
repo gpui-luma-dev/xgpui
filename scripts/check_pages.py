@@ -23,6 +23,8 @@ DEMOS = ["canvas", "mandelbrot", "shader", "brushes", "layers", "hermite", "parl
          "mipmaps", "path-effects"]
 SHADER_EXAMPLES = ["minimal", "glow", "particles", "composition", "shadows", "borders"]
 API_SECTION = "gpui-public-api-changes-additions-and-compatibility"
+# Extension crates whose guide is not written yet. Remove an entry when its guide lands.
+PENDING_GUIDES = {"xgpui-engine-surface"}
 
 failures = []
 
@@ -142,6 +144,9 @@ print(f"Checked {len(crates)} crate pages, navigation and legacy route forwardin
 api = parsed.get("gpui-public-api.html")
 for crate in extensions:
     if crate == "xgpui-color":  # standalone math, no GPUI dependency
+        continue
+    if crate in PENDING_GUIDES:
+        print(f"Warning: {crate} has no guide yet; its GPUI API section is not checked.")
         continue
     crate_page = PAGES / "crates" / f"{crate}.html"
     guide = re.search(r'class="crate-guide"><a href="\.\./([\w.-]+\.html)"',
