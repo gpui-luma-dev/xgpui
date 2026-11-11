@@ -18,6 +18,7 @@ cargo run --release -p xgpui-ext-lab --bin gpu-canvas-workbench
 | `--second-window` | Open a second window that places the same published revision. |
 | `--minimize-after S` | Minimize the main window after S seconds; the second window keeps stepping the engine. |
 | `--resize-second` | Resize the second window every 0.5 s. This only changes placement; nothing is republished. |
+| `--throttle-inactive` | Keep GPUI's default 30 fps animation throttle for unfocused windows. |
 
 **Interaction:**
 
@@ -83,6 +84,8 @@ Measured on macOS:
 
 - **Resizing:** one snapshot served 3 window sizes, with no republishing.
 - **Minimizing:** the second window carried on at 60 fps, after a single stall of about 570 ms during the minimize animation.
-- **Two animating windows:** the second window runs at about 30 fps while the main one animates, even when it paints nothing. That pacing comes from GPUI or macOS, not from engine surfaces.
+- **Two animating windows:** both run at 60 fps (298 new frames each in 5 s).
+
+GPUI throttles the animation frames of an unfocused window to `WindowOptions::inactive_frame_interval`, 33.3 ms by default, as a power-saving policy on every platform. The workbench turns that off so its measurements reflect compositing; `--throttle-inactive` restores GPUI's default, under which the unfocused window runs at about 30 fps.
 
 Not yet included: pan/zoom and generation-replacement recovery. Pressure is covered by *Hold snapshot* and `--check`. `engine-surface-lab --lose-engine-after` covers engine loss.
