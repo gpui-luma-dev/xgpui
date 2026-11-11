@@ -74,11 +74,15 @@ jobs:
       - name: Lint the crate without features (no engine adapter)
         run: cargo clippy --locked --config .cargo/validation.toml -p xgpui-engine-surface --lib --tests --no-deps -- -D warnings
       - name: Lint the crate with the wgpu engine adapter
+        # Keep reporting after an earlier failure, so one run shows every problem.
+        if: ${{ !cancelled() }}
         run: cargo clippy --locked --config .cargo/validation.toml -p xgpui-engine-surface --features wgpu --lib --tests --no-deps -- -D warnings
       - name: Lint both labs
+        if: ${{ !cancelled() }}
         # --tests on the shared lab package selects unrelated lab binaries too.
         run: cargo clippy --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin engine-surface-lab --bin gpu-canvas-workbench --no-deps -- -D warnings
       - name: Build crate tests and labs without running them
+        if: ${{ !cancelled() }}
         run: |
           cargo test --locked --config .cargo/validation.toml -p xgpui-engine-surface --features wgpu --lib --no-run
           cargo build --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin engine-surface-lab --bin gpu-canvas-workbench

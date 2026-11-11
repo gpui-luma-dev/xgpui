@@ -26,6 +26,14 @@
 use gpui::{DevicePixels, Size, size};
 
 pub(crate) mod heavy;
+// Only the surface uses the ring; Linux and Windows have none without `wgpu`.
+#[cfg_attr(
+    not(any(
+        target_os = "macos",
+        all(any(target_os = "linux", target_os = "windows"), feature = "wgpu")
+    )),
+    allow(dead_code)
+)]
 mod ring;
 pub use heavy::{HeavyEngine, HeavyStatus};
 
@@ -276,6 +284,14 @@ pub(crate) mod test_engine {
 /// near-black, saturated out-of-sRGB, fractional alpha, opacity and sRGB
 /// controls, preview and wide).
 #[cfg(test)]
+// Used by the platform tests; Linux and Windows have none without `wgpu`.
+#[cfg_attr(
+    not(any(
+        target_os = "macos",
+        all(any(target_os = "linux", target_os = "windows"), feature = "wgpu")
+    )),
+    allow(dead_code)
+)]
 pub(crate) mod colour_reference {
     /// Stripe width in pixels; the strip is `PATCHES.len() * STRIPE` wide.
     pub const STRIPE: u32 = 8;
