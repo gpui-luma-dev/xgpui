@@ -64,7 +64,6 @@ list-all-labs:
       Conic gradients              just lab-paint --effect conic
       Diamond gradients            just lab-paint --effect diamond
       Hermite mesh                 just lab-paint --effect mesh
-      Pastel waves                 just lab-paint --pastel-waves
 
     Benchmarks and diagnostics
       Quad benchmark               just lab-quad-bench

@@ -875,26 +875,12 @@ surface lacks framebuffer-copy usage, frames containing layer/backdrop effects
 render into a reusable full-window SDR texture and present through a final
 unblended draw. This adds one pass and four bytes per device pixel of retained
 frame storage; it resizes with the window and is released on effect-free frames.
-Surfaces that support copies continue to render directly. Pastel waves remains native-only.</p>
+Surfaces that support copies continue to render directly.</p>
 <h2 id="pastel-waves-composition">Pastel waves composition</h2>
-<p>The standalone native example combines nine translucent mesh-gradient ribbons
-with fixed pastel background color fields. Separate variable-width contours and
-soft inward bleed gradients create the rounded-fold illusion. The shading
-follows the ribbon geometry rather than blurring its silhouette.</p>
-<pre><code class="language-sh">cargo run --release --locked --config .cargo/validation.toml \
-  --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features portable-shaders -- --pastel-waves
-</code></pre>
-<p>Use <strong>Animate / Pause</strong>, <strong>Reverse</strong>, <strong>Grain</strong>, and <strong>Reset</strong>. Motion travels
-forward and backward with eased endpoint turns. The bottom-right label shows
-render frame count, measured render FPS and direction; it does not measure GPU
-presentation cadence. The background fields stay fixed.</p>
-<p>This is a visual reference implementation, not an optimized animation pipeline.
-Each foreground ribbon's bleed uses 24 overlapping translucent shapes with
-native path coverage. Frame timing is smoothed and capped, so animation can slow
-under load. <a href="https://github.com/gpui-luma-dev/xgpui/issues/35">Issue #35</a> tracks
-release profiling, cached-background experiments and directly shaded ribbon
-strips, with in-app comparisons and resource measurements. No performance gain
-or target frame rate is claimed yet. Source: <code>apps/xgpui-ext-lab/paint-lab/src/pastel_waves.rs</code>.</p>
+<p>The pastel waves ribbon composition has moved to the
+<a href="https://github.com/gpui-luma-dev/xgpui-luma/blob/main/apps/xgpui-lab/docs/pastel-waves.md">xgpui-luma lab</a>, together with its native and portable
+renderers. See the <a href="performance-study.html">performance study</a> for
+how its native producers were measured and optimized.</p>
 <h2 id="issue-22-completion-review">Issue #22 completion review</h2>
 <p>All five roadmap phases have bounded implementations in the existing
 <code>xgpui-shader</code> crate, using explicit <code>Painted</code> receivers rather than adding

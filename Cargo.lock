@@ -8016,7 +8016,6 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "ash",
- "bytemuck",
  "clap",
  "console_error_panic_hook",
  "core-foundation 0.10.1",
@@ -8024,7 +8023,6 @@ dependencies = [
  "image",
  "libc",
  "log",
- "naga 30.0.1",
  "objc2-core-foundation",
  "objc2-core-video",
  "objc2-foundation 0.3.2",
