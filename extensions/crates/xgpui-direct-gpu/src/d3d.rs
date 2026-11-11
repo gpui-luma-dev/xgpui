@@ -22,7 +22,7 @@ use std::time::Duration;
 use wgpu::hal::api::Dx12;
 use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
 use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Device1, ID3D11Device5, ID3D11Fence, ID3D11Texture2D,
+    ID3D11Device, ID3D11Device1, ID3D11Device5, ID3D11Fence, ID3D11Texture2D,
 };
 use windows::Win32::Graphics::Direct3D12::{
     D3D12_FENCE_FLAG_SHARED, D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES,
@@ -47,13 +47,15 @@ pub struct SyncPoint(Readiness);
 #[derive(Clone)]
 enum Readiness {
     Completed,
-    Fence(Arc<SharedFence>, u64),
+    /// The flag caches "reached" so recompositing a finished frame never
+    /// queries an engine device that may since have been lost.
+    Fence(Arc<SharedFence>, u64, Arc<std::sync::atomic::AtomicBool>),
 }
 impl std::fmt::Debug for SyncPoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
             Readiness::Completed => f.write_str("SyncPoint::Completed"),
-            Readiness::Fence(_, value) => write!(f, "SyncPoint::Fence({value})"),
+            Readiness::Fence(_, value, _) => write!(f, "SyncPoint::Fence({value})"),
         }
     }
 }
@@ -75,7 +77,9 @@ pub(crate) struct SharedFence {
     // is destroyed, so a D3D12 object released afterwards would call into an
     // unloaded library.
     fence: ID3D12Fence,
-    host: Mutex<Option<(usize, Option<ID3D11Fence>)>>,
+    // Keyed by the compositor device object, held so its address cannot be
+    // reused by a recreated device (#197 K6).
+    host: Mutex<Option<(ID3D11Device, Option<ID3D11Fence>)>>,
     handle: SharedHandle,
     _engine: wgpu::Device,
 }
@@ -85,10 +89,9 @@ impl SharedFence {
     }
     /// The compositor's fence, or `None` when it lacks D3D11.4 fences.
     fn host_fence(&self, context: &Dx11CustomContext) -> Result<Option<ID3D11Fence>> {
-        let key = context.cache_key();
         let mut host = self.host.lock().unwrap();
         if let Some((cached, fence)) = host.as_ref()
-            && *cached == key
+            && cached.as_raw() == context.device.as_raw()
         {
             return Ok(fence.clone());
         }
@@ -101,7 +104,7 @@ impl SharedFence {
                 unsafe { device.OpenSharedFence(self.handle.0, &mut fence) }.ok()?;
                 fence
             });
-        *host = Some((key, opened.clone()));
+        *host = Some((context.device.clone(), opened.clone()));
         Ok(opened)
     }
     /// Fallback for a compositor that cannot open the fence.
@@ -141,7 +144,8 @@ impl Drop for SharedHandle {
 pub(crate) struct SlotResources {
     handle: SharedHandle,
     adapter: (u32, i32),
-    host: Mutex<Option<(usize, ID3D11Texture2D)>>,
+    // Keyed by the compositor device object (see `SharedFence::host`).
+    host: Mutex<Option<(ID3D11Device, ID3D11Texture2D)>>,
 }
 impl std::fmt::Debug for SlotResources {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -154,10 +158,9 @@ impl std::fmt::Debug for SlotResources {
 impl SlotResources {
     /// The compositor's texture over this slot, opened once per host device.
     fn host_texture(&self, context: &Dx11CustomContext) -> Result<ID3D11Texture2D> {
-        let key = context.cache_key();
         let mut host = self.host.lock().unwrap();
         if let Some((cached, texture)) = host.as_ref()
-            && *cached == key
+            && cached.as_raw() == context.device.as_raw()
         {
             return Ok(texture.clone());
         }
@@ -174,7 +177,7 @@ impl SlotResources {
             .map_err(|_| Unsupported("the compositor lacks ID3D11Device1".into()))?;
         let texture: ID3D11Texture2D = unsafe { device.OpenSharedResource1(self.handle.0) }
             .context("opening the engine's shared texture failed")?;
-        *host = Some((key, texture.clone()));
+        *host = Some((context.device.clone(), texture.clone()));
         Ok(texture)
     }
 }
@@ -192,8 +195,12 @@ pub(crate) fn prepare_frame(
         .downcast_ref::<Dx11CustomContext>()
         .ok_or_else(|| Unsupported("engine surfaces require the D3D11 compositor".into()))?;
     let texture = resources.host_texture(context)?;
-    if let Readiness::Fence(fence, value) = &sync.0
-        && !fence.reached(*value)
+    if let Readiness::Fence(fence, value, seen) = &sync.0
+        && !seen.load(std::sync::atomic::Ordering::Acquire)
+        && !(fence.reached(*value) && {
+            seen.store(true, std::sync::atomic::Ordering::Release);
+            true
+        })
     {
         match fence.host_fence(context)? {
             // SAFETY: opened on the host device from the engine's shared fence,
@@ -368,9 +375,14 @@ impl WgpuSurfaceTarget {
                 .context("missing D3D12 engine queue")?
                 .add_signal_fence(fence.fence.clone(), self.next);
             self.queue.submit(commands);
-            return self
-                .surface
-                .present(slot, SyncPoint(Readiness::Fence(fence.clone(), self.next)));
+            return self.surface.present(
+                slot,
+                SyncPoint(Readiness::Fence(
+                    fence.clone(),
+                    self.next,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                )),
+            );
         }
         let index = self.queue.submit(commands);
         self.device

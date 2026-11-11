@@ -400,3 +400,45 @@ fn rounded_placement_clips_corners() {
         assert!(near(image.get_pixel(16, 8).0, [255; 4]));
     });
 }
+
+/// Losing the engine (#197 K6): new work is rejected, the last frame keeps
+/// compositing from the surface's own memory, and a new surface recovers.
+#[test]
+fn invalidated_surface_keeps_last_frame_and_recovers() {
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Bgra8Srgb, 2)).unwrap();
+        let mut renderer = MetalHeadlessRenderer::new().unwrap();
+        let pending = {
+            let mut engine = Engine::new();
+            let slot = surface.acquire().unwrap();
+            engine.draw_and_present(&surface, slot, [1.0, 0.0, 0.0, 1.0]);
+            let image = renderer
+                .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+                .unwrap();
+            assert!(near(image.get_pixel(16, 8).0, [255, 0, 0, 255]));
+            let pending = surface.acquire().unwrap();
+            (pending, engine.event.clone())
+            // The engine's queue and resources are dropped here.
+        };
+        surface.invalidate();
+        assert!(!surface.is_valid());
+        assert_eq!(surface.acquire().err(), Some(AcquireError::Invalidated));
+        let (slot, event) = pending;
+        assert!(surface.present(slot, SyncPoint::new(event, 0)).is_err());
+        let image = renderer
+            .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+            .unwrap();
+        assert!(
+            near(image.get_pixel(16, 8).0, [255, 0, 0, 255]),
+            "last frame must survive the engine"
+        );
+        let replacement = EngineSurface::new(desc(SurfaceFormat::Bgra8Srgb, 2)).unwrap();
+        let mut engine = Engine::new();
+        let slot = replacement.acquire().unwrap();
+        engine.draw_and_present(&replacement, slot, [0.0, 1.0, 0.0, 1.0]);
+        let image = renderer
+            .render_scene_to_image(&scene(replacement.content().unwrap()), viewport())
+            .unwrap();
+        assert!(near(image.get_pixel(16, 8).0, [0, 255, 0, 255]));
+    });
+}

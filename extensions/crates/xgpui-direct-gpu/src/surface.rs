@@ -6,6 +6,7 @@ use crate::{AcquireError, SurfaceDesc, SurfaceStats, Transport};
 use anyhow::{Result, ensure};
 use gpui::{Bounds, Corners, CustomContent, CustomGeometry, DevicePixels, Pixels, Size, Window};
 use std::any::Any;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 struct Shared {
@@ -14,6 +15,7 @@ struct Shared {
     slots: Vec<Arc<SlotResources>>,
     latest: Mutex<Option<Arc<SurfaceFrame>>>,
     on_present: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    invalid: AtomicBool,
 }
 
 /// A ring of shareable slots presented into xgpui (see the crate docs).
@@ -56,6 +58,7 @@ impl EngineSurface {
             slots,
             latest: Mutex::new(None),
             on_present: Mutex::new(None),
+            invalid: AtomicBool::new(false),
         })))
     }
 
@@ -72,6 +75,9 @@ impl EngineSurface {
     /// When the ring is full, first lets the compositor retire frames whose GPU
     /// sampling already finished (no later frame needs to be drawn, #197 K4).
     pub fn acquire(&self) -> Result<SurfaceSlot, AcquireError> {
+        if !self.is_valid() {
+            return Err(AcquireError::Invalidated);
+        }
         let writing = match self.0.ring.acquire(false) {
             Some(writing) => writing,
             None => {
@@ -91,6 +97,7 @@ impl EngineSurface {
     /// Publish `slot` as the latest frame, readable once `sync` is reached.
     /// Call only after submitting the engine work that signals `sync`.
     pub fn present(&self, slot: SurfaceSlot, sync: SyncPoint) -> Result<()> {
+        ensure!(self.is_valid(), AcquireError::Invalidated);
         ensure!(
             self.0.ring.owns(&slot.writing),
             "slot belongs to another surface"
@@ -150,6 +157,21 @@ impl EngineSurface {
 
     pub fn stats(&self) -> SurfaceStats {
         self.0.ring.stats()
+    }
+
+    /// Mark the surface unusable, typically from the engine's device-lost
+    /// callback (#197 K6). Later `acquire`/`present` calls fail with
+    /// `AcquireError::Invalidated`. The last presented frame keeps displaying:
+    /// the compositor holds its own reference to that frame's shared memory,
+    /// so it outlives the engine device. Recover by creating a new engine
+    /// device and surface.
+    pub fn invalidate(&self) {
+        self.0.invalid.store(true, Ordering::Release);
+    }
+
+    /// `false` after `invalidate`.
+    pub fn is_valid(&self) -> bool {
+        !self.0.invalid.load(Ordering::Acquire)
     }
 }
 
