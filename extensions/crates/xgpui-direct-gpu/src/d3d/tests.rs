@@ -331,3 +331,36 @@ fn windows_reports_sync_mode() {
         }
     ));
 }
+
+/// An idle compositor (no further frames) must not starve the engine: the
+/// compositor's fence worker releases finished frames (#197 K4).
+#[::core::prelude::v1::test]
+fn windows_idle_compositor_releases_slots_without_frames() {
+    let Some((device, queue, mut renderer)) = setup() else {
+        return;
+    };
+    let mut target =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Bgra8Srgb, 2), &device, &queue).unwrap();
+    draw(&mut target, wgpu::Color::RED);
+    // Composite once without reading back, then draw nothing more.
+    let frame = scene(target.surface().content().unwrap());
+    renderer.render_scene(&frame, viewport()).unwrap();
+    drop(frame);
+    draw(&mut target, wgpu::Color::GREEN);
+    let started = std::time::Instant::now();
+    let slot = loop {
+        if let Ok(slot) = target.surface().acquire() {
+            break slot;
+        }
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "slot never returned while the compositor was idle"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    drop(slot);
+    report(format!(
+        "PASS slot returned after {:?} with no further compositor frames",
+        started.elapsed()
+    ));
+}

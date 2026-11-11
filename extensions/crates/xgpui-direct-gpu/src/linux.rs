@@ -283,6 +283,7 @@ pub(crate) struct SlotResources {
 }
 struct HostImport {
     key: usize,
+    device: Arc<wgpu::Device>,
     texture: wgpu::Texture,
     raw: ash::Device,
     family: u32,
@@ -387,12 +388,31 @@ impl SlotResources {
         };
         *host = Some(HostImport {
             key,
+            device: context.device.clone(),
             texture: texture.clone(),
             raw: raw.clone(),
             family,
             image,
         });
         Ok((texture, raw, family, image))
+    }
+}
+
+/// wgpu runs the compositor's completion callbacks (which release retained
+/// frames) only when its device is polled or submits again. Poll each
+/// compositor device these slots were imported into, without blocking.
+pub(crate) fn retire_completed(slots: &[Arc<SlotResources>]) {
+    let mut devices: Vec<Arc<wgpu::Device>> = Vec::new();
+    for slot in slots {
+        let host = slot.host.lock().unwrap();
+        if let Some(import) = host.as_ref()
+            && !devices.iter().any(|device| Arc::ptr_eq(device, &import.device))
+        {
+            devices.push(import.device.clone());
+        }
+    }
+    for device in devices {
+        let _ = device.poll(wgpu::PollType::Poll);
     }
 }
 

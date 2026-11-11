@@ -174,6 +174,9 @@ impl SlotResources {
     }
 }
 
+/// The D3D11 compositor retires frames on its fence worker thread.
+pub(crate) fn retire_completed(_slots: &[Arc<SlotResources>]) {}
+
 pub(crate) fn prepare_frame(
     _desc: &SurfaceDesc,
     resources: &SlotResources,

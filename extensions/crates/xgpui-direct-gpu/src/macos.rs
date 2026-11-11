@@ -173,6 +173,9 @@ impl SurfaceSlot {
     }
 }
 
+/// Metal completion handlers retire frames without further frames.
+pub(crate) fn retire_completed(_slots: &[Arc<SlotResources>]) {}
+
 pub(crate) fn prepare_frame(
     desc: &SurfaceDesc,
     resources: &SlotResources,

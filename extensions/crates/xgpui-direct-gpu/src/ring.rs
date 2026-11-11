@@ -50,8 +50,9 @@ impl Ring {
         })))
     }
 
-    /// Lowest free slot, or `None` (counted) when every slot is in use.
-    pub fn acquire(&self) -> Option<Writing> {
+    /// Lowest free slot, or `None` when every slot is in use (counted in the
+    /// stats when `count_block`).
+    pub fn acquire(&self, count_block: bool) -> Option<Writing> {
         let mut state = self.0.lock().unwrap();
         match state.slots.iter().position(|slot| *slot == Slot::Free) {
             Some(index) => {
@@ -63,7 +64,9 @@ impl Ring {
                 })
             }
             None => {
-                state.would_block += 1;
+                if count_block {
+                    state.would_block += 1;
+                }
                 None
             }
         }
@@ -133,29 +136,29 @@ mod tests {
     #[test]
     fn acquire_until_full_then_would_block() {
         let ring = Ring::new(2);
-        let a = ring.acquire().unwrap();
-        let b = ring.acquire().unwrap();
+        let a = ring.acquire(true).unwrap();
+        let b = ring.acquire(true).unwrap();
         assert_ne!(a.index(), b.index());
-        assert!(ring.acquire().is_none());
+        assert!(ring.acquire(true).is_none());
         assert_eq!(ring.stats().would_block, 1);
         drop(a);
-        assert!(ring.acquire().is_some(), "dropped unpublished slot is free");
+        assert!(ring.acquire(true).is_some(), "dropped unpublished slot is free");
     }
 
     #[test]
     fn published_slot_returns_only_after_last_lease() {
         let ring = Ring::new(2);
-        let lease = ring.publish(ring.acquire().unwrap());
+        let lease = ring.publish(ring.acquire(true).unwrap());
         let retained_scene = lease.clone();
-        let _writing = ring.acquire().unwrap();
+        let _writing = ring.acquire(true).unwrap();
         assert!(
-            ring.acquire().is_none(),
+            ring.acquire(true).is_none(),
             "published slot must not be reused"
         );
         drop(lease);
-        assert!(ring.acquire().is_none(), "a retained scene still holds it");
+        assert!(ring.acquire(true).is_none(), "a retained scene still holds it");
         drop(retained_scene);
-        assert!(ring.acquire().is_some());
+        assert!(ring.acquire(true).is_some());
         let stats = ring.stats();
         assert_eq!(stats.presents, 1);
     }
@@ -163,7 +166,7 @@ mod tests {
     #[test]
     fn lease_outliving_the_ring_is_harmless() {
         let ring = Ring::new(2);
-        let lease = ring.publish(ring.acquire().unwrap());
+        let lease = ring.publish(ring.acquire(true).unwrap());
         drop(ring);
         drop(lease);
     }
@@ -171,7 +174,7 @@ mod tests {
     #[test]
     fn lease_drop_from_another_thread() {
         let ring = Ring::new(2);
-        let lease = ring.publish(ring.acquire().unwrap());
+        let lease = ring.publish(ring.acquire(true).unwrap());
         std::thread::spawn(move || drop(lease)).join().unwrap();
         assert_eq!(ring.stats().free, 2);
     }
@@ -181,7 +184,7 @@ mod tests {
     fn rejects_foreign_slots() {
         let a = Ring::new(2);
         let b = Ring::new(2);
-        let writing = b.acquire().unwrap();
+        let writing = b.acquire(true).unwrap();
         a.publish(writing);
     }
 }

@@ -305,3 +305,36 @@ fn linux_reports_sync_mode() {
         }
     ));
 }
+
+/// An idle compositor (no further frames) must not starve the engine: slots
+/// held only by finished compositions return when the ring is full (#197 K4).
+#[test]
+fn linux_idle_compositor_releases_slots_without_frames() {
+    let (Some((device, queue)), Some(mut renderer)) = (engine_device(), host()) else {
+        return;
+    };
+    let mut target =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Bgra8Srgb, 2), &device, &queue).unwrap();
+    draw(&mut target, wgpu::Color::RED);
+    // Composite once without waiting, then draw nothing more.
+    let frame = scene(target.surface().content().unwrap());
+    renderer.render_scene(&frame, viewport()).unwrap();
+    drop(frame);
+    draw(&mut target, wgpu::Color::GREEN);
+    let started = std::time::Instant::now();
+    let slot = loop {
+        if let Ok(slot) = target.surface().acquire() {
+            break slot;
+        }
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "slot never returned while the compositor was idle"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    drop(slot);
+    report(format!(
+        "PASS slot returned after {:?} with no further compositor frames",
+        started.elapsed()
+    ));
+}
