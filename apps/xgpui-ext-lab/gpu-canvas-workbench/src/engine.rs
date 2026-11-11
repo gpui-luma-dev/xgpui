@@ -199,7 +199,19 @@ pub struct Engine {
     /// Recording split into phases: edits, slot acquire (and first-use bind
     /// group), publish pass encoding, `encoder.finish()`.
     pub phase_ms: [Vec<f32>; 4],
+    /// Staging belt for uploads, or `None` for queued writes.
+    belt: Option<wgpu::util::StagingBelt>,
 }
+
+#[derive(Clone, Copy)]
+enum Upload {
+    Params,
+    PaintParams,
+    Dabs,
+}
+
+/// Use queued buffer writes instead of the staging belt (comparison).
+pub static QUEUE_UPLOADS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 impl Engine {
     pub fn new(slots: usize) -> Result<Self> {
@@ -300,6 +312,7 @@ impl Engine {
                 request: None,
             })
             .collect();
+        let device_for_belt = device.clone();
         let stats = EngineStats {
             // Working image, two params, dabs, two bind groups, staging.
             resources_created: 6 + STAGING as u64,
@@ -335,6 +348,8 @@ impl Engine {
             record_ms: Vec::new(),
             present_ms: Vec::new(),
             phase_ms: Default::default(),
+            belt: (!QUEUE_UPLOADS.load(Ordering::Relaxed))
+                .then(|| wgpu::util::StagingBelt::new(device_for_belt, 64 * 1024)),
         })
     }
 
@@ -453,23 +468,66 @@ impl Engine {
         }
     }
 
-    fn write_params(&mut self, paint: bool, origin: [u32; 2], size: [u32; 2], count: u32) {
+    /// Upload `bytes` to `buffer`: through the staging belt (a copy recorded
+    /// in `encoder`, reusing mapped chunks), or with a queued write that
+    /// applies to the whole next submission (`--queue-uploads`).
+    fn upload(&mut self, encoder: &mut wgpu::CommandEncoder, which: Upload, bytes: &[u8]) {
+        let buffer = match which {
+            Upload::Params => &self.params,
+            Upload::PaintParams => &self.paint_params,
+            Upload::Dabs => &self.dab_buffer,
+        };
+        match &mut self.belt {
+            Some(belt) => {
+                let size = wgpu::BufferSize::new(bytes.len() as u64).expect("non-empty upload");
+                belt.write_buffer(encoder, buffer, 0, size)
+                    .copy_from_slice(bytes);
+            }
+            None => self.queue.write_buffer(buffer, 0, bytes),
+        }
+        self.stats.cpu_bytes_uploaded += bytes.len() as u64;
+    }
+
+    fn write_params(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        paint: bool,
+        origin: [u32; 2],
+        size: [u32; 2],
+        count: u32,
+    ) {
         let mut bytes = Vec::with_capacity(32);
         for v in [origin[0], origin[1], size[0], size[1], WIDTH, HEIGHT, count] {
             bytes.extend_from_slice(&v.to_ne_bytes());
         }
         bytes.extend_from_slice(&self.exposure.to_ne_bytes());
-        let buffer = if paint {
-            &self.paint_params
+        let which = if paint {
+            Upload::PaintParams
         } else {
-            &self.params
+            Upload::Params
         };
-        self.queue.write_buffer(buffer, 0, &bytes);
-        self.stats.cpu_bytes_uploaded += 32;
+        self.upload(encoder, which, &bytes);
+    }
+
+    /// Close `encoder` (and the belt's chunks used by it).
+    fn finish(&mut self, encoder: wgpu::CommandEncoder) -> wgpu::CommandBuffer {
+        if let Some(belt) = &mut self.belt {
+            belt.finish();
+        }
+        encoder.finish()
+    }
+
+    /// After a submission: let the belt reuse chunks once the GPU is done.
+    fn recall(&mut self) {
+        if let Some(belt) = &mut self.belt {
+            belt.recall();
+        }
     }
 
     fn submit(&mut self, encoder: wgpu::CommandEncoder) {
-        self.queue.submit([encoder.finish()]);
+        let commands = self.finish(encoder);
+        self.queue.submit([commands]);
+        self.recall();
         self.stats.submissions += 1;
     }
 
@@ -480,7 +538,7 @@ impl Engine {
     fn record_edits(&mut self, encoder: &mut wgpu::CommandEncoder) -> bool {
         let mut ran = false;
         if std::mem::take(&mut self.reset_pending) {
-            self.write_params(false, [0, 0], [WIDTH, HEIGHT], 0);
+            self.write_params(encoder, false, [0, 0], [WIDTH, HEIGHT], 0);
             {
                 let mut pass = encoder.begin_compute_pass(&Default::default());
                 pass.set_pipeline(&self.generate);
@@ -530,9 +588,14 @@ impl Engine {
         if x0 >= x1 {
             return ran;
         }
-        self.queue.write_buffer(&self.dab_buffer, 0, &bytes);
-        self.stats.cpu_bytes_uploaded += bytes.len() as u64;
-        self.write_params(true, [x0, y0], [x1 - x0, y1 - y0], batch.len() as u32);
+        self.upload(encoder, Upload::Dabs, &bytes);
+        self.write_params(
+            encoder,
+            true,
+            [x0, y0],
+            [x1 - x0, y1 - y0],
+            batch.len() as u32,
+        );
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(&self.paint);
@@ -604,7 +667,7 @@ impl Engine {
             self.stats.resources_created += 1;
         }
         let acquired = Instant::now();
-        self.write_params(false, [0, 0], [WIDTH, HEIGHT], 0);
+        self.write_params(&mut encoder, false, [0, 0], [WIDTH, HEIGHT], 0);
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(&self.publish);
@@ -612,7 +675,7 @@ impl Engine {
             pass.dispatch_workgroups(WIDTH.div_ceil(8), HEIGHT.div_ceil(8), 1);
         }
         let encoded = Instant::now();
-        let commands = encoder.finish();
+        let commands = self.finish(encoder);
         let presenting = Instant::now();
         for (phase, (from, to)) in self.phase_ms.iter_mut().zip([
             (started, edits_done),
@@ -624,7 +687,9 @@ impl Engine {
         }
         self.record_ms
             .push((presenting - started).as_secs_f32() * 1000.);
-        self.target.present(slot, [commands])?;
+        let presented = self.target.present(slot, [commands]);
+        self.recall();
+        presented?;
         self.present_ms
             .push(presenting.elapsed().as_secs_f32() * 1000.);
         self.stats.submissions += 1;
@@ -791,15 +856,15 @@ impl Engine {
                 },
             ],
         });
-        self.write_params(false, [0, 0], [WIDTH, HEIGHT], 0);
         let mut encoder = self.device.create_command_encoder(&Default::default());
+        self.write_params(&mut encoder, false, [0, 0], [WIDTH, HEIGHT], 0);
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(&self.publish);
             pass.set_bind_group(0, &bind, &[]);
             pass.dispatch_workgroups(WIDTH.div_ceil(8), HEIGHT.div_ceil(8), 1);
         }
-        self.queue.submit([encoder.finish()]);
+        self.submit(encoder);
         let row = (WIDTH as u64 * 8).div_ceil(256) * 256;
         let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("workbench_check_slot"),
