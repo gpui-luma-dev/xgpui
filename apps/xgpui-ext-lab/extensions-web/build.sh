@@ -43,4 +43,4 @@ cp apps/xgpui-ext-lab/svg-lab/samples/ATTRIBUTION.md "$out/svg-ATTRIBUTION.md"
 for sample in ribbon-leaf.svg AJ_Digital_Camera.svg rg1024_green_grapes.svg rg1024_metal_effect.svg dragon.svg; do
     cp "apps/xgpui-ext-lab/svg-lab/samples/$sample" "$out/$sample"
 done
-echo "Built $out. Preview with: just docs-serve"
+echo "Built $out. Preview with: just pages-serve"

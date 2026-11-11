@@ -18,7 +18,7 @@ just lab-test                          # Run unit/compatibility tests.
 just lab-media                         # Open the media lab.
 just lab-shader                        # Open the shader examples.
 just lab-quad-bench --headless --cpu-only   # Run a bounded CPU benchmark.
-just web-build                         # Build and package both browser demos.
+just pages-demos                       # Build and package both browser demos.
 ```
 
 Each extension has a `lab-*` recipe: `lab-canvas`, `lab-media`, `lab-shader`,

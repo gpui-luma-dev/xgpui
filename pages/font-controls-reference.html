@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Font controls reference · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/font-controls-reference.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="font-controls.html">← Font controls</a></p><article class="extension-document"><h1 id="font-controls-reference">Font controls reference</h1>
+<p>Issue: <a href="https://github.com/gpui-luma-dev/xgpui/issues/27">https://github.com/gpui-luma-dev/xgpui/issues/27</a></p>
+<p>The <a href="font-controls.html">web font-controls guide</a> covers usage, support
+and core 3.0 migration. This page holds the implementation contract,
+measurements and individual API rationale.</p>
+<h2 id="feature-introspection">Feature introspection</h2>
+<p>Resolve a font, then query the resolved face:</p>
+<pre><code class="language-rust,ignore">let id = text_system.resolve_font(&amp;gpui::font("Inter"));
+match text_system.opentype_features(id)? {
+    gpui::FontQuery::Unsupported =&gt; { /* Hide the feature inspector. */ }
+    gpui::FontQuery::Supported(features) =&gt; {
+        // An empty list is a successful query with no GSUB/GPOS features.
+        for feature in features {
+            println!("{}: GSUB={} GPOS={}",
+                feature.tag, feature.substitution, feature.positioning);
+        }
+    }
+}
+</code></pre>
+<p>The result is a sorted union of the face's GSUB and GPOS FeatureLists. It
+records table provenance, merges duplicate tags, and returns errors for
+unreadable feature metadata or invalid font IDs on supporting backends.
+The reader validates feature records, not the complete shaping tables.
+It does not enumerate AAT features, named stylistic-set labels, allowed values,
+or script/language associations. Feature presence does not establish that a
+feature applies to a particular script, language, text, or variation instance.
+It describes this face only; fallback runs can use other faces. As with other
+font queries, font IDs belong to the text system that created them.</p>
+<p>Apple's font-kit backend, Parley, and DirectWrite implement feature and axis
+queries. DirectWrite static axes require the runtime <code>IDWriteTextLayout4</code> probe
+to succeed. Native/Parley font-controls labs and tests are verified on macOS
+and Windows. Parley in Wasm supports the same queries and static axes, exposed
+in the <a href="font-controls.html#try-the-live-inspector">Wasm inspector</a>.
+Cosmic now implements table access for resolved font files, including collection
+faces, and reports feature/axis inspection support. Its arbitrary static axis
+requests remain rejected. The default Cosmic/Canvas web wrapper still reports
+inspection as <code>Unsupported</code>; it does not expose the new native Cosmic hook.
+<code>TextSystem::font_capabilities()</code> reports support explicitly. Unsupported backends
+reject nonempty axis requests in their <code>font_id</code> entry point rather than silently
+pretending to apply them. Note that GPUI's existing <code>resolve_font</code> convenience
+method can fall back on resolution errors; callers should check capabilities
+before presenting axis controls. <code>Err</code>,
+<code>Unsupported</code>, and <code>Supported(vec![])</code> must remain distinct in inspectors.</p>
+<p>Use existing <code>FontFeatures</code> to request settings. Values are numeric OpenType
+parameters, not exclusively booleans. For example, <code>("cv02", 2)</code> must retain 2;
+0 disables a feature, while nonzero values can select different alternates.
+Enumeration does not change the descriptor or enable any features.
+Backend-specific shaping limitations still apply.</p>
+<h2 id="precise-variation-values">Precise variation values</h2>
+<p><code>FontTag</code> accepts exactly four printable ASCII bytes, including spaces.
+Use <code>FontTag::{WEIGHT, WIDTH, SLANT, OPTICAL_SIZE, ITALIC}</code> for the registered
+axes. Constants avoid parsing in normal application code. Custom tags still use
+validated <code>FromStr</code>, and serialized tag strings are unchanged.</p>
+<p><code>FontVariations::new</code> accepts <code>(FontTag, f32)</code> pairs in font design units:</p>
+<ul>
+<li>Coordinates remain signed and precise to f32; negative slant is preserved.</li>
+<li>Reject NaN and infinities, even when a later duplicate would overwrite them.</li>
+<li>Normalize negative zero to positive zero for consistent equality and hashing.</li>
+<li>Sort tags and retain the last occurrence of each duplicate.</li>
+<li>Do not quantize author values or clamp before the actual face is known.</li>
+<li>Empty settings preserve existing font behavior.</li>
+</ul>
+<p><code>Font::variations</code> now carries these values through Apple, Parley, and the
+DirectWrite implementation. For normal
+element styling, use <code>Styled::font_variations(...)</code> or <code>Styled::font(...)</code>;
+<code>TextStyle::font_variations</code> propagates them into text runs. Values serialize as
+a JSON map, such as <code>{"slnt": -10.125, "wght": 500.25}</code>. Deserialization validates
+every entry before canonicalizing duplicates.</p>
+<pre><code class="language-rust,ignore">let mut font = gpui::font("Roboto Flex");
+font.variations = gpui::FontVariations::new([
+    (gpui::FontTag::SLANT, -10.125),
+    (gpui::FontTag::WEIGHT, 500.25),
+])?;
+</code></pre>
+<h2 id="static-axis-resolution-rules">Static-axis resolution rules</h2>
+<p>Apple, Parley, and the DirectWrite implementation use the following rules in shaping, metrics, glyph bounds,
+caret/selection geometry, fallback, and rasterization:</p>
+<ol>
+<li>Use existing family, weight, and style selection to choose the face. Explicit
+axes do not select another family or substitute for static-face matching.</li>
+<li>On that face, apply explicit coordinates after implicit weight/style axis
+settings. Explicit <code>wght</code>, <code>ital</code>, and <code>slnt</code> override the corresponding
+implicit coordinate. Other implicit coordinates remain as before.</li>
+<li>Clamp each supported axis to that resolved face's advertised minimum and
+maximum. Unsupported tags are ignored for that face; they do not fail font
+selection. Preserve the original author settings separately from effective
+coordinates so fallback faces can apply their own support and ranges.</li>
+<li>Apply this process independently to every fallback face. Do not transfer
+normalized coordinates between different faces. Resolved instance identity
+must describe the coordinates actually used throughout the pipeline.</li>
+<li>Explicit <code>opsz</code> is in font design units and follows the same rules. There is
+no new automatic optical sizing. Preserve existing backend defaults when
+<code>opsz</code> is omitted. Automatic sizing requires a later size-dependent identity
+design, including units, precedence, clamping, and fonts without <code>opsz</code>.</li>
+<li>Keep precise author coordinates distinct from any future preview policy.
+Preview quantization must occur before resolution and affect shaping and
+rendering together. The optional extension preview policy is described below; global budgets and
+frame-safe eviction remain separate.</li>
+</ol>
+<p>Apple keeps requested descriptors separate from resolved native identity, then
+applies author coordinates to resolved fallback runs before reshaping. Its cascade
+now uses actual descriptors for in-memory user fallback fonts, which family-only
+cascade descriptors could not reliably resolve. Parley passes explicit variations
+through its shared flat-line/paragraph style builder and retains the resulting
+normalized coordinates in its existing face registry. Retained IDs are never
+recycled. Layout and raster keys continue to use <code>FontId</code>; no duplicate axis arrays
+were added to glyph or layout cache keys.</p>
+<p>DirectWrite first resolves the native faces using normal selection/fallback.
+For each variable run, it clamps explicit coordinates against that face's font
+resource, creates an instance collection, and applies effective coordinates to
+an <code>IDWriteTextLayout4</code> range. The final callback retains the actual shaped face
+for metrics/rasterization instead of selecting another face by family name.
+Numeric typography settings remain associated with the requested descriptor.
+In-memory user fallbacks use a collection containing custom and system fonts;
+owned font buffers remain alive for the text-system lifetime. Static faces
+ignore unsupported axes. The implementation and its five fixture tests have
+been cross-checked for MSVC but not executed on Windows yet.</p>
+<h2 id="pinned-fixtures-and-validation">Pinned fixtures and validation</h2>
+<p>Tests use repository font bytes, without host-font discovery for metadata:</p>
+<table><thead><tr><th>Fixture</th><th>License</th><th>SHA-256</th></tr></thead><tbody>
+<tr><td><code>gpui/crates/gpui/assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf</code></td><td>SIL OFL, adjacent <code>license.txt</code></td><td><code>975dcda37d80f038dcd143c22e33ca2d97a0cc5a929aace1c749153b0fe1afa5</code></td></tr>
+<tr><td><code>extensions/crates/xgpui-parley/tests/fonts/InterVariable.ttf</code></td><td>SIL OFL, adjacent <code>Inter-LICENSE</code></td><td><code>4989b125924991b90d05b2d16e0e388c48f7d5bb8b30539bbf9c755278d0ccaf</code></td></tr>
+</tbody></table>
+<p>Core tests cover canonical settings, signed precision, invalid values/tags,
+empty results, unsupported queries, malformed/truncated feature metadata,
+merged GSUB/GPOS provenance, numeric feature serialization, and real feature
+lists. Apple and Parley tests exercise resolved-face queries and invalid IDs;
+Parley also exercises numeric controls through shaping. Static-axis tests cover negative slant with Roboto Flex, axis-order equivalence,
+explicit weight precedence, range clamping, instance isolation, fallback
+coordinates, retained raster output, size agreement with explicit optical size,
+and paragraph wrapping/caret/selection geometry. The Roboto Flex source revision,
+license, and SHA-256 are recorded beside the fixture in the Parley fonts README.</p>
+<h2 id="preview-policy-and-measured-baseline">Preview policy and measured baseline</h2>
+<p>The extension-owned <code>xgpui_parley::VariationPreview</code> accepts a fixed base font,
+per-axis ranges and intervals, and an explicit maximum number of admitted
+preview descriptors. It snaps coordinates before font resolution. Once the
+limit is reached, old settings still work and new settings return an error;
+the caller can keep displaying its last successful preview. Author coordinates
+remain precise and must be committed separately after editing. Keep the same
+controller for the inspector's lifetime. This controller does not evict IDs or
+atlas tiles and does not claim a global CPU/GPU memory bound.</p>
+<p>A debug CPU diagnostic on this macOS/Apple Silicon host ran an 8 × 8 × 4
+<code>wght</code>/<code>wdth</code>/<code>slnt</code> sweep three times, using the pinned Roboto Flex font,
+<code>Hamburgefonts 012345</code>, 28px, scale 1, and one subpixel variant. Raster masks were
+built once per distinct raster key. Coarse preview intervals (400/50/5 design
+units) illustrate a policy; these are not recommended production defaults.</p>
+<table><thead><tr><th>Policy</th><th style="text-align: right">Requested descriptors</th><th style="text-align: right">Registered faces/aliases</th><th style="text-align: right">Raster keys</th><th style="text-align: right">Mask payload bytes</th><th style="text-align: right">First sweep</th><th style="text-align: right">Three sweeps</th></tr></thead><tbody>
+<tr><td>Precise</td><td style="text-align: right">257</td><td style="text-align: right">515</td><td style="text-align: right">5,120</td><td style="text-align: right">1,361,381</td><td style="text-align: right">1,145ms</td><td style="text-align: right">1,460ms</td></tr>
+<tr><td>Coarse preview</td><td style="text-align: right">28</td><td style="text-align: right">57</td><td style="text-align: right">540</td><td style="text-align: right">150,204</td><td style="text-align: right">238ms</td><td style="text-align: right">508ms</td></tr>
+</tbody></table>
+<p>Counts include initial probes. Repeated identical sweeps stabilized after the
+first sweep in both cases. Timings are local debug measurements, not production
+performance targets. These CPU counts do not include all GPUI caches; mask payload bytes are not
+atlas allocations or GPU memory. The diagnostic is
+reproducible with:</p>
+<pre><code class="language-sh">cargo test --manifest-path extensions/crates/xgpui-parley/Cargo.toml --lib multi_axis_sweep_baseline --features native-test,gpui-platform/runtime_shaders --offline -- --ignored --nocapture
+</code></pre>
+<p>A separate native Apple/Metal diagnostic uploads the same specimen to a real
+atlas. It uses native CoreText masks, so its timings are not comparable to the
+Parley CPU-only timings above. GPU access required running outside the sandbox.</p>
+<table><thead><tr><th>Policy</th><th style="text-align: right">Requested instances</th><th style="text-align: right">Live tiles</th><th style="text-align: right">Allocated pages</th><th style="text-align: right"><code>MTLResource::allocatedSize</code> total</th><th style="text-align: right">First sweep</th><th style="text-align: right">Three sweeps</th></tr></thead><tbody>
+<tr><td>Precise</td><td style="text-align: right">256</td><td style="text-align: right">5,120</td><td style="text-align: right">4</td><td style="text-align: right">4,325,376 bytes</td><td style="text-align: right">381ms</td><td style="text-align: right">510ms</td></tr>
+<tr><td>Coarse preview</td><td style="text-align: right">27</td><td style="text-align: right">540</td><td style="text-align: right">1</td><td style="text-align: right">1,081,344 bytes</td><td style="text-align: right">91ms</td><td style="text-align: right">212ms</td></tr>
+</tbody></table>
+<p>Repeated sweeps stabilized. Removing all keys with no scenes or GPU commands
+referencing them left zero active pages and tiles. A retained texture handle
+still held 1,081,344 allocated bytes until dropped: active allocator counters
+are not the same as total resource lifetime. This diagnostic does not measure
+rendered frames, completion fences, driver-level reclamation, or cached-scene
+invalidation. It exposed and now guards against loss of variation coordinates
+when CoreText resizes an embedded font with implicit optical sizing. Effective coordinates and the sizing policy are retained explicitly in native
+identity for the static-axis path. Shaping/drawing preserve these coordinates;
+bounds and metrics use the same underlying instance. Empty-variation descriptors
+retain the existing sizing path, separately from static-axis instances.</p>
+<pre><code class="language-sh">cargo test --manifest-path gpui/crates/gpui-apple/Cargo.toml --lib static_axis_sweep_measures --features font-kit,runtime_shaders --offline -- --ignored --nocapture
+</code></pre>
+<h2 id="core-gpui-public-api-review-ledger">Core GPUI public API review ledger</h2>
+<p>The user approved the API changes below, including the backend table-access
+hook. Raw-table parsing is private inside core GPUI. Default inspection methods
+read table bytes through <code>PlatformTextSystem::font_table</code>; Apple, DirectWrite,
+and Parley implement only native table access. There is no helper package,
+copied parser source, synchronization script, or public parser API.</p>
+<table><thead><tr><th>Public API</th><th>Compatibility</th><th>Why it is in core / extension alternative</th></tr></thead><tbody>
+<tr><td><code>Font::variations: FontVariations</code></td><td><strong>Breaking:</strong> exhaustive <code>Font</code> literals and patterns require updating</td><td>Ordinary GPUI text descriptors must carry coordinates into every backend. An extension-only descriptor cannot pass through existing <code>Font</code>-based styling and runs without another core hook.</td></tr>
+<tr><td><code>TextStyle::font_variations: FontVariations</code></td><td><strong>Breaking:</strong> exhaustive style literals and patterns require updating</td><td>Carries inherited coordinates into <code>font()</code> and <code>to_run()</code>. Could be omitted only if ordinary element styling does not expose axes.</td></tr>
+<tr><td>Generated <code>TextStyleRefinement::font_variations: Option&lt;FontVariations&gt;</code></td><td>Additive setting and serialized key; <strong>breaking for exhaustive literals/patterns</strong></td><td>Required by normal style refinement/inheritance. Missing serialized values remain <code>None</code>.</td></tr>
+<tr><td><code>Styled::font_variations(FontVariations)</code></td><td>Additive default trait method</td><td>Convenience over the style field; can be moved to an extension trait independently.</td></tr>
+<tr><td><code>FontTag</code></td><td>Additive type; <code>FromStr</code>, <code>Display</code>, <code>Clone</code>, <code>Copy</code>, <code>Debug</code>, equality, ordering, hash; <code>as_bytes()</code></td><td>Used by core variation settings and inspection results. Could move with the owning contract types, at the cost of a core dependency on that crate.</td></tr>
+<tr><td><code>FontTag::WEIGHT</code></td><td>Additive associated constant for <code>wght</code>; no source/serialization change</td><td>Typed spelling for the registered weight axis; belongs with the existing core tag type.</td></tr>
+<tr><td><code>FontTag::WIDTH</code></td><td>Additive associated constant for <code>wdth</code>; no source/serialization change</td><td>Typed spelling for the registered width axis; same ownership.</td></tr>
+<tr><td><code>FontTag::SLANT</code></td><td>Additive associated constant for <code>slnt</code>; no source/serialization change</td><td>Typed spelling for the registered signed slant axis; same ownership.</td></tr>
+<tr><td><code>FontTag::OPTICAL_SIZE</code></td><td>Additive associated constant for <code>opsz</code>; no source/serialization change</td><td>Typed spelling for explicit optical size; does not enable automatic sizing. Same ownership.</td></tr>
+<tr><td><code>FontTag::ITALIC</code></td><td>Additive associated constant for <code>ital</code>; no source/serialization change</td><td>Completes the five registered axes; italic design selection is distinct from slant. Same ownership.</td></tr>
+<tr><td><code>FontVariations</code></td><td>Additive type; <code>new()</code>, <code>settings()</code>, default, clone/debug, equality/hash, serde, schema, <code>TryFrom&lt;BTreeMap&lt;String,f32&gt;&gt;</code>, conversion back to that map</td><td>Needed by the new core descriptor/style fields. Validated immutable storage protects cache equality/hash invariants. Could move to a small shared font-types crate; not dependent on Parley.</td></tr>
+<tr><td><code>FontQuery&lt;T&gt;</code> with <code>Unsupported</code> / <code>Supported(T)</code></td><td>Additive enum, clone/debug/equality</td><td>Makes unsupported inspection distinct from success and failure. Could move to an inspection extension if the query methods move.</td></tr>
+<tr><td><code>OpenTypeFeatureInfo</code> with public <code>tag</code>, <code>substitution</code>, <code>positioning</code></td><td>Additive type, clone/debug/equality</td><td>Cross-backend inspection return type. Can move with an extension-owned inspector interface.</td></tr>
+<tr><td><code>VariationAxisInfo</code> with public <code>tag</code>, <code>min_value</code>, <code>default_value</code>, <code>max_value</code>, <code>hidden</code></td><td>Additive type, clone/debug/partial equality</td><td>Cross-backend axis inspection return type. Can move with an extension-owned inspector. Localized names are not included.</td></tr>
+<tr><td><code>FontCapabilities</code> with public <code>feature_introspection</code>, <code>axis_introspection</code>, <code>static_variations</code></td><td>Additive type, default/copy/clone/debug/equality</td><td>Makes incomplete backend support visible. Could move with an inspector interface, but static support still needs a discoverable contract.</td></tr>
+<tr><td><code>TextSystem::opentype_features(FontId)</code></td><td>Additive inherent method</td><td>Entry point on the text system applications already own. Moving to an extension trait requires a backend inspection handle or another core access hook.</td></tr>
+<tr><td><code>TextSystem::font_axes(FontId)</code></td><td>Additive inherent method</td><td>Same inspector-handle alternative.</td></tr>
+<tr><td><code>TextSystem::font_capabilities()</code></td><td>Additive inherent method</td><td>Same inspector-handle alternative.</td></tr>
+<tr><td><code>PlatformTextSystem::opentype_features(FontId)</code></td><td>Additive default trait method; existing implementations compile</td><td>Default implementation reads GSUB/GPOS via <code>font_table</code> and parses privately in core. Backend extension point. Can move to a separate optional inspector interface with corresponding access/ownership plumbing.</td></tr>
+<tr><td><code>PlatformTextSystem::font_axes(FontId)</code></td><td>Additive default trait method</td><td>Default implementation reads <code>fvar</code> via <code>font_table</code> and parses privately in core. Same optional inspector-interface alternative.</td></tr>
+<tr><td><code>PlatformTextSystem::font_capabilities()</code></td><td>Additive default trait method</td><td>Defaults to no new support; implementations opt in explicitly. Same interface alternative.</td></tr>
+<tr><td><code>PlatformTextSystem::font_table(FontId, FontTag) -&gt; Result&lt;FontQuery&lt;Option&lt;Vec&lt;u8&gt;&gt;&gt;&gt;</code></td><td>Additive default trait method; defaults to <code>Unsupported</code>, so existing implementations compile</td><td>Backend hook for resolved-face table bytes. <code>Supported(None)</code> means absent, <code>Some(bytes)</code> means read successfully, and errors mean invalid ID/read failure. Lets core parse metadata privately. An extension-owned reader would require another access hook to backend font handles.</td></tr>
+<tr><td><code>xgpui-windows --no-default-features</code></td><td>Feature opt-out behavior fix; ordinary defaults unchanged</td><td>The dependency now has <code>default-features = false</code>; the existing default feature forwards <code>gpui/default</code>. This lets explicit opt-out avoid the core manifest compiler. Cargo feature behavior belongs to the backend crate, not an extension.</td></tr>
+</tbody></table>
+<p>No existing <code>FontFeatures</code> signatures or serialized behavior changed; its numeric
+values were already supported. Apple implements the trait methods without new
+public inherent methods or types. The preview controller and its constructor,
+<code>font()</code>, and <code>admitted_instances()</code> are extension APIs, not core APIs.</p>
+<h3 id="migration-for-exhaustive-literals">Migration for exhaustive literals</h3>
+<p>Prefer <code>gpui::font(family)</code> or <code>Font { ... , ..Default::default() }</code>. Existing
+exhaustive font literals need <code>variations: Default::default()</code>. Existing
+exhaustive text-style literals need <code>font_variations: Default::default()</code>;
+refinement literals need <code>font_variations: None</code>. Exhaustive patterns can name
+the new fields or use <code>..</code>. Empty coordinates preserve existing axis behavior.
+The in-memory Apple fallback correction described above is a separate behavior
+fix: requested embedded fallbacks can now resolve to their actual font.</p>
+<h2 id="released-scope-and-follow-ups">Released scope and follow-ups</h2>
+<p>The release includes Apple, DirectWrite and Parley static axes, inspection, and
+measured previews. macOS and Windows labs and unit tests are confirmed working.
+The public API is reviewed and raw parsers remain private in core. Follow-ups:</p>
+<ul>
+<li><a href="https://github.com/gpui-luma-dev/xgpui/issues/139">#139: measured CPU/GPU budgets and frame-safe eviction</a></li>
+<li><a href="https://github.com/gpui-luma-dev/xgpui/issues/140">#140: DirectWrite static-axis and inspection parity</a></li>
+<li><a href="https://github.com/gpui-luma-dev/xgpui/issues/141">#141: Cosmic/Linux and web static-axis and inspection parity</a></li>
+</ul>
+<p>Those follow-ups retain these gates:</p>
+<ul>
+<li>Extend the baselines to all CPU caches, real frame times, multiple sizes,
+scale/subpixel variants, and drag-completion behavior. The current Metal
+diagnostic measures isolated atlas allocations, not rendered frames.</li>
+<li>Design budgets and frame-safe invalidation/eviction. Cached scenes retain
+atlas tiles directly; removing glyph keys alone cannot guarantee cached views
+repaint or protect in-flight texture use. Font IDs must remain valid for old
+layouts. Existing removal hooks are not a complete policy.</li>
+<li>Windows lab and unit-test acceptance is confirmed. #140 retains broader
+DirectWrite compatibility/host validation; the five standalone backend fixture
+tests are implemented and cross-checked for MSVC.</li>
+<li>Cosmic inspection and Linux headless font validation are complete. #141 retains
+arbitrary-axis integration, interactive Linux desktop acceptance and default
+web backend parity; the bundled Cosmic interface does not expose arbitrary
+axis inputs. The Parley Wasm inspector already supports inspection and axes.</li>
+<li>Automatic optical sizing remains explicitly deferred until size-dependent
+instance identity and coordinate mapping are specified and tested.</li>
+</ul>
+<p>Do not advertise globally bounded scrubbing based on these isolated diagnostics.
+Later stages are tracked in the linked issues.</p>
+<h2 id="verification-on-the-implementation-host">Verification on the implementation host</h2>
+<ul>
+<li>Core text-system tests: 52 passed, including six private parser/query tests;
+style/refinement serialization test: passed.</li>
+<li>Parley library: 36 passed, one diagnostic ignored in normal runs; that CPU
+diagnostic was run explicitly and passed.</li>
+<li>Apple text system: 9 passed. Metal allocation diagnostic: passed with native
+GPU access, outside the sandbox.</li>
+<li>Text-lab: 10 tests passed on macOS, including editing/IME, paragraph
+interaction, native/Parley slider events, keyboard/presets, and preview limits.
+The native and Parley headless comparison workloads also ran successfully.</li>
+<li>WebAssembly backend: <code>cargo check</code> passed for <code>wasm32-unknown-unknown</code> with
+default features disabled.</li>
+<li>Windows library and tests: MSVC cross-check passed with <code>--no-default-features --features test-support</code>. Windows lab and lab-unit-test execution passed by user confirmation on
+November 5, 2026; standalone backend fixture execution is not separately recorded.
+The Windows crate's existing default feature still forwards <code>gpui/default</code>;
+its dependency now disables implicit defaults so explicit opt-out works and
+cross-checking does not require the Windows manifest resource compiler.</li>
+</ul>
+<p>Tests used the existing runtime-shader feature to avoid writing Metal compiler
+cache files outside the sandbox. No dependencies were added.</p>
+<h2 id="windows-implementation-and-api-impact">Windows implementation and API impact</h2>
+<p>The Windows backend implements the existing reviewed interfaces; this change
+adds no further core GPUI public types, fields, or methods. Its internal native
+face handling and metadata queries are new. The <code>xgpui-windows</code> feature opt-out
+fix described above changes <code>--no-default-features</code> behavior deliberately;
+ordinary default builds keep forwarding GPUI's defaults.</p>
+<p>For repeatable Windows and macOS commands, expected output, fixture tests, and
+patch transfer instructions, see <a href="#testing-font-controls">font-controls testing</a>.</p>
+<h2 id="interactive-text-lab-inspector">Interactive text-lab inspector</h2>
+<p>The comparison workload now includes application-local live sliders for <code>wght</code>,
+<code>wdth</code>, <code>slnt</code>, and <code>opsz</code> on each supporting backend. Presets, keyboard and
+accessibility actions share the same <code>VariationPreview</code> path as pointer drags.
+A fixed 512-descriptor admission limit holds the previous preview on exhaustion;
+there is no eviction, font-ID reuse, or unbounded reset. The specimen font and
+its advance measurement use the same effective settings. No new core GPUI
+public API was added for these controls.</p>
+<h2 id="release-versions">Release versions</h2>
+<p>The combined font-controls and GPUI 1.27.0 release uses these selected versions
+and exact internal dependency requirements. No new crate is published; the parser module is private inside <code>xgpui</code>.</p>
+<table><thead><tr><th>Crate</th><th>Previous</th><th>Version</th><th>Rationale</th></tr></thead><tbody>
+<tr><td><code>xgpui</code></td><td>2.0.1</td><td><strong>3.0.0</strong></td><td>Breaking fields on <code>Font</code>, <code>TextStyle</code>, and <code>TextStyleRefinement</code>, plus GPUI 1.27.0 keystroke, window-text and platform contract changes.</td></tr>
+<tr><td><code>xgpui-apple</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td><td>Static axes and introspection plus GPUI 1.27.0 integration: renderer constructors become fallible, the factory drops unused arguments, and thermal observation moves to <code>process_info</code>.</td></tr>
+<tr><td><code>xgpui-windows</code></td><td>2.0.1</td><td><strong>2.1.0</strong></td><td>New static axes and introspection capabilities; existing public signatures remain intact.</td></tr>
+<tr><td><code>xgpui-parley</code></td><td>0.3.1</td><td><strong>0.4.0</strong></td><td>New axes/introspection capabilities and additive <code>VariationPreview</code> API; no removed APIs.</td></tr>
+<tr><td><code>xgpui-wgpu</code></td><td>2.0.1</td><td><strong>2.1.0</strong></td><td>Adds Cosmic feature/axis inspection; arbitrary axis application remains rejected.</td></tr>
+<tr><td><code>xgpui-web</code></td><td>2.0.1</td><td><strong>2.0.2</strong></td><td>Reject unsupported explicit axes and update core/backend pins.</td></tr>
+<tr><td><code>xgpui-macos</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td><td>Typed AppKit integration, macOS 12 minimum, and a fallible constructor on the public headless-renderer re-export.</td></tr>
+<tr><td><code>xgpui-ios</code></td><td>1.26.3</td><td><strong>1.26.4</strong></td><td>Core/Apple pins and upstream UIKit initialization updates.</td></tr>
+<tr><td><code>xgpui-linux</code></td><td>2.0.1</td><td><strong>2.0.2</strong></td><td>Core and wgpu dependency-pin updates only.</td></tr>
+<tr><td><code>xgpui-platform</code></td><td>2.0.1</td><td><strong>2.0.2</strong></td><td>Matching core and backend dependency-pin updates only.</td></tr>
+<tr><td><code>xgpui-media</code></td><td>0.5.1</td><td><strong>0.5.2</strong></td><td>Matching core/backend/shader dependency-pin updates only.</td></tr>
+<tr><td><code>xgpui-shader</code></td><td>0.4.1</td><td><strong>0.4.2</strong></td><td>Matching core/backend dependency-pin updates only.</td></tr>
+<tr><td><code>xgpui-gamut</code></td><td>0.3.1</td><td><strong>0.3.2</strong></td><td>Matching core/backend/shader dependency-pin updates only.</td></tr>
+<tr><td><code>xgpui-canvas</code></td><td>0.3.1</td><td><strong>0.3.2</strong></td><td>Matching core/shader dependency-pin updates only.</td></tr>
+<tr><td><code>xgpui-svg</code></td><td>0.3.1</td><td><strong>0.3.2</strong></td><td>Core dependency-pin updates only.</td></tr>
+</tbody></table>
+<p><code>xgpui-color</code> remains 0.3.0 and <code>xgpui-macros</code> remains 1.0.1. The repository's
+versioning policy does not automatically propagate major bumps to dependent
+crates. Apple and macOS receive majors for their changed public constructors;
+the other dependents retain their public members/signatures. Their GPUI
+inputs, outputs, traits, and re-exports now resolve to the matching 3.0 type
+universe, so consumers must upgrade the pinned stack together; mixing this
+release family with core 2.x is unsupported. The exhaustive-literal migrations above
+remain necessary wherever applications directly construct the changed core types.</p>
+<h2 id="ergonomics-follow-ups">Ergonomics follow-ups</h2>
+<p>The standard axis constants are implemented. The following are design follow-ups,
+not callable APIs in this release:</p>
+<ul>
+<li>Axis lookup and immutable editing helpers: a <code>get</code> operation, a validated
+<code>with</code> update, and <code>without</code> removal would avoid reconstructing settings for
+every control change. Removal must restore the backend/default axis behavior
+rather than writing an arbitrary zero. Equality, hashing and finite-value
+validation must keep their current guarantees.</li>
+<li>Typed feature construction: <code>FontFeatures</code> currently exposes string/number
+pairs through an <code>Arc&lt;Vec&lt;_&gt;&gt;</code>. A typed constructor could accept validated tags
+while preserving numeric selectors, existing serialized input and compatibility.</li>
+<li>Fallible resolution: a public error-returning resolver would let inspectors
+distinguish a missing/rejected requested font from successful fallback.
+The existing <code>resolve_font</code> intentionally falls back and can panic if the
+fallback stack also fails; it must retain that behavior for existing callers.</li>
+</ul>
+<p>Each additional core API requires its own compatibility and ownership review.</p>
+<h2 id="cosmic-inspection-milestone">Cosmic inspection milestone</h2>
+<p><code>CosmicTextSystem</code> implements the existing <code>PlatformTextSystem::font_table</code> hook
+using the selected font's bytes and collection index. <code>ttf-parser::RawFace</code> reads
+the directory and table extent; the core's existing private parsers interpret
+GSUB/GPOS and <code>fvar</code>. Advertised unreadable tables return errors; absent tables
+return <code>Supported(None)</code>. Invalid IDs return errors without indexing panics.
+No new core public type, field or method is introduced.</p>
+<p>The backend reports feature and axis inspection, while <code>static_variations</code> stays
+false. The text lab displays inspection independently from axis editing. Tests
+cover pinned static/variable fonts, a two-face collection, invalid IDs, missing
+and corrupt table reads, and continued rejection of explicit axes.</p>
+<p>Cosmic 0.19 still lacks a general arbitrary-axis shaping input in its attribute
+contract. Static-axis support remains a separate change spanning shaping,
+resolved-instance identity, fallback, metrics and Swash rasterization; painting
+with varied coordinates alone would be incorrect. Linux CI also runs the Parley
+library, native-host construction/axis smoke test and shared slider tests.
+Interactive Wayland/X11 and Linux IME/accessibility acceptance remain separate.</p>
+<p>Validation at commit <code>8359fe8</code> passed on Ubuntu: 29 Cosmic tests, 36 active Parley
+library tests, the native-host construction/axis smoke test and shared slider
+tests. The complete <a href="https://github.com/gpui-luma-dev/xgpui/actions/runs/42065875880">validation run</a>
+also passed native macOS/Windows, experimental iOS simulator and Wasm checks.
+The Linux host build exposed a stale DMA-BUF completion-guard call; the private
+guard now retains either staging allocations or imported textures, preserving
+resource lifetime and admission-release order. This adds no public API and is
+included in <code>xgpui-wgpu 2.1.0</code>; no additional version increment is needed for this
+fix within the same release.</p>
+<h2 id="testing-font-controls">Testing font controls</h2>
+<p>Run commands from the repository root. The lab bundles licensed fonts; no font
+installation is needed. See the <a href="font-controls.html">font-controls guide</a>
+for API usage, backend support and the core 3.0 migration.</p>
+<h3 id="wasm-inspector">Wasm inspector</h3>
+<p>Open the <a href="examples/extensions/?demo=font-controls">font-controls demo</a>
+from the website's Text gallery. Use its WebGPU and WebGL2 launch links to check
+both renderers. The real GPUI slider component and Parley/Skrifa pipeline execute
+in Wasm; the specimens are not CSS text. Check all four sliders, keyboard limits,
+presets, measured advances, and axis/feature metadata.</p>
+<p>To build and preview the site locally:</p>
+<pre><code class="language-sh">just pages-demos
+just docs
+just pages-serve
+</code></pre>
+<p>Open <code>/examples/extensions/?demo=font-controls</code> on the local server. The default
+GPUI web text backend remains separate from this demo's Parley backend.</p>
+<h3 id="native-and-parley-comparison">Native and Parley comparison</h3>
+<p>On macOS or Windows:</p>
+<pre><code class="language-sh">just text --backend both
+</code></pre>
+<p>Two windows compare native CoreText/DirectWrite with Parley. Each has independent
+weight, width, slant and optical-size sliders. Use the same presets to compare
+matching settings. Drag a track or focus a slider and use arrows, Shift for
+larger steps, Home and End. Confirm both specimen sizes, wrapping and measured
+advance update together, without clipping. Default restores the original values.</p>
+<p>The inspector uses steps of 10/1/0.25/1 design units and admits 512 combinations
+per window. When full, it holds the last preview and displays an explanation.
+Previously admitted settings and Default remain usable. Restart for a fresh
+session. This is not a global CPU/GPU memory budget or an eviction policy.</p>
+<p>Scroll down for the static samples:</p>
+<ul>
+<li><code>wdth=50</code>, upright, <code>opsz=14</code>: condensed.</li>
+<li><code>wdth=100</code>, <code>slnt=-10</code>, <code>opsz=14</code>: visibly slanted.</li>
+<li><code>wdth=150</code>, <code>slnt=-5</code>, <code>opsz=72</code>: wider, with a larger optical-size design.</li>
+<li>Inter <code>cv02=2</code>: a numeric OpenType feature value.</li>
+</ul>
+<p>Available axis ranges and GSUB/GPOS tags appear with the samples. Presence does
+not guarantee an effect on every string. Check that the editor still supports
+selection and typing. Minor native/Parley or display-dependent raster differences
+need not indicate a coordinate mismatch; compare the displayed values and presets.</p>
+<p>Windows requires the MSVC toolchain, Visual Studio C++ Build Tools and Windows
+SDK. DirectWrite static axes require the <code>IDWriteTextLayout4</code> runtime probe to
+succeed; unsupported runtimes omit the controls instead of pretending to apply
+axes. macOS uses the shared Apple font-kit/CoreText implementation.</p>
+<p>For headless comparison output:</p>
+<pre><code class="language-sh">just text --backend both --timings-only --iterations 3
+</code></pre>
+<h3 id="linux-inspection-versus-editing">Linux: inspection versus editing</h3>
+<pre><code class="language-sh">just text --backend both
+</code></pre>
+<p>The native Cosmic panel displays Roboto Flex's axis ranges and feature tags but
+omits editable sliders and static-axis specimens. The Parley panel applies axes
+with the same controls used on macOS, Windows and Wasm. Keep these capabilities
+separate: successful inspection does not establish arbitrary-axis shaping support.</p>
+<p>The repository validation workflow runs Cosmic fixture tests, the Parley library,
+a headless native-host construction/axis smoke check and the shared slider tests
+on Ubuntu. This is distinct from interactive Wayland/X11, IME and accessibility
+acceptance on a Linux desktop.</p>
+<h3 id="lab-tests">Lab tests</h3>
+<pre><code class="language-sh">just lab-test
+</code></pre>
+<p>Backtraces are enabled automatically. To isolate slider interaction failures:</p>
+<pre><code class="language-sh">just lab-test live_axis -- --nocapture
+</code></pre>
+<p>These tests send actual pointer and keyboard events through GPUI's simulated test
+windows, checking endpoint values, focus/keyboard changes, drag release, presets,
+layout changes and restored defaults. Windows uses a real DirectWrite text system:
+its headless platform deliberately supplies a no-op text backend and is unsuitable
+for this test. The preview-capacity test is included in the full lab suite.</p>
+<h3 id="validation-scope">Validation scope</h3>
+<p>The Wasm inspector was exercised in the local in-app browser on November 5,
+2026, using both WebGPU and WebGL2. Checks covered all four pointer sliders,
+Home/arrow keyboard changes (including <code>slnt=-9.75</code>), the Wide preset and Default
+reset. The pinned specimen's 32px advance changed from 337.05px at Default to
+446.73px at Wide and returned to 337.05px on reset. Axis ranges, GSUB/GPOS feature
+tags and static/numeric-feature specimens rendered through the Wasm pipeline.
+These are browser checks on this host, not exhaustive browser/device coverage.</p>
+<p>The native/Parley labs and lab unit tests were confirmed working on macOS and
+Windows on November 5, 2026. A subtle cross-platform slant appearance difference
+was observed in both panels, with matching endpoints, and accepted as non-blocking.</p>
+<p>Implementation-host checks also passed 52 core text tests (including six private
+parser/query tests), nine Apple text-system tests, 36 Parley tests and ten text-lab
+tests. Core tests distinguish unsupported queries, absent tables, read failures
+and malformed metadata. Backend fixtures cover resolved-face inspection, signed
+axes, clamping, fallback, stable identity and layout/raster agreement. Five
+standalone DirectWrite fixture tests and the lab test targets cross-compile for
+MSVC; separate native execution of the standalone fixture suite is not recorded.</p>
+<p>The CPU sweep and Metal allocation baselines are documented in
+<a href="#preview-policy-and-measured-baseline">preview policy</a>. They do
+not establish globally bounded scrubbing, frame-safe eviction, exhaustive runtime
+compatibility, physical-display equivalence or complete IME acceptance.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

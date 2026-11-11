@@ -90,7 +90,7 @@ if (canonical) {
       if (!["canvas", "mandelbrot", "shader", "brushes", "layers", "hermite", "parley", "font-controls", "svg", "color", "chromaticity", "pixel-metadata", "italy", "typography", "media-filters", "media-float", "media-tiles", "mipmaps", "path-effects"].includes(demo)) throw new Error(`Unknown demo: ${demo}`);
       // build.sh writes build-id.txt next to the bundle; the module reports the same ID.
       const revision = await fetch("build-id.txt", {cache: "no-store"});
-      if (!revision.ok) throw new Error("The WebAssembly demos are not built here. Run: just web-build");
+      if (!revision.ok) throw new Error("The WebAssembly demos are not built here. Run: just pages-demos");
       const pageRevision = (await revision.text()).trim();
       const jsUrl = new URL("./extensions_web.js", location.href);
       const wasmUrl = new URL("./extensions_web_bg.wasm", location.href);

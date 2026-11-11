@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Releasing XGPUI · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/releasing.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="releasing-xgpui">Releasing XGPUI</h1>
+<p>This is the authoritative release guide. Historical publication evidence is kept
+in <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/release-reviews/publishing-history.md">the publication archive</a>; release-specific
+reviews live in <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/release-reviews">release-reviews/</a>.</p>
+<p>This procedure is for the agent to execute. The user requests a release, reviews
+its proposed versions and notes, and gives the approvals below. The agent runs
+the commands, monitors workflows and handles failures.</p>
+<h2 id="1-prepare--agent">1. Prepare — agent</h2>
+<p>When the user says <strong>“prepare today's release”</strong>:</p>
+<ul>
+<li>Fetch current <code>main</code> and identify the last successfully completed release.</li>
+<li>Compare code, packaged documentation, dependencies and publication changes.</li>
+<li>Reuse already prepared version numbers and existing release PRs; do not run an automatic bump over them. Propose only the remaining old → new versions, with a reason for each.</li>
+<li>Reuse the existing release prose in docs for the GitHub release notes, retaining change titles, short summaries, links and an old → new version table. Keep alpha limits explicit. Do not rewrite docs merely to create the GitHub record.</li>
+<li>For a first publication, check the crate is in the release map, enable crates.io publication, and verify package metadata, README and the actual <code>LICENSE-APACHE</code> file. A manifest license declaration alone is insufficient. Inspect the candidate archive before tagging; a package file listing is a quick check, not full archive/build verification. Raise internal dependency minimums when the new crate uses newly added APIs.</li>
+<li>Review automatic version proposals against the versioning policy below. Include a reason for every bump in the PR.</li>
+<li>Run the validation and no-upload registry checks below; resolve failures and version conflicts. Record source identity, host, commands and results in the release review. Revalidate affected checks after source changes.</li>
+<li>For each public API addition or change in non-extension GPUI crates, document purpose, source/serialization compatibility, migration requirements and whether it could live in an extension. Present each concrete API change for final user review; implementation approval does not approve the final public API.</li>
+<li>Present the PR, versions, validation scope and exact publish/skip counts. Distinguish a version audit, archive payload plan and actual package/build verification.</li>
+</ul>
+<p><strong>User:</strong> review the proposal and approve or revise the version numbers. No commands or manual preparation are required.</p>
+<h2 id="2-merge--agent-after-approval">2. Merge — agent, after approval</h2>
+<p><strong>User:</strong> explicitly approve merging the release PR.</p>
+<p><strong>Agent:</strong> verify relevant CI tests, lint and builds pass, then merge the approved PR and remove its branch, or confirm the merge if the user performed it. Record the full merge commit SHA from GitHub. Preserve unrelated local edits; a local checkout/cleanup failure does not mean the remote merge failed.</p>
+<h2 id="3-create-the-tag-and-release-record--agent">3. Create the tag and release record — agent</h2>
+<p><strong>Before any crates.io upload:</strong></p>
+<ul>
+<li>Create the remote Git tag explicitly, then verify its full SHA before creating the draft. Creating a draft release with a tag name does not necessarily create the Git ref; workflow dispatch requires the real ref.</li>
+<li>Tag the approved commit as <code>release-YYYY-MM-DD-COMMIT</code>, using its UTC commit date and first 12 hex characters.</li>
+<li>Support multiple releases per day: each distinct approved commit gets its own tag, for example <code>release-2026-10-31-ed4469267251</code> and <code>release-2026-10-31-a1b2c3d4e5f6</code>. Retries of the same release reuse its tag and record; do not create a new release identity for a retry.</li>
+<li>Create a draft GitHub release containing the reviewed notes and version table. Preserve a copy of its title and body in the named release-artifacts directory before running publication; the current finalizer overwrites them.</li>
+<li>Verify the remote tag resolves to the approved full SHA and the record is a draft. Explain if the UTC tag date differs from the user's local date. Run the final no-upload plan against this tag, download its report and check the exact source SHA, publish/skip counts and payload conflicts. A successful plan has uploads disabled and may still report <code>release_ready: false</code>; only completed publication verification must report true. Present the draft and results to the user.</li>
+</ul>
+<h2 id="4-publish-and-verify-crates--agent-after-approval">4. Publish and verify crates — agent, after approval</h2>
+<p><strong>User:</strong> explicitly approve publication of the stated new versions and any still-pending, individually presented public API changes. Ask plainly: “Publish these N new crate versions? These other versions will be verified and skipped.” Identify any pending API item and its compatibility impact plainly; merging implementation does not itself approve its final public API.</p>
+<p><strong>Agent:</strong></p>
+<ul>
+<li>Dispatch publication against the tag, confirming <code>publish FULL_COMMIT_SHA</code>; do not select a moving <code>main</code> branch. Publish in dependency order and monitor through completion.</li>
+<li>Verify and skip matching versions already published; verify each new upload.</li>
+<li>Inspect the report: the source SHA must match, <code>release_ready</code> must be true, and every candidate must be <code>published-verified</code> or <code>already-published</code> with a registry checksum. Report the actual new/skip counts.</li>
+<li>Use a fresh consumer outside the checkout, with exact versions for the full release map and no repository patches or credentials. Verify its Cargo metadata resolves those versions from crates.io, then build/run representative APIs, including new extension APIs. Use the actual Rust library name, which may differ from the package name (<code>xgpui</code> exposes <code>gpui</code>), and exercise new behavior rather than only importing types. State the host and limits; this is not interactive or cross-platform acceptance.</li>
+<li>Restore the reviewed title and notes after the workflow finalizer runs. Add the publication/consumer results and workflow link. Keep the version history and add the machine-readable verification table described below. Explicitly publish the existing draft and recheck the tag SHA and published state.</li>
+<li>Report crate publication and release-record completion; say separately that Pages is still undeployed.</li>
+</ul>
+<p><strong>On failure:</strong> retain the tag and draft, diagnose the failure and retry the same commit where safe, skipping verified uploads. Never move a tag after an upload. A source fix requires a repair PR with explicit merge approval, then a new commit-derived tag/draft and another tagged plan. Preserve the old tag and mark its draft superseded. Before any upload, unchanged candidate versions can be reused if still available; after an upload, do not reuse that version for changed contents. Keep the record in draft and hold docs deployment until verification succeeds.</p>
+<h2 id="5-deploy-documentation--agent-after-approval">5. Deploy documentation — agent, after approval</h2>
+<p><strong>User:</strong> approve documentation deployment.</p>
+<p><strong>Agent:</strong> check that the intended docs source describes the published state, replacing stale “in preparation”/“unpublished” wording while retaining alpha warnings. Any source edits go through a PR and explicit merge approval. Then manually dispatch Pages, monitor it to completion, verify the deployed commit, live site, documented versions, galleries and both Wasm bundles, and add the deployment link to the release record. Report docs deployment separately from crate publication.</p>
+<h2 id="versioning-policy">Versioning policy</h2>
+<p>Apply this policy during preparation:</p>
+<ul>
+<li><strong>Patch:</strong> compatible fixes, internal backend changes, packaged documentation and compatible dependency updates.</li>
+<li><strong>Minor:</strong> new capabilities that preserve supported public APIs.</li>
+<li><strong>Major:</strong> deliberate breaking changes to supported public APIs.</li>
+<li><strong>Before 1.0:</strong> use a minor bump for breaking changes or new capabilities; use a patch for compatible fixes, internal changes and packaged docs. State whether a minor release contains breaking changes.</li>
+<li><strong>Dependent crates:</strong> bump only when packaged content or dependency requirements change. Do not automatically propagate a major bump; review whether changed dependency types affect the crate's public API.</li>
+<li><strong>Internal requirements:</strong> use full stable compatible requirements (for example,
+<code>3.0.0</code> or <code>0.4.0</code>) for XGPUI libraries. Preserve an existing minimum when it
+admits the candidate version; raise it when code needs a newer API or fix.
+Normalization and release preparation must not raise compatible minimums just
+because a dependency releases. Exact requirements remain appropriate in
+registry verification fixtures. Upstream helper pins remain unchanged.
+Release tools support full stable caret/default, tilde and exact requirements;
+other syntax requires explicit review.</li>
+<li><strong>Compatibility review:</strong> inspect removed or renamed APIs, signatures, exhaustive enum variants, features and minimum supported Rust version. Explain their impact and the proposed version in the PR.</li>
+<li><strong>Exceptions:</strong> obtain explicit user approval and record the compatibility impact in the release notes.</li>
+</ul>
+<p>Require a version rationale for every changed crate. Automated Rust API checks should inform this review; they must not assign versions blindly. Until those checks are implemented, the agent performs the review.</p>
+<h2 id="documentation-only-publishing">Documentation-only publishing</h2>
+<p>Website fixes and improvements may be published independently, without a crate release, release tag or crate version bump. The agent validates the docs, obtains deployment approval and manually runs Pages.</p>
+<p>Keep the website accurate for currently published crates. Do not announce unreleased APIs as available. Record which source commit was deployed; a docs-only deployment is not a new crate-release baseline.</p>
+<p>Documentation inside a published crate archive is different: shipping its updated contents requires a new crate version.</p>
+<h2 id="agent-responsibility-for-automation-gaps">Agent responsibility for automation gaps</h2>
+<p>The agent performs any steps the workflows do not yet automate. The finalizer can create missing tags/records after uploads and replaces the title and notes with generated text. Create the tag/draft beforehand, preserve the reviewed title/body outside the checkout, and restore them with verification evidence before publishing the record. Updating this guide does not change workflow behavior.</p>
+<p>Mark abandoned partial releases <strong>incomplete</strong> or <strong>superseded</strong>, preserving their source tags and publication results. Never use them as completed baselines.</p>
+<p>Always use the most recent <strong>completed</strong> release in the approved source history as the preparation baseline, including an earlier release from the same day. Exclude unfinished release tags. Ask the user only for a missing decision, required approval or a blocker the agent cannot resolve.</p>
+<h2 id="local-validation-before-review">Local validation before review</h2>
+<p>Run from the repository root using the existing commands:</p>
+<pre><code class="language-sh">just test
+just pages-check
+git diff --check
+</code></pre>
+<p>Release tooling and its regression tests live in <code>tools/release-sync</code> and run
+through <code>just test</code> on every host, without Python. To run only that suite:</p>
+<pre><code class="language-sh">just test --only release-sync
+</code></pre>
+<p>Registry checks are a separate read-only network operation:</p>
+<pre><code class="language-sh">just release-check --epoch LAST_COMPLETED_RELEASE_TAG
+</code></pre>
+<p><code>just release-check</code> checks changed packages, versions and dependency pins against
+release history and crates.io; it is read-only but requires registry access.
+Pass the completed baseline explicitly: the history parser currently recognizes only the verification table format below and can miss releases recorded only with prose or old/new version tables. A missed baseline can falsely flag unchanged crates. Confirm the actual tag and packaged diff before proposing bumps.</p>
+<p>It does not compile or test the code. <code>just test</code> runs the current host's suites,
+including native-library and benchmark compilation. Use <code>just test --list</code> to
+inspect coverage or <code>just test --only native-libraries</code> to isolate a failure.
+Prerequisite failures must be resolved or recorded as outstanding gates.</p>
+<p>Run native validation on macOS, Windows and Linux for changes affecting those
+platforms. A successful Mac run or cross-check does not establish native Windows
+or Linux behavior. Use the relevant lab recipes in <a href="local-development.html#build-harness-and-test-runner">Building</a> and
+<a href="local-development.html">Local development</a> for graphical acceptance; for the 1.27.0
+integration, follow its <a href="gpui-1.27-migration.html">ordered lab checklist</a>.
+Record browser, iOS and optional-feature checks where the release affects them.
+CI results supplement this evidence; preparation workflows do not establish that
+all native or graphical validation passed.</p>
+<p><code>just pages-check</code> checks the static website in <code>pages/</code>; update its pages by
+hand, including the upstream baseline on the overview after a sync. Toolchain and host prerequisites
+are documented in <a href="#upstream-release-imports">Upstream release imports</a> and <a href="local-development.html#build-harness-and-test-runner">Building</a>.</p>
+<h2 id="preparation-and-publication-tools">Preparation and publication tools</h2>
+<p>Work in the normal repository checkout. Keep builds and downloaded workflow
+reports under <code>target/</code>. Use a named, persistent release-artifacts directory
+outside the checkout for isolated consumers and tools that require external
+outputs; do not create <code>/tmp</code> checkouts or scatter release files there. The agent
+creates that directory and sets <code>XGPUI_RELEASE_ARTIFACTS</code> to its absolute path
+before using the examples below. Keep edits local until the user requests a
+branch push or PR.</p>
+<p>The version source of truth is <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/scripts/release-packages.json"><code>scripts/release-packages.json</code></a>.
+Do not maintain a second current-version table in this guide. Release notes carry
+the reviewed old → new versions and a rationale for each changed crate.</p>
+<p>The <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/prepare-daily-release.yml">Prepare daily release PR workflow</a>
+runs on <code>main</code>. Supply the most recent completed ancestor release explicitly as
+its baseline: its automatic tag selection does not exclude unfinished releases.
+It proposes versions, refreshes lockfiles, checks release tooling and opens a PR.
+Its automatic version proposals still require the compatibility review above.
+For local preparation, choose new report paths outside the checkout:</p>
+<pre><code class="language-sh">cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- daily prepare --baseline APPROVED_COMPLETED_RELEASE_TAG \
+  --report "$XGPUI_RELEASE_ARTIFACTS/preparation.json" --notes "$XGPUI_RELEASE_ARTIFACTS/notes.md"
+</code></pre>
+<p>This previews automatic patch suggestions; it is not needed when versions are already prepared. Apply only the user-approved version plan, preserving compatible requirements. After version changes, run
+<code>cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- daily refresh-locks</code> and review the resulting diff. Reject unplanned external dependency changes.</p>
+<p>The <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/prepare-registry-release.yml">Prepare registry release workflow</a>
+checks out the selected dispatch commit and uses the release map. Local no-upload
+equivalents, each with a new output directory outside the checkout:</p>
+<pre><code class="language-sh">cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode plan --out "$XGPUI_RELEASE_ARTIFACTS/plan"
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode dry-run --out "$XGPUI_RELEASE_ARTIFACTS/dry-run"
+</code></pre>
+<ul>
+<li><strong>plan</strong> inspects candidate archives and registry versions, reporting
+<code>publish-needed</code>, <code>already-published</code> or <code>version-conflict</code>. Changed packaged
+contents under an existing version fail the plan.</li>
+<li><strong>dry-run</strong> additionally performs registry-backed package/build verification
+where dependencies are available. Dependents of missing candidate versions
+remain blocked until prerequisites are published; they are not verified yet.</li>
+<li><strong>publish</strong>, after approval, requires <code>--confirmation 'publish FULL_COMMIT_SHA'</code>
+and <code>CARGO_REGISTRY_TOKEN</code>. It preflights all candidates and verifies/builds and
+uploads missing versions in dependency order. Use the approved immutable source.</li>
+</ul>
+<p>Plan and dry-run have no uploads and need no upload credentials, but access
+crates.io and may download dependencies. Existing versions are skipped only after
+comparing packaged source and normalized manifests. Generated lockfiles, VCS
+metadata and publication permissions are excluded from that comparison; source,
+resources, README, features and dependency requirements remain significant.</p>
+<p>Each upload is checked through the registry API and a checksum-verified download
+before dependents proceed. Reports, logs and archives are retained in workflow
+artifacts, including failures. A retry checks registry contents again and skips
+matching published versions. Unknown upload outcomes stop; investigate before
+retrying. Never change an uploaded version's source or move its release tag.
+Complete the registry-only consumer verification before declaring success.</p>
+<p>The obsolete six-extension 0.2.0 publisher has been removed. Historical
+publication evidence remains in the archive. Use <code>xgpui-release preflight</code> and
+<code>prepare-registry</code> for manifest inventory and offline archive inspection;
+<code>verify-packages</code> and <code>verify-color</code> run isolated archive/consumer checks.
+Archive generation with <code>--no-verify --exclude-lockfile</code> is not registry-backed
+build verification. Release commands require Cargo and Git; registry requests
+also require curl, and GitHub context/finalization requires the gh CLI.</p>
+<h2 id="workflow-limitations-and-release-records">Workflow limitations and release records</h2>
+<p>The registry workflow invokes <code>xgpui-release daily finalize</code> after successful
+uploads. It validates the report and tag identity, but overwrites the release
+title/body and does not publish an existing draft. Agent restoration and explicit
+draft publication remain required.</p>
+<p>Preserve the human release notes and old/new table. Append a separate three-column
+table containing every mapped crate and its actual report result:</p>
+<pre><code class="language-markdown">| Crate | Version | Result |
+| --- | --- | --- |
+| `crate-name` | VERSION | published-verified |
+| `unchanged-crate` | VERSION | already-published |
+</code></pre>
+<p>The history checker recognizes exactly <code>published-verified</code> and
+<code>already-published</code> in the third column. A prose statement or a previous/candidate
+version table alone is not sufficient. Keep this verification table alongside
+the highlights so the next release can identify the completed baseline.</p>
+<p>The <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-08-cb66d2b2238b">maintenance/Parley release</a>
+is an example of this sequence: pre-upload tag and draft, 15 verified new versions,
+2 verified skips, a registry-only consumer, and restored full notes with the
+verification table. Pages remained a separate action.</p>
+<p>The <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/pages.yml">Publish documentation workflow</a> is manually
+dispatched. After deployment approval, select the intended source and monitor its
+build and deployment. Record the deployed commit and deployment link. Docs-only
+deployments follow the documentation-only policy above.</p>
+<h2 id="upstream-release-imports">Upstream release imports</h2>
+<p>gpui-unofficial is xgpui's upstream. <code>main</code> contains xgpui's maintained code.
+Sync prepares an <strong>incoming tree proposal</strong>, not an integrated or buildable update.</p>
+<h3 id="review-a-release">Review a release</h3>
+<p>Run <strong>Actions → Sync GPUI release</strong> on main with a release number and optional
+source SHA. Sync normalizes the release's crate names, compares that tree with
+xgpui's current tree, and opens a <strong>new draft PR on a fresh version-named branch</strong>.
+Existing PRs are never edited, force-pushed or merged.</p>
+<p>The proposal uses separate commits:</p>
+<ol>
+<li><strong>Code:</strong> changed source, shaders, build scripts, assets and other package
+files, including additions and deletions.</li>
+<li><strong>Cargo versions/dependencies:</strong> package versions and dependency requirements,
+which affect dependency resolution.</li>
+<li><strong>Generated metadata/artifacts:</strong> generated package READMEs, provenance and
+other retained capture metadata.</li>
+</ol>
+<p>Release context uses the exact old/new Zed SHAs in snapshot provenance, never
+latest-release or previous-stable guesses. Its path filter is the union of both
+captures' <code>transform-metadata.json</code> crate inventories, including nested crates.
+It links relevant Zed commits and referenced PRs, with root Cargo dependency
+changes and unrelated range commits labeled separately. Missing provenance,
+incomplete API pagination and non-forward ranges fail context generation rather
+than silently reporting no changes. Markdown/JSON context accompanies the PR and
+workflow artifact; no issue or comment is created in the upstream repository.</p>
+<p>The PR links each commit and lists code differences separately. The detailed JSON
+comparison is uploaded as a workflow artifact. A release with no differences
+creates no PR.</p>
+<p>Sync also compares a clean snapshot of the previously recorded source release.
+This labels whether each proposed file changed upstream and whether xgpui has a
+local modification. It does <strong>not</strong> automatically merge or resolve those overlaps.
+A downstream-only code difference is reported and retained, not applied. When
+upstream also changed a file, its incoming version is a manual review proposal:
+combine or reject overlapping changes before any merge.</p>
+<p><code>main</code> remains untouched. Complete incoming versions are placed only on the review
+branch. Platform validation, integration, publishing and merging are separate work.</p>
+<p>For example, 1.25.3 contains release metadata changes and no upstream Rust source
+changes relative to 1.25.2. The spring clock difference against xgpui is a local
+patch, not an upstream fix; it is retained with its regression assertion.</p>
+<h3 id="names-and-provenance">Names and provenance</h3>
+<p>For example, <code>gpui-unofficial</code> becomes <code>gpui</code>, and
+<code>gpui-linux-gpui-unofficial</code> becomes <code>gpui-linux</code>. Rust dependency aliases such as
+<code>gpui_linux</code> stay as they were. Cargo package identities, dependency references,
+directory paths and local overrides change together. The unused nested
+<code>transformed-crates</code> staging mirror is excluded from imports and removed by
+normalization. Required per-crate vendored sources are preserved.</p>
+<p><code>upstream.json</code> retains the source repository, release and commit, plus Zed's
+reported provenance. <code>source_packages</code> retains original names/paths; <code>packages</code>
+describes the local normalized tree. <code>normalization</code> records the schema and name
+map. <code>registry_packages</code> records the supporting crates fetched from the matching
+published <code>gpui-unofficial</code> release. Retained local crates preserve upstream
+repository URLs, Rust source, licenses and READMEs.</p>
+<p>Package names change for downstream consumers. Existing dependency aliases can
+stay, but their <code>package</code> and path fields must point at the normalized names.
+Local directory names remain stable. <code>scripts/release-packages.json</code> maps the
+maintained packages to downstream <code>xgpui-*</code> identities at <code>1.0.0</code> for the framework and <code>0.2.0</code> for extensions;
+<code>upstream.json</code> records those separately under <code>distribution</code>. Upstream helper
+versions continue to follow the captured release.</p>
+<h3 id="integrate-and-validate">Integrate and validate</h3>
+<p>Review and resolve the incoming proposal on a development/integration branch. Preserve local
+Rust edits when resolving conflicts; do not replace main's capture with a fresh
+generated snapshot as a substitute for merging. The first normalization is a
+directory/package migration; later releases use the same stable paths.</p>
+<p>After integration, run from the repository root. The local-source patches live
+in the root workspace manifest, so the standalone tools' lockfiles don't record
+them and need no refresh when captured versions change:</p>
+<pre><code class="language-sh">cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- normalize --check
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests
+cargo check
+cargo build --locked
+
+cargo test --locked --manifest-path tools/release-sync/Cargo.toml
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests --check
+</code></pre>
+<p><code>build-manifests</code> reads the package map and preserves native target selection,
+standalone workspace exclusions and the compatibility patches. It supersedes the
+removed Python <code>update_build.py</code> compatibility entry point. Review and retain the root lockfile.</p>
+<p>Supporting crates listed in <code>scripts/registry-crates.json</code> resolve from crates.io
+at the captured release version. Only the retained framework/backend crates are
+locally overridden; see <a href="#published-supporting-dependencies">build details</a>.</p>
+<p>For standalone checks, continue invoking Cargo from the repository root so it
+discovers <code>.cargo/config.toml</code> (the shared target directory). The captured
+crates are root workspace members, so the root manifest's local-source patches
+apply. For example, on macOS:</p>
+<pre><code class="language-sh">cargo check --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-platform/Cargo.toml \
+  --features font-kit,runtime_shaders
+cargo test --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui/Cargo.toml --lib \
+  --features gpui_platform/runtime_shaders
+</code></pre>
+<p><code>.cargo/validation.toml</code> remains separate from generated capture overrides. It
+restores the Proptest and async-process Git revisions needed by this release.
+Cargo patches do not force a lower version over a newer compatible registry
+version; inspect metadata when updating versions. A separate consumer must carry
+its own local package overrides rather than assuming this checkout's config is
+inherited.</p>
+<p>Review the website in <code>pages/</code> after each release; <code>just pages-check</code> catches broken
+links and a stale upstream baseline, not stale narrative. See
+<a href="local-development.html#edit-this-website">website maintenance</a> and <a href="local-development.html#build-harness-and-test-runner">build options</a>.</p>
+<p>Sync performs no platform validation. Its branch is an unintegrated proposal;
+review and test the chosen integration separately.</p>
+<h3 id="github-settings">GitHub settings</h3>
+<p>Keep main as the default branch. Enable <strong>Allow GitHub Actions to create and
+approve pull requests</strong> in repository/organization Actions settings. Sync creates
+only new draft PRs; it never approves or merges them. The old persistent <code>upstream</code>
+and <code>upstream-normalized</code> branches are not used or updated.</p>
+<h3 id="how-imports-and-builds-stay-separate">How imports and builds stay separate</h3>
+<p>The captured manifests each declare their own workspace. The root workspace
+explicitly excludes each of those directories and builds their libraries as
+path dependencies. The harness does not rewrite their manifests or source.
+A separate downstream spring-animation fix uses the scheduler clock so headless
+tests advance deterministically; the clean upstream branch retains the original.
+The unused nested <code>transformed-crates</code> staging mirror is removed during import
+and normalization. Required per-crate vendored shader inputs remain intact.</p>
+<p><code>Cargo.toml</code> and <code>tools/build-all/Cargo.toml</code> are generated development files;
+they are not overwritten by upstream imports or downstream normalization. After an import adds or removes
+packages, regenerate them and update the root lockfile on the development or
+integration branch:</p>
+<pre><code class="language-sh">cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests
+cargo generate-lockfile
+cargo build --locked
+</code></pre>
+<p>CI checks <code>xgpui-release build-manifests --check</code> to detect a stale harness.
+<code>cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests --check</code> delegates to the same Rust generator.
+Review its platform classification when upstream adds a backend.
+Keep the root Cargo.lock committed for reproducible native builds.</p>
+<p>The generated root manifest restores production compatibility dependencies from
+<code>.cargo/validation.toml</code>. The Proptest override stays scoped to explicit standalone
+test validation, avoiding an unused-patch warning in root library builds.
+Compiling the macOS
+utility crate requires Zed's async-process fork: its process launcher calls
+<code>Child::adopt_raw_pid</code>, which the registry dependency does not provide. The fork
+revision is taken from the original Zed release's workspace patch. These
+overrides repair extraction omissions without editing captured source.</p>
+<p>The local Apple backends and extension producers use <code>objc2</code>, <code>objc2-metal</code>,
+and <code>block2</code>. The legacy Cocoa/metal-rs <code>block</code> compatibility patch is no longer
+needed by this checkout. Published versions can still resolve the older bindings;
+verify a consumer's selected dependency graph independently of local builds.</p>
+<h3 id="local-naming">Local naming</h3>
+<p>The raw gpui-unofficial release remains on upstream. Development uses a
+normalized capture with names such as gpui and gpui-linux. The Rust tool in
+tools/release-sync applies scripts/crate-names.json and preserves original
+package paths in upstream.json. See <a href="#upstream-release-imports">the sync process</a>.</p>
+<h3 id="published-supporting-dependencies">Published supporting dependencies</h3>
+<p><code>scripts/registry-crates.json</code> maps former local helper names to their published
+<code>*-gpui-unofficial</code> packages. Normalization preserves Rust dependency aliases,
+features, target conditions, and upstream source provenance. It removes helper
+source directories and local patches, and records registry identities and the
+release version in <code>upstream.json</code>. Core, macros, and platform/renderer backends
+remain local. Runtime Rust source is not rewritten by this migration.</p>
+<p>After an upstream import, run normalization before generating build manifests.
+Normalization also updates direct helper dependencies in app and extension
+manifests. Refresh their lockfiles when changing the captured release. The
+registry version follows the captured core manifest, not the latest registry
+release. Keep shared types such as <code>Refineable</code> on the same registry package
+throughout the graph.</p>
+<p>Verify resolved package identities from the repository root:</p>
+<pre><code class="language-sh">cargo metadata --locked --format-version 1 &gt; /tmp/xgpui-metadata.json
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- check-local-dependencies --metadata /tmp/xgpui-metadata.json
+</code></pre>
+<p>This checks local framework sources, pinned registry helpers, and accidental
+pulls of the upstream framework alongside the local fork.</p>
+<h3 id="downstream-release-identities">Downstream release identities</h3>
+<p><code>scripts/release-packages.json</code> defines downstream package identities and individual
+version overrides for ten framework/backend crates and seven extensions.
+Normalization applies those versions while keeping directory names, library names
+and dependency aliases stable. The helper package version follows the captured
+<code>release/1.27.0</code> provenance independently. <code>upstream.json</code> records both sets.</p>
+<p>For example, the local <code>gpui</code> crate is packaged as <code>xgpui</code>; applications retain
+<code>use gpui::*</code> through a Cargo alias. Internal dependencies use exact requirements
+from the release map. Supporting packages retain their upstream identities and
+<code>=1.27.0</code> requirements. The selected downstream family uses core 3.0.0 and Apple/macOS 4.0.0, with
+matching exact pins. The integration still requires final public API review
+before release.
+Interactive iOS simulator/device validation remains pending.</p>
+<h2 id="website-deployment">Website deployment</h2>
+<p><code>.github/workflows/pages.yml</code> runs on manual dispatch only. It checks <code>pages/</code>,
+builds both demo collections, checks that the bundles exist and uploads <code>pages/</code>
+as is. Internal documentation and tooling are never uploaded.</p>
+<p>Select <strong>Settings → Pages → Source: GitHub Actions</strong>. After deployment, repeat
+the browser checks at <code>https://xgpui.dev/</code> and refresh nested URLs directly to
+catch stale assets.</p>
+<h3 id="custom-domain">Custom domain</h3>
+<p>Production traffic for <code>xgpui.dev</code> was migrated in
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/61">issue #61</a> and
+<a href="https://github.com/gpui-luma-dev/xgpui/pull/64">PR #64</a> (verified 2026-10-28).</p>
+<ul>
+<li>The repository Pages custom domain is <code>xgpui.dev</code>, with <strong>Enforce HTTPS</strong>. The
+certificate covers <code>xgpui.dev</code> and <code>www.xgpui.dev</code>.</li>
+<li>Organization ownership is verified by the TXT record at
+<code>_github-pages-challenge-gpui-luma-dev.xgpui.dev</code>. Retain it.</li>
+<li>Apex A records: <code>185.199.108.153</code>, <code>185.199.109.153</code>, <code>185.199.110.153</code>,
+<code>185.199.111.153</code>. <code>www</code> is a CNAME to <code>gpui-luma-dev.github.io</code>. Preserve
+unrelated DNS records.</li>
+<li>No <code>CNAME</code> file is needed: Actions publishing uses the repository setting.</li>
+<li><code>http://xgpui.dev/</code>, <code>https://www.xgpui.dev/</code> and the former project URL
+<code>https://gpui-luma-dev.github.io/xgpui/…</code> redirect to the HTTPS apex, keeping
+path and query. Keep site links relative so localhost previews also work.</li>
+</ul>
+<pre><code class="language-sh">dig A xgpui.dev +short
+dig CNAME www.xgpui.dev +short
+dig TXT _github-pages-challenge-gpui-luma-dev.xgpui.dev +short
+curl -IL https://www.xgpui.dev/
+curl -IL 'https://gpui-luma-dev.github.io/xgpui/examples/extensions/?demo=color&amp;backend=webgl'
+</code></pre>
+<p>For rollback, redeploy a known-good commit through the workflow. If removing the
+domain mapping, change Pages DNS before removing the GitHub custom-domain
+association, and keep the ownership record. GitHub's
+<a href="https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site">custom domain</a>
+and <a href="https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/troubleshooting-custom-domains-and-github-pages">troubleshooting</a>
+guides have the details.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>
