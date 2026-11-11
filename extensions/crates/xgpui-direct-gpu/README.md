@@ -2,6 +2,8 @@
 
 Present output from an independently owned GPU engine into **xgpui**, the way an engine presents to a swapchain. Design and evidence are in issues #197 and #198.
 
+For color and integration guidance, see [GPU engines and color](../../../docs/extensions/gpu-engines-and-color.md).
+
 The engine keeps its own device, queue and thread. An `EngineSurface` owns a fixed ring of shareable slots:
 
 ```rust,ignore

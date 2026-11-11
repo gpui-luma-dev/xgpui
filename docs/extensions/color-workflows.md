@@ -8,6 +8,7 @@ pixels from their storage and from the window that presents them.
 | Display supplied RGB pixels with the right interpretation | [Pixels and metadata](pixels-and-metadata.md) |
 | Preserve Adobe RGB or P3 colors through storage | [Choose image storage](pixels-and-metadata.md#choose-storage-deliberately) |
 | Enable wide-gamut presentation in a native window | [Wide-gamut windows](high-gamut-windows.md) |
+| Show output from my own GPU engine with correct color | [GPU engines and color](gpu-engines-and-color.md) |
 | Use an embedded RGB ICC profile supplied by my decoder | [ICC profiles](icc-profiles.md) |
 | Explore the behavior before integrating it | [Color labs and browser demos](color-labs.md) |
 | Convert a color or interpolate a gradient | [Color math API](color-math.md) |
