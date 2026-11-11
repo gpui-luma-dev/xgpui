@@ -684,7 +684,7 @@ Existing `WindowButtonLayout` Linux helpers also become available under `test-su
 
 ## Engine surfaces from independent GPU engines (#197)
 
-Added for the experimental `xgpui-direct-gpu` extension and approved in the #197 API review (2026-11-11). An engine keeps its own GPU device and presents frames into xgpui through a ring of shareable slots. The surface, ring, sync points and engine adapters live in the extension. The macOS ring uses the existing `MetalCustomOutput`, `MetalWideSdrOutput` and `MetalCustomContext::record`; only the non-wide RGBA16F preview (K2) needs a Metal addition. The additions below are what the extension cannot do from outside `gpui-wgpu` and `gpui-windows`. Evidence and transport details: issue #198 (spikes) and PRs #200–#204.
+Added for the experimental `xgpui-engine-surface` extension and approved in the #197 API review (2026-11-11). An engine keeps its own GPU device and presents frames into xgpui through a ring of shareable slots. The surface, ring, sync points and engine adapters live in the extension. The macOS ring uses the existing `MetalCustomOutput`, `MetalWideSdrOutput` and `MetalCustomContext::record`; only the non-wide RGBA16F preview (K2) needs a Metal addition. The additions below are what the extension cannot do from outside `gpui-wgpu` and `gpui-windows`. Evidence and transport details: issue #198 (spikes) and PRs #200–#204.
 
 | Core addition | Purpose | Compatibility and migration | Why core |
 | --- | --- | --- | --- |

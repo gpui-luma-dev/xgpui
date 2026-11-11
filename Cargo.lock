@@ -7993,7 +7993,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "xgpui-direct-gpu"
+name = "xgpui-engine-surface"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -8045,7 +8045,7 @@ dependencies = [
  "xgpui-apple",
  "xgpui-canvas",
  "xgpui-color",
- "xgpui-direct-gpu",
+ "xgpui-engine-surface",
  "xgpui-gamut",
  "xgpui-media",
  "xgpui-parley",

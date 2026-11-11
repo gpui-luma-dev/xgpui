@@ -7,7 +7,7 @@ members = [
     "apps/xgpui-ext-lab",
     "extensions/crates/xgpui-canvas",
     "extensions/crates/xgpui-color",
-    "extensions/crates/xgpui-direct-gpu",
+    "extensions/crates/xgpui-engine-surface",
     "extensions/crates/xgpui-gamut",
     "extensions/crates/xgpui-media",
     "extensions/crates/xgpui-parley",

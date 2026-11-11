@@ -28,7 +28,7 @@ mod lab {
         },
         time::{Duration, Instant},
     };
-    use xgpui_direct_gpu::{
+    use xgpui_engine_surface::{
         AcquireError, EngineSurface, HeavyEngine, SurfaceDesc, SurfaceFormat, WgpuSurfaceTarget,
         wgpu,
     };
