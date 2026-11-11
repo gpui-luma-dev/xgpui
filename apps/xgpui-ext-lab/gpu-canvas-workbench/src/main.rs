@@ -156,7 +156,9 @@ mod workbench {
                 .flex()
                 .flex_col()
                 .gap_2()
-                .child(div().text_color(rgb(0xb0b0b0)).child(format!(
+                // One fixed-height line, truncated: changing counters must
+                // never re-wrap and shift the placement below.
+                .child(div().flex_none().h(px(20.)).w_full().truncate().text_color(rgb(0xb0b0b0)).child(format!(
                     "Second window · revision {revision} · {:.0}×{:.0} · {} · {} new / {} repeated frames",
                     f32::from(stats.size.width),
                     f32::from(stats.size.height),
@@ -165,7 +167,7 @@ mod workbench {
                     stats.repeated_frames,
                 )))
                 .child(
-                    div().flex_1().child(
+                    div().flex_1().min_h_0().child(
                         canvas(
                             |_, _, _| (),
                             move |bounds, _, window, _| {
