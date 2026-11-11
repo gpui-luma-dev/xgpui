@@ -19,8 +19,9 @@
 //! signals the sync point. A sync point whose signal is never submitted can
 //! stall composition.
 //!
-//! Currently implemented: macOS (IOSurface slots, `MTLSharedEvent` sync). Other
-//! platforms return [`Unsupported`].
+//! Implemented: macOS (IOSurface slots, `MTLSharedEvent` sync, GPU-side wait)
+//! and Linux with feature `wgpu` (opaque-fd Vulkan memory from a wgpu engine on
+//! its own device; readiness observed by the engine before `present`).
 use gpui::{DevicePixels, Size, size};
 
 mod ring;
@@ -28,15 +29,37 @@ mod ring;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
+use macos as platform;
+#[cfg(target_os = "macos")]
 pub use macos::*;
+
+#[cfg(all(target_os = "linux", feature = "wgpu"))]
+mod linux;
+#[cfg(all(target_os = "linux", feature = "wgpu"))]
+use linux as platform;
+#[cfg(all(target_os = "linux", feature = "wgpu"))]
+pub use linux::*;
+
+#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "wgpu")))]
+mod surface;
+#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "wgpu")))]
+pub use surface::{EngineSurface, SurfaceSlot};
+
+/// The wgpu version engine adapters are built against; use it for engine devices.
+#[cfg(all(target_os = "macos", feature = "wgpu"))]
+pub use ::wgpu;
+/// The wgpu version engine adapters are built against; use it for engine devices.
+#[cfg(all(target_os = "linux", feature = "wgpu"))]
+pub use gpui_wgpu::wgpu;
 
 /// Pixel storage and color interpretation of every slot in a surface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SurfaceFormat {
     /// BGRA8, straight alpha, sRGB-encoded channels. Works in every window.
     Bgra8Srgb,
-    /// RGBA16 float, associated alpha, linear Display P3/D65. Requires a window
-    /// that negotiated `WindowColorMode::WideGamutSdr`.
+    /// RGBA16 float, associated alpha, linear Display P3/D65. On macOS this
+    /// requires a window that negotiated `WindowColorMode::WideGamutSdr`; on
+    /// Linux it is shown as a mapped sRGB preview (#146).
     Rgba16FloatLinearP3,
 }
 impl SurfaceFormat {
@@ -51,7 +74,10 @@ impl SurfaceFormat {
     pub fn color_mode(self) -> gpui::ImageColorMode {
         match self {
             Self::Bgra8Srgb => gpui::ImageColorMode::EncodedSrgb,
+            #[cfg(target_os = "macos")]
             Self::Rgba16FloatLinearP3 => gpui::ImageColorMode::LinearP3Wide,
+            #[cfg(not(target_os = "macos"))]
+            Self::Rgba16FloatLinearP3 => gpui::ImageColorMode::LinearP3Preview,
         }
     }
 }

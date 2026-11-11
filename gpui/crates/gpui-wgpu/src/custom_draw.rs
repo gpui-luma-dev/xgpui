@@ -326,6 +326,53 @@ impl WgpuCustomContext {
             recording: self.recording.clone(),
         })
     }
+    /// Adopt a texture created on this context's `device` (for example from
+    /// imported external memory) as a source-sized output.
+    ///
+    /// Accepted: 2D, one mip level/sample/layer, `TEXTURE_BINDING`, and
+    /// `Rgba8Unorm`/`Bgra8Unorm` (straight-alpha encoded sRGB) or `Rgba16Float`
+    /// (associated linear content per the producer's `ImageColorMode`).
+    ///
+    /// # Safety
+    /// `texture` must belong to `self.device`. Its contents must be complete and
+    /// visible to this queue before any command that samples them executes; record
+    /// any required ownership acquire or barrier on this context. The contents must
+    /// not change while this output, a cached copy of it, or a retained scene
+    /// referencing its content can still be sampled.
+    pub unsafe fn adopt_texture(&self, texture: wgpu::Texture) -> Result<WgpuCustomOutput> {
+        ensure!(
+            self.recording.state.load(Ordering::Acquire) == PENDING,
+            "custom preparation is no longer writable"
+        );
+        ensure!(
+            texture.dimension() == wgpu::TextureDimension::D2
+                && texture.mip_level_count() == 1
+                && texture.sample_count() == 1
+                && texture.depth_or_array_layers() == 1
+                && texture.usage().contains(wgpu::TextureUsages::TEXTURE_BINDING),
+            "adopted texture must be a sampleable single-level 2D texture"
+        );
+        ensure!(
+            matches!(
+                texture.format(),
+                wgpu::TextureFormat::Rgba8Unorm
+                    | wgpu::TextureFormat::Bgra8Unorm
+                    | wgpu::TextureFormat::Rgba16Float
+            ),
+            "adopted texture format must be Rgba8Unorm, Bgra8Unorm or Rgba16Float"
+        );
+        ensure!(
+            (1..=16384).contains(&texture.width()) && (1..=16384).contains(&texture.height()),
+            "adopted texture extent must be 1..=16384"
+        );
+        Ok(WgpuCustomOutput {
+            texture,
+            source_sized: true,
+            key: self.key,
+            _queue: self.queue.clone(),
+            recording: self.recording.clone(),
+        })
+    }
     /// Record preparation commands. Do not submit work or wait on the GPU here.
     /// An encoding error invalidates this transaction, including commands recorded earlier.
     pub fn record<T>(

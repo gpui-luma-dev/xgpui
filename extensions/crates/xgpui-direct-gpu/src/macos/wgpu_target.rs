@@ -1,6 +1,6 @@
 //! Adapter for wgpu engines running on Metal with their own device and queue.
-use super::{EngineSurface, SurfaceSlot, SyncPoint, surface_texture};
-use crate::SurfaceFormat;
+use super::{SyncPoint, surface_texture};
+use crate::{EngineSurface, SurfaceDesc, SurfaceFormat, SurfaceSlot};
 use anyhow::{Context as _, Result};
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
@@ -28,23 +28,21 @@ pub struct WgpuSurfaceTarget {
 unsafe impl Send for WgpuSurfaceTarget {}
 
 impl WgpuSurfaceTarget {
-    pub fn new(
-        surface: &EngineSurface,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-    ) -> Result<Self> {
+    /// Create a surface for `desc` and a target that renders into it.
+    pub fn new(desc: SurfaceDesc, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Self> {
+        let surface = EngineSurface::new(desc)?;
         let event = unsafe { device.as_hal::<Metal>() }
             .context("wgpu engine surfaces require the Metal backend")?
             .raw_device()
             .newSharedEvent()
             .context("MTLSharedEvent allocation failed")?;
         Ok(Self {
-            surface: surface.clone(),
+            surface,
             device: device.clone(),
             queue: queue.clone(),
             event,
             next: 0,
-            textures: vec![None; surface.desc().slots],
+            textures: vec![None; desc.slots],
         })
     }
 

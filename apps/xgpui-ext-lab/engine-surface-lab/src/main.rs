@@ -1,18 +1,19 @@
-//! Engine surface lab (#197): a wgpu engine on its own Metal device and queue
-//! renders every frame into an `EngineSurface`; xgpui composites the latest
-//! frame zero-copy beside ordinary sRGB controls, in two placements.
+//! Engine surface lab (#197): a wgpu engine on its own device and queue
+//! (Metal on macOS, Vulkan on Linux) renders every frame into an
+//! `EngineSurface`; xgpui composites the latest frame zero-copy beside ordinary
+//! sRGB controls, in two placements.
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn main() {
-    eprintln!("engine-surface-lab currently requires macOS (Metal); see issue #197");
+    eprintln!("engine-surface-lab requires macOS (Metal) or Linux (Vulkan); see issue #197");
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn main() -> anyhow::Result<()> {
     lab::main()
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod lab {
     use anyhow::{Context as _, Result, ensure};
     use clap::Parser;
@@ -28,8 +29,17 @@ mod lab {
         time::{Duration, Instant},
     };
     use xgpui_direct_gpu::{
-        AcquireError, EngineSurface, SurfaceDesc, SurfaceFormat, WgpuSurfaceTarget,
+        AcquireError, EngineSurface, SurfaceDesc, SurfaceFormat, WgpuSurfaceTarget, wgpu,
     };
+
+    #[cfg(target_os = "macos")]
+    const BACKEND: (wgpu::Backends, &str) = (wgpu::Backends::METAL, "Metal");
+    #[cfg(target_os = "linux")]
+    const BACKEND: (wgpu::Backends, &str) = (wgpu::Backends::VULKAN, "Vulkan");
+    #[cfg(target_os = "macos")]
+    const TRANSPORT: &str = "zero-copy IOSurface ring";
+    #[cfg(target_os = "linux")]
+    const TRANSPORT: &str = "zero-copy opaque-fd ring";
     use xgpui_ext_lab::{LabApp, LabWindowTitle};
 
     const WIDTH: u32 = 640;
@@ -37,11 +47,15 @@ mod lab {
     const RADIUS: f32 = 8.;
 
     #[derive(Parser)]
-    #[command(about = "wgpu engine on its own device presenting into xgpui (Metal)")]
+    #[command(about = "wgpu engine on its own device presenting into xgpui")]
     struct Options {
         /// Use a standard SDR window and BGRA8 sRGB slots.
         #[arg(long)]
         sdr: bool,
+        /// Use RGBA16F linear-P3 slots even without a wide window (Linux shows
+        /// them as a mapped sRGB preview; macOS requires a wide window).
+        #[arg(long)]
+        p3: bool,
         /// Ring length (2..=8).
         #[arg(long, default_value_t = 3)]
         slots: usize,
@@ -181,9 +195,9 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     }
 
     impl WaveEngine {
-        fn new(surface: &EngineSurface) -> Result<Self> {
+        fn new(desc: SurfaceDesc) -> Result<Self> {
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-                backends: wgpu::Backends::METAL,
+                backends: BACKEND.0,
                 flags: wgpu::InstanceFlags::default(),
                 backend_options: wgpu::BackendOptions::default(),
                 memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
@@ -191,10 +205,18 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             });
             let adapter =
                 gpui::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-                    .context("no wgpu Metal adapter")?;
+                    .with_context(|| format!("no wgpu {} adapter", BACKEND.1))?;
+            #[cfg(target_os = "linux")]
+            let required_features = WgpuSurfaceTarget::required_features();
+            #[cfg(not(target_os = "linux"))]
+            let required_features = wgpu::Features::empty();
             let (device, queue) =
-                gpui::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))?;
-            let target = WgpuSurfaceTarget::new(surface, &device, &queue)?;
+                gpui::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+                    label: Some("engine"),
+                    required_features,
+                    ..Default::default()
+                }))?;
+            let target = WgpuSurfaceTarget::new(desc, &device, &queue)?;
             let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("engine_waves"),
                 source: wgpu::ShaderSource::Wgsl(SHADER.into()),
@@ -258,7 +280,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                 pipeline,
                 uniforms,
                 bind_group,
-                wide: surface.desc().format == SurfaceFormat::Rgba16FloatLinearP3,
+                wide: desc.format == SurfaceFormat::Rgba16FloatLinearP3,
                 target,
                 start: Instant::now(),
             })
@@ -383,11 +405,11 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                     pick(0.95),
                     pick(0.99),
                     pick(1.0),
-                    if self.wide {
-                        "wide RGBA16F"
-                    } else {
-                        "SDR BGRA8"
-                    },
+                    format!(
+                        "{} window, {:?} slots",
+                        if self.wide { "wide" } else { "SDR" },
+                        self.surface.desc().format
+                    ),
                 );
                 if let Some(error) = &self.error {
                     println!("engine error: {error}");
@@ -454,9 +476,10 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                 .flex()
                 .flex_col()
                 .gap_3()
-                .child(div().text_lg().child(
-                    "wgpu engine on its own Metal device → xgpui (zero-copy IOSurface ring)",
-                ))
+                .child(div().text_lg().child(format!(
+                    "wgpu engine on its own {} device → xgpui ({TRANSPORT})",
+                    BACKEND.1
+                )))
                 .child(div().text_color(rgb(0xb0b0b0)).child(status))
                 .children(
                     self.notice
@@ -510,7 +533,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         let capture_result = completion.clone();
         let headless = options.headless;
         gpui_platform::application().run(move |cx: &mut App| {
-            let bounds = Bounds::centered(None, size(px(1000.), px(560.)), cx);
+            let bounds = Bounds::centered(None, size(px(1000.), px(640.)), cx);
             let window = cx
                 .open_lab_window(
                     WindowOptions {
@@ -527,19 +550,19 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                         };
                         let wide =
                             window.color_status().effective() == WindowColorMode::WideGamutSdr;
-                        let format = if wide {
+                        let format = if wide || options.p3 {
                             SurfaceFormat::Rgba16FloatLinearP3
                         } else {
                             SurfaceFormat::Bgra8Srgb
                         };
-                        let surface = EngineSurface::new(SurfaceDesc {
+                        let engine = WaveEngine::new(SurfaceDesc {
                             width: WIDTH,
                             height: HEIGHT,
                             format,
                             slots: options.slots,
                         })
-                        .expect("engine surface");
-                        let engine = WaveEngine::new(&surface).expect("wgpu engine");
+                        .expect("wgpu engine");
+                        let surface = engine.target.surface().clone();
                         let (engine, thread) = if options.threaded {
                             (None, Some(EngineThread::spawn(engine, options.engine_hz)))
                         } else {

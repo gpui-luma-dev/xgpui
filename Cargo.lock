@@ -7997,6 +7997,7 @@ name = "xgpui-direct-gpu"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ash",
  "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-io-surface",
@@ -8004,6 +8005,7 @@ dependencies = [
  "wgpu",
  "xgpui",
  "xgpui-apple",
+ "xgpui-wgpu",
 ]
 
 [[package]]
