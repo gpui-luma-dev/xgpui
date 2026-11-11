@@ -93,6 +93,17 @@ mod lab {
         /// Engine frame rate with `--threaded`.
         #[arg(long, default_value_t = 60.)]
         engine_hz: f32,
+        /// Stress: this many extra engines, each on its own device and
+        /// thread, presenting into their own surfaces of `--stress-size`.
+        #[arg(long, default_value_t = 0)]
+        stress_surfaces: usize,
+        /// Stress surface size, WIDTHxHEIGHT (rings over the 512 MiB cap are
+        /// rejected and reported).
+        #[arg(long, default_value = "1920x1080")]
+        stress_size: String,
+        /// Extra shader work per pixel (loop iterations) for every engine.
+        #[arg(long, default_value_t = 0)]
+        work: u32,
     }
 
     /// The engine running on its own thread, presenting at its own rate.
@@ -160,7 +171,7 @@ mod lab {
     }
 
     const SHADER: &str = r#"
-struct Uniforms { time: f32, wide: f32, width: f32, height: f32 };
+struct Uniforms { time: f32, wide: f32, width: f32, height: f32, work: f32, p0: f32, p1: f32, p2: f32 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
 @vertex
@@ -188,6 +199,12 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     if abs(uv.x - fract(t * 0.2)) < 0.004 {
         color = vec3<f32>(1.0);
     }
+    // Optional extra per-pixel work (stress); contributes invisibly.
+    var acc = vec3<f32>(0.0);
+    for (var i = 0u; i < u32(u.work); i++) {
+        acc = sin(acc * 1.0001 + color + vec3<f32>(f32(i) * 1e-4));
+    }
+    color = color + acc * 1e-7;
     if u.wide > 0.5 {
         return vec4<f32>(color, 1.0);
     }
@@ -205,10 +222,12 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         target: WgpuSurfaceTarget,
         wide: bool,
         start: Instant,
+        size: (u32, u32),
+        work: u32,
     }
 
     impl WaveEngine {
-        fn new(desc: SurfaceDesc) -> Result<Self> {
+        fn new(desc: SurfaceDesc, work: u32) -> Result<Self> {
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
                 backends: BACKEND.0,
                 flags: wgpu::InstanceFlags::default(),
@@ -275,7 +294,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             });
             let uniforms = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("engine_uniforms"),
-                size: 16,
+                size: 32,
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
@@ -296,6 +315,8 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                 wide: desc.format == SurfaceFormat::Rgba16FloatLinearP3,
                 target,
                 start: Instant::now(),
+                size: (desc.width, desc.height),
+                work,
             })
         }
 
@@ -311,8 +332,12 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             let uniforms = [
                 self.start.elapsed().as_secs_f32(),
                 if self.wide { 1. } else { 0. },
-                WIDTH as f32,
-                HEIGHT as f32,
+                self.size.0 as f32,
+                self.size.1 as f32,
+                self.work as f32,
+                0.,
+                0.,
+                0.,
             ];
             let bytes: Vec<u8> = uniforms.iter().flat_map(|v| v.to_ne_bytes()).collect();
             self.queue.write_buffer(&self.uniforms, 0, &bytes);
@@ -364,6 +389,11 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         lose_after: Option<f32>,
         lost_at: Option<Instant>,
         recoveries: u32,
+        /// Stress engines (own device and thread each) and rejections.
+        stress: Vec<(EngineSurface, EngineThread)>,
+        stress_rejected: Vec<String>,
+        stress_size: (u32, u32),
+        work: u32,
     }
 
     impl Lab {
@@ -439,6 +469,52 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                         }
                     ),
                 );
+                if !self.stress.is_empty() || !self.stress_rejected.is_empty() {
+                    let (rendered, skipped): (u64, u64) =
+                        self.stress.iter().fold((0, 0), |acc, (_, t)| {
+                            (
+                                acc.0 + t.rendered.load(Ordering::Relaxed),
+                                acc.1 + t.skipped.load(Ordering::Relaxed),
+                            )
+                        });
+                    let ring_full: u64 =
+                        self.stress.iter().map(|(s, _)| s.stats().would_block).sum();
+                    let presents: u64 = self.stress.iter().map(|(s, _)| s.stats().presents).sum();
+                    let slot_bytes: u64 = self
+                        .stress
+                        .iter()
+                        .map(|(s, _)| {
+                            let d = s.desc();
+                            d.width as u64
+                                * d.height as u64
+                                * d.format.bytes_per_pixel() as u64
+                                * d.slots as u64
+                        })
+                        .sum();
+                    let errors = self
+                        .stress
+                        .iter()
+                        .filter(|(_, t)| t.error.lock().unwrap().is_some())
+                        .count();
+                    println!(
+                        "stress: {} of {} extra surfaces at {}x{} (work {}), {:.0} MiB of slots; engines rendered {} / skipped {} (ring full {}), presents {}, engine errors {}{}",
+                        self.stress.len(),
+                        self.stress.len() + self.stress_rejected.len(),
+                        self.stress_size.0,
+                        self.stress_size.1,
+                        self.work,
+                        slot_bytes as f64 / (1024. * 1024.),
+                        rendered,
+                        skipped,
+                        ring_full,
+                        presents,
+                        errors,
+                        self.stress_rejected
+                            .first()
+                            .map(|reason| format!("; rejected: {reason}"))
+                            .unwrap_or_default(),
+                    );
+                }
                 if let Some(error) = &self.error {
                     println!("engine error: {error}");
                 }
@@ -461,7 +537,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                 && lost.elapsed().as_secs_f32() >= 1.
             {
                 self.lost_at = None;
-                match WaveEngine::new(self.surface.desc()) {
+                match WaveEngine::new(self.surface.desc(), self.work) {
                     Ok(engine) => {
                         self.surface = engine.target.surface().clone();
                         self.gpu_sync = engine.target.gpu_sync();
@@ -571,6 +647,24 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                                 ),
                         ),
                 )
+                .children((!self.stress.is_empty()).then(|| {
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .gap_2()
+                        .children(self.stress.iter().map(|(surface, _)| {
+                            let surface = surface.clone();
+                            div().w(px(150.)).h(px(84.)).child(
+                                canvas(
+                                    |_, _, _| (),
+                                    move |bounds, _, window, _| {
+                                        surface.paint(window, bounds, Corners::all(px(4.)))
+                                    },
+                                )
+                                .size_full(),
+                            )
+                        }))
+                }))
         }
     }
 
@@ -594,6 +688,30 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             (1..=10000).contains(&options.frames),
             "frames must be 1..=10000"
         );
+        let stress_size = options
+            .stress_size
+            .split_once('x')
+            .and_then(|(w, h)| Some((w.parse::<u32>().ok()?, h.parse::<u32>().ok()?)))
+            .context("stress-size must be WIDTHxHEIGHT")?;
+        ensure!(
+            options.stress_surfaces <= 32,
+            "stress-surfaces must be 0..=32"
+        );
+        ensure!(options.work <= 100_000, "work must be 0..=100000");
+        // A GPU-starved UI may never draw the frame that ends the run; don't
+        // let it hang a scripted run (stress levels report this as a finding).
+        if let Some(limit) = options.run_seconds {
+            std::thread::Builder::new()
+                .name("watchdog".into())
+                .spawn(move || {
+                    std::thread::sleep(Duration::from_secs_f32(limit + 15.));
+                    println!(
+                        "watchdog: UI did not finish {:.0} s after the run ended (starved); exiting",
+                        15.
+                    );
+                    std::process::exit(0);
+                })?;
+        }
         let completion: Rc<RefCell<Option<Result<()>>>> = Rc::new(RefCell::new(None));
         let capture_result = completion.clone();
         let headless = options.headless;
@@ -620,13 +738,39 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                         } else {
                             SurfaceFormat::Bgra8Srgb
                         };
-                        let engine = WaveEngine::new(SurfaceDesc {
-                            width: WIDTH,
-                            height: HEIGHT,
-                            format,
-                            slots: options.slots,
-                        })
+                        let engine = WaveEngine::new(
+                            SurfaceDesc {
+                                width: WIDTH,
+                                height: HEIGHT,
+                                format,
+                                slots: options.slots,
+                            },
+                            options.work,
+                        )
                         .expect("wgpu engine");
+                        // Stress engines: each its own device and thread.
+                        let mut stress = Vec::new();
+                        let mut stress_rejected = Vec::new();
+                        for _ in 0..options.stress_surfaces {
+                            match WaveEngine::new(
+                                SurfaceDesc {
+                                    width: stress_size.0,
+                                    height: stress_size.1,
+                                    format,
+                                    slots: options.slots,
+                                },
+                                options.work,
+                            ) {
+                                Ok(engine) => {
+                                    let surface = engine.target.surface().clone();
+                                    stress.push((
+                                        surface,
+                                        EngineThread::spawn(engine, options.engine_hz),
+                                    ));
+                                }
+                                Err(error) => stress_rejected.push(format!("{error:#}")),
+                            }
+                        }
                         let surface = engine.target.surface().clone();
                         let gpu_sync = engine.target.gpu_sync();
                         let (engine, thread) = if options.threaded {
@@ -664,6 +808,10 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                             lose_after: options.lose_engine_after,
                             lost_at: None,
                             recoveries: 0,
+                            stress,
+                            stress_rejected,
+                            stress_size,
+                            work: options.work,
                         })
                     },
                 )
