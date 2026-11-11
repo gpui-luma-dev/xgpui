@@ -131,16 +131,45 @@ impl RgbSpace {
 fn mul(m: [[f64; 3]; 3], v: [f64; 3]) -> [f64; 3] {
     m.map(|r| r[0] * v[0] + r[1] * v[1] + r[2] * v[2])
 }
-fn inverse(m: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
+const fn inverse(m: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
     let [[a, b, c], [d, e, f], [g, h, i]] = m;
     let det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
     [
-        [e * i - f * h, c * h - b * i, b * f - c * e],
-        [f * g - d * i, a * i - c * g, c * d - a * f],
-        [d * h - e * g, b * g - a * h, a * e - b * d],
+        [
+            (e * i - f * h) / det,
+            (c * h - b * i) / det,
+            (b * f - c * e) / det,
+        ],
+        [
+            (f * g - d * i) / det,
+            (a * i - c * g) / det,
+            (c * d - a * f) / det,
+        ],
+        [
+            (d * h - e * g) / det,
+            (b * g - a * h) / det,
+            (a * e - b * d) / det,
+        ],
     ]
-    .map(|r| r.map(|x| x / det))
 }
+
+// Björn Ottosson's published OkLab matrices (10 decimals). The published
+// inverses are not exact inverses of these rounded values, which made the
+// OkLab round trip drift by about 1e-7, so the inverses are derived here.
+/// Linear sRGB to LMS.
+const OKLAB_M1: [[f64; 3]; 3] = [
+    [0.4122214708, 0.5363325363, 0.0514459929],
+    [0.2119034982, 0.6806995451, 0.1073969566],
+    [0.0883024619, 0.2817188376, 0.6299787005],
+];
+/// Cube-root LMS to OkLab.
+const OKLAB_M2: [[f64; 3]; 3] = [
+    [0.2104542553, 0.7936177850, -0.0040720468],
+    [1.9779984951, -2.4285922050, 0.4505937099],
+    [0.0259040371, 0.7827717662, -0.8086757660],
+];
+const OKLAB_M1_INV: [[f64; 3]; 3] = inverse(OKLAB_M1);
+const OKLAB_M2_INV: [[f64; 3]; 3] = inverse(OKLAB_M2);
 
 macro_rules! rgb {
     ($name:ident, $doc:literal) => {
@@ -203,15 +232,8 @@ impl LinearRgb {
         XyzD65::new(mul(self.space.linear_to_xyz_matrix(), self.components))
     }
     pub fn to_oklab(self) -> Result<Oklab> {
-        let [r, g, b] = self.convert(RgbSpace::Srgb)?.components;
-        let l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b).cbrt();
-        let m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b).cbrt();
-        let s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b).cbrt();
-        Oklab::new([
-            0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
-            1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
-            0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
-        ])
+        let lms = mul(OKLAB_M1, self.convert(RgbSpace::Srgb)?.components);
+        Oklab::new(mul(OKLAB_M2, lms.map(f64::cbrt)))
     }
 }
 /// Relative XYZ with D65 white; components are unclipped.
@@ -238,20 +260,10 @@ impl Oklab {
     pub fn components(self) -> [f64; 3] {
         self.0
     }
+    /// Inverts [`LinearRgb::to_oklab`]; the round trip is exact to about 1e-15.
     pub fn to_linear(self, space: RgbSpace) -> Result<LinearRgb> {
-        let [l, a, b] = self.0;
-        let x = (l + 0.3963377774 * a + 0.2158037573 * b).powi(3);
-        let y = (l - 0.1055613458 * a - 0.0638541728 * b).powi(3);
-        let z = (l - 0.0894841775 * a - 1.2914855480 * b).powi(3);
-        LinearRgb::new(
-            RgbSpace::Srgb,
-            [
-                4.0767416621 * x - 3.3077115913 * y + 0.2309699292 * z,
-                -1.2684380046 * x + 2.6097574011 * y - 0.3413193965 * z,
-                -0.0041960863 * x - 0.7034186147 * y + 1.7076147010 * z,
-            ],
-        )?
-        .convert(space)
+        let lms = mul(OKLAB_M2_INV, self.0).map(|x| x * x * x);
+        LinearRgb::new(RgbSpace::Srgb, mul(OKLAB_M1_INV, lms))?.convert(space)
     }
     pub fn to_oklch(self) -> Result<Oklch> {
         let [l, a, b] = self.0;
