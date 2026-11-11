@@ -258,6 +258,167 @@ pub(crate) mod test_engine {
     }
 }
 
+/// Independent CPU reference for compositor colour tests (#197 acceptance:
+/// near-black, saturated out-of-sRGB, fractional alpha, opacity and sRGB
+/// controls, preview and wide).
+#[cfg(test)]
+pub(crate) mod colour_reference {
+    /// Stripe width in pixels; the strip is `PATCHES.len() * STRIPE` wide.
+    pub const STRIPE: u32 = 8;
+    pub const HEIGHT: u32 = 8;
+
+    /// Associated (premultiplied) linear Display P3, exactly representable
+    /// in binary16.
+    pub const PATCHES: [(&str, [f32; 4]); 5] = [
+        ("near-black", [0.001953125, 0.001953125, 0.001953125, 1.]),
+        ("P3 green (outside sRGB)", [0., 1., 0., 1.]),
+        ("P3 red (outside sRGB)", [1., 0., 0., 1.]),
+        ("half alpha", [0.25, 0.125, 0., 0.5]),
+        ("mid grey", [0.5, 0.5, 0.5, 1.]),
+    ];
+
+    /// Straight-alpha encoded sRGB BGRA8 controls (as R, G, B, A).
+    pub const SRGB_CONTROLS: [(&str, [u8; 4]); 3] = [
+        ("sRGB colour", [128, 64, 200, 255]),
+        ("sRGB near-black", [3, 3, 3, 255]),
+        ("sRGB half alpha", [255, 128, 0, 128]),
+    ];
+
+    pub fn width() -> u32 {
+        PATCHES.len() as u32 * STRIPE
+    }
+
+    /// Centre x of stripe `i`.
+    pub fn centre(i: usize) -> u32 {
+        i as u32 * STRIPE + STRIPE / 2
+    }
+
+    /// IEEE binary16 bits, round to nearest even (normal and subnormal).
+    pub fn f16_bits(value: f32) -> u16 {
+        let bits = value.to_bits();
+        let sign = ((bits >> 16) & 0x8000) as u16;
+        let exponent = ((bits >> 23) & 0xff) as i32 - 127 + 15;
+        let mantissa = bits & 0x7f_ffff;
+        if value == 0. {
+            return sign;
+        }
+        if exponent >= 31 {
+            return sign | 0x7c00;
+        }
+        if exponent <= 0 {
+            let shift = 14 - exponent;
+            let m = (mantissa | 0x80_0000) as u64;
+            let half = 1u64 << (shift - 1);
+            let rounded = (m + half - 1 + ((m >> shift) & 1)) >> shift;
+            return sign | rounded as u16;
+        }
+        let rounded = (mantissa + 0xfff + ((mantissa >> 13) & 1)) >> 13;
+        sign | (((exponent as u32) << 10) + rounded) as u16
+    }
+
+    /// The patch strip as RGBA16F rows.
+    pub fn strip_rgba16f() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for _ in 0..HEIGHT {
+            for (_, patch) in PATCHES {
+                for _ in 0..STRIPE {
+                    for channel in patch {
+                        bytes.extend_from_slice(&f16_bits(channel).to_ne_bytes());
+                    }
+                }
+            }
+        }
+        bytes
+    }
+
+    /// The sRGB controls as BGRA8 rows, one stripe each.
+    pub fn controls_bgra8() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for _ in 0..HEIGHT {
+            for (_, [r, g, b, a]) in SRGB_CONTROLS {
+                for _ in 0..STRIPE {
+                    bytes.extend_from_slice(&[b, g, r, a]);
+                }
+            }
+        }
+        bytes
+    }
+
+    /// Linear Display P3 (D65) to linear sRGB (D65), from the primaries.
+    const P3_TO_SRGB: [[f64; 3]; 3] = [
+        [1.224_940_2, -0.224_940_2, 0.],
+        [-0.042_056_95, 1.042_056_95, 0.],
+        [-0.019_637_55, -0.078_636_05, 1.098_273_6],
+    ];
+
+    fn encode(linear: f64) -> f64 {
+        let v = linear.clamp(0., 1.);
+        if v <= 0.003_130_8 {
+            v * 12.92
+        } else {
+            1.055 * v.powf(1. / 2.4) - 0.055
+        }
+    }
+
+    /// Expected 8-bit readback of a patch shown as an sRGB preview (clipped
+    /// to sRGB) at `opacity`: the encoded straight colour times coverage, as
+    /// composited over black (alpha is coverage over a transparent target).
+    pub fn preview(patch: [f32; 4], opacity: f32) -> [f64; 4] {
+        let alpha = patch[3] as f64;
+        let straight: Vec<f64> = (0..3)
+            .map(|c| {
+                if alpha > 0. {
+                    patch[c] as f64 / alpha
+                } else {
+                    0.
+                }
+            })
+            .collect();
+        let coverage = alpha * opacity as f64;
+        let mut out = [0.; 4];
+        for (row, value) in P3_TO_SRGB.iter().zip(out.iter_mut()) {
+            let linear: f64 = row.iter().zip(&straight).map(|(m, v)| m * v).sum();
+            *value = encode(linear) * 255. * coverage;
+        }
+        out[3] = coverage * 255.;
+        out
+    }
+
+    /// Expected 8-bit readback of a straight sRGB control at `opacity`.
+    pub fn control(rgba: [u8; 4], opacity: f32) -> [f64; 4] {
+        let coverage = rgba[3] as f64 / 255. * opacity as f64;
+        [
+            rgba[0] as f64 * coverage,
+            rgba[1] as f64 * coverage,
+            rgba[2] as f64 * coverage,
+            coverage * 255.,
+        ]
+    }
+
+    /// Max colour-channel distance between a readback pixel and a reference.
+    /// Headless compositors draw onto the window background (opaque black on
+    /// macOS), so alpha is not compared; associated colour over black equals
+    /// the reference either way.
+    pub fn distance(actual: [u8; 4], expected: [f64; 4]) -> f64 {
+        (0..3)
+            .map(|c| (actual[c] as f64 - expected[c]).abs())
+            .fold(0., f64::max)
+    }
+}
+
+/// binary16 bits to f32 (macOS FP16 composition readbacks).
+#[cfg(all(test, target_os = "macos"))]
+pub(crate) fn colour_reference_f16(bits: u16) -> f32 {
+    let sign = if bits & 0x8000 != 0 { -1. } else { 1. };
+    let exponent = ((bits >> 10) & 0x1f) as i32;
+    let mantissa = (bits & 0x3ff) as f32;
+    sign * match exponent {
+        0 => mantissa * 2f32.powi(-24),
+        31 => f32::INFINITY,
+        _ => (1. + mantissa / 1024.) * 2f32.powi(exponent - 15),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

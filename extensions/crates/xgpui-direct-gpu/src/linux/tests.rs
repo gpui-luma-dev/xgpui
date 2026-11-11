@@ -555,3 +555,134 @@ fn linux_compositor_device_replacement_reimports_slots() {
     }
     report("PASS compositor device replaced: retained and new frames composite on the new device");
 }
+
+/// Write `bytes` into the next slot with the queue and present it.
+fn present_written(target: &mut WgpuSurfaceTarget, bytes: &[u8]) {
+    let slot = target.surface().acquire().expect("free slot");
+    let desc = slot.desc();
+    let texture = target.texture(&slot).unwrap();
+    target.queue.write_texture(
+        texture.as_image_copy(),
+        bytes,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(desc.width * desc.format.bytes_per_pixel()),
+            rows_per_image: None,
+        },
+        texture.size(),
+    );
+    target.present(slot, []).unwrap();
+}
+
+fn strip_scene(content: Arc<dyn CustomContent>, width: u32, opacity: f32) -> Scene {
+    let bounds = Bounds::new(
+        point(ScaledPixels(0.), ScaledPixels(0.)),
+        size(
+            ScaledPixels(width as f32),
+            ScaledPixels(crate::colour_reference::HEIGHT as f32),
+        ),
+    );
+    let mut scene = Scene::default();
+    scene.insert_primitive(CustomDraw {
+        order: 0,
+        bounds,
+        content_mask: ContentMask { bounds },
+        corner_radii: Default::default(),
+        opacity,
+        content,
+        coverage: None,
+    });
+    scene.finish();
+    scene
+}
+
+/// Acceptance (#197): colour through the compositor against an independent
+/// CPU reference: near-black, out-of-sRGB P3, fractional alpha and opacity
+/// mapped to clipped sRGB; sRGB controls unchanged.
+#[test]
+fn linux_colour_matches_reference() {
+    use crate::colour_reference::*;
+    let (Some((device, queue)), Some(renderer)) = (engine_device(), host()) else {
+        return;
+    };
+    let mut strip = WgpuSurfaceTarget::new(
+        SurfaceDesc {
+            width: width(),
+            height: HEIGHT,
+            format: SurfaceFormat::Rgba16FloatLinearP3,
+            slots: 2,
+        },
+        &device,
+        &queue,
+    )
+    .unwrap();
+    present_written(&mut strip, &strip_rgba16f());
+    let control_width = SRGB_CONTROLS.len() as u32 * STRIPE;
+    let mut controls = WgpuSurfaceTarget::new(
+        SurfaceDesc {
+            width: control_width,
+            height: HEIGHT,
+            format: SurfaceFormat::Bgra8Srgb,
+            slots: 2,
+        },
+        &device,
+        &queue,
+    )
+    .unwrap();
+    present_written(&mut controls, &controls_bgra8());
+    let extent = size(DevicePixels(width() as i32), DevicePixels(HEIGHT as i32));
+    let mut failures = Vec::new();
+    let mut worst = 0f64;
+    let mut checked = 0;
+    // Linux composites RGBA16F slots as an sRGB preview.
+    let content = |target: &WgpuSurfaceTarget| target.surface().preview_content().unwrap();
+    for (mode, mut renderer) in [("preview", renderer)] {
+        for opacity in [1., 0.5] {
+            let image = renderer
+                .render_scene_to_image(&strip_scene(content(&strip), width(), opacity), extent)
+                .unwrap();
+            for (i, (name, patch)) in PATCHES.iter().enumerate() {
+                let actual = image.get_pixel(centre(i), HEIGHT / 2).0;
+                let expected = preview(*patch, opacity);
+                let d = distance(actual, expected);
+                worst = worst.max(d);
+                checked += 1;
+                if d > 2.5 {
+                    failures.push(format!(
+                        "{mode} {name} @ {opacity}: {actual:?} vs {expected:.1?}"
+                    ));
+                }
+            }
+            let image = renderer
+                .render_scene_to_image(
+                    &strip_scene(
+                        controls.surface().content().unwrap(),
+                        control_width,
+                        opacity,
+                    ),
+                    extent,
+                )
+                .unwrap();
+            for (i, (name, rgba)) in SRGB_CONTROLS.iter().enumerate() {
+                let actual = image.get_pixel(centre(i), HEIGHT / 2).0;
+                let expected = control(*rgba, opacity);
+                let d = distance(actual, expected);
+                worst = worst.max(d);
+                checked += 1;
+                if d > 2.5 {
+                    failures.push(format!(
+                        "{mode} {name} @ {opacity}: {actual:?} vs {expected:.1?}"
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "colour mismatches:\n{}",
+        failures.join("\n")
+    );
+    report(format!(
+        "PASS colour: {checked} patches match the CPU reference (worst 8-bit distance {worst:.2})"
+    ));
+}
