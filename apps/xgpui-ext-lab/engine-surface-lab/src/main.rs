@@ -122,6 +122,10 @@ mod lab {
         /// `pace()` and per-frame chunks from `suggested_chunks()`.
         #[arg(long)]
         heavy: bool,
+        /// Heavy-engine chunk cap (default: the extension's per-platform
+        /// default).
+        #[arg(long)]
+        max_chunks: Option<u32>,
     }
 
     /// The engine running on its own thread, presenting at its own rate.
@@ -203,7 +207,13 @@ mod lab {
                         next += period;
                         let now = Instant::now();
                         if next > now {
-                            std::thread::sleep(next - now);
+                            // Sleep in short slices: a paced engine may wait
+                            // seconds, and shutdown must not wait with it.
+                            while Instant::now() < next && !s.load(Ordering::Acquire) {
+                                std::thread::sleep(
+                                    (next - Instant::now()).min(Duration::from_millis(20)),
+                                );
+                            }
                         } else {
                             next = now;
                         }
@@ -644,6 +654,26 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                 if let Some(error) = &self.error {
                     println!("engine error: {error}");
                 }
+                // Stop every engine thread before any is joined, so their
+                // devices drain their GPU work in parallel, not one by one.
+                for (_, thread) in &self.stress {
+                    thread.stop.store(true, Ordering::Release);
+                }
+                if let Some(thread) = &self.thread {
+                    thread.stop.store(true, Ordering::Release);
+                }
+                let stopping = Instant::now();
+                for (_, mut thread) in std::mem::take(&mut self.stress) {
+                    if let Some(handle) = thread.handle.take() {
+                        let _ = handle.join();
+                    }
+                }
+                if !self.stress_rejected.is_empty() || self.stress_size.0 > 0 {
+                    println!(
+                        "shutdown: engine threads stopped in {:.0} ms",
+                        stopping.elapsed().as_secs_f32() * 1000.
+                    );
+                }
                 cx.quit();
             }
             // Simulated engine device loss and recovery (#197 K6).
@@ -892,9 +922,13 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                                 Ok(mut engine) => {
                                     engine.target.set_gpu_wait(!options.observe);
                                     if options.heavy {
+                                        let defaults = HeavyEngine::default();
                                         engine.target.set_heavy(Some(HeavyEngine {
                                             max_hz: options.engine_hz,
-                                            ..HeavyEngine::default()
+                                            max_chunks: options
+                                                .max_chunks
+                                                .unwrap_or(defaults.max_chunks),
+                                            ..defaults
                                         }));
                                     }
                                     let surface = engine.target.surface().clone();

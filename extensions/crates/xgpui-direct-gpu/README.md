@@ -51,7 +51,7 @@ loop {
 Heavy-engine mode combines three measures, because the stress tests showed that each alone falls short:
 
 1. **Observe-only presentation** (`set_gpu_wait(false)`). The compositor never waits for an unfinished engine frame.
-2. **Short submissions** of about `chunk_ms` of GPU time, so the GPU can schedule the compositor between them.
+2. **Short submissions** of about `chunk_ms` of GPU time, so the GPU can schedule the compositor between them. At most `max_chunks` per frame: 16 by default on Linux, where Mesa did better with fewer, and 64 elsewhere.
 3. **Throttling on compositor lag.**
 
 On Linux the engine queue is also created at low priority where the driver supports it. The Windows D3D12 queue priority cannot be lowered through wgpu.

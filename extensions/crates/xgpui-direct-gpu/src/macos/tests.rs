@@ -983,8 +983,7 @@ fn heavy_mode_paces_and_measures_frames() {
         });
         let adapter =
             gpui::block_on(instance.request_adapter(&Default::default())).expect("Metal adapter");
-        let (device, queue) =
-            gpui::block_on(adapter.request_device(&Default::default())).unwrap();
+        let (device, queue) = gpui::block_on(adapter.request_device(&Default::default())).unwrap();
         let mut target =
             WgpuSurfaceTarget::new(desc(SurfaceFormat::Rgba16FloatLinearP3, 3), &device, &queue)
                 .unwrap();
@@ -999,7 +998,10 @@ fn heavy_mode_paces_and_measures_frames() {
             target.present(slot, [commands]).unwrap();
             let _ = device.poll(wgpu::PollType::wait_indefinitely());
             let delay = target.pace();
-            assert!(delay > Duration::ZERO && delay <= Duration::from_secs(4), "{delay:?}");
+            assert!(
+                delay > Duration::ZERO && delay <= Duration::from_secs(4),
+                "{delay:?}"
+            );
         }
         let status = target.heavy().unwrap();
         assert!(status.frame_ms.is_some(), "frame time measured: {status:?}");

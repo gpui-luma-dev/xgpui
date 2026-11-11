@@ -32,6 +32,11 @@ pub struct HeavyEngine {
     pub lag_budget_ms: f32,
     /// GPU time per submission chunk to aim for.
     pub chunk_ms: f32,
+    /// Most submissions to split one frame into. Measured on Iris Xe and
+    /// M-series: Mesa (Linux) did best at 16 with several heavy engines;
+    /// Metal and D3D12 did best with up to 64. Default: 16 on Linux, 64
+    /// elsewhere.
+    pub max_chunks: u32,
 }
 
 impl Default for HeavyEngine {
@@ -41,6 +46,7 @@ impl Default for HeavyEngine {
             min_hz: 0.25,
             lag_budget_ms: 33.,
             chunk_ms: 4.,
+            max_chunks: if cfg!(target_os = "linux") { 16 } else { 64 },
         }
     }
 }
@@ -70,6 +76,7 @@ impl HeavyEngine {
             } else {
                 4.
             },
+            max_chunks: self.max_chunks.clamp(1, 64),
         }
     }
 }
@@ -144,7 +151,11 @@ impl Heavy {
     /// Chunks that keep each submission near `chunk_ms` of GPU time.
     pub(crate) fn suggested_chunks(&self) -> u32 {
         self.frame_ms
-            .map(|ms| (ms / self.config.chunk_ms).ceil().clamp(1., 64.) as u32)
+            .map(|ms| {
+                (ms / self.config.chunk_ms)
+                    .ceil()
+                    .clamp(1., self.config.max_chunks as f32) as u32
+            })
             .unwrap_or(1)
     }
 }
@@ -210,7 +221,12 @@ mod tests {
         heavy.observe(true);
         let ms = heavy.frame_ms().unwrap();
         assert!(ms >= 40., "{ms}");
-        assert_eq!(heavy.suggested_chunks(), (ms / 4.).ceil() as u32);
+        let cap = HeavyEngine::default().max_chunks;
+        assert_eq!(heavy.suggested_chunks(), ((ms / 4.).ceil() as u32).min(cap));
+        // A frame far over budget is capped at max_chunks.
+        heavy.on_present(Instant::now() - Duration::from_secs(2));
+        heavy.observe(true);
+        assert_eq!(heavy.suggested_chunks(), cap);
     }
 
     #[test]
@@ -220,11 +236,13 @@ mod tests {
             min_hz: 500.,
             lag_budget_ms: -1.,
             chunk_ms: 0.,
+            max_chunks: 0,
         });
         let config = heavy.config();
         assert_eq!(config.max_hz, 60.);
         assert_eq!(config.min_hz, 60.);
         assert_eq!(config.lag_budget_ms, 33.);
         assert_eq!(config.chunk_ms, 4.);
+        assert_eq!(config.max_chunks, 1);
     }
 }
