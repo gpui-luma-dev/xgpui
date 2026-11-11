@@ -180,6 +180,7 @@ pub(crate) fn prepare_frame(
     desc: &SurfaceDesc,
     resources: &SlotResources,
     sync: &SyncPoint,
+    color: gpui::ImageColorMode,
     backend: &dyn Any,
 ) -> Result<Box<dyn Any>> {
     let context = backend
@@ -212,10 +213,16 @@ pub(crate) fn prepare_frame(
             Ok(())
         })?]
     };
-    Ok(match desc.format {
-        SurfaceFormat::Bgra8Srgb => Box::new(MetalCustomOutput { texture, commands }),
-        SurfaceFormat::Rgba16FloatLinearP3 => Box::new(
+    Ok(match (desc.format, color) {
+        (SurfaceFormat::Bgra8Srgb, _) => Box::new(MetalCustomOutput { texture, commands }),
+        (SurfaceFormat::Rgba16FloatLinearP3, gpui::ImageColorMode::LinearP3Wide) => Box::new(
             MetalWideSdrOutput::from_objc2_linear_p3_premultiplied(context, texture, commands)?,
         ),
+        // SAFETY: the slot is on the host device; `commands` wait for the
+        // engine's signal before composition, and the slot's lease keeps it
+        // unmodified while this frame can be sampled.
+        (SurfaceFormat::Rgba16FloatLinearP3, _) => {
+            Box::new(unsafe { context.adopt_texture(texture, commands) }?)
+        }
     })
 }

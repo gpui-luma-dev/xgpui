@@ -442,3 +442,103 @@ fn invalidated_surface_keeps_last_frame_and_recovers() {
         assert!(near(image.get_pixel(16, 8).0, [0, 255, 0, 255]));
     });
 }
+
+/// Linear P3 (0.5, 0.25, 0.25) mapped to clipped sRGB and encoded. Unmapped
+/// channels would encode as (188, 137, 137).
+const P3_PREVIEW: [u8; 4] = [197, 134, 136, 255];
+
+fn near3(actual: [u8; 4], expected: [u8; 4]) -> bool {
+    actual.iter().zip(expected).all(|(a, e)| a.abs_diff(e) <= 3)
+}
+
+/// K2: an RGBA16F surface in a standard (non-wide) window composites as an
+/// sRGB preview from the same slot, without a copy; the wide placement is
+/// still rejected there.
+#[test]
+fn wide_frame_previews_in_standard_window() {
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Rgba16FloatLinearP3, 2)).unwrap();
+        let mut engine = Engine::new();
+        let mut renderer = MetalHeadlessRenderer::new().unwrap();
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [0.5, 0.25, 0.25, 1.0]);
+        assert!(
+            renderer
+                .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+                .is_err(),
+            "wide placement needs a wide window"
+        );
+        let image = renderer
+            .render_scene_to_image(&scene(surface.preview_content().unwrap()), viewport())
+            .unwrap();
+        let pixel = image.get_pixel(16, 8).0;
+        assert!(near3(pixel, P3_PREVIEW), "{pixel:?}");
+    });
+}
+
+/// K2: the same frame placed in a wide and a standard window at once.
+#[test]
+fn one_frame_composites_wide_and_preview() {
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Rgba16FloatLinearP3, 2)).unwrap();
+        let mut engine = Engine::new();
+        let mut standard = MetalHeadlessRenderer::new().unwrap();
+        let mut wide = MetalHeadlessRenderer::new().unwrap();
+        wide.set_color_mode(WindowColorMode::WideGamutSdr).unwrap();
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [0.5, 0.5, 0.5, 1.0]);
+        let wide_scene = scene(surface.content().unwrap());
+        let preview_scene = scene(surface.preview_content().unwrap());
+        for image in [
+            wide.render_scene_to_image(&wide_scene, viewport()).unwrap(),
+            standard
+                .render_scene_to_image(&preview_scene, viewport())
+                .unwrap(),
+        ] {
+            let pixel = image.get_pixel(16, 8).0;
+            assert!(near(pixel, [188, 188, 188, 255]), "{pixel:?}");
+        }
+        drop((wide_scene, preview_scene));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while surface.stats().free < 1 && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(surface.stats().free, 1, "both placements released the slot");
+    });
+}
+
+/// K2: a wgpu engine writes an RGBA16F slot from a compute shader.
+#[cfg(feature = "wgpu")]
+#[test]
+fn compute_written_frame_composites() {
+    use crate::{test_engine::compute_fill, wgpu};
+    objc2::rc::autoreleasepool(|_| {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::METAL,
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
+        });
+        let adapter =
+            gpui::block_on(instance.request_adapter(&Default::default())).expect("Metal adapter");
+        let (device, queue) = gpui::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            required_features: WgpuSurfaceTarget::required_features(),
+            ..Default::default()
+        }))
+        .unwrap();
+        let mut target =
+            WgpuSurfaceTarget::new(desc(SurfaceFormat::Rgba16FloatLinearP3, 2), &device, &queue)
+                .unwrap();
+        let slot = target.surface().acquire().unwrap();
+        let texture = target.texture(&slot).unwrap();
+        let commands = compute_fill(&device, &texture, [0.5, 0.25, 0.25, 1.0]);
+        target.present(slot, [commands]).unwrap();
+        let mut renderer = MetalHeadlessRenderer::new().unwrap();
+        let image = renderer
+            .render_scene_to_image(
+                &scene(target.surface().preview_content().unwrap()),
+                viewport(),
+            )
+            .unwrap();
+        let pixel = image.get_pixel(16, 8).0;
+        assert!(near3(pixel, P3_PREVIEW), "{pixel:?}");
+    });
+}

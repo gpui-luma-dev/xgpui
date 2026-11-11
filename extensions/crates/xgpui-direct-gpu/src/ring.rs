@@ -142,7 +142,10 @@ mod tests {
         assert!(ring.acquire(true).is_none());
         assert_eq!(ring.stats().would_block, 1);
         drop(a);
-        assert!(ring.acquire(true).is_some(), "dropped unpublished slot is free");
+        assert!(
+            ring.acquire(true).is_some(),
+            "dropped unpublished slot is free"
+        );
     }
 
     #[test]
@@ -156,7 +159,10 @@ mod tests {
             "published slot must not be reused"
         );
         drop(lease);
-        assert!(ring.acquire(true).is_none(), "a retained scene still holds it");
+        assert!(
+            ring.acquire(true).is_none(),
+            "a retained scene still holds it"
+        );
         drop(retained_scene);
         assert!(ring.acquire(true).is_some());
         let stats = ring.stats();

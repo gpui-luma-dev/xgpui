@@ -382,3 +382,36 @@ fn linux_engine_device_loss_keeps_last_frame_and_recovers() {
     assert!(near(image.get_pixel(16, 8).0, [0, 255, 0, 255]));
     report("PASS engine loss: new work rejected, last frame kept, new surface recovered");
 }
+
+/// Linear P3 (0.5, 0.25, 0.25) mapped to clipped sRGB and encoded. Unmapped
+/// channels would encode as (188, 137, 137).
+const P3_PREVIEW: [u8; 4] = [197, 134, 136, 255];
+
+fn near3(actual: [u8; 4], expected: [u8; 4]) -> bool {
+    actual.iter().zip(expected).all(|(a, e)| a.abs_diff(e) <= 3)
+}
+
+/// K2: the engine writes an RGBA16F slot from a compute shader through a
+/// storage binding; the compositor shows it as a preview.
+#[test]
+fn linux_compute_written_frame_composites() {
+    let (Some((device, queue)), Some(mut renderer)) = (engine_device(), host()) else {
+        return;
+    };
+    let mut target =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Rgba16FloatLinearP3, 2), &device, &queue)
+            .unwrap();
+    let slot = target.surface().acquire().unwrap();
+    let texture = target.texture(&slot).unwrap();
+    let commands = crate::test_engine::compute_fill(&device, &texture, [0.5, 0.25, 0.25, 1.0]);
+    target.present(slot, [commands]).unwrap();
+    let image = renderer
+        .render_scene_to_image(
+            &scene(target.surface().preview_content().unwrap()),
+            viewport(),
+        )
+        .unwrap();
+    let pixel = image.get_pixel(16, 8).0;
+    assert!(near3(pixel, P3_PREVIEW), "{pixel:?}");
+    report("PASS compute-written RGBA16F slot composited");
+}

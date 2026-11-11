@@ -71,10 +71,10 @@ pub use gpui_wgpu::wgpu;
 pub enum SurfaceFormat {
     /// BGRA8, straight alpha, sRGB-encoded channels. Works in every window.
     Bgra8Srgb,
-    /// RGBA16 float, associated alpha, linear Display P3/D65. On macOS and
-    /// Windows this requires a window that negotiated
-    /// `WindowColorMode::WideGamutSdr`; on Linux it is shown as a mapped sRGB
-    /// preview (#146).
+    /// RGBA16 float, associated alpha, linear Display P3/D65. Shown in wide
+    /// gamut in a window that negotiated `WindowColorMode::WideGamutSdr`
+    /// (macOS and Windows), and as a mapped sRGB preview in any other window
+    /// and on Linux (#146). Slots also allow storage (compute) writes.
     Rgba16FloatLinearP3,
 }
 impl SurfaceFormat {
@@ -85,15 +85,22 @@ impl SurfaceFormat {
             Self::Rgba16FloatLinearP3 => 8,
         }
     }
-    /// The color interpretation the host applies when compositing.
-    pub fn color_mode(self) -> gpui::ImageColorMode {
+    /// The color interpretation the host applies when compositing into a
+    /// window whose effective color mode is (`wide`) or is not wide-gamut SDR.
+    pub fn color_mode(self, wide: bool) -> gpui::ImageColorMode {
         match self {
             Self::Bgra8Srgb => gpui::ImageColorMode::EncodedSrgb,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
-            Self::Rgba16FloatLinearP3 => gpui::ImageColorMode::LinearP3Wide,
-            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-            Self::Rgba16FloatLinearP3 => gpui::ImageColorMode::LinearP3Preview,
+            Self::Rgba16FloatLinearP3 if wide => gpui::ImageColorMode::LinearP3Wide,
+            Self::Rgba16FloatLinearP3 => {
+                let _ = wide;
+                gpui::ImageColorMode::LinearP3Preview
+            }
         }
+    }
+    /// Whether engines may bind slots as storage textures (compute writes).
+    pub fn supports_storage(self) -> bool {
+        matches!(self, Self::Rgba16FloatLinearP3)
     }
 }
 
@@ -184,6 +191,68 @@ pub struct SurfaceStats {
 pub enum Transport {
     /// The compositor samples the engine's memory directly.
     ZeroCopy,
+}
+
+/// Engine-side helpers shared by the platform tests.
+#[cfg(all(
+    test,
+    feature = "wgpu",
+    any(target_os = "macos", target_os = "linux", target_os = "windows")
+))]
+pub(crate) mod test_engine {
+    use crate::wgpu;
+
+    /// Encode a compute pass that writes `color` to every texel of an
+    /// RGBA16F slot through a storage binding.
+    pub fn compute_fill(
+        device: &wgpu::Device,
+        texture: &wgpu::Texture,
+        color: [f32; 4],
+    ) -> wgpu::CommandBuffer {
+        let [r, g, b, a] = color;
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("engine_compute_fill"),
+            source: wgpu::ShaderSource::Wgsl(
+                format!(
+                    "@group(0) @binding(0) var slot: texture_storage_2d<rgba16float, write>;
+                     @compute @workgroup_size(8, 8)
+                     fn main(@builtin(global_invocation_id) id: vec3<u32>) {{
+                         let size = textureDimensions(slot);
+                         if (id.x < size.x && id.y < size.y) {{
+                             textureStore(slot, vec2<i32>(id.xy), vec4<f32>({r:?}, {g:?}, {b:?}, {a:?}));
+                         }}
+                     }}"
+                )
+                .into(),
+            ),
+        });
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("engine_compute_fill"),
+            layout: None,
+            module: &shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+        let view = texture.create_view(&Default::default());
+        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("engine_compute_fill"),
+            layout: &pipeline.get_bind_group_layout(0),
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            }],
+        });
+        let mut encoder = device.create_command_encoder(&Default::default());
+        {
+            let mut pass = encoder.begin_compute_pass(&Default::default());
+            pass.set_pipeline(&pipeline);
+            pass.set_bind_group(0, &bind, &[]);
+            let size = texture.size();
+            pass.dispatch_workgroups(size.width.div_ceil(8), size.height.div_ceil(8), 1);
+        }
+        encoder.finish()
+    }
 }
 
 #[cfg(test)]
