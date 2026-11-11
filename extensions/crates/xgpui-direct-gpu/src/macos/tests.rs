@@ -969,3 +969,42 @@ fn observe_only_target_shows_completed_frames() {
         assert!(near3(pixel, P3_PREVIEW), "{pixel:?}");
     });
 }
+
+/// Heavy-engine mode on a target: observe-only, pacing and a measured frame
+/// time that drives the chunk advice.
+#[cfg(feature = "wgpu")]
+#[test]
+fn heavy_mode_paces_and_measures_frames() {
+    use crate::{HeavyEngine, test_engine::compute_fill, wgpu};
+    objc2::rc::autoreleasepool(|_| {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::METAL,
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
+        });
+        let adapter =
+            gpui::block_on(instance.request_adapter(&Default::default())).expect("Metal adapter");
+        let (device, queue) =
+            gpui::block_on(adapter.request_device(&Default::default())).unwrap();
+        let mut target =
+            WgpuSurfaceTarget::new(desc(SurfaceFormat::Rgba16FloatLinearP3, 3), &device, &queue)
+                .unwrap();
+        assert_eq!(target.pace(), Duration::ZERO, "no pacing unless heavy");
+        assert_eq!(target.suggested_chunks(), 1);
+        target.set_heavy(Some(HeavyEngine::default()));
+        assert!(!target.gpu_wait(), "heavy mode is observe-only");
+        for _ in 0..3 {
+            let slot = target.surface().acquire().unwrap();
+            let texture = target.texture(&slot).unwrap();
+            let commands = compute_fill(&device, &texture, [0.5, 0.25, 0.25, 1.0]);
+            target.present(slot, [commands]).unwrap();
+            let _ = device.poll(wgpu::PollType::wait_indefinitely());
+            let delay = target.pace();
+            assert!(delay > Duration::ZERO && delay <= Duration::from_secs(4), "{delay:?}");
+        }
+        let status = target.heavy().unwrap();
+        assert!(status.frame_ms.is_some(), "frame time measured: {status:?}");
+        assert!(status.suggested_chunks >= 1);
+        target.set_heavy(None);
+        assert!(target.gpu_wait() && target.heavy().is_none());
+    });
+}

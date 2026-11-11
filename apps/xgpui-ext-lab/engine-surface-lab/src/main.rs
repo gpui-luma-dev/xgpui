@@ -29,7 +29,8 @@ mod lab {
         time::{Duration, Instant},
     };
     use xgpui_direct_gpu::{
-        AcquireError, EngineSurface, SurfaceDesc, SurfaceFormat, WgpuSurfaceTarget, wgpu,
+        AcquireError, EngineSurface, HeavyEngine, SurfaceDesc, SurfaceFormat, WgpuSurfaceTarget,
+        wgpu,
     };
 
     #[cfg(target_os = "macos")]
@@ -116,12 +117,19 @@ mod lab {
         /// frames once complete and never waits for them on the GPU.
         #[arg(long)]
         observe: bool,
+        /// Stress engines use the target's heavy-engine mode
+        /// (`WgpuSurfaceTarget::set_heavy`): observe-only, pacing from
+        /// `pace()` and per-frame chunks from `suggested_chunks()`.
+        #[arg(long)]
+        heavy: bool,
     }
 
     /// The engine running on its own thread, presenting at its own rate.
     struct EngineThread {
         /// Lowest rate an adaptive engine dropped to, in milli-Hz.
         min_rate: Arc<AtomicU64>,
+        /// Most chunks per frame a heavy engine used.
+        max_chunks: Arc<AtomicU64>,
         rendered: Arc<AtomicU64>,
         skipped: Arc<AtomicU64>,
         error: Arc<Mutex<Option<String>>>,
@@ -131,11 +139,13 @@ mod lab {
     }
     impl EngineThread {
         fn spawn(engine: WaveEngine, hz: f32) -> Self {
-            Self::spawn_with(engine, hz, false)
+            Self::spawn_with(engine, hz, false, false)
         }
-        fn spawn_with(mut engine: WaveEngine, hz: f32, adaptive: bool) -> Self {
+        fn spawn_with(mut engine: WaveEngine, hz: f32, adaptive: bool, heavy: bool) -> Self {
             let min_rate = Arc::new(AtomicU64::new((hz * 1000.) as u64));
             let lowest = min_rate.clone();
+            let max_chunks = Arc::new(AtomicU64::new(1));
+            let most_chunks = max_chunks.clone();
             let rendered = Arc::new(AtomicU64::new(0));
             let skipped = Arc::new(AtomicU64::new(0));
             let error = Arc::new(Mutex::new(None));
@@ -168,6 +178,12 @@ mod lab {
                             period = Duration::from_secs_f32(1. / rate);
                             lowest.fetch_min((rate * 1000.) as u64, Ordering::Relaxed);
                         }
+                        if heavy {
+                            // The target's advice: split the frame so each
+                            // submission stays near the chunk budget.
+                            engine.bands = engine.target.suggested_chunks().min(engine.size.1);
+                            most_chunks.fetch_max(engine.bands as u64, Ordering::Relaxed);
+                        }
                         match engine.frame() {
                             Ok(true) => r.fetch_add(1, Ordering::Relaxed),
                             Ok(false) => k.fetch_add(1, Ordering::Relaxed),
@@ -176,6 +192,14 @@ mod lab {
                                 return;
                             }
                         };
+                        if heavy {
+                            // The target paces the engine on compositor lag.
+                            period = engine.target.pace();
+                            if let Some(status) = engine.target.heavy() {
+                                lowest
+                                    .fetch_min((status.rate_hz * 1000.) as u64, Ordering::Relaxed);
+                            }
+                        }
                         next += period;
                         let now = Instant::now();
                         if next > now {
@@ -188,6 +212,7 @@ mod lab {
                 .expect("engine thread");
             Self {
                 min_rate,
+                max_chunks,
                 rendered,
                 skipped,
                 error,
@@ -450,6 +475,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         bands: u32,
         adaptive: bool,
         observe: bool,
+        heavy: bool,
     }
 
     impl Lab {
@@ -570,12 +596,24 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                     #[cfg(not(target_os = "linux"))]
                     let priority = "normal";
                     println!(
-                        "stress budget: bands {}, adaptive {} (lowest engine rate {:.1} Hz), engine queue priority {}, compositor {}; stress frames unshown {}; main surface composite latency {:.1} ms, unshown {}",
+                        "stress budget: {}bands {}, adaptive {} (lowest engine rate {:.1} Hz), engine queue priority {}, compositor {}; stress frames unshown {}; main surface composite latency {:.1} ms, unshown {}",
+                        if self.heavy {
+                            format!(
+                                "heavy mode (most chunks per frame {}), ",
+                                self.stress
+                                    .iter()
+                                    .map(|(_, t)| t.max_chunks.load(Ordering::Relaxed))
+                                    .max()
+                                    .unwrap_or(1)
+                            )
+                        } else {
+                            String::new()
+                        },
                         self.bands,
                         if self.adaptive { "on" } else { "off" },
                         min_rate,
                         priority,
-                        if self.observe {
+                        if self.observe || self.heavy {
                             "observes engine frames"
                         } else {
                             "waits on the GPU"
@@ -853,6 +891,12 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                             ) {
                                 Ok(mut engine) => {
                                     engine.target.set_gpu_wait(!options.observe);
+                                    if options.heavy {
+                                        engine.target.set_heavy(Some(HeavyEngine {
+                                            max_hz: options.engine_hz,
+                                            ..HeavyEngine::default()
+                                        }));
+                                    }
                                     let surface = engine.target.surface().clone();
                                     stress.push((
                                         surface,
@@ -860,6 +904,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                                             engine,
                                             options.engine_hz,
                                             options.adaptive,
+                                            options.heavy,
                                         ),
                                     ));
                                 }
@@ -910,6 +955,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                             bands: options.bands,
                             adaptive: options.adaptive,
                             observe: options.observe,
+                            heavy: options.heavy,
                         })
                     },
                 )

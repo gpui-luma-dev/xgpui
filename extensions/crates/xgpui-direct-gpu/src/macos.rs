@@ -95,7 +95,7 @@ impl SyncPoint {
     pub fn is_gpu_wait(&self) -> bool {
         self.submitted
     }
-    fn reached(&self) -> bool {
+    pub(crate) fn reached(&self) -> bool {
         if self.seen.load(Ordering::Acquire) {
             return true;
         }

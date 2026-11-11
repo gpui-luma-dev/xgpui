@@ -71,7 +71,7 @@ impl SyncPoint {
     pub fn is_gpu_wait(&self) -> bool {
         matches!(self.0, Readiness::Fence(..))
     }
-    fn reached(&self) -> bool {
+    pub(crate) fn reached(&self) -> bool {
         match &self.0 {
             Readiness::Completed => true,
             Readiness::Fence(fence, value, seen) => {
@@ -291,6 +291,8 @@ pub struct WgpuSurfaceTarget {
     textures: Vec<wgpu::Texture>,
     fence: Option<Arc<SharedFence>>,
     next: u64,
+    heavy: Option<crate::heavy::Heavy>,
+    heavy_sync: Option<SyncPoint>,
 }
 
 impl WgpuSurfaceTarget {
@@ -419,6 +421,8 @@ impl WgpuSurfaceTarget {
             textures,
             fence,
             next: 0,
+            heavy: None,
+            heavy_sync: None,
         })
     }
 
@@ -463,6 +467,7 @@ impl WgpuSurfaceTarget {
         slot: SurfaceSlot,
         commands: impl IntoIterator<Item = wgpu::CommandBuffer>,
     ) -> Result<()> {
+        let submitted = std::time::Instant::now();
         if let Some(fence) = &self.fence {
             // Signal after this submission; present only once it is submitted.
             self.next += 1;
@@ -470,13 +475,14 @@ impl WgpuSurfaceTarget {
                 .context("missing D3D12 engine queue")?
                 .add_signal_fence(fence.fence.clone(), self.next);
             self.queue.submit(commands);
-            return self.surface.present(
+            return self.publish(
                 slot,
                 SyncPoint(Readiness::Fence(
                     fence.clone(),
                     self.next,
                     Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 )),
+                submitted,
             );
         }
         let index = self.queue.submit(commands);
@@ -486,7 +492,64 @@ impl WgpuSurfaceTarget {
                 timeout: Some(Duration::from_secs(5)),
             })
             .context("engine GPU work did not complete")?;
-        self.surface.present(slot, SyncPoint::completed())
+        self.publish(slot, SyncPoint::completed(), submitted)
+    }
+
+    /// Heavy-engine mode (see the `heavy` module): observe-only
+    /// presentation, pacing on compositor lag ([`Self::pace`]) and chunk
+    /// advice ([`Self::suggested_chunks`]). `None` restores the defaults
+    /// (GPU-side wait, no pacing).
+    pub fn set_heavy(&mut self, config: Option<crate::HeavyEngine>) {
+        self.set_gpu_wait(config.is_none());
+        self.heavy = config.map(crate::heavy::Heavy::new);
+        self.heavy_sync = None;
+    }
+
+    /// Heavy-engine state, when enabled.
+    pub fn heavy(&self) -> Option<crate::HeavyStatus> {
+        self.heavy.as_ref().map(|heavy| heavy.status())
+    }
+
+    /// In heavy-engine mode, how long to wait before rendering the next
+    /// frame (backs off while the compositor lags); zero otherwise. Also
+    /// measures the previous frame's GPU time for [`Self::suggested_chunks`].
+    pub fn pace(&mut self) -> std::time::Duration {
+        let Some(heavy) = &mut self.heavy else {
+            return std::time::Duration::ZERO;
+        };
+        if let Some(sync) = &self.heavy_sync {
+            let reached = sync.reached();
+            heavy.observe(reached);
+            if reached {
+                self.heavy_sync = None;
+            }
+        }
+        heavy.pace(&self.surface.stats())
+    }
+
+    /// In heavy-engine mode, how many separate submissions to split a
+    /// frame's work into so each stays near the chunk budget; 1 otherwise.
+    /// Submit all but the last chunk with the engine's queue, the last with
+    /// [`Self::present`].
+    pub fn suggested_chunks(&self) -> u32 {
+        self.heavy
+            .as_ref()
+            .map_or(1, |heavy| heavy.suggested_chunks())
+    }
+
+    fn publish(
+        &mut self,
+        slot: SurfaceSlot,
+        sync: SyncPoint,
+        submitted: std::time::Instant,
+    ) -> Result<()> {
+        if let Some(heavy) = &mut self.heavy {
+            heavy.on_present(submitted);
+            if self.heavy_sync.is_none() {
+                self.heavy_sync = Some(sync.clone());
+            }
+        }
+        self.surface.present(slot, sync)
     }
 
     pub fn surface(&self) -> &EngineSurface {
