@@ -20,6 +20,7 @@ pub struct WgpuSurfaceTarget {
     event: Retained<ProtocolObject<dyn MTLSharedEvent>>,
     next: u64,
     textures: Vec<Option<wgpu::Texture>>,
+    gpu_wait: bool,
 }
 
 // SAFETY: wgpu handles are Send + Sync on native targets; MTLSharedEvent is
@@ -48,6 +49,7 @@ impl WgpuSurfaceTarget {
             event,
             next: 0,
             textures: vec![None; desc.slots],
+            gpu_wait: true,
         })
     }
 
@@ -134,14 +136,31 @@ impl WgpuSurfaceTarget {
             .context("Metal hal queue")?
             .add_signal_event(self.event.clone(), self.next);
         self.queue.submit(commands);
-        self.surface
+        let sync = if self.gpu_wait {
             // SAFETY: the signal was staged on the submission above.
-            .present(slot, unsafe {
-                SyncPoint::submitted(self.event.clone(), self.next)
-            })
+            unsafe { SyncPoint::submitted(self.event.clone(), self.next) }
+        } else {
+            SyncPoint::new(self.event.clone(), self.next)
+        };
+        self.surface.present(slot, sync)
     }
 
-    /// Frames are always handed over with a GPU-side wait on macOS.
+    /// Whether the compositor may wait on the GPU for this target's frames
+    /// (default). With `false` (observe-only) a frame is shown only once its
+    /// GPU work is observed complete, so a slow engine frame never holds up
+    /// composition; the last complete frame stays on screen meanwhile.
+    /// Costs up to a frame of latency. Applies to frames presented after the
+    /// call.
+    pub fn set_gpu_wait(&mut self, enabled: bool) {
+        self.gpu_wait = enabled;
+    }
+
+    /// See [`Self::set_gpu_wait`].
+    pub fn gpu_wait(&self) -> bool {
+        self.gpu_wait
+    }
+
+    /// Frames are always handed over with GPU synchronization on macOS.
     pub fn gpu_sync(&self) -> bool {
         true
     }

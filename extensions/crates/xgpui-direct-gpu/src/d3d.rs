@@ -91,7 +91,9 @@ impl SyncPoint {
         match &self.0 {
             Readiness::Completed => true,
             Readiness::Fence(fence, ..) => {
-                !fence.no_host_wait.load(Ordering::Acquire) || self.reached()
+                (!fence.no_host_wait.load(Ordering::Acquire)
+                    && !fence.observe_only.load(Ordering::Acquire))
+                    || self.reached()
             }
         }
     }
@@ -123,6 +125,9 @@ pub(crate) struct SharedFence {
     /// Set once a compositor could not open the fence: its frames are then
     /// shown only once observed reached, never waited for.
     no_host_wait: AtomicBool,
+    /// Set by `WgpuSurfaceTarget::set_gpu_wait(false)`: frames are only
+    /// observed, never waited for.
+    observe_only: AtomicBool,
     handle: SharedHandle,
     _engine: wgpu::Device,
 }
@@ -313,6 +318,7 @@ impl WgpuSurfaceTarget {
                     fence,
                     host: Mutex::new(None),
                     no_host_wait: AtomicBool::new(false),
+                    observe_only: AtomicBool::new(false),
                     handle: SharedHandle(handle),
                     _engine: device.clone(),
                 }))
@@ -418,6 +424,25 @@ impl WgpuSurfaceTarget {
 
     /// Whether frames are handed over with a GPU-side wait (shared fence)
     /// rather than the engine waiting on its own thread.
+    /// Whether the compositor may wait on the GPU for this target's frames
+    /// (default). With `false` (observe-only) a frame is shown only once its
+    /// GPU work is observed complete, so a slow engine frame never holds up
+    /// composition; the last complete frame stays on screen meanwhile.
+    /// Costs up to a frame of latency. Applies to frames presented after the
+    /// call.
+    pub fn set_gpu_wait(&mut self, enabled: bool) {
+        if let Some(shared) = &self.fence {
+            shared.observe_only.store(!enabled, Ordering::Release);
+        }
+    }
+
+    /// See [`Self::set_gpu_wait`].
+    pub fn gpu_wait(&self) -> bool {
+        self.fence
+            .as_ref()
+            .is_some_and(|shared| !shared.observe_only.load(Ordering::Acquire))
+    }
+
     pub fn gpu_sync(&self) -> bool {
         self.fence.is_some()
     }

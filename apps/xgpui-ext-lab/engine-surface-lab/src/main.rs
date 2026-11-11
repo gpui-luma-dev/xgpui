@@ -112,6 +112,10 @@ mod lab {
         /// composite latency rises, and speed back up when it recovers.
         #[arg(long)]
         adaptive: bool,
+        /// Stress engines present observe-only: the compositor shows their
+        /// frames once complete and never waits for them on the GPU.
+        #[arg(long)]
+        observe: bool,
     }
 
     /// The engine running on its own thread, presenting at its own rate.
@@ -445,6 +449,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         work: u32,
         bands: u32,
         adaptive: bool,
+        observe: bool,
     }
 
     impl Lab {
@@ -565,11 +570,16 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                     #[cfg(not(target_os = "linux"))]
                     let priority = "normal";
                     println!(
-                        "stress budget: bands {}, adaptive {} (lowest engine rate {:.1} Hz), engine queue priority {}; stress frames unshown {}; main surface composite latency {:.1} ms, unshown {}",
+                        "stress budget: bands {}, adaptive {} (lowest engine rate {:.1} Hz), engine queue priority {}, compositor {}; stress frames unshown {}; main surface composite latency {:.1} ms, unshown {}",
                         self.bands,
                         if self.adaptive { "on" } else { "off" },
                         min_rate,
                         priority,
+                        if self.observe {
+                            "observes engine frames"
+                        } else {
+                            "waits on the GPU"
+                        },
                         unshown,
                         main.composite_latency_ms,
                         main.unshown,
@@ -841,7 +851,8 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                                 options.work,
                                 options.bands,
                             ) {
-                                Ok(engine) => {
+                                Ok(mut engine) => {
+                                    engine.target.set_gpu_wait(!options.observe);
                                     let surface = engine.target.surface().clone();
                                     stress.push((
                                         surface,
@@ -898,6 +909,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                             work: options.work,
                             bands: options.bands,
                             adaptive: options.adaptive,
+                            observe: options.observe,
                         })
                     },
                 )

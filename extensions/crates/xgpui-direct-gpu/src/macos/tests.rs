@@ -926,3 +926,46 @@ fn feedback_counts_composited_and_unshown_frames() {
         assert!(stats.composite_latency_ms >= 0. && stats.composite_latency_ms < 1000.);
     });
 }
+
+/// Observe-only target: frames appear once complete, without a GPU wait,
+/// and the waiter wakes the UI.
+#[cfg(feature = "wgpu")]
+#[test]
+fn observe_only_target_shows_completed_frames() {
+    use crate::{test_engine::compute_fill, wgpu};
+    objc2::rc::autoreleasepool(|_| {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::METAL,
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
+        });
+        let adapter =
+            gpui::block_on(instance.request_adapter(&Default::default())).expect("Metal adapter");
+        let (device, queue) = gpui::block_on(adapter.request_device(&Default::default())).unwrap();
+        let mut target =
+            WgpuSurfaceTarget::new(desc(SurfaceFormat::Rgba16FloatLinearP3, 2), &device, &queue)
+                .unwrap();
+        target.set_gpu_wait(false);
+        assert!(!target.gpu_wait());
+        let slot = target.surface().acquire().unwrap();
+        let texture = target.texture(&slot).unwrap();
+        let commands = compute_fill(&device, &texture, [0.5, 0.25, 0.25, 1.0]);
+        target.present(slot, [commands]).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while target.surface().stats().waiting > 0 {
+            assert!(
+                Instant::now() < deadline,
+                "observed frame never became ready"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let mut renderer = MetalHeadlessRenderer::new().unwrap();
+        let image = renderer
+            .render_scene_to_image(
+                &scene(target.surface().preview_content().unwrap()),
+                viewport(),
+            )
+            .unwrap();
+        let pixel = image.get_pixel(16, 8).0;
+        assert!(near3(pixel, P3_PREVIEW), "{pixel:?}");
+    });
+}

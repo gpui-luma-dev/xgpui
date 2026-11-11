@@ -100,6 +100,10 @@ mod workbench {
         /// Animate zoom and pan of the main canvas (presentation only).
         #[arg(long)]
         pan_zoom: bool,
+        /// Upload edits with queued buffer writes instead of the staging
+        /// belt (for comparison).
+        #[arg(long)]
+        queue_uploads: bool,
         /// Keep GPUI's default animation throttling of unfocused windows
         /// (about 30 fps). By default the workbench animates every window at
         /// the display rate, so measurements reflect compositing, not power
@@ -1145,6 +1149,8 @@ mod workbench {
     pub fn main() -> Result<()> {
         let options = Options::parse();
         ensure!((2..=8).contains(&options.slots), "slots must be 2..=8");
+        crate::engine::QUEUE_UPLOADS
+            .store(options.queue_uploads, std::sync::atomic::Ordering::Relaxed);
         if options.check {
             return crate::check::run(options.slots);
         }
