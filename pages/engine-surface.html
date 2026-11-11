@@ -99,9 +99,40 @@ loop {
 </code></pre>
 <p>With four 4K engines saturating an Intel Iris Xe, the UI went from 5–6 frames
 in 6 s to a median of 16.7 ms per frame. Linux also runs the engine queue at low
-priority; Windows can't lower it through wgpu. An unfocused window is
-composited at about 30 fps by GPUI's inactive-window throttling
-(<a href="https://github.com/gpui-luma-dev/xgpui/issues/211">#211</a>).</p>
+priority; Windows can't lower it through wgpu.</p>
+<h2 id="frame-rate">Frame rate and unfocused windows</h2>
+<p>GPUI rate-limits <em>animation frames</em>, the frames requested with
+<code>window.request_animation_frame()</code> or <code>on_next_frame</code>:</p>
+<ul>
+<li><strong>Unfocused windows</strong> get about 30 fps by default
+(<code>WindowOptions::inactive_frame_interval</code>, 33.3 ms). A second window
+showing a surface is unfocused most of the time.</li>
+<li><strong>Low-power mode</strong> caps animation frames at 30 fps in every window,
+on macOS, Windows and Linux.</li>
+<li><strong>Thermal pressure</strong> (serious or critical, reported on macOS only)
+caps animation frames in the active window at 60 fps.</li>
+</ul>
+<p>A redraw requested with <code>cx.notify()</code> alone is not rate-limited. So
+instead of requesting an animation frame every display frame, redraw when the
+engine presents. <code>EngineSurface::on_present</code> runs on the engine's
+thread, so forward it to the view:</p>
+<pre><code class="language-rust">let (tx, mut rx) = futures::channel::mpsc::unbounded::&lt;()&gt;();
+surface.on_present(move || {
+    tx.unbounded_send(()).ok();
+});
+cx.spawn(async move |this, cx| {
+    while rx.next().await.is_some() {
+        if this.update(cx, |_, cx| cx.notify()).is_err() {
+            break; // the view is gone
+        }
+    }
+})
+.detach();
+</code></pre>
+<p>New engine frames then appear at the engine's own rate in any window, and the
+UI does no work between frames. To keep animation frames at full rate in an
+unfocused window, open it with <code>inactive_frame_interval: None</code>.
+Low-power mode still applies.</p>
 <h2 id="api-reference">API reference</h2>
 <p>The crate is not published, so there is no docs.rs page yet; this is the reference. Every item is re-exported from the crate root. For full rustdoc, run <code>cargo doc --open -p xgpui-engine-surface --features wgpu</code>.</p>
 <h3 id="api-engine-surface">EngineSurface</h3>

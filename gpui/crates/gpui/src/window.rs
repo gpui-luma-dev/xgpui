@@ -2792,6 +2792,12 @@ impl Window {
     /// which automatically respects [`App::reduce_motion`]. When using this
     /// method directly for decorative motion, check [`App::reduce_motion`]
     /// and skip the frame request when it is set.
+    ///
+    /// Frames requested this way are rate-limited in inactive windows (about
+    /// 30 fps by default), in low-power mode and under thermal pressure; see
+    /// [`WindowOptions::inactive_frame_interval`]. Content that changes on its
+    /// own schedule, such as frames from another thread, should call
+    /// `cx.notify()` when new content arrives instead.
     pub fn request_animation_frame(&self) {
         let entity = self.current_view();
         self.on_next_frame(move |_, cx| cx.notify(entity));
@@ -8702,6 +8708,49 @@ mod tests {
                 })
                 .expect("inspect presented frame");
             assert!(callback_ran.get());
+        }
+    }
+
+    /// The inactive-window throttle applies only to frames with pending
+    /// `on_next_frame` callbacks or a forced render. A redraw requested with
+    /// `cx.notify()` alone renders on the next frame request (#211).
+    #[cfg(feature = "profiler")]
+    #[gpui::test]
+    fn test_notify_redraw_bypasses_inactive_throttle(cx: &mut TestAppContext) {
+        // Test mode draws during effect flushing, bypassing platform frame throttling.
+        cx.app.borrow_mut().mode = crate::app::GpuiMode::Production;
+        let window = cx
+            .app
+            .borrow_mut()
+            .open_window(
+                WindowOptions {
+                    inactive_frame_interval: Some(Duration::from_secs(3600)),
+                    ..Default::default()
+                },
+                |_, cx| cx.new(|_| EmptyView),
+            )
+            .expect("open inactive test window");
+        let platform_window = cx.test_window(window.into());
+        platform_window.simulate_active_status_change(false);
+        // Records the last frame time, so a throttled request would now wait an hour.
+        platform_window.simulate_frame_request(RequestFrameOptions::default());
+        let draws = |cx: &mut TestAppContext| {
+            window
+                .update(cx, |_, window, _| {
+                    window
+                        .frame_duration_snapshot()
+                        .draw_duration_histogram
+                        .len()
+                })
+                .expect("read draw count")
+        };
+        for _ in 0..3 {
+            let before = draws(cx);
+            window
+                .update(cx, |_, _, cx| cx.notify())
+                .expect("notify root view");
+            platform_window.simulate_frame_request(RequestFrameOptions::default());
+            assert_eq!(draws(cx), before + 1, "notify redraw was throttled");
         }
     }
 
