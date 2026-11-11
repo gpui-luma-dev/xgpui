@@ -184,6 +184,9 @@ pub struct SurfaceStats {
     pub presents: u64,
     /// Total `acquire` calls that returned `WouldBlock`.
     pub would_block: u64,
+    /// Presented frames not shown yet because their sync point has not been
+    /// observed reached (see `EngineSurface::present`).
+    pub waiting: usize,
 }
 
 /// How engine output reaches the compositor.

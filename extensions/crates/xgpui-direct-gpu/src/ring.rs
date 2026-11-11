@@ -98,6 +98,7 @@ impl Ring {
             published: count(Slot::Published),
             presents: state.presents,
             would_block: state.would_block,
+            waiting: 0,
         }
     }
 

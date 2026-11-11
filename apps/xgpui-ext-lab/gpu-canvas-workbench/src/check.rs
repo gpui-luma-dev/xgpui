@@ -309,6 +309,57 @@ pub fn run(slots: usize) -> Result<()> {
         ),
     );
 
+    // Pressure: retained snapshots pin every slot. Edits keep landing in the
+    // working image, publishing is deferred without blocking, and releasing
+    // the snapshots publishes the newest revision.
+    let mut held = Vec::new();
+    let slots = engine.surface().desc().slots;
+    let mut pinned_dab = 0;
+    while held.len() < slots {
+        if let Some(content) = engine.surface().content() {
+            held.push(content);
+        }
+        let dab = Dab {
+            x: 100. + pinned_dab as f32 * 9.,
+            y: 60.,
+            radius: 4.,
+            opacity: 1.,
+            color: [1., 0., 1.],
+        };
+        pinned_dab += 1;
+        engine.dab(dab);
+        reference.apply(&dab);
+        engine.frame()?;
+        ensure!(pinned_dab < 50, "could not pin every slot");
+    }
+    let blocked_before = engine.stats().publish_blocked;
+    let started = std::time::Instant::now();
+    for i in 0..10 {
+        let dab = Dab {
+            x: 500.,
+            y: 40. + i as f32 * 4.,
+            radius: 3.,
+            opacity: 1.,
+            color: [0., 1., 1.],
+        };
+        engine.dab(dab);
+        reference.apply(&dab);
+        engine.frame()?;
+    }
+    let blocked = engine.stats().publish_blocked - blocked_before;
+    let stalled = started.elapsed();
+    let (bad_held, _) = compare_working(&mut engine, &reference)?;
+    let unpublished = engine.stats().revision - engine.stats().published_revision;
+    drop(held);
+    engine.frame()?;
+    let caught_up = engine.stats().revision == engine.stats().published_revision;
+    ok &= report(
+        blocked == 10 && unpublished > 0 && caught_up && bad_held == 0 && stalled.as_millis() < 500,
+        format!(
+            "{slots} held snapshots pinned the ring: 10 edits applied, publish deferred {blocked}× without blocking ({stalled:?}); released, the newest revision published"
+        ),
+    );
+
     // Reset regenerates the image and discards queued edits.
     engine.dab(Dab {
         x: 10.,

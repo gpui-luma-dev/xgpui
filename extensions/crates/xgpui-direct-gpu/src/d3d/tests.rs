@@ -471,3 +471,95 @@ fn windows_compute_written_frame_composites() {
     assert!(near3(pixel, P3_PREVIEW), "{pixel:?}");
     report("PASS compute-written RGBA16F slot composited");
 }
+
+/// Acceptance (#197): a compositor that cannot wait on the GPU never blocks
+/// on the engine. It shows the last ready frame until the new one is reached.
+#[::core::prelude::v1::test]
+fn windows_compositor_without_gpu_wait_never_blocks_on_the_engine() {
+    let Some((device, queue, mut renderer)) = setup() else {
+        return;
+    };
+    let mut target =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Bgra8Srgb, 3), &device, &queue).unwrap();
+    let Some(fence) = target.fence.clone() else {
+        report("skipped: no shared engine fence (CPU-wait mode)");
+        return;
+    };
+    draw(&mut target, wgpu::Color::RED);
+    renderer
+        .render_scene_to_image(&scene(target.surface().content().unwrap()), viewport())
+        .unwrap();
+    // Behave as a compositor that could not open the fence.
+    fence
+        .no_host_wait
+        .store(true, std::sync::atomic::Ordering::Release);
+    let wakes = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let counter = wakes.clone();
+    target.surface().on_present(move || {
+        counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    });
+    let raw: windows::Win32::Graphics::Direct3D12::ID3D12Device =
+        unsafe { device.as_hal::<Dx12>() }
+            .unwrap()
+            .raw_device()
+            .clone();
+    let gate: ID3D12Fence = unsafe {
+        raw.CreateFence(
+            0,
+            windows::Win32::Graphics::Direct3D12::D3D12_FENCE_FLAG_NONE,
+        )
+    }
+    .unwrap();
+    unsafe { queue.as_hal::<Dx12>() }
+        .unwrap()
+        .add_wait_fence(gate.clone(), 1);
+    draw(&mut target, wgpu::Color::GREEN);
+    let woken = wakes.load(std::sync::atomic::Ordering::SeqCst);
+    struct Gate(ID3D12Fence);
+    // SAFETY: ID3D12Fence is free-threaded; Signal may be called on any thread.
+    unsafe impl Send for Gate {}
+    let opener_gate = Gate(gate.clone());
+    let opener = std::thread::spawn(move || {
+        let gate = opener_gate;
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        unsafe { gate.0.Signal(1) }.unwrap();
+    });
+
+    // Composition right away shows the last ready frame; it must not block.
+    let started = std::time::Instant::now();
+    let image = renderer
+        .render_scene_to_image(&scene(target.surface().content().unwrap()), viewport())
+        .unwrap();
+    let elapsed = started.elapsed();
+    let pixel = image.get_pixel(16, 8).0;
+    assert!(
+        near(pixel, [255, 0, 0, 255]),
+        "unready frame shown: {pixel:?}"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_millis(200),
+        "composition blocked on the engine ({elapsed:?})"
+    );
+    assert_eq!(target.surface().stats().waiting, 1);
+    // The waiter wakes the UI once the engine finishes; then it shows.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while wakes.load(std::sync::atomic::Ordering::SeqCst) == woken {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "waiter never woke the UI"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    opener.join().unwrap();
+    let image = renderer
+        .render_scene_to_image(&scene(target.surface().content().unwrap()), viewport())
+        .unwrap();
+    let pixel = image.get_pixel(16, 8).0;
+    assert!(
+        near(pixel, [0, 255, 0, 255]),
+        "ready frame not shown: {pixel:?}"
+    );
+    report(format!(
+        "PASS compositor without GPU waits showed the last ready frame in {elapsed:?}, then the new frame once woken"
+    ));
+}

@@ -103,6 +103,8 @@ mod workbench {
         last_point: Option<Point<f32>>,
         inspection: Option<Inspection>,
         inspect_rejected: bool,
+        /// Snapshots held back on purpose (pressure test): each pins a slot.
+        held: Vec<std::sync::Arc<dyn CustomContent>>,
         demo: bool,
         demo_step: u32,
         error: Option<String>,
@@ -373,6 +375,37 @@ mod workbench {
                             },
                         ))),
                 )
+                .child(
+                    row()
+                        .child(label("Pressure"))
+                        .child(
+                            button(
+                                "hold",
+                                format!(
+                                    "Hold snapshot ({}/{})",
+                                    self.held.len(),
+                                    self.engine.surface().desc().slots
+                                ),
+                                false,
+                            )
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                // Like a retained old scene: the held snapshot
+                                // keeps its slot until released.
+                                if this.held.len() < this.engine.surface().desc().slots
+                                    && let Some(content) = this.engine.surface().content()
+                                {
+                                    this.held.push(content);
+                                }
+                                cx.notify();
+                            })),
+                        )
+                        .child(button("release", "Release", false).on_click(cx.listener(
+                            |this, _, _, cx| {
+                                this.held.clear();
+                                cx.notify();
+                            },
+                        ))),
+                )
         }
 
         fn inspection_view(&self) -> impl IntoElement {
@@ -457,11 +490,13 @@ mod workbench {
                     self.engine.inspections_in_flight()
                 ),
                 format!(
-                    "Ring {} slots: free {} / writing {} / published {} · ring full {} · publish deferred {}",
+                    "Ring {} slots: free {} / writing {} / published {} · held {} · waiting {} · ring full {} · publish deferred {}",
                     desc.slots,
                     surface.free,
                     surface.writing,
                     surface.published,
+                    self.held.len(),
+                    surface.waiting,
                     surface.would_block,
                     stats.publish_blocked
                 ),
@@ -670,6 +705,7 @@ mod workbench {
                         last_point: None,
                         inspection: None,
                         inspect_rejected: false,
+                        held: Vec::new(),
                         demo: options.demo,
                         demo_step: 0,
                         error: None,

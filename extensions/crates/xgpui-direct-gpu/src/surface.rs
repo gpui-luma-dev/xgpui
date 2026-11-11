@@ -6,14 +6,18 @@ use crate::{AcquireError, SurfaceDesc, SurfaceStats, Transport};
 use anyhow::{Result, ensure};
 use gpui::{Bounds, Corners, CustomContent, CustomGeometry, DevicePixels, Pixels, Size, Window};
 use std::any::Any;
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
+use std::time::Duration;
 
 struct Shared {
     desc: SurfaceDesc,
     ring: Ring,
     slots: Vec<Arc<SlotResources>>,
-    latest: Mutex<Option<Arc<SurfaceFrame>>>,
+    /// Presented frames, oldest first. Every frame older than the newest
+    /// ready one has been dropped; newer frames wait for their sync point.
+    frames: Mutex<VecDeque<Arc<SurfaceFrame>>>,
     on_present: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     invalid: AtomicBool,
 }
@@ -56,7 +60,7 @@ impl EngineSurface {
             desc,
             ring: Ring::new(desc.slots),
             slots,
-            latest: Mutex::new(None),
+            frames: Mutex::new(VecDeque::new()),
             on_present: Mutex::new(None),
             invalid: AtomicBool::new(false),
         })))
@@ -95,7 +99,12 @@ impl EngineSurface {
     }
 
     /// Publish `slot` as the latest frame, readable once `sync` is reached.
-    /// Call only after submitting the engine work that signals `sync`.
+    ///
+    /// Frames whose sync point is known to be submitted (every frame from a
+    /// `WgpuSurfaceTarget`, and `unsafe` submitted points on macOS) are shown
+    /// at once, with a GPU-side wait. Any other frame is shown only once its
+    /// sync point is observed reached; until then the last ready frame stays
+    /// on screen, so an engine that never signals cannot stall composition.
     pub fn present(&self, slot: SurfaceSlot, sync: SyncPoint) -> Result<()> {
         ensure!(self.is_valid(), AcquireError::Invalidated);
         ensure!(
@@ -109,13 +118,24 @@ impl EngineSurface {
             sync,
             _lease: lease,
         });
-        // Drop the previous frame outside the lock: its lease may free a slot.
-        let previous = self.0.latest.lock().unwrap().replace(frame);
-        drop(previous);
-        let callback = self.0.on_present.lock().unwrap().clone();
-        if let Some(callback) = callback {
-            callback();
+        let ready = frame.sync.ready();
+        let waiter = (!ready).then(|| Arc::downgrade(&frame));
+        let superseded = {
+            let mut frames = self.0.frames.lock().unwrap();
+            let superseded = if ready {
+                frames.drain(..).collect()
+            } else {
+                Vec::new()
+            };
+            frames.push_back(frame);
+            superseded
+        };
+        // Drop superseded frames outside the lock: their leases free slots.
+        drop(superseded);
+        if let Some(frame) = waiter {
+            spawn_waiter(Arc::downgrade(&self.0), frame);
         }
+        notify(&self.0);
         Ok(())
     }
 
@@ -135,7 +155,13 @@ impl EngineSurface {
     }
 
     fn content_for(&self, wide: bool) -> Option<Arc<dyn CustomContent>> {
-        let frame = self.0.latest.lock().unwrap().clone()?;
+        let (frame, superseded) = {
+            let mut frames = self.0.frames.lock().unwrap();
+            let newest_ready = frames.iter().rposition(|frame| frame.sync.ready())?;
+            let superseded: Vec<_> = frames.drain(..newest_ready).collect();
+            (frames[0].clone(), superseded)
+        };
+        drop(superseded);
         Some(Arc::new(FrameView { frame, wide }))
     }
 
@@ -160,14 +186,24 @@ impl EngineSurface {
         }
     }
 
-    /// Called after every present, on the presenting thread. Typically wakes
-    /// the UI to redraw.
+    /// Called after every present, on the presenting thread, and when a frame
+    /// that was waiting for its sync point becomes ready, on a waiter thread.
+    /// Typically wakes the UI to redraw.
     pub fn on_present(&self, callback: impl Fn() + Send + Sync + 'static) {
         *self.0.on_present.lock().unwrap() = Some(Arc::new(callback));
     }
 
     pub fn stats(&self) -> SurfaceStats {
-        self.0.ring.stats()
+        let mut stats = self.0.ring.stats();
+        stats.waiting = self
+            .0
+            .frames
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|frame| !frame.sync.ready())
+            .count();
+        stats
     }
 
     /// Mark the surface unusable, typically from the engine's device-lost
@@ -184,6 +220,37 @@ impl EngineSurface {
     pub fn is_valid(&self) -> bool {
         !self.0.invalid.load(Ordering::Acquire)
     }
+}
+
+fn notify(shared: &Shared) {
+    let callback = shared.on_present.lock().unwrap().clone();
+    if let Some(callback) = callback {
+        callback();
+    }
+}
+
+/// Wait off the UI thread for a frame's sync point, then wake the UI. Exits
+/// early when the frame is superseded or the surface is dropped; a sync point
+/// that is never reached keeps only this thread waiting, in short slices.
+fn spawn_waiter(shared: Weak<Shared>, frame: Weak<SurfaceFrame>) {
+    let _ = std::thread::Builder::new()
+        .name("engine-surface-wait".into())
+        .spawn(move || {
+            loop {
+                let Some(waiting) = frame.upgrade() else {
+                    return;
+                };
+                let reached = waiting.sync.wait_reached(Duration::from_millis(100));
+                drop(waiting);
+                let Some(shared) = shared.upgrade() else {
+                    return;
+                };
+                if reached {
+                    notify(&shared);
+                    return;
+                }
+            }
+        });
 }
 
 /// One presented frame. Holding it keeps its slot published.

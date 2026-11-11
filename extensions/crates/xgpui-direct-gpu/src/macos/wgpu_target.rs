@@ -135,7 +135,10 @@ impl WgpuSurfaceTarget {
             .add_signal_event(self.event.clone(), self.next);
         self.queue.submit(commands);
         self.surface
-            .present(slot, SyncPoint::new(self.event.clone(), self.next))
+            // SAFETY: the signal was staged on the submission above.
+            .present(slot, unsafe {
+                SyncPoint::submitted(self.event.clone(), self.next)
+            })
     }
 
     /// Frames are always handed over with a GPU-side wait on macOS.
