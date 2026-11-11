@@ -1,0 +1,563 @@
+//! Windows transport: shared NT-handle D3D12 textures and a shared fence.
+//!
+//! The engine is a wgpu device of its own (D3D12). `WgpuSurfaceTarget` creates
+//! one shared committed resource per slot (`D3D12_HEAP_FLAG_SHARED`,
+//! simultaneous access) and an NT handle for it. The D3D11 compositor opens
+//! each slot once per device, after checking that both use the same adapter
+//! (LUID), and adopts it through `Dx11CustomContext::adopt_texture` without a
+//! copy (issue #198, spike 3).
+//!
+//! Simultaneous access lets a slot decay to the common state when the engine's
+//! command lists complete. The engine signals a shared fence after them and
+//! presents without waiting; the compositor opens the fence once and its
+//! preparation batch issues `ID3D11DeviceContext4::Wait` on the immediate
+//! context (#197 K3). Without a shared fence the engine waits on its own
+//! thread; without D3D11.4 fences, preparation waits on the CPU.
+use crate::{EngineSurface, SurfaceDesc, SurfaceFormat, SurfaceSlot, Unsupported};
+use anyhow::{Context as _, Result, ensure};
+use gpui_windows::custom_draw::Dx11CustomContext;
+use std::any::Any;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use wgpu::hal::api::Dx12;
+use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE, WAIT_OBJECT_0};
+use windows::Win32::Graphics::Direct3D11::{
+    ID3D11Device, ID3D11Device1, ID3D11Device5, ID3D11Fence, ID3D11Texture2D,
+};
+use windows::Win32::Graphics::Direct3D12::{
+    D3D12_FENCE_FLAG_SHARED, D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES,
+    D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_DESC, D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+    D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS,
+    D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_NONE,
+    D3D12_RESOURCE_STATE_COMMON, D3D12_TEXTURE_LAYOUT_UNKNOWN, ID3D12Device, ID3D12Fence,
+    ID3D12Resource,
+};
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_SAMPLE_DESC,
+};
+use windows::Win32::Graphics::Dxgi::IDXGIDevice;
+use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
+use windows::core::{Interface, PCWSTR};
+
+#[cfg(test)]
+mod tests;
+
+/// Readiness of a presented slot: already complete, or a value on the engine's
+/// shared fence that the compositor waits for on the GPU.
+#[derive(Clone)]
+pub struct SyncPoint(Readiness);
+#[derive(Clone)]
+enum Readiness {
+    Completed,
+    /// The flag caches "reached" so recompositing a finished frame never
+    /// queries an engine device that may since have been lost.
+    Fence(Arc<SharedFence>, u64, Arc<std::sync::atomic::AtomicBool>),
+}
+impl std::fmt::Debug for SyncPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Readiness::Completed => f.write_str("SyncPoint::Completed"),
+            Readiness::Fence(_, value, _) => write!(f, "SyncPoint::Fence({value})"),
+        }
+    }
+}
+impl SyncPoint {
+    /// The slot's writes have completed on the engine's GPU queue.
+    pub fn completed() -> Self {
+        Self(Readiness::Completed)
+    }
+    /// Whether the compositor waits for this point on the GPU.
+    pub fn is_gpu_wait(&self) -> bool {
+        matches!(self.0, Readiness::Fence(..))
+    }
+    pub(crate) fn reached(&self) -> bool {
+        match &self.0 {
+            Readiness::Completed => true,
+            Readiness::Fence(fence, value, seen) => {
+                seen.load(Ordering::Acquire)
+                    || (fence.reached(*value) && {
+                        seen.store(true, Ordering::Release);
+                        true
+                    })
+            }
+        }
+    }
+    /// Whether a frame with this point can be composited now. Fence points
+    /// come only from `WgpuSurfaceTarget`, which submits the signal before
+    /// presenting, so the compositor may wait for them on the GPU, unless it
+    /// cannot open the fence.
+    pub(crate) fn ready(&self) -> bool {
+        match &self.0 {
+            Readiness::Completed => true,
+            Readiness::Fence(fence, ..) => {
+                (!fence.no_host_wait.load(Ordering::Acquire)
+                    && !fence.observe_only.load(Ordering::Acquire))
+                    || self.reached()
+            }
+        }
+    }
+    /// Block up to `timeout` for the point (waiter thread only).
+    pub(crate) fn wait_reached(&self, timeout: Duration) -> bool {
+        match &self.0 {
+            Readiness::Completed => true,
+            Readiness::Fence(fence, value, _) => {
+                self.reached() || (fence.wait(*value, timeout) && self.reached())
+            }
+        }
+    }
+}
+
+/// Bounded CPU wait for the first frame on a compositor that cannot open the
+/// engine's fence (later frames are never waited for).
+const FIRST_FRAME_WAIT: Duration = Duration::from_millis(100);
+
+/// The engine's shared D3D12 fence and the compositor's opened view of it.
+pub(crate) struct SharedFence {
+    // Field order is drop order: release the D3D12 fence (and the host's view)
+    // before the engine device clone. wgpu unloads d3d12.dll when its device
+    // is destroyed, so a D3D12 object released afterwards would call into an
+    // unloaded library.
+    fence: ID3D12Fence,
+    // Keyed by the compositor device object, held so its address cannot be
+    // reused by a recreated device (#197 K6).
+    host: Mutex<Option<(ID3D11Device, Option<ID3D11Fence>)>>,
+    /// Set once a compositor could not open the fence: its frames are then
+    /// shown only once observed reached, never waited for.
+    no_host_wait: AtomicBool,
+    /// Set by `WgpuSurfaceTarget::set_gpu_wait(false)`: frames are only
+    /// observed, never waited for.
+    observe_only: AtomicBool,
+    handle: SharedHandle,
+    _engine: wgpu::Device,
+}
+impl SharedFence {
+    fn reached(&self, value: u64) -> bool {
+        unsafe { self.fence.GetCompletedValue() >= value }
+    }
+    /// The compositor's fence, or `None` when it lacks D3D11.4 fences.
+    fn host_fence(&self, context: &Dx11CustomContext) -> Result<Option<ID3D11Fence>> {
+        let mut host = self.host.lock().unwrap();
+        if let Some((cached, fence)) = host.as_ref()
+            && cached.as_raw() == context.device.as_raw()
+        {
+            return Ok(fence.clone());
+        }
+        let opened = context
+            .device
+            .cast::<ID3D11Device5>()
+            .ok()
+            .and_then(|device| {
+                let mut fence: Option<ID3D11Fence> = None;
+                unsafe { device.OpenSharedFence(self.handle.0, &mut fence) }.ok()?;
+                fence
+            });
+        if opened.is_none() {
+            self.no_host_wait.store(true, Ordering::Release);
+        }
+        *host = Some((context.device.clone(), opened.clone()));
+        Ok(opened)
+    }
+    /// Block up to `timeout` for `value`; never call on the UI thread
+    /// except for the bounded first-frame fallback.
+    fn wait(&self, value: u64, timeout: Duration) -> bool {
+        if self.reached(value) {
+            return true;
+        }
+        let Ok(event) = (unsafe { CreateEventW(None, true, false, PCWSTR::null()) }) else {
+            return false;
+        };
+        let signalled = unsafe { self.fence.SetEventOnCompletion(value, event) }.is_ok()
+            && unsafe {
+                WaitForSingleObject(event, timeout.as_millis().min(u32::MAX as u128 - 1) as u32)
+            } == WAIT_OBJECT_0;
+        unsafe {
+            let _ = CloseHandle(event);
+        }
+        signalled && self.reached(value)
+    }
+}
+
+fn dxgi_format(format: SurfaceFormat) -> DXGI_FORMAT {
+    match format {
+        SurfaceFormat::Bgra8Srgb => DXGI_FORMAT_B8G8R8A8_UNORM,
+        SurfaceFormat::Rgba16FloatLinearP3 => DXGI_FORMAT_R16G16B16A16_FLOAT,
+    }
+}
+fn wgpu_format(format: SurfaceFormat) -> wgpu::TextureFormat {
+    match format {
+        SurfaceFormat::Bgra8Srgb => wgpu::TextureFormat::Bgra8Unorm,
+        SurfaceFormat::Rgba16FloatLinearP3 => wgpu::TextureFormat::Rgba16Float,
+    }
+}
+
+/// An owned NT handle, closed on drop.
+struct SharedHandle(HANDLE);
+// SAFETY: an NT handle is a process-wide kernel object reference; it is only
+// passed to OpenSharedResource1 and closed once.
+unsafe impl Send for SharedHandle {}
+unsafe impl Sync for SharedHandle {}
+impl Drop for SharedHandle {
+    fn drop(&mut self) {
+        let _ = unsafe { CloseHandle(self.0) };
+    }
+}
+
+/// One slot's shared handle plus the compositor's opened view of it.
+pub(crate) struct SlotResources {
+    handle: SharedHandle,
+    adapter: (u32, i32),
+    // Keyed by the compositor device object (see `SharedFence::host`).
+    host: Mutex<Option<(ID3D11Device, ID3D11Texture2D)>>,
+}
+impl std::fmt::Debug for SlotResources {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SlotResources")
+            .field("adapter", &self.adapter)
+            .finish_non_exhaustive()
+    }
+}
+
+impl SlotResources {
+    /// The compositor's texture over this slot, opened once per host device.
+    fn host_texture(&self, context: &Dx11CustomContext) -> Result<ID3D11Texture2D> {
+        let mut host = self.host.lock().unwrap();
+        if let Some((cached, texture)) = host.as_ref()
+            && cached.as_raw() == context.device.as_raw()
+        {
+            return Ok(texture.clone());
+        }
+        let dxgi: IDXGIDevice = context.device.cast()?;
+        let desc = unsafe { dxgi.GetAdapter()?.GetDesc()? };
+        let luid = (desc.AdapterLuid.LowPart, desc.AdapterLuid.HighPart);
+        ensure!(
+            luid == self.adapter,
+            Unsupported("engine and compositor use different GPUs".into())
+        );
+        let device: ID3D11Device1 = context
+            .device
+            .cast()
+            .map_err(|_| Unsupported("the compositor lacks ID3D11Device1".into()))?;
+        let texture: ID3D11Texture2D = unsafe { device.OpenSharedResource1(self.handle.0) }
+            .map_err(|error| {
+                Unsupported(format!(
+                    "the compositor cannot open the engine's shared texture \
+                     (engine and compositor on different adapters?): {error}"
+                ))
+            })?;
+        *host = Some((context.device.clone(), texture.clone()));
+        Ok(texture)
+    }
+}
+
+/// The D3D11 compositor retires frames on its fence worker thread.
+pub(crate) fn retire_completed(_slots: &[Arc<SlotResources>]) {}
+
+pub(crate) fn prepare_frame(
+    _desc: &SurfaceDesc,
+    resources: &SlotResources,
+    sync: &SyncPoint,
+    _color: gpui::ImageColorMode,
+    backend: &dyn Any,
+) -> Result<Box<dyn Any>> {
+    let context = backend
+        .downcast_ref::<Dx11CustomContext>()
+        .ok_or_else(|| Unsupported("engine surfaces require the D3D11 compositor".into()))?;
+    let texture = resources.host_texture(context)?;
+    if let Readiness::Fence(fence, value, _) = &sync.0
+        && !sync.reached()
+    {
+        match fence.host_fence(context)? {
+            // SAFETY: opened on the host device from the engine's shared fence,
+            // and the engine submitted the signal before presenting.
+            Some(host) => unsafe { context.wait_for_fence(&host, *value)? },
+            // Learned on the first frame only; later frames from this fence
+            // are selected only once reached (`SyncPoint::ready`).
+            None => anyhow::ensure!(
+                fence.wait(*value, FIRST_FRAME_WAIT) && sync.reached(),
+                "engine frame not ready and the compositor cannot wait on the GPU"
+            ),
+        }
+    }
+    // SAFETY: the texture was opened on the host device; the engine's writes
+    // completed before present and simultaneous access needs no transition;
+    // the slot's lease keeps it unmodified while this frame can be sampled.
+    Ok(Box::new(unsafe { context.adopt_texture(texture) }?))
+}
+
+/// A wgpu engine (D3D12) on its own device rendering into surface slots.
+///
+/// The engine must run on the compositor's adapter. `present` waits for the
+/// engine's GPU work on the calling thread, so call it from the engine thread.
+pub struct WgpuSurfaceTarget {
+    surface: EngineSurface,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    textures: Vec<wgpu::Texture>,
+    fence: Option<Arc<SharedFence>>,
+    next: u64,
+    heavy: Option<crate::heavy::Heavy>,
+    heavy_sync: Option<SyncPoint>,
+}
+
+impl WgpuSurfaceTarget {
+    /// Features the engine's wgpu device must enable.
+    pub fn required_features() -> wgpu::Features {
+        wgpu::Features::empty()
+    }
+
+    /// Allocate shared slots on the engine device and create the surface.
+    pub fn new(desc: SurfaceDesc, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Self> {
+        desc.validate()?;
+        let raw: ID3D12Device = unsafe { device.as_hal::<Dx12>() }
+            .ok_or_else(|| Unsupported("wgpu engine surfaces require the D3D12 backend".into()))?
+            .raw_device()
+            .clone();
+        let luid = unsafe { raw.GetAdapterLuid() };
+        let adapter = (luid.LowPart, luid.HighPart);
+        let fence = unsafe { raw.CreateFence::<ID3D12Fence>(0, D3D12_FENCE_FLAG_SHARED) }
+            .ok()
+            .and_then(|fence| {
+                let handle =
+                    unsafe { raw.CreateSharedHandle(&fence, None, GENERIC_ALL.0, PCWSTR::null()) }
+                        .ok()?;
+                Some(Arc::new(SharedFence {
+                    fence,
+                    host: Mutex::new(None),
+                    no_host_wait: AtomicBool::new(false),
+                    observe_only: AtomicBool::new(false),
+                    handle: SharedHandle(handle),
+                    _engine: device.clone(),
+                }))
+            });
+        let heap = D3D12_HEAP_PROPERTIES {
+            Type: D3D12_HEAP_TYPE_DEFAULT,
+            ..Default::default()
+        };
+        let resource_desc = D3D12_RESOURCE_DESC {
+            Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+            Alignment: 0,
+            Width: desc.width as u64,
+            Height: desc.height,
+            DepthOrArraySize: 1,
+            MipLevels: 1,
+            Format: dxgi_format(desc.format),
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Layout: D3D12_TEXTURE_LAYOUT_UNKNOWN,
+            Flags: D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET
+                | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS
+                | if desc.format.supports_storage() {
+                    D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+                } else {
+                    D3D12_RESOURCE_FLAG_NONE
+                },
+        };
+        let mut usage = wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::COPY_DST;
+        if desc.format.supports_storage() {
+            usage |= wgpu::TextureUsages::STORAGE_BINDING;
+        }
+        let size = wgpu::Extent3d {
+            width: desc.width,
+            height: desc.height,
+            depth_or_array_layers: 1,
+        };
+        let mut slots = Vec::new();
+        let mut textures = Vec::new();
+        for _ in 0..desc.slots {
+            let mut resource: Option<ID3D12Resource> = None;
+            unsafe {
+                raw.CreateCommittedResource(
+                    &heap,
+                    D3D12_HEAP_FLAG_SHARED,
+                    &resource_desc,
+                    D3D12_RESOURCE_STATE_COMMON,
+                    None,
+                    &mut resource,
+                )
+            }
+            .context("shared slot allocation failed")?;
+            let resource = resource.context("missing shared slot resource")?;
+            let handle = SharedHandle(
+                unsafe { raw.CreateSharedHandle(&resource, None, GENERIC_ALL.0, PCWSTR::null()) }
+                    .context("shared slot handle creation failed")?,
+            );
+            let hal = unsafe {
+                wgpu::hal::dx12::Device::texture_from_raw(
+                    resource,
+                    wgpu_format(desc.format),
+                    wgpu::TextureDimension::D2,
+                    size,
+                    1,
+                    1,
+                )
+            };
+            textures.push(unsafe {
+                device.create_texture_from_hal::<Dx12>(
+                    hal,
+                    &wgpu::TextureDescriptor {
+                        label: Some("engine_surface_slot"),
+                        size,
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu_format(desc.format),
+                        usage,
+                        view_formats: &[],
+                    },
+                    wgpu::TextureUses::UNINITIALIZED,
+                )
+            });
+            slots.push(Arc::new(SlotResources {
+                handle,
+                adapter,
+                host: Mutex::new(None),
+            }));
+        }
+        Ok(Self {
+            surface: EngineSurface::from_slots(desc, slots)?,
+            device: device.clone(),
+            queue: queue.clone(),
+            textures,
+            fence,
+            next: 0,
+            heavy: None,
+            heavy_sync: None,
+        })
+    }
+
+    /// Whether frames are handed over with a GPU-side wait (shared fence)
+    /// rather than the engine waiting on its own thread.
+    /// Whether the compositor may wait on the GPU for this target's frames
+    /// (default). With `false` (observe-only) a frame is shown only once its
+    /// GPU work is observed complete, so a slow engine frame never holds up
+    /// composition; the last complete frame stays on screen meanwhile.
+    /// Costs up to a frame of latency. Applies to frames presented after the
+    /// call.
+    pub fn set_gpu_wait(&mut self, enabled: bool) {
+        if let Some(shared) = &self.fence {
+            shared.observe_only.store(!enabled, Ordering::Release);
+        }
+    }
+
+    /// See [`Self::set_gpu_wait`].
+    pub fn gpu_wait(&self) -> bool {
+        self.fence
+            .as_ref()
+            .is_some_and(|shared| !shared.observe_only.load(Ordering::Acquire))
+    }
+
+    pub fn gpu_sync(&self) -> bool {
+        self.fence.is_some()
+    }
+
+    pub fn format(&self) -> wgpu::TextureFormat {
+        wgpu_format(self.surface.desc().format)
+    }
+
+    /// The engine's texture over `slot`.
+    pub fn texture(&mut self, slot: &SurfaceSlot) -> Result<wgpu::Texture> {
+        Ok(self.textures[slot.index()].clone())
+    }
+
+    /// Submit `commands`, wait for the engine's GPU work to complete, then
+    /// publish the slot.
+    pub fn present(
+        &mut self,
+        slot: SurfaceSlot,
+        commands: impl IntoIterator<Item = wgpu::CommandBuffer>,
+    ) -> Result<()> {
+        let submitted = std::time::Instant::now();
+        if let Some(fence) = &self.fence {
+            // Signal after this submission; present only once it is submitted.
+            self.next += 1;
+            unsafe { self.queue.as_hal::<Dx12>() }
+                .context("missing D3D12 engine queue")?
+                .add_signal_fence(fence.fence.clone(), self.next);
+            self.queue.submit(commands);
+            return self.publish(
+                slot,
+                SyncPoint(Readiness::Fence(
+                    fence.clone(),
+                    self.next,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                )),
+                submitted,
+            );
+        }
+        let index = self.queue.submit(commands);
+        self.device
+            .poll(wgpu::PollType::Wait {
+                submission_index: Some(index),
+                timeout: Some(Duration::from_secs(5)),
+            })
+            .context("engine GPU work did not complete")?;
+        self.publish(slot, SyncPoint::completed(), submitted)
+    }
+
+    /// Heavy-engine mode (see the `heavy` module): observe-only
+    /// presentation, pacing on compositor lag ([`Self::pace`]) and chunk
+    /// advice ([`Self::suggested_chunks`]). `None` restores the defaults
+    /// (GPU-side wait, no pacing).
+    pub fn set_heavy(&mut self, config: Option<crate::HeavyEngine>) {
+        self.set_gpu_wait(config.is_none());
+        self.heavy = config.map(crate::heavy::Heavy::new);
+        self.heavy_sync = None;
+    }
+
+    /// Heavy-engine state, when enabled.
+    pub fn heavy(&self) -> Option<crate::HeavyStatus> {
+        self.heavy.as_ref().map(|heavy| heavy.status())
+    }
+
+    /// In heavy-engine mode, how long to wait before rendering the next
+    /// frame (backs off while the compositor lags); zero otherwise. Also
+    /// measures the previous frame's GPU time for [`Self::suggested_chunks`].
+    pub fn pace(&mut self) -> std::time::Duration {
+        let Some(heavy) = &mut self.heavy else {
+            return std::time::Duration::ZERO;
+        };
+        if let Some(sync) = &self.heavy_sync {
+            let reached = sync.reached();
+            heavy.observe(reached);
+            if reached {
+                self.heavy_sync = None;
+            }
+        }
+        heavy.pace(&self.surface.stats())
+    }
+
+    /// In heavy-engine mode, how many separate submissions to split a
+    /// frame's work into so each stays near the chunk budget; 1 otherwise.
+    /// Submit all but the last chunk with the engine's queue, the last with
+    /// [`Self::present`].
+    pub fn suggested_chunks(&self) -> u32 {
+        self.heavy
+            .as_ref()
+            .map_or(1, |heavy| heavy.suggested_chunks())
+    }
+
+    fn publish(
+        &mut self,
+        slot: SurfaceSlot,
+        sync: SyncPoint,
+        submitted: std::time::Instant,
+    ) -> Result<()> {
+        if let Some(heavy) = &mut self.heavy {
+            heavy.on_present(submitted);
+            if self.heavy_sync.is_none() {
+                self.heavy_sync = Some(sync.clone());
+            }
+        }
+        self.surface.present(slot, sync)
+    }
+
+    pub fn surface(&self) -> &EngineSurface {
+        &self.surface
+    }
+}
