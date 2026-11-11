@@ -2746,7 +2746,24 @@ pub struct WindowOptions {
 
     /// The minimum interval between animation frames while the window is inactive.
     ///
-    /// Set to `None` to disable inactive-window animation frame throttling.
+    /// Defaults to 33.3 ms (about 30 fps). Set to `None` to disable inactive-window
+    /// animation frame throttling, for example for a second window showing a live
+    /// canvas. It can only be set when the window is created.
+    ///
+    /// The limit applies to frames with pending [`Window::on_next_frame`] callbacks
+    /// (including [`Window::request_animation_frame`]) or a forced render, in a
+    /// window that is not active and is not receiving input at 60 or more events
+    /// per second. A redraw requested only with `cx.notify()` is not throttled.
+    ///
+    /// Other caps on those same animation frames, independent of this setting:
+    ///
+    /// - In low-power mode (reported on macOS, Windows and Linux), animation frames
+    ///   are capped at 30 fps in every window, including inactive windows with `None`.
+    /// - Under serious or critical thermal pressure (reported on macOS only), animation
+    ///   frames in an active window are capped at 60 fps.
+    ///
+    /// [`Window::on_next_frame`]: crate::Window::on_next_frame
+    /// [`Window::request_animation_frame`]: crate::Window::request_animation_frame
     pub inactive_frame_interval: Option<Duration>,
 
     /// Whether the window should be resizable by the user
