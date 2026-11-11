@@ -458,6 +458,10 @@ impl WgpuContext {
         if adapter.features().contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF) {
             required_features |= wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
         }
+        #[cfg(all(target_os = "linux", feature = "external-memory"))]
+        if adapter.features().contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_FD) {
+            required_features |= wgpu::Features::VULKAN_EXTERNAL_MEMORY_FD;
+        }
         let color_atlas_texture_format = Self::select_color_texture_format(adapter)?;
         #[cfg(target_family = "wasm")]
         let required_limits = if adapter.get_info().backend == wgpu::Backend::Gl {
@@ -474,17 +478,25 @@ impl WgpuContext {
             .using_resolution(adapter.limits())
             .using_alignment(adapter.limits());
 
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("gpui_device"),
-                required_features,
-                required_limits,
-                memory_hints: wgpu::MemoryHints::MemoryUsage,
-                trace: wgpu::Trace::Off,
-                experimental_features: wgpu::ExperimentalFeatures::disabled(),
-            })
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to create wgpu device: {e}"))?;
+        let descriptor = wgpu::DeviceDescriptor {
+            label: Some("gpui_device"),
+            required_features,
+            required_limits,
+            memory_hints: wgpu::MemoryHints::MemoryUsage,
+            trace: wgpu::Trace::Off,
+            experimental_features: wgpu::ExperimentalFeatures::disabled(),
+        };
+        #[cfg(all(target_os = "linux", feature = "external-memory"))]
+        let opened = Self::open_with_external_semaphores(adapter, &descriptor);
+        #[cfg(not(all(target_os = "linux", feature = "external-memory")))]
+        let opened = None;
+        let (device, queue) = match opened {
+            Some(pair) => pair,
+            None => adapter
+                .request_device(&descriptor)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to create wgpu device: {e}"))?,
+        };
 
         Ok((
             device,
@@ -492,6 +504,64 @@ impl WgpuContext {
             dual_source_blending,
             color_atlas_texture_format,
         ))
+    }
+
+    /// Create the Vulkan device with `VK_KHR_external_semaphore_fd` enabled, so
+    /// producers can import other devices' timeline semaphores (#197 K1).
+    /// `None` keeps the ordinary device path (no extension, not Vulkan, or failure).
+    #[cfg(all(target_os = "linux", feature = "external-memory"))]
+    fn open_with_external_semaphores(
+        adapter: &wgpu::Adapter,
+        descriptor: &wgpu::DeviceDescriptor<'_>,
+    ) -> Option<(wgpu::Device, wgpu::Queue)> {
+        use wgpu::hal::api::Vulkan;
+        let name = ash::khr::external_semaphore_fd::NAME;
+        let open = {
+            // SAFETY: the guard is dropped before the adapter is used again.
+            let hal_adapter = unsafe { adapter.as_hal::<Vulkan>() }?;
+            let available = unsafe {
+                hal_adapter
+                    .shared_instance()
+                    .raw_instance()
+                    .enumerate_device_extension_properties(hal_adapter.raw_physical_device())
+            }
+            .ok()?;
+            if !available
+                .iter()
+                .any(|extension| extension.extension_name_as_c_str() == Ok(name))
+            {
+                return None;
+            }
+            let callback: Box<wgpu::hal::vulkan::CreateDeviceCallback> = Box::new(move |args| {
+                if !args.extensions.contains(&name) {
+                    args.extensions.push(name);
+                }
+            });
+            // SAFETY: the callback only adds an extension the adapter supports.
+            unsafe {
+                hal_adapter.open_with_callback(
+                    descriptor.required_features,
+                    &descriptor.required_limits,
+                    &descriptor.memory_hints,
+                    Some(callback),
+                )
+            }
+        };
+        let open = match open {
+            Ok(open) => open,
+            Err(error) => {
+                log::warn!("Vulkan device with external semaphores failed ({error:?}); retrying without");
+                return None;
+            }
+        };
+        // SAFETY: `open` came from this adapter with the descriptor's features.
+        match unsafe { adapter.create_device_from_hal(open, descriptor) } {
+            Ok(pair) => Some(pair),
+            Err(error) => {
+                log::warn!("Vulkan device with external semaphores failed ({error}); retrying without");
+                None
+            }
+        }
     }
 
     #[cfg(not(target_family = "wasm"))]

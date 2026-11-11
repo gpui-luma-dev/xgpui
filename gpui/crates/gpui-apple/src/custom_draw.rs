@@ -104,6 +104,49 @@ impl MetalCustomContext {
     pub fn cache_key(&self) -> u64 {
         self.queue.as_ptr() as usize as u64
     }
+
+    /// Adopt a texture on the host device (for example an IOSurface written by
+    /// another queue) as a source-sized output, without a copy. The content's
+    /// `image_color_mode` selects the interpretation: RGBA16Float requires a
+    /// linear mode, so a non-wide window can show it as an sRGB preview.
+    /// `commands` are uncommitted host-queue recordings (for example a wait on
+    /// the producer's shared event) that the host submits before sampling.
+    ///
+    /// # Safety
+    ///
+    /// The texture's contents must be complete and visible to the host queue
+    /// once `commands` have run, and must stay unchanged while any scene can
+    /// sample this output.
+    pub unsafe fn adopt_texture(
+        &self,
+        texture: Retained<ProtocolObject<dyn MTLTexture>>,
+        commands: Vec<CommandBuffer>,
+    ) -> Result<MetalImageOutput> {
+        ensure!(
+            texture.device().registryID() == self.device.registryID(),
+            "adopted texture belongs to another device"
+        );
+        ensure!(
+            texture.textureType() == MTLTextureType::Type2D
+                && texture.sampleCount() == 1
+                && texture.arrayLength() == 1
+                && texture.usage().contains(MTLTextureUsage::ShaderRead)
+                && matches!(
+                    texture.pixelFormat(),
+                    MTLPixelFormat::RGBA8Unorm
+                        | MTLPixelFormat::BGRA8Unorm
+                        | MTLPixelFormat::RGBA16Float
+                )
+                && (1..=16384).contains(&texture.width())
+                && (1..=16384).contains(&texture.height()),
+            "adopted texture must be a sampleable 2D RGBA8, BGRA8 or RGBA16Float texture of 1..=16384 pixels"
+        );
+        validate_commands(self, &commands)?;
+        Ok(MetalImageOutput {
+            output: MetalCustomOutput { texture, commands },
+            queue: self.queue.clone(),
+        })
+    }
 }
 
 /// Producer output: straight-alpha, encoded sRGB-channel BGRA8Unorm texture.
