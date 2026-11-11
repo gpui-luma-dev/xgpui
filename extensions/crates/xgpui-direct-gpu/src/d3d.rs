@@ -132,6 +132,27 @@ impl Drop for SharedHandle {
     }
 }
 
+/// Temporary teardown diagnostics (#197 K4): `XGPUI_TRACE_DROPS=1` prints
+/// which thread releases engine-shared objects.
+fn trace_drop(what: &str) {
+    if std::env::var_os("XGPUI_TRACE_DROPS").is_some() {
+        eprintln!(
+            "trace: drop {what} on thread {:?}",
+            std::thread::current().name().unwrap_or("unnamed")
+        );
+    }
+}
+impl Drop for SharedFence {
+    fn drop(&mut self) {
+        trace_drop("SharedFence");
+    }
+}
+impl Drop for SlotResources {
+    fn drop(&mut self) {
+        trace_drop("SlotResources");
+    }
+}
+
 /// One slot's shared handle plus the compositor's opened view of it.
 pub(crate) struct SlotResources {
     handle: SharedHandle,

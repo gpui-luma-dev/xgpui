@@ -390,6 +390,20 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         }
     }
 
+    impl Drop for Lab {
+        fn drop(&mut self) {
+            eprintln!("lab: Lab view dropping (engine and surface)");
+        }
+    }
+    impl Drop for WaveEngine {
+        fn drop(&mut self) {
+            eprintln!(
+                "lab: engine dropping on thread {:?}",
+                std::thread::current().name().unwrap_or("unnamed")
+            );
+        }
+    }
+
     impl Render for Lab {
         fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
             let now = Instant::now();
@@ -535,6 +549,12 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     pub fn main() -> Result<()> {
         let options = Options::parse();
+        // Temporary teardown traces while the Windows exit crash is open.
+        // SAFETY: set before any other thread exists.
+        unsafe {
+            std::env::set_var("XGPUI_TRACE_DROPS", "1");
+            std::env::set_var("GPUI_D3D11_RETIREMENT_TRACE", "1");
+        }
         if options.query_retirement {
             // SAFETY: set before any other thread exists.
             unsafe { std::env::set_var("GPUI_D3D11_FENCE_RETIREMENT", "0") };
