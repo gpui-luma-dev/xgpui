@@ -43,7 +43,7 @@ The existing `apps/xgpui-ext-lab/extensions-web` gallery is not modified.
 ```sh
 # From the repository root; wasm-bindgen-cli must be 0.2.129.
 bash apps/xgpui-ext-lab/shader-examples/build.sh
-just docs-serve
+just pages-serve
 ```
 
 Open http://localhost:8000/examples/shaders/ and choose an example and backend. WebGPU needs a
@@ -78,7 +78,7 @@ poll timeout; the tested examples continued rendering without console errors.
 The shader crate's 23 tests passed, including Metal/wgpu pixel checks. The native
 example app initially compiled for macOS and cross-compiled for Windows. That
 checkpoint is superseded by the owner's 2026-11-04 Windows native-lab and
-`just lab-test` pass; see [Windows validation](../../../docs/LOCAL_DEVELOPMENT.md#windows-validation).
+`just lab-test` pass; see [Windows validation](https://xgpui.dev/local-development.html#windows-validation).
 
 Native app acceptance on 2026-10-25: launched the macOS Metal app, switched
 between Minimal, Glow and Particles using the in-app selector, and verified the

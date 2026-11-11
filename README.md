@@ -38,8 +38,8 @@ Without just, use `cargo build --release --locked`.
 for targets, launch commands and why the lab package is unpublished.
 
 `just build` builds the libraries supported by the selected target; it does not
-launch an application. See [Local Development](docs/LOCAL_DEVELOPMENT.md) for Windows,
-Linux and macOS build/run commands, or [build harness details](docs/BUILDING.md).
+launch an application. See [Local Development](https://xgpui.dev/local-development.html) for Windows,
+Linux and macOS build/run commands, or [build harness details](https://xgpui.dev/local-development.html#build-harness-and-test-runner).
 
 ## Crate release preflight
 
@@ -94,13 +94,13 @@ The website at <https://xgpui.dev/> is the static `pages/` directory: guides,
 crate pages and the browser demos. Preview and check it without building:
 
 ```sh
-just docs-serve
-just docs-check
+just pages-serve
+just pages-check
 ```
 
-See [docs/WEBSITE.md](docs/WEBSITE.md) for layout, demos and publishing.
+See [Edit this website](https://xgpui.dev/local-development.html#edit-this-website) for layout and demos, and [website deployment](https://xgpui.dev/releasing.html#website-deployment) for publishing.
 
-See [documentation instructions](docs/WEBSITE.md) for maintenance and checks.
+See [documentation instructions](https://xgpui.dev/local-development.html#edit-this-website) for maintenance and checks.
 
 ## Contributing
 

@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Shell lab and Linux preferences · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/shell-lab.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="shell.html">← Desktop shell</a></p><article class="extension-document"><h1 id="shell-lab-and-linux-preferences">Shell lab and Linux preferences</h1>
+<p>Interactive diagnostics for xgpui issue 149. The lab reads the platform's current
+preferences and uses the same <code>ShellOptions::resolved_preferences</code> resolver as the
+client frame. It never writes desktop settings.</p>
+<h2 id="run">Run</h2>
+<p>From the xgpui repository:</p>
+<pre><code class="language-sh">just profile=dev lab-shell
+
+# Ask for the xgpui client frame on Linux (the compositor can decline).
+just profile=dev lab-shell --client-decorations
+
+# Exercise a non-resizable window.
+just profile=dev lab-shell --client-decorations --fixed-size
+</code></pre>
+<p>The shell is experimental. This release prepares its first crates.io publication; repository builds use the local workspace crate. The first build uses the existing native extension-lab workspace and its dependencies.</p>
+<h2 id="what-to-inspect">What to inspect</h2>
+<ul>
+<li><strong>Detected:</strong> actual values exposed by the platform snapshot. Missing values
+say <code>not reported</code>; this can mean an absent setting/provider, an unsupported
+platform, or an initial snapshot still pending. The API does not currently
+distinguish those cases, so the lab does not claim a specific reason.</li>
+<li><strong>Resolved client frame:</strong> actual resolver output after this window's overrides,
+desktop preferences and built-in fallbacks. Native/server decorations retain
+control of their own appearance; resolved values do not prove the compositor
+is displaying xgpui's frame.</li>
+<li><strong>System / explicit override:</strong> selected buttons show each window's current
+override. Explicit Normal, Black and None are preserved; Reset clears every
+override for this window only.</li>
+<li><strong>Typography / reduced motion:</strong> common desktop font descriptions now style the
+client-frame title. Per-window typography and motion-policy overrides are available.
+Motion is a resolved policy only: this static frame has no animations.</li>
+<li><strong>Window state:</strong> requested and platform-reported decoration modes, appearance,
+button layout, activation, maximization/fullscreen, capabilities, bounds,
+viewport and device scale. Decoration requests may be declined or arrive
+asynchronously; inspect the reported result.</li>
+<li><strong>Recent events:</strong> the last twelve distinct notifications/actions, newest first.
+Refresh View only rereads displayed state; it does not force a portal request.</li>
+</ul>
+<p>All interactive buttons support pointer activation, Tab focus, Enter/Space and
+accessible click actions. Unsupported operations are dimmed and do not dispatch.</p>
+<h2 id="client-frame-preview-on-mac-or-any-host">Client-frame preview on Mac (or any host)</h2>
+<p>The left pane contains a clearly labeled <strong>simulation</strong>, using the same renderer
+as the production client frame. The right pane scrolls independently, keeping the
+preview visible while changing per-window overrides.</p>
+<ul>
+<li>Change contrast, accent, typography and logical scale in the right pane to inspect their
+rendered result. Show Focus Ring simulates focus on the decorative close icon
+so accent changes remain visible without making preview controls actionable.
+Show Hover independently simulates the close-button hover background.</li>
+<li>Select Floating, Maximized, Tiled or Fullscreen, Light/Dark/native appearance,
+Active/Inactive, and alternate button layouts in the preview controls.</li>
+<li>Toggle the long title in Window Operations to inspect truncation in the preview.</li>
+<li>Preview buttons are decorative images; clicks, double-clicks, drag regions and
+resize borders do not close, move, resize or change the host window. Use the
+separate native Window Operations controls to operate the real window.</li>
+<li>Simulated choices are never stored in the detected platform snapshot. They do
+not claim to validate Linux compositor behavior or real desktop integration.</li>
+</ul>
+<p>Window Menu and decoration requests are disabled on macOS/Windows, where the
+current backend operations are no-ops. Dispatch guards enforce the same rule as
+the buttons, even if an unsupported action is invoked programmatically. The
+Linux-only <code>--client-decorations</code> startup option is ignored on these platforms.</p>
+<h2 id="manual-linux-check">Manual Linux check</h2>
+<ol>
+<li>Start the client-decorated lab on Fedora GNOME or Ubuntu GNOME. Confirm the
+reported decoration mode before judging frame styling.</li>
+<li>Change appearance, accent, contrast, text scale, button placement and title-bar
+actions through the desktop settings UI. Watch detected values and events.
+Portal values take precedence; optional GNOME/KDE native fallbacks fill missing
+preferences. See <a href="#linux-desktop-preferences">provider coverage</a>.</li>
+<li>Override contrast, accent, typography, scale and click actions in this window. Check that
+the client frame responds and desktop settings remain unchanged. Click the
+real title bar to exercise its selected action.</li>
+<li>Open a second window. Verify independent defaults and titles; reset one window
+while leaving the other's overrides intact.</li>
+<li>Try maximize/restore, fullscreen/exit, window menu, compact/normal size, the long
+title, and drag/resize. Minimize is restored through the desktop. Use desktop
+snap/tiling gestures to test tiling; the lab does not invent a portable tiling API.</li>
+<li>Open a fixed-size window and verify resize/maximize controls are unavailable.</li>
+<li>Move windows between displays and inspect device scale separately from logical
+text scale. Repeat with server decorations and another desktop/compositor.</li>
+</ol>
+<p>On macOS, native traffic lights remain while the app composes the title/app bar.
+On Windows, this composition path uses custom title-bar content and shell controls.
+Overrides style the app bar and simulated frame; they do not change native macOS
+traffic-light artwork. No behavior is selected from the displayed distro name.</p>
+<h2 id="build-and-headless-tests">Build and headless tests</h2>
+<pre><code class="language-sh">cargo build --locked --config .cargo/validation.toml \
+  --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shell-lab
+cargo test --locked --config .cargo/validation.toml \
+  --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shell-lab
+cargo test --locked --config .cargo/validation.toml -p xgpui-shell --lib
+</code></pre>
+<p>The lab's headless tests verify per-window override/reset isolation and rejection
+of unavailable fixed-window operations. Shared shell tests cover preference
+resolution. New headless tests verify Mac operation guards, simulation-state
+isolation and that clicks/double-clicks on rendered preview controls preserve the
+host window, its bounds, decorations and insets. These do not establish real GNOME/KDE input, rendering, accessibility,
+portal service behavior or resolution of the recorded Wayland frame stall.</p>
+<p>The lab adds no core platform public API beyond the separate #182 prerequisite.
+The shell extension exposes its existing resolver and result fields for accurate
+diagnostics instead of duplicating resolution logic in the app.</p>
+<h2 id="how-the-look-is-applied">How the look is applied</h2>
+<p>The new left-pane inspector uses <code>ResolvedShellPreferences::resolved_look</code>, the
+same resolver consumed by the production client frame and its safe preview.
+It displays the exact header, text, border, hover and effective focus colors;
+requested title font family/weight/style, scaled logical size, header height and
+button target size; and the resolved click actions and reduced-motion policy.</p>
+<ol>
+<li>Choose typography and logical scale in the right pane. The title changes;
+the sample body and lab controls keep their independent styles.</li>
+<li>Select Light/Dark and Active/Inactive. Compare the displayed color swatches
+with the header and title. Contrast selects the accessibility palette.</li>
+<li>Choose an accent and toggle Show Focus Ring. In high contrast, focus uses the
+foreground color instead of the accent. Toggle Show Hover to inspect its
+background independently; both can be visible together.</li>
+<li>Toggle reduced-motion policy. The inspector shows the resolved policy without
+pretending there is an animation to disable. Current hover/focus changes are instant.</li>
+<li>Reset this window. Desktop values or built-in fallbacks return. Open another
+window to check independent settings. Actual pointer/keyboard behavior on a
+native Linux client frame remains part of final platform validation.</li>
+</ol>
+<p>Fonts are <strong>requested</strong>, not reported as actual matched faces. GPUI may substitute
+an installed family or fall back for particular glyphs. The close icon is a vector;
+other control symbols use stable system typography independently of the title.
+Native/server decorations retain OS-controlled typography and colors; the app-owned
+bar inside or alongside them can use the shell look or app-supplied styles.</p>
+<h3 id="typography-contract-and-limits">Typography contract and limits</h3>
+<p><code>ShellTypography { font: gpui::Font, size: f32 }</code> is an extension API for explicit
+client-frame typography. <code>ShellOptions::typography</code> overrides the desktop font;
+<code>None</code> parses a desktop description or falls back to system UI at 14 logical px.
+Size is bounded to 8–48 before text scale (0.5–4), and the header grows to contain
+larger titles. Points convert at 96/72 logical px; device DPI is applied later by
+the renderer, never multiplied into this value again.</p>
+<p>The parser supports common Pango family/size/weight/style descriptions, including
+<code>px</code> and comma-terminated family names, and the family/size/weight/style subset of
+Qt 5/6 QFont strings. It is intentionally not a complete Pango/Qt interpreter:
+Pango family lists, stretch, variants, features and variation syntax are unsupported;
+QFont attributes beyond family/size/weight/style are not applied. Unsupported or
+invalid descriptions fall back; the raw description remains visible. Explicit
+<code>gpui::Font</code> overrides can supply features/fallbacks/variations directly.</p>
+<p>Format references: <a href="https://docs.gtk.org/Pango/type_func.FontDescription.from_string.html">Pango descriptions</a>
+and <a href="https://doc.qt.io/qt-6/qfont.html#toString">QFont serialization</a>.</p>
+<h3 id="experimental-extension-api-migration">Experimental extension API migration</h3>
+<p>This subtask adds <code>ShellTypography</code>, <code>ShellColors</code>, <code>ResolvedShellLook</code>,
+<code>ResolvedShellPreferences::resolved_look</code>, typography/motion option and result
+fields, and <code>ClientFramePreview::show_hover</code>. Use <code>..Default::default()</code> when
+constructing the unpublished <code>ShellOptions</code> with explicit fields. The resolved
+preference type is now <code>Clone</code> rather than <code>Copy</code> because it owns font data;
+clone it if needed. No serialization format or core GPUI API changes are introduced.</p>
+<p>Checks: 12 shell and five lab headless tests pass, including common font parsing,
+scale/override policy and rendered content-style isolation. The preview pointer
+safety and Mac unsupported-operation regressions still pass. No GUI was launched;
+new typography and look-inspector visuals still need manual acceptance.</p>
+<p>Strict shell library/test Clippy and focused shell-lab binary Clippy passed, as
+did shell Cargo formatting, lab rustfmt, <code>git diff --check</code> and the lab build.
+Using <code>--tests</code> for Clippy in the shared lab package also selects unrelated lab
+binaries and hits existing media-lab warnings; those files were not changed.</p>
+<h3 id="platform-readings-icon-source-and-hover-target">Platform readings, icon source and hover target</h3>
+<p>The right pane now starts with <strong>Platform preferences — actual readings</strong>. On
+macOS/Windows it explicitly says desktop font/accent/contrast/motion/title-bar
+action detection is not implemented; empty readings are not native OS defaults.
+Appearance and window state are still reported. The API currently has no native
+decoration-theme or icon-artwork preference. Client-frame icons are xgpui-shell
+artwork; platform button layout controls placement/availability, not their shape.</p>
+<p><strong>Simulate Close hover</strong> forces the close icon's hover background; it does not
+enable pointer interactions. An adjacent ON/OFF readout identifies the exact
+header and hover colors. Fullscreen hides chrome, so hover/focus simulation
+controls are disabled in that mode. A regression checks that simulated hover
+sets the control background; existing preview tests keep actions noninteractive.</p>
+<h2 id="app-composed-titleapp-bar">App-composed title/app bar</h2>
+<p>The <strong>real window's top bar</strong>, above the lab panels, now demonstrates the
+<code>shell-2026</code> composition model. The app supplies SVG artwork, controls, title and
+spacing. No icon-theme catalog or layout presets are added.</p>
+<ul>
+<li>Reset icon: clear this window's overrides.</li>
+<li>Panel icon: hide/show the raw platform preference panel.</li>
+<li>Title/empty space: explicit drag surface, separated from app buttons.</li>
+<li>Theme icon: toggle the simulated preview's appearance (not desktop settings).</li>
+<li>Plus icon: open an independent lab window.</li>
+</ul>
+<p>On macOS, the real native traffic lights remain at the left, with reserved space;
+the app bar fills the transparent title area. On Windows the app-composed bar
+uses the shell's window controls and native hit-test regions. On Linux a negotiated
+client frame wraps the app bar with window controls and resize edges. If the
+compositor supplies server decorations, the app bar sits inside the native frame
+and does not duplicate window controls. In fullscreen the app bar remains useful
+while window controls and native traffic-light clearance are omitted.</p>
+<p>The separate <strong>client-frame preview</strong> still shows built-in frame defaults; it is
+not a clone of the actionable app toolbar. Its decorative buttons remain inert.</p>
+<h3 id="developer-entry-point">Developer entry point</h3>
+<p>Use <code>ShellApp::open_shell_window_with_titlebar</code> instead of <code>open_shell_window</code>:</p>
+<pre><code class="language-rust">cx.open_shell_window_with_titlebar(
+    window_options,
+    ShellOptions::default(),
+    |window, cx| {
+        let header = cx.new(|cx| MyHeader::new(window, cx));
+        let content = cx.new(|cx| MyContent::new(window, cx));
+        (header, content)
+    },
+)?;
+</code></pre>
+<p><code>MyHeader</code> is an ordinary GPUI <code>Render</code> entity. Luma can supply its own SDK controls,
+look, icons and layout there. The shell wraps that content with its default
+background/typography and platform controls; child elements can supply their own
+styles. Use <code>ShellDragRegion::new(id, content)</code> for title text/empty drag surfaces,
+and keep interactive controls as siblings. A drag begins after a four-logical-pixel
+threshold; release clears tracking. Default macOS double click delegates to the
+native preference. <code>.options(...)</code> on the region can provide the window's explicit
+action overrides. Windows delegates dragging/control hit tests to the native path.</p>
+<p>The original <code>open_shell_window</code> API is unchanged and still uses default chrome.
+The new method configures transparent/custom title-bar options on macOS/Windows;
+macOS traffic lights are positioned for the resolved header height. Apps that need
+further native positioning can use existing GPUI window APIs from their header.
+Linux decoration requests continue to be negotiated with the compositor.</p>
+<p>This is an extension-only addition (<code>ShellApp</code> method and <code>ShellDragRegion</code>);
+no new core GPUI public API or serialization changes. Implementers of the
+experimental <code>ShellApp</code> trait need the new method; application callers using the
+existing method need no changes. Prerequisite #182 core API review remains separate.</p>
+<h3 id="final-manual-acceptance">Final manual acceptance</h3>
+<p>From this branch, run <code>just profile=dev lab-shell</code> on macOS/Windows, and also
+<code>just profile=dev lab-shell --client-decorations</code> on Linux. Check:</p>
+<ol>
+<li>App icons render; each action works with pointer, Tab/Enter/Space and accessibility.</li>
+<li>Native traffic lights (macOS) or frame controls stay usable and do not overlap app controls.</li>
+<li>Dragging the title moves the window. Clicking an app button does not start a drag.</li>
+<li>Double click honors the native/resolved action. Test maximize, fullscreen/restore,
+minimized restore, fixed-size windows and multi-display DPI changes.</li>
+<li>Linux client/server decoration modes do not draw duplicate headers or controls.</li>
+</ol>
+<p>Headless checks validate app/header layout, native traffic-light clearance,
+click isolation, platform option setup, app toolbar toggling, SVG rasterization and
+all earlier preview safety/override regressions. They do not replace native
+macOS/Windows/Linux interaction and visual checks. No GUI launch is performed.</p>
+<p>This completes the currently requested implementation scope; platform acceptance
+is the next step. It is not a declaration that the experimental crate is publishable.</p>
+<p>Titlebar-composition checks: 16 shell and seven lab tests passed, focused strict
+Clippy passed, formatting and diff checks passed, and the lab built without launch.</p>
+<h2 id="ci-and-actions">CI and Actions</h2>
+<p><code>Shell and title-bar validation</code> (<code>.github/workflows/shell.yml</code>) runs a focused
+Linux/macOS/Windows matrix for relevant pull requests and pushes to <code>main</code> or
+<code>issue-149/epic</code>; it also supports manual dispatch when available on the default
+branch. Each host checks formatting, shell and lab headless tests, the core
+preference-observer regression, focused strict Clippy and a native lab build.
+Linux additionally compiles and tests the actual portal/native fallback modules
+with Wayland and X11 enabled. No lab or native GUI is launched.</p>
+<p>The existing opt-in <strong>Windows lab applications</strong> workflow now includes <code>shell-lab</code>,
+runs its headless tests and uploads its release executable for manual acceptance.
+The existing broad Linux extension workflow already includes shell library tests
+and all lab binaries; it remains opt-in and is not made part of this focused job.</p>
+<p>These checks do not establish live GNOME/KDE providers, native traffic-light
+placement, Windows hit testing, accessibility or display-scale behavior. The
+summary records those limits on each matrix job. This CI subtask does not change
+<code>publish = false</code>, release inventory, publishing actions or upload authorization.</p>
+<p>Branch <code>issue-149/shell-ci</code> was created from the epic and carries the existing
+preference/lab/titlebar prerequisite commits without merging their PRs.</p>
+<p>Local CI-command verification on macOS: 24 headless tests passed (16 shell,
+seven lab and one core observer), focused strict Clippy and build passed, and
+workflow YAML/run-step syntax, formatting and diff checks passed. Hosted
+Linux/Windows jobs have not yet established native platform results.</p>
+<h2 id="linux-desktop-preferences">Linux desktop preferences</h2>
+<p>The shell work is integrated. This release prepares the first shell publication; final core API release approval and native desktop acceptance remain separate gates.</p>
+<h3 id="integration">Integration</h3>
+<p><code>App::desktop_preferences()</code> returns optional platform values.
+<code>App::observe_desktop_preferences(...)</code> reports changes; keep the returned
+subscription alive. The shell subscribes once per shell entity and redraws that
+entity when the desktop snapshot changes. Applications do not need a D-Bus client.</p>
+<p><code>ShellOptions::default()</code> follows the available desktop values. An explicit
+<code>Some(...)</code> overrides the corresponding value, including <code>Some(false)</code>,
+<code>Some(0)</code> for a black accent and <code>Some(TitlebarAction::None)</code> for disabled actions.
+<code>ShellWindow::set_options</code> replaces the window's overrides and redraws it.</p>
+<p>The existing light/dark and button-layout APIs remain responsible for those
+preferences. Other platforms currently return an empty desktop snapshot; their
+native window chrome is unchanged.</p>
+<h3 id="providers-and-fallbacks">Providers and fallbacks</h3>
+<p>Values resolve per field: standardized portal value, desktop portal extension,
+optional native desktop reader, then the consumer's default. Explicit window
+options continue to override that result. False, black and <code>TitlebarAction::None</code>
+are values, not missing settings.</p>
+<table><thead><tr><th>Preference</th><th>Portal sources</th><th>Optional native fallback / final default</th></tr></thead><tbody>
+<tr><td>Accent</td><td>freedesktop appearance <code>accent-color</code></td><td>No guessed theme palette; shell blue</td></tr>
+<tr><td>Contrast</td><td>freedesktop appearance <code>contrast</code></td><td>GNOME accessibility <code>high-contrast</code>; normal</td></tr>
+<tr><td>Reduced motion</td><td>freedesktop <code>reduced-motion</code>, GNOME <code>enable-animations</code>, KDE <code>AnimationDurationFactor</code></td><td>GNOME animation flag or KDE duration factor; unset</td></tr>
+<tr><td>Text scale</td><td>GNOME <code>text-scaling-factor</code></td><td>GNOME text scale; 1, shell clamps to 0.5–4</td></tr>
+<tr><td>Font description</td><td>GNOME <code>font-name</code>, KDE General <code>font</code></td><td>Native GNOME/KDE font; unset</td></tr>
+<tr><td>Title-bar actions</td><td>GNOME <code>action-*-click-titlebar</code></td><td>GNOME actions or portable subset of KWin actions; maximize / none / menu</td></tr>
+<tr><td>Light/dark</td><td>freedesktop <code>color-scheme</code></td><td>GNOME <code>color-scheme</code>; existing appearance API</td></tr>
+<tr><td>Button layout, cursors</td><td>GNOME portal extensions</td><td>GNOME native settings; existing platform defaults</td></tr>
+</tbody></table>
+<p>The native reader is selected by colon-separated <code>XDG_CURRENT_DESKTOP</code> tokens:
+GNOME/Unity (including <code>ubuntu:GNOME</code>) or KDE. Other desktops use the portal and
+consumer defaults. Merely installing GNOME schemas on KDE does not activate the
+GNOME native reader. KDE/GNOME portal extensions remain optional; they are not
+freedesktop standards.</p>
+<p>GNOME uses three concurrent, read-only <code>gsettings list-recursively</code> schema reads.
+KDE uses concurrent <code>kreadconfig6</code> queries, with <code>kreadconfig5</code> as an optional
+fallback, for <code>kdeglobals</code> font/animation preferences and KWin title-bar actions.
+KConfig handles config search paths, escaping and inheritance; the toolkit does
+not parse private INI files. No command uses a shell or writes preferences.
+Commands run in the background with five-second deadlines and kill-on-drop;
+missing tools, denied sandbox access, invalid values and failed queries leave
+individual preferences unavailable. Applications need no command or D-Bus code.</p>
+<p>The portal subscribes before reading, deduplicates across reconnects, refreshes
+every 15 seconds and retries failed sessions after five seconds. Native results
+are cached for 15 seconds during a healthy portal session, so portal signals do
+not launch commands repeatedly. During outages native preferences are still read
+on retries. Appearance/layout/cursor values retain their last-known values only
+when the failing portal and native reader cannot supply them. Extra optional
+preferences clear when unavailable. Successful empty snapshots reveal native
+fallbacks or restore consumer defaults. Explicit window overrides survive both.</p>
+<p>KDE font descriptions retain QFont serialization; GNOME descriptions retain Pango
+syntax. Neither is a family name. KDE display DPI is deliberately not converted
+to logical text scale (that would risk double scaling). Unsupported KWin actions,
+such as shading or vertical-only maximization, remain unavailable. KDE native
+button-layout, palette and cursor config are not guessed; their existing portal
+or consumer defaults apply. No app-wide fonts, animations or theme are changed.</p>
+<h4 id="applying-the-look">Applying the look</h4>
+<p>The shell-look subtask now applies common desktop font descriptions to the client
+frame title and adds a shell-lab inspector for resolved typography, colors,
+focus/hover, dimensions and click actions. It uses the production renderer's
+style resolver. Application content remains independently styled; reduced motion
+is reported as policy because the frame has no animation. See
+<a href="#how-the-look-is-applied">the walkthrough and parser limits</a>.
+New visuals remain pending manual acceptance at the end of issue 149.</p>
+<p>Provider contracts checked against upstream sources:
+<a href="https://github.com/GNOME/gsettings-desktop-schemas/blob/master/schemas/org.gnome.desktop.interface.gschema.xml.in">GNOME interface schema</a>,
+<a href="https://github.com/KDE/xdg-desktop-portal-kde/blob/master/src/settings.cpp">KDE portal settings</a>,
+and <a href="https://github.com/KDE/kwin/blob/master/src/kwin.kcfg">KWin settings</a>.</p>
+<h3 id="experimental-shell-migration">Experimental shell migration</h3>
+<p>The earlier local-only shell's scalar options are now optional overrides. Replace
+<code>high_contrast: true</code> with <code>high_contrast: Some(true)</code>, and similarly wrap explicit
+accent, scale and double-click values. New middle/right-click override fields can
+be omitted with <code>..Default::default()</code>. Callers already using <code>ShellOptions::default()</code>
+need no source change. Local lab adapters use that default constructor.</p>
+<h3 id="core-public-api-review-required-by-agentsmd">Core public API review required by AGENTS.md</h3>
+<table><thead><tr><th>Addition</th><th>Purpose</th><th>Compatibility and migration</th><th>Why core rather than extension</th></tr></thead><tbody>
+<tr><td><code>DesktopPreferences</code> and its optional fields</td><td>Normalized, toolkit-independent preference snapshot</td><td>Additive; no Serialize/Deserialize implementation or existing serialized format change; unset values preserve consumer defaults</td><td>The platform backend owns the portal connection and event loop</td></tr>
+<tr><td><code>TitlebarAction::{None, ToggleMaximize, Minimize, Menu}</code></td><td>Represent the portable subset of desktop title-bar actions</td><td>Additive type; unsupported actions remain unset; name may require explicit qualification in glob-importing consumers</td><td>Shared protocol between backend and any window-frame implementation</td></tr>
+<tr><td><code>Platform::desktop_preferences()</code></td><td>Read the current snapshot</td><td>Default implementation returns an empty snapshot, so existing implementers remain valid</td><td>An extension cannot read private backend state</td></tr>
+<tr><td><code>Platform::on_desktop_preferences_changed(...)</code></td><td>Notify after a snapshot update</td><td>Default no-op preserves implementers; callback is main-thread and invoked after releasing backend state borrows</td><td>Backend-to-App event delivery belongs in the platform contract</td></tr>
+<tr><td><code>App::desktop_preferences()</code></td><td>Consumer-facing read access</td><td>Additive; does not automatically mutate app styling or reduced-motion policy</td><td>Exposes the existing platform contract to shell and other consumers</td></tr>
+<tr><td><code>App::observe_desktop_preferences(...)</code></td><td>Scoped consumer change notification</td><td>Additive; dropping Subscription stops callbacks</td><td>Uses App observer ownership and update lifecycle</td></tr>
+</tbody></table>
+<p>Existing Linux button-layout helpers are also compiled when <code>test-support</code> is
+enabled so the Linux frame can be type-checked and unit-tested on a macOS host.
+Their production platform availability is unchanged. <code>TestPlatform</code> additions
+are private test plumbing.</p>
+<p>These core additions must receive explicit final user review before this subtask
+is finalized or released. No API approval is inferred from implementation approval.</p>
+<h3 id="validation-and-remaining-work">Validation and remaining work</h3>
+<p>The initial shell baseline passed two headless host tests. This subtask adds
+normalization/removal/deduplication tests, explicit override precedence tests,
+and a core observer lifetime/readback regression. Linux frame code is included
+in the shell's headless test build so platform-only type errors can be caught.</p>
+<p>This macOS environment cannot establish GNOME/KDE behavior. Portal parsing is also
+tested through an isolated host harness including the actual Linux source; that
+is not a full Linux backend build or a live portal/service-restart test.</p>
+<p>Issue 149 still requires provider/fallback acceptance on real desktops, app-composed title-bar native acceptance, visual polish, native input/accessibility validation,
+diagnosis of the recorded GNOME frame stall, and a separately reviewed release.
+No GUI launch or publication is authorized by this document.</p>
+<h4 id="checks-recorded-for-this-subtask">Checks recorded for this subtask</h4>
+<ul>
+<li>Core headless unit suite: 427 passed, 2 ignored.</li>
+<li>Shell suite: 6 passed, including the Linux frame path compiled on the host.</li>
+<li>Actual portal module in isolated host harness: 3 normalization/deduplication tests passed.</li>
+<li>Strict shell clippy (<code>--no-deps</code>): passed; isolated portal clippy: passed.</li>
+<li>Shell Cargo formatting, changed Rust modules and <code>git diff --check</code>: passed.</li>
+<li>Full-workspace formatting is already divergent in unrelated lab/example files.</li>
+<li>Normal core clippy is blocked by the existing <code>relative(1.618_034)</code> in
+<code>geometry.rs</code>, now diagnosed as <code>clippy::approx_constant</code> by Rust 1.99;
+strict core clippy additionally reports existing warnings. These are not changed here.</li>
+<li>Full Linux backend builds, real portal restart tests and native GUI acceptance
+have not been run in this macOS environment.</li>
+</ul>
+<h4 id="desktop-fallback-subtask">Desktop fallback subtask</h4>
+<p>Branch <code>issue-149/desktop-fallbacks</code> starts from <code>issue-149/epic</code> and carries
+the prerequisite preference commit from PR #182 without merging either PR.
+This subtask adds no public API beyond that separately documented prerequisite;
+the native readers and merge policy are private Linux backend details.</p>
+<p>Host checks compile the actual Linux source using an isolated Cargo harness
+with ashpd, calloop, smol and the local core crate. They cover native normalization,
+missing tools, portal precedence, removal, outage behavior and deduplication.
+This does not establish live GNOME/KDE behavior or constitute a full Linux build.
+Final native validation remains scheduled for the end of issue 149.</p>
+<p>Checks for this subtask: 10 actual-source Linux preference tests and six shell
+headless tests passed; strict preference-module Clippy passed (only unused-code
+warnings caused by the isolated harness were allowed); <code>cargo fmt</code> for the Linux
+crate, changed core-module rustfmt and <code>git diff --check</code> passed. No GUI launched.</p>
+<p>The app-composed title-bar subtask now supplies a single app-owned header view
+and an explicit drag-region element; see <a href="#app-composed-titleapp-bar">the lab and integration example</a>.
+It adds no layout-preset catalog. Native platform acceptance remains outstanding.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

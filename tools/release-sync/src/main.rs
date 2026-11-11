@@ -800,7 +800,7 @@ fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|s| s == "--help" || s == "-h") {
         println!(
-            "xgpui-release: normalize, build-manifests, preflight, prepare-registry, registry-release, release-check, daily, import, review, context, review-notes, verify-packages, verify-color, check-local-dependencies.\nSee docs/RELEASING.md for options and publication approval requirements."
+            "xgpui-release: normalize, build-manifests, preflight, prepare-registry, registry-release, release-check, daily, import, review, context, review-notes, verify-packages, verify-color, check-local-dependencies.\nSee https://xgpui.dev/releasing.html for options and publication approval requirements."
         );
         return Ok(());
     }

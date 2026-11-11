@@ -63,4 +63,8 @@ Measured with 4 × 4K engines at a GPU-saturating load on an Intel Iris Xe: the 
 - `cargo run -p xgpui-ext-lab --bin engine-surface-lab -- --threaded`. Stress testing: `--stress-surfaces N --stress-size WxH --work N [--heavy]`.
 - `cargo run -p xgpui-ext-lab --bin gpu-canvas-workbench`: the example application, with `--check` for automated verification.
 
-Not published; the API is under review.
+## GPUI public API changes: additions and compatibility
+
+Seven additive hooks in `gpui-wgpu`, `gpui-windows` and `gpui-apple` let this extension adopt shared textures and wait on engine signals. Nothing in `gpui` changes and no application needs to migrate. See [engine surface API changes](https://xgpui.dev/gpui-public-api.html#engine-surfaces-from-independent-gpu-engines-197).
+
+Guide: [GPU engine surfaces](https://xgpui.dev/engine-surface.html). Not published; the API is under review.

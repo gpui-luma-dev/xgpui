@@ -125,7 +125,7 @@ for additions, affected public types and migration requirements.
 
 ## Project
 
-[Repository](https://github.com/gpui-luma-dev/xgpui) · [Release preparation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md) ·
+[Repository](https://github.com/gpui-luma-dev/xgpui) · [Release preparation](https://xgpui.dev/releasing.html) ·
 [Website](https://xgpui.dev/). Licensed under Apache-2.0.
 
 This extension uses its own `0.2.0` version, separate from xgpui framework

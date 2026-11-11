@@ -165,7 +165,7 @@ on each OS. Native video rejects `--wgpu` explicitly.
 
 The project owner confirmed all native labs and `just lab-test` passed on Windows
 on 2026-11-04, including the video demo and selected capture/lifecycle checks.
-See [Windows validation](../../../docs/LOCAL_DEVELOPMENT.md#windows-validation). NV12/YUV conversion, decoding, A/V clocks,
+See [Windows validation](https://xgpui.dev/local-development.html#windows-validation). NV12/YUV conversion, decoding, A/V clocks,
 shared producer pools and device-loss recovery are outside this demo's scope.
 
 ## Linux DMA-BUF layout checks

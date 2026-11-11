@@ -14,7 +14,7 @@ never depends on extension crates. Keep renderer integration and API changes sma
 - Local test/performance apps: [paint-lab](../../apps/xgpui-ext-lab/paint-lab/README.md)
 - [`xgpui-gamut`](xgpui-gamut/README.md): linear-P3 SDR producers; [presentation contract](https://xgpui.dev/high-gamut-windows.html).
 - [`xgpui-parley`](xgpui-parley/README.md): opt-in Parley text backend: flat LTR, BiDi paragraphs, shared font identity and grayscale rasterization.
-- [Build](../../docs/BUILDING.md) · [web docs generation](../../docs/WEBSITE.md)
+- [Build](https://xgpui.dev/local-development.html#build-harness-and-test-runner) · [web docs generation](https://xgpui.dev/local-development.html#edit-this-website)
 
 [#7: Custom shaders](https://github.com/gpui-luma-dev/xgpui/issues/7) and
 [#8: high-gamut windows](https://github.com/gpui-luma-dev/xgpui/issues/8) are separate capabilities.
