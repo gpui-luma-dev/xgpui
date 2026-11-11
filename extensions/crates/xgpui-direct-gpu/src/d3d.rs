@@ -28,6 +28,7 @@ use windows::Win32::Graphics::Direct3D12::{
     D3D12_FENCE_FLAG_SHARED, D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES,
     D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_DESC, D3D12_RESOURCE_DIMENSION_TEXTURE2D,
     D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS,
+    D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_NONE,
     D3D12_RESOURCE_STATE_COMMON, D3D12_TEXTURE_LAYOUT_UNKNOWN, ID3D12Device, ID3D12Fence,
     ID3D12Resource,
 };
@@ -189,6 +190,7 @@ pub(crate) fn prepare_frame(
     _desc: &SurfaceDesc,
     resources: &SlotResources,
     sync: &SyncPoint,
+    _color: gpui::ImageColorMode,
     backend: &dyn Any,
 ) -> Result<Box<dyn Any>> {
     let context = backend
@@ -274,8 +276,20 @@ impl WgpuSurfaceTarget {
             },
             Layout: D3D12_TEXTURE_LAYOUT_UNKNOWN,
             Flags: D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET
-                | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS,
+                | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS
+                | if desc.format.supports_storage() {
+                    D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+                } else {
+                    D3D12_RESOURCE_FLAG_NONE
+                },
         };
+        let mut usage = wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::COPY_DST;
+        if desc.format.supports_storage() {
+            usage |= wgpu::TextureUsages::STORAGE_BINDING;
+        }
         let size = wgpu::Extent3d {
             width: desc.width,
             height: desc.height,
@@ -321,10 +335,7 @@ impl WgpuSurfaceTarget {
                         sample_count: 1,
                         dimension: wgpu::TextureDimension::D2,
                         format: wgpu_format(desc.format),
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                            | wgpu::TextureUsages::TEXTURE_BINDING
-                            | wgpu::TextureUsages::COPY_SRC
-                            | wgpu::TextureUsages::COPY_DST,
+                        usage,
                         view_formats: &[],
                     },
                     wgpu::TextureUses::UNINITIALIZED,

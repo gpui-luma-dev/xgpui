@@ -119,14 +119,24 @@ impl EngineSurface {
         Ok(())
     }
 
-    /// Immutable snapshot of the latest presented frame, for scene placement.
+    /// Immutable snapshot of the latest presented frame, for scene placement
+    /// in a window whose effective color mode is wide-gamut SDR (macOS and
+    /// Windows). Use [`Self::preview_content`] for other windows, or
+    /// [`Self::paint`], which chooses for the window.
     pub fn content(&self) -> Option<Arc<dyn CustomContent>> {
-        self.0
-            .latest
-            .lock()
-            .unwrap()
-            .clone()
-            .map(|frame| frame as Arc<dyn CustomContent>)
+        self.content_for(true)
+    }
+
+    /// Like [`Self::content`], for a window that is not wide-gamut: RGBA16F
+    /// slots are composited as an sRGB preview. BGRA8 slots, and every slot
+    /// on Linux, composite the same either way.
+    pub fn preview_content(&self) -> Option<Arc<dyn CustomContent>> {
+        self.content_for(false)
+    }
+
+    fn content_for(&self, wide: bool) -> Option<Arc<dyn CustomContent>> {
+        let frame = self.0.latest.lock().unwrap().clone()?;
+        Some(Arc::new(FrameView { frame, wide }))
     }
 
     /// Paint the latest frame into `bounds`, scaled from the slot size.
@@ -138,7 +148,8 @@ impl EngineSurface {
         bounds: Bounds<Pixels>,
         corner_radii: Corners<Pixels>,
     ) {
-        if let Some(content) = self.content() {
+        let wide = window.color_status().effective() == gpui::WindowColorMode::WideGamutSdr;
+        if let Some(content) = self.content_for(wide) {
             window.paint_custom(
                 CustomGeometry::RoundedRect {
                     bounds,
@@ -191,14 +202,29 @@ impl std::fmt::Debug for SurfaceFrame {
     }
 }
 
-impl CustomContent for SurfaceFrame {
+/// A frame placed for a wide or non-wide window. Holding it keeps the
+/// frame's slot published.
+#[derive(Debug)]
+struct FrameView {
+    frame: Arc<SurfaceFrame>,
+    wide: bool,
+}
+
+impl CustomContent for FrameView {
     fn image_source_size(&self) -> Option<Size<DevicePixels>> {
-        Some(self.desc.extent())
+        Some(self.frame.desc.extent())
     }
     fn image_color_mode(&self) -> gpui::ImageColorMode {
-        self.desc.format.color_mode()
+        self.frame.desc.format.color_mode(self.wide)
     }
     fn prepare(&self, backend: &dyn Any, _: Size<DevicePixels>) -> Result<Box<dyn Any>> {
-        platform::prepare_frame(&self.desc, &self.resources, &self.sync, backend)
+        let frame = &self.frame;
+        platform::prepare_frame(
+            &frame.desc,
+            &frame.resources,
+            &frame.sync,
+            self.image_color_mode(),
+            backend,
+        )
     }
 }

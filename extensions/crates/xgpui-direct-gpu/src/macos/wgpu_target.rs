@@ -100,7 +100,7 @@ impl WgpuSurfaceTarget {
             | wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_SRC
             | wgpu::TextureUsages::COPY_DST;
-        if desc.format == SurfaceFormat::Rgba16FloatLinearP3 {
+        if desc.format.supports_storage() {
             usage |= wgpu::TextureUsages::STORAGE_BINDING;
         }
         let texture = unsafe {

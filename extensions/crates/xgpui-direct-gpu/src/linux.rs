@@ -434,6 +434,7 @@ pub(crate) fn prepare_frame(
     desc: &SurfaceDesc,
     resources: &SlotResources,
     sync: &SyncPoint,
+    _color: gpui::ImageColorMode,
     backend: &dyn Any,
 ) -> Result<Box<dyn Any>> {
     let context = backend
