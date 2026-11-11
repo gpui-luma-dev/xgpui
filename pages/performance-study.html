@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Performance Study · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/performance-study.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="performance-study">Performance Study</h1>
+<p>Pastel waves (<code>paint-lab --pastel-waves</code>): nine translucent antialiased
+mesh-gradient ribbons over a five-point freeform background and nine radial
+tint fields, with per-ribbon veils, variable-width rims, lip highlights, five
+thread lines and hashed grain. Target: sustained 120 Hz with headroom.</p>
+<p>Platform: Apple M4 Max, macOS, release builds, 2560 × 1562 device pixels
+(1280 × 781 logical at 2×). All code below is from
+<code>apps/xgpui-ext-lab/paint-lab/src/</code> unless marked otherwise; excerpts are
+trimmed with <code>…</code>.</p>
+<p><img src="images/pastel-waves-metal-120hz.webp" alt="Pastel waves animating in paint-lab with the Metal renderer; the status label reads Frame 1232 · 120 FPS · forward · metal" /></p>
+<p><em>The native Metal producer animating at 120 FPS on the laptop's 120 Hz
+display, after row culling.</em></p>
+<h2 id="baseline">Baseline</h2>
+<table><thead><tr><th>Renderer</th><th>Implementation</th><th>Cost</th></tr></thead><tbody>
+<tr><td><code>paths</code></td><td>Brush fills over native path coverage; geometry rebuilt per frame</td><td>~177 ms/frame (debug), ~6 FPS</td></tr>
+<tr><td><code>wgsl</code></td><td>One instanced WGSL draw; each fragment evaluates all 9 ribbons</td><td>6.0 ms GPU (saturated)</td></tr>
+<tr><td><code>metal</code></td><td><code>CustomContent</code> producer: compute pass per column + one fragment pass</td><td>6.3 ms GPU per frame at 120 Hz</td></tr>
+</tbody></table>
+<p>Frame breakdown at 120 Hz (Metal producer, pre-optimization):</p>
+<table><thead><tr><th>Component</th><th>Mean</th><th>p99</th></tr></thead><tbody>
+<tr><td>Frame callback, total</td><td>4.84 ms</td><td>6.09 ms</td></tr>
+<tr><td><code>nextDrawable</code> wait</td><td>3.63 ms</td><td>5.03 ms</td></tr>
+<tr><td>CPU work excluding wait</td><td>1.22 ms</td><td>2.93 ms</td></tr>
+<tr><td>Command encoding</td><td>0.29 ms</td><td>0.46 ms</td></tr>
+<tr><td>GPU, producer start → main pass end</td><td>6.29 ms</td><td>7.90 ms (max 8.78)</td></tr>
+</tbody></table>
+<p>The workload is GPU-bound: 6.3 of 8.33 ms, with the worst frames over budget.
+CPU work and encoding are an order of magnitude below the limit.</p>
+<h2 id="problem-1-frame-rate-does-not-expose-cost">Problem 1: frame rate does not expose cost</h2>
+<p><strong>Problem.</strong> FPS is quantized to the display: 60 on a 60 Hz panel, 120 on a
+ProMotion panel, for every frame that completes in time. It reports no
+headroom.</p>
+<p><strong>Measurement pitfalls.</strong></p>
+<ul>
+<li>The producer command buffer and GPUI's main pass overlap on the GPU (4.2 ms
+overlap measured). Summing per-buffer spans gives 10.5 ms for a frame that
+completes at 120 Hz. The valid span is producer <code>GPUStartTime</code> → main pass
+<code>GPUEndTime</code>.</li>
+<li>Frame callback time includes <code>nextDrawable</code> blocking (vsync back-pressure),
+which is idle time, not work.</li>
+<li>Apple GPU DVFS lowers the clock under light load. A shader that does less
+work can report the same milliseconds at a lower clock: the culled WGSL
+shader showed 6.3 ms in-app before and after a change that removed ~20% of
+its work.</li>
+</ul>
+<p><strong>Solution.</strong> Measure three quantities separately.</p>
+<p>GPU span per command buffer, from a completion handler. This was temporary
+instrumentation in <code>gpui-apple</code>'s <code>MetalRenderer::draw</code> and in
+<code>submit_custom_commands</code>; it is not part of the repository:</p>
+<pre><code class="language-rust">// Not in the repository: temporary measurement hook.
+let block = RcBlock::new(move |cb: ptr::NonNull&lt;ProtocolObject&lt;dyn MTLCommandBuffer&gt;&gt;| {
+    let cb = unsafe { cb.as_ref() };
+    eprintln!("TMGPUMAIN {:.4} {:.6} {:.6}",
+        (cb.GPUEndTime() - cb.GPUStartTime()) * 1000., cb.GPUStartTime(), cb.GPUEndTime());
+});
+unsafe { command_buffer.addCompletedHandler(RcBlock::as_ptr(&amp;block)) };
+</code></pre>
+<p>Logging absolute start and end times for both buffers gives the true frame
+span (producer start → main end) and their overlap.</p>
+<p>Saturated GPU cost, with the clock pinned high by rendering back to back
+offscreen and subtracting an empty scene's readback. Also a temporary test,
+not in the repository:</p>
+<pre><code class="language-rust">// Not in the repository: temporary benchmark, run as a paint-lab unit test.
+let mut renderer = gpui_platform::current_headless_renderer()?.expect("native");
+let extent = size(DevicePixels(2560), DevicePixels(1562));
+for frame in 0..360 {
+    let phase = 0.5 * PI * (1. - (frame as f32 * 0.012).cos());
+    let mut scene = Scene::default();
+    scene.insert_primitive(CustomDraw {
+        order: 0, bounds, content_mask: ContentMask { bounds },
+        corner_radii: Corners::default(), opacity: 1., coverage: None,
+        content: Arc::new(native::PastelWavesNative {
+            phase, grain: true, scale: 2., fill_bounds: fill_bounds(phase),
+        }),
+    });
+    scene.finish();
+    let start = Instant::now();
+    renderer.render_scene_to_image(&amp;scene, extent)?; // waits for completion
+    if frame &gt;= 60 { times.push(start.elapsed()); }  // median minus empty scene
+}
+</code></pre>
+<p>Old and new variants were run alternately, three repetitions each; run-to-run
+noise was ±0.3 ms.</p>
+<h2 id="platform-measurement-tools">Platform measurement tools</h2>
+<p>Two external tools complement the in-app measurements: a HUD overlaid on the
+running app (frame rate, frame time, GPU time) and a system monitor that
+reports GPU clock, load and power, which shows whether a timing change is real
+work or clock scaling. Only the macOS tools were used in this study.</p>
+<blockquote>
+<p><strong>macOS (Metal) · used in this study</strong></p>
+<p><strong>Metal Performance HUD.</strong> Set <code>MTL_HUD_ENABLED=1</code> for any Metal app
+launched from a terminal; the overlay shows frame rate, frame time, GPU time
+and memory:</p>
+<pre><code class="language-sh">MTL_HUD_ENABLED=1 cargo run --release --locked --config .cargo/validation.toml \
+  --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab \
+  --features portable-shaders -- --pastel-waves
+</code></pre>
+<p><strong>powermetrics.</strong> GPU active frequency, residency and power, sampled every
+500 ms. It requires <code>sudo</code> and must sample while the app animates. With <code>-o</code>
+it writes only to the file and prints nothing.</p>
+<pre><code class="language-sh">sudo powermetrics --samplers gpu_power -i 500 -n 20
+</code></pre>
+</blockquote>
+<blockquote>
+<p><strong>Windows (D3D11) · not yet used in this study</strong></p>
+<p><strong>HUD:</strong> <a href="https://github.com/GameTechDev/PresentMon">PresentMon</a> (overlay and
+CSV capture of per-frame present timing and GPU busy time), or the Xbox Game
+Bar performance widget (<code>Win+G</code>) for frame rate and GPU load.</p>
+<p><strong>GPU monitor:</strong> Task Manager's per-engine GPU graphs (3D and Compute) for
+load; vendor tools for clock and power, for example
+<code>nvidia-smi --query-gpu=clocks.gr,power.draw,utilization.gpu --format=csv -l 1</code>
+on NVIDIA.</p>
+</blockquote>
+<blockquote>
+<p><strong>Linux (wgpu on Vulkan) · not yet used in this study</strong></p>
+<p><strong>HUD:</strong> <a href="https://github.com/flightlessmango/MangoHud">MangoHud</a>, a Vulkan
+layer overlay with frame rate, frame time, GPU load, clock and power. Prefix
+the launch command; the layer applies to the app cargo starts:</p>
+<pre><code class="language-sh">mangohud cargo run --release --locked --config .cargo/validation.toml \
+  --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab \
+  --features portable-shaders -- --pastel-waves
+</code></pre>
+<p><strong>GPU monitor:</strong> <code>intel_gpu_top</code> (Intel), <code>nvidia-smi … -l 1</code> (NVIDIA),
+<code>amdgpu_top</code> or <code>radeontop</code> (AMD), or <code>nvtop</code> across vendors.</p>
+</blockquote>
+<h2 id="problem-2-per-pixel-evaluation-of-per-column-data">Problem 2: per-pixel evaluation of per-column data</h2>
+<p><strong>Problem.</strong> Each ribbon edge is a Catmull-Rom spline in <code>u</code> (seven knots),
+plus sinusoidal drift and, for foreground ribbons, a fold strength computed
+from a finite-difference second derivative (three more spline evaluations).
+None of it depends on <code>y</code>, yet the single-pass shader recomputes it for every
+pixel: 18 spline evaluations, 36 trig calls and 12 fold-strength splines per
+fragment.</p>
+<p><code>pastel_waves.wgsl</code>, inside the per-pixel ribbon loop:</p>
+<pre><code class="language-wgsl">for (var r = 0u; r &lt; 9u; r += 1u) {
+    // …
+    let top = ribbon_edge(r, 0u, u);
+    let bottom = ribbon_edge(r, 1u, u);
+    let drift = ribbon_motion(r, u, phase);
+    // … and for r &gt;= 5u:
+    let s = fold_strength(r, u); // three more ribbon_edge calls
+</code></pre>
+<p>The spline itself, shared by every shader (<code>pastel_waves/pastel_waves.metal</code>):</p>
+<pre><code class="language-metal">// Catmull-Rom edge (x: value, y: d/du), matching edge_y in pastel_waves.rs.
+static float2 ribbon_edge(uint r, uint side, float u) {
+    float x = clamp(u, 0.0f, 1.0f) * 6.0f;
+    int i = min(int(floor(x)), 5);
+    float t = x - float(i);
+    uint base = r * 14u + side * 7u;
+    float a = RIB_EDGES[base + uint(max(i - 1, 0))];
+    float b = RIB_EDGES[base + uint(i)];
+    float c = RIB_EDGES[base + uint(i + 1)];
+    float d = RIB_EDGES[base + uint(min(i + 2, 6))];
+    float c1 = -a + c;
+    float c2 = 2.0f * a - 5.0f * b + 4.0f * c - d;
+    float c3 = -a + 3.0f * b - 3.0f * c + d;
+    float value = 0.5f * (2.0f * b + c1 * t + c2 * t * t + c3 * t * t * t);
+    float slope = 3.0f * (c1 + 2.0f * c2 * t + 3.0f * c3 * t * t);
+    return float2(value, (u &gt;= 0.0f &amp;&amp; u &lt;= 1.0f) ? slope : 0.0f);
+}
+</code></pre>
+<p><strong>Solution.</strong> A native producer with two passes. A compute pass evaluates every
+ribbon once per pixel column and writes two <code>float4</code> per ribbon per column; the
+fragment pass reads its column and only shades. The buffer is
+<code>width × 9 × 2 × 16</code> bytes, 720 KB at 2560 columns.</p>
+<p><code>pastel_waves/pastel_waves.metal</code>, the column pass (culling lines omitted
+here; see Problem 3):</p>
+<pre><code class="language-metal">// Per column x and ribbon r, two float4s at (x * 9 + r) * 2:
+//   [0] top value, top d/du, bottom value, bottom d/du (drift included)
+//   [1] fold strength (foreground ribbons), then the device-pixel y range
+//       outside which every layer of this ribbon has exactly zero coverage
+kernel void pastel_columns(device float4 *columns [[buffer(0)]],
+                           constant Uniforms &amp;uniforms [[buffer(1)]],
+                           uint x [[thread_position_in_grid]]) {
+    uint width = uint(uniforms.extent.x);
+    if (x &gt;= width) {
+        return;
+    }
+    float2 size = max(uniforms.extent.xy, float2(1.0f));
+    float u = (float(x) + 0.5f) / float(width);
+    for (uint r = 0u; r &lt; 9u; r++) {
+        float2 drift = ribbon_motion(r, u, uniforms.frame.x);
+        float2 top = ribbon_edge(r, 0u, u) + drift;
+        float2 bottom = ribbon_edge(r, 1u, u) + drift;
+        float strength = r &gt;= 5u ? fold_strength(r, u) : 0.0f;
+        // … y range, see Problem 3
+        columns[(x * 9u + r) * 2u] = float4(top, bottom);
+        columns[(x * 9u + r) * 2u + 1u] = float4(strength, lo - 1.0f, hi + 1.0f, 0.0f);
+    }
+}
+</code></pre>
+<p>The fragment pass covers the target with one oversized triangle and reads the
+column instead of evaluating curves:</p>
+<pre><code class="language-metal">vertex VertexOut pastel_vertex(uint id [[vertex_id]]) {
+    float2 uv = float2(float((id &lt;&lt; 1u) &amp; 2u), float(id &amp; 2u));
+    VertexOut out;
+    out.position = float4(uv * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f), 0.0f, 1.0f);
+    return out;
+}
+
+fragment float4 pastel_fragment(VertexOut in [[stage_in]],
+                                constant Uniforms &amp;uniforms [[buffer(0)]],
+                                device const float4 *columns [[buffer(1)]]) {
+    // …
+    uint column = min(uint(pixel.x), uint(size.x) - 1u);
+    // … background
+    for (uint r = 0u; r &lt; 9u; r++) {
+        float4 extra = columns[(column * 9u + r) * 2u + 1u];
+        // … cull, see Problem 3
+        float4 edges = columns[(column * 9u + r) * 2u];
+        float2 top = edges.xy;
+        float2 bottom = edges.zw;
+        // … shading only
+</code></pre>
+<p>The producer is a <code>CustomContent</code>. The app paints one immutable snapshot per
+frame (<code>pastel_waves.rs</code>):</p>
+<pre><code class="language-rust">fn paint_waves_native(bounds: Bounds&lt;Pixels&gt;, phase: f32, grain: bool, window: &amp;mut Window) {
+    let content: std::sync::Arc&lt;dyn CustomContent&gt; =
+        std::sync::Arc::new(native::PastelWavesNative {
+            phase,
+            grain,
+            scale: window.scale_factor(),
+            fill_bounds: fill_bounds(phase),
+        });
+    window.paint_custom(
+        CustomGeometry::RoundedRect {
+            bounds,
+            corner_radii: Corners::default(),
+        },
+        content,
+    );
+}
+</code></pre>
+<p><code>prepare</code> records both passes into the host's batch and returns the output
+texture; GPUI submits the batch and composites the texture at scene order. The
+Metal recording (<code>pastel_waves/metal.rs</code>):</p>
+<pre><code class="language-rust">let command = ctx.record(|command| {
+    let compute = command
+        .computeCommandEncoder()
+        .context("Metal compute encoder allocation failed")?;
+    compute.setComputePipelineState(&amp;pipelines.columns);
+    unsafe { compute.setBuffer_offset_atIndex(Some(&amp;*columns), 0, 0) };
+    unsafe {
+        compute.setBytes_length_atIndex(uniform_bytes, std::mem::size_of::&lt;Uniforms&gt;(), 1)
+    };
+    // … one thread per column, threadExecutionWidth per group
+    // Tracked resources order the column writes before the fragment reads.
+    compute.endEncoding();
+    // … render pass: DontCare load, Store, pastel_fragment, one triangle
+    Ok(())
+})?;
+Ok(Box::new(MetalCustomOutput {
+    texture,
+    commands: vec![command],
+}))
+</code></pre>
+<p>Pipelines are compiled once per device and queue and cached in a static; the
+column buffer and output texture are allocated per frame (0.29 ms total
+encoding, not a bottleneck).</p>
+<h2 id="problem-3-every-pixel-shades-every-ribbon">Problem 3: every pixel shades every ribbon</h2>
+<p><strong>Problem.</strong> Each ribbon contributes up to five layers per pixel (fill, veil,
+rim, lip, threads), each with one or two antialiased edge tests (<code>rsqrt</code>), a
+mesh-color interpolation and, with grain, an integer hash and a soft-light
+blend. A ribbon covers a band a fraction of the target's height, but all nine
+are shaded everywhere.</p>
+<p>The coverage primitives (<code>pastel_waves/pastel_waves.metal</code>):</p>
+<pre><code class="language-metal">// Coverage below a curve (value, d/du) from perpendicular distance in device px.
+static float below(float2 curve, float y, float2 size) {
+    float slope = curve.y * size.y / size.x;
+    float distance = (y - curve.x * size.y) * rsqrt(1.0f + slope * slope);
+    return clamp(0.5f + distance, 0.0f, 1.0f);
+}
+
+static float band(float2 top, float2 bottom, float fa, float fb, float y, float2 size) {
+    return abs(below(top + (bottom - top) * fa, y, size) - below(top + (bottom - top) * fb, y, size));
+}
+
+static float3 over(float3 dst, float3 color, float alpha) {
+    float a = clamp(alpha, 0.0f, 1.0f);
+    return saturate(color) * a + dst * (1.0f - a);
+}
+</code></pre>
+<p><strong>Solution: exact row culling.</strong> Per ribbon and column, compute a device-pixel
+interval <code>[y_min, y_max]</code> outside which all five layers have zero coverage, and
+skip the ribbon there. Since <code>over(dst, c, 0) == dst</code> exactly, the skip is
+lossless provided the interval is conservative:</p>
+<ul>
+<li><code>below</code> reaches 0 or 1 at a vertical offset of <code>0.5 √(1 + s²)</code> from the edge,
+<code>s</code> the device-space slope.</li>
+<li>Lip and thread bands interpolate value and slope between top and bottom, so
+<code>|s_f| ≤ max(|s_top|, |s_bottom|)</code>: one stretch factor bounds every band.</li>
+<li>The rim spans <code>−0.2w … 0.8w</code> along the top edge's normal; the veil extends
+<code>reach</code> of the thickness below the top edge.</li>
+<li>One pixel of margin covers rounding differences between passes.</li>
+</ul>
+<p><code>pastel_waves/pastel_waves.metal</code>, in <code>pastel_columns</code>:</p>
+<pre><code class="language-metal">// Coverage uses perpendicular distance, so a half-pixel edge spans
+// 0.5 * sqrt(1 + slope^2) vertically. Bands between top and bottom
+// interpolate value and slope, so the steeper edge bounds them all.
+float top_slope = top.y * size.y / size.x;
+float bottom_slope = bottom.y * size.y / size.x;
+float top_stretch = sqrt(1.0f + top_slope * top_slope);
+float max_stretch = sqrt(1.0f + max(top_slope * top_slope, bottom_slope * bottom_slope));
+float top_y = top.x * size.y;
+float bottom_y = bottom.x * size.y;
+float lo = min(top_y, bottom_y) - 0.5f * max_stretch;
+float hi = max(top_y, bottom_y) + 0.5f * max_stretch;
+if (r &gt;= 5u) {
+    // Rim spans -0.2..0.8 of its width around the top edge; the veil
+    // reaches `reach` of the thickness below it.
+    float rim = (0.35f + 2.25f * strength) * uniforms.frame.z;
+    float reach = 0.12f + 0.43f * strength;
+    lo = min(lo, top_y - (0.2f * rim + 0.5f) * top_stretch);
+    hi = max(hi, top_y + (0.8f * rim + 0.5f) * top_stretch);
+    hi = max(hi, (top.x + reach * max(bottom.x - top.x, 1e-5f)) * size.y);
+}
+columns[(x * 9u + r) * 2u] = float4(top, bottom);
+// One extra pixel absorbs rounding differences with the fragment pass.
+columns[(x * 9u + r) * 2u + 1u] = float4(strength, lo - 1.0f, hi + 1.0f, 0.0f);
+</code></pre>
+<p>In <code>pastel_fragment</code>, one comparison per ribbon:</p>
+<pre><code class="language-metal">for (uint r = 0u; r &lt; 9u; r++) {
+    // Skip ribbons that cannot touch this row: every layer below would
+    // composite with zero alpha.
+    float4 extra = columns[(column * 9u + r) * 2u + 1u];
+    if (y &lt; extra.y || y &gt; extra.z) {
+        continue;
+    }
+    // …
+</code></pre>
+<p>The portable WGSL shader has no column pass, so it computes the same interval
+inline after evaluating the edges and before any layer work. It uses the
+largest fold strength (rim width 2.6, reach 0.55) so <code>fold_strength</code> is skipped
+too (<code>pastel_waves.wgsl</code>):</p>
+<pre><code class="language-wgsl">let edge_top = top + drift;
+let edge_bottom = bottom + drift;
+let top_slope = edge_top.y * size.y / size.x;
+let bottom_slope = edge_bottom.y * size.y / size.x;
+let top_stretch = sqrt(1. + top_slope * top_slope);
+let max_stretch = sqrt(1. + max(top_slope * top_slope, bottom_slope * bottom_slope));
+let top_y = edge_top.x * size.y;
+let bottom_y = edge_bottom.x * size.y;
+var row_lo = min(top_y, bottom_y) - 0.5 * aa * max_stretch;
+var row_hi = max(top_y, bottom_y) + 0.5 * aa * max_stretch;
+if (r &gt;= 5u) {
+    row_lo = min(row_lo, top_y - (0.52 + 0.5 * aa) * top_stretch);
+    row_hi = max(row_hi, top_y + (2.08 + 0.5 * aa) * top_stretch);
+    row_hi = max(row_hi, (edge_top.x + 0.55 * max(bottom.x - top.x, 1e-5)) * size.y);
+}
+// One extra device pixel absorbs rounding in the bounds themselves.
+if (y &lt; row_lo - aa || y &gt; row_hi + aa) {
+    continue;
+}
+</code></pre>
+<p>WGSL works in logical pixels, so the half-pixel terms are scaled by <code>aa</code>, one
+device pixel.</p>
+<p><strong>Result.</strong></p>
+<table><thead><tr><th></th><th>Before</th><th>After</th></tr></thead><tbody>
+<tr><td>Metal, GPU per frame at 120 Hz (mean / p99 / max)</td><td>6.4 / 8.0 / 10.2 ms</td><td>4.2 / 4.5 / 4.6 ms</td></tr>
+<tr><td>WGSL, saturated</td><td>6.03 ms</td><td>4.84 ms (−20%)</td></tr>
+<tr><td>Metal, saturated</td><td>5.11 ms</td><td>4.59 ms (−10%)</td></tr>
+<tr><td>Output vs. original</td><td>—</td><td>≤ 1/255 on ≤ 79 of 4.0 M pixels</td></tr>
+</tbody></table>
+<h2 id="problem-4-remaining-cost-after-culling">Problem 4: remaining cost after culling</h2>
+<p>Ablation of the culled WGSL shader (saturated, each part removed in turn):</p>
+<table><thead><tr><th>Component</th><th>Cost</th></tr></thead><tbody>
+<tr><td>Full-target draw and write, fixed</td><td>~1.2 ms</td></tr>
+<tr><td>Background field (5 points) and 9 radial tints</td><td>~1.3 ms</td></tr>
+<tr><td>Grain: hash, soft light, thread bands</td><td>~0.9 ms</td></tr>
+<tr><td>Remaining ribbon shading</td><td>~1.4 ms</td></tr>
+</tbody></table>
+<p>The background, computed per pixel in every renderer
+(<code>pastel_waves/pastel_waves.metal</code>):</p>
+<pre><code class="language-metal">// Background: inverse-square freeform field of five opaque colors.
+float distances[5];
+float nearest = 1e30f;
+for (uint i = 0u; i &lt; 5u; i++) {
+    float2 delta = uv - BG_POS[i];
+    float dd = max(dot(delta, delta), 1e-12f);
+    distances[i] = dd;
+    nearest = min(nearest, dd);
+}
+float3 acc = float3(0.0f);
+float total = 0.0f;
+for (uint i = 0u; i &lt; 5u; i++) {
+    float w = nearest / distances[i];
+    acc += BG_COLOR[i] * w;
+    total += w;
+}
+acc /= total;
+
+// Fixed radial color fields: stops 0, 0.48, 1 at alpha 1, 0.45, 0.
+for (uint i = 0u; i &lt; 9u; i++) {
+    float4 geom = FIELD_GEOM[i];
+    float4 tint = FIELD_TINT[i];
+    float t = length((uv - geom.xy) / geom.zw);
+    float fade = t &lt; 0.48f ? mix(1.0f, 0.45f, t / 0.48f)
+                           : mix(0.45f, 0.0f, clamp((t - 0.48f) / 0.52f, 0.0f, 1.0f));
+    acc = over(acc, tint.rgb, fade * tint.a);
+}
+</code></pre>
+<p>The grain hash, evaluated per covered ribbon per pixel:</p>
+<pre><code class="language-metal">static float grain_signal(float2 pixel, uint r) {
+    uint2 cell = as_type&lt;uint2&gt;(int2(floor(pixel)));
+    uint h = ((cell.x + r * 7919u) * 0x9e3779b9u) ^ ((cell.y + r * 104729u) * 0x85ebca6bu);
+    h = (h ^ (h &gt;&gt; 16u)) * 0x7feb352du;
+    h = (h ^ (h &gt;&gt; 15u)) * 0x846ca68bu;
+    h = h ^ (h &gt;&gt; 16u);
+    return float(h &amp; 0x00ffffffu) / 16777216.0f;
+}
+</code></pre>
+<p>Candidate fixes, measured and rejected (none are in the repository):</p>
+<table><thead><tr><th>Change</th><th>Result</th><th>Cause</th></tr></thead><tbody>
+<tr><td>Per-pixel shared Catmull-Rom basis and angle-addition drift in WGSL (36 → 4 trig calls)</td><td>−2%, within noise</td><td>Edge evaluation is not the bottleneck after culling</td></tr>
+<tr><td>Cull lip and thread bands per line</td><td>Byte-identical, no gain</td><td>Grain cost is the hash and soft light, not the band tests</td></tr>
+<tr><td>Cache the phase-independent background in an RGBA16Float texture (Metal)</td><td>No gain, +32 MB</td><td>Reading 8 B/pixel costs about the same as recomputing 5 + 9 terms</td></tr>
+<tr><td>Reuse the per-frame output texture and column buffer</td><td>Not pursued</td><td>Encoding is 0.29 ms; the frame is GPU-bound</td></tr>
+</tbody></table>
+<h2 id="problem-5-one-producer-per-backend">Problem 5: one producer per backend</h2>
+<p><strong>Problem.</strong> The native producer is backend-specific; Windows renders through
+D3D11 and Linux through wgpu, each with its own recording context.</p>
+<p><strong>Solution.</strong> One frame snapshot whose <code>prepare</code> dispatches on the host context
+type. Which branches exist is decided at build time by target
+(<code>pastel_waves/native.rs</code>):</p>
+<pre><code class="language-rust">impl CustomContent for PastelWavesNative {
+    fn prepare(&amp;self, backend: &amp;dyn Any, extent: Size&lt;DevicePixels&gt;) -&gt; Result&lt;Box&lt;dyn Any&gt;&gt; {
+        #[cfg(target_os = "macos")]
+        if let Some(ctx) = backend.downcast_ref::&lt;gpui_apple::custom_draw::MetalCustomContext&gt;() {
+            return super::metal::prepare(self, ctx, extent);
+        }
+        #[cfg(target_os = "windows")]
+        if let Some(ctx) = backend.downcast_ref::&lt;gpui_windows::custom_draw::Dx11CustomContext&gt;() {
+            return super::dx11::prepare(self, ctx, extent);
+        }
+        if let Some(ctx) = backend.downcast_ref::&lt;gpui_wgpu::custom_draw::WgpuCustomContext&gt;() {
+            return super::wgpu_producer::prepare(self, ctx, extent);
+        }
+        bail!("pastel waves has no native producer for this backend")
+    }
+}
+</code></pre>
+<table><thead><tr><th>Target</th><th>Context</th><th>Producer</th><th>Shader</th></tr></thead><tbody>
+<tr><td>macOS</td><td><code>MetalCustomContext</code></td><td><code>metal.rs</code></td><td><code>pastel_waves.metal</code></td></tr>
+<tr><td>Windows</td><td><code>Dx11CustomContext</code></td><td><code>dx11.rs</code></td><td><code>producer.wgsl</code> → HLSL SM 5.0 via naga</td></tr>
+<tr><td>Linux</td><td><code>WgpuCustomContext</code></td><td><code>wgpu_producer.rs</code></td><td><code>producer.wgsl</code></td></tr>
+</tbody></table>
+<p>All three share one uniform layout (<code>pastel_waves/native.rs</code>):</p>
+<pre><code class="language-rust">/// Matches `Uniforms` in pastel_waves.metal and producer.wgsl.
+#[repr(C, align(16))] {#align16}
+pub(super) struct Uniforms {
+    frame: [f32; 4],
+    extent: [f32; 4],
+    bounds: [[f32; 4]; 5],
+}
+</code></pre>
+<h3 id="wgpu">wgpu</h3>
+<p><code>pastel_waves/producer.wgsl</code> binds the column buffer twice, writable for the
+compute pass and read-only for the fragment pass:</p>
+<pre><code class="language-wgsl">@group(0) @binding(0) var&lt;uniform&gt; uniforms: Uniforms;
+@group(0) @binding(1) var&lt;storage, read_write&gt; columns_out: array&lt;vec4&lt;f32&gt;&gt;;
+@group(0) @binding(2) var&lt;storage, read&gt; columns: array&lt;vec4&lt;f32&gt;&gt;;
+
+@compute @workgroup_size(64)
+fn pastel_columns(@builtin(global_invocation_id) id: vec3&lt;u32&gt;) {
+    // … same body as the Metal kernel, writing columns_out
+}
+</code></pre>
+<p><code>pastel_waves/wgpu_producer.rs</code> uses automatic bind group layouts, so the
+compute pipeline gets bindings 0 and 1 and the render pipeline 0 and 2:</p>
+<pre><code class="language-rust">let compute_bind = device.create_bind_group(&amp;wgpu::BindGroupDescriptor {
+    label: Some("pastel_columns"),
+    layout: &amp;pipelines.columns.get_bind_group_layout(0),
+    entries: &amp;[
+        wgpu::BindGroupEntry { binding: 0, resource: uniforms.as_entire_binding() },
+        wgpu::BindGroupEntry { binding: 1, resource: columns.as_entire_binding() },
+    ],
+});
+// … shade_bind: bindings 0 and 2 on pipelines.shade.get_bind_group_layout(0)
+let output = ctx.create_output(extent)?;
+let view = output.texture().create_view(&amp;Default::default());
+ctx.record(|encoder| {
+    {
+        let mut pass = encoder.begin_compute_pass(&amp;wgpu::ComputePassDescriptor {
+            label: Some("pastel_columns"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&amp;pipelines.columns);
+        pass.set_bind_group(0, &amp;compute_bind, &amp;[]);
+        pass.dispatch_workgroups((width as u32).div_ceil(WORKGROUP), 1, 1);
+    }
+    let mut pass = encoder.begin_render_pass(/* output view, Clear, Store */);
+    pass.set_pipeline(&amp;pipelines.shade);
+    pass.set_bind_group(0, &amp;shade_bind, &amp;[]);
+    pass.draw(0..3, 0..1);
+    Ok(())
+})?;
+Ok(Box::new(output))
+</code></pre>
+<p>Pipelines are created inside a validation error scope and cached per device.</p>
+<h3 id="d3d11">D3D11</h3>
+<p><code>pastel_waves/hlsl.rs</code> translates the same WGSL to shader model 5.0 and keeps
+each WGSL binding number as the D3D11 register (<code>b0</code>, <code>u1</code>, <code>t2</code>); shader model
+5.0 has no register spaces:</p>
+<pre><code class="language-rust">for (_, global) in module.global_variables.iter() {
+    if let Some(binding) = global.binding {
+        options.binding_map.insert(
+            binding,
+            hlsl::BindTarget {
+                register: binding.binding,
+                ..Default::default()
+            },
+        );
+    }
+}
+</code></pre>
+<p>naga lowers WGSL storage arrays to <code>RWByteAddressBuffer</code>/<code>ByteAddressBuffer</code>,
+so <code>pastel_waves/dx11.rs</code> creates the column buffer with raw views:</p>
+<pre><code class="language-rust">let column_bytes = (width * 9 * 2 * 16) as u32;
+let mut columns = None;
+unsafe {
+    device.CreateBuffer(
+        &amp;D3D11_BUFFER_DESC {
+            ByteWidth: column_bytes,
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: (D3D11_BIND_UNORDERED_ACCESS.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+            MiscFlags: D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS.0 as u32,
+            ..Default::default()
+        },
+        None,
+        Some(&amp;mut columns),
+    )?;
+}
+let columns = columns.context("missing pastel waves column buffer")?;
+let (mut uav, mut srv) = (None, None);
+unsafe {
+    device.CreateUnorderedAccessView(
+        &amp;columns,
+        Some(&amp;D3D11_UNORDERED_ACCESS_VIEW_DESC {
+            Format: DXGI_FORMAT_R32_TYPELESS,
+            ViewDimension: D3D11_UAV_DIMENSION_BUFFER,
+            Anonymous: D3D11_UNORDERED_ACCESS_VIEW_DESC_0 {
+                Buffer: D3D11_BUFFER_UAV {
+                    FirstElement: 0,
+                    NumElements: column_bytes / 4,
+                    Flags: D3D11_BUFFER_UAV_FLAG_RAW.0 as u32,
+                },
+            },
+        }),
+        Some(&amp;mut uav),
+    )?;
+    device.CreateShaderResourceView(
+        &amp;columns,
+        Some(&amp;D3D11_SHADER_RESOURCE_VIEW_DESC {
+            Format: DXGI_FORMAT_R32_TYPELESS,
+            ViewDimension: D3D11_SRV_DIMENSION_BUFFEREX,
+            Anonymous: D3D11_SHADER_RESOURCE_VIEW_DESC_0 {
+                BufferEx: D3D11_BUFFEREX_SRV {
+                    FirstElement: 0,
+                    NumElements: column_bytes / 4,
+                    Flags: D3D11_BUFFEREX_SRV_FLAG_RAW.0 as u32,
+                },
+            },
+        }),
+        Some(&amp;mut srv),
+    )?;
+}
+</code></pre>
+<p>Both passes are recorded on the host's deferred context. The UAV is unbound
+after <code>Dispatch</code> so the same buffer can be bound as an SRV for the pixel pass:</p>
+<pre><code class="language-rust">ctx.record(|context| {
+    unsafe {
+        context.CSSetShader(&amp;pipelines.columns, None);
+        context.CSSetConstantBuffers(0, Some(&amp;[Some(constants.clone())]));
+        context.CSSetUnorderedAccessViews(COLUMNS_UAV, 1, Some(&amp;Some(uav.clone())), None);
+        context.Dispatch((width as u32).div_ceil(WORKGROUP), 1, 1);
+        // Unbind so the buffer can be read as a shader resource.
+        context.CSSetUnorderedAccessViews(COLUMNS_UAV, 1, Some(&amp;None), None);
+        context.CSSetShader(None::&lt;&amp;ID3D11ComputeShader&gt;, None);
+
+        context.IASetInputLayout(None);
+        context.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        context.VSSetShader(&amp;pipelines.vertex, None);
+        context.PSSetShader(&amp;pipelines.fragment, None);
+        context.RSSetState(&amp;pipelines.raster);
+        context.OMSetBlendState(None, None, u32::MAX);
+        context.OMSetRenderTargets(Some(&amp;[Some(rtv.clone())]), None);
+        // … RSSetViewports(width × height)
+        context.VSSetConstantBuffers(0, Some(&amp;[Some(constants.clone())]));
+        context.PSSetConstantBuffers(0, Some(&amp;[Some(constants.clone())]));
+        context.PSSetShaderResources(COLUMNS_SRV, Some(&amp;[Some(srv.clone())]));
+        context.Draw(3, 0);
+        context.PSSetShaderResources(COLUMNS_SRV, Some(&amp;[None]));
+    }
+    Ok(())
+})?;
+Ok(Box::new(output))
+</code></pre>
+<p>Shaders are compiled with <code>D3DCompile</code> (<code>cs_5_0</code>, <code>vs_5_0</code>, <code>ps_5_0</code>) once per
+device and cached.</p>
+<h3 id="verification">Verification</h3>
+<table><thead><tr><th>Check</th><th>Result</th></tr></thead><tbody>
+<tr><td>Metal producer after the refactor</td><td>16 captured frames byte-identical</td></tr>
+<tr><td>wgpu producer vs. Metal producer (wgpu's Metal backend)</td><td>≤ 1/255 on &lt; 0.1% of channels; <code>just wgpu-test</code></td></tr>
+<tr><td>WGSL → HLSL translation</td><td>Unit test on every desktop target: entry points, registers, <code>numthreads(64, 1, 1)</code></td></tr>
+<tr><td>Windows build</td><td>Cross-target type-check and clippy</td></tr>
+<tr><td>D3D11 at runtime</td><td>Not yet run</td></tr>
+<tr><td>Linux at runtime</td><td>Not yet run; producer code is the wgpu path verified above</td></tr>
+</tbody></table>
+<p>The parity test (<code>pastel_waves/native.rs</code>):</p>
+<pre><code class="language-rust">#[::core::prelude::v1::test]
+fn wgpu_pastel_producer_matches_metal() -&gt; Result&lt;()&gt; {
+    let mut metal = gpui_platform::current_headless_renderer()?.expect("native renderer");
+    let mut wgpu = gpui_wgpu::WgpuHeadlessRenderer::new()?;
+    for (phase, grain) in [(0., true), (0.9, true), (2.2, false), (3.0, true)] {
+        let expected = render(metal.as_mut(), phase, grain)?;
+        let actual = render(&amp;mut wgpu, phase, grain)?;
+        // … flat-frame guard
+        // Same algorithm, different shader compilers: rounding only.
+        assert!(worst &lt;= 1, "phase {phase}: max channel difference {worst}");
+        assert!(differing * 1000 &lt; expected.len(), "phase {phase}: {differing} channels differ");
+    }
+    Ok(())
+}
+</code></pre>
+<p>The native producer is the default renderer on macOS. Windows and Linux default
+to <code>wgsl</code> until the native producers run on that hardware.</p>
+<h2 id="output-verification-method">Output verification method</h2>
+<p>Changes were accepted only with pixel evidence. With <code>test-support</code>,
+<code>Window::render_to_image()</code> reads back the real window's last frame. A
+temporary hook (not in the repository) fixed the phase, captured a frame and
+exited:</p>
+<pre><code class="language-rust">// Not in the repository: temporary capture hook in PastelWaves::render.
+if let Ok(path) = std::env::var("PW_CAPTURE") {
+    if self.frames == 1 {
+        self.phase = std::env::var("PW_PHASE").ok().and_then(|v| v.parse().ok()).unwrap_or(0.);
+        // … grain and renderer from the environment
+    }
+    if self.frames == 6 {
+        window.render_to_image().expect("capture").save(&amp;path).expect("save");
+        std::process::exit(0);
+    }
+    window.request_animation_frame();
+}
+</code></pre>
+<p>Repeated captures of the same frame are byte-identical. Each change was
+compared over 16 frames (two renderers × four phases × grain on/off) against
+the pre-change capture. Float reordering in shader refactors produces 1/255
+differences on a small fraction of pixels; anything larger is treated as a
+defect.</p>
+<p>See <a href="extension-lab.html">Labs &amp; benchmarks</a> for running <code>paint-lab</code>.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

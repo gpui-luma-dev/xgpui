@@ -54,7 +54,7 @@ parsed explicitly. Both paragraph and flat-line paths retain effective axes for
 metrics and rasterization. GPUI's `font_axes`, `opentype_features` and
 `font_capabilities` expose resolved-face inspection. Optional `VariationPreview`
 quantizes before resolution and limits admitted descriptors without evicting
-resources. See the [font-controls guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/font-controls.md)
+resources. See the [font-controls guide](https://xgpui.dev/font-controls.html)
 for styling, fallback, backend support and migration.
 
 ## Lines and paragraphs
@@ -152,7 +152,7 @@ focused IME/assistive-technology acceptance remain separate checks; see the
 
 ## Guides and examples
 
-- [Text backend setup, supported subset and validation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/parley-text.md)
+- [Text backend setup, supported subset and validation](https://xgpui.dev/parley-text.html)
 - [Wasm font-controls demo](https://xgpui.dev/examples/extensions/?demo=font-controls) — the native lab’s sliders and font inspection, running through Parley in Wasm on WebGPU/WebGL2.
 - [Text and editing/IME lab](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/text-lab/README.md)
 - [Bundled test fonts and licenses](https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-parley/tests/fonts/README.md)
@@ -162,8 +162,8 @@ Run `just lab-text` from the repository root for the native comparison lab.
 ## GPUI public API changes: additions and compatibility
 
 Use this crate with xgpui's matching framework packages. Its integration depends
-on [xgpui's GPUI API changes](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md#added-text-backend-and-paragraph-seams).
-See the [compatibility guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/parley-text.md#gpui-public-api-changes-additions-and-compatibility)
+on [xgpui's GPUI API changes](https://xgpui.dev/gpui-public-api.html#added-text-backend-and-paragraph-seams).
+See the [compatibility guide](https://xgpui.dev/parley-text.html#gpui-public-api-changes-additions-and-compatibility)
 for additions, affected public types and migration requirements.
 
 ## Project

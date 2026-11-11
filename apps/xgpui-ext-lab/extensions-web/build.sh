@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+# Build the extension demos into pages/examples/extensions/. Only generated files
+# are written there; the hand-authored page, scripts and styles are checked in.
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
-app=apps/xgpui-ext-lab/extensions-web
-out=target/web/extensions
+out=pages/examples/extensions
 expected_bindgen=0.2.129
 actual_bindgen=$(wasm-bindgen --version | cut -d ' ' -f 2)
 if [[ "$actual_bindgen" != "$expected_bindgen" ]]; then
@@ -10,7 +11,7 @@ if [[ "$actual_bindgen" != "$expected_bindgen" ]]; then
     echo "Install with: cargo install wasm-bindgen-cli --version $expected_bindgen --locked" >&2
     exit 1
 fi
-# Stamp the page and compiled module together; each build gets fresh asset URLs.
+# The page compares build-id.txt with the ID compiled into the module.
 export XGPUI_WEB_BUILD_ID="$(git rev-parse --short HEAD)-$(date -u +%Y%m%dT%H%M%SZ)"
 # Ignore global host linker flags (for example macOS -lc++). This target is
 # deliberately non-atomic, with no shared-memory linker flags.
@@ -22,44 +23,24 @@ profile=debug
 for arg in "$@"; do
     if [[ "$arg" == --release ]]; then profile=release; fi
 done
-rm -rf "$out"
-mkdir -p "$out"
-cp apps/web-support/graphics.mjs "$out/graphics.mjs"
-cp apps/web-support/gallery.css "$out/gallery.css"
+bash apps/xgpui-ext-lab/extensions-web/clean.sh
 wasm-bindgen --target web --out-dir "$out" --out-name extensions_web \
     "target/wasm32-unknown-unknown/$profile/extensions-web.wasm"
-cp docs/favicon.svg docs/favicon.ico "$out/"
-python3 - "$app/index.html" "$out/index.html" "$XGPUI_WEB_BUILD_ID" <<'PYTHON'
-import pathlib
-import sys
-source, destination, revision = sys.argv[1:]
-pathlib.Path(destination).write_text(pathlib.Path(source).read_text().replace("__BUILD_ID__", revision))
-PYTHON
-cp "$app/italy.mjs" "$app/italy.css" "$out/"
-mkdir -p "$out/italy"
+printf '%s\n' "$XGPUI_WEB_BUILD_ID" > "$out/build-id.txt"
+# Data shared with native labs and tests stays beside its Rust sources.
+app=apps/xgpui-ext-lab/extensions-web
+mkdir -p "$out/italy" "$out/icc" "$out/colorimetry"
 cp "$app/assets/italy/"*.jpg "$app/assets/italy/README.md" "$app/assets/italy/prepare.swift" "$out/italy/"
-mkdir -p "$out/font-licenses"
-cp extensions/crates/xgpui-parley/tests/fonts/RobotoFlex-OFL.txt "$out/font-licenses/"
-cp extensions/crates/xgpui-parley/tests/fonts/Inter-LICENSE "$out/font-licenses/"
-cp gpui/crates/gpui-web/assets/fonts/ibm-plex-sans/license.txt "$out/font-licenses/IBM-Plex-license.txt"
-cp extensions/crates/xgpui-parley/tests/fonts/NotoSans-LICENSE "$out/font-licenses/"
-cat > "$out/font-licenses/index.html" <<'HTML'
-<!doctype html><html lang="en"><meta charset="utf-8"><title>Font licenses</title>
-<h1>Bundled font licenses</h1><ul>
-<li><a href="RobotoFlex-OFL.txt">Roboto Flex</a></li>
-<li><a href="Inter-LICENSE">Inter</a></li>
-<li><a href="IBM-Plex-license.txt">IBM Plex Sans</a></li>
-<li><a href="NotoSans-LICENSE">Noto Sans Arabic and Hebrew</a></li></ul>
-HTML
-cp "$app/color-attribution.html" "$out/color-attribution.html"
-cp -R "$app/assets/colorimetry" "$out/colorimetry"
-mkdir -p "$out/icc"
+cp "$app/assets/colorimetry/"* "$out/colorimetry/"
 for notice in README.md manifest.json CC0-1.0.txt; do
     cp "extensions/crates/xgpui-color/tests/reference/real-icc/$notice" "$out/icc/$notice"
 done
-cp "$app/svg-attribution.html" "$out/svg-attribution.html"
+cp extensions/crates/xgpui-parley/tests/fonts/RobotoFlex-OFL.txt \
+    extensions/crates/xgpui-parley/tests/fonts/Inter-LICENSE \
+    extensions/crates/xgpui-parley/tests/fonts/NotoSans-LICENSE "$out/font-licenses/"
+cp gpui/crates/gpui-web/assets/fonts/ibm-plex-sans/license.txt "$out/font-licenses/IBM-Plex-license.txt"
 cp apps/xgpui-ext-lab/svg-lab/samples/ATTRIBUTION.md "$out/svg-ATTRIBUTION.md"
 for sample in ribbon-leaf.svg AJ_Digital_Camera.svg rg1024_green_grapes.svg rg1024_metal_effect.svg dragon.svg; do
     cp "apps/xgpui-ext-lab/svg-lab/samples/$sample" "$out/$sample"
 done
-echo "Built $out. Run: python3 apps/xgpui-ext-lab/extensions-web/serve.py"
+echo "Built $out. Preview with: just docs-serve"

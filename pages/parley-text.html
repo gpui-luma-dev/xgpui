@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>xgpui-parley · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/parley-text.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" aria-current="page" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Text backend extension.</strong> Parley shaping and geometry; GPUI caches, atlas and native input.</p><article class="extension-document"><h1 id="xgpui-parley">xgpui-parley</h1>
+<p>Opt-in Parley 0.12/HarfRust text backend: flat-LTR compatibility, BiDi paragraphs,
+resolved-face metrics, precise variable-font axes and grayscale rasterization.
+GPUI retains platform input,
+frame caches and glyph atlas ownership.</p>
+<h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
+<p>This crate adds <code>Application::with_platform_and_text_system</code> to select the
+backend before GPUI caches are built, optional <code>PlatformTextSystem::shape_paragraph</code>,
+paragraph layout/cache geometry, and <code>paint_paragraph</code>. The optional trait method
+defaults to Unsupported, so existing text backends need no required override.
+Existing application construction and native initialization retain their behavior.
+Additive method names can still collide with downstream extension methods.</p>
+<p>Parley uses GPUI's existing glyph atlas; it does not require custom-draw scene
+variants or wide-gamut presentation. Its flat-line supported subset and fallback
+behavior are documented below; those are extension behavior, not required
+changes to existing GPUI callers.</p>
+<p><strong><a href="gpui-public-api.html#added-text-backend-and-paragraph-seams">GPUI public API changes: additions and compatibility</a>.</strong></p>
+<h2 id="construction">Construction</h2>
+<pre><code class="language-toml">[dependencies]
+gpui = { package = "xgpui", version = "=3.0.0" }
+xgpui-parley = { version = "=0.5.0", features = ["system-fonts"] }
+</code></pre>
+<pre><code class="language-rust">use gpui::{Application, PlatformTextSystem};
+use std::sync::Arc;
+use xgpui_parley::ParleyTextSystem;
+
+// Register application fonts in font_context before construction.
+let backend = Arc::new(ParleyTextSystem::new(font_context, "IBM Plex Sans")?);
+let app = Application::with_platform_and_text_system(
+    gpui_platform::current_platform(false), backend,
+);
+</code></pre>
+<p>The explicit default family must exist; <code>.SystemUIFont</code> maps to it. Ordered
+fallback uses <code>FontFallbacks</code>. <code>system-fonts</code> is optional and off by default.
+Native platform initialization is unchanged. Native and Parley font-controls
+labs/tests are verified on macOS and Windows. Linux runtime acceptance and
+paragraph conversion IMEs remain separate checks.</p>
+<h2 id="variable-fonts-and-inspection">Variable fonts and inspection</h2>
+<p>Version 0.4.0 accepts <code>Font::variations</code> in flat-line and paragraph shaping and
+retains the actual resolved coordinates for metrics and rasterization. Use
+<code>FontTag::{WEIGHT, WIDTH, SLANT, OPTICAL_SIZE, ITALIC}</code> for standard axes, and
+validated tag parsing for custom axes; see the <a href="font-controls.html#set-precise-axes">typed styling example</a>. Explicit
+signed/fractional axes, clamping, fallback and instance isolation share core's
+<a href="font-controls.html">font-controls contract</a>. <code>font_axes</code>, <code>opentype_features</code>, and
+<code>font_capabilities</code> are available through GPUI's text system. Parley supplies raw
+resolved-face tables through the backend hook; the parsers remain private in core.</p>
+<h3 id="inspect-axes-and-opentype-features">Inspect axes and OpenType features</h3>
+<p>After registering the font with the selected backend, query it through the
+window's text system:</p>
+<pre><code class="language-rust">use gpui::{FontQuery, font};
+
+let text_system = window.text_system();
+let capabilities = text_system.font_capabilities();
+let font_id = text_system.resolve_font(&amp;font("Roboto Flex"));
+
+if capabilities.axis_introspection {
+    match text_system.font_axes(font_id)? {
+        FontQuery::Unsupported =&gt; { /* Hide the axis inspector. */ }
+        FontQuery::Supported(axes) =&gt; {
+            for axis in axes {
+                println!("{}: {} .. {} (default {}, hidden={})",
+                    axis.tag, axis.min_value, axis.max_value,
+                    axis.default_value, axis.hidden);
+            }
+        }
+    }
+}
+
+if capabilities.feature_introspection {
+    match text_system.opentype_features(font_id)? {
+        FontQuery::Unsupported =&gt; { /* Hide the feature inspector. */ }
+        FontQuery::Supported(features) =&gt; {
+            for feature in features {
+                println!("{}: GSUB={}, GPOS={}",
+                    feature.tag, feature.substitution, feature.positioning);
+            }
+        }
+    }
+}
+</code></pre>
+<p>A successful empty list differs from unsupported inspection; <code>?</code> propagates
+read/parsing errors. Results describe the resolved face, including any font
+substitution performed by <code>resolve_font</code>. Use IDs from this same text system.
+Feature presence does not guarantee an effect on every script or string.</p>
+<h3 id="set-axes-with-typed-tags">Set axes with typed tags</h3>
+<pre><code class="language-rust">use gpui::{FontTag, FontVariations, div, prelude::*};
+
+let axes = FontVariations::new([
+    (FontTag::WEIGHT, 650.0),
+    (FontTag::WIDTH, 85.0),
+    (FontTag::SLANT, -7.5),
+    (FontTag::OPTICAL_SIZE, 14.0),
+])?;
+
+let specimen = div()
+    .font_family("Roboto Flex")
+    .font_variations(axes)
+    .child("Hamburgefonts 012345");
+</code></pre>
+<p>Check <code>capabilities.static_variations</code> before offering axis editing. Standard
+tags need no parsing; coordinates remain validated and clamp per resolved face.</p>
+<h3 id="interactive-previews">Interactive previews</h3>
+<p><code>VariationPreview</code> is an optional extension utility for a fixed font descriptor:
+configure axis-specific intervals and a finite capacity, then obtain quantized
+GPUI fonts before resolution. It works with native text backends too. Retain the
+controller throughout the inspector session; keep precise author values separate.
+It never recycles font IDs or evicts atlas resources. See the
+<a href="font-controls.html#interactive-preview-policy">preview policy</a> and live lab.</p>
+<h2 id="paragraphs-and-input">Paragraphs and input</h2>
+<pre><code class="language-rust">// FontRuns contain descriptor IDs resolved by this application's TextSystem.
+let paragraph = window.text_system().layout_paragraph(
+    text, gpui::px(24.0), &amp;font_runs, width,
+)?;
+let hit = paragraph.hit_test(mouse_position - bounds.origin)?;
+let caret = paragraph.caret_bounds(hit)?;
+let fragments = paragraph.selection_bounds(anchor, hit)?;
+
+// Explicit base direction and language use the extension API directly.
+// `parley` is the Arc&lt;ParleyTextSystem&gt; installed as the app's text backend.
+let options = xgpui_parley::ParagraphOptions {
+    direction: xgpui_parley::TextDirection::RightToLeft,
+    language: Some(xgpui_parley::TextLanguage::parse("ur")?),
+};
+let urdu = parley
+    .prepare_paragraph_with_options(&amp;text, gpui::px(24.0), &amp;font_runs, options)?
+    .layout(width)?; // Cache shapes/reflows yourself; GPUI's cache has no options.
+
+// During element paint:
+window.handle_input(&amp;focus, gpui::ElementInputHandler::new(bounds, entity), cx);
+gpui::paint_paragraph(paragraph.as_ref(), bounds.origin, color_at, window)?;
+</code></pre>
+<p>The input entity implements <code>EntityInputHandler</code>. It translates UTF-16 edits to
+source UTF-8 and uses the painted paragraph for IME geometry. Candidate anchors
+use the requested caret/fragment; marked text uses selection fragments. Edits
+invalidate geometry until repaint. Apply origin/scrolling once at the UI edge.</p>
+<h2 id="the-typeset-element">The typeset() element</h2>
+<p><code>typeset("…")</code> wraps the paragraph path as an ordinary GPUI element, using only
+public GPUI APIs (<code>Window::request_measured_layout</code>, a GPUI global and
+<code>paint_paragraph</code>). Install it with the backend, then use it like text:</p>
+<pre><code class="language-rust">xgpui_parley::typeset::install(backend.clone(), cx); // the installed Arc&lt;ParleyTextSystem&gt;
+
+div().w(px(150.0)).truncate().child(
+    xgpui_parley::typeset("تقرير الإيرادات").rtl().language("ar".parse()?),
+)
+</code></pre>
+<p>It inherits GPUI's text style, including <code>white_space</code>, all three
+<code>text_overflow</code> modes, <code>line_clamp</code> and <code>text_align</code> (Left/Right act as
+start/end). Mixed styles use GPUI's model: <code>with_highlights</code> and <code>with_runs</code>, as
+on <code>StyledText</code>, including per-run fonts, colors, backgrounds, underlines and
+strikethroughs; styles follow truncated text. Wrapping text reports min-content and max-content widths, as in
+taffy's Parley example. Truncation is logical and verified by reshaping. Shapes,
+reflows and fits are cached in the engine. Without <code>install</code> it renders as GPUI
+text. Under this backend, plain GPUI text uses the left-to-right-only flat-line
+path, so right-to-left text needs <code>typeset()</code>. The text lab's Paragraph panel
+draws every label with <code>typeset()</code>: truncated cells, a tooltip and a clamp, plus
+a UI-language toggle (en/he/ar/fa/ur) that mirrors the panel for right-to-left
+languages.</p>
+<h2 id="gpui-versus-extension-apis">GPUI versus extension APIs</h2>
+<table><thead><tr><th>Added to GPUI</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>Application::with_platform_and_text_system(Rc&lt;dyn Platform&gt;, Arc&lt;dyn PlatformTextSystem&gt;)</code></td><td>Select the backend before cache construction</td></tr>
+<tr><td><code>PlatformTextSystem::shape_paragraph(ParagraphRequest)</code></td><td>Optional provider hook; default returns Unsupported</td></tr>
+<tr><td><code>PlatformParagraphShape::layout(width)</code></td><td>Immutable width-dependent reflow</td></tr>
+<tr><td><code>PlatformParagraphLayout</code></td><td>Source, size, visual glyph runs, hit testing, caret, movement and selection geometry</td></tr>
+<tr><td><code>ParagraphRequest</code>, <code>ParagraphPosition</code>, <code>TextAffinity</code>, <code>VisualDirection</code></td><td>Backend-neutral request and interaction types</td></tr>
+<tr><td><code>WindowTextSystem::layout_paragraph(text, size, runs, width)</code></td><td>GPUI-owned shaping/reflow cache entry point</td></tr>
+<tr><td><code>paint_paragraph(layout, origin, color_at, window)</code></td><td>Visual glyph painting through the existing atlas</td></tr>
+</tbody></table>
+<p><code>ParleyTextSystem</code>, <code>FaceRegistry</code>, <code>RegisteredFace</code>, <code>GlyphRasterizer</code>,
+<code>ParagraphShape</code>, <code>ParagraphLayout</code>, <code>VariationPreview</code>, <code>ParagraphOptions</code>,
+<code>TextDirection</code>, <code>TextLanguage</code>, <code>Typeset</code> and <code>typeset::install</code> belong to <strong>xgpui-parley</strong>, not GPUI.
+Explicit paragraph direction and language add no GPUI API.
+Parley/HarfRust/Skrifa types do not enter the core signatures.</p>
+<p>The paragraph additions change no existing public struct fields or required trait
+methods. Core 3.0 font controls separately add descriptor/style fields; see the
+<a href="gpui-public-api.html#font-axes-and-inspection-core-30">migration table</a>. Existing backend implementations need no paragraph override;
+<code>Application::with_platform</code> and <code>PlatformTextSystem::layout_line</code> retain their
+contracts. <code>EntityInputHandler</code>, <code>ElementInputHandler</code> and glyph/emoji paint
+methods are existing GPUI APIs. Internal changes add paragraph frame-cache
+entries and invalidation; the macOS variable-weight correction changes native
+font selection behavior without adding public API.</p>
+<h2 id="contracts">Contracts</h2>
+<table><thead><tr><th>Boundary</th><th>Contract</th></tr></thead><tbody>
+<tr><td>Font identity</td><td>Requested descriptors distinguish features/fallbacks/variations; shaped IDs retain actual blob, face index and normalized variation location</td></tr>
+<tr><td>Lifetime</td><td>IDs are not recycled; old layouts remain rasterizable after font registration</td></tr>
+<tr><td>Shape cache</td><td>GPUI key: source, ordered FontRuns, size</td></tr>
+<tr><td>Reflow cache</td><td>Same key plus width; immutable layout Arcs; width changes reuse shaping</td></tr>
+<tr><td>Invalidation</td><td>Both cache levels follow frame retention/reuse and font generation; backend calls run outside cache locks</td></tr>
+<tr><td>Geometry</td><td>Logical UTF-8 plus affinity; visual glyph order; paragraph-local positions include baseline/glyph offsets</td></tr>
+<tr><td>Paint</td><td>Existing bounds cache and sprite atlas; colors resolve by logical index; decorations/backgrounds remain caller-owned</td></tr>
+<tr><td>Native providers</td><td>Optional paragraph hook defaults to Unsupported</td></tr>
+</tbody></table>
+<p>Parley owns shaping, BiDi, breaking and interaction geometry. Reflow clones and
+rebreaks retained Parley layout. Skrifa metrics/rasterization use the same
+registered instance; a bounded LRU retains hinting setup and one staged outline
+avoids repeating extraction between matching bounds and raster calls. Shaping
+and rasterization use separate locks. No extension layout or
+bitmap cache is added. <a href="gpui-public-api.html">Core API additions</a>.</p>
+<h2 id="supported-subset">Supported subset</h2>
+<p>Flat-line compatibility requires LTR, one size, scale 1 and start alignment.
+<code>try_layout_line</code> returns errors; the infallible hook substitutes <code>.notdef</code> with
+original indices and reports rejection outside the backend lock.</p>
+<p>Paragraphs support mixed LTR/RTL, automatic direction (explicit direction and a
+paragraph language through <code>prepare_paragraph_with_options</code>), start alignment, one size,
+multiple font runs and U+2028 hard breaks. Callers split document paragraphs;
+the lab normalizes pasted line endings to U+2028.</p>
+<p>Color emoji (COLR v0/v1, sbix and CBDT) are supported in plain GPUI text and
+<code>typeset()</code>; registered emoji families are automatic fallbacks. Synthetic styles,
+LCD, dilation, inline boxes, vertical text and split-style cluster fragments are
+unsupported. Raster size/bounds are capped
+at 4096 device pixels. Explicit alignment, per-run languages, advanced styling,
+accessibility and broader BiDi/UAX #14 conformance remain follow-ups.</p>
+<h2 id="lab-and-validation">Lab and validation</h2>
+<p><a href="examples/extensions/?demo=font-controls">The Wasm font inspector</a> runs the
+same GPUI axis controls with Parley shaping and rasterization in Wasm, through
+WebGPU or WebGL2. It displays axis ranges, GSUB/GPOS feature tags and precise
+static samples beside the live preview. This is separate from the default GPUI
+web text backend, whose explicit-axis requests remain unsupported.</p>
+<pre><code class="language-sh">just text --backend both
+just text --workload paragraph
+just text --workload paragraph --timings-only
+just text --workload scroll --scroll-frames 640 --exit-after-scroll
+just lab-test
+</code></pre>
+<p>The lab covers bundled fallback/variable fonts, mixed scripts, wrapping, caret,
+selection, clipboard and composition. First/warm/reflow CPU diagnostics separate
+cache hits from new-width layout; seed timings exclude GPU work. Native optical
+size and host fallback can differ, so matched fonts do not imply pixel identity.</p>
+<p>Automated checks cover face/cache identity, visual conversion, atlas reuse,
+UTF-16 composition/candidate replacement and stale/wrapped IME geometry.
+Manual macOS results (2026-10-24): single-line native/Parley Japanese–Romaji popup
+selection/commit/cancel passed; paragraph U.S. accent-panel placement, selection,
+commit/cancel passed by user confirmation without keyboard-setting changes.
+The November 5, 2026 native/Parley font-controls labs and unit tests passed on
+macOS and Windows. Paragraph conversion IMEs and Linux runtime/IME acceptance
+remain unvalidated.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

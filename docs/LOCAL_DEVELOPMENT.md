@@ -65,7 +65,7 @@ Cargo builds only the dependencies needed for the selected platform, features
 and targets. Some helpers are used only by optional functionality, examples or
 tests. The mapping is maintained in `scripts/registry-crates.json`, and
 `upstream.json` records the matching release and local source provenance.
-The website's crate inventory and source pages cover local crates only.
+The website's crate pages cover local crates only.
 
 When building a separate application against this checkout, override only the
 retained framework/backend packages using their `xgpui-*` package identities.
@@ -77,7 +77,7 @@ this dependency change, then resume locked builds.
 
 ## Extension labs and benchmarks
 
-See [xgpui-ext-lab](extensions/extension-lab.md) for its targets, purpose and
+See [xgpui-ext-lab](https://xgpui.dev/extension-lab.html) for its targets, purpose and
 unpublished status, and how it differs from the separate `xgpui-lab` application.
 
 All native labs, repeatable benchmarks and browser demos live in the unpublished
@@ -136,7 +136,7 @@ The text comparison has independent weight, width, slant and optical-size slider
 on native and Parley windows. macOS and Windows labs/tests are verified. Run
 `just text --backend both` to compare them, `just lab-test` for the suite, or
 `just lab-test live_axis -- --nocapture` for slider interactions. The existing
-lab-test command enables backtraces automatically. See [font controls](extensions/font-controls.md)
+lab-test command enables backtraces automatically. See [font controls](https://xgpui.dev/font-controls.html)
 for capabilities, preview limits and the core 3.0 migration.
 
 Parley uses the same text lab; pass `--backend parley` for only that engine or
@@ -329,7 +329,7 @@ stepping through code, but are not representative of rendering performance.
 Keep 60 Hz as the baseline; a 120 Hz monitor is optional. Media surface runtime
 validation on Windows/Linux remains tracked in
 [issue #23](https://github.com/gpui-luma-dev/xgpui/issues/23).
-See the [media guide](extensions/media-images.md) for backend limits and measurements.
+See the [media guide](https://xgpui.dev/media-images.html) for backend limits and measurements.
 
 ## Check a change
 
@@ -355,22 +355,21 @@ platform and, where applicable, a graphical session.
 
 ## Preview this website
 
-Generate the crate inventory and embedded guides, then serve the staged website
-from `target/site/` locally:
+The website is the static `pages/` directory. Serve and check it without
+building anything:
 
 ```sh
-just docs-check
 just docs-serve
+just docs-check
 ```
 
-The server uses `python3` on macOS/Linux and `python` on Windows. If Windows
-only provides the Python launcher, use `just python=py docs-serve`. Choose another
-port with `just docs-serve 8001`. Open
-[localhost:8000](http://localhost:8000/#local-development). Node and Python are
-only needed for the verification/server commands, not for native app builds.
+Both use `python3` on macOS/Linux and `python` on Windows. If Windows only
+provides the Python launcher, use `just python=py docs-serve`. Choose another
+port with `just docs-serve 8001`, then open [localhost:8000](http://localhost:8000/).
+Python is not needed for native app builds.
 
-The documentation generator does not build the WebAssembly demos. To include
-them, install the Wasm target and the CLI version pinned by the build scripts:
+The browser demos are the only part that needs a build. Install the Wasm target
+and the CLI version pinned by the build scripts:
 
 ```sh
 rustup target add wasm32-unknown-unknown
@@ -379,8 +378,8 @@ just web-build
 just docs-serve
 ```
 
-These scripts also require Bash and Python 3; on Windows run them in a Bash
-environment with the same Rust and Python tools on PATH. Rebuild after changing
+The build scripts need Bash; on Windows run them in a Bash environment with
+the same Rust tools on PATH. Rebuild after changing
 demo code, then reload the page. Use `localhost` for browser WebGPU access.
 
 ## Common build problems
@@ -393,7 +392,7 @@ demo code, then reload the page. Use `localhost` for browser WebGPU access.
 | Lockfile needs an update | Check the branch and manifest you selected. For an intentional dependency change, regenerate that workspace's lockfile and review the diff; do not delete all lockfiles. |
 | Patch location does not contain `collections` or another removed helper | Remove stale helper path patches from the consuming app and refresh its lockfile; use the published packages listed above. |
 | Local GPUI changes do not appear | Run from the repository root and keep its checked-in Cargo configuration enabled. |
-| Browser demos are absent or stale | Build the Wasm assets separately; regenerating the documentation alone does not rebuild them. |
+| Browser demos are absent or stale | Run `just web-build`; the pages in `pages/` do not include the Wasm bundles. |
 
 Build harness details are maintained in
 [BUILDING.md](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/BUILDING.md).

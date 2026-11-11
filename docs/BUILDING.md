@@ -89,9 +89,8 @@ Stop active builds, then run `just clean-preview` to list all of them and
 `just clean` to remove them. Without Just, use
 `bash scripts/clean_build_outputs.sh` and add `--apply` to delete.
 The cleaner skips symlinks and refuses directories containing tracked files or
-not ignored by Git. It leaves source assets intact. Web bundles (`target/web/`)
-and staged deployment
-files (`target/site/`) live under the root target directory and are cleaned too.
+not ignored by Git. It leaves source assets intact. Browser demo bundles live in `pages/examples/`;
+remove them with `just web-clean`.
 Build outputs outside this checkout (such as an external `CARGO_TARGET_DIR`)
 are not included. Use `--target-dir target` for standalone builds to share the
 root output directory, as the lab recipes already do.

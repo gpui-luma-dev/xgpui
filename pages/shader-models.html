@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Shader paints and instanced shaders · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/shader-models.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" aria-current="page" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><article class="extension-document"><h1 id="shader-paints-and-instanced-shaders">Shader paints and instanced shaders</h1>
+<p>Both rendering models are experimental and require <code>portable-shaders</code>. Choose by
+integration and workload; neither name implies stabilization or broader backend support.</p>
+<table><thead><tr><th>Choice</th><th>Shader paints</th><th>Instanced shaders</th></tr></thead><tbody>
+<tr><td>Rust entry</td><td><code>shader_paint::ShaderProgram::new(source)</code></td><td><code>instanced::ShaderProgram::&lt;T&gt;::new(source)</code></td></tr>
+<tr><td>Use when</td><td>A reusable paint should fill a styled background, border or path</td><td>Typed effects should draw directly in scene order, including many repeated instances</td></tr>
+<tr><td>Rendering</td><td>Cached offscreen output, integrated through <code>Paint</code></td><td>Main-pass draws; compatible consecutive instances can batch</td></tr>
+<tr><td>Parameters</td><td>Named <code>ShaderParameters</code>; reflected packing into immutable <code>ShaderPaint</code> snapshots</td><td>POD <code>ShaderInstance</code> records with explicit field metadata, checked against WGSL layout</td></tr>
+<tr><td>Parameter limits</td><td>1–32 f32 scalar/vector members; at most 1,024 packed bytes</td><td>At most 128 bytes; f32 scalars/vectors with verified offsets and stride</td></tr>
+<tr><td>WGSL entry</td><td><code>fn paint(input: PaintInput) -&gt; vec4&lt;f32&gt;</code>; supplied global <code>parameters</code></td><td><code>fn shade(input: ShaderInput, parameters: Parameters) -&gt; vec4&lt;f32&gt;</code></td></tr>
+<tr><td>Coordinates</td><td>Full source UV, local logical position and size</td><td>Full effect UV, local logical position and size, plus scale factor</td></tr>
+<tr><td>Clipping and opacity</td><td>Host applies coverage and opacity without remapping the paint field</td><td>Host applies content-mask clipping and inherited opacity; shader supplies analytical shape coverage</td></tr>
+<tr><td>Loops and derivatives</td><td>Rejected, as is discard</td><td>Subject to Naga validation</td></tr>
+<tr><td>Resources</td><td>No user textures, resource bindings or compute</td><td>No user resource bindings or compute</td></tr>
+<tr><td>Output</td><td>Straight-alpha encoded-sRGB SDR</td><td>Encoded-sRGB SDR by default; explicit <code>new_linear_p3</code> requires an active native <code>WideGamutSdr</code> window</td></tr>
+<tr><td>Backends</td><td>Metal, D3D11 and optional wgpu adapters</td><td>Metal, D3D11, wgpu, browser WebGPU and WebGL2</td></tr>
+</tbody></table>
+<p>Backend implementation does not establish driver acceptance on every platform.
+The <a href="portable-wgsl-v1.html">shader-paint guide</a> and
+<a href="instanced-wgsl-v2.html">instanced shader guide</a> record runtime validation and
+remaining platform checks. Main-pass batching preserves draw order; it does not
+sort all matching programs together. Reuse compiled programs in either model.</p>
+<h2 id="migration-from-v1v2-terminology">Migration from v1/v2 terminology</h2>
+<p>“v1” referred to shader paints; “v2” referred to instanced shaders. These are
+parallel rendering models, not successive releases of one API. Existing guide
+filenames remain available to preserve incoming links.</p>
+<pre><code class="language-rust,ignore">// Before: removed beta API.
+use xgpui_shader::experimental::{ShaderParameters, ShaderProgram};
+let program = ShaderProgram::new_v1(source)?;
+</code></pre>
+<pre><code class="language-rust,ignore">// After: identical source and output contracts.
+use xgpui_shader::shader_paint::{ShaderParameters, ShaderProgram};
+let program = ShaderProgram::new(source)?;
+let paint = program.paint(ShaderParameters::new().float("gain", 0.5))?;
+</code></pre>
+<p><code>ShaderPaint</code> is also exported from <code>shader_paint</code>. The old <code>experimental</code> module
+and <code>new_v1</code> constructor have been removed as a breaking beta API change; update
+all callers to the new names. No aliases or deprecated forwarding APIs remain.
+<code>instanced::ShaderProgram&lt;T&gt;::new</code> and typed instance terminology are unchanged.</p>
+<p>Version numbers are reserved for actual source-contract or ABI revisions within
+each rendering model. Naming changes do not relax validation, change color
+semantics, or add backend support.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

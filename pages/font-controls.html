@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Variable fonts and OpenType inspection · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/font-controls.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=font-controls">Open Variable fonts ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p><article class="extension-document"><h1 id="variable-fonts-and-opentype-inspection">Variable fonts and OpenType inspection</h1>
+<p><code>xgpui 3.0</code> adds precise variable-font axes and resolved-face feature inspection.
+Native CoreText on macOS, DirectWrite on Windows, and the Parley backend apply
+the same settings through shaping, metrics, wrapping, fallback and rasterization.
+<code>xgpui-parley 0.4</code> also provides an optional quantized preview controller.</p>
+<h2 id="try-the-live-inspector">Try the live inspector</h2>
+<p><a href="examples/extensions/?demo=font-controls">Open the Wasm font inspector</a>, or
+choose <a href="examples/extensions/?demo=font-controls&amp;backend=webgpu">WebGPU</a> /
+<a href="examples/extensions/?demo=font-controls&amp;backend=webgl">WebGL2</a> explicitly.
+It reuses the native lab's GPUI sliders and bundled fonts. Parley/HarfRust shapes
+and Skrifa/tiny-skia rasterizes the actual glyphs in Wasm; CSS text is not used.
+WebGPU/WebGL2 chooses the GPU renderer, not a different text engine.</p>
+<p>For native CoreText/DirectWrite versus Parley, run from the repository root:</p>
+<pre><code class="language-sh">just text --backend both
+</code></pre>
+<p>Each window has independent Roboto Flex sliders for <strong>weight</strong>, <strong>width</strong>,
+<strong>slant</strong>, and <strong>optical size</strong>, plus Default, Condensed, Slanted, and Wide presets.
+The large specimen, wrapping specimen and measured advance update together.
+Focus a slider and use arrows, Shift for larger steps, or Home/End for limits.
+Feature tags and available axis ranges appear with the static samples.</p>
+<p>Run the lab tests, with backtraces enabled:</p>
+<pre><code class="language-sh">just lab-test
+</code></pre>
+<p>To focus on the slider interaction tests:</p>
+<pre><code class="language-sh">just lab-test live_axis -- --nocapture
+</code></pre>
+<p>The labs and tests were confirmed working on macOS and Windows on November 5,
+2026. Native and Parley output need not be pixel-identical. A subtle slant
+appearance difference between the tested macOS and Windows displays was reported
+in both panels, with matching endpoints; it did not block acceptance. This does
+not establish equivalent rendering on every display or validate every IME path.</p>
+<h2 id="set-precise-axes">Set precise axes</h2>
+<p>Load or install a font that supports the requested axes. Roboto Flex is bundled
+with the lab; applications provide their own fonts.</p>
+<pre><code class="language-rust">use gpui::{FontTag, FontVariations, div, prelude::*};
+
+let axes = FontVariations::new([
+    (FontTag::WEIGHT, 650.0),
+    (FontTag::WIDTH, 85.0),
+    (FontTag::SLANT, -7.5),
+    (FontTag::OPTICAL_SIZE, 14.0),
+])?;
+
+let specimen = div()
+    .font_family("Roboto Flex")
+    .font_variations(axes)
+    .child("Hamburgefonts 012345");
+</code></pre>
+<p>For explicit text runs, assign the same settings to <code>gpui::font(family).variations</code>.
+<code>TextStyle::font_variations</code> participates in inheritance and refinement.
+Coordinates serialize as a tag-to-number map, for example
+<code>{"slnt": -7.5, "wght": 650.0}</code>.</p>
+<p>Use these constants for the five <a href="https://learn.microsoft.com/en-us/typography/opentype/spec/dvaraxisreg">registered axes</a>:</p>
+<table><thead><tr><th>Constant</th><th>OpenType tag</th><th>Coordinate meaning</th></tr></thead><tbody>
+<tr><td><code>FontTag::WEIGHT</code></td><td><code>wght</code></td><td>Weight; conventionally 400 for regular</td></tr>
+<tr><td><code>FontTag::WIDTH</code></td><td><code>wdth</code></td><td>Percentage of normal width</td></tr>
+<tr><td><code>FontTag::SLANT</code></td><td><code>slnt</code></td><td>Angle in degrees; negative values lean right</td></tr>
+<tr><td><code>FontTag::OPTICAL_SIZE</code></td><td><code>opsz</code></td><td>Optical design size in typographic points</td></tr>
+<tr><td><code>FontTag::ITALIC</code></td><td><code>ital</code></td><td>Italic design; conventionally 0 for roman and 1 for italic</td></tr>
+</tbody></table>
+<p>Constants are already validated tags and need no <code>.parse()</code> or error handling.
+<code>FontVariations::new</code> remains fallible because coordinates must be finite. The
+font determines its supported ranges: constants do not guarantee a font has that
+axis or impose a universal range. Italic design and slant angle are separate axes.
+Explicit optical size does not track GPUI's pixel font size automatically.</p>
+<p>Custom axes remain available through validated parsing:</p>
+<pre><code class="language-rust">let grade = "GRAD".parse::&lt;FontTag&gt;()?;
+let custom_axes = FontVariations::new([(grade, 25.0)])?;
+</code></pre>
+<p>The spelling change does not alter serialization: constants still write standard
+tags such as <code>wght</code> and <code>slnt</code> into the same tag-to-number map.</p>
+<p><code>FontTag</code> validates four printable ASCII bytes. <code>FontVariations</code> accepts finite
+signed <code>f32</code> coordinates, sorts tags, keeps the last duplicate and normalizes
+negative zero. Author settings retain their precision; core does not quantize
+them. Invalid tags, NaN and infinity are rejected.</p>
+<p>Existing family/weight/style matching chooses a face first. Explicit axis values
+override corresponding implicit coordinates, then clamp to that face's range.
+An unsupported axis is ignored on that face, while the original request remains
+available to fallback faces. Each fallback resolves its own effective coordinates.
+Empty settings preserve existing backend behavior. Explicit <code>opsz</code> uses font
+design units and stays fixed across text sizes; automatic optical sizing is not
+part of this API.</p>
+<h2 id="inspect-a-resolved-face">Inspect a resolved face</h2>
+<pre><code class="language-rust">use gpui::{FontQuery, font};
+
+let text_system = window.text_system();
+let capabilities = text_system.font_capabilities();
+let id = text_system.resolve_font(&amp;font("Roboto Flex"));
+
+match text_system.font_axes(id)? {
+    FontQuery::Unsupported =&gt; { /* Hide axis inspection. */ }
+    FontQuery::Supported(axes) =&gt; {
+        for axis in axes {
+            println!("{}: {} .. {} (default {})",
+                axis.tag, axis.min_value, axis.max_value, axis.default_value);
+        }
+    }
+}
+let features = text_system.opentype_features(id)?;
+</code></pre>
+<p><code>FontCapabilities</code> reports <code>feature_introspection</code>, <code>axis_introspection</code>, and
+<code>static_variations</code>. Check <code>static_variations</code> before offering editing controls:
+the existing <code>resolve_font</code> convenience method can fall back after resolution
+errors. A <code>FontId</code> belongs to the text system that resolved it.</p>
+<p>Queries distinguish <strong>unsupported</strong>, <strong>successful empty results</strong>, and <strong>errors</strong>.
+<code>VariationAxisInfo</code> contains tag, minimum, default, maximum and hidden status.
+<code>OpenTypeFeatureInfo</code> identifies each tag's GSUB/GPOS provenance; tags are sorted
+and duplicates merged. Feature presence does not guarantee an effect on a given
+script, language or string, or describe its allowed parameter values. Existing
+<code>FontFeatures</code> supports numeric values as well as on/off settings.</p>
+<p>Core owns the private <code>fvar</code>, GSUB and GPOS parsers. The default
+<code>PlatformTextSystem::font_axes</code> and <code>opentype_features</code> methods call the backend's
+<code>font_table(FontId, FontTag)</code> hook. Backends obtain bytes from their actual
+resolved face; core interprets the metadata. The hook returns <code>Unsupported</code>,
+<code>Supported(None)</code> for an absent table, <code>Supported(Some(bytes))</code> for a present
+table, or an error for a failed read/invalid ID. No public parser function,
+additional package, or copied parser implementation is required.</p>
+<h2 id="backend-support">Backend support</h2>
+<table><thead><tr><th>Backend</th><th>Feature/axis inspection</th><th>Explicit static axes</th></tr></thead><tbody>
+<tr><td>Apple font-kit / CoreText</td><td>Supported</td><td>Supported; macOS labs/tests verified</td></tr>
+<tr><td>Windows / DirectWrite</td><td>Supported</td><td>Supported when the <code>IDWriteTextLayout4</code> runtime probe succeeds; Windows labs/tests verified</td></tr>
+<tr><td>Parley / HarfRust / Skrifa</td><td>Supported</td><td>Supported for flat lines and paragraphs; macOS/Windows labs/tests verified</td></tr>
+<tr><td>Parley in Wasm</td><td>Supported</td><td>Supported; Wasm inspector interactions verified on WebGPU and WebGL2</td></tr>
+<tr><td>Cosmic / Linux (<code>xgpui-wgpu 2.1</code>)</td><td>Supported for resolved font files</td><td>Nonempty explicit axis requests rejected; inspection does not enable editing</td></tr>
+<tr><td>GPUI default web text backend (Cosmic/Canvas)</td><td>Unsupported</td><td>Nonempty explicit axis requests rejected; this is an integration limit, not a browser-wide restriction</td></tr>
+</tbody></table>
+<p>The Wasm inspector was verified on this host with both renderers, including
+pointer controls, keyboard input, presets and restored measurements. This is not
+exhaustive browser/device acceptance.</p>
+<p>Shared Apple code also serves iOS, but macOS acceptance does not establish iOS
+runtime validation. Cosmic inspection uses the same private core parsers through
+the backend table hook. The text lab displays available metadata even when
+static-axis editing is unavailable. Cosmic axis application and default web
+backend parity are tracked in
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/141">#141</a>.</p>
+<h2 id="interactive-preview-policy">Interactive preview policy</h2>
+<p><code>xgpui_parley::VariationPreview</code> is an extension utility that returns ordinary
+GPUI <code>Font</code> descriptors; it works with native backends too. Retain one controller
+for an inspector's lifetime. Supply face-specific axis ranges, per-axis intervals
+and a positive combination capacity to <code>VariationPreview::new</code>, then call
+<code>font(&amp;author_settings)</code> for each update. Quantization happens before resolution,
+so layout and paint use the same coordinates. Commit precise author settings
+separately from the preview.</p>
+<p>The lab admits at most <strong>512 combinations per window</strong>, using steps of
+<code>wght=10</code>, <code>wdth=1</code>, <code>slnt=0.25</code>, and <code>opsz=1</code>. Once full, it retains the last
+preview and displays a message. Revisiting admitted settings and Default still
+works; restarting creates a fresh session. These are lab policy choices, not
+universal font defaults.</p>
+<p>Admission limits descriptors in that controller. They do not set a global
+CPU/GPU memory budget or evict fonts, glyphs or atlas pages. Retained layouts keep
+valid font IDs. Resource budgets and frame-safe eviction remain
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/139">#139</a>.</p>
+<h2 id="upgrade-to-core-30">Upgrade to core 3.0</h2>
+<p>The breaking changes are new fields on <code>Font</code>, <code>TextStyle</code>, and
+<code>TextStyleRefinement</code>. Add <code>variations: Default::default()</code> to exhaustive font
+literals, <code>font_variations: Default::default()</code> to exhaustive text-style literals,
+and <code>font_variations: None</code> to refinement literals. Patterns can use <code>..</code>.
+Constructor/default-based callers generally only need recompilation against the
+matching crate family. No axis request is introduced implicitly.</p>
+<p>The inspection and styling methods are additive. <code>PlatformTextSystem::font_table</code>
+has an unsupported default, so existing custom backends compile without an
+override. See <a href="gpui-public-api.html#font-axes-and-inspection-core-30">core API migration</a>
+and <a href="whats-new.html#font-controls-crate-versions">release versions</a>.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

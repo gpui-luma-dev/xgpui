@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Use a supplied RGB ICC profile · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/icc-profiles.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Color tasks.</strong> Pixels, metadata, storage and presentation. <a href="color-workflows.html">Choose a task →</a></p><article class="extension-document"><h1 id="use-a-supplied-rgb-icc-profile">Use a supplied RGB ICC profile</h1>
+<p>Enable the optional parser when your application already has profile bytes.
+The parser supplies validated colorants and curves to the f64 color core. It
+does not decode image files, select a monitor profile or run a general ICC
+transform engine.</p>
+<pre><code class="language-toml">[dependencies]
+xgpui-color = { path = "../../extensions/crates/xgpui-color", features = ["icc"] }
+</code></pre>
+<h2 id="parse-once-then-attach-the-definition-to-pixels">Parse once, then attach the definition to pixels</h2>
+<pre><code class="language-rust">use std::sync::Arc;
+use xgpui_color::icc::IccRgbProfile;
+use xgpui_media::pipeline::{AlphaMode, PixelColor};
+
+fn interpretation(profile_bytes: &amp;[u8]) -&gt; anyhow::Result&lt;PixelColor&gt; {
+    let profile = IccRgbProfile::parse(profile_bytes)?;
+    Ok(PixelColor::Custom {
+        rgb: Arc::new(profile.into_rgb_definition()),
+        alpha: AlphaMode::Straight,
+    })
+}
+</code></pre>
+<p>Pass that interpretation to <code>MediaLoader::load_pixel_buffer</code> with the decoded
+RGBA samples, an explicit storage space and mapping policy. Reuse the immutable
+definition across pixels; parse outside rendering and keep admission of profile
+bytes/work on the application's bounded workers. Source alpha remains with the
+caller. <a href="pixels-and-metadata.html">Pixels and metadata</a> covers the full flow.</p>
+<h2 id="supported-subset">Supported subset</h2>
+<table><thead><tr><th>Item</th><th>Current contract</th></tr></thead><tbody>
+<tr><td>Profiles</td><td>ICC v2/v4 RGB input/display matrix/TRC, XYZ PCS with standard encoded D50 header illuminant</td></tr>
+<tr><td>Curves</td><td>Linear, gamma, monotone normalized u16 samples, supported parametric types 0/3/4</td></tr>
+<tr><td>Evaluation</td><td>f64 color core; sampled values interpolate continuously</td></tr>
+<tr><td>Source domain</td><td>Finite encoded RGB in 0–1; alpha is supplied separately</td></tr>
+<tr><td>Matrix</td><td>Preserve serialized colorants, including non-neutral matrix sums; require finite/invertible/well-conditioned data</td></tr>
+<tr><td>Adaptation</td><td>Header PCS reference to D65 once; do not apply chad or media-white tags again</td></tr>
+<tr><td>Errors</td><td>Limit, unsupported, malformed or invalid color; no silent sRGB fallback</td></tr>
+</tbody></table>
+<p>Limits include 512 KiB/profile, 32 tags, 65,536 samples/curve and 4 KiB per
+admitted informational tag. Exact shared tag ranges are allowed; partial overlap
+is rejected. Large parametric coefficients outside the parser's exact admitted
+range are rejected. The adapter rejects CICP combinations and unsupported
+transform tags instead of guessing precedence.</p>
+<p>LUT profiles, CMYK, gray, HDR/iccMAX, arbitrary rendering-intent transforms,
+black-point compensation and display calibration are outside this subset.
+Informational luminance, measurement, black-point, technology and viewing-text
+tags do not add those operations to the relative matrix/TRC decode.</p>
+<h2 id="why-srgb2014-is-not-replaced-with-named-srgb">Why sRGB2014 is not replaced with named sRGB</h2>
+<p>A profile's name is not a conversion rule. The pinned sRGB2014 fixture contains
+a 1024-entry curve and a small encoded neutral-axis offset. Both are retained.
+<code>RgbDefinition::from_relative_xyz_matrix</code> separates the declared XYZ reference
+white from the actual transform's matrix sum. The neutral-space constructors
+remain available for definitions that must map neutral RGB onto their declared
+white. No column normalization or wider conversion tolerance is used to admit
+the profile.</p>
+<h2 id="tested-profiles-and-boundaries">Tested profiles and boundaries</h2>
+<p>The pinned published corpus accepts Compact v4 sRGB, Display P3,
+Adobe-compatible RGB, and the ICC-authored sRGB2014 mirror. Compact v2 fixtures
+with overlapping packed tag ranges are intentionally rejected; this describes
+our admission policy, not a claim that the upstream files are corrupt.
+Grayscale and CMYK fixtures are also explicit rejections.</p>
+<p>There are 4,108 independent 120-digit exact-tag vectors for the accepted
+published profiles, plus synthetic curve and adaptation tests. They cover
+near-black, mixed colors, endpoints, threshold neighbors and sampled knots.
+The f64 source-energy precision budgets are separate from FP16 storage budgets.
+A secondary Little CMS endpoint check confirms the retained relative PCS matrix;
+its interpolation behavior does not define the core's sampled-curve contract.</p>
+<p>Try <a href="examples/extensions/?demo=pixel-metadata">identical pixels with different metadata</a>
+in Wasm, or inspect them in the <a href="color-labs.html">native lab</a>. Provenance, licenses,
+hashes and detailed results live with the
+<a href="https://github.com/gpui-luma-dev/xgpui/tree/main/extensions/crates/xgpui-color/tests/reference/real-icc">profile fixtures</a>.
+Historical engine evaluations are retained in
+<a href="https://github.com/gpui-luma-dev/xgpui/tree/main/validation/icc-import-probe">validation notes</a>.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

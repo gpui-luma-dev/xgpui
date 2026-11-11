@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Portable wgpu paints · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/portable-paints.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" aria-current="page" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><article class="extension-document"><h1 id="portable-wgpu-paints">Portable wgpu paints</h1>
+<p><code>xgpui-shader/wgpu</code> · paint-lab headless path · native window renderers unchanged.</p>
+<h2 id="use">Use</h2>
+<pre><code class="language-toml"># App under apps/: {#app-under-apps}
+[dependencies]
+xgpui-shader = { path = "../../extensions/crates/xgpui-shader", features = ["wgpu"] }
+</code></pre>
+<pre><code class="language-rust">use gpui::{prelude::*, *};
+use std::sync::Arc;
+use xgpui_shader::{painted, Gradient, GradientStop, WindowPaintExt};
+
+let paint = Arc::new(Gradient::linear(45.0, vec![
+    GradientStop::new(0.0, [1.0, 0.2, 0.3, 1.0]),
+    GradientStop::new(1.0, [0.1, 0.3, 1.0, 0.5]),
+])?);
+painted().w(px(320.0)).h(px(240.0)).bg_paint(paint.clone());
+window.paint_path_with_paint(path, paint.clone());
+</code></pre>
+<h2 id="producer-api">Producer API</h2>
+<p><code>gpui_wgpu::custom_draw</code> — signature summary:</p>
+<pre><code class="language-rust">pub struct WgpuCustomContext {
+    pub device: Arc&lt;wgpu::Device&gt;,
+    // Private recording state.
+}
+impl WgpuCustomContext {
+    pub fn cache_key(&amp;self) -&gt; usize;
+    pub fn create_output(&amp;self, extent: Size&lt;DevicePixels&gt;) -&gt; Result&lt;WgpuCustomOutput&gt;;
+    pub fn record&lt;T&gt;(
+        &amp;self,
+        encode: impl FnOnce(&amp;mut wgpu::CommandEncoder) -&gt; Result&lt;T&gt;,
+    ) -&gt; Result&lt;T&gt;;
+    pub fn can_reuse(&amp;self, output: &amp;WgpuCustomOutput) -&gt; bool;
+}
+pub struct WgpuCustomOutput { /* private fields; Clone */ }
+impl WgpuCustomOutput {
+    pub fn texture(&amp;self) -&gt; &amp;wgpu::Texture;
+}
+</code></pre>
+<h2 id="contract">Contract</h2>
+<pre><code class="language-text">producer    reusable cache hit OR allocate → record → return output
+host        validate → stage → submit accepted batch → compose
+failure     discard unsubmitted batch → frame error
+reuse       same recording / accepted batch / submitted queue
+
+output      RGBA8Unorm · straight alpha · encoded-sRGB SDR
+mapping     full unclipped bounds; logical size ≠ raster extent
+coverage    analytic rounded rect; native border/path mask red channel
+cache key   queue + extent (+ logical size for WGSL)
+cache       64 MiB live output; separate 64 MiB coverage
+mesh        Hermite vertex shader; no compute/storage buffers
+</code></pre>
+<p>No producer submission/GPU wait. Cache budgets exclude in-flight retention.
+<a href="paint-contract-hardening.html#implemented-discardable-recording-transactions">Recording details</a>.</p>
+<h2 id="checks">Checks</h2>
+<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-test
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-headless --effect mesh --frames 60 --png /tmp/wgpu-mesh.png
+
+# One headless backend/device per process; unavailable backend → error. {#one-headless-backenddevice-per-process-unavailable-backend--error}
+WGPU_BACKEND=metal just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-test
+WGPU_BACKEND=vulkan just --justfile apps/xgpui-ext-lab/paint-lab/justfile wgpu-test
+# Windows PowerShell: $env:WGPU_BACKEND = "dx12" {#windows-powershell-envwgpubackend--dx12}
+
+cargo test --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-wgpu/Cargo.toml \
+  --features test-support --lib wgpu_custom --target-dir target
+</code></pre>
+<p>Executed: macOS wgpu/Metal pixels, geometry, mesh parity, replay/cache and
+transaction tests. SPIR-V/HLSL generation passes; Vulkan/DX12 runtime acceptance
+remains outstanding. Software/readback timing is not hardware GPU timing.</p>
+<p><a href="native-dx11-paints.html">Native D3D11</a> · <a href="portable-wgsl-v1.html">WGSL</a></p>
+<p>Backend workflows, focused diagnostics, caching, and cold/warm measurement are
+documented in <a href="paint-validation.html">Paint GPU validation</a>.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Spatial canvas · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/canvas.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" aria-current="page" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Experimental spatial canvas.</strong> Camera, retained scenes and clipped procedural grids.</p><p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=canvas">Open spatial card canvas ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p><p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=mandelbrot">Open Mandelbrot explorer ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p><article class="extension-document"><h1 id="spatial-canvas">Spatial canvas</h1>
+<aside class="canvas-beta" aria-label="Canvas beta warning"><strong>BETA</strong> — Expect significant API changes.</aside>
+<p><code>xgpui-canvas</code> adds a spatial viewport to GPUI: an f64 pan/zoom camera, retained
+scenes with BVH culling and hit testing, LOD hints, alignment snapping, and a
+procedural line/dot grid. Native and browser labs show the same camera driving
+cards and fractals. The native fractal uses coherent viewport images; the browser
+companion uses bounded CPU rendering.</p>
+<h2 id="try-it">Try it</h2>
+<ul>
+<li><a href="examples/extensions/?demo=canvas">Card canvas</a>: 10k/100k cards, selection,
+group movement, snapping and a navigable density minimap.</li>
+<li><a href="examples/extensions/?demo=mandelbrot">Mandelbrot explorer</a>: progressive
+CPU rendering with pointer-anchored zoom.</li>
+</ul>
+<p>Both support WebGPU and WebGL2. Run the native labs from the repository root:</p>
+<pre><code class="language-sh">just canvas-lab
+just canvas-lab --mandelbrot
+</code></pre>
+<table><thead><tr><th>Action</th><th>Cards</th><th>Mandelbrot</th></tr></thead><tbody>
+<tr><td>Pan</td><td>Scroll, middle drag or Space-drag</td><td>Left drag</td></tr>
+<tr><td>Zoom</td><td>Pinch; browser also supports Ctrl/Cmd+wheel</td><td>Pinch; browser also supports wheel</td></tr>
+<tr><td>Select/move</td><td>Click or Shift-drag; drag selected cards</td><td>—</td></tr>
+<tr><td>Bypass snapping / cancel</td><td>Alt/Option / Escape</td><td>—</td></tr>
+<tr><td>Reset</td><td>R or browser Reset button</td><td>R or browser Reset button</td></tr>
+</tbody></table>
+<p>Click/drag the card minimap to navigate. Native <strong>T</strong> switches minimap/live
+preview; <strong>M</strong> toggles the panel. Browser buttons change scene size and grid style.</p>
+<h2 id="use-it">Use it</h2>
+<p>For development against this checkout:</p>
+<pre><code class="language-toml">xgpui-canvas = { path = "path/to/extensions/crates/xgpui-canvas", features = ["gpui"] }
+</code></pre>
+<p>Retain a <code>Camera2D</code>, <code>Scene&lt;T&gt;</code> and <code>GridPainter</code> in view state. Cull before
+building children, then place them using the returned screen bounds:</p>
+<pre><code class="language-rust">for entry in scene.visible(camera, viewport_size) {
+    // entry.item: your data and world bounds
+    // entry.screen_bounds: viewport-local position and size
+    // entry.detail: Point, Bounds or Full
+}
+
+Canvas::with_grid_options(camera, &amp;grid, GridOptions {
+    spacing: 40.,
+    major_interval: 4,
+    ..Default::default()
+}).size_full().children(children)
+</code></pre>
+<p><code>Canvas</code> clips and paints the grid. Project child positions, sizes and fonts
+explicitly. <code>GridOptions</code> also controls line/dot style and RGBA color.</p>
+<p>Subtract the viewport origin from pointer coordinates before calling
+<code>screen_to_world</code> or <code>zoom_at</code>. Feed <code>PanGesture</code> deltas to <code>camera.pan_by</code>;
+end the gesture on release, Escape or focus loss. Use <code>scene.hit_test</code> for
+selection, <code>scene.snap_translation</code> for alignment, and <code>scene.cache_key()</code> to
+invalidate geometry caches.</p>
+<p>See the <a href="crates/xgpui-canvas.html#crate-api">crate API</a>,
+<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/extensions-web/src/canvas.rs">browser implementation</a>
+and <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/canvas-lab">native lab controls and benchmarks</a>.</p>
+<h2 id="scope-and-performance">Scope and performance</h2>
+<p>The native fractal presents complete buffered viewport images, reprojecting the
+last completed image during navigation. Shallow Metal views use GPU calculation
+with linear P3 float textures at a steady resolution; deep views use f64 CPU
+calculation, retain sharper completed images where possible, and blend in detail
+after settling. GPU deep-zoom
+perturbation is not implemented. The browser retains bounded CPU slices, refining
+a coarse image to at most 480×360; f64 precision and a 2,048-iteration cap limit
+deep detail. The native live preview uses GPU readback; the default minimap
+avoids that cost.</p>
+<p>Local macOS measurements averaged 16.7 ms/frame in normal card views and
+23.3 ms in the dense 100k overview. These are observations, not guarantees.
+<code>xgpui-canvas</code> has 19 unit tests (camera, scene/BVH, snapping, overview, input
+and grid). The <code>canvas-lab</code> binary adds 13 tests covering navigation, launch
+validation, CPU Mandelbrot scheduling/precision and, on macOS, Metal pixel
+comparison with the f64 reference; a manual GPU timing test is ignored by
+default. Run them with:</p>
+<pre><code class="language-sh">cargo test --manifest-path extensions/crates/xgpui-canvas/Cargo.toml --all-features
+cargo test --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin canvas-lab
+</code></pre>
+<p>Both browser demos were checked in Chromium with WebGPU and WebGL2. Native
+runtime acceptance: macOS arm64 smoke and visual checks recorded; Windows native
+labs and <code>just lab-test</code> owner-confirmed on 2026-11-04. Linux runtime acceptance
+is deferred until a Linux environment is available.</p>
+<p>Rotation, isometric grids, general subtree transforms, reusable selection/map
+widgets and large-scene indexing/rendering improvements remain follow-ups in
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/54">issue #54</a>.</p>
+<h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
+<p>Canvas uses existing GPUI containers, clipping and the shader pipeline, with no
+new GPUI signatures or fields. See <a href="gpui-public-api.html#canvas-reuses-existing-gpui-apis">integration compatibility</a>.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

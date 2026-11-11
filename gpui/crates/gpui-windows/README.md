@@ -29,7 +29,7 @@ The registry package is `xgpui-windows`; its Rust library name is
 ## Documentation
 
 - [Local development and platform prerequisites](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md)
-- [xgpui API additions and compatibility](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md)
+- [xgpui API additions and compatibility](https://xgpui.dev/gpui-public-api.html)
 - [Release preparation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md)
 - [Repository](https://github.com/gpui-luma-dev/xgpui) · [Website](https://xgpui.dev/)
 

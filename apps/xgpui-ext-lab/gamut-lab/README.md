@@ -6,7 +6,7 @@
 cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab
 ```
 
-[Controls, captures, tests and Windows CI builds](../../../docs/extensions/high-gamut-windows.md#run-gamut-lab).
+[Controls, captures, tests and Windows CI builds](https://xgpui.dev/high-gamut-windows.html#run-gamut-lab).
 
 
 ## Instanced comparison

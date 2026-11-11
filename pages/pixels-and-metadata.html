@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Display supplied pixels correctly · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/pixels-and-metadata.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Color tasks.</strong> Pixels, metadata, storage and presentation. <a href="color-workflows.html">Choose a task →</a></p><article class="extension-document"><h1 id="display-supplied-pixels-correctly">Display supplied pixels correctly</h1>
+<p>For this API, an image is supplied pixels plus an explicit interpretation.
+Your application or format adapter decodes the file and resolves its metadata.
+<code>xgpui-media</code> converts and retains the supplied pixels; the color core does not
+open files or discover profiles.</p>
+<h2 id="choose-an-interpretation">Choose an interpretation</h2>
+<table><thead><tr><th>Supplied data</th><th>Interpretation</th></tr></thead><tbody>
+<tr><td>Known SDR RGB with named primaries and transfer</td><td><code>PixelColor::Named(ImageColor)</code></td></tr>
+<tr><td>Encoded RGB with independent curves and explicit colorants</td><td><code>PixelColor::Custom</code> with <code>Arc&lt;RgbDefinition&gt;</code></td></tr>
+<tr><td>Finite linear RGB containing negative or above-one channels</td><td><code>PixelColor::ExtendedLinear</code></td></tr>
+<tr><td>Supported RGB ICC bytes supplied by your decoder</td><td>Parse once with <code>IccRgbProfile</code>, then use <code>PixelColor::Custom</code></td></tr>
+</tbody></table>
+<p>Primaries and transfer are separate. P3 source pixels commonly use the sRGB
+transfer curve; Adobe RGB (1998) uses its own gamma. Declaring sRGB transfer with
+Adobe primaries means exactly that combination. RGBA16F does not imply linear
+light unless the interpretation says so.</p>
+<p>The application owns the missing-profile policy. It can require metadata,
+explicitly assume sRGB, or supply a known interpretation. An unsupported profile
+must not silently become sRGB. See <a href="icc-profiles.html">ICC profile scope</a>.</p>
+<h2 id="load-named-adobe-rgb-pixels">Load named Adobe RGB pixels</h2>
+<pre><code class="language-rust">use xgpui_media::{ImageJob, MediaLoader};
+use xgpui_media::pipeline::{GamutMapping, ImageColor, ImagePrimaries};
+
+fn load_adobe(
+    loader: &amp;MediaLoader,
+    width: u32,
+    height: u32,
+    pixels: Vec&lt;[f32; 4]&gt;,
+) -&gt; anyhow::Result&lt;ImageJob&gt; {
+    loader.load_pixel_buffer(
+        width, height, pixels,
+        ImageColor::ADOBE_RGB_1998.into(),
+        ImagePrimaries::Rec2020,
+        GamutMapping::Clip,
+    )
+}
+</code></pre>
+<p>This accepts tightly packed RGBA f32 samples and returns a background job.
+The source interpretation is straight-alpha, encoded Adobe RGB (1998). Storage
+is bounded associated linear Rec.2020 RGBA16F. Observe loading and upload errors
+using the normal <a href="media-images.html">media lifecycle</a>; successful conversion alone
+does not establish that the image has reached the GPU.</p>
+<h2 id="choose-storage-deliberately">Choose storage deliberately</h2>
+<table><thead><tr><th>Source you want to retain</th><th>Storage choice</th><th>Why</th></tr></thead><tbody>
+<tr><td>Entire P3 gamut</td><td>P3</td><td>P3 red is slightly outside bounded Rec.2020</td></tr>
+<tr><td>Adobe RGB (1998) gamut</td><td>Rec.2020</td><td>Adobe RGB fits, while some Adobe colors lie outside P3</td></tr>
+<tr><td>A deliberately reduced preview</td><td>P3 or Rec.2020 plus an explicit mapping policy</td><td>Out-of-storage colors are mapped at ingestion</td></tr>
+</tbody></table>
+<p>Neither storage space universally replaces the other. P3 red has a Rec.2020
+blue component near <code>-0.00121034</code>; bounded Rec.2020 ingestion maps that color.
+For an image already stored with a suitable interpretation, use native wide
+placement to preserve its extended composition channels. An sRGB preview still
+maps or clips those colors for its output.</p>
+<p><code>GamutMapping::Clip</code> clips destination channels. <code>ReduceChroma</code> performs the
+color core's explicit chroma-reduction mapping. Select a policy as part of the
+operation; do not infer it from a filename or display label.</p>
+<h2 id="keep-alpha-and-mapping-in-the-right-order">Keep alpha and mapping in the right order</h2>
+<p>Source alpha is finite and bounded. Straight and premultiplied source samples
+have different meanings; declare the actual convention. Transfer-domain
+premultiplication is undone before transfer decoding. Transparent pixels
+canonicalize to zero RGB.</p>
+<p>The pipeline converts in linear light, maps into the selected bounded storage,
+then associates alpha. Mipmaps average associated linear values. Intermediate
+working RGB may be negative or above one until the explicit storage/output
+mapping boundary.</p>
+<h2 id="supply-extended-linear-values">Supply extended linear values</h2>
+<p>Use <code>PixelColor::ExtendedLinear { primaries, alpha }</code> when your preceding
+operation already produced finite linear RGB outside 0–1. Do not pass that
+output through a bounded encoded source decoder. Storage remains an explicit
+bounded P3/Rec.2020 choice, so this is not a lossless arbitrary-float container.</p>
+<h2 id="show-it-in-a-wide-gamut-window">Show it in a wide-gamut window</h2>
+<p>Request <code>WindowColorMode::WideGamutSdr</code>, inspect the effective status, and use
+<code>image.wide(...)</code> or the image view's wide placement API. See
+<a href="high-gamut-windows.html">wide-gamut windows</a> for producer and backend contracts.
+The window's presentation space is independent of the original image profile.</p>
+<p>Try the <a href="examples/extensions/?demo=pixel-metadata">pixels + metadata Wasm demo</a>
+for interpretations and CPU packing, or the <a href="color-labs.html">native chromaticity lab</a>
+for native-wide versus sRGB previews and Metal GPU readback.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

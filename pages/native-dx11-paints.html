@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Native D3D11 paints · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/native-dx11-paints.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" aria-current="page" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><article class="extension-document"><h1 id="native-d3d11-paints">Native D3D11 paints</h1>
+<p>Windows · feature level ≥ 11.0 · <code>xgpui-shader</code> · no app-side OS branches.</p>
+<h2 id="use">Use</h2>
+<pre><code class="language-rust">use gpui::{prelude::*, *};
+use std::sync::Arc;
+use xgpui_shader::{painted, MeshGradient, MeshGrid};
+
+let grid = MeshGrid::regular(2, 2, vec![
+    [1.0, 0.1, 0.2], [1.0, 0.8, 0.1],
+    [0.2, 0.3, 1.0], [0.1, 0.9, 0.7],
+])?;
+let mesh = Arc::new(MeshGradient::new(grid, 18)?);
+painted().w(px(960.0)).h(px(640.0)).bg_paint(mesh);
+</code></pre>
+<h2 id="producer-api">Producer API</h2>
+<p><code>gpui_windows::custom_draw</code> — signature summary:</p>
+<pre><code class="language-rust">pub struct Dx11CustomContext {
+    pub device: ID3D11Device,
+    // Private recording state.
+}
+impl Dx11CustomContext {
+    pub fn cache_key(&amp;self) -&gt; usize;
+    pub fn create_output(&amp;self, extent: Size&lt;DevicePixels&gt;) -&gt; Result&lt;Dx11CustomOutput&gt;;
+    pub fn can_reuse(&amp;self, output: &amp;Dx11CustomOutput) -&gt; bool;
+    pub fn record&lt;T&gt;(
+        &amp;self,
+        encode: impl FnOnce(&amp;ID3D11DeviceContext) -&gt; Result&lt;T&gt;,
+    ) -&gt; Result&lt;T&gt;;
+}
+pub struct Dx11CustomOutput { /* private fields; Clone */ }
+impl Dx11CustomOutput {
+    pub fn texture(&amp;self) -&gt; &amp;ID3D11Texture2D;
+}
+</code></pre>
+<h2 id="contract">Contract</h2>
+<pre><code class="language-text">extension   WGSL → Naga → HLSL SM5 → private pipeline → record draws
+host        validate → stage → execute accepted batch → compose
+failure     discard unsubmitted batch → frame error
+reuse       same recording / accepted batch / submitted context
+state       command-list execution restores immediate-context bindings
+
+output      BGRA8Unorm · straight alpha · encoded-sRGB SDR
+coverage    native border/path mask; host clip/corners/opacity
+cache key   retained context identity + extent (+ logical size for WGSL)
+cache       64 MiB live output/snapshot; separate coverage cache
+recovery    reject old device/context caches
+</code></pre>
+<p><a href="paint-contract-hardening.html#implemented-discardable-recording-transactions">Recording details</a>.</p>
+<h2 id="windows-checks">Windows checks</h2>
+<pre><code class="language-powershell">cargo test --config .cargo/validation.toml --manifest-path gpui/crates/gpui-windows/Cargo.toml --features test-support --lib dx11_custom
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --features wgpu,portable-shaders
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab -- --headless --effect mesh --frames 3 --png native-dx11-mesh.png
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab
+</code></pre>
+<p>Windows native paint/gamut backend CI passed on 2026-10-25; the owner also
+confirmed all native labs and <code>just lab-test</code> passed on Windows on 2026-11-04.
+See <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">Windows validation</a>. Hardware
+performance measurements and device-loss recovery remain separate acceptance work. WARP/readback timing is not hardware GPU timing.</p>
+<p><a href="portable-paints.html">wgpu adapter</a> · <a href="portable-wgsl-v1.html">WGSL</a></p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

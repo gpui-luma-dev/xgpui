@@ -302,7 +302,7 @@ or decoder. Native output compares explicit sRGB preview with accepted wide-SDR;
 both browser panels are sRGB previews. Exposure/saturation, vignette, opacity,
 reset and mode/zoom controls reuse one source upload.
 
-See [media pipeline guide](../../../docs/extensions/media-pipeline.md) for the
+See [media pipeline guide](https://xgpui.dev/media-pipeline.html) for the
 `load_rgba16f` API, input metadata, byte limits and backend validation status.
 Windows native lab/testing passed in user testing on 2026-11-04. Linux native
 runtime QA remains pending; this does not add sustained performance evidence.
@@ -323,7 +323,7 @@ availability; view timing ends at reusable upload submission. Browser generation
 is one small page per frame on the host thread. These are functional diagnostics,
 not disk/decoder or sustained frame-time benchmarks. Keep 60 Hz as the baseline.
 
-The [pipeline guide](../../../docs/extensions/media-pipeline.md) documents
+The [pipeline guide](https://xgpui.dev/media-pipeline.html) documents
 `TileProvider`, `TileCanvas`, code examples, budget scope and pending native
 Windows/Linux QA. No new decoder, blur pass or playback engine is added.
 

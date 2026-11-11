@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Explicit wide SDR content alongside normal sRGB controls.">
+<title>xgpui-gamut · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/high-gamut-windows.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" aria-current="page" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<div class="eyebrow">Extensions</div><h1>xgpui-gamut</h1><p class="lead">Explicit wide SDR content alongside normal sRGB controls.</p><p class="muted"><a href="crates/xgpui-gamut.html">xgpui-gamut</a> · Backend owners: <a href="crates/gpui-apple.html">gpui-apple</a> / <a href="crates/gpui-windows.html">gpui-windows</a>.</p><nav class="tabs" aria-label="Wide-gamut sections"><a href="high-gamut-windows.html" aria-current="page">Use &amp; contract</a><a href="#typed-windows-output">Windows output</a><a href="gpui-public-api.html">GPUI API changes</a></nav><section class="demo-entry" aria-label="Wide-gamut demos"><div class="demo-entry-heading"><span>EXPLORE COLOR &amp; WIDE GAMUT</span><a href="examples/extensions/">All demos →</a></div><div class="demo-launch-grid"><article class="demo-launch gamut-native"><div class="demo-thumb gamut-thumb" aria-hidden="true"></div><strong>Native Display P3 lab</strong><span>Compare wide SDR content with ordinary sRGB controls on macOS or Windows. Run from the repository root:</span><pre><code class="language-sh">cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab</code></pre><span>Move the window to a wide-gamut display. Check <code>Effective: WideGamutSdr</code> and <code>Display wide gamut: Some(true)</code>. These report negotiated support, not display calibration.</span></article><a class="demo-launch" href="examples/extensions/?demo=color"><div class="demo-thumb gamut-preview-thumb" aria-hidden="true"></div><strong>Open color comparison ↗</strong><span>Interactive browser preview of interpolation and gamut mapping. Rendered as sRGB; use the native lab to compare actual Display P3 output.</span></a></div></section><article class="extension-document"><p><strong>Wide gamut is a capability; Display P3 is a specific RGB space.</strong> <code>WideGamutSdr</code> requests native wide presentation. It does not select an Adobe RGB monitor mode. Metal uses extended linear P3; Windows uses scRGB. Source Adobe RGB pixels can travel through either contract. Start with <a href="color-workflows.html">color tasks</a>, <a href="pixels-and-metadata.html">pixels + metadata</a> and <a href="color-labs.html">lab limits</a>.</p>
+<p>Opt-in <strong>macOS Metal / Windows D3D11</strong> presentation: wide <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Standard-dynamic-range_video">SDR ↗</a> surfaces and normal
+<a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/SRGB">sRGB ↗</a> controls in one window. Windows native labs and <code>just lab-test</code> passed in owner
+testing on 2026-11-04; <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">Windows validation</a>
+also records the earlier native paint/gamut CI baseline. Physical display checks
+retain their separate scope. Linux, <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/High_dynamic_range">HDR ↗</a>
+content and transparent wide windows remain deferred.</p>
+<h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
+<p>This crate requires per-window color request/status APIs and typed wide-SDR
+backend outputs. <code>PlatformWindow</code> supplies default request/report methods, so
+existing platform implementations need no required overrides. Default windows
+and legacy sRGB paints retain their behavior; additive method names can still
+collide with downstream extension methods.</p>
+<p>It reuses the custom-content recording changes: complete <code>Scene</code> literals must
+include <code>custom_draws</code>, and exhaustive <code>Primitive</code> / <code>PrimitiveBatch</code> matches
+must handle <code>Custom</code>. Window-option structs and existing ordinary output types
+retain their contracts. New color configuration/fallback enums are non-exhaustive.</p>
+<p><strong><a href="gpui-public-api.html#added-opt-in-window-presentation">GPUI public API changes: additions and compatibility</a>.</strong>
+See also <a href="gpui-public-api.html#altered-existing-public-types--source-compatibility-risks">shared structural compatibility risks</a>
+and <a href="gpui-public-api.html#added-backend-crate-public-apis">backend APIs</a>.</p>
+<pre><code class="language-toml"># App under apps/: {#app-under-apps}
+[dependencies]
+xgpui-gamut = { path = "../../extensions/crates/xgpui-gamut" }
+xgpui-shader = { path = "../../extensions/crates/xgpui-shader" }
+</code></pre>
+<pre><code class="language-rust">use gpui::{prelude::*, *};
+use std::sync::Arc;
+use xgpui_gamut::WideColor;
+use xgpui_shader::painted;
+
+// During window construction/update, outside drawing:
+window.set_color_mode(WindowColorMode::WideGamutSdr)?;
+
+// Linear Display P3/D65, straight input alpha; producer stores associated alpha.
+let red = Arc::new(WideColor::linear_p3([1.0, 0.0, 0.0, 0.5])?);
+painted().w(px(320.0)).h(px(240.0))
+    .bg_paint(red)
+    .child(div().p_4().child("Normal sRGB controls"));
+</code></pre>
+<p>The default <code>xgpui-gamut</code> producer is usable without <code>xgpui-shader</code>;
+<code>xgpui-shader</code> supplies optional <code>painted()</code> ergonomics here. Enabling gamut's
+<code>instanced</code> feature adds a shader dependency for <code>WidePainter</code>/<code>WideGradient</code>.
+Shared CPU math lives in the standalone <code>xgpui-color</code> crate. <code>WideColor</code> retains
+its texture preparation path; instanced fills avoid producer textures/passes.
+See <a href="instanced-wgsl-v2.html#reusable-wide-fills-and-gradients">wide fills and gradients</a>.</p>
+<table><thead><tr><th>Capability</th><th>Owner</th><th>Status</th></tr></thead><tbody>
+<tr><td>Window mode and cached status</td><td><code>gpui</code></td><td>Public, opt-in</td></tr>
+<tr><td>Typed P3 output and ordered compositor</td><td><code>gpui-apple</code> / <code>gpui-macos</code>, <code>gpui-windows</code></td><td>Metal + native D3D11</td></tr>
+<tr><td>Reusable producer</td><td><code>xgpui-gamut::WideColor</code></td><td>Metal + typed D3D11 preparation</td></tr>
+<tr><td>Test/control app</td><td><code>apps/xgpui-ext-lab/gamut-lab</code></td><td>Uses <code>xgpui-gamut</code></td></tr>
+</tbody></table>
+<p>Independent of the <a href="extension-paints.html">paint/shader extension</a>. Enabling this
+mode does not reinterpret existing gradients, meshes, colors or controls as P3.</p>
+<h2 id="configure-one-window">Configure one window</h2>
+<pre><code class="language-rust">use gpui::{Window, WindowColorMode};
+
+fn enable_wide_content(window: &amp;mut Window) -&gt; anyhow::Result&lt;()&gt; {
+    let status = window.set_color_mode(WindowColorMode::WideGamutSdr)?;
+    assert_eq!(status.requested(), WindowColorMode::WideGamutSdr);
+    Ok(())
+}
+
+// Inspect a cheap cached snapshot:
+let status = window.color_status();
+let requested = status.requested();
+let effective = status.effective();
+let supported = status.supports_wide_gamut_sdr();
+let display = status.display_wide_gamut(); // Option&lt;bool&gt;: None means unknown.
+let fallback = status.fallback();
+
+// Disable before switching to a transparent top-level window:
+window.set_color_mode(WindowColorMode::Default)?;
+</code></pre>
+<p>Call during <code>open_window</code> construction or an event/update outside drawing.
+Unsupported requests fail with the previous configuration intact. Each window
+starts in <code>Default</code>; enabling one window never changes another.</p>
+<pre><code class="language-text">controls        Rgba / Hsla / Style retain encoded-sRGB meaning
+wide content    explicit linear Display P3/D65, associated alpha
+composition     ordered legacy UI runs; Metal linear P3 / Windows linear scRGB
+presentation    Metal tagged P3 / Windows tagged scRGB; bounded SDR content
+</code></pre>
+<p>The report describes negotiated configuration, not proof of physical monitor
+output. macOS retains the P3-tagged target and delegates display mapping to
+ColorSync, including SDR monitors; it does not report a fictitious <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Framebuffer">framebuffer ↗</a>
+fallback. Display-profile evidence is sampled at frame boundaries, with screen and
+same-screen profile notifications scheduling refreshes. A window spanning displays
+cannot promise identical physical output everywhere.</p>
+<table><thead><tr><th>Operation</th><th>Behavior</th></tr></thead><tbody>
+<tr><td><code>set_color_mode(WideGamutSdr)</code></td><td>Stage compatible pipelines/layer configuration, then refresh. Size-dependent allocation remains fallible at draw/resize.</td></tr>
+<tr><td>Same mode again</td><td>Reuse compatible pipelines.</td></tr>
+<tr><td>Setter during drawing</td><td>Error before changing platform state.</td></tr>
+<tr><td>Unsupported backend or transparent window</td><td>Error; previous configuration/status stays valid.</td></tr>
+<tr><td><code>Default</code></td><td>Restore legacy presentation; queued commands retain their resources. Subsequent wide outputs are rejected.</td></tr>
+<tr><td>Transparency requested while wide</td><td>The existing infallible background setter preserves the opaque window and logs a warning. Disable wide mode first.</td></tr>
+</tbody></table>
+<h2 id="metal-backend-contract">Metal backend contract</h2>
+<p><code>WideColor</code> implements the existing <code>CustomContent</code> protocol. Its Metal adapter
+uses the typed constructor below; custom producers can use the same contract.</p>
+<pre><code class="language-rust">use gpui_apple::custom_draw::{MetalCustomContext, MetalWideSdrOutput};
+
+// Backend-owned context, RGBA16Float texture and unsubmitted commands:
+let output = MetalWideSdrOutput::from_linear_p3_premultiplied(
+    context, texture, commands,
+)?;
+</code></pre>
+<pre><code class="language-text">texture          RGBA16Float, 2D, single-sample, shader-readable
+color            linear Display P3/D65; straight SDR RGB and alpha in 0..1
+association      stored RGB = straight RGB * alpha; zero RGB at zero alpha
+device / queue   retained host identities; host alone submits/presents
+geometry         full local source, exact requested raster extent
+host             applies coverage, clipping and inherited opacity once
+</code></pre>
+<p>Constructor validation checks texture/device/queue/command structure; the host
+revalidates the requested extent and complete batch before submission. Pixel color
+and alpha correctness remain an in-process producer contract; validating handles
+cannot prove generated pixel values.</p>
+<p>Cache immutable output by retained queue/device, exact extent and content revision:</p>
+<pre><code class="language-rust">// `cached` is a retained MetalWideSdrOutput.
+let output = cached.reusable_for(context)?;
+Ok(Box::new(output))
+</code></pre>
+<table><thead><tr><th>Cached command state</th><th>Reuse</th></tr></thead><tbody>
+<tr><td>Pending</td><td>Same texture and command identities; host deduplicates submission.</td></tr>
+<tr><td>Committed/scheduled/completed</td><td>Same texture, no pending commands; same-queue ordering supplies readiness.</td></tr>
+<tr><td>Enqueued/error, different queue/device</td><td>Error.</td></tr>
+</tbody></table>
+<p>No CPU wait. Like the legacy protocol, host-only submission is cooperative:
+command status cannot identify who committed a same-queue buffer. Empty commands
+at construction require content already ready/submitted on the host queue.
+Display moves change host mapping, not canonical producer content. Future
+source/profile decoding and additional <code>xgpui-gamut</code> producers are separate work.</p>
+<h2 id="existing-producer-compatibility">Existing producer compatibility</h2>
+<pre><code class="language-text">Background               → existing native adapter             → sRGB UI run
+MetalCustomOutput        → existing straight sRGB / BGRA8Unorm → sRGB UI run
+MetalWideSdrOutput        → associated linear P3 / Float16      → wide composition
+unknown output           → explicit preparation error
+</code></pre>
+<p>Existing producers implement no new methods and keep their current output
+interpretation. Existing mesh/gradient/WGSL content does not become P3 implicitly.
+Wide output requires an accepted <code>WideGamutSdr</code> request; no texture-format guesses,
+process switch or tuple tag. Recording validation, batch submission and scene
+ordering are shared with legacy producers.</p>
+<h2 id="metal-compositing-contract">Metal compositing contract</h2>
+<pre><code class="language-text">scene: UI background → wide A → controls → wide B → tooltip
+
+1. legacy renderer → transparent sRGB scratch → convert/composite
+2. wide A         → linear P3 composition target
+3. legacy renderer → cleared scratch         → convert/composite
+4. wide B         → linear P3 composition target
+5. legacy renderer → cleared scratch         → convert/composite
+6. tagged window presentation
+</code></pre>
+<p>A UI run is a maximal consecutive sequence of legacy draws between wide draws.
+Scratch is consumed before clearing/reusing it, in GPU command order. Do not
+flatten all UI into a top overlay. Native overlays, surface children, paths,
+masking and replay retain scene order.</p>
+<pre><code class="language-text">// UI scratch: associated encoded sRGB, aligned texel reads.
+A       = sampled alpha
+C       = A &gt; 0 ? sampled RGB / A : 0
+L       = srgb_decode_piecewise(C)
+P       = linear_srgb_to_linear_p3(L)
+source  = (A * P, A)
+
+// Wide output is already associated linear P3; filter in that representation.
+k       = host coverage * inherited opacity
+src     = (k * source.rgb, k * source.a)
+out.rgb = src.rgb + dst.rgb * (1 - src.a)
+out.a   = src.a   + dst.a   * (1 - src.a)
+</code></pre>
+<p>Opaque panels retain legacy blending within each run. Translucent controls over
+wide content use linear composition; exact legacy blending across that boundary
+is not promised. Flattening a transparent run loses individual backdrop
+interactions. On macOS Metal, explicit backdrop and layer boundaries flush the
+preceding UI run into the linear P3 target before capturing. Captures and blur
+scratch use premultiplied extended linear P3 RGBA16F; filtered layers restore their saved
+destination before applying group opacity and blending. Saturation uses P3
+luminance coefficients; linear tone operations preserve extended channels. Normal
+blending preserves extended channels; artistic modes retain bounded operand
+definitions. Rec.2020 image/instanced shader sources convert to extended P3 on
+Metal or scRGB on Windows. P3 sources keep P3 storage, since bounded Rec.2020
+maps a small P3 boundary region. Windows capture restrictions remain unchanged.
+Default-mode effects retain encoded-sRGB behavior, so filtered colors can differ
+between modes. Path-masked shader draws retain their coverage pass.</p>
+<p>Retained capture textures are rebuilt when switching between default and wide
+modes. Four 1024-square layer groups remain the limit; FP16 group textures consume
+eight bytes per texel, with at most 128 MiB retained for groups. Backdrops retain
+their separate four-boundary/1024-side limits. The viewport target budget remains
+256 MiB. These limits exclude driver and in-flight references.</p>
+<p>Grayscale text coverage is supported. macOS Metal's LCD/subpixel batch remains
+unsupported. Low-alpha pixels are tested without an arbitrary epsilon cutoff.</p>
+<h2 id="api-surface">API surface</h2>
+<pre><code class="language-rust">// GPUI core: additive methods; no new window-option fields.
+impl Window {
+    pub fn set_color_mode(&amp;mut self, mode: WindowColorMode)
+        -&gt; anyhow::Result&lt;WindowColorStatus&gt;;
+    pub fn color_status(&amp;self) -&gt; WindowColorStatus;
+}
+
+// PlatformWindow: same pair, with existing-mode/unsupported defaults.
+// MetalRenderer: same pair; required by the gpui-macos / gpui-apple crate split.
+</code></pre>
+<table><thead><tr><th>Type</th><th>Public contract</th></tr></thead><tbody>
+<tr><td><code>WindowColorMode</code></td><td>Non-exhaustive <code>Default</code> / <code>WideGamutSdr</code>; <code>Default</code> preserves existing behavior.</td></tr>
+<tr><td><code>WindowColorStatus</code></td><td>Private fields; constructor for backends; requested/effective/support/display/fallback getters. Copyable snapshot.</td></tr>
+<tr><td><code>WindowColorFallback</code></td><td>Non-exhaustive <code>SdrDisplay</code> / <code>PlatformPolicy</code>; current Metal output remains OS-managed P3.</td></tr>
+<tr><td><code>MetalWideSdrOutput</code></td><td>Opaque output; explicit constructor and <code>reusable_for</code>.</td></tr>
+</tbody></table>
+<p><code>WindowOptions</code>, <code>WindowParams</code>, native colors/styling, <code>CustomContent</code>,
+<code>PreparationRequest</code>, <code>CustomDraw</code> and primitive enums are unchanged by this
+milestone. Default trait methods preserve platforms without overrides. Additive
+method names can still collide with downstream extension methods.</p>
+<h2 id="compare-srgb-and-native-display-p3">Compare sRGB and native Display P3</h2>
+<p>The desktop color companion uses <code>WidePainter</code> to display native P3 swatches
+beside ordinary mapped sRGB swatches. Both use the same 32 CPU reference samples
+as the browser Color / Gamut demo: encoded sRGB, linear RGB, OkLab and shorter-hue
+OkLCh. Change endpoint presets, gamut mapping and end alpha interactively.</p>
+<pre><code class="language-sh">cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab
+</code></pre>
+<p>Move the window to your wide-gamut monitor and check <code>Effective: WideGamutSdr</code> and
+<code>Display wide gamut: Some(true)</code>. <code>None</code> means display capability is unknown.
+macOS Metal presentation was checked; the owner confirmed Windows native labs
+and <code>just lab-test</code> passed on 2026-11-04. Physical display measurement remains separate.
+The status reports negotiation and capability, not calibrated color accuracy.</p>
+<p>The <a href="color-math.html#browser-color--gamut-lab">browser comparison and runtime diagnostics</a>
+remain an sRGB preview. A wide-gamut display alone does not change its output:
+WebGL reads <code>drawingBufferColorSpace</code>, and WebGPU queries its canvas configuration
+where supported. Unavailable queries report unknown. Screenshots cannot prove
+physical P3 output.</p>
+<h2 id="run-gamut-lab">Run gamut-lab</h2>
+<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui --instanced
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui --instanced --gradient
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile baseline
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile headless --frames 60
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile capture
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile metal-test
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile test
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile lint
+just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui --ui-png /tmp/gamut-lab-ui.png
+</code></pre>
+<p>On Windows (PowerShell), no <code>just</code> installation required:</p>
+<pre><code class="language-powershell">cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab -- --sdr
+cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab -- --headless --frames 3 --png gamut-lab-preview.png
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab --test compatibility
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab --test native_windows
+</code></pre>
+<p><code>--headless</code> now captures the full lab UI through a hidden native window on both
+platforms. It requires a desktop session and measures encoding plus readback on
+every iteration. Backend WARP tests remain independent of a visible desktop.
+<code>--sdr</code> and the presentation button compare the native sRGB baseline with P3
+surfaces. Overlay, opacity, backdrop and ordering controls are shared.</p>
+<pre><code class="language-sh"># After pushing the branch: build on GitHub-hosted Windows runners. {#after-pushing-the-branch-build-on-github-hosted-windows-runners}
+gh workflow run windows-apps.yml --ref codex/high-gamut-windows
+gh run list --workflow windows-apps.yml
+gh run download RUN_ID --name gamut-lab-windows-x64
+# On Windows, launch the downloaded artifact: {#on-windows-launch-the-downloaded-artifact}
+# .\gamut-lab.exe {#gamut-labexe}
+</code></pre>
+<p>The <strong>Windows lab applications</strong> workflow also builds <code>paint-lab</code>,
+compiles their tests and uploads separate x64 release executables. It runs on
+relevant pull requests or manual dispatch. Download builds from the Actions run's
+artifacts. It does not launch desktop windows or establish physical gamut fidelity.
+The separate <strong>Portable paint GPU checks</strong> workflow runs the offscreen WARP suite.
+Windows app builds have passed; interactive Windows behavior has also been checked locally by the app developer. Physical color measurement remains separate.</p>
+<pre><code class="language-text">controls    overlays, opacity, light/dark backdrop, reverse surface order
+content     two P3 patches; native labels/buttons/panels
+headless    hidden native window; same UI and producers; encode + readback
+capture     explicit clipped sRGB preview; not a wide-gamut export
+</code></pre>
+<p><code>MetalRenderer</code> supports the same negotiation for headless checks. Raw Float16
+pixel diagnostics remain in backend tests; no generic headless trait or image
+API expansion. Backend tests cover queued scratch reuse, P3 preservation, low-alpha
+edges, masks/order/resize, rejection before submission, mode switches, legacy
+outputs and queue-scoped pending/submitted reuse. Native tests create separate
+native platform windows and verify independent requests and transparency rejection. Compile
+checks preserve complete window-option literals and unchanged platform defaults.</p>
+<h2 id="limits-and-acceptance">Limits and acceptance</h2>
+<ul>
+<li>Full-viewport conversion per UI run and an extra Float16 presentation copy.
+Lab patch producers allocate on preparation; pooling/GPU timing remain future work.</li>
+<li>Scratch + composition targets are capped at 256 MiB per live pair. This excludes
+drawable, producer, path/atlas and in-flight retention. Float16 is eight bytes/pixel.</li>
+<li>Physical display/profile comparisons and device-loss stress remain outstanding.
+An sRGB screenshot cannot prove physical wide-gamut output.</li>
+<li>Source/image profiles, RAW/video, HDR/EDR and Linux presentation remain separate
+milestones. Windows native execution and physical display validation remain
+outstanding; cross-compilation alone is not acceptance.</li>
+</ul>
+<p><a href="gpui-public-api.html">GPUI API delta</a> · <a href="extension-paints.html">Paint integration</a> ·
+<a href="paint-contract-hardening.html">Preparation/recording</a> ·
+<a href="https://developer.apple.com/documentation/coregraphics/cgcolorspace/displayp3">Apple Display P3</a> ·
+<a href="https://developer.apple.com/documentation/quartzcore/cametallayer/colorspace">Layer color-space configuration</a></p>
+<h2 id="windows-swap-chain-presentation">Windows swap-chain presentation</h2>
+<pre><code class="language-rust">// Existing GPUI API; no new window options, color types or scene variants.
+window.set_color_mode(WindowColorMode::WideGamutSdr)?;
+let status = window.color_status(); // cached; does not query DXGI
+let patch = Arc::new(WideColor::linear_p3([1.0, 0.0, 0.0, 0.5])?);
+painted().bg_paint(patch).child(div().child("Native sRGB controls"));
+
+// Disable before requesting transparency, blur or a Mica backdrop:
+window.set_color_mode(WindowColorMode::Default)?;
+</code></pre>
+<pre><code class="language-text">real Scene::batches(), including each custom draw within a batch:
+  native UI + BGRA8/sRGB custom paints → transparent BGRA8 scratch
+  flush run → unpremultiply encoded RGB → sRGB decode → reassociate
+  typed P3 draw → P3-to-scRGB → coverage/opacity once → source-over
+  repeat in scene order; clear scratch only after consuming it
+  final FP16 scRGB target → RGB * SDR-white scale, alpha unchanged → Present
+</code></pre>
+<table><thead><tr><th>Resource / policy</th><th>Windows</th></tr></thead><tbody>
+<tr><td>Flip swap chain</td><td><code>R16G16B16A16_FLOAT</code>, <code>RGB_FULL_G10_NONE_P709</code>; DirectComposition and HWND paths</td></tr>
+<tr><td>Producer color</td><td>Linear Display P3/D65, associated alpha; identical to Metal input</td></tr>
+<tr><td>Composition</td><td>Linear <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/ScRGB">scRGB ↗</a>; retain negative and above-one RGB for saturated SDR colors</td></tr>
+<tr><td>UI</td><td>Existing colors, themes and legacy paints retain encoded-sRGB meaning</td></tr>
+<tr><td>Text</td><td>Existing capability hook requests grayscale; cached LCD tiles collapse to scalar coverage</td></tr>
+<tr><td>Coverage</td><td>Native border/path masks, corners, clipping and inherited opacity applied once</td></tr>
+<tr><td>White</td><td>HDR desktop: <code>DISPLAYCONFIG_SDR_WHITE_LEVEL / 1000</code>; SDR desktop: scale 1</td></tr>
+<tr><td>Capture</td><td>Explicit clipped-sRGB preview of the canonical target, without display-white scaling</td></tr>
+<tr><td>Allocation</td><td>FP16 + <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/RGBA_color_model">BGRA ↗</a> frame targets ≤256 MiB; producer outputs separately ≤64 MiB; excludes paths/atlas/replacement peaks/in-flight resources</td></tr>
+</tbody></table>
+<pre><code class="language-text">linear P3 → scRGB:
+R =  1.22494018 * r - 0.22494018 * g
+G = -0.04205695 * r + 1.04205695 * g
+B = -0.01963755 * r - 0.07863605 * g + 1.09827360 * b
+</code></pre>
+<table><thead><tr><th>Lifecycle</th><th>Behavior</th></tr></thead><tbody>
+<tr><td>Enable</td><td>Preflight FP16 blend/sample support, pipelines, targets and display white; release back-buffer references; change format and set <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Color_space">color space ↗</a></td></tr>
+<tr><td>Same mode</td><td>Preserve compatible pipelines</td></tr>
+<tr><td>Shared device</td><td>Serialize mode/resize updates against cross-window drawing; defer re-entrant resize messages to the next frame</td></tr>
+<tr><td>Recoverable transition failure</td><td>Restore previous configuration; return error</td></tr>
+<tr><td>Rollback also fails</td><td>Preserve prior intent/status, pause drawing and request existing GPU recovery</td></tr>
+<tr><td>Resize</td><td>Preserve active format; reacquire views and reapply scRGB tag</td></tr>
+<tr><td>Device replacement</td><td>Drop device-bound outputs/pipelines, restore requested mode and pending size, force scene/atlas rebuild</td></tr>
+<tr><td>Transparent/backdrop window</td><td>Reject enabling; while wide, preserve opaque appearance and log a warning</td></tr>
+<tr><td>Profile/monitor/white changes</td><td>Dirty on move/size/DPI/display/settings messages; resample at frame boundaries, with a one-second fallback on requested frames</td></tr>
+<tr><td>Missing HDR white evidence</td><td>Defer presentation until a valid snapshot is available; no guessed brightness</td></tr>
+</tbody></table>
+<p>Choose the output with the largest window intersection. Report only conservative
+positive wide-gamut evidence from display colorimetry; ambiguous metadata stays
+<code>None</code>. Negotiated scRGB does not prove physical delivery. DWM may clip output on
+an ordinary display; no host framebuffer fallback is reported unless performed.
+A spanning window uses one SDR-white reference and cannot promise identical
+physical output across displays. No HDR mode is enabled by the app.</p>
+<pre><code class="language-sh"># Native Windows: WARP pixels, producer transactions and presentation policy. {#native-windows-warp-pixels-producer-transactions-and-presentation-policy}
+cargo test --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-windows/Cargo.toml \
+  --features test-support --lib
+
+# Requires an interactive Windows desktop: both flip-chain paths, {#requires-an-interactive-windows-desktop-both-flip-chain-paths}
+# toggles/resize/isolation, retained-buffer failure and device replacement. {#togglesresizeisolation-retained-buffer-failure-and-device-replacement}
+cargo test --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-windows/Cargo.toml \
+  --features test-support --lib directx_renderer::color_presentation \
+  -- --ignored --test-threads=1
+
+# Portable CPU oracle only; does not execute HLSL or D3D11. {#portable-cpu-oracle-only-does-not-execute-hlsl-or-d3d11}
+rustc --edition 2024 --test \
+  gpui/crates/gpui-windows/src/directx_renderer/wide_sdr/reference.rs \
+  -o /tmp/xgpui-wide-sdr-reference-tests
+/tmp/xgpui-wide-sdr-reference-tests
+rustc --edition 2024 --test \
+  gpui/crates/gpui-windows/src/directx_renderer/color_presentation/policy.rs \
+  -o /tmp/xgpui-color-policy-tests
+/tmp/xgpui-color-policy-tests
+</code></pre>
+<p>The manual <strong>Portable paint GPU checks</strong> workflow includes WARP composition,
+transaction/policy tests and <code>xgpui-gamut</code> checks. Desktop fixtures remain explicitly
+ignored in unattended runs. HLSL compiles during native execution, not Rust
+cross-compilation. <code>gamut-lab</code> shares its UI and capture path across macOS and Windows; the backend fixtures
+exercise the renderer directly. Physical HDR/WCG/ordinary-display comparisons,
+monitor moves, live SDR-white changes and display-loss stress remain outstanding.</p>
+<h2 id="typed-windows-output">Typed Windows output</h2>
+<pre><code class="language-rust">use anyhow::{anyhow, Result};
+use gpui::{CustomContent, DevicePixels, Size};
+use gpui_windows::custom_draw::Dx11CustomContext;
+use std::any::Any;
+
+#[derive(Debug)]
+struct WideRed;
+impl CustomContent for WideRed {
+    fn prepare(&amp;self, backend: &amp;dyn Any, extent: Size&lt;DevicePixels&gt;)
+        -&gt; Result&lt;Box&lt;dyn Any&gt;&gt;
+    {
+        let ctx = backend.downcast_ref::&lt;Dx11CustomContext&gt;()
+            .ok_or_else(|| anyhow!("native D3D11 required"))?;
+        let output = ctx.create_wide_sdr_output(extent)?;
+        ctx.record_wide_sdr(&amp;output, |deferred, target| {
+            // Associated linear P3: red at 50% alpha, not encoded sRGB.
+            unsafe { deferred.ClearRenderTargetView(target, &amp;[0.5, 0.0, 0.0, 0.5]); }
+            Ok(())
+        })?;
+        Ok(Box::new(output)) // host alone finishes and executes the recording
+    }
+}
+</code></pre>
+<pre><code class="language-rust">// In a producer cache, scoped by retained host context, extent and revision:
+if let Some(output) = cached.as_ref().filter(|o| ctx.can_reuse_wide_sdr(o)) {
+    return Ok(Box::new(output.clone()));
+}
+</code></pre>
+<table><thead><tr><th>Contract</th><th>Windows output</th></tr></thead><tbody>
+<tr><td>Type</td><td>Opaque, cloneable <code>Dx11WideSdrOutput</code>; <code>texture()</code> exposes the host texture</td></tr>
+<tr><td>Storage</td><td>Host-allocated <code>R16G16B16A16_FLOAT</code>, one mip/sample, 2D, sampleable/renderable</td></tr>
+<tr><td>Color</td><td>Finite linear Display P3/D65; straight RGB/alpha in 0..1, stored associated; RGB zero at alpha zero</td></tr>
+<tr><td>Allocation</td><td>1..16384 each dimension; 64 MiB per output, accounting for eight bytes/pixel</td></tr>
+<tr><td>Reuse</td><td>Local pending, same-batch staged, or submitted on the same retained host context</td></tr>
+<tr><td>Writes</td><td><code>record_wide_sdr</code> accepts only a fresh output from the current recording</td></tr>
+<tr><td>Failure</td><td>Recording/validation failure or dropped batch abandons escaped outputs and discards unsubmitted work</td></tr>
+<tr><td>Host</td><td>Existing <code>PreparationBatch</code>; exact extent/device/type/texture validation before submission</td></tr>
+<tr><td>Legacy</td><td><code>Dx11CustomOutput</code> remains <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Alpha_compositing">straight-alpha ↗</a> BGRA8/sRGB; types are never inferred from format</td></tr>
+</tbody></table>
+<p>Raw D3D handles and pixel values remain a cooperative in-process contract. Typed
+output is available in the backend SDK and accepted by the native Windows renderer
+when <code>WideGamutSdr</code> is active. Default Windows rendering rejects it and discards
+its recording. GPUI core APIs and existing producer signatures are unchanged.</p>
+<pre><code class="language-sh"># Native Windows recording lifecycle and pixel tests: {#native-windows-recording-lifecycle-and-pixel-tests}
+cargo test --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui-windows/Cargo.toml \
+  --features test-support --lib custom_draw::wide_output
+</code></pre>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

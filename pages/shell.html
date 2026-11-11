@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Desktop shell · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/shell.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" aria-current="page" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="notice"><strong>ALPHA:</strong> First release in preparation; expect API changes.</p><article class="extension-document"><h1 id="desktop-shell">Desktop shell</h1>
+<blockquote>
+<p><strong>ALPHA — expect API changes.</strong> <code>xgpui-shell 0.1.0</code> is being prepared for its first crates.io release. The code is available locally; publication is still pending.</p>
+</blockquote>
+<p><code>xgpui-shell</code> supplies window chrome built from GPUI elements. Use its shared Linux client frame, or compose your own title bar while retaining native platform structure. It does not load GTK, libadwaita or third-party widget themes.</p>
+<h2 id="add-to-an-application">Add to an application</h2>
+<p>After publication:</p>
+<pre><code class="language-toml">[dependencies]
+xgpui = "3.1.0"
+xgpui-shell = "0.1.0"
+</code></pre>
+<p>While reviewing this release, use local path dependencies instead.</p>
+<pre><code class="language-rust">use xgpui_shell::{ShellApp, ShellOptions, ShellWindowTitle};
+
+// Inside an App callback; MyView is your application's Render implementation.
+cx.open_shell_window(options, ShellOptions::default(), |window, cx| {
+    window.set_shell_title("My application");
+    cx.new(|_| MyView::new())
+})?;
+</code></pre>
+<p>The returned handle refers to <code>ShellWindow</code>. Its <code>set_options</code> method updates that window's overrides. Set the initial title through <code>WindowOptions.titlebar.title</code>, or keep it synchronized with <code>set_shell_title</code>.</p>
+<h2 id="compose-a-title-bar">Compose a title bar</h2>
+<p>Use <code>ShellApp::open_shell_window_with_titlebar</code> with a builder returning <code>(Entity&lt;Titlebar&gt;, Entity&lt;Content&gt;)</code>. Place title text or empty space inside <code>ShellDragRegion</code>; keep interactive buttons and inputs outside that drag region.</p>
+<p>macOS retains native traffic lights. Windows uses app-composed content and shell controls. Linux/FreeBSD draw the client frame only when the platform reports client decorations; server decorations remain compositor-owned. Fullscreen suppresses the client frame. A decoration request is not proof that the compositor accepted it.</p>
+<h2 id="follow-desktop-preferences">Follow desktop preferences</h2>
+<p><code>ShellOptions::default()</code> follows available desktop values. Explicit optional fields override them per window, including <code>Some(false)</code>, a black accent and <code>Some(TitlebarAction::None)</code>. Resetting an override restores desktop/default resolution.</p>
+<p>The Linux backend reads accent, contrast, reduced motion, logical text scale, font descriptions and supported title-bar actions. Settings portal values take precedence over optional GNOME/KDE native fallbacks. Missing tools or settings leave fields unset. Existing appearance and button-layout APIs remain separate.</p>
+<p>Desktop font descriptions style the shell title; logical text scale is clamped to 0.5–4 and stays separate from display DPI. Reduced motion is exposed as policy; the static frame has no animations. Application content retains its own styling.</p>
+<p>Core <code>App::desktop_preferences()</code> reads the snapshot, and <code>App::observe_desktop_preferences(...)</code> subscribes to changes. Keep the returned subscription alive. Other platforms currently return an empty optional snapshot.</p>
+<h2 id="try-the-lab">Try the lab</h2>
+<pre><code class="language-sh">just profile=dev lab-shell
+# Linux: request a client frame {#linux-request-a-client-frame}
+just profile=dev lab-shell --client-decorations
+# Check capabilities on a fixed-size window {#check-capabilities-on-a-fixed-size-window}
+just profile=dev lab-shell --client-decorations --fixed-size
+</code></pre>
+<p>The lab shows detected and resolved preferences, per-window overrides and window state. Its client-frame preview is a simulation: preview controls never move, resize or close the host window.</p>
+<p>See the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/shell-lab.md">Shell Lab walkthrough</a> and <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/linux-shell-preferences.md">Linux provider details</a>.</p>
+<h2 id="limits-and-compatibility">Limits and compatibility</h2>
+<p>This is the first published interface; APIs may change. Headless macOS, Windows and Linux CI passes, but it does not establish interactive GNOME/KDE acceptance, mixed-DPI behavior or screen-reader acceptance. Unsupported desktop actions remain unavailable; native macOS traffic-light artwork is not restyled.</p>
+<p>Compared with the earlier local-only shell, scalar preference options are now optional overrides: use <code>Some(value)</code> for an explicit choice, or <code>..Default::default()</code> to follow the desktop. The new core APIs are additive, have default platform implementations and introduce no serialization format changes.</p>
+<h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
+<p>The shell uses additive core desktop-preference types, defaulted platform hooks and scoped App subscriptions. Existing platform implementers remain valid; no serialized representation changes. Its rendering and styling remain in this extension. Final API release approval is pending.</p>
+<p>See <a href="gpui-public-api.html#desktop-preferences-for-shells">the core API ledger</a> for the individual additions and why the backend seam belongs in core.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

@@ -54,7 +54,7 @@ operations on retained line, quadratic and cubic contours before stroke
 tessellation. Arc lengths are approximate. This API does not convert imported
 SVG documents into native path geometry.
 
-See the [SVG guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/svg-rendering.md)
+See the [SVG guide](https://xgpui.dev/svg-rendering.html)
 for construction, viewport defaults, scheduling, path effects and supported limits.
 
 ## Examples and status
@@ -73,8 +73,8 @@ for validated behavior and remaining work.
 ## GPUI public API changes: additions and compatibility
 
 Use this crate with xgpui's matching framework packages. Its integration depends
-on [xgpui's GPUI API changes](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md#added-svg-viewport-size).
-See the [compatibility guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/svg-rendering.md#gpui-public-api-changes-additions-and-compatibility)
+on [xgpui's GPUI API changes](https://xgpui.dev/gpui-public-api.html#added-svg-viewport-size).
+See the [compatibility guide](https://xgpui.dev/svg-rendering.html#gpui-public-api-changes-additions-and-compatibility)
 for additions, affected public types and migration requirements.
 
 ## Project

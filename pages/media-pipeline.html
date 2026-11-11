@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Media pipeline contracts · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/media-pipeline.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Pixel and media pipeline.</strong> Explicit metadata, linear adjustments, RGBA16F sources, progressive tiled canvases, bounded preview blur and native video effects.</p><article class="extension-document"><h1 id="media-pipeline-contracts">Media pipeline contracts</h1>
+<p>For new integrations, start with <a href="pixels-and-metadata.html">pixels + metadata</a>. That guide separates source interpretation, storage and presentation, including custom RGB definitions and the optional supplied-profile <a href="icc-profiles.html">ICC adapter</a>. File convenience loaders do not infer these properties.</p>
+<p>Phases 1–5 of <a href="https://github.com/gpui-luma-dev/xgpui/issues/26">issue #26</a> define
+CPU reference behavior, retained-source linear adjustments and the contracts for the next image pipeline. The types
+live in <code>xgpui_media::pipeline</code>. The existing image loader, encoded-sRGB <code>ImageFilter</code> and native video surfaces
+retain their contracts. Matrix/vignette adjustments opt into a separate sampling path.</p>
+<p>Use these contracts to agree on how an editor interprets pixels, how an asset
+browser accepts background results, or how a map/document viewer plans large
+raster pages. Visible matrix/vignette controls are available in the native and browser labs.
+RGBA16F supplied-pixel uploads and native wide-SDR placements are available. Provider-driven progressive/tiled drawing is available below, followed by bounded preview blur and native video modifiers.</p>
+<h2 id="color-and-alpha">Color and alpha</h2>
+<table><thead><tr><th>Contract</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>Primaries</td><td><a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/SRGB">sRGB ↗</a>, <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/DCI-P3">Display P3 ↗</a> , SDR Rec.2020 or <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Adobe_RGB_color_space">Adobe RGB (1998) ↗</a>, all <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Standard_illuminant">D65 ↗</a></td></tr>
+<tr><td>Transfer</td><td>Independent linear, sRGB (also used by encoded P3), or Adobe RGB (1998) transfer</td></tr>
+<tr><td>Source pixels</td><td>Bounded <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Standard-dynamic-range_video">SDR ↗</a> RGB and alpha, each 0..1</td></tr>
+<tr><td>Association</td><td>Straight, or <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Alpha_compositing">premultiplied ↗</a> in the declared transfer domain</td></tr>
+<tr><td>Working pixels</td><td><a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Alpha_compositing">Straight-alpha ↗</a>, linear RGB in explicit working primaries</td></tr>
+<tr><td>Intermediate RGB</td><td>May be negative or above one; no per-adjustment clipping</td></tr>
+<tr><td>Output</td><td>Convert primaries, explicitly map <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Gamut">gamut ↗</a>, encode, then associate</td></tr>
+<tr><td>Storage</td><td><a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/RGBA_color_model">RGBA8 ↗</a> or RGBA16Float metadata, independent of color interpretation</td></tr>
+</tbody></table>
+<p><code>ImageColor::decode</code> unassociates before transfer decoding, then converts working
+primaries using <code>xgpui-color</code>. Associated source RGB must not exceed alpha. Zero
+alpha canonicalizes RGB to zero, including after matrix offsets. Alpha is finite,
+bounded and unchanged by all adjustments. Nonfinite inputs, mismatched working
+spaces and arithmetic overflow return errors.</p>
+<p><code>WorkingPixel::output</code> requires an explicit <code>GamutMapping::Clip</code> or
+<code>GamutMapping::ReduceChroma</code>. This produces bounded SDR reference pixels, not an
+OS swapchain payload. Native wide-SDR adapters still follow #25: Metal's linear
+P3 path and Windows' <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/ScRGB">scRGB ↗</a> path have distinct presentation contracts. RGBA16F
+storage alone does not establish color meaning, color profile ingestion or <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/High_dynamic_range">HDR ↗</a>.</p>
+<h2 id="ordered-adjustments">Ordered adjustments</h2>
+<p>The new <code>ColorMatrix</code> applies affine RGB adjustments in a named <strong>linear</strong> working
+space. Its three rows multiply <code>[R, G, B, 1]</code>; there is no arbitrary alpha row.
+<code>ImageFilter</code> keeps its existing <strong>encoded-sRGB</strong> behavior and cannot be silently
+substituted for this transform.</p>
+<pre><code class="language-rust">use xgpui_media::pipeline::{
+    ColorMatrix, GamutMapping, ImageColor, ImagePrimaries,
+};
+
+// CPU reference: +1 stop doubles linear light, not the encoded sRGB number.
+let input = ImageColor::SRGB.decode([0.5, 0.5, 0.5, 0.25], ImagePrimaries::Srgb)?;
+let matrix = ColorMatrix::identity(ImagePrimaries::Srgb)
+    .exposure(1.0)?
+    .contrast(1.1, 0.18)?
+    .saturation(1.2)?;
+let output = matrix.apply(input)?.output(ImageColor::SRGB, GamutMapping::Clip)?;
+assert_eq!(output[3], 0.25);
+</code></pre>
+<p>Calls compose in their written order. <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Exposure_value">Exposure ↗</a> is in EV/stops; +1 doubles and -1
+halves RGB. Contrast uses <code>factor * (RGB - pivot) + pivot</code> with an explicit 0..1
+linear pivot and a nonnegative factor. Saturation uses the Y coefficients from
+the working primaries' D65 XYZ matrix: 0 is grayscale, 1 is identity. Factors
+must be finite and nonnegative. Finite extended intermediates survive until
+output mapping, so exposure followed by its inverse can recover the original.</p>
+<p>Temperature/white balance has no API in this phase: a meaningful illuminant and
+adaptation contract must precede such a control. Affine matrices do not represent
+all photographic operations.</p>
+<h2 id="vignette-reference">Vignette reference</h2>
+<p><code>Vignette</code> darkens linear RGB after the matrix and before output mapping. Radius
+is the unaffected inner radius; feather is the positive transition width.
+Intensity and roundness are in 0..1. Roundness 0 follows the source rectangle's
+ellipse; roundness 1 is circular in source pixels, with radius 1 reaching the
+shortest image edge. Intermediate roundness blends those distance measures.</p>
+<pre><code class="language-rust">use xgpui_media::pipeline::Vignette;
+
+let vignette = Vignette::new(0.4, 0.65, 0.35, 1.0)?;
+let adjusted = vignette.apply(matrix.apply(input)?, [0.9, 0.5], [8000, 6000])?;
+</code></pre>
+<p>Coordinates always refer to the full source image, not a tile or the destination
+widget. The feather uses ascending smoothstep bounds. This prevents the original
+RFC's reversed-edge ambiguity and keeps rectangular images aspect-correct.
+The GPU sampling path follows this reference without an offscreen pass.</p>
+<h2 id="render-retained-image-adjustments">Render retained-image adjustments</h2>
+<p>Use the new explicit placement API for RGBA8 encoded-sRGB images:</p>
+<pre><code class="language-rust,ignore">use xgpui_media::{image_view, pipeline::{
+    ColorMatrix, ImageAdjustments, ImagePrimaries, Vignette,
+}};
+
+let matrix = ColorMatrix::identity(ImagePrimaries::Srgb)
+    .exposure(1.0)?.contrast(1.1, 0.18)?.saturation(1.2)?;
+let adjustments = ImageAdjustments::new(matrix,
+    Some(Vignette::new(0.4, 0.35, 0.65, 1.0)?))?;
+image_view(image.clone()).adjustments(adjustments)
+</code></pre>
+<p>The source is retained/uploaded once. Changing placement parameters updates the
+sampling uniforms; it does not decode, re-encode or upload source pixels again.
+<code>MediaImage::adjusted</code> and <code>paint_adjusted</code> expose the same behavior to custom
+placements. <code>.filter(...)</code> selects the old encoded path; <code>.adjustments(...)</code>
+selects the linear path. The last setter wins, with no implicit combination.</p>
+<p><code>ImageAdjustments::new</code> accepts linear sRGB or Display P3 working primaries.
+Coefficients/feathers that cannot be represented safely in the f32 shader ABI
+return errors. RGB clips once after matrix and <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Vignetting">vignette ↗</a> in the selected output
+gamut. Alpha, native opacity, corners and clipping retain their meanings.</p>
+<p>This helps with exposure previews in a photo library, brightness controls for
+scientific imagery, or a document viewer that highlights a region with a soft
+vignette. Source interpretation is explicit rather than dependent on a label like
+“brightness.” It is still an SDR image path; no ICC/RAW/HDR processing is implied.</p>
+<h3 id="try-the-demos">Try the demos</h3>
+<pre><code class="language-sh">just media --adjustments
+just media --adjustments --headless --png /tmp/media-adjustments.png
+</code></pre>
+<p>The native lab generates its samples. Both panels share one <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Mipmap">mipmapped ↗</a> source:
+original on the left, adjusted on the right. Cycle exposure, contrast, saturation
+and vignette; animate exposure, try Alpha edges, opacity/corners, reset controls
+and zoom/pan. The source upload count should stay at one until you select/reload a
+source. Toggle <strong>Linear adjustments OFF</strong> to return to the earlier atlas/filter
+comparison. Use release mode and keep 60 Hz as the performance baseline.</p>
+<p>After rebuilding the Wasm assets with <code>just web-build</code>, use:</p>
+<ul>
+<li><a href="examples/extensions/?demo=media-filters">Browser demo</a></li>
+<li><a href="examples/extensions/?demo=media-filters&amp;backend=webgpu">Force WebGPU</a></li>
+<li><a href="examples/extensions/?demo=media-filters&amp;backend=webgl">Force WebGL2</a></li>
+</ul>
+<p>The browser starts in linear mode on a rectangular 1280 × 800 RGBA fixture.
+<strong>Use encoded filters</strong> switches to the previous filter controls. <strong>Animate</strong>
+sweeps exposure and zoom; the texture preparation count should remain one.
+Browser fixture generation/upload is synchronous once per source, and does not
+exercise native decoding/upload budgets or video imports.</p>
+<h2 id="supplied-rgba16f-images">Supplied RGBA16F images</h2>
+<p>Use this for application-generated scientific rasters, design previews or pixels
+from an existing decoder that already reports their color interpretation. No new
+image codec is needed. The existing PNG/JPEG/WebP loader remains SDR sRGB and
+does not infer <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/ICC_profile">ICC ↗</a> metadata.</p>
+<pre><code class="language-rust,ignore">use xgpui_media::{MediaLoader, image_view, pipeline::ImageColor};
+
+// Supplied float components describe bounded SDR, not scene-referred HDR.
+// Retain/poll ImageJob just like MediaLoader::load(path).
+let mut job = MediaLoader::default().load_rgba16f(
+    2, 1,
+    vec![[1.0, 0.1, 0.0, 1.0], [0.0, 0.8, 0.2, 0.5]],
+    ImageColor::LINEAR_P3,
+)?;
+if let Some(image) = job.try_take() {
+    // Default: explicitly clipped, encoded sRGB preview.
+    let preview = image_view(image.clone());
+    // Requires an accepted native WindowColorMode::WideGamutSdr window.
+    let wide = image_view(image).wide_gamut()?;
+}
+</code></pre>
+<p>Set <code>ImageColor { primaries, transfer, alpha }</code> for other supplied conventions:
+sRGB/Display P3/Adobe RGB (1998)/Rec.2020 primaries, independent linear/sRGB/Adobe RGB transfer, straight/premultiplied. The worker validates,
+unassociates in the declared source domain, decodes transfer, converts to linear
+P3 and associates alpha. It builds alpha-aware area mips before <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Half-precision_floating-point_format">binary16 ↗</a> packing.
+Storage is <strong>bounded premultiplied linear Display P3/D65 RGBA16F</strong>, little-endian.
+Invalid values and associated RGB above alpha are errors. Zero-alpha RGB becomes
+zero. Original source metadata is available via <code>MediaImage::source_color()</code>.</p>
+<p>The canonical texture retains more precision than RGBA8 and supports linear
+filtering/mips. An 8-bit preview <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Framebuffer">framebuffer ↗</a> still limits visible precision.
+The GPU converts into the adjustment's named working primaries, retains extended
+intermediates, then clips once to the chosen output gamut. No HDR highlights,
+<a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Raw_image_format">RAW ↗</a> development or ICC profile processing are implied. GPU placements currently
+use Clip for their output conversion. Supplied-pixel ingestion also offers
+<code>ReduceChroma</code> before storage through the explicit mapping API below.</p>
+<h3 id="rec2020-sdr-storage">Rec.2020 SDR storage</h3>
+<p>To retain Adobe RGB source colors, use an explicit wider storage path:</p>
+<pre><code class="language-rust">let job = loader.load_rec2020_rgba16f(
+    width, height, supplied_rgba, ImageColor::ADOBE_RGB_1998,
+    GamutMapping::Clip,
+)?;
+</code></pre>
+<p>The synchronous equivalent is <code>pipeline::rec2020_rgba16f_data</code>. The output tag is
+<code>ImageTextureFormat::LinearRec2020Rgba16Float</code>: bounded premultiplied linear
+Rec.2020/D65, eight bytes per texel, with associated linear area mipmaps. Mapping
+is into Rec.2020 before association. <code>ImageColor::LINEAR_REC2020</code> describes linear
+supplied input, independently of any encoded transfer curve. Existing P3 loaders
+keep their behavior.</p>
+<p>Metal, D3D11 and wgpu image shaders interpret the new storage tag for clipped
+sRGB previews. Native Metal and macOS wgpu execution are tested; D3D11 runtime
+remains unverified. GPU preview adjustments still use sRGB/P3 working matrices.
+<code>wide()</code> accepts P3 and Rec.2020 storage in an opted-in native wide-SDR window.
+Metal converts Rec.2020 to extended linear P3 and preserves extended channels
+through normal blending, captures and blur. Windows converts to scRGB, with its
+existing capture/path-mask restrictions and unverified native runtime. Browser /
+wgpu hosts reject native wide output. Tiled FP16 canvas pages remain P3.</p>
+<p>For the full P3 gamut, keep P3 storage: P3 red has a small negative blue component
+in Rec.2020, which bounded Rec.2020 ingestion maps. Adobe RGB fits Rec.2020.
+Wide image adjustments use sRGB/P3 working matrices and require each affine row's
+absolute sum to be at most 4, retaining finite FP16 values through the four
+supported nested color filters. Artistic blend modes retain their bounded channel
+definitions; normal blending and linear filters preserve extended channels.
+This is SDR rendering support, not HDR, ICC inference or a promise of display coverage.</p>
+<p>Independent 120-digit primary/white matrix solves and Adobe transfer calculations
+cover 1,000 source/alpha combinations. Stored channels allow at most one FP16
+step for intermediate rounding, with exact zeros. Odd mips and retention of
+out-of-P3 Adobe green are checked. Regenerate with
+<code>python3 scripts/generate_adobe_rgb_references.py --check</code>.</p>
+<h3 id="explicit-adobe-rgb-input-mapping">Explicit Adobe RGB input mapping</h3>
+<pre><code class="language-rust">use xgpui_media::pipeline::{GamutMapping, ImageColor};
+
+let job = loader.load_rgba16f_with_mapping(
+    width, height, adobe_pixels,
+    ImageColor::ADOBE_RGB_1998,
+    GamutMapping::ReduceChroma,
+)?;
+</code></pre>
+<p>The synchronous equivalent is <code>pipeline::rgba16f_data_with_mapping</code>.
+Both convert into bounded P3 before associating alpha and generating mipmaps.
+Existing <code>load_rgba16f</code> / <code>rgba16f_data</code> retain their clipping default.
+These functions accept explicitly described Adobe RGB pixels; they do not
+preserve Adobe RGB colors outside P3 or infer embedded ICC profiles.
+<code>MediaImage::source_color()</code> retains the original interpretation, while
+<code>format()</code> identifies the canonical P3 storage. Mapping is selected per ingestion
+job and each result retains its own source identity.</p>
+<p><code>ColorMatrix</code> can operate in Adobe RGB on the CPU. <code>ImageAdjustments::new</code>
+explicitly rejects Adobe RGB working matrices because the GPU currently supports
+only sRGB/P3; convert the input to canonical P3 and choose either supported
+working space for placement. See the <a href="color-math.html#preserve-both-source-gamuts">wider-gamut design</a>.</p>
+<p><code>load_rgba16f</code> uses the same worker admission, cancellation, payload reservation,
+background staging pool, per-frame transfer limits and immutable source cache as
+ordinary images. The full chain still has a <strong>64 MiB</strong> payload cap; RGBA16F costs
+8 bytes/pixel before mip overhead and staging padding. Caller-supplied f32 arrays
+cost 16 bytes/pixel and must fit <code>max_encoded_bytes</code> (also the supplied-input cap).
+Conversion scratch and driver overhead are additional; these are not RSS/VRAM caps.
+For small fixtures or application-owned workers, <code>pipeline::rgba16f_data</code> returns
+validated core upload data synchronously without loader admission.</p>
+<table><thead><tr><th>Backend</th><th>RGBA16F sampling</th><th>Output policy / validation</th></tr></thead><tbody>
+<tr><td>macOS Metal</td><td>Native RGBA16Float, <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Trilinear_filtering">trilinear mips ↗</a></td><td>Explicit sRGB preview, or accepted wide-SDR linear-P3 compositor; release pixels and UI tested</td></tr>
+<tr><td>Windows D3D11</td><td>R16G16B16A16_FLOAT</td><td>Preview or wide-SDR/scRGB compositor; Windows native labs/lab-test passed in owner testing, 2026-11-04; physical output measurement is separate</td></tr>
+<tr><td>wgpu / Linux</td><td>Rgba16Float</td><td>Explicit sRGB preview; wide placement returns an error; macOS wgpu pixel tests, Linux native QA pending</td></tr>
+<tr><td>Wasm WebGPU / WebGL2</td><td>Rgba16Float through wgpu</td><td>Explicit sRGB preview; both browser demos manually tested; no browser wide presentation claim</td></tr>
+</tbody></table>
+<p>Unsupported texture/device limits fail rather than quantizing to RGBA8. A native
+wide placement requires window acceptance; the lab labels preview fallback when
+wide mode is unavailable. Use linear <code>ImageAdjustments</code> for float sources; a
+nonidentity encoded <code>ImageFilter</code> returns an error.</p>
+<h3 id="try-rgba16f">Try RGBA16F</h3>
+<pre><code class="language-sh">just media --float-images
+</code></pre>
+<p>The release native lab generates a 1280 × 800 source with saturated P3 colors,
+near-black gradients and transparent edges. The left panel is an sRGB preview;
+the right uses accepted native wide output. Cycle exposure/saturation, vignette,
+opacity and output mode, then reset. Both panels must retain one preparation.
+The ordinary 8-bit screenshot is an sRGB preview. Metal test-support also exposes linear-P3 FP16 readback before OS display mapping; see <a href="color-labs.html">what the labs prove</a>. Neither is a measurement of physical monitor output.</p>
+<ul>
+<li><a href="examples/extensions/?demo=media-float">RGBA16F browser demo</a></li>
+<li><a href="examples/extensions/?demo=media-float&amp;backend=webgpu">Force WebGPU</a></li>
+<li><a href="examples/extensions/?demo=media-float&amp;backend=webgl">Force WebGL2</a></li>
+</ul>
+<p>Both browser panels are explicitly clipped sRGB previews of the retained P3
+RGBA16F source. Controls, animation and zoom reuse one upload. Keep 60 Hz as the
+performance baseline; this phase's checks establish correctness, not a new
+sustained frame-time benchmark.</p>
+<h2 id="progressive-source-protocol">Progressive source protocol</h2>
+<p>The generic protocol permits previews/refinements or a final image only. This
+state type does not start workers; TileCanvas below provides admitted native
+provider jobs. An adapter can wrap an existing decoder, system facility or
+application-produced raster source without adding a new codec engine.</p>
+<pre><code class="language-rust">use std::sync::Arc;
+use xgpui_media::pipeline::{
+    ProgressiveImage, SourceCapabilities, SourceEvent, SourceId, SourceUpdate,
+};
+
+// T is an immutable application snapshot; u8 is just a small protocol example.
+let mut state = ProgressiveImage::&lt;u8&gt;::new(
+    SourceId { asset: 42, generation: 1 },
+    SourceCapabilities::default(), // final-image-only provider
+);
+let request = state.request();
+assert!(state.publish(SourceUpdate {
+    request,
+    sequence: 0,
+    event: SourceEvent::Complete(Arc::new(7)),
+}));
+</code></pre>
+<ul>
+<li><code>Loading</code> can advance directly to <code>Ready</code>, or through <code>Preview</code>/<code>Refining</code>.</li>
+<li>Provider capability flags govern optional events. Refinement can arrive without
+a preview; a preview cannot replace a refinement or an earlier preview.</li>
+<li>Sequence numbers strictly increase within a request. Stale or invalid updates
+return false and change neither the snapshot nor the last accepted sequence.</li>
+<li><code>restart</code> creates a new request revision, even for the same source or a viewport
+change. Tokens also carry a private state identity so unrelated views cannot
+accidentally publish into one another. Old requests cannot win an A→B→A race.</li>
+<li><code>Ready</code>, <code>Failed</code> and <code>Cancelled</code> are terminal until restart. Failure retains
+the last usable snapshot. Cancellation suppresses publication and releases the
+state's ownership; it does not forcibly interrupt a decoder.</li>
+<li>Snapshots are immutable <code>Arc&lt;T&gt;</code> values. A worker must not rewrite data/resources
+retained by earlier scenes. State replacement does not revoke other Arc owners.</li>
+<li>Provider completion is separate from upload completion and presentation. The
+host must serialize updates and arrange notifications/redraws.</li>
+</ul>
+<p><code>SourceId</code> is application-owned: keep the asset ID stable and advance generation
+whenever content, dimensions or color metadata changes. A future tile update
+publishes a new snapshot/version; it must not mutate an in-flight GPU page.</p>
+<h2 id="tiled-identities-and-budgets">Tiled identities and budgets</h2>
+<p><code>ImageDescriptor</code> and <code>TilePyramid</code> plan pages without allocating image pixels.
+Mip dimensions floor-halve, matching the existing RGBA8 mip path. Tiles include
+clipped overlap (halo) for filters that sample neighboring pixels. Tile edges
+plus both halos must fit within the contract's 16384-pixel maximum extent;
+backend-specific limits still need capability checks when uploads are implemented.</p>
+<pre><code class="language-rust">use xgpui_media::pipeline::{
+    ImageDescriptor, PixelFormat, TileBudgets, TileLayout, TilePyramid,
+};
+
+let image = ImageDescriptor::new(8000, 6000, PixelFormat::Rgba16Float,
+    ImageColor::LINEAR_P3)?;
+let pyramid = TilePyramid::new(image, TileLayout::new(512, 2)?);
+let tile = pyramid.tile(SourceId { asset: 42, generation: 1 }, 0, 4, 3)?;
+TileBudgets::default().check_tile(&amp;tile)?;
+</code></pre>
+<p>A raw page key includes source/generation, dimensions, mip and tile coordinates,
+layout/halo, storage format and color/alpha interpretation. Draw-time matrix and
+vignette parameters are excluded so controls can reuse uploads. A future cache
+of processed intermediates must also key on all effect parameters.</p>
+<p>Budgets independently describe CPU decoded/scratch reservations, GPU residency,
+staging storage, per-frame transfer bytes/count and decode concurrency. The
+feasibility check includes 256-byte row-aligned staging costs. It does not reserve
+memory or implement scheduling, eviction, viewport selection or worker admission.</p>
+<p>TileCanvas below enforces these policies: visible-page priority, pinned resources
+until safe retirement, stale-request cancellation and capped native staging pools. Provider/codec internals and driver overhead need separate
+limits. The policy is not a total RSS/VRAM cap, and does not lift the existing
+64 MiB whole-image upload limit. Sparse hardware textures are optional.</p>
+<h2 id="progressive-tiled-canvases">Progressive tiled canvases</h2>
+<p>Use <code>TileCanvas</code> for a scanned document, map, large screenshot or scientific
+raster whose whole image would exceed the retained-image payload limit.
+<code>GeneratedCanvas</code> provides a deterministic 12,000 × 6,000 (72 MP) example without
+an asset file, decoder or full-resolution allocation.</p>
+<pre><code class="language-rust,ignore">use std::sync::Arc;
+use xgpui_media::pipeline::{
+    CanvasOptions, CanvasView, GeneratedCanvas, TileCanvas,
+};
+
+let mut canvas = TileCanvas::new(
+    Arc::new(GeneratedCanvas::new(0)),
+    CanvasOptions::default(),
+)?;
+
+// Once per frame, from the host view:
+canvas.advance(CanvasView {
+    center: [6000.0, 3000.0],   // original source pixels
+    scale: 0.1,               // logical pixels per source pixel
+    viewport: [1000.0, 500.0],
+    device_scale: f64::from(window.scale_factor()),
+})?;
+if let Some(snapshot) = canvas.snapshot() {
+    snapshot.paint(bounds, window);
+}
+</code></pre>
+<p>Retain the canvas in your view. The host arranges redraws while work remains;
+the shared native/browser demo shows polling and interaction. <code>snapshot()</code>
+returns an immutable page table whose pages remain pinned while scenes/GPU work
+retain them. <code>status()</code> describes provider publication, not GPU completion.
+<code>stats().ready_pages</code> counts submitted, reusable tile sources separately.</p>
+<h3 id="providers-and-progressive-behavior">Providers and progressive behavior</h3>
+<p>Implement <code>TileProvider</code> to describe a source and return an individual requested
+<code>TileDescriptor</code>. The request includes source generation, mip, content rectangle
+and an upload rectangle with a clipped halo. Supply a <strong>single-level</strong>
+<code>ImageTextureData::page</code> of exactly that upload extent. The scheduler validates
+format, dimensions and payload before publication. RGBA8 pages are straight
+encoded sRGB; RGBA16F pages are bounded premultiplied linear P3/D65. Float pages
+use the explicit sRGB preview path; tiled native wide output and tiled adjustment
+coordinates are not enabled by this API.</p>
+<p>Providers supply prefiltered <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Pyramid_%28image_processing%29">pyramid ↗</a> pixels, including halos. They must check
+the cancellation flag regularly and account for their own encoded input,
+decoder caches and scratch. A supplied thumbnail can serve the coarse-mip
+request. This canvas requires a coarse preview and requested pyramid pages;
+final-image-only sources can continue using <code>MediaLoader</code> and the generic
+<code>ProgressiveImage</code> protocol instead.</p>
+<p>The preview is requested first and remains visible under missing tiles. Tile
+selection accounts for viewport, zoom and device scale; visible pages nearest the
+viewport center are requested first. If all selected pages cannot fit the policy,
+selection chooses a coarser mip. This preserves a bounded usable view instead of
+pretending the whole source fits on the GPU.</p>
+<p>A refinement <strong>replaces</strong> its preview region, including for translucent pixels.
+Unready sources warm up with zero sampling opacity, so their first upload cannot
+double-blend alpha over the preview. Tile content is clipped separately from its
+halo. A provider failure keeps the last usable snapshot and stops retrying that
+failed view; a changed view or source can retry.</p>
+<pre><code class="language-rust,ignore">// Source IDs are application-owned; advance generation when pixels change.
+canvas.replace(Arc::new(GeneratedCanvas::new(1)))?;
+canvas.cancel(); // stops publication and releases this canvas's page ownership
+</code></pre>
+<p>Replacement may change dimensions or canonical format. Old requests cannot
+publish into the new source, and old immutable resources remain charged until
+their workers, scenes and GPU uses release them. No in-flight texture is rewritten.</p>
+<h3 id="budgets-and-backend-behavior">Budgets and backend behavior</h3>
+<p><code>CanvasOptions</code> defaults to 256-pixel pages with a one-pixel halo, 16 MiB each for
+CPU/GPU payload reservations, 4 MiB staging, two provider jobs, at most two uploads
+and 1 MiB aligned transfer bytes per frame, and 48 cached pages. An additional
+512 KiB provider scratch reservation is charged per active job. Tune these
+values for your provider; a larger filter needs a larger halo.</p>
+<ul>
+<li>CPU reservations include retained page bytes and declared active-job scratch.
+GPU reservations conservatively include pending, cached, visible and retired
+page payloads. Idle nonvisible pages are evicted by least-recent use.</li>
+<li>Eviction removes cache ownership, not other owners. Held snapshots and GPU
+submissions keep their leases; admission waits when those bytes are still busy.</li>
+<li>Native providers run on admitted workers, followed by existing background GPU
+staging. Native upload handoff enforces aligned per-frame byte/count limits.
+Native pooled staging counts idle allocations toward its separate pool cap.
+Existing large-image benchmark harnesses now allow 33 MiB rather than 32 MiB
+per frame so their 32 MiB pixel chains also fit aligned rows. Historical
+benchmark reports retain their original policy and results.</li>
+<li>Wasm currently generates at most one small page per <code>advance</code> on the host
+thread. Upload admission and in-flight staging are bounded again at preparation.
+This demo does not measure a browser worker, file I/O or decoder.</li>
+<li>Metal retains source snapshots through command completion. wgpu now retains them
+through queue completion; D3D11 uses event-query retirement. Windows/Linux native
+runtime QA remains pending; cross-compilation is not runtime validation.</li>
+</ul>
+<p><code>pending_staging_bytes</code>, <code>upload_staging_bytes</code> and <code>staging_pool_bytes</code> describe
+different stages. They are not interchangeable. These limits concern page payloads,
+declared scratch and source staging, not process RSS, driver VRAM, render targets,
+provider internals, allocator overhead or tiny transparent helper textures.
+Keep one canvas/policy owner for the budget domain you intend to bound. A new
+canvas has its own limits; dropping an old one does not instantly revoke GPU use.</p>
+<h3 id="run-and-inspect">Run and inspect</h3>
+<pre><code class="language-sh">just media --tiled
+</code></pre>
+<ul>
+<li><a href="examples/extensions/?demo=media-tiles">Progressive tiled browser demo</a></li>
+<li><a href="examples/extensions/?demo=media-tiles&amp;backend=webgpu">Force WebGPU</a></li>
+<li><a href="examples/extensions/?demo=media-tiles&amp;backend=webgl">Force WebGL2</a></li>
+</ul>
+<p>Start with Fit, choose 1:1, pan/drag, wheel zoom and try Cache: 2 MiB. Watch mip,
+ready/visible counts, reservations, staging, eviction and cancellation. Replace
+the source repeatedly, then Cancel/Restart. The colored grid is generated imagery;
+the demo's coarse levels sample the analytic function at mip centers and can alias.
+They are not a substitute for a real provider's properly prefiltered pyramid.</p>
+<p>The demo shows first-preview CPU availability and per-view submission latency.
+Those observations include host scheduling and generation/upload work; there is
+no disk or codec latency in this workload, and submission is not physical display
+completion. Keep <strong>60 Hz as the performance baseline</strong>. This phase's manual runs
+are functional checks, not a new sustained frame-time or total-memory benchmark.</p>
+<h2 id="reusable-preview-blur-and-native-video-effects">Reusable preview blur and native video effects</h2>
+<p><code>ImageBlur</code> reuses <code>xgpui-shader</code>'s <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Gaussian_blur">Gaussian blur ↗</a> compositor. It blurs a completed
+<strong>sRGB preview</strong>, after source matrix/vignette adjustments and before final group
+opacity. The kernel filters premultiplied RGBA, including alpha. This is encoded
+sRGB filtering, not a linear-light photographic <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Convolution">convolution ↗</a> or wide-SDR effect.
+RGBA16F sources must use their sRGB preview placement inside the blur closure.</p>
+<pre><code class="language-rust">use gpui::{px, LayerBlurQuality};
+use xgpui_media::pipeline::ImageBlur;
+
+// Keep this in view state; clone it for paint callbacks.
+let blur = ImageBlur::new(px(8.))?
+    .with_quality(LayerBlurQuality::Adaptive);
+// In a paint callback, compose all visible pages before applying the kernel.
+blur.paint(bounds, window, |window| snapshot.paint(bounds, window))?;
+</code></pre>
+<p>Use the same closure for <code>MediaImage::paint_adjusted</code> or <code>VideoFrame::paint</code>.
+Radius is Gaussian kernel support in logical pixels, from 0 to 16, with at most
+64 device pixels of support. Adaptive quality uses smaller intermediate targets
+for larger radii; <code>FullResolution</code> provides the reference mode.</p>
+<p>The shared compositor limits each capture, <strong>including its sampling halo</strong>, to
+1,024 device pixels per side and allows four layer groups per scene. Nonzero
+<code>ImageBlur::paint</code> returns an explicit size error before recording an oversized
+capture. Radius zero paints directly. Choose a bounded preview rather than
+assuming whole-window blur. The tiled demo switches to a smaller preview when
+blur is enabled; pan and zoom still select source pages normally.</p>
+<p>Blurring the assembled preview gives neighboring pages one continuous kernel;
+there is no per-page blur boundary and no need to grow the source tile halo for
+this output-space effect. Existing tile halos still provide <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Bilinear_interpolation">bilinear sampling ↗</a>.
+Undrawn pixels beyond the image/canvas viewport are transparent, which can soften
+outer edges; output clips to the requested bounds. No extra off-viewport source
+pages are requested. This is different from source-space blur of a complete asset.</p>
+<p>Allocated capture/filter targets are reused while their dimensions and quality
+permit. Custom media draws refresh raw captures on each paint, including paused
+frames: this does not promise retained filtered pixels or zero GPU work. Source
+image uploads/native texture imports remain reusable. Capture, intermediate and
+filtered textures are <strong>additional to <code>TileBudgets</code></strong>; page statistics do not
+represent total effect memory. Resizing or switching quality can allocate again.</p>
+<p>Existing immutable native video frames accept the same linear adjustments:</p>
+<pre><code class="language-rust">use xgpui_media::{video_frame, VideoFrame};
+// `frame` is an application-supplied immutable native snapshot.
+let adjusted = frame.adjusted(adjustments);
+let view = video_frame(frame)
+    .adjustments(adjustments)
+    .blur(blur.clone());
+// Or use video(stream).adjustments(adjustments).blur(blur.clone()).
+</code></pre>
+<p><code>VideoFrame::adjusted</code> preserves size, timestamp and underlying allocation
+ownership; it changes placement parameters, not source pixels. Native <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/RGBA_color_model">BGRA ↗</a> and
+<a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/YCbCr">NV12 ↗</a> use the existing range/matrix conversion to encoded sRGB first, followed by
+linear working-color adjustments. Application-owned adapters must supply an
+explicit matching SDR contract. <code>VideoView::blur</code> falls back to the adjusted,
+unblurred frame when capture bounds exceed the compositor limit; use
+<code>ImageBlur::paint</code> directly when an explicit error is needed. File playback,
+decoders, seeking, clocks and mutable decoder-pool synchronization remain in #40.</p>
+<p>Practical uses:</p>
+<ul>
+<li>Soften a document/map preview while retaining sharp controls and overlays.</li>
+<li>Preview image adjustments or a blurred thumbnail without re-uploading its pixels.</li>
+<li>Apply exposure, grayscale and vignette to camera or screen-sharing surfaces.</li>
+<li>Build a small frosted video preview with the same effects used for still images.</li>
+</ul>
+<p>Run <code>just media --tiled</code> for blur radius/quality, pan, replacement and cache pressure.
+Run <code>just media --video</code> for synthetic macOS Metal BGRA/NV12 frames, effects,
+pause/resume, opacity and corners; no sample video is required. Browser coverage
+uses the portable tiled preview, not imported native video surfaces:
+<a href="examples/extensions/?demo=media-tiles&amp;backend=webgpu">WebGPU</a> ·
+<a href="examples/extensions/?demo=media-tiles&amp;backend=webgl">WebGL2</a>.</p>
+<h2 id="capability-reporting-and-validation">Capability reporting and validation</h2>
+<p><code>PipelineCapabilities::current()</code> reports linear adjustments and vignette as
+available, along with RGBA16F, progressive/tiled images and bounded sRGB preview blur. These
+flags describe implementation availability; they are not a driver probe, proof
+of display gamut or validation of the existing #23 surface adapters. CPU reference
+methods above remain available independently of rendered placements.</p>
+<p>Run the CPU contract tests from the repository root:</p>
+<pre><code class="language-sh">cargo test --release --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-media/Cargo.toml --target-dir target --lib pipeline::
+</code></pre>
+<p>On macOS, <code>--features gpui-apple/runtime_shaders</code> avoids the build-time Metal
+compiler when needed. Tests cover known transfer/exposure values, working-space
+luminance, alpha, matrix order, unclipped intermediates and explicit mapping,
+aspect-correct vignette falloff, stale/terminal source states, tile edges/halos,
+overflow, cache identities and independent pool/frame feasibility.</p>
+<h3 id="phase-2-verification-2026-10-26">Phase 2 verification (2026-10-26)</h3>
+<ul>
+<li>35 release media tests pass with the <code>wgpu</code> feature, including both Metal and
+wgpu pixel comparisons to the CPU reference. Coverage includes five exposure
+settings, source-aspect vignette, translucent alpha/opacity, switching back to
+encoded filters and one-upload reuse.</li>
+<li>The release native Metal app was manually exercised: exposure, contrast,
+grayscale, vignette, animation/reset, translucent samples and opacity/corners.
+Generated contact sheets were also captured on Metal and wgpu.</li>
+<li>Release Wasm was rebuilt and the demo manually exercised with <strong>forced WebGPU</strong>
+and <strong>forced WebGL2</strong>, including controls, animated exposure/zoom, opacity,
+corners, reset and mode switching. Preparations remained at one.</li>
+<li>Strict media/lab Clippy, formatting and documentation checks pass. Windows
+cross-compilation passed at this phase checkpoint. Windows native labs and
+<code>just lab-test</code> subsequently passed in owner testing on 2026-11-04; Linux and
+dedicated library-suite results retain their own scope.</li>
+</ul>
+<p>These are functional and pixel checks, not GPU timestamps or a new sustained
+60 Hz performance benchmark. Keep the documented 60 Hz baseline for performance
+acceptance; no universal 120 FPS claim is made.</p>
+<h3 id="phase-3-verification-2026-10-26">Phase 3 verification (2026-10-26)</h3>
+<p>40 release media tests pass with wgpu enabled, including Metal/wgpu float-source
+pixels against CPU references in both working spaces, saturated colors,
+transparency/opacity, vignette, upload reuse, half precision, odd-edge mips,
+invalid input, payload limits and unsupported wide-output rejection. Metal wide
+tests check linear-light blending before the explicit sRGB readback mapping.
+Release native controls and both browser backends were manually exercised.</p>
+<h3 id="phase-4-verification-2026-10-26">Phase 4 verification (2026-10-26)</h3>
+<p>47 release media tests pass with wgpu enabled. Scheduler tests exercise mip/device
+scale selection, coarsening under pressure, held-snapshot accounting, eviction,
+cancellation, repeated generation/geometry replacement, provider failure/panic and
+page validation. Metal/wgpu pixels cover clipped odd pages, halos, transparency
+and very large virtual preview bounds at 64× zoom.</p>
+<p>The release native Metal and forced WebGPU/WebGL2 demos were manually exercised:
+Fit/1:1, pan/drag/wheel zoom, replacement, cancellation/restart and low-memory
+mode. The 2 MiB policy coarsens the selected mip while the preview stays usable.
+Strict lint/build/documentation checks and Windows cross-compilation pass.
+Windows native labs and <code>just lab-test</code> passed in owner testing on 2026-11-04.
+Remaining Linux and dedicated import/ownership checks stay under #23.</p>
+<p><strong>Status:</strong> Phases 1–5 were merged in PR #43. Windows native labs and <code>just lab-test</code> passed in owner testing on 2026-11-04. Remaining Linux and dedicated import/ownership coverage is tracked in #23; deferred video APIs are tracked in #134. System playback remains #40.</p>
+<h3 id="phase-5-verification-2026-10-26">Phase 5 verification (2026-10-26)</h3>
+<p>50 release media tests pass with wgpu enabled. New native surface tests compare
+BGRA and full/video-range BT.601/709 NV12 adjustments to CPU references in both
+working spaces, including vignette, opacity, timestamp/size preservation and a
+single texture import across edits. Capture bounds/support tests cover display
+scale and the halo size check before recording. Eight existing shader blur tests pass:
+Gaussian references at fractional DPI, premultiplied alpha, halo/clipping,
+quality changes, nested invalidation and target reuse.</p>
+<p>Visible release Metal canvas and video labs, plus forced WebGPU and WebGL2 tiled
+blur demos, were tested directly. Radius/quality, pan, replacement/cache pressure,
+video pause/resume, format switching, opacity, corners and reset were exercised.
+Testing caught the existing 1,024-device-pixel capture limit; bounded previews and
+explicit API checks prevent an oversized blur from blanking the renderer.
+These are functional/reference checks, not a new sustained 60 Hz benchmark.
+Windows native labs and <code>just lab-test</code> passed in owner testing on 2026-11-04;
+see <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">Windows validation</a>. Remaining
+Linux and dedicated import/ownership checks stay under #23.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

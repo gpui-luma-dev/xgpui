@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Instanced shaders (experimental) · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/instanced-wgsl-v2.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" aria-current="page" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><h2>Instanced shaders · native app first</h2><p>Typed fragment instances, ordered batching, configurable gradient shadows, soft animated borders and direct main-pass rendering. Experimental SDR subset; Windows runtime acceptance remains outstanding.</p><pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/shader-examples/justfile ui
+just --justfile apps/xgpui-ext-lab/shader-examples/justfile composition</code></pre><p><a href="instanced-wgsl-v2.html">API, examples and implementation status →</a> · <a href="examples/shaders/">WASM companion →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/shader-examples">Demo source</a></p><article class="extension-document"><h1 id="instanced-shaders-experimental">Instanced shaders (experimental)</h1>
+<p>See <a href="shader-models.html">choosing a shader rendering model and migrating old names</a>.</p>
+<p>Issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/21">#21</a>. Enable
+<code>xgpui-shader/portable-shaders</code>. <code>instanced</code> is an API alongside shader paints; existing texture producers keep their existing behavior.</p>
+<p><code>WindowShaderExt::paint_custom_shader(bounds, &amp;program, instance)</code> records an
+immutable typed instance. GPUI clips and applies inherited opacity, preserves
+scene draw order, and combines compatible shader runs in the main render pass.
+A native primitive or another program can split a run. Programs are never globally
+sorted by identity. GPUI's explicit <code>paint_layer</code> contract still requires
+non-overlapping geometry within a layer.</p>
+<h2 id="implementation-status">Implementation status</h2>
+<p>As of 2026-10-25, the first experimental slice is implemented locally. It is an
+opt-in SDR API, not the complete unrestricted shader system proposed in the RFC.</p>
+<table><thead><tr><th>Area</th><th>Status</th></tr></thead><tbody>
+<tr><td>Scene recording, compatible ordered runs and retained paint replay</td><td>Implemented</td></tr>
+<tr><td>Typed parameter metadata, WGSL reflection and layout checks</td><td>Implemented; f32 scalars/vectors, 128-byte payload</td></tr>
+<tr><td>Generated vertex/fragment wrappers; clipping and inherited opacity</td><td>Implemented</td></tr>
+<tr><td>WGSL validation and MSL, HLSL SM5 and SPIR-V translation</td><td>Implemented</td></tr>
+<tr><td>Native Metal and wgpu rendering</td><td>Implemented; macOS pixel checks passed</td></tr>
+<tr><td>Native D3D11 dispatch</td><td>Implemented; native paint/gamut Windows CI baseline and owner-confirmed labs/lab-test pass recorded in <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">Windows validation</a></td></tr>
+<tr><td>Browser WebGPU and WebGL2</td><td>Implemented; local Chromium smoke checks passed</td></tr>
+<tr><td>Rounded-box, pulse-glow and soft particle presets</td><td>Implemented</td></tr>
+<tr><td>Local native demo and shared WASM companion</td><td>Implemented; same Rust example views and shader sources</td></tr>
+<tr><td>Explicit linear-P3 shader output and optional gamut fills/gradients (#25)</td><td>Implemented; Metal references and earlier Windows native gamut CI passed; Windows lab/lab-test pass confirmed 2026-11-04</td></tr>
+</tbody></table>
+<p>The shader regression suite passed, including Metal/wgpu pixel checks, ABI and
+invalid-input rejection, native/shader ordering, replay, and a 5,000-instance
+single-run case. Native app launch and controls were checked on macOS. The
+optimized browser particle demo showed roughly 16.7 ms redraw intervals at
+5,000 instances in one local session; this includes scheduling and is not GPU
+timing or a 120 FPS guarantee.</p>
+<p>Remaining acceptance: execute and compare on Windows/D3D11; capture GPU draw
+counts, allocations and timings on representative hardware; broaden runtime
+coverage for device recovery, buffer growth and wide-SDR composition. Arbitrary
+resource bindings, integer/array/matrix/nested parameter records, HDR output,
+the larger preset library and mesh-gradient migration are outside this first slice.</p>
+<h2 id="rust">Rust</h2>
+<pre><code class="language-rust">use gpui::*;
+use xgpui_shader::{WindowShaderExt, instanced::{ShaderProgram, presets::*}};
+
+// Construct once, outside paint. Clone shares the program identity.
+let program = ShaderProgram::&lt;EffectInstance&gt;::new(ROUNDED_BOX)?;
+// During an element's paint callback:
+window.paint_custom_shader(bounds, &amp;program, EffectInstance {
+    color: [0.25, 0.65, 1.0, 1.0],
+    effect: [12.0, 0.0, 1.0, 0.0],
+})?;
+</code></pre>
+<p>For custom Rust records, derive <code>Copy</code>, <code>Clone</code>, <code>bytemuck::Pod</code> and
+<code>bytemuck::Zeroable</code>, use <code>#[repr(C)]</code>, and implement <code>ShaderInstance::FIELDS</code>.
+Each <code>InstanceField</code> describes the exact name, <code>offset_of!</code> byte offset and f32
+component count of the corresponding WGSL member, including explicit padding.
+The author is responsible for truthful field metadata and f32 representations;
+<code>Pod</code> alone does not establish WGSL layout compatibility. Construction checks
+all reflected members, offsets, types, total size and WGSL array stride. There
+is no unchecked automatic cast based solely on <code>repr(C)</code> or <code>Pod</code>.</p>
+<h2 id="wgsl">WGSL</h2>
+<pre><code class="language-wgsl">struct Parameters { color: vec4&lt;f32&gt;, effect: vec4&lt;f32&gt;, }
+fn shade(input: ShaderInput, parameters: Parameters) -&gt; vec4&lt;f32&gt; {
+    return vec4(parameters.color.rgb, parameters.color.a * input.uv.x);
+}
+</code></pre>
+<p>The host supplies <code>ShaderInput</code>: <code>uv</code> (full effect rectangle), <code>position</code> and
+<code>size</code> (logical GPUI pixels), and <code>scale_factor</code>. Origin is top-left, positive y
+down. The generated vertex stage transports flat instance parameters; the
+fragment wrapper clips against the content mask and applies opacity once.
+User source supplies functions, constants and types, without entry points,
+global variables, overrides or resource bindings. Derivatives and loops are
+subject to Naga validation rather than the restricted shader-paint subset.</p>
+<p>Output is finite, straight-alpha encoded-sRGB SDR; the wrapper clamps channels
+to 0..1. The shader author must avoid non-finite arithmetic. Intensity above one
+saturates; this API does not imply HDR or a bloom postprocess. The Metal/D3D11
+wide-SDR compositors treat these instances as ordinary SDR UI and convert their
+composed scratch image using the existing color path.</p>
+<h2 id="richer-shadows">Richer shadows</h2>
+<p>The opt-in <code>instanced::ShadowPainter</code> adds rounded-box shadows with one to four
+color stops, a gradient angle, configurable falloff, blur, spread, offset and
+inset/outset mode. Native <code>BoxShadow</code> retains its existing behavior. Start with:</p>
+<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/shader-examples/justfile shadows
+</code></pre>
+<pre><code class="language-rust">use xgpui_shader::{painted, instanced::{ShadowPainter, ShadowStyle, ShadowStop}};
+
+// Construct once and retain alongside the view state.
+let shadows = ShadowPainter::new()?;
+let style = ShadowStyle {
+    stops: vec![
+        ShadowStop::new(0.0, [0.95, 0.15, 0.45, 0.8]),
+        ShadowStop::new(1.0, [0.05, 0.65, 1.0, 0.8]),
+    ],
+    angle: 90.0,
+    blur_radius: px(24.0),
+    falloff: 2.0,
+    ..Default::default()
+};
+let layer = shadows.layer(style)?; // Validate once; retain and clone as needed.
+let card = painted()
+    .rounded(px(16.0))
+    .bg(rgb(0xf8fafd))
+    .shadow_paint(layer)
+    .p_4()
+    .child("Normal styled children");
+</code></pre>
+<p><code>painted().shadow_paint(layer)</code> handles receiver bounds and paint order:
+outsets precede the background; insets follow it and precede children. Repeat
+<code>.shadow_paint(...)</code> to stack layers. Outsets escape the card's own overflow mask,
+while ancestor masks still apply. Card and inherited opacity each apply once.
+Normal layout, padding, custom backgrounds, borders and interactive children stay
+on the same container. This is an extension API; no GPUI API changes are needed.</p>
+<p>Use uniform <code>.rounded(...)</code> corners. The helper uses the container's base style
+geometry and opacity; state-dependent corner/opacity refinements are not supported.
+For custom canvas code, <code>shadows.paint(window, receiver_bounds, radius, &amp;style)?</code>
+remains available. It expands outset bounds automatically; place it before the
+background for outsets, or after the background and before children for insets.</p>
+<p>The gradient runs across the receiver: zero degrees points up, 90 degrees right.
+Stops are nondecreasing in 0..1; duplicate positions form hard stops. Colors are
+straight-alpha sRGB at the API boundary and interpolate in premultiplied sRGB to
+avoid transparent-color fringes. One stop gives a solid shadow.</p>
+<p>Softness uses a rounded-box signed-distance smoothstep band, followed by a
+coverage power (<code>falloff</code> 0.25..8; default 1). <code>blur_radius</code> is the logical
+half-width of that band, not the CSS Gaussian blur radius. Zero blur retains
+antialiasing. This provides controllable shadow aesthetics, <strong>not pixel-identical
+CSS box-shadow rendering</strong>. Uniform rounded rectangles, four stops and SDR output
+are the initial scope; arbitrary silhouettes, per-corner radii, CSS interpolation
+spaces and general blur filters are not provided by this helper.</p>
+<p>The 128-byte instance uses the same batched main-pass path without a shadow
+texture/pass per layer. Tests validate layout and automatic extents, reject
+invalid inputs, and check gradient edges, clear centers, inset containment and
+falloff changes through both native Metal and wgpu on macOS. The native editor
+and WASM companion share the same shadow API and source shader.</p>
+<h2 id="animated-borders">Animated borders</h2>
+<p>Enable <code>portable-shaders</code> and retain an <code>AnimatedBorder</code> in view state. Supply
+phase in turns from the host clock; the shader draws a rounded ring with two
+opposite conic highlights, matching the rotating-gradient technique in CSS.</p>
+<pre><code class="language-rust">use xgpui_shader::{painted, instanced::{AnimatedBorder, AnimatedBorderStyle}};
+
+let border = AnimatedBorder::new()?; // Once, outside render.
+// During render: request frames while playing, freeze phase for reduced motion.
+window.request_animation_frame();
+let layer = border.layer(AnimatedBorderStyle::default(), elapsed_seconds / 2.5)?;
+let button_content = painted().rounded(px(999.)).bg(rgb(0xffffff))
+    .animated_border(layer).px_6().py_3().child("Generate");
+// Wrap in an ordinary div().id(...).on_click(...) for button interaction.
+</code></pre>
+<p>Configure logical-pixel width, highlight <code>softness</code> (default 3px; zero is crisp),
+base track color, two straight-alpha sRGB highlight colors and trail length (fraction of a turn, greater than zero and at most 0.5).
+Finite phases wrap; negative phase supports reverse rotation. Colors interpolate
+premultiplied to avoid transparent fringes. The neutral track occupies the inside
+edge; a Gaussian-shaped highlight halo extends around it (analytic softness, not a general CSS blur filter). Effect
+bounds expand by three softness radii; ancestor and container clips still apply.
+It paints after the background/inset shadows, before children. Reserve padding for
+content; the effect does not change layout. Use uniform base corner radii.
+Ancestor clipping and opacity apply through the normal container paint path.
+Native hover corner refinements are not supported; rebuild the style explicitly.</p>
+<p>The helper does not own a timer or simulate physics. The view supplies phase and
+requests animation frames only while active; keep phase constant and stop frame
+requests for pause/reduced motion. A spring or pointer simulation can supply the
+same phase parameter. No GPUI API changes are required.</p>
+<p>The separate local Borders demo (<code>just --justfile apps/xgpui-ext-lab/shader-examples/justfile borders</code>)
+includes an interactive Generate pill on a light panel and Pause/Resume;
+the companion uses the same Rust view and WGSL on WebGPU and WebGL2.</p>
+<h2 id="limits-and-transport">Limits and transport</h2>
+<ul>
+<li>Source: at most 64 KiB. Parameters: at most 128 bytes, only <code>f32</code> and
+<code>vec2/3/4&lt;f32&gt;</code> members. Rust instances must match the reflected WGSL stride.</li>
+<li>Eleven instance attributes: three host float4 slots and eight payload slots.
+Flat varyings keep the fragment data independent of quad interpolation.</li>
+<li>Transport: 176 bytes/instance. WebGPU/WebGL2 and D3D11 use a reusable growing
+vertex buffer with a 64 MiB cap. Metal uses the existing host instance-buffer
+pool and its frame limits. No per-instance texture or render pass is created.</li>
+<li>Six generated vertices per instance. Batch buffer slices start at instance
+zero, including WebGL2, which lacks base-instance draws.</li>
+<li>Pipelines are device/renderer-owned and retained while referenced by the
+last shader-bearing scene (native-only coverage subpasses do not evict them). Program identity includes the immutable generated sources.
+Replacing a device creates a new renderer cache.</li>
+<li>Effect bounds must include the entire visual. The pulse preset reserves a
+12px inset so glow can extend beyond its inner shape. Clipping does not remap
+local coordinates. Rounded/path masks are not part of this rectangle API;
+implement analytic shape coverage in the shader.</li>
+</ul>
+<h2 id="examples-and-validation">Examples and validation</h2>
+<p>Start with the local native app. From the repository root:</p>
+<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/shader-examples/justfile ui
+just --justfile apps/xgpui-ext-lab/shader-examples/justfile composition
+just --justfile apps/xgpui-ext-lab/shader-examples/justfile --set profile release particles
+</code></pre>
+<p>Inside <code>apps/xgpui-ext-lab/shader-examples</code>, use <code>just ui</code>; bare <code>just</code> lists recipes. The
+in-window selector opens all six examples:</p>
+<ol>
+<li><strong>Minimal:</strong> a custom WGSL fragment function and typed Rust instance.</li>
+<li><strong>Glow:</strong> 100 independently animated badges sharing a program.</li>
+<li><strong>Particles:</strong> 100–10,000 instances, count selection, pause and opacity controls.</li>
+<li><strong>Composition:</strong> numbered red shader → gold native quad → green shader → blue
+shader legend. An inset cyan frame identifies the clip boundary. <strong>Clipping ON/OFF</strong>
+reveals the full shapes without changing their positions; the opacity toggle
+shows inherited opacity on the same scene. Full shapes fit inside the outer
+canvas, so clipping reads as an explicit comparison rather than a broken layout.</li>
+<li><strong>Shadows:</strong> side-by-side native and shader shadow cards with blur, spread,
+offset, custom falloff, solid/gradient color and inset/outset controls.</li>
+<li><strong>Borders:</strong> soft orbiting highlights on a light panel, with Generate clicks and pause/resume.</li>
+</ol>
+<p>The companion WASM build uses these same Rust views and WGSL sources, including
+the selector and improved composition controls. Only platform startup and the
+GPU backend differ: native Metal/D3D11 versus browser WebGPU/WebGL2. Rebuild WASM
+after source changes and reload; native and browser binaries do not update each
+other automatically. The existing extensions-web gallery remains separate.</p>
+<pre><code class="language-sh">bash apps/xgpui-ext-lab/shader-examples/build.sh --release
+just docs-serve
+</code></pre>
+<p>Open <code>http://localhost:8000/examples/shaders/</code>. The build writes the companion
+into <code>pages/examples/shaders/</code>, which the local preview and the website serve. See the
+<a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/shader-examples">demo source and run guide</a>.</p>
+<pre><code class="language-sh">cargo test --offline --config .cargo/validation.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
+  --features wgpu,portable-shaders --target-dir target instanced::
+</code></pre>
+<p>Tests cover preset translation, ABI rejection, invalid resources/data, compatible
+batch runs, program/native boundaries, and replay. On macOS, a Metal and wgpu
+pixel test exercises multiple instances, clipping, opacity and interleaved native
+geometry. Shader translation and cross-compilation do not establish D3D11 runtime
+correctness. Redraw intervals in the demo include scheduling and are not GPU
+execution timings; use platform GPU captures for draw-count/timing acceptance.</p>
+<h2 id="explicit-wide-sdr-output">Explicit wide-SDR output</h2>
+<p><code>ShaderProgram::new</code> retains straight-alpha encoded-sRGB SDR semantics.
+<code>ShaderProgram::new_linear_p3</code> instead declares bounded straight-alpha linear
+Display P3/D65 producer output; <code>new_linear_rec2020</code> declares bounded linear
+Rec.2020/D65 SDR output. All wrappers clamp producer RGBA to [0,1]; use
+explicit gamut mapping inside the producer when clipping is unsuitable.</p>
+<p>Enable <code>WindowColorMode::WideGamutSdr</code> outside painting before recording a wide
+program. <code>paint_custom_shader</code> rejects a wide program in an ordinary window;
+renderers also reject unsupported scenes before preparation/submission. wgpu
+and non-macOS Apple rendering currently reject wide programs explicitly.</p>
+<p>The generated wrapper applies inherited opacity and associates RGB once. On
+Metal, wide instances convert to an extended linear-P3 Float16 target with
+premultiplied blending. Rec.2020 can produce negative P3 channels, which survive
+captures, linear filters and normal blending. On D3D11, the host converts the
+declared producer primaries to
+linear scRGB before association; negative and above-one scRGB survive because
+producer clamping happens before that conversion. No per-instance offscreen
+producer texture is allocated. Legacy UI runs still require conversion, and
+presentation still has its existing overhead.</p>
+<p>Output meaning lives in immutable <code>SceneShaderProgram</code> metadata. Unique program
+IDs include that choice by construction; cached Metal pipelines therefore keep
+compatible pixel formats and blend state across mode changes. Wide instances
+batch by program identity within scene ordering rules. The compositor flushes
+pending legacy UI before a wide shader run and resumes legacy composition in
+order afterward. Clip bounds, per-instance opacity and paint replay retain
+existing behavior. Analytical shape coverage remains the shader's responsibility.</p>
+<p>The gamut-owned native regression (<code>xgpui-gamut/tests/instanced_output.rs</code>) compares instanced P3 fills against typed <code>WideColor</code>
+producers with translucent overlapping fills, ordinary shaders, native controls,
+clipping, resize, replay and mode changes. It executes on Metal locally; the
+same test is wired into the Windows WARP workflow. Windows cross-compilation
+alone does not validate native HLSL execution or physical display fidelity.</p>
+<p>Color conversion, mapping and interpolation math live independently in
+<a href="color-math.html"><code>xgpui-color</code></a>.
+<code>xgpui-shader</code> has no runtime or development dependency on gamut or color.
+Cross-extension comparisons belong to gamut's development tests. Its existing
+producer has no default runtime shader dependency; the <code>instanced</code> feature adds
+optional wide fill/gradient adapters.</p>
+<p>For low-level scene adapters, <code>ShaderProgram::scene_program()</code> returns an <code>Arc</code>
+to its immutable compiled <code>SceneShaderProgram</code>. Raw <code>ShaderDraw</code> parameter slots
+must obey the program's validated instance ABI; ordinary applications should
+continue using <code>WindowShaderExt::paint_custom_shader</code> for validated packing.</p>
+<h2 id="reusable-wide-fills-and-gradients">Reusable wide fills and gradients</h2>
+<p>Enable <code>xgpui-gamut</code>'s optional <code>instanced</code> feature. <code>WidePainter</code> compiles a shared
+program once and paints bounded <code>WideColor</code> solids or <code>WideGradient</code> two-stop
+linear gradients. No new dependency is added to <code>xgpui-shader</code>.</p>
+<pre><code class="language-rust">use xgpui_gamut::{color::*, instanced::{WideGradient, WidePainter}};
+
+let painter = WidePainter::new()?;
+let red = LinearRgba::new(LinearRgb::new(RgbSpace::DisplayP3, [1., 0., 0.])?, 1.)?;
+let blue = LinearRgba::new(LinearRgb::new(RgbSpace::DisplayP3, [0., 0., 1.])?, 0.5)?;
+let gradient = WideGradient::linear(
+    [0., 0.], [1., 0.], [red, blue],
+    ColorInterpolation::Oklab, GamutMapping::ReduceChroma,
+)?;
+// During a canvas/element paint callback in an enabled WideGamutSdr window:
+painter.paint_gradient(window, bounds, gpui::px(16.), &amp;gradient)?;
+</code></pre>
+<p>Start/end coordinates are normalized to fill bounds. Radius is a uniform logical
+pixel value clamped to half the shorter dimension. Host clipping/opacity and
+analytic antialiasing combine once. Gamut mapping follows interpolation before
+coverage/output association. Gradient uploads are bounded to finite magnitudes
+&lt;=65504, including the precomputed axis projection coefficients. Unrepresentable
+or extremely short axes return errors; coincident endpoints select the second stop.
+The shared 80-byte parameter ABI fits the existing 128-byte transport.</p>
+<p>The native gradient reference test covers six interpolation/hue choices, both
+mapping policies, endpoint extension, degenerate axes, rounded coverage, masks and
+opacity against CPU-derived expected pixels. A scene test verifies 5,000 instances
+form one ordered shader run with no custom producer draws.</p>
+<p>Run <code>gamut-lab --instanced</code> for solids, or <code>gamut-lab --instanced --gradient</code> for
+OkLab gradients. Omit the flags to compare the existing offscreen producer path.
+<code>--sdr</code> retains the solid sRGB baseline. Captures are clipped sRGB previews.</p>
+<p>A manual allocation/timing test is available:</p>
+<pre><code class="language-sh">cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-gamut/Cargo.toml --features instanced --lib compare_producer_allocations_and_frame_readback -- --ignored --nocapture --test-threads=1
+</code></pre>
+<p>This test counts actual producer texture allocations, warms the renderer, and
+reports three-frame averages at 512×512 for 1 and 16 8×8 solid fills on both
+paths, plus 1,000 instanced fills. The larger legacy preparation run stalled on
+this Metal host, so the baseline is capped rather than assigned a timing.
+Producer pass/fill draw counts follow the recorded path; timing includes CPU
+encoding, GPU completion and readback, not isolated GPU timestamps. Run it alone
+so the test-only allocation counter is scoped. Physical display measurements and
+native Windows execution remain separate acceptance work.</p>
+<p>Local debug measurement on Apple M4 Max, 512×512 target, three measured frames
+after warmup (milliseconds include encode, completion and readback):</p>
+<table><thead><tr><th>Fills</th><th>Path</th><th>Producer textures/frame</th><th>Fill draws/frame</th><th>Mean frame ms</th></tr></thead><tbody>
+<tr><td>1</td><td>Offscreen</td><td>1</td><td>1</td><td>11.531</td></tr>
+<tr><td>1</td><td>Instanced</td><td>0</td><td>1</td><td>11.359</td></tr>
+<tr><td>16</td><td>Offscreen</td><td>16</td><td>16</td><td>11.997</td></tr>
+<tr><td>16</td><td>Instanced</td><td>0</td><td>1</td><td>11.326</td></tr>
+<tr><td>1,000</td><td>Instanced</td><td>0</td><td>1</td><td>11.948</td></tr>
+</tbody></table>
+<p>The allocation/draw reduction is directly exercised. Readback dominates these
+small frames; this sample does not establish isolated GPU speed or a frame-rate
+guarantee. The legacy 100-fill run stalled during preparation and was stopped. The
+renderer creates its Metal queue with the default capacity of 64 outstanding
+command buffers. Each legacy WideColor preparation records one uncommitted
+buffer, while the host submits only after all producers are prepared; allocation
+of the next buffer can block before submission is reached. See
+<a href="https://developer.apple.com/documentation/metal/mtldevice/makecommandqueue%28%29?changes=_11&amp;language=objc">Apple's queue capacity contract</a>.
+The instanced path records no per-producer buffers and avoids this cycle.
+Changing legacy preparation/submission semantics is deferred; no timing is
+inferred for the stalled case.</p>
+<h3 id="native-p3-comparison-companion">Native P3 comparison companion</h3>
+<p>Use <a href="high-gamut-windows.html#compare-srgb-and-native-display-p3">color-lab</a> to compare
+<code>WidePainter</code> P3 swatches with ordinary sRGB UI colors using the same CPU reference
+samples as the browser Color / Gamut demo. The native header reports effective
+window mode and display capability. The browser version maps to sRGB and reports
+its actual canvas color space separately from advertised display gamut; see
+<a href="color-math.html#runtime-output-diagnostics-and-native-comparison">runtime diagnostics</a>.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Paint GPU validation · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/paint-validation.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" aria-current="page" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><article class="extension-document"><h1 id="paint-gpu-validation">Paint GPU validation</h1>
+<p>The GPU workflows validate rendering at the checked-out commit. Rust <strong>1.99.0</strong>,
+<code>.cargo/validation.toml</code>, and committed standalone lockfiles define the build.
+All Cargo commands use <code>--locked</code>. The backend lockfiles were seeded from
+<code>apps/xgpui-ext-lab/paint-lab/Cargo.lock</code> to retain compatible shared dependency versions.
+When updating dependencies, refresh affected locks using the same validation
+configuration and pinned compiler; commit the locks with the manifests.</p>
+<h2 id="dispatch-a-fix">Dispatch a fix</h2>
+<p>Push the fix to a branch, then select that branch in Actions → Run workflow, or:</p>
+<pre><code class="language-sh">gh workflow run paints-windows-native.yml --ref YOUR_BRANCH -f scope=full
+gh workflow run paints-windows-wgpu.yml --ref YOUR_BRANCH -f scope=full
+gh workflow run paints-linux-vulkan.yml --ref YOUR_BRANCH -f scope=full
+</code></pre>
+<p>Each command runs only the selected backend. The workflow definitions must be
+available on the default branch for GitHub's dispatch UI/CLI discovery. To run
+full acceptance across all three backends at one commit:</p>
+<pre><code class="language-sh">gh workflow run portable-paints.yml --ref YOUR_BRANCH
+</code></pre>
+<p>Check the SHA in each job name, summary, and <code>timings.json</code>. Rerunning an existing
+Actions run tests its <strong>original SHA</strong>, even after a new fix is pushed. Dispatch a
+new run on the updated branch to test the new fix. PR-triggered jobs validate the
+PR merge commit; manually dispatched jobs validate the selected branch tip.
+Full cross-platform acceptance requires successful <strong>full</strong> results for all
+three backends at the same SHA.</p>
+<h2 id="focused-diagnostics">Focused diagnostics</h2>
+<p><code>scope=full</code> is the default. Other scopes are explicitly diagnostic and always
+report <code>acceptance: false</code>, even when successful:</p>
+<table><thead><tr><th>Scope</th><th>Windows native</th><th>Windows wgpu / Linux Vulkan</th></tr></thead><tbody>
+<tr><td><code>color-gamut</code></td><td>Wide SDR recording/composition, presentation policy, color/shader math, gamut producers and instanced adapters</td><td>Unavailable; select native</td></tr>
+<tr><td><code>producer-cache</code></td><td>Exact coverage lookup/allocation and D3D11 WARP preparation/recovery</td><td>Exact coverage lookup/allocation, wgpu preparation/recovery, compositor uniform growth/recovery</td></tr>
+<tr><td><code>paint-parity</code></td><td>Native application check, complete paint-lab native/wgpu parity suite, mesh capture</td><td>Portable paint references and low-alpha saturated edges</td></tr>
+<tr><td><code>full</code></td><td>All original native checks and capture</td><td>All original backend checks</td></tr>
+</tbody></table>
+<p>For example:</p>
+<pre><code class="language-sh">gh workflow run paints-windows-native.yml --ref YOUR_BRANCH -f scope=color-gamut
+gh workflow run paints-linux-vulkan.yml --ref YOUR_BRANCH -f scope=producer-cache
+</code></pre>
+<p>All backends additionally run the main-pass brush library tests in full/parity scope.
+The native Windows job enables D3D11/WARP brush parity alongside wgpu.</p>
+<p><code>.github/paints/commands.tsv</code> is the single acceptance command inventory
+(tab-separated: backend, scope, name, command);
+<code>.github/paints/run.sh</code> selects scopes and runs it. Before each test, it executes
+the same Cargo command with <code>--no-run</code> to measure compilation separately. Capture
+similarly runs <code>cargo build</code> before the original <code>cargo run</code>. Test/capture time
+includes Cargo's warm fingerprint check and process startup. No test command or
+native capture from the original workflow was removed.</p>
+<h2 id="builds-cache-and-evidence">Builds, cache, and evidence</h2>
+<p>Every manifest in a job uses the absolute <code>CARGO_TARGET_DIR</code> pointing to
+<code>target/paint-validation</code>. Cargo can reuse compatible dependencies there; feature,
+profile, target, compiler and crate version differences still cause builds.
+Incremental compilation is disabled for predictable CI caching. Runner images
+are pinned to Ubuntu 24.04 and Windows 2025; Rust is pinned independently.</p>
+<p>Cache keys isolate runner OS/architecture, backend, full compiler identity and
+validation configuration/runner implementation. Manifest and lockfile hashes
+prefer an exact dependency match; a compatible fallback can restore older
+builds, which Cargo rechecks. Unique run/attempt suffixes allow completed new
+compilation to be saved even after test failures. Cancellation skips saving.
+The cache contains registry/git dependencies and target outputs. It contains no
+result logs or native capture. A restored cache is never validation evidence;
+all selected tests execute again.</p>
+<p>Each run uploads <code>paints-BACKEND-SCOPE-SHA</code> with per-command build/test/capture
+logs, a summary and <code>timings.json</code>. Native full/parity runs also retain the
+<code>native-dx11-mesh</code> PNG artifact. Expand the command groups in the Actions job to
+inspect live output. Setup failures appear in the corresponding Actions step;
+command failures retain the timings and logs collected up to that point.</p>
+<h2 id="coldwarm-measurement-protocol">Cold/warm measurement protocol</h2>
+<p>Use the same SHA, backend, scope, pinned compiler and runner image for both runs:</p>
+<pre><code class="language-sh">gh workflow run paints-linux-vulkan.yml --ref YOUR_BRANCH -f scope=full -f cache=cold
+# Wait for completion and cache save before dispatching the warm run. {#wait-for-completion-and-cache-save-before-dispatching-the-warm-run}
+gh workflow run paints-linux-vulkan.yml --ref YOUR_BRANCH -f scope=full -f cache=warm
+</code></pre>
+<p>Repeat for both Windows backends. Cold mode skips restoration and still saves
+completed compilation; warm mode restores it. Check the recorded restored cache
+key and compiler identity before comparing. Use a quiet branch to avoid other
+runs replacing the most recent matching cache. GitHub cache ref visibility still
+applies, so compare runs on the same branch/event type.</p>
+<p>Download both timing artifacts. Compare <code>setup_seconds</code>, sums of <code>results.seconds</code>
+by <code>build</code>, <code>test</code> and <code>capture</code>, and the <code>Compiling</code> lines in build logs. Setup
+covers toolchain/dependencies/cache restoration after checkout; build includes
+Cargo dependency fetching. Compare per-manifest first builds as well as later
+commands to distinguish restored compilation from within-job reuse. Record run
+URLs, SHA, cache keys, runner image versions (Actions setup logs), phase totals
+and compilation counts. Repeated warm tests must still pass. Hosted cold/warm
+numbers and GPU correctness must be established by these actual CI runs; local
+orchestration tests do not demonstrate a performance improvement.</p>
+<h2 id="triggers-and-cancellation">Triggers and cancellation</h2>
+<p>Each backend has PR path triggers for Cargo configuration/manifests/locks, GPUI
+core/platform/shader sources, extension crates, paint-lab, and validation
+orchestration. Shared core/shader changes intentionally run all three backends.
+Documentation-only changes skip automatic GPU work; dispatch remains available.
+The full-platform workflow is manual to avoid duplicating the three PR jobs.</p>
+<p>Concurrency groups contain PR number or branch ref, backend, scope and cache
+mode. A new run supersedes an older matching run, including one started through
+the full entry point. Other backends, focused scopes, PRs/branches, and cold/warm
+measurement modes remain independent. Avoid manually starting a duplicate full
+run while waiting for the same backend/scope on the same branch.</p>
+<p>To check orchestration locally without a GPU:</p>
+<pre><code class="language-sh">bash .github/paints/run_selftest.sh
+bash .github/paints/run.sh --backend windows-native --scope full --dry-run
+</code></pre>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>
