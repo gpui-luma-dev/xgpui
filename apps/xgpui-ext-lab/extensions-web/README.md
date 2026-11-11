@@ -208,7 +208,7 @@ repeat with `backend=webgl`. The in-app tabs switch views without reloading.
   unsupported. Both examples stay within the four-group/four-backdrop limits.
 
 These use the real public brush and layer APIs, not HTML/CSS approximations.
-The pastel waves performance experiment remains a native-only follow-up (#35).
+The pastel waves performance experiment now lives in the xgpui-luma lab.
 
 Browser presentation surfaces without `COPY_SRC` use one reusable full-window
 SDR effect target and a final unblended presentation draw. The extra texture
@@ -238,7 +238,7 @@ rather than copying a wildcard listening address from a server's output.
 The index lists all 23 hosted WASM examples from this app and `shader-examples`,
 grouped into Brushes & paints, Layer effects, Shaders & motion, Text, Media & paths, and SVG &
 color. Native labs are a separate section with repository-root launch commands,
-including pastel waves and the full paint-lab/Hermite editor. The shader gallery
+including the full paint-lab/Hermite editor. The shader gallery
 remains a focused subset; its All demos link opens this complete index.
 
 For cross-gallery navigation, use the documentation preview at
