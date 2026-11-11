@@ -689,3 +689,38 @@ fn submitted_frame_is_waited_for_on_the_gpu() {
         assert!(near(image.get_pixel(16, 8).0, [0, 0, 255, 255]));
     });
 }
+
+/// #197 K6: the compositor is replaced (new renderer and queue). Retained
+/// scenes and new frames composite on the replacement.
+#[test]
+fn compositor_replacement_keeps_compositing() {
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Rgba16FloatLinearP3, 3)).unwrap();
+        let mut engine = Engine::new();
+        let mut first = MetalHeadlessRenderer::new().unwrap();
+        first.set_color_mode(WindowColorMode::WideGamutSdr).unwrap();
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [0.5, 0.5, 0.5, 1.0]);
+        let retained = scene(surface.content().unwrap());
+        let image = first.render_scene_to_image(&retained, viewport()).unwrap();
+        assert!(near(image.get_pixel(16, 8).0, [188, 188, 188, 255]));
+        drop(first);
+        let mut second = MetalHeadlessRenderer::new().unwrap();
+        second
+            .set_color_mode(WindowColorMode::WideGamutSdr)
+            .unwrap();
+        let image = second.render_scene_to_image(&retained, viewport()).unwrap();
+        assert!(near(image.get_pixel(16, 8).0, [188, 188, 188, 255]));
+        drop(retained);
+        for i in 0..4 {
+            let slot = surface.acquire().unwrap();
+            let v = if i % 2 == 0 { 1.0 } else { 0.0 };
+            engine.draw_and_present(&surface, slot, [v, v, v, 1.0]);
+            let image = second
+                .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+                .unwrap();
+            let e = if i % 2 == 0 { 255 } else { 0 };
+            assert!(near(image.get_pixel(16, 8).0, [e, e, e, 255]), "frame {i}");
+        }
+    });
+}
