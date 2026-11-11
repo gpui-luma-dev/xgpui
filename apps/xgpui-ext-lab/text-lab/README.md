@@ -126,7 +126,7 @@ Linux needs native build prerequisites and a Vulkan driver/display session.
 Windows native labs and `just lab-test` passed in user testing on 2026-11-04.
 The current Windows x64 source/test cross-check also passes with the installed
 LLVM resource compiler. These replace the earlier missing-`llvm-rc` build notice;
-see [Windows validation](../../../docs/LOCAL_DEVELOPMENT.md#windows-validation).
+see [Windows validation](https://xgpui.dev/local-development.html#windows-validation).
 Conversion IME and assistive-technology behavior require their dedicated checks.
 
 PowerShell/Linux shell, from the repository root; omit `--offline` on first use:
@@ -150,9 +150,9 @@ and the backend's axis ranges and GSUB/GPOS feature tags. Axis samples are
 omitted when the backend does not support explicit variations. The comparison now has live sliders at the top of each window for weight,
 width, negative slant, and optical size, with matching presets and two specimen
 sizes. Each window is controlled independently. See
-[font controls and API review](../../../docs/FONT-CONTROLS.md).
+[font controls and API review](https://xgpui.dev/font-controls-reference.html).
 
-[Font-controls testing](../../../docs/FONT-CONTROLS-TESTING.md) includes native
+[Font-controls testing](https://xgpui.dev/font-controls-reference.html#testing-font-controls) includes native
 Windows fixture tests, visual checks, and headless comparison commands.
 
 

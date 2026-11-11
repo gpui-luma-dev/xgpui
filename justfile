@@ -77,8 +77,8 @@ list-all-labs:
       Metal producer [macOS only]  cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin metal-producer-regression --target-dir target
 
     Browser galleries (requires Wasm tooling)
-      Build both galleries         just web-build
-      Serve documentation/gallery  just docs-serve
+      Build both galleries         just pages-demos
+      Serve website and galleries  just pages-serve
 
     Native wide-gamut views use SDR fallback where available; native P3 output
     requires a capable backend and display. Linux video requires Vulkan DMA-BUF.
@@ -185,20 +185,20 @@ build-full *args:
     cargo build --profile {{ profile }} --locked --features full-capture "$@"
 
 # Check the static website in pages/: links, anchors, assets and legacy routes.
-docs-check:
+pages-check:
     {{ python }} scripts/check_pages.py
 
-# Serve pages/ at http://localhost:8000 (optional port). Demos need `just web-build` first.
-docs-serve port="8000":
+# Serve pages/ at http://localhost:8000 (optional port). Demos need `just pages-demos` first.
+pages-serve port="8000":
     {{ python }} -m http.server "{{ port }}" --bind 127.0.0.1 --directory pages
 
 # Build both browser demo collections into pages/examples/; requires pinned wasm-bindgen.
-web-build:
+pages-demos:
     bash apps/xgpui-ext-lab/extensions-web/build.sh --release
     bash apps/xgpui-ext-lab/shader-examples/build.sh --release
 
 # Remove the generated demo bundles from pages/examples/, keeping checked-in pages.
-web-clean:
+pages-demos-clean:
     bash apps/xgpui-ext-lab/extensions-web/clean.sh
     bash apps/xgpui-ext-lab/shader-examples/clean.sh
 

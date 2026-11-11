@@ -13,4 +13,4 @@ profile=debug
 for arg in "$@"; do if [[ "$arg" == --release ]]; then profile=release; fi; done
 bash apps/xgpui-ext-lab/shader-examples/clean.sh
 wasm-bindgen --target web --out-dir "$out" --out-name shader_examples "target/wasm32-unknown-unknown/$profile/shader-examples.wasm"
-echo "Built $out. Preview with: just docs-serve"
+echo "Built $out. Preview with: just pages-serve"

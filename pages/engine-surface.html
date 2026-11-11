@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>GPU engine surfaces · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/engine-surface.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" aria-current="page" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Experimental GPU engine surfaces.</strong> Present frames from your own GPU engine into xgpui, with no copies.</p><article class="extension-document"><h1 id="gpu-engine-surfaces">GPU engine surfaces</h1>
+<aside class="canvas-beta" aria-label="Engine surface experimental warning"><strong>EXPERIMENTAL</strong> — Not published; the API is under review.</aside>
+<p><code>xgpui-engine-surface</code> lets a GPU engine you own present frames into an xgpui
+window, the way it would present to a swapchain. The engine keeps its own
+device, queue and thread, and can render or run compute shaders as it likes.
+xgpui composites the result like any other element: no copies, no extra
+synchronisation code in your app, and wide-gamut colour where the window
+supports it.</p>
+<p>Use it when <a href="extension-paints.html"><code>xgpui-shader</code> paints</a> are not enough: long compute passes, image
+pipelines, simulations or anything that should not run inside GPUI's frame.</p>
+<h2 id="use-it">Use it</h2>
+<p>For development against this checkout:</p>
+<pre><code class="language-toml">xgpui-engine-surface = { path = "path/to/extensions/crates/xgpui-engine-surface", features = ["wgpu"] }
+</code></pre>
+<p>Create the target on the engine's thread, render into an acquired slot and
+present it. Paint the surface from any element:</p>
+<pre><code class="language-rust">let mut target = WgpuSurfaceTarget::new(SurfaceDesc {
+    width: 640,
+    height: 400,
+    format: SurfaceFormat::Rgba16FloatLinearP3, // or Bgra8Srgb
+    slots: 3,
+}, &amp;device, &amp;queue)?;
+
+// Engine thread
+let slot = target.surface().acquire()?;    // Err(WouldBlock) when the ring is full
+let texture = target.texture(&amp;slot)?;      // render or compute into it
+target.present(slot, [encoder.finish()])?; // submits, then publishes the frame
+
+// UI thread, in an element's paint phase
+surface.paint(window, bounds, radii);
+</code></pre>
+<p><code>EngineSurface</code> is cheap to clone, so hand a clone to the view and keep the
+target on the engine thread. On Linux, create the engine's device with
+<code>WgpuSurfaceTarget::request_device</code> so it can share memory with the compositor.</p>
+<h2 id="platforms">Platforms</h2>
+<table><thead><tr><th>Platform</th><th>Engine</th><th>Shared memory</th><th>Synchronisation</th></tr></thead><tbody>
+<tr><td>macOS</td><td>wgpu or raw Metal</td><td>IOSurface</td><td><code>MTLSharedEvent</code></td></tr>
+<tr><td>Linux</td><td>wgpu (Vulkan)</td><td>opaque-fd external memory</td><td>timeline semaphore</td></tr>
+<tr><td>Windows</td><td>wgpu (D3D12), composited by D3D11</td><td>shared NT-handle textures</td><td>shared fence</td></tr>
+</tbody></table>
+<p>If the compositor cannot use the surface (for example, the engine is on a
+different GPU), the first frame fails with a typed <code>Unsupported</code> reason and
+<code>EngineSurface::unsupported()</code> reports it.</p>
+<h2 id="colour">Colour</h2>
+<ul>
+<li><code>Bgra8Srgb</code> shows the same in every window.</li>
+<li><code>Rgba16FloatLinearP3</code> shows in wide gamut in a <code>WideGamutSdr</code> window and as a
+mapped sRGB preview elsewhere. <code>paint</code> picks per window; <code>content</code> and
+<code>preview_content</code> pick explicitly. RGBA16F slots accept storage writes, so
+compute shaders can write them directly.</li>
+</ul>
+<p>Colour is checked against a CPU reference on all three platforms. See
+<a href="color-workflows.html">colour workflows</a> for how wide-gamut windows work. Linux shows
+the sRGB preview until native wide gamut lands
+(<a href="https://github.com/gpui-luma-dev/xgpui/issues/146">#146</a>).</p>
+<h2 id="what-it-guarantees">What it guarantees</h2>
+<ul>
+<li><strong>Published frames don't change.</strong> A slot is never rewritten while a window
+shows it, and returns to the ring once it no longer does. Use 3 slots plus one
+for each extra window showing the surface.</li>
+<li><strong>A misbehaving engine can't freeze the UI.</strong> Until a frame is ready, the last
+ready frame stays on screen. A GPU hang is the exception: the driver's timeout
+handles it.</li>
+<li><strong>Device loss is recoverable.</strong> Call <code>EngineSurface::invalidate()</code> when the
+engine loses its device and create a new surface. When the compositor's device
+is replaced, slots are re-imported.</li>
+</ul>
+<h2 id="heavy-engines">Heavy engines</h2>
+<p><code>SurfaceStats</code> reports frames composited, frames never shown and the latency
+from <code>present</code> to first composition. If the engine saturates the GPU, turn on
+heavy mode so the UI keeps its frame rate:</p>
+<pre><code class="language-rust">target.set_heavy(Some(HeavyEngine::default()));
+loop {
+    let chunks = target.suggested_chunks(); // split the frame into short submissions
+    render_frame_in(chunks, &amp;mut target)?;
+    std::thread::sleep(target.pace());      // back off while the UI lags
+}
+</code></pre>
+<p>With four 4K engines saturating an Intel Iris Xe, the UI went from 5–6 frames
+in 6 s to a median of 16.7 ms per frame. Linux also runs the engine queue at low
+priority; Windows can't lower it through wgpu. An unfocused window is
+composited at about 30 fps by GPUI's inactive-window throttling
+(<a href="https://github.com/gpui-luma-dev/xgpui/issues/211">#211</a>).</p>
+<h2 id="api-reference">API reference</h2>
+<p>The crate is not published, so there is no docs.rs page yet; this is the reference. Every item is re-exported from the crate root. For full rustdoc, run <code>cargo doc --open -p xgpui-engine-surface --features wgpu</code>.</p>
+<h3 id="api-engine-surface">EngineSurface</h3>
+<p>A ring of shareable slots presented into xgpui. Cheap to clone; the engine side and the view each hold one.</p>
+<div class="table-wrap"><table><thead><tr><th>Method</th><th>Purpose</th></tr></thead><tbody><tr><td><code>acquire() -> Result&lt;SurfaceSlot, AcquireError&gt;</code></td><td>A writable slot. Frees slots whose GPU sampling has finished before giving up with <code>WouldBlock</code>.</td></tr><tr><td><code>present(slot, SyncPoint) -> Result&lt;()&gt;</code></td><td>Publish a written slot. Frames with a submitted signal are shown at once with a GPU-side wait; others once their signal is observed reached. Adapters call this for you.</td></tr><tr><td><code>paint(window, bounds, corner_radii)</code></td><td>Paint the latest frame, scaled and clipped to a rounded rectangle; picks wide or preview colour for the window.</td></tr><tr><td><code>content()</code> / <code>preview_content()</code></td><td>The latest frame as <code>CustomContent</code> for a wide-gamut window, or as an sRGB preview for any other window.</td></tr><tr><td><code>on_present(callback)</code></td><td>Called after every present and when a waiting frame becomes ready. Typically wakes the UI.</td></tr><tr><td><code>stats() -> SurfaceStats</code></td><td>Counters for diagnostics and pacing.</td></tr><tr><td><code>invalidate()</code> / <code>is_valid()</code></td><td>Mark the surface dead after engine device loss. The last frame keeps showing; create a new surface on a new device.</td></tr><tr><td><code>unsupported() -> Option&lt;String&gt;</code></td><td>Why the compositor could not use the surface (for example, a different GPU). It then offers no frames.</td></tr><tr><td><code>desc()</code> / <code>transport()</code></td><td>The surface's fixed description, and how frames reach the compositor (always <code>Transport::ZeroCopy</code>).</td></tr></tbody></table></div>
+<p><code>SurfaceSlot</code>: an acquired slot. <code>index()</code> is stable for the surface's lifetime (useful as a cache key); <code>desc()</code> repeats the surface description; on macOS <code>iosurface()</code> exposes the slot's IOSurface for raw Metal engines. Dropping a slot without presenting returns it to the ring.</p>
+<h3 id="api-surface-desc">SurfaceDesc and SurfaceFormat</h3>
+<div class="table-wrap"><table><thead><tr><th>Item</th><th>Meaning</th></tr></thead><tbody><tr><td><code>SurfaceDesc { width, height, format, slots }</code></td><td>Fixed slot properties. <code>slots</code> is 2–8: use 3, plus one for each extra window showing the surface. <code>validate()</code> checks sizes and the 512 MiB per-surface budget.</td></tr><tr><td><code>SurfaceFormat::Bgra8Srgb</code></td><td>BGRA8, straight alpha, sRGB-encoded. Looks the same in every window.</td></tr><tr><td><code>SurfaceFormat::Rgba16FloatLinearP3</code></td><td>RGBA16F, premultiplied, linear Display P3. Wide gamut in a <code>WideGamutSdr</code> window (macOS, Windows), sRGB preview elsewhere and on Linux. Allows storage (compute) writes.</td></tr><tr><td><code>bytes_per_pixel()</code>, <code>supports_storage()</code>, <code>color_mode(wide)</code></td><td>Format helpers.</td></tr></tbody></table></div>
+<h3 id="api-wgpu-surface-target">WgpuSurfaceTarget (feature <code>wgpu</code>)</h3>
+<p>The adapter for wgpu engines on all three platforms. It creates the shared slots on the engine's device, hands out wgpu textures and presents with a signal the compositor can wait on.</p>
+<div class="table-wrap"><table><thead><tr><th>Method</th><th>Purpose</th></tr></thead><tbody><tr><td><code>new(desc, &amp;device, &amp;queue)</code></td><td>Create the slot ring on the engine's device. Check <code>required_features()</code> when requesting the device.</td></tr><tr><td><code>request_device(&amp;adapter)</code> (Linux)</td><td>Create a Vulkan device with the external-memory extensions and, where supported, a low-priority queue (<code>engine_queue_low_priority()</code>).</td></tr><tr><td><code>surface() -> &amp;EngineSurface</code></td><td>The surface to clone into the view.</td></tr><tr><td><code>texture(&amp;slot) -> wgpu::Texture</code>, <code>format()</code></td><td>The slot as a wgpu texture to render or compute into.</td></tr><tr><td><code>present(slot, command_buffers)</code></td><td>Submit the frame's work with the slot's signal, then publish it.</td></tr><tr><td><code>set_gpu_wait(bool)</code>, <code>gpu_wait()</code>, <code>gpu_sync()</code></td><td>Turn off GPU-side waits (observe-only: frames show once complete).</td></tr><tr><td><code>set_heavy(Option&lt;HeavyEngine&gt;)</code>, <code>heavy()</code></td><td>Heavy-engine mode, and its current status.</td></tr><tr><td><code>pace() -> Duration</code>, <code>suggested_chunks() -> u32</code></td><td>How long to wait before the next frame, and how many submissions to split it into, while the UI lags.</td></tr></tbody></table></div>
+<h3 id="api-sync-point">SyncPoint</h3>
+<p>The signal a presented frame waits on. With <code>WgpuSurfaceTarget</code> you never build one. On macOS, raw Metal engines use <code>SyncPoint::new(event, value)</code> (shown once reached) or the <code>unsafe SyncPoint::submitted(event, value)</code> (GPU-side wait; the signal must already be committed). On Linux and Windows, <code>SyncPoint::completed()</code> marks work that is already finished.</p>
+<h3 id="api-stats-and-errors">Stats, heavy mode and errors</h3>
+<div class="table-wrap"><table><thead><tr><th>Item</th><th>Meaning</th></tr></thead><tbody><tr><td><code>SurfaceStats</code></td><td>Slots <code>free</code> / <code>writing</code> / <code>published</code>; totals <code>presents</code>, <code>would_block</code>, <code>composited</code>, <code>unshown</code>; <code>waiting</code> frames; <code>composite_latency_ms</code> from present to first composition.</td></tr><tr><td><code>HeavyEngine { max_hz, min_hz, lag_budget_ms, chunk_ms, max_chunks }</code></td><td>Defaults 60 Hz, 0.25 Hz, 33 ms, 4 ms, 64. Pace down when compositor latency exceeds the budget; split frames into submissions of about <code>chunk_ms</code>.</td></tr><tr><td><code>HeavyStatus { config, rate_hz, frame_ms, suggested_chunks }</code></td><td>What heavy mode is currently doing.</td></tr><tr><td><code>AcquireError::WouldBlock</code></td><td>Every slot is in use; retry after the next presented frame.</td></tr><tr><td><code>AcquireError::Invalidated</code></td><td>The surface was invalidated; create a new one.</td></tr><tr><td><code>Unsupported(String)</code></td><td>The platform or configuration cannot support a surface.</td></tr></tbody></table></div>
+<h3 id="api-features-and-dependencies">Features and dependencies</h3>
+<div class="table-wrap"><table><thead><tr><th>Feature or target</th><th>Adds</th></tr></thead><tbody><tr><td>always</td><td><code>xgpui</code>, <code>anyhow</code></td></tr><tr><td>macOS</td><td><code>xgpui-apple</code>, <code>objc2-metal</code>, <code>objc2-io-surface</code></td></tr><tr><td><code>wgpu</code> on Linux</td><td><code>xgpui-wgpu</code> with <code>external-memory</code>, <code>ash</code></td></tr><tr><td><code>wgpu</code> on Windows</td><td><code>xgpui-windows</code>, <code>windows</code> (D3D11, D3D12, DXGI)</td></tr><tr><td><code>wgpu</code> on macOS</td><td><code>wgpu</code></td></tr></tbody></table></div>
+<p>Enabling <code>wgpu</code> on Linux turns on <code>xgpui-wgpu/external-memory</code> for the whole app through Cargo feature unification; device creation falls back if the extensions are missing.</p>
+<h2 id="try-it">Try it</h2>
+<p>Run from the repository root:</p>
+<pre><code class="language-sh">cargo run -p xgpui-ext-lab --bin gpu-canvas-workbench
+cargo run -p xgpui-ext-lab --bin engine-surface-lab -- --threaded
+</code></pre>
+<p>The <strong>GPU Canvas Workbench</strong> is a small editor on a compute engine: edits are
+checked against a CPU reference, with a second window, minimize, resize,
+pan/zoom, wide versus sRGB comparison (<code>--compare</code>) and simulated device loss.
+<code>--check</code> runs it as an automated test. The <strong>engine surface lab</strong> stresses
+surfaces: <code>--stress-surfaces N --stress-size WxH --work N [--heavy]</code>.</p>
+<p>Run the tests with:</p>
+<pre><code class="language-sh">cargo test -p xgpui-engine-surface --all-features
+</code></pre>
+<p>Tested on Apple M-series, Intel Iris Xe (Fedora 44 and Windows 11) and Intel Arc
+140T (Windows 11). Evidence per machine is in
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/198">#198</a>; the design is in
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/197">#197</a>, and open follow-ups are in
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/227">#227</a>.</p>
+<h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
+<p>Seven additive hooks in <code>gpui-wgpu</code>, <code>gpui-windows</code> and <code>gpui-apple</code> let the
+extension adopt shared textures and wait on engine signals. Nothing in <code>gpui</code>
+itself changes and no application needs to migrate. See
+<a href="gpui-public-api.html#engine-surfaces-from-independent-gpu-engines-197">engine surface API changes</a>.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

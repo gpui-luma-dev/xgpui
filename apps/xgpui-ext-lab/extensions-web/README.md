@@ -37,7 +37,7 @@ rustup target add wasm32-unknown-unknown
 # Match the version recorded for wasm-bindgen in this app's Cargo.lock.
 cargo install wasm-bindgen-cli --version 0.2.129 --locked
 bash apps/xgpui-ext-lab/extensions-web/build.sh
-just docs-serve
+just pages-serve
 ```
 
 Open <http://localhost:8000/examples/extensions/>. Add `--release` to the build
@@ -101,8 +101,8 @@ settings remain usable. This is not a global memory budget or an eviction policy
 Build and preview from the repository root:
 
 ```sh
-just web-build
-just docs-serve
+just pages-demos
+just pages-serve
 ```
 
 Then open `/examples/extensions/?demo=font-controls`. The site Text gallery links

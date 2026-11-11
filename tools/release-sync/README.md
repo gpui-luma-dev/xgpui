@@ -54,4 +54,4 @@ fresh absent-version check. Never run publication as part of tests.
 
 Tests use temporary repositories, synthetic archives and fake registry state;
 they do not upload, create tags/releases/PRs, or require registry credentials.
-See [the release guide](../../docs/RELEASING.md) for the approval and version policy.
+See [the release guide](https://xgpui.dev/releasing.html) for the approval and version policy.

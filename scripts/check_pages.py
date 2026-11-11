@@ -14,7 +14,7 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 PAGES = ROOT / "pages"
 SITE = "https://xgpui.dev/"
-# Written by apps/xgpui-ext-lab/*/build.sh; absent until `just web-build`.
+# Written by apps/xgpui-ext-lab/*/build.sh; absent until `just pages-demos`.
 GENERATED = ["examples/extensions/italy/*", "examples/extensions/icc/*", "examples/extensions/colorimetry/*",
              "examples/extensions/font-licenses/*[!l]", "examples/extensions/*.svg",
              "examples/extensions/svg-ATTRIBUTION.md"]
@@ -24,7 +24,7 @@ DEMOS = ["canvas", "mandelbrot", "shader", "brushes", "layers", "hermite", "parl
 SHADER_EXAMPLES = ["minimal", "glow", "particles", "composition", "shadows", "borders"]
 API_SECTION = "gpui-public-api-changes-additions-and-compatibility"
 # Extension crates whose guide is not written yet. Remove an entry when its guide lands.
-PENDING_GUIDES = {"xgpui-engine-surface"}
+PENDING_GUIDES: set[str] = set()
 
 failures = []
 

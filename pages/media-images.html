@@ -14,7 +14,7 @@
 <body><a class="skip" href="#content">Skip to content</a>
 <aside>
 <a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
-<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
 <div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" aria-current="page" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
@@ -512,7 +512,7 @@ on 2026-11-04. A separate Windows-only WARP library regression covers
 native resource identity (no copy), retained pixels, resize-independent source
 extent, wrong backend/device and unsupported format rejection; execution of
 that dedicated suite is not established by the same-device lab result; see
-<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">Windows validation</a>. Linux DMA-BUF runtime verification, explicit
+<a href="local-development.html#windows-validation">Windows validation</a>. Linux DMA-BUF runtime verification, explicit
 fences/pool reuse and broader surface formats remain required before Phase 5 is complete.</p>
 <p>System file playback is tracked separately in <a href="https://github.com/gpui-luma-dev/xgpui/issues/40">issue #40</a>.
 The surface lab generates frames itself and requires no video file.</p>
@@ -678,10 +678,10 @@ its recording/readiness tests in a terminal configured with the native build too
 </code></pre>
 <p>Windows native lab and root lab-test execution passed in owner testing on
 2026-11-04. This dedicated library command is separate from the root lab-test
-selection; retain its own result when run. See <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">Windows validation</a>.</p>
+selection; retain its own result when run. See <a href="local-development.html#windows-validation">Windows validation</a>.</p>
 <h3 id="web-documentation-preview">Web documentation preview</h3>
-<pre><code class="language-sh">just docs-serve
-just docs-check
+<pre><code class="language-sh">just pages-serve
+just pages-check
 </code></pre>
 <p>Open <code>http://localhost:8000/media-images.html</code>. This guide is
 <code>pages/media-images.html</code>; edit it directly. Publishing uses the repository's
@@ -726,8 +726,8 @@ stroke tessellation. Animation respects the browser's reduced-motion preference.
 </ul>
 <p>Each link supports <code>&amp;backend=webgpu</code> or <code>&amp;backend=webgl</code> for forced backend checks.
 The automatic entry prefers WebGPU and can fall back to WebGL2. Build in release:</p>
-<pre><code class="language-sh">PATH="/path/to/matching/wasm-bindgen/bin:$PATH" just web-build
-just docs-serve
+<pre><code class="language-sh">PATH="/path/to/matching/wasm-bindgen/bin:$PATH" just pages-demos
+just pages-serve
 </code></pre>
 <p>Use the pinned wasm-bindgen version in the app README. The build writes the bundle into
 <code>pages/examples/extensions/</code>, which local previews and deployment serve directly. Publication still requires the normal site deployment. No deployment is implied

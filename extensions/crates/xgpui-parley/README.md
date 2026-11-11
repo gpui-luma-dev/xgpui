@@ -148,7 +148,7 @@ deterministic results; host discovery and raster pixels can still differ.
 Windows/Linux use the same adapter. On 2026-11-04 the owner confirmed all native
 labs, including text, and `just lab-test` passed on Windows. Linux runtime and
 focused IME/assistive-technology acceptance remain separate checks; see the
-[validation scope](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation).
+[validation scope](https://xgpui.dev/local-development.html#windows-validation).
 
 ## Guides and examples
 
@@ -168,7 +168,7 @@ for additions, affected public types and migration requirements.
 
 ## Project
 
-[Repository](https://github.com/gpui-luma-dev/xgpui) · [Release preparation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md) ·
+[Repository](https://github.com/gpui-luma-dev/xgpui) · [Release preparation](https://xgpui.dev/releasing.html) ·
 [Website](https://xgpui.dev/). Licensed under Apache-2.0.
 
 This extension uses its own `0.4.0` version, separate from xgpui core `3.0.0`

@@ -60,5 +60,5 @@ The integrated app passes 24 tests on macOS, including independent numerical,
 ICC/FP16, pinned WebKit asset and Metal photo-composition checks. The color binary
 and tests also cross-check for Windows. Live macOS verification covers both tabs,
 the chromaticity fill and xy/u′v′ setting retention across tab switches. The owner additionally confirmed all native labs and `just lab-test` passed on
-Windows on 2026-11-04; see [Windows validation](../../../docs/LOCAL_DEVELOPMENT.md#windows-validation).
+Windows on 2026-11-04; see [Windows validation](https://xgpui.dev/local-development.html#windows-validation).
 Linux runtime and monitor color accuracy remain separate.

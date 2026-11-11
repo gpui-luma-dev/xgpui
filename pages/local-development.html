@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Local Development · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/local-development.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="local-development">Local Development</h1>
+<p>Build xgpui and run its native examples on Windows, Linux or macOS. These
+instructions assume Rust, the platform C/C++ toolchain, SDKs and native development
+libraries are already installed. The commands below use <code>just</code> and Bash. On
+Windows, put Git for Windows Bash on PATH (including when launching <code>just</code> from
+PowerShell). Run commands from the repository root.</p>
+<h2 id="get-the-source">Get the source</h2>
+<pre><code class="language-sh">git clone https://github.com/gpui-luma-dev/xgpui.git
+cd xgpui
+</code></pre>
+<p>Use a current stable Rust toolchain with Rust 2024 support. The first build needs
+network access to download registry and pinned Git dependencies. Keep the committed
+lockfiles. Recipes allow dependency downloads; they do not force offline mode.</p>
+<h2 id="local-crates-and-published-dependencies">Local crates and published dependencies</h2>
+<p>XGPUI keeps ten framework and backend crates in <code>gpui/crates/</code>: <code>gpui</code>,
+<code>gpui-macros</code>, <code>gpui-platform</code>, <code>gpui-apple</code>, <code>gpui-macos</code>, <code>gpui-linux</code>,
+<code>gpui-windows</code>, <code>gpui-web</code>, <code>gpui-wgpu</code> and <code>gpui-ios</code>. The seven XGPUI extension crates live
+under <code>extensions/crates/</code>.</p>
+<p>Downstream versions vary by package. The iOS implementation follows the captured upstream 1.27.0 source, with XGPUI package wiring; other packages retain their existing independent version histories. Local directory names and Rust import names stay stable; Cargo package
+names use the XGPUI prefix:</p>
+<table><thead><tr><th>Local directory / import name</th><th>Release package</th></tr></thead><tbody>
+<tr><td><code>gpui</code></td><td><code>xgpui</code></td></tr>
+<tr><td><code>gpui-apple</code></td><td><code>xgpui-apple</code></td></tr>
+<tr><td><code>gpui-ios</code></td><td><code>xgpui-ios</code> (1.26.4)</td></tr>
+<tr><td><code>gpui-linux</code></td><td><code>xgpui-linux</code></td></tr>
+<tr><td><code>gpui-macos</code></td><td><code>xgpui-macos</code></td></tr>
+<tr><td><code>gpui-macros</code></td><td><code>xgpui-macros</code></td></tr>
+<tr><td><code>gpui-platform</code></td><td><code>xgpui-platform</code></td></tr>
+<tr><td><code>gpui-web</code></td><td><code>xgpui-web</code></td></tr>
+<tr><td><code>gpui-wgpu</code></td><td><code>xgpui-wgpu</code></td></tr>
+<tr><td><code>gpui-windows</code></td><td><code>xgpui-windows</code></td></tr>
+</tbody></table>
+<p>All seven extension packages keep their existing <code>xgpui-*</code> names. <code>scripts/release-packages.json</code> is the authoritative
+name/version map. The <code>xgpui</code> facade is a subsequent packaging step; these package
+identities prepare the release and do not mean it has been published.</p>
+<p>The supporting crates below are dependencies from the published
+<a href="https://github.com/gpui-archipelago/gpui-unofficial">gpui-unofficial distribution</a>.
+They are no longer copied into this repository. Cargo downloads them from
+crates.io; manifests keep familiar Rust import names using dependency aliases.
+For example, the <code>collections</code> dependency uses the package
+<code>collections-gpui-unofficial</code>, currently at <code>=1.27.0</code> to match the captured upstream release, rather than the
+independent downstream package versions.</p>
+<table><thead><tr><th>Former local crate names</th><th>Published crates.io packages</th></tr></thead><tbody>
+<tr><td><code>collections</code>, <code>gpui-util</code>, <code>gpui-shared-string</code></td><td><code>collections-gpui-unofficial</code>, <code>gpui-util-gpui-unofficial</code>, <code>gpui-shared-string-gpui-unofficial</code></td></tr>
+<tr><td><code>scheduler</code>, <code>sum-tree</code></td><td><code>scheduler-gpui-unofficial</code>, <code>sum-tree-gpui-unofficial</code></td></tr>
+<tr><td><code>refineable</code>, <code>derive-refineable</code></td><td><code>refineable-gpui-unofficial</code>, <code>derive-refineable-gpui-unofficial</code></td></tr>
+<tr><td><code>http-client</code>, <code>http-client-tls</code>, <code>reqwest-client</code></td><td><code>http-client-gpui-unofficial</code>, <code>http-client-tls-gpui-unofficial</code>, <code>reqwest-client-gpui-unofficial</code></td></tr>
+<tr><td><code>util</code>, <code>path</code>, <code>perf</code>, <code>util-macros</code></td><td><code>util-gpui-unofficial</code>, <code>path-gpui-unofficial</code>, <code>perf-gpui-unofficial</code>, <code>util-macros-gpui-unofficial</code></td></tr>
+<tr><td><code>zlog</code>, <code>ztracing</code>, <code>ztracing-macro</code></td><td><code>zlog-gpui-unofficial</code>, <code>ztracing-gpui-unofficial</code>, <code>ztracing-macro-gpui-unofficial</code></td></tr>
+</tbody></table>
+<p>Cargo builds only the dependencies needed for the selected platform, features
+and targets. Some helpers are used only by optional functionality, examples or
+tests. The mapping is maintained in <code>scripts/registry-crates.json</code>, and
+<code>upstream.json</code> records the matching release and local source provenance.
+The website's crate pages cover local crates only.</p>
+<p>When building a separate application against this checkout, override only the
+retained framework/backend packages using their <code>xgpui-*</code> package identities.
+For example, <code>gpui = { package = "xgpui", path = "../xgpui/gpui/crates/gpui" }</code>
+keeps the <code>gpui</code> import name. Remove old patches pointing at helper
+paths such as <code>gpui/crates/collections</code>; those directories no longer exist.
+Run Cargo once without <code>--locked</code> to refresh the application's lockfile after
+this dependency change, then resume locked builds.</p>
+<h2 id="extension-labs-and-benchmarks">Extension labs and benchmarks</h2>
+<p>See <a href="extension-lab.html">xgpui-ext-lab</a> for its targets, purpose and
+unpublished status, and how it differs from the separate <code>xgpui-lab</code> application.</p>
+<p>All native labs, repeatable benchmarks and browser demos live in the unpublished
+<code>xgpui-ext-lab</code> package under <code>apps/xgpui-ext-lab/</code>. They share one manifest and
+lockfile, with a separate binary target for each lab. Its <code>publish = false</code>
+setting keeps development workloads out of the extension library release.</p>
+<p>Use <code>just lab-build</code> to compile all native lab/benchmark binaries and
+<code>just lab-test</code> to run unit and compatibility tests. The individual launch
+recipes below retain their names. Browser build scripts select the <code>web</code> feature
+without the default native targets; hosted demo URLs remain the same.</p>
+<h2 id="choose-a-sample-app">Choose a sample app</h2>
+<p>Run <code>just</code> (or <code>just --list</code>) to list recipes without opening a window. All native
+app recipes use release mode, committed lockfiles, the repository compatibility
+configuration and the shared <code>target/</code> directory.</p>
+<table><thead><tr><th>Command</th><th>Opens</th></tr></thead><tbody>
+<tr><td><code>just lab-canvas</code></td><td>Spatial canvas, navigation and selection</td></tr>
+<tr><td><code>just lab-media</code></td><td>Image <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Mipmap">mipmapping ↗</a>, filters, GPU surfaces and path effects</td></tr>
+<tr><td><code>just lab-shader</code></td><td>Shader examples and typography</td></tr>
+<tr><td><code>just lab-paint</code></td><td>Paints, gradients, brushes and layer effects</td></tr>
+<tr><td><code>just lab-gamut</code></td><td>Native wide-SDR <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Gamut">gamut ↗</a> comparison</td></tr>
+<tr><td><code>just lab-color</code></td><td>Swatches and CIE chromaticity/FP16/ICC workspaces</td></tr>
+<tr><td><code>just lab-text</code> / <code>just lab-parley</code></td><td>Native/Parley text, live font-axis sliders, paragraphs and scrolling</td></tr>
+<tr><td><code>just lab-svg</code></td><td>SVG rendering, zoom and scheduling</td></tr>
+<tr><td><code>just lab-quad-bench</code></td><td>Quad rendering benchmark</td></tr>
+<tr><td><code>just lab-color-field-bench</code></td><td>Color-field rendering benchmark</td></tr>
+</tbody></table>
+<p>Every lab accepts <code>--help</code> to list its complete command-line options without
+opening a window. Arguments after the recipe name go directly to the app,
+including quoted paths. The short names <code>media</code>, <code>shaders</code>, <code>paints</code>, <code>gamut</code>,
+<code>color</code>, <code>text</code> and <code>svg</code>, and the previous <code>*-lab</code> names, remain aliases with
+identical options. Canonical launch commands start with <code>lab-</code> so they appear
+together in <code>just --list</code>.</p>
+<pre><code class="language-sh">just lab-media --help
+just lab-shader --help
+just lab-shader --example composition # Positional `composition` also works.
+just lab-media --paths
+just lab-media --tiled # Generated 72 MP canvas; pan/zoom/cache pressure, blur/quality
+just lab-media --float-images # Supplied RGBA16F pixels; native wide/sRGB comparison
+just lab-media --adjustments
+just lab-media --image "photos/my image.png"
+just lab-media --headless --wgpu --png "target/media preview.png"
+just lab-color --chromaticity
+just lab-color --help
+just lab-text --help
+just lab-parley --backend parley --workload paragraph
+</code></pre>
+<p>The text comparison has independent weight, width, slant and optical-size sliders
+on native and Parley windows. macOS and Windows labs/tests are verified. Run
+<code>just text --backend both</code> to compare them, <code>just lab-test</code> for the suite, or
+<code>just lab-test live_axis -- --nocapture</code> for slider interactions. The existing
+lab-test command enables backtraces automatically. See <a href="font-controls.html">font controls</a>
+for capabilities, preview limits and the core 3.0 migration.</p>
+<p>Parley uses the same text lab; pass <code>--backend parley</code> for only that engine or
+leave the default to compare both. Color lab has Swatches/Chromaticity tabs; <code>--chromaticity</code>, <code>--uv</code>, <code>--photo</code>
+and its ICC flags select the chromaticity workspace. Preset, mapping and alpha
+controls remain available in the window. It no longer needs the sibling lab. Shader/typography
+controls also remain available in the window.</p>
+<p>Native launch recipes enable <code>runtime-shaders</code>, <code>portable-shaders</code> and <code>wgpu</code>
+so feature-gated app options are available without changing the Cargo command.
+Host/GPU restrictions still apply: media's synthetic video option supports
+macOS Metal (BGRA/NV12), Windows D3D11 (BGRA), and Linux Vulkan DMA-BUF (linear BGRA); native wide output
+requires a supported backend/display.
+Select a debug build with <code>just profile=dev lab-media</code>. App arguments are not
+Cargo arguments. The app-level justfiles remain available for specialized
+captures and benchmarks.</p>
+<h2 id="ios-backend">iOS backend</h2>
+<p>The iOS source now follows captured upstream 1.27.0 with XGPUI package and shared
+renderer integration. Its selected downstream version is 1.26.4, with core 3.0.0 and Apple 4.0.0
+pins; final public API review and publication remain pending. Simulator compilation is checked; interactive
+simulator/device validation remains pending.
+Install Xcode, select its developer directory, and add the simulator target:</p>
+<pre><code class="language-sh">rustup target add aarch64-apple-ios-sim
+cargo check --locked --features full-capture,runtime-shaders --target aarch64-apple-ios-sim
+bash gpui/crates/gpui-ios/examples/ios/build-simulator.sh --locked
+</code></pre>
+<p>The script builds and ad-hoc signs <code>target/gpui-ios-example/GPUIIosExample.app</code>.
+Launching it requires an installed iOS Simulator runtime. CI checks library,
+example and native protocol-test compilation; those checks do not establish
+runtime behavior. The backend currently uses standard color presentation;
+XGPUI's wide-gamut SDR compositor remains macOS-only.</p>
+<h2 id="windows">Windows</h2>
+<p>Use PowerShell in a Visual Studio Developer terminal with the Windows SDK and
+MSVC tools available. Select the native MSVC Rust toolchain, such as
+<code>x86_64-pc-windows-msvc</code> on an x64 machine; the native renderer uses Direct3D 11.</p>
+<pre><code class="language-powershell">rustc -vV
+just build
+just lab-shader
+</code></pre>
+<p>The first recipe builds the libraries for Windows. The second builds and
+opens the shader example application. Commands below also work in PowerShell;
+they use single lines rather than shell-specific continuation characters.</p>
+<h3 id="windows-validation">Windows validation</h3>
+<p>On <strong>2026-11-04</strong>, the project owner confirmed that <strong>all native labs and
+<code>just lab-test</code> passed on Windows</strong> using the existing Git/Bash, Rust/Windows
+build tools and Just setup. This includes the shared BGRA video-surface demo on
+<code>codex/extension-lab-commands</code>. The <a href="https://github.com/gpui-luma-dev/xgpui/issues/133">Windows testing issue</a>
+records the original reports and fixes; the successful retest was reported in
+the development chat. This supersedes blanket descriptions of these labs as
+Windows-untested or cross-compilation-only.</p>
+<table><thead><tr><th>Coverage</th><th>Evidence</th></tr></thead><tbody>
+<tr><td>Native lab applications, including media/video, color/chromaticity, gamut, shaders, canvas, SVG and text</td><td>User-confirmed Windows pass, 2026-11-04</td></tr>
+<tr><td>Root <code>just lab-test</code>: native lab binary tests and compatibility target</td><td>User-confirmed Windows pass, 2026-11-04; native-window tests remain opt-in</td></tr>
+<tr><td>Media video capture and snapshot lifecycle checks selected by <code>lab-test</code></td><td>Windows lab-test pass; same-device generated BGRA/D3D11 path</td></tr>
+<tr><td>Windows x64 source and lab test compilation</td><td>Cross-check passed from macOS with the installed LLVM resource compiler; a separate compile result</td></tr>
+<tr><td>Earlier native paint/gamut backend baseline</td><td><a href="https://github.com/gpui-luma-dev/xgpui/actions/runs/40207704397">2026-10-25 CI</a>: Windows D3D11/WARP, Windows wgpu/DX12 and Linux Vulkan jobs passed at <code>ece8ddfb88969e43503a8ab3f37315718383b2ac</code></td></tr>
+</tbody></table>
+<p><code>lab-test</code> selects lab binary tests and the compatibility target; it is not a
+claim that every standalone library suite, opt-in desktop test or external
+producer was exercised. Keep dedicated keyed/shared-handle ownership tests,
+IME and assistive-technology acceptance, physical display/calibration checks,
+new backend features and sustained performance measurements separately scoped.
+Windows NV12, decoder/pool APIs, playback and recovery remain tracked in
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/134">issue #134</a>. Linux and browser
+results retain their own host/backend scope.</p>
+<h2 id="linux">Linux</h2>
+<p>Build in a native Linux environment with a working graphical session and Vulkan
+driver. The root harness enables both Wayland and X11; the corresponding headers
+and libraries must be available, along with fontconfig, FreeType and xkbcommon.
+The app uses the wgpu renderer. An SSH shell without a display can build the
+libraries but cannot open the example window.</p>
+<pre><code class="language-sh">just build
+just lab-shader
+</code></pre>
+<p>Run inside your normal Wayland or X11 desktop session. Native labs provide a
+shared title bar and resize frame when the compositor requires client-side
+decorations (including GNOME Wayland); server-decorated windows retain their
+normal window-manager chrome. The frame follows the desktop button layout and
+is omitted for hidden captures and fullscreen windows.</p>
+<p><code>lab-gamut</code> and <code>lab-color</code> attempt wide-gamut SDR presentation and fall back to
+standard SDR with a visible notice when it is unavailable. The gamut lab keeps
+its sRGB baseline; the color lab keeps its mapped sRGB swatches and chromaticity
+workspace. Native P3 content and unsupported wide-gamut controls are disabled.
+This fallback does not add native wide-gamut presentation to the Linux backend.
+<code>just lab-gamut --sdr</code> still explicitly selects the standard SDR baseline.</p>
+<p>For windowing diagnostics only, <code>env -u WAYLAND_DISPLAY just lab-text</code> selects
+X11/XWayland when <code>DISPLAY</code> is set. Vulkan rendering is independent of that
+window-system selection.</p>
+<p>Run inside your normal Wayland or X11 desktop session. The repository's <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/paints-backend.yml">Linux Vulkan CI workflow</a> lists the native packages used on Ubuntu if a linker reports
+a missing system library.</p>
+<h2 id="macos">macOS</h2>
+<p>Use the native Rust toolchain for your machine. The default renderer is Metal;
+the active Xcode installation must include the Metal compiler.</p>
+<pre><code class="language-sh">just build
+just lab-shader
+</code></pre>
+<p>If the build fails because the Metal compiler is unavailable, the root harness
+can embed shader source for compilation at runtime:</p>
+<pre><code class="language-sh">just build --features runtime-shaders
+</code></pre>
+<p>Features belong to the selected manifest. For the shader example application,
+pass the platform dependency's feature explicitly:</p>
+<pre><code class="language-sh">cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shader-examples --features gpui_platform/runtime_shaders --target-dir target
+</code></pre>
+<p>Runtime compilation still needs a functioning Metal-capable system. It avoids
+the build-time Metal compiler invocation; it does not replace the native SDK.</p>
+<h2 id="without-just">Without just</h2>
+<p>The recipes wrap ordinary Cargo commands. If <code>just</code> or Bash is unavailable, build
+and launch directly (these commands also work in PowerShell):</p>
+<pre><code class="language-sh">cargo build --release --locked
+cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin shader-examples --target-dir target
+</code></pre>
+<h2 id="understand-the-cargo-layout">Understand the Cargo layout</h2>
+<p>The root workspace contains <code>xgpui-build</code>, a private harness that builds captured
+GPUI libraries for the host platform. <strong>It does not launch an application or build
+all extension libraries and labs.</strong> The labs share the separate <code>xgpui-ext-lab</code> workspace and lockfile; extensions
+and repository tools retain their own workspaces. Select a lab with
+<code>--manifest-path apps/xgpui-ext-lab/Cargo.toml --bin &lt;name&gt;</code>.</p>
+<p>The generated root <code>Cargo.toml</code> patches the ten retained framework/backend
+crate names to local source. Workspace patches apply only inside the root
+workspace, so the standalone tools under <code>tools/</code> don't see them. Supporting crates retain their published identities
+and are not overridden.
+Standalone commands also pass <code>.cargo/validation.toml</code> for the pinned
+compatibility overrides used by CI. Run from the root so Cargo discovers the
+local configuration. Do not copy the command into an unrelated working directory.</p>
+<p>Use <code>--target-dir target</code> to share the root output directory across native labs.
+Without it, standalone workspaces use their own target directories. No personal
+Cargo configuration or manifest edits are required for these recipes.</p>
+<h2 id="run-the-media-lab">Run the media lab</h2>
+<p>The lab generates its own image samples; no photo or video file is needed.</p>
+<pre><code class="language-sh">just lab-media
+</code></pre>
+<p>Compare <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Texture_atlas">atlas ↗</a> and mipmapped images, change filters, zoom and pan. Run
+<code>just lab-media --adjustments</code> for linear <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Exposure_value">exposure ↗</a> and <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Vignetting">vignette ↗</a> with a shared-source
+original/adjusted comparison. Open the path
+effects view with:</p>
+<pre><code class="language-sh">just lab-media --paths
+</code></pre>
+<p>Use release mode for visual performance testing. Debug builds are useful for
+stepping through code, but are not representative of rendering performance.
+Keep 60 Hz as the baseline; a 120 Hz monitor is optional. Media surface runtime
+validation on Windows/Linux remains tracked in
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/23">issue #23</a>.
+See the <a href="media-images.html">media guide</a> for backend limits and measurements.</p>
+<p>The tiled lab's blur controls use a bounded <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/SRGB">sRGB ↗</a> preview so the capture and halo
+fit the compositor's 1,024-device-pixel limit. <code>just lab-media --video</code> also offers
+linear adjustments, vignette and blur on generated native macOS Metal frames;
+no video file is needed. See the <a href="media-pipeline.html">media pipeline guide</a> for
+resource reuse, output color and backend limits.</p>
+<h2 id="check-a-change">Check a change</h2>
+<p>Build the host framework/backend libraries without launching an app:</p>
+<pre><code class="language-sh">just build
+just build-full # Also build every retained local library supported on this host.
+</code></pre>
+<p>For faster compile checks and an example extension test:</p>
+<pre><code class="language-sh">cargo check --workspace --locked
+cargo test --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-color/Cargo.toml --lib
+</code></pre>
+<p>The first command checks the root harness and its dependencies. The second runs
+the CPU color-math library tests as an example of selecting an extension directly.
+Choose tests for the crate you changed. A root <code>cargo test</code> only tests the harness;
+it is not a repository-wide test suite. Native GPU/window tests need the matching
+platform and, where applicable, a graphical session.</p>
+<h2 id="build-harness-and-test-runner">Build harness and test runner</h2>
+<p>Run these commands from the repository root:</p>
+<pre><code class="language-sh">cargo build --locked
+</code></pre>
+<p>The private root harness builds GPUI and the selected platform backend by
+default. Nine framework/backend crates remain local. Seventeen supporting crates
+come from the published <code>gpui-unofficial</code> release, currently pinned to <code>=1.27.0</code>.
+Optional integrations and development-only support are not direct default build
+inputs. Metal shaders compile at build time
+by default. The harness launches nothing.</p>
+<p>Use the explicit full-capture mode to compile every captured library supported
+by the selected target:</p>
+<pre><code class="language-sh">cargo build --locked --features full-capture
+# Equivalent recipe:
+just build-full
+</code></pre>
+<p>Full-capture adds every retained local library supported by the selected target,
+including the WGPU renderer on macOS. Supporting registry crates are compiled
+when required by those libraries; full-capture no longer directly builds the
+upstream utility and test tools. Neither mode enables every optional feature or
+standalone test, benchmark, example, or binary target. Windows and Linux still
+require their own native checks.</p>
+<p><code>just test</code> runs CI's full native-library and platform-benchmark compilation
+gates before its runtime suites. The extension suites enable ICC, canvas GPUI
+integration and media wgpu coverage; Linux additionally checks media without
+GPU backends and Parley with system fonts. Use <code>just test --only native-libraries</code>
+or <code>just test --only gpui-bench-build</code> to isolate compilation failures.
+Hosted Linux extensions/labs, Windows lab applications, and the three platform
+paint workflows are manual-only (<code>workflow_dispatch</code>). Run them from Actions →
+the selected workflow → Run workflow when hosted verification is needed.
+<code>Validate repository tooling</code> is also manual-only, including its tooling checks,
+macOS/Linux/Windows native-library matrix, iOS compilation and WASM build.
+PR acceptance is verified in the local test environments;
+record the tested commit SHA, command and result in the PR.</p>
+<p>Local results cover the current host; platform-specific tests still require
+their native operating system. The release/version preflight checks package
+versions and pins; its success does not establish that builds or tests passed.</p>
+<p>The test runner uses Bash and a small Rust helper built from <code>tools/release-sync</code>;
+warning capture and artifact indexing require no Python. The helper reuses the
+release tool's dependencies. Its bootstrap build retains text diagnostics in
+<code>cargo/bootstrap.stderr.log</code>; subsequent Cargo invocations retain structured JSON.</p>
+<p><code>just test</code> keeps warnings visible and writes a combined report to
+<code>target/test-logs/warnings.log</code>, with structured records in <code>warnings.jsonl</code>.
+The summary prints the unique warning count and report paths, including on failed
+runs. Shared and isolated Cargo invocations retain raw JSON messages and stderr
+under <code>target/test-logs/cargo/</code>. Set <code>TEST_ALL_LOG_DIR</code> to retain a run elsewhere;
+the next run replaces the Cargo diagnostics and warning reports in that directory.</p>
+<p>Compiler warnings are deduplicated by package, target and complete diagnostic
+(including source spans), ignoring rendered formatting. Records retain occurrence
+counts and the contributing build/suite names. Cargo stderr warnings are grouped
+with their continuation text and deduplicated by that text; they may lack package
+or source locations. Cargo's compiler-warning count summaries are omitted from
+the combined count because the individual structured diagnostics already cover
+them. Raw stderr remains available. Runtime output stays in the suite logs;
+warning-prefixed stderr from programs launched by Cargo can also appear in the
+stderr warning report. Warnings do not change the build/test exit status.</p>
+<p>The benchmark compilation gate checks that every requested executable was
+produced and exists; it does not launch benchmarks, including with <code>--help</code>.
+Forwarded arguments to <code>just test</code> are Cargo options, applied to the shared build
+and isolated Cargo invocations. They are not forwarded to prebuilt test binaries.
+The runner owns Cargo's <code>--message-format</code> option for diagnostic capture.</p>
+<h2 id="build-options-and-cleaning">Build options and cleaning</h2>
+<h3 id="cleaning-build-outputs">Cleaning build outputs</h3>
+<p>The repository Cargo configuration shares the root <code>target/</code> directory across
+standalone crates too, so root <code>cargo clean</code> removes normal build outputs.
+Older branches or explicit overrides can still leave nested target directories.
+Stop active builds, then run <code>just clean-preview</code> to list all of them and
+<code>just clean</code> to remove them. Without Just, use
+<code>bash scripts/clean_build_outputs.sh</code> and add <code>--apply</code> to delete.
+The cleaner skips symlinks and refuses directories containing tracked files or
+not ignored by Git. It leaves source assets intact. Browser demo bundles live in <code>pages/examples/</code>;
+remove them with <code>just pages-demos-clean</code>.
+Build outputs outside this checkout (such as an external <code>CARGO_TARGET_DIR</code>)
+are not included. Use <code>--target-dir target</code> for standalone builds to share the
+root output directory, as the lab recipes already do.</p>
+<h3 id="build-prerequisites">Build prerequisites</h3>
+<ul>
+<li>Rust with the 2024 edition; tested with Rust 1.99.0 on Apple Silicon macOS.</li>
+<li>Xcode selected as the active developer directory, with the Metal compiler
+installed, for the default macOS shader build.</li>
+<li>macOS 12.0 or later for the native Apple backend.</li>
+<li>Rust for downstream normalization and build-manifest generation. The existing
+raw import workflow retains its current importer.</li>
+</ul>
+<pre><code class="language-sh"># Optimized native libraries.
+cargo build --release --locked
+
+# Embed shaders for runtime compilation instead of invoking the Metal compiler.
+cargo build --locked --features runtime-shaders
+
+# Static checks on the root harness and its dependency graph.
+cargo check --workspace --locked
+cargo clippy --workspace --locked
+cargo fmt --package xgpui-build --check
+</code></pre>
+<p>Root Clippy and formatting checks target the harness; imported libraries are
+dependencies, not root workspace members. Existing platform/library validation
+is still run separately by validate.yml.</p>
+<h2 id="compile-the-captured-examples">Compile the captured examples</h2>
+<pre><code class="language-sh">cargo build --config .cargo/validation.toml \
+  --manifest-path gpui/crates/gpui/Cargo.toml \
+  --examples --features gpui_platform/font-kit --target-dir target
+</code></pre>
+<p>This builds example executables under <code>target/debug/examples/</code> without launching
+them. Add <code>gpui_platform/runtime_shaders</code> to the comma-separated feature list
+if you need runtime shader compilation. Standalone example builds use their
+own Cargo.lock; the root lockfile applies to the root harness build.</p>
+<p><code>cargo test</code> at the root tests only the harness. For the imported library's
+headless tests, follow <a href="releasing.html#integrate-and-validate">the integration steps</a>; its dependency override and feature
+flags remain required. No test or application is launched by <code>cargo build</code>.</p>
+<h2 id="benchmark-support">Benchmark support</h2>
+<p>The platform benchmarks require <code>bench-support</code>. Their test targets also need
+<code>test-support</code> when using <code>cargo check --benches</code>:</p>
+<pre><code class="language-sh">cargo check --locked --config .cargo/validation.toml --manifest-path gpui/crates/gpui-platform/Cargo.toml --features bench-support,test-support,runtime_shaders --benches
+</code></pre>
+<p>The core package includes Zed's benchmark metrics source at the captured Zed
+commit. <code>bench-metrics-provenance.json</code> records that source and the local test
+adaptation. It is compiled only with <code>bench-support</code>; the Linux <code>perf-event2</code>
+dependency is optional and only activated by that feature. The public benchmark
+measurement and allocator types remain available through <code>gpui</code>.</p>
+<p>Benchmark collectors use process-wide tracing and allocation state. Run their
+unit tests with <code>--test-threads=1</code> to isolate measurements from other test cases.
+Native CI compiles all platform benchmarks and runs the metrics and benchmark
+context tests on Windows, Linux and macOS.</p>
+<h2 id="preview-this-website">Preview this website</h2>
+<p>The website is the static <code>pages/</code> directory. Serve and check it without
+building anything:</p>
+<pre><code class="language-sh">just pages-serve
+just pages-check
+</code></pre>
+<p>Both use <code>python3</code> on macOS/Linux and <code>python</code> on Windows. If Windows only
+provides the Python launcher, use <code>just python=py pages-serve</code>. Choose another
+port with <code>just pages-serve 8001</code>, then open <a href="http://localhost:8000/">localhost:8000</a>.
+Python is not needed for native app builds.</p>
+<p>The browser demos are the only part that needs a build. Install the Wasm target
+and the CLI version pinned by the build scripts:</p>
+<pre><code class="language-sh">rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.129 --locked
+just pages-demos
+just pages-serve
+</code></pre>
+<p>The build scripts need Bash; on Windows run them in a Bash environment with
+the same Rust tools on PATH. Rebuild after changing
+demo code, then reload the page. Use <code>localhost</code> for browser WebGPU access.</p>
+<h3 id="edit-this-website">Edit this website</h3>
+<p>The website at <strong>https://xgpui.dev/</strong> is the static <code>pages/</code> directory. Edit an
+HTML file, refresh the browser. There is no generator, Markdown conversion or
+content index. The only build step is compiling the two browser demo
+collections to WebAssembly.</p>
+<pre><code class="language-sh">just pages-serve        # serve pages/ at http://localhost:8000
+just pages-check        # check links, anchors, assets and legacy routes
+</code></pre>
+<p><code>pages-check</code> runs <code>scripts/check_pages.py</code> (Python 3, standard library only). It
+reads the checked-in pages and runs no build. It does not render pages or run the
+demos.</p>
+<h4 id="layout">Layout</h4>
+<ul>
+<li><code>index.html</code>: overview. Also forwards bookmarks from the former single-page
+site (<code>#route&amp;section=…</code>, <code>#crate=…&amp;tab=…</code>) to the new pages.</li>
+<li><code>&lt;guide&gt;.html</code>: one page per guide, for example <code>media-images.html</code>. Each
+guide is its only copy; repository Markdown links to <code>https://xgpui.dev/&lt;guide&gt;.html</code>.</li>
+<li><code>extensions.html</code>: the extension overview.</li>
+<li><code>crates/&lt;crate&gt;.html</code>: one page per captured and extension crate: role,
+extension guide, source and manifest links, rustdoc on docs.rs, and the review
+hypothesis.</li>
+<li><code>404.html</code>: forwards former <code>source/&lt;path&gt;.html#L&lt;line&gt;</code> URLs to the same
+lines on GitHub.</li>
+<li><code>style.css</code>, <code>code-examples.js</code> and <code>vendor/prism/</code> (Rust highlighting; keep
+the license), <code>images/</code>, <code>benchmarks/</code>, favicons.</li>
+<li><code>examples/extensions/</code> and <code>examples/shaders/</code>: hand-written demo pages,
+<code>examples/graphics.mjs</code> (WebGPU preflight and recovery) and
+<code>examples/gallery.css</code>.</li>
+</ul>
+<p>Pages work without JavaScript. Scripts only highlight code and forward legacy
+URLs. Every page carries the same navigation rail; when adding a guide or crate,
+add it to the rail on every page and to the forwarding lists in <code>index.html</code>.
+<code>pages-check</code> reports anything missing.</p>
+<p>All documentation lives in <code>pages/</code>. <code>docs/</code> keeps only release records and upstream
+investigations (<code>docs/release-reviews/</code>, <code>docs/upstream/</code>), which release tooling and audits read. It is not published.</p>
+<p><code>index.html</code> states the upstream source baseline. <code>pages-check</code> fails when it no
+longer matches <code>upstream.json</code>, so update it after a release sync.</p>
+<h4 id="browser-demos">Browser demos</h4>
+<p>Both entry points belong to <code>apps/xgpui-ext-lab/Cargo.toml</code>. Install the WASM
+target and the wasm-bindgen CLI pinned in <code>.github/workflows/pages.yml</code>:</p>
+<pre><code class="language-sh">rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.129 --locked
+just pages-demos        # write bundles into pages/examples/
+just pages-serve
+just pages-demos-clean  # remove only the generated bundle files
+</code></pre>
+<p><code>build.sh</code> writes the JavaScript bindings, the <code>.wasm</code> module, <code>build-id.txt</code>
+and the data files shared with native labs (Italy photos, SVG samples, color
+reference data and font licenses). These are ignored by Git. The extension
+gallery compares <code>build-id.txt</code> with the ID compiled into the module and asks
+for a reload when a browser cached a mismatched pair.</p>
+<p>Open <code>http://localhost:8000/examples/extensions/</code> and
+<code>http://localhost:8000/examples/shaders/</code>. Use <code>localhost</code> or <code>127.0.0.1</code>.
+Wildcard bind addresses such as <code>[::]</code> and <code>0.0.0.0</code> are not trustworthy WebGPU
+origins, so the demo loaders redirect them to localhost.</p>
+<p>Rebuild WASM after changing demo code or switching branches. After rendering
+changes, smoke-test the affected demos with <code>&amp;backend=webgpu</code> and
+<code>&amp;backend=webgl</code>, and check the console and network panels for errors.</p>
+<p>Publishing and the custom domain are covered in <a href="releasing.html#website-deployment">Releasing</a>.</p>
+<h2 id="common-build-problems">Common build problems</h2>
+<table><thead><tr><th>Symptom</th><th>What to check</th></tr></thead><tbody>
+<tr><td>Missing native library or linker</td><td>Check the selected host toolchain, SDK and platform libraries. On Windows use MSVC tools; on Linux check the development package named by the error.</td></tr>
+<tr><td>Missing Metal compiler</td><td>Check the active Xcode installation, or use the macOS runtime-shader commands above.</td></tr>
+<tr><td>Build succeeds but nothing opens</td><td>The root harness only builds libraries. Launch an app using its manifest.</td></tr>
+<tr><td>Lockfile needs an update</td><td>Check the branch and manifest you selected. For an intentional dependency change, regenerate that workspace's lockfile and review the diff; do not delete all lockfiles.</td></tr>
+<tr><td>Patch location does not contain <code>collections</code> or another removed helper</td><td>Remove stale helper path patches from the consuming app and refresh its lockfile; use the published packages listed above.</td></tr>
+<tr><td>Local GPUI changes do not appear</td><td>Run from the repository root and keep its checked-in Cargo configuration enabled.</td></tr>
+<tr><td>Browser demos are absent or stale</td><td>Run <code>just pages-demos</code>; the pages in <code>pages/</code> do not include the Wasm bundles.</td></tr>
+</tbody></table>
+<h2 id="linux-ci-coverage">Linux CI coverage</h2>
+<p>The <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/linux-extensions.yml">Linux extension workflow</a> runs all
+seven extension suites, native lab tests, Vulkan image/path captures and real
+window smoke probes under headless Weston and Xvfb/Openbox. Its path filters
+include all lab and shared app code. Existing paint and native font checks remain
+independent. Hosted Mesa results may use software rendering and do not establish
+physical GPU DMA-BUF or desktop input acceptance.</p>
+<p>A separate opt-in workflow-dispatch job targets a configured <code>xgpui-vulkan</code>
+self-hosted runner and runs strict native DMA-BUF/video checks with synchronization
+validation. See <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/linux/README.md">runner setup and local commands</a>.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

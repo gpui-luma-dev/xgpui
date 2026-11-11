@@ -14,7 +14,7 @@
 <body><a class="skip" href="#content">Skip to content</a>
 <aside>
 <a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
-<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
 <div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" aria-current="page" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
@@ -39,7 +39,7 @@ opt-in SDR API, not the complete unrestricted shader system proposed in the RFC.
 <tr><td>Generated vertex/fragment wrappers; clipping and inherited opacity</td><td>Implemented</td></tr>
 <tr><td>WGSL validation and MSL, HLSL SM5 and SPIR-V translation</td><td>Implemented</td></tr>
 <tr><td>Native Metal and wgpu rendering</td><td>Implemented; macOS pixel checks passed</td></tr>
-<tr><td>Native D3D11 dispatch</td><td>Implemented; native paint/gamut Windows CI baseline and owner-confirmed labs/lab-test pass recorded in <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">Windows validation</a></td></tr>
+<tr><td>Native D3D11 dispatch</td><td>Implemented; native paint/gamut Windows CI baseline and owner-confirmed labs/lab-test pass recorded in <a href="local-development.html#windows-validation">Windows validation</a></td></tr>
 <tr><td>Browser WebGPU and WebGL2</td><td>Implemented; local Chromium smoke checks passed</td></tr>
 <tr><td>Rounded-box, pulse-glow and soft particle presets</td><td>Implemented</td></tr>
 <tr><td>Local native demo and shared WASM companion</td><td>Implemented; same Rust example views and shader sources</td></tr>
@@ -226,7 +226,7 @@ GPU backend differ: native Metal/D3D11 versus browser WebGPU/WebGL2. Rebuild WAS
 after source changes and reload; native and browser binaries do not update each
 other automatically. The existing extensions-web gallery remains separate.</p>
 <pre><code class="language-sh">bash apps/xgpui-ext-lab/shader-examples/build.sh --release
-just docs-serve
+just pages-serve
 </code></pre>
 <p>Open <code>http://localhost:8000/examples/shaders/</code>. The build writes the companion
 into <code>pages/examples/shaders/</code>, which the local preview and the website serve. See the

@@ -56,7 +56,7 @@ just profile=dev lab-shell --client-decorations --fixed-size
 
 The lab shows detected and resolved preferences, per-window overrides and window state. Its client-frame preview is a simulation: preview controls never move, resize or close the host window.
 
-See the [Shell Lab walkthrough](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/shell-lab.md) and [Linux provider details](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/linux-shell-preferences.md).
+See the [Shell Lab walkthrough](https://xgpui.dev/shell-lab.html) and [Linux provider details](https://xgpui.dev/shell-lab.html#linux-desktop-preferences).
 
 ## Limits and compatibility
 
