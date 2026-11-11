@@ -405,11 +405,11 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                     pick(0.95),
                     pick(0.99),
                     pick(1.0),
-                    if self.wide {
-                        "wide RGBA16F"
-                    } else {
-                        "SDR BGRA8"
-                    },
+                    format!(
+                        "{} window, {:?} slots",
+                        if self.wide { "wide" } else { "SDR" },
+                        self.surface.desc().format
+                    ),
                 );
                 if let Some(error) = &self.error {
                     println!("engine error: {error}");
@@ -533,7 +533,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         let capture_result = completion.clone();
         let headless = options.headless;
         gpui_platform::application().run(move |cx: &mut App| {
-            let bounds = Bounds::centered(None, size(px(1000.), px(560.)), cx);
+            let bounds = Bounds::centered(None, size(px(1000.), px(640.)), cx);
             let window = cx
                 .open_lab_window(
                     WindowOptions {
