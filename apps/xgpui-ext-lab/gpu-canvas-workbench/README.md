@@ -85,4 +85,4 @@ Measured on macOS:
 - **Minimizing:** the second window carried on at 60 fps, after a single stall of about 570 ms during the minimize animation.
 - **Two animating windows:** the second window runs at about 30 fps while the main one animates, even when it paints nothing. That pacing comes from GPUI or macOS, not from engine surfaces.
 
-Not yet included: pan/zoom, pressure and failure test controls, and generation-replacement recovery. `engine-surface-lab --lose-engine-after` covers engine loss.
+Not yet included: pan/zoom and generation-replacement recovery. Pressure is covered by *Hold snapshot* and `--check`. `engine-surface-lab --lose-engine-after` covers engine loss.
