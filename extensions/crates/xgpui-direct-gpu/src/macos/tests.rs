@@ -1,12 +1,15 @@
 //! Headless Metal tests: a raw-Metal "engine" on its own command queue draws
 //! into slots; xgpui's real Metal renderer composites them.
 use super::*;
+use crate::{AcquireError, Transport};
+use gpui::{Bounds, CustomContent, DevicePixels, Size};
 use gpui::{
     ContentMask, CustomDraw, PlatformHeadlessRenderer, ScaledPixels, Scene, WindowColorMode, point,
     size,
 };
 use gpui_apple::metal_renderer::MetalHeadlessRenderer;
 use objc2_metal::{MTLClearColor, MTLCommandQueue, MTLCreateSystemDefaultDevice};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// An independent engine: its own command queue and shared event.

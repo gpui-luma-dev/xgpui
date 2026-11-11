@@ -12,8 +12,9 @@ categories = ["gui", "graphics"]
 
 [features]
 default = []
-# Engine adapter for wgpu engines on their own device and queue.
-wgpu = ["dep:wgpu"]
+# Engine adapter for wgpu engines on their own device and queue. On Linux this
+# is also the transport (opaque-fd Vulkan memory) and enables it in gpui-wgpu.
+wgpu = ["dep:wgpu", "dep:gpui-wgpu", "dep:ash"]
 
 [dependencies]
 anyhow = "1"
@@ -26,6 +27,13 @@ objc2-core-foundation = { version = "=0.3.2", default-features = false, features
 objc2-io-surface = "0.3.2"
 objc2-metal = { version = "0.3", features = ["objc2-io-surface"] }
 wgpu = { version = "30.0.1", optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", package = "xgpui-wgpu", version = "2.2.0", features = ["external-memory"], optional = true }
+ash = { version = "0.38", default-features = false, optional = true }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", package = "xgpui-wgpu", version = "2.2.0", features = ["external-memory", "test-support"] }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui-apple = { path = "../../../gpui/crates/gpui-apple", features = ["test-support"], package = "xgpui-apple", version = "4.0.0" }

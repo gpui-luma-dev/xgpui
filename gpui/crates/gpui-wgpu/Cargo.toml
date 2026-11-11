@@ -18,6 +18,8 @@ name = "gpui_wgpu"
 
 [features]
 dma-buf = ["dep:ash"]
+# Import opaque-fd external memory from independent Vulkan engines (#197).
+external-memory = ["dep:ash"]
 default = []
 bench-support = ["gpui/bench-support", "dep:image"]
 font-kit = ["dep:font-kit"]
