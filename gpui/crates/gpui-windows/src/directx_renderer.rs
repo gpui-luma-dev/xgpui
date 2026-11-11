@@ -2659,6 +2659,32 @@ impl Dx11HeadlessRenderer {
         }
         let device = device.context("missing WARP device")?;
         let device_context = immediate.context("missing WARP context")?;
+        Self::from_device(device, device_context)
+    }
+
+    /// Offscreen renderer on a hardware adapter, for tests that share
+    /// resources with other APIs on the same GPU (WARP cannot open them).
+    pub fn with_adapter(adapter: &IDXGIAdapter1) -> Result<Self> {
+        let (mut device, mut immediate) = (None, None);
+        unsafe {
+            D3D11CreateDevice(
+                adapter,
+                D3D_DRIVER_TYPE_UNKNOWN,
+                windows::Win32::Foundation::HMODULE::default(),
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                Some(&[D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0]),
+                D3D11_SDK_VERSION,
+                Some(&mut device),
+                None,
+                Some(&mut immediate),
+            )?;
+        }
+        let device = device.context("missing hardware D3D11 device")?;
+        let device_context = immediate.context("missing hardware D3D11 context")?;
+        Self::from_device(device, device_context)
+    }
+
+    fn from_device(device: ID3D11Device, device_context: ID3D11DeviceContext) -> Result<Self> {
         let dxgi: IDXGIDevice = device.cast()?;
         let adapter: IDXGIAdapter1 = unsafe { dxgi.GetAdapter()? }.cast()?;
         let dxgi_factory: IDXGIFactory6 = unsafe { adapter.GetParent()? };

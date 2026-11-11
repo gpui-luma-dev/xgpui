@@ -82,7 +82,7 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["N
 objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFDictionary", "CFBase"] }
 objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVReturn"] }
 
-[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+[target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
 xgpui-direct-gpu = { path = "../../extensions/crates/xgpui-direct-gpu", features = ["wgpu"] }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]

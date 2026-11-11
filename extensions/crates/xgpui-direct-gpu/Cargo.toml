@@ -14,7 +14,7 @@ categories = ["gui", "graphics"]
 default = []
 # Engine adapter for wgpu engines on their own device and queue. On Linux this
 # is also the transport (opaque-fd Vulkan memory) and enables it in gpui-wgpu.
-wgpu = ["dep:wgpu", "dep:gpui-wgpu", "dep:ash"]
+wgpu = ["dep:wgpu", "dep:gpui-wgpu", "dep:ash", "dep:gpui-windows", "dep:windows"]
 
 [dependencies]
 anyhow = "1"
@@ -34,6 +34,14 @@ ash = { version = "0.38", default-features = false, optional = true }
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", package = "xgpui-wgpu", version = "2.2.0", features = ["external-memory", "test-support"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gpui-windows = { path = "../../../gpui/crates/gpui-windows", package = "xgpui-windows", version = "2.1.0", optional = true }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Security", "Win32_Graphics_Direct3D11", "Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common"], optional = true }
+wgpu = { version = "30.0.1", optional = true }
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+gpui-windows = { path = "../../../gpui/crates/gpui-windows", package = "xgpui-windows", version = "2.1.0", features = ["test-support"] }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui-apple = { path = "../../../gpui/crates/gpui-apple", features = ["test-support"], package = "xgpui-apple", version = "4.0.0" }
