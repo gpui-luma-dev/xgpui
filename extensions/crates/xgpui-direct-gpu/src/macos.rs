@@ -20,7 +20,9 @@ use objc2_metal::{
     MTLTextureUsage,
 };
 use std::any::Any;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 #[cfg(feature = "wgpu")]
 mod wgpu_target;
@@ -36,27 +38,84 @@ mod tests;
 pub struct SyncPoint {
     event: Retained<ProtocolObject<dyn MTLSharedEvent>>,
     value: u64,
+    /// The signal is known to be submitted, so the compositor may wait for it
+    /// on the GPU.
+    submitted: bool,
+    /// Caches "reached" so recompositing never queries the event again.
+    seen: Arc<AtomicBool>,
 }
 // SAFETY: MTLSharedEvent is a thread-safe Metal object; only retain/release,
-// signaledValue reads and GPU-side waits are performed.
+// signaledValue reads, CPU waits and GPU-side waits are performed.
 unsafe impl Send for SyncPoint {}
 unsafe impl Sync for SyncPoint {}
 impl std::fmt::Debug for SyncPoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SyncPoint({})", self.value)
+        write!(
+            f,
+            "SyncPoint({}{})",
+            self.value,
+            if self.submitted { ", submitted" } else { "" }
+        )
     }
 }
 impl SyncPoint {
-    /// The engine must already have submitted work that signals `event` to
-    /// `value`. The event must belong to the compositor's GPU.
+    /// A point the compositor observes without waiting: the frame is shown
+    /// once `event` is seen at `value` or above, and the last ready frame
+    /// stays on screen until then. Safe for any engine, including one that
+    /// never signals. The event must belong to the compositor's GPU.
     pub fn new(event: Retained<ProtocolObject<dyn MTLSharedEvent>>, value: u64) -> Self {
-        Self { event, value }
+        Self {
+            event,
+            value,
+            submitted: false,
+            seen: Arc::new(AtomicBool::new(false)),
+        }
+    }
+    /// A point the compositor waits for on the GPU, so the frame is shown
+    /// without waiting for the engine on the CPU.
+    ///
+    /// # Safety
+    ///
+    /// The engine must already have committed work that signals `event` to
+    /// `value`, and that work must finish. Otherwise the compositor's queue
+    /// waits forever and composition stalls.
+    pub unsafe fn submitted(
+        event: Retained<ProtocolObject<dyn MTLSharedEvent>>,
+        value: u64,
+    ) -> Self {
+        Self {
+            submitted: true,
+            ..Self::new(event, value)
+        }
     }
     pub fn value(&self) -> u64 {
         self.value
     }
+    /// Whether the compositor waits for this point on the GPU.
+    pub fn is_gpu_wait(&self) -> bool {
+        self.submitted
+    }
     fn reached(&self) -> bool {
-        self.event.signaledValue() >= self.value
+        if self.seen.load(Ordering::Acquire) {
+            return true;
+        }
+        let reached = self.event.signaledValue() >= self.value;
+        if reached {
+            self.seen.store(true, Ordering::Release);
+        }
+        reached
+    }
+    /// Whether a frame with this point can be composited now.
+    pub(crate) fn ready(&self) -> bool {
+        self.submitted || self.reached()
+    }
+    /// Block up to `timeout` for the point (waiter thread only).
+    pub(crate) fn wait_reached(&self, timeout: Duration) -> bool {
+        self.reached()
+            || (self
+                .event
+                .waitUntilSignaledValue_timeoutMS(self.value, timeout.as_millis() as u64)
+                && self.reached())
     }
 }
 
@@ -195,6 +254,9 @@ pub(crate) fn prepare_frame(
         // Engine work has completed; nothing to wait for.
         Vec::new()
     } else {
+        // Only frames whose signal is known to be submitted are selected
+        // before they are reached (`EngineSurface::content`).
+        anyhow::ensure!(sync.submitted, "engine frame selected before it was ready");
         let event = sync.event.clone();
         let value = sync.value;
         let target = texture.clone();

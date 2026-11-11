@@ -415,3 +415,88 @@ fn linux_compute_written_frame_composites() {
     assert!(near3(pixel, P3_PREVIEW), "{pixel:?}");
     report("PASS compute-written RGBA16F slot composited");
 }
+
+/// Acceptance (#197): a compositor that cannot wait on the GPU never blocks
+/// on the engine. It shows the last ready frame until the new one is reached.
+#[test]
+fn linux_compositor_without_gpu_wait_never_blocks_on_the_engine() {
+    let (Some((device, queue)), Some(mut renderer)) = (engine_device(), host()) else {
+        return;
+    };
+    let mut target =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Bgra8Srgb, 3), &device, &queue).unwrap();
+    let Some(timeline) = target.timeline.clone() else {
+        report("skipped: engine device lacks VK_KHR_external_semaphore_fd (CPU-wait mode)");
+        return;
+    };
+    draw(&mut target, wgpu::Color::RED);
+    renderer
+        .render_scene_to_image(&scene(target.surface().content().unwrap()), viewport())
+        .unwrap();
+    // Behave as a compositor that could not import the semaphore.
+    timeline
+        .no_host_wait
+        .store(true, std::sync::atomic::Ordering::Release);
+    let wakes = Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let counter = wakes.clone();
+    target.surface().on_present(move || {
+        counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    });
+    let gate = unsafe { timeline_semaphore(&target.raw, false).unwrap() };
+    unsafe { target.queue.as_hal::<Vulkan>() }
+        .unwrap()
+        .add_wait_semaphore(gate, Some(1), vk::PipelineStageFlags::ALL_COMMANDS);
+    draw(&mut target, wgpu::Color::GREEN);
+    let woken = wakes.load(std::sync::atomic::Ordering::SeqCst);
+    let raw = target.raw.clone();
+    let opener = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        unsafe {
+            raw.signal_semaphore(&vk::SemaphoreSignalInfo::default().semaphore(gate).value(1))
+                .unwrap()
+        };
+    });
+
+    // Composition right away shows the last ready frame; it must not block.
+    let started = std::time::Instant::now();
+    let image = renderer
+        .render_scene_to_image(&scene(target.surface().content().unwrap()), viewport())
+        .unwrap();
+    let elapsed = started.elapsed();
+    let pixel = image.get_pixel(16, 8).0;
+    assert!(
+        near(pixel, [255, 0, 0, 255]),
+        "unready frame shown: {pixel:?}"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_millis(200),
+        "composition blocked on the engine ({elapsed:?})"
+    );
+    assert_eq!(target.surface().stats().waiting, 1);
+    // The waiter wakes the UI once the engine finishes; then it shows.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while wakes.load(std::sync::atomic::Ordering::SeqCst) == woken {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "waiter never woke the UI"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    opener.join().unwrap();
+    let image = renderer
+        .render_scene_to_image(&scene(target.surface().content().unwrap()), viewport())
+        .unwrap();
+    let pixel = image.get_pixel(16, 8).0;
+    assert!(
+        near(pixel, [0, 255, 0, 255]),
+        "ready frame not shown: {pixel:?}"
+    );
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: Some(std::time::Duration::from_secs(5)),
+    });
+    unsafe { target.raw.destroy_semaphore(gate, None) };
+    report(format!(
+        "PASS compositor without GPU waits showed the last ready frame in {elapsed:?}, then the new frame once woken"
+    ));
+}

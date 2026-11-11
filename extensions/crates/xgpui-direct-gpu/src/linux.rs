@@ -21,6 +21,7 @@ use gpui_wgpu::wgpu;
 use gpui_wgpu::wgpu::hal::api::Vulkan;
 use std::any::Any;
 use std::os::fd::{FromRawFd, IntoRawFd, OwnedFd};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -57,7 +58,44 @@ impl SyncPoint {
     pub fn is_gpu_wait(&self) -> bool {
         matches!(self.0, Readiness::Timeline(..))
     }
+    fn reached(&self) -> bool {
+        match &self.0 {
+            Readiness::Completed => true,
+            Readiness::Timeline(timeline, value, seen) => {
+                seen.load(Ordering::Acquire)
+                    || (timeline.reached(*value) && {
+                        seen.store(true, Ordering::Release);
+                        true
+                    })
+            }
+        }
+    }
+    /// Whether a frame with this point can be composited now. Timeline
+    /// points come only from `WgpuSurfaceTarget`, which submits the signal
+    /// before presenting, so the compositor may wait for them on the GPU,
+    /// unless it cannot import the semaphore.
+    pub(crate) fn ready(&self) -> bool {
+        match &self.0 {
+            Readiness::Completed => true,
+            Readiness::Timeline(timeline, ..) => {
+                !timeline.no_host_wait.load(Ordering::Acquire) || self.reached()
+            }
+        }
+    }
+    /// Block up to `timeout` for the point (waiter thread only).
+    pub(crate) fn wait_reached(&self, timeout: Duration) -> bool {
+        match &self.0 {
+            Readiness::Completed => true,
+            Readiness::Timeline(timeline, value, _) => {
+                self.reached() || (timeline.wait(*value, timeout) && self.reached())
+            }
+        }
+    }
 }
+
+/// Bounded CPU wait for the first frame on a compositor that cannot import
+/// the engine's semaphore (later frames are never waited for).
+const FIRST_FRAME_WAIT: Duration = Duration::from_millis(100);
 
 const SEMAPHORE_HANDLE: vk::ExternalSemaphoreHandleTypeFlags =
     vk::ExternalSemaphoreHandleTypeFlags::OPAQUE_FD;
@@ -82,6 +120,9 @@ pub(crate) struct Timeline {
     semaphore: vk::Semaphore,
     fd: OwnedFd,
     host: Mutex<Option<HostSemaphore>>,
+    /// Set once a compositor could not import the semaphore: its frames are
+    /// then shown only once observed reached, never waited for.
+    no_host_wait: AtomicBool,
 }
 struct HostSemaphore {
     key: usize,
@@ -112,6 +153,7 @@ impl Timeline {
             .enabled_device_extensions()
             .contains(&ash::khr::external_semaphore_fd::NAME)
         {
+            self.no_host_wait.store(true, Ordering::Release);
             return Ok(None);
         }
         let raw = hal_device.raw_device().clone();
@@ -146,8 +188,9 @@ impl Timeline {
         });
         Ok(Some(semaphore))
     }
-    /// Fallback for a compositor that cannot import the semaphore.
-    fn cpu_wait(&self, value: u64) -> Result<()> {
+    /// Block up to `timeout` for `value`; never call on the UI thread
+    /// except for the bounded first-frame fallback.
+    fn wait(&self, value: u64, timeout: Duration) -> bool {
         let semaphores = [self.semaphore];
         let values = [value];
         unsafe {
@@ -155,10 +198,10 @@ impl Timeline {
                 &vk::SemaphoreWaitInfo::default()
                     .semaphores(&semaphores)
                     .values(&values),
-                2_000_000_000,
+                timeout.as_nanos().min(u64::MAX as u128) as u64,
             )
         }
-        .context("engine timeline wait failed")
+        .is_ok_and(|()| self.reached(value))
     }
 }
 impl Drop for Timeline {
@@ -441,19 +484,20 @@ pub(crate) fn prepare_frame(
         .downcast_ref::<WgpuCustomContext>()
         .ok_or_else(|| Unsupported("engine surfaces require the wgpu compositor".into()))?;
     let (texture, raw, family, image) = resources.host_import(context, desc)?;
-    if let Readiness::Timeline(timeline, value, seen) = &sync.0
-        && !seen.load(std::sync::atomic::Ordering::Acquire)
-        && !(timeline.reached(*value) && {
-            seen.store(true, std::sync::atomic::Ordering::Release);
-            true
-        })
+    if let Readiness::Timeline(timeline, value, _) = &sync.0
+        && !sync.reached()
     {
         match timeline.host_semaphore(context)? {
             // SAFETY: imported on the host device from the engine's timeline,
             // kept alive by this frame, and the engine submitted the signal
             // before presenting.
             Some(semaphore) => unsafe { context.wait_vulkan_semaphore(semaphore, *value)? },
-            None => timeline.cpu_wait(*value)?,
+            // Learned on the first frame only; later frames from this
+            // timeline are selected only once reached (`SyncPoint::ready`).
+            None => anyhow::ensure!(
+                timeline.wait(*value, FIRST_FRAME_WAIT) && sync.reached(),
+                "engine frame not ready and the compositor cannot wait on the GPU"
+            ),
         }
     }
     // Raw commands get the producer's own encoder: wgpu forbids mixing raw and
@@ -612,6 +656,7 @@ impl WgpuSurfaceTarget {
                     semaphore,
                     fd: unsafe { OwnedFd::from_raw_fd(fd) },
                     host: Mutex::new(None),
+                    no_host_wait: AtomicBool::new(false),
                 })),
                 Err(_) => {
                     unsafe { raw.destroy_semaphore(semaphore, None) };

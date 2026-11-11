@@ -62,7 +62,10 @@ impl Engine {
         command.encodeSignalEvent_value(ProtocolObject::from_ref(&*self.event), self.next);
         command.commit();
         surface
-            .present(slot, SyncPoint::new(self.event.clone(), self.next))
+            // SAFETY: the signal was committed above.
+            .present(slot, unsafe {
+                SyncPoint::submitted(self.event.clone(), self.next)
+            })
             .unwrap();
     }
 }
@@ -540,5 +543,149 @@ fn compute_written_frame_composites() {
             .unwrap();
         let pixel = image.get_pixel(16, 8).0;
         assert!(near3(pixel, P3_PREVIEW), "{pixel:?}");
+    });
+}
+
+/// Clear `slot` to `color` and present it with an observed point on a
+/// separate event that the test signals from the CPU (or never).
+fn present_observed(
+    engine: &mut Engine,
+    surface: &EngineSurface,
+    slot: SurfaceSlot,
+    color: [f64; 4],
+    gate: &Retained<ProtocolObject<dyn MTLSharedEvent>>,
+    value: u64,
+) {
+    let texture = surface_texture(
+        &engine.device,
+        slot.iosurface(),
+        &slot.desc(),
+        MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead,
+    )
+    .unwrap();
+    let command = engine.queue.commandBuffer().expect("engine command buffer");
+    let pass = MTLRenderPassDescriptor::new();
+    let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+    attachment.setTexture(Some(&texture));
+    attachment.setLoadAction(MTLLoadAction::Clear);
+    attachment.setStoreAction(MTLStoreAction::Store);
+    let [red, green, blue, alpha] = color;
+    attachment.setClearColor(MTLClearColor {
+        red,
+        green,
+        blue,
+        alpha,
+    });
+    command
+        .renderCommandEncoderWithDescriptor(&pass)
+        .expect("engine encoder")
+        .endEncoding();
+    command.commit();
+    command.waitUntilCompleted();
+    surface
+        .present(slot, SyncPoint::new(gate.clone(), value))
+        .unwrap();
+}
+
+/// Acceptance (#197): an engine that never signals cannot stall the
+/// compositor. Its frames wait off-screen; the last ready frame keeps
+/// compositing; the ring fills and backpressures the engine.
+#[test]
+fn never_signaled_frames_cannot_stall_composition() {
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Bgra8Srgb, 3)).unwrap();
+        let mut engine = Engine::new();
+        let mut renderer = MetalHeadlessRenderer::new().unwrap();
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [1.0, 0.0, 0.0, 1.0]);
+        let never = engine.device.newSharedEvent().expect("event");
+        let mut presented = 0;
+        while let Ok(slot) = surface.acquire() {
+            present_observed(&mut engine, &surface, slot, [0.0, 0.0, 1.0, 1.0], &never, 1);
+            presented += 1;
+        }
+        assert!(presented >= 1);
+        assert_eq!(surface.stats().waiting, presented);
+        assert_eq!(surface.acquire().err(), Some(AcquireError::WouldBlock));
+        let started = Instant::now();
+        for _ in 0..3 {
+            let image = renderer
+                .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+                .unwrap();
+            assert!(near(image.get_pixel(16, 8).0, [255, 0, 0, 255]));
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "composition stalled: {:?}",
+            started.elapsed()
+        );
+    });
+}
+
+/// An observed frame appears once its point is reached, the waiter wakes the
+/// UI without a new present, and older frames are then released.
+#[test]
+fn observed_frame_appears_when_reached_and_wakes_the_ui() {
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Bgra8Srgb, 3)).unwrap();
+        let mut engine = Engine::new();
+        let mut renderer = MetalHeadlessRenderer::new().unwrap();
+        let wakes = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let counter = wakes.clone();
+        surface.on_present(move || {
+            counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        });
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [1.0, 0.0, 0.0, 1.0]);
+        let gate = engine.device.newSharedEvent().expect("event");
+        let slot = surface.acquire().unwrap();
+        present_observed(&mut engine, &surface, slot, [0.0, 1.0, 0.0, 1.0], &gate, 5);
+        let presents_woken = wakes.load(std::sync::atomic::Ordering::SeqCst);
+        let image = renderer
+            .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+            .unwrap();
+        assert!(
+            near(image.get_pixel(16, 8).0, [255, 0, 0, 255]),
+            "unreached frame must not show"
+        );
+        assert_eq!(surface.stats().waiting, 1);
+        gate.setSignaledValue(5);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while wakes.load(std::sync::atomic::Ordering::SeqCst) == presents_woken {
+            assert!(Instant::now() < deadline, "waiter never woke the UI");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let image = renderer
+            .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+            .unwrap();
+        assert!(near(image.get_pixel(16, 8).0, [0, 255, 0, 255]));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while surface.stats().free < 2 {
+            assert!(Instant::now() < deadline, "superseded frame kept its slot");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(surface.stats().waiting, 0);
+    });
+}
+
+/// A submitted point whose engine work is still running is waited for on
+/// the GPU: the frame shows at once, with no CPU wait.
+#[test]
+fn submitted_frame_is_waited_for_on_the_gpu() {
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Bgra8Srgb, 2)).unwrap();
+        let mut engine = Engine::new();
+        let mut renderer = MetalHeadlessRenderer::new().unwrap();
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(
+            surface.stats().waiting,
+            0,
+            "submitted frames never wait off-screen"
+        );
+        let image = renderer
+            .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+            .unwrap();
+        assert!(near(image.get_pixel(16, 8).0, [0, 0, 255, 255]));
     });
 }

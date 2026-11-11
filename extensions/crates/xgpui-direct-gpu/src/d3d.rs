@@ -17,10 +17,11 @@ use crate::{EngineSurface, SurfaceDesc, SurfaceFormat, SurfaceSlot, Unsupported}
 use anyhow::{Context as _, Result, ensure};
 use gpui_windows::custom_draw::Dx11CustomContext;
 use std::any::Any;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use wgpu::hal::api::Dx12;
-use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
+use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11Device, ID3D11Device1, ID3D11Device5, ID3D11Fence, ID3D11Texture2D,
 };
@@ -36,6 +37,7 @@ use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_SAMPLE_DESC,
 };
 use windows::Win32::Graphics::Dxgi::IDXGIDevice;
+use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
 use windows::core::{Interface, PCWSTR};
 
 #[cfg(test)]
@@ -69,7 +71,44 @@ impl SyncPoint {
     pub fn is_gpu_wait(&self) -> bool {
         matches!(self.0, Readiness::Fence(..))
     }
+    fn reached(&self) -> bool {
+        match &self.0 {
+            Readiness::Completed => true,
+            Readiness::Fence(fence, value, seen) => {
+                seen.load(Ordering::Acquire)
+                    || (fence.reached(*value) && {
+                        seen.store(true, Ordering::Release);
+                        true
+                    })
+            }
+        }
+    }
+    /// Whether a frame with this point can be composited now. Fence points
+    /// come only from `WgpuSurfaceTarget`, which submits the signal before
+    /// presenting, so the compositor may wait for them on the GPU, unless it
+    /// cannot open the fence.
+    pub(crate) fn ready(&self) -> bool {
+        match &self.0 {
+            Readiness::Completed => true,
+            Readiness::Fence(fence, ..) => {
+                !fence.no_host_wait.load(Ordering::Acquire) || self.reached()
+            }
+        }
+    }
+    /// Block up to `timeout` for the point (waiter thread only).
+    pub(crate) fn wait_reached(&self, timeout: Duration) -> bool {
+        match &self.0 {
+            Readiness::Completed => true,
+            Readiness::Fence(fence, value, _) => {
+                self.reached() || (fence.wait(*value, timeout) && self.reached())
+            }
+        }
+    }
 }
+
+/// Bounded CPU wait for the first frame on a compositor that cannot open the
+/// engine's fence (later frames are never waited for).
+const FIRST_FRAME_WAIT: Duration = Duration::from_millis(100);
 
 /// The engine's shared D3D12 fence and the compositor's opened view of it.
 pub(crate) struct SharedFence {
@@ -81,6 +120,9 @@ pub(crate) struct SharedFence {
     // Keyed by the compositor device object, held so its address cannot be
     // reused by a recreated device (#197 K6).
     host: Mutex<Option<(ID3D11Device, Option<ID3D11Fence>)>>,
+    /// Set once a compositor could not open the fence: its frames are then
+    /// shown only once observed reached, never waited for.
+    no_host_wait: AtomicBool,
     handle: SharedHandle,
     _engine: wgpu::Device,
 }
@@ -105,14 +147,29 @@ impl SharedFence {
                 unsafe { device.OpenSharedFence(self.handle.0, &mut fence) }.ok()?;
                 fence
             });
+        if opened.is_none() {
+            self.no_host_wait.store(true, Ordering::Release);
+        }
         *host = Some((context.device.clone(), opened.clone()));
         Ok(opened)
     }
-    /// Fallback for a compositor that cannot open the fence.
-    fn cpu_wait(&self, value: u64) -> Result<()> {
-        // A null event makes SetEventOnCompletion block until the value.
-        unsafe { self.fence.SetEventOnCompletion(value, HANDLE::default()) }
-            .context("engine fence wait failed")
+    /// Block up to `timeout` for `value`; never call on the UI thread
+    /// except for the bounded first-frame fallback.
+    fn wait(&self, value: u64, timeout: Duration) -> bool {
+        if self.reached(value) {
+            return true;
+        }
+        let Ok(event) = (unsafe { CreateEventW(None, true, false, PCWSTR::null()) }) else {
+            return false;
+        };
+        let signalled = unsafe { self.fence.SetEventOnCompletion(value, event) }.is_ok()
+            && unsafe {
+                WaitForSingleObject(event, timeout.as_millis().min(u32::MAX as u128 - 1) as u32)
+            } == WAIT_OBJECT_0;
+        unsafe {
+            let _ = CloseHandle(event);
+        }
+        signalled && self.reached(value)
     }
 }
 
@@ -197,18 +254,19 @@ pub(crate) fn prepare_frame(
         .downcast_ref::<Dx11CustomContext>()
         .ok_or_else(|| Unsupported("engine surfaces require the D3D11 compositor".into()))?;
     let texture = resources.host_texture(context)?;
-    if let Readiness::Fence(fence, value, seen) = &sync.0
-        && !seen.load(std::sync::atomic::Ordering::Acquire)
-        && !(fence.reached(*value) && {
-            seen.store(true, std::sync::atomic::Ordering::Release);
-            true
-        })
+    if let Readiness::Fence(fence, value, _) = &sync.0
+        && !sync.reached()
     {
         match fence.host_fence(context)? {
             // SAFETY: opened on the host device from the engine's shared fence,
             // and the engine submitted the signal before presenting.
             Some(host) => unsafe { context.wait_for_fence(&host, *value)? },
-            None => fence.cpu_wait(*value)?,
+            // Learned on the first frame only; later frames from this fence
+            // are selected only once reached (`SyncPoint::ready`).
+            None => anyhow::ensure!(
+                fence.wait(*value, FIRST_FRAME_WAIT) && sync.reached(),
+                "engine frame not ready and the compositor cannot wait on the GPU"
+            ),
         }
     }
     // SAFETY: the texture was opened on the host device; the engine's writes
@@ -254,6 +312,7 @@ impl WgpuSurfaceTarget {
                 Some(Arc::new(SharedFence {
                     fence,
                     host: Mutex::new(None),
+                    no_host_wait: AtomicBool::new(false),
                     handle: SharedHandle(handle),
                     _engine: device.clone(),
                 }))
