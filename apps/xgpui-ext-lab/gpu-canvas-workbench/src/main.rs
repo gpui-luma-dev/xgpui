@@ -547,11 +547,11 @@ mod workbench {
                 WIDTH as f32 * (0.5 + 0.42 * (t * 1.3).sin()),
                 HEIGHT as f32 * (0.5 + 0.4 * (t * 2.1).cos()),
             );
-            if self.demo_step % 120 == 0 {
+            if self.demo_step.is_multiple_of(120) {
                 self.last_point = None;
             }
             self.stroke_to(to);
-            if self.demo_step % 30 == 0 {
+            if self.demo_step.is_multiple_of(30) {
                 self.inspect_rejected = !self.engine.inspect(to.x as u32, to.y as u32);
             }
             (self.color, self.radius, self.opacity) = (color, radius, opacity);
