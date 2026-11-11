@@ -28,6 +28,11 @@ pub struct WgpuSurfaceTarget {
 unsafe impl Send for WgpuSurfaceTarget {}
 
 impl WgpuSurfaceTarget {
+    /// Features the engine's wgpu device must enable.
+    pub fn required_features() -> wgpu::Features {
+        wgpu::Features::empty()
+    }
+
     /// Create a surface for `desc` and a target that renders into it.
     pub fn new(desc: SurfaceDesc, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Self> {
         let surface = EngineSurface::new(desc)?;
@@ -131,6 +136,11 @@ impl WgpuSurfaceTarget {
         self.queue.submit(commands);
         self.surface
             .present(slot, SyncPoint::new(self.event.clone(), self.next))
+    }
+
+    /// Frames are always handed over with a GPU-side wait on macOS.
+    pub fn gpu_sync(&self) -> bool {
+        true
     }
 
     pub fn surface(&self) -> &EngineSurface {

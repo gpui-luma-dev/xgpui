@@ -1,4 +1,4 @@
-//! Linux transport: opaque-fd Vulkan memory, CPU-observed readiness.
+//! Linux transport: opaque-fd Vulkan memory and timeline semaphores.
 //!
 //! The engine is a wgpu device of its own (Vulkan). `WgpuSurfaceTarget` creates
 //! one exportable image per slot on the engine device and exports its memory as
@@ -6,10 +6,13 @@
 //! adopts it through `WgpuCustomContext::adopt_texture`.
 //!
 //! Each frame the engine transitions the slot to shader-read, releases it to
-//! `VK_QUEUE_FAMILY_EXTERNAL`, waits for completion on its own thread, then
-//! presents; the host acquires it from `VK_QUEUE_FAMILY_EXTERNAL` in a raw-only
-//! preparation encoder before sampling (issue #198, spike 2). A GPU-side wait
-//! on an imported timeline semaphore needs host device extensions (#197 K1).
+//! `VK_QUEUE_FAMILY_EXTERNAL` and signals a shared timeline semaphore, then
+//! presents without waiting. The compositor imports the semaphore once, stages
+//! a GPU-side wait with its preparation batch (#197 K1/K3), and acquires the
+//! slot from `VK_QUEUE_FAMILY_EXTERNAL` in a raw-only encoder before sampling
+//! (issue #198, spike 2). Without `VK_KHR_external_semaphore_fd` on the engine
+//! device the engine waits for completion on its own thread instead; without it
+//! on the compositor device, preparation waits on the CPU.
 use crate::{EngineSurface, SurfaceDesc, SurfaceFormat, SurfaceSlot, Unsupported};
 use anyhow::{Context as _, Result, bail, ensure};
 use ash::vk;
@@ -26,14 +29,142 @@ mod tests;
 
 const HANDLE: vk::ExternalMemoryHandleTypeFlags = vk::ExternalMemoryHandleTypeFlags::OPAQUE_FD;
 
-/// Readiness of a presented slot. On Linux the engine observes completion of
-/// its writes before presenting, so the compositor never waits.
-#[derive(Clone, Debug)]
-pub struct SyncPoint(());
+/// Readiness of a presented slot: already complete, or a value on the engine's
+/// shared timeline that the compositor waits for on the GPU.
+#[derive(Clone)]
+pub struct SyncPoint(Readiness);
+#[derive(Clone)]
+enum Readiness {
+    Completed,
+    Timeline(Arc<Timeline>, u64),
+}
+impl std::fmt::Debug for SyncPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Readiness::Completed => f.write_str("SyncPoint::Completed"),
+            Readiness::Timeline(_, value) => write!(f, "SyncPoint::Timeline({value})"),
+        }
+    }
+}
 impl SyncPoint {
     /// The slot's writes have completed on the engine's GPU queue.
     pub fn completed() -> Self {
-        Self(())
+        Self(Readiness::Completed)
+    }
+    /// Whether the compositor waits for this point on the GPU.
+    pub fn is_gpu_wait(&self) -> bool {
+        matches!(self.0, Readiness::Timeline(..))
+    }
+}
+
+const SEMAPHORE_HANDLE: vk::ExternalSemaphoreHandleTypeFlags =
+    vk::ExternalSemaphoreHandleTypeFlags::OPAQUE_FD;
+
+unsafe fn timeline_semaphore(raw: &ash::Device, exportable: bool) -> Result<vk::Semaphore> {
+    let mut kind = vk::SemaphoreTypeCreateInfo::default()
+        .semaphore_type(vk::SemaphoreType::TIMELINE)
+        .initial_value(0);
+    let mut export = vk::ExportSemaphoreCreateInfo::default().handle_types(SEMAPHORE_HANDLE);
+    let mut info = vk::SemaphoreCreateInfo::default().push_next(&mut kind);
+    if exportable {
+        info = info.push_next(&mut export);
+    }
+    unsafe { raw.create_semaphore(&info, None) }.context("timeline semaphore creation failed")
+}
+
+/// The engine's exportable timeline semaphore and the compositor's import.
+/// Holding device clones keeps both Vulkan devices alive until it is dropped.
+pub(crate) struct Timeline {
+    _engine: wgpu::Device,
+    raw: ash::Device,
+    semaphore: vk::Semaphore,
+    fd: OwnedFd,
+    host: Mutex<Option<HostSemaphore>>,
+}
+struct HostSemaphore {
+    key: usize,
+    _device: Arc<wgpu::Device>,
+    raw: ash::Device,
+    semaphore: vk::Semaphore,
+}
+impl Timeline {
+    fn reached(&self, value: u64) -> bool {
+        unsafe { self.raw.get_semaphore_counter_value(self.semaphore) }
+            .is_ok_and(|current| current >= value)
+    }
+    /// The compositor's import, or `None` when its device cannot import.
+    fn host_semaphore(&self, context: &WgpuCustomContext) -> Result<Option<vk::Semaphore>> {
+        let key = context.cache_key();
+        let mut host = self.host.lock().unwrap();
+        if let Some(import) = host.as_ref().filter(|import| import.key == key) {
+            return Ok(Some(import.semaphore));
+        }
+        let hal_device = unsafe { context.device.as_hal::<Vulkan>() }
+            .ok_or_else(|| Unsupported("engine surfaces require the Vulkan compositor".into()))?;
+        if !hal_device
+            .enabled_device_extensions()
+            .contains(&ash::khr::external_semaphore_fd::NAME)
+        {
+            return Ok(None);
+        }
+        let raw = hal_device.raw_device().clone();
+        let instance = hal_device.shared_instance().raw_instance().clone();
+        drop(hal_device);
+        let semaphore = unsafe { timeline_semaphore(&raw, false)? };
+        let fd = self.fd.try_clone()?.into_raw_fd();
+        let imported = unsafe {
+            ash::khr::external_semaphore_fd::Device::new(&instance, &raw).import_semaphore_fd(
+                &vk::ImportSemaphoreFdInfoKHR::default()
+                    .semaphore(semaphore)
+                    .handle_type(SEMAPHORE_HANDLE)
+                    .fd(fd),
+            )
+        };
+        if let Err(error) = imported {
+            unsafe {
+                // A failed import leaves fd ownership with the caller.
+                drop(OwnedFd::from_raw_fd(fd));
+                raw.destroy_semaphore(semaphore, None);
+            }
+            bail!("compositor timeline semaphore import failed: {error:?}");
+        }
+        if let Some(previous) = host.take() {
+            unsafe { previous.raw.destroy_semaphore(previous.semaphore, None) };
+        }
+        *host = Some(HostSemaphore {
+            key,
+            _device: context.device.clone(),
+            raw,
+            semaphore,
+        });
+        Ok(Some(semaphore))
+    }
+    /// Fallback for a compositor that cannot import the semaphore.
+    fn cpu_wait(&self, value: u64) -> Result<()> {
+        let semaphores = [self.semaphore];
+        let values = [value];
+        unsafe {
+            self.raw.wait_semaphores(
+                &vk::SemaphoreWaitInfo::default()
+                    .semaphores(&semaphores)
+                    .values(&values),
+                2_000_000_000,
+            )
+        }
+        .context("engine timeline wait failed")
+    }
+}
+impl Drop for Timeline {
+    fn drop(&mut self) {
+        // Frames holding this timeline are released only after the host GPU
+        // work that waited on it completed; the engine target waits for its
+        // queue before dropping its reference.
+        unsafe {
+            if let Some(host) = self.host.lock().unwrap().take() {
+                host.raw.destroy_semaphore(host.semaphore, None);
+            }
+            self.raw.destroy_semaphore(self.semaphore, None);
+        }
     }
 }
 
@@ -268,13 +399,24 @@ impl SlotResources {
 pub(crate) fn prepare_frame(
     desc: &SurfaceDesc,
     resources: &SlotResources,
-    _sync: &SyncPoint,
+    sync: &SyncPoint,
     backend: &dyn Any,
 ) -> Result<Box<dyn Any>> {
     let context = backend
         .downcast_ref::<WgpuCustomContext>()
         .ok_or_else(|| Unsupported("engine surfaces require the wgpu compositor".into()))?;
     let (texture, raw, family, image) = resources.host_import(context, desc)?;
+    if let Readiness::Timeline(timeline, value) = &sync.0
+        && !timeline.reached(*value)
+    {
+        match timeline.host_semaphore(context)? {
+            // SAFETY: imported on the host device from the engine's timeline,
+            // kept alive by this frame, and the engine submitted the signal
+            // before presenting.
+            Some(semaphore) => unsafe { context.wait_vulkan_semaphore(semaphore, *value)? },
+            None => timeline.cpu_wait(*value)?,
+        }
+    }
     // Raw commands get the producer's own encoder: wgpu forbids mixing raw and
     // wgpu commands in one encoder, and this producer records nothing else.
     context.record(|encoder| unsafe {
@@ -289,9 +431,11 @@ pub(crate) fn prepare_frame(
                 .dst_access_mask(vk::AccessFlags::SHADER_READ)
                 .image(image)
                 .subresource_range(color_range());
+            // ALL_COMMANDS in the first scope chains the batch's semaphore
+            // wait to this barrier, and its second scope to the composition.
             raw.cmd_pipeline_barrier(
                 encoder.raw_handle(),
-                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::ALL_COMMANDS,
                 vk::PipelineStageFlags::ALL_COMMANDS,
                 vk::DependencyFlags::empty(),
                 &[],
@@ -320,12 +464,79 @@ pub struct WgpuSurfaceTarget {
     family: u32,
     textures: Vec<wgpu::Texture>,
     images: Vec<vk::Image>,
+    timeline: Option<Arc<Timeline>>,
+    next: u64,
+}
+
+impl Drop for WgpuSurfaceTarget {
+    fn drop(&mut self) {
+        // Let pending signals of the shared timeline complete before it can be
+        // destroyed.
+        let _ = self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(Duration::from_secs(5)),
+        });
+    }
 }
 
 impl WgpuSurfaceTarget {
     /// Features the engine's wgpu device must enable.
     pub fn required_features() -> wgpu::Features {
         wgpu::Features::VULKAN_EXTERNAL_MEMORY_FD
+    }
+
+    /// Create an engine device with the required features and, when supported,
+    /// `VK_KHR_external_semaphore_fd` for GPU-side handoff.
+    pub fn request_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue)> {
+        let descriptor = wgpu::DeviceDescriptor {
+            label: Some("engine"),
+            required_features: Self::required_features(),
+            ..Default::default()
+        };
+        let name = ash::khr::external_semaphore_fd::NAME;
+        let open = unsafe { adapter.as_hal::<Vulkan>() }.and_then(|hal_adapter| {
+            let available = unsafe {
+                hal_adapter
+                    .shared_instance()
+                    .raw_instance()
+                    .enumerate_device_extension_properties(hal_adapter.raw_physical_device())
+            }
+            .ok()?;
+            if !available
+                .iter()
+                .any(|extension| extension.extension_name_as_c_str() == Ok(name))
+            {
+                return None;
+            }
+            let callback: Box<wgpu::hal::vulkan::CreateDeviceCallback> = Box::new(move |args| {
+                if !args.extensions.contains(&name) {
+                    args.extensions.push(name);
+                }
+            });
+            // SAFETY: the callback only adds an extension the adapter supports.
+            unsafe {
+                hal_adapter.open_with_callback(
+                    descriptor.required_features,
+                    &descriptor.required_limits,
+                    &descriptor.memory_hints,
+                    Some(callback),
+                )
+            }
+            .ok()
+        });
+        if let Some(open) = open {
+            // SAFETY: `open` came from this adapter with the descriptor's features.
+            if let Ok(pair) = unsafe { adapter.create_device_from_hal(open, &descriptor) } {
+                return Ok(pair);
+            }
+        }
+        Ok(gpui::block_on(adapter.request_device(&descriptor))?)
+    }
+
+    /// Whether frames are handed over with a GPU-side wait (shared timeline
+    /// semaphore) rather than the engine waiting on its own thread.
+    pub fn gpu_sync(&self) -> bool {
+        self.timeline.is_some()
     }
 
     /// Allocate exportable slots on the engine device and create the surface.
@@ -343,6 +554,34 @@ impl WgpuSurfaceTarget {
         let physical = hal_device.raw_physical_device();
         let exporter = ash::khr::external_memory_fd::Device::new(&instance, &raw);
         let properties = unsafe { instance.get_physical_device_memory_properties(physical) };
+        let timeline = if hal_device
+            .enabled_device_extensions()
+            .contains(&ash::khr::external_semaphore_fd::NAME)
+        {
+            let semaphore = unsafe { timeline_semaphore(&raw, true)? };
+            let fd = unsafe {
+                ash::khr::external_semaphore_fd::Device::new(&instance, &raw).get_semaphore_fd(
+                    &vk::SemaphoreGetFdInfoKHR::default()
+                        .semaphore(semaphore)
+                        .handle_type(SEMAPHORE_HANDLE),
+                )
+            };
+            match fd {
+                Ok(fd) => Some(Arc::new(Timeline {
+                    _engine: device.clone(),
+                    raw: raw.clone(),
+                    semaphore,
+                    fd: unsafe { OwnedFd::from_raw_fd(fd) },
+                    host: Mutex::new(None),
+                })),
+                Err(_) => {
+                    unsafe { raw.destroy_semaphore(semaphore, None) };
+                    None
+                }
+            }
+        } else {
+            None
+        };
         let mut slots = Vec::new();
         let mut hal_textures = Vec::new();
         let mut images = Vec::new();
@@ -418,6 +657,8 @@ impl WgpuSurfaceTarget {
             family,
             textures,
             images,
+            timeline,
+            next: 0,
         })
     }
 
@@ -475,11 +716,22 @@ impl WgpuSurfaceTarget {
                 Ok(())
             })?;
         }
-        let index = self.queue.submit(
-            commands
-                .into_iter()
-                .chain([transition.finish(), release.finish()]),
-        );
+        let commands = commands
+            .into_iter()
+            .chain([transition.finish(), release.finish()]);
+        if let Some(timeline) = &self.timeline {
+            // Signal after this submission; present only once it is submitted.
+            self.next += 1;
+            unsafe { self.queue.as_hal::<Vulkan>() }
+                .context("missing Vulkan engine queue")?
+                .add_signal_semaphore(timeline.semaphore, Some(self.next));
+            self.queue.submit(commands);
+            return self.surface.present(
+                slot,
+                SyncPoint(Readiness::Timeline(timeline.clone(), self.next)),
+            );
+        }
+        let index = self.queue.submit(commands);
         self.device
             .poll(wgpu::PollType::Wait {
                 submission_index: Some(index),

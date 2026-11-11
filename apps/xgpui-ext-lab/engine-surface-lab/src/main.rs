@@ -210,14 +210,14 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             let adapter =
                 gpui::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
                     .with_context(|| format!("no wgpu {} adapter", BACKEND.1))?;
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
-            let required_features = WgpuSurfaceTarget::required_features();
-            #[cfg(target_os = "macos")]
-            let required_features = wgpu::Features::empty();
+            // Linux engines also need semaphore export for GPU-side handoff.
+            #[cfg(target_os = "linux")]
+            let (device, queue) = WgpuSurfaceTarget::request_device(&adapter)?;
+            #[cfg(not(target_os = "linux"))]
             let (device, queue) =
                 gpui::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                     label: Some("engine"),
-                    required_features,
+                    required_features: WgpuSurfaceTarget::required_features(),
                     ..Default::default()
                 }))?;
             let target = WgpuSurfaceTarget::new(desc, &device, &queue)?;
@@ -332,6 +332,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     struct Lab {
         surface: EngineSurface,
+        gpu_sync: bool,
         engine: Option<WaveEngine>,
         thread: Option<EngineThread>,
         last_presents: u64,
@@ -354,9 +355,14 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     impl Lab {
         fn engine_mode(&self) -> String {
+            let sync = if self.gpu_sync {
+                "GPU-side wait"
+            } else {
+                "engine waits on CPU"
+            };
             match &self.thread {
-                Some(thread) => format!("engine thread @ {:.0} Hz", thread.hz),
-                None => "engine on UI thread".into(),
+                Some(thread) => format!("engine thread @ {:.0} Hz, {sync}", thread.hz),
+                None => format!("engine on UI thread, {sync}"),
             }
         }
         fn surface_view(&self, width: f32, height: f32) -> impl IntoElement {
@@ -567,6 +573,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                         })
                         .expect("wgpu engine");
                         let surface = engine.target.surface().clone();
+                        let gpu_sync = engine.target.gpu_sync();
                         let (engine, thread) = if options.threaded {
                             (None, Some(EngineThread::spawn(engine, options.engine_hz)))
                         } else {
@@ -575,6 +582,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                         window.set_lab_title("XGPUI Engine Surface Lab");
                         cx.new(|_| Lab {
                             surface,
+                            gpu_sync,
                             engine,
                             thread,
                             last_presents: 0,
