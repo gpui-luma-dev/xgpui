@@ -104,10 +104,20 @@ mod lab {
         /// Extra shader work per pixel (loop iterations) for every engine.
         #[arg(long, default_value_t = 0)]
         work: u32,
+        /// Split each engine frame into this many horizontal bands, each a
+        /// separate submission, so the compositor's work can interleave.
+        #[arg(long, default_value_t = 1)]
+        bands: u32,
+        /// Engine threads slow down when the compositor's present-to-
+        /// composite latency rises, and speed back up when it recovers.
+        #[arg(long)]
+        adaptive: bool,
     }
 
     /// The engine running on its own thread, presenting at its own rate.
     struct EngineThread {
+        /// Lowest rate an adaptive engine dropped to, in milli-Hz.
+        min_rate: Arc<AtomicU64>,
         rendered: Arc<AtomicU64>,
         skipped: Arc<AtomicU64>,
         error: Arc<Mutex<Option<String>>>,
@@ -116,7 +126,12 @@ mod lab {
         hz: f32,
     }
     impl EngineThread {
-        fn spawn(mut engine: WaveEngine, hz: f32) -> Self {
+        fn spawn(engine: WaveEngine, hz: f32) -> Self {
+            Self::spawn_with(engine, hz, false)
+        }
+        fn spawn_with(mut engine: WaveEngine, hz: f32, adaptive: bool) -> Self {
+            let min_rate = Arc::new(AtomicU64::new((hz * 1000.) as u64));
+            let lowest = min_rate.clone();
             let rendered = Arc::new(AtomicU64::new(0));
             let skipped = Arc::new(AtomicU64::new(0));
             let error = Arc::new(Mutex::new(None));
@@ -130,9 +145,25 @@ mod lab {
             let handle = std::thread::Builder::new()
                 .name("engine".into())
                 .spawn(move || {
-                    let period = Duration::from_secs_f32(1. / hz);
+                    let mut rate = hz;
+                    let mut period = Duration::from_secs_f32(1. / rate);
                     let mut next = Instant::now();
                     while !s.load(Ordering::Acquire) {
+                        if adaptive {
+                            // Back off while the compositor lags (more than
+                            // two display frames from present to composite);
+                            // recover gradually.
+                            let lag = engine.target.surface().stats().composite_latency_ms;
+                            rate = if lag > 33. {
+                                (rate * 0.5).max(0.25)
+                            } else if lag < 20. {
+                                (rate * 1.1).min(hz)
+                            } else {
+                                rate
+                            };
+                            period = Duration::from_secs_f32(1. / rate);
+                            lowest.fetch_min((rate * 1000.) as u64, Ordering::Relaxed);
+                        }
                         match engine.frame() {
                             Ok(true) => r.fetch_add(1, Ordering::Relaxed),
                             Ok(false) => k.fetch_add(1, Ordering::Relaxed),
@@ -152,6 +183,7 @@ mod lab {
                 })
                 .expect("engine thread");
             Self {
+                min_rate,
                 rendered,
                 skipped,
                 error,
@@ -224,10 +256,14 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         start: Instant,
         size: (u32, u32),
         work: u32,
+        bands: u32,
     }
 
     impl WaveEngine {
         fn new(desc: SurfaceDesc, work: u32) -> Result<Self> {
+            Self::with_bands(desc, work, 1)
+        }
+        fn with_bands(desc: SurfaceDesc, work: u32, bands: u32) -> Result<Self> {
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
                 backends: BACKEND.0,
                 flags: wgpu::InstanceFlags::default(),
@@ -317,6 +353,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                 start: Instant::now(),
                 size: (desc.width, desc.height),
                 work,
+                bands: bands.clamp(1, desc.height),
             })
         }
 
@@ -341,26 +378,38 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             ];
             let bytes: Vec<u8> = uniforms.iter().flat_map(|v| v.to_ne_bytes()).collect();
             self.queue.write_buffer(&self.uniforms, 0, &bytes);
-            let mut encoder = self.device.create_command_encoder(&Default::default());
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("engine_waves"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    ..Default::default()
-                });
-                pass.set_pipeline(&self.pipeline);
-                pass.set_bind_group(0, &self.bind_group, &[]);
-                pass.draw(0..3, 0..1);
+            // Each band is its own submission, so the GPU can schedule the
+            // compositor's work between them; the last goes with `present`.
+            let (width, height) = self.size;
+            let mut last = None;
+            for band in 0..self.bands {
+                let y0 = height * band / self.bands;
+                let y1 = height * (band + 1) / self.bands;
+                let mut encoder = self.device.create_command_encoder(&Default::default());
+                {
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("engine_waves"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        ..Default::default()
+                    });
+                    pass.set_scissor_rect(0, y0, width, y1 - y0);
+                    pass.set_pipeline(&self.pipeline);
+                    pass.set_bind_group(0, &self.bind_group, &[]);
+                    pass.draw(0..3, 0..1);
+                }
+                if let Some(previous) = last.replace(encoder.finish()) {
+                    self.queue.submit([previous]);
+                }
             }
-            self.target.present(slot, [encoder.finish()])?;
+            self.target.present(slot, last)?;
             Ok(true)
         }
     }
@@ -394,6 +443,8 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         stress_rejected: Vec<String>,
         stress_size: (u32, u32),
         work: u32,
+        bands: u32,
+        adaptive: bool,
     }
 
     impl Lab {
@@ -496,6 +547,33 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                         .iter()
                         .filter(|(_, t)| t.error.lock().unwrap().is_some())
                         .count();
+                    let min_rate = self
+                        .stress
+                        .iter()
+                        .map(|(_, t)| t.min_rate.load(Ordering::Relaxed))
+                        .min()
+                        .unwrap_or(0) as f32
+                        / 1000.;
+                    let unshown: u64 = self.stress.iter().map(|(s, _)| s.stats().unshown).sum();
+                    let main = self.surface.stats();
+                    #[cfg(target_os = "linux")]
+                    let priority = if WgpuSurfaceTarget::engine_queue_low_priority() {
+                        "low"
+                    } else {
+                        "normal"
+                    };
+                    #[cfg(not(target_os = "linux"))]
+                    let priority = "normal";
+                    println!(
+                        "stress budget: bands {}, adaptive {} (lowest engine rate {:.1} Hz), engine queue priority {}; stress frames unshown {}; main surface composite latency {:.1} ms, unshown {}",
+                        self.bands,
+                        if self.adaptive { "on" } else { "off" },
+                        min_rate,
+                        priority,
+                        unshown,
+                        main.composite_latency_ms,
+                        main.unshown,
+                    );
                     println!(
                         "stress: {} of {} extra surfaces at {}x{} (work {}), {:.0} MiB of slots; engines rendered {} / skipped {} (ring full {}), presents {}, engine errors {}{}",
                         self.stress.len(),
@@ -698,6 +776,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             "stress-surfaces must be 0..=32"
         );
         ensure!(options.work <= 100_000, "work must be 0..=100000");
+        ensure!((1..=64).contains(&options.bands), "bands must be 1..=64");
         // A GPU-starved UI may never draw the frame that ends the run; don't
         // let it hang a scripted run (stress levels report this as a finding).
         if let Some(limit) = options.run_seconds {
@@ -752,7 +831,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                         let mut stress = Vec::new();
                         let mut stress_rejected = Vec::new();
                         for _ in 0..options.stress_surfaces {
-                            match WaveEngine::new(
+                            match WaveEngine::with_bands(
                                 SurfaceDesc {
                                     width: stress_size.0,
                                     height: stress_size.1,
@@ -760,12 +839,17 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                                     slots: options.slots,
                                 },
                                 options.work,
+                                options.bands,
                             ) {
                                 Ok(engine) => {
                                     let surface = engine.target.surface().clone();
                                     stress.push((
                                         surface,
-                                        EngineThread::spawn(engine, options.engine_hz),
+                                        EngineThread::spawn_with(
+                                            engine,
+                                            options.engine_hz,
+                                            options.adaptive,
+                                        ),
                                     ));
                                 }
                                 Err(error) => stress_rejected.push(format!("{error:#}")),
@@ -812,6 +896,8 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                             stress_rejected,
                             stress_size,
                             work: options.work,
+                            bands: options.bands,
+                            adaptive: options.adaptive,
                         })
                     },
                 )

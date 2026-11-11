@@ -196,6 +196,9 @@ pub struct Engine {
     /// (submission and sync signal).
     pub record_ms: Vec<f32>,
     pub present_ms: Vec<f32>,
+    /// Recording split into phases: edits, slot acquire (and first-use bind
+    /// group), publish pass encoding, `encoder.finish()`.
+    pub phase_ms: [Vec<f32>; 4],
 }
 
 impl Engine {
@@ -331,6 +334,7 @@ impl Engine {
             latencies_ms: Vec::new(),
             record_ms: Vec::new(),
             present_ms: Vec::new(),
+            phase_ms: Default::default(),
         })
     }
 
@@ -383,6 +387,7 @@ impl Engine {
         fresh.latencies_ms = std::mem::take(&mut self.latencies_ms);
         fresh.record_ms = std::mem::take(&mut self.record_ms);
         fresh.present_ms = std::mem::take(&mut self.present_ms);
+        fresh.phase_ms = std::mem::take(&mut self.phase_ms);
         let replayed = fresh.pending.len() as u64;
         fresh.stats = EngineStats {
             revision: self.stats.revision + 1,
@@ -554,6 +559,7 @@ impl Engine {
             encoder = self.device.create_command_encoder(&Default::default());
             recorded = self.record_edits(&mut encoder);
         }
+        let edits_done = Instant::now();
         if self.stats.published_revision == self.stats.revision {
             if recorded {
                 self.submit(encoder);
@@ -597,6 +603,7 @@ impl Engine {
             self.publish_binds[index] = Some(bind);
             self.stats.resources_created += 1;
         }
+        let acquired = Instant::now();
         self.write_params(false, [0, 0], [WIDTH, HEIGHT], 0);
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
@@ -604,8 +611,17 @@ impl Engine {
             pass.set_bind_group(0, self.publish_binds[index].as_ref().unwrap(), &[]);
             pass.dispatch_workgroups(WIDTH.div_ceil(8), HEIGHT.div_ceil(8), 1);
         }
+        let encoded = Instant::now();
         let commands = encoder.finish();
         let presenting = Instant::now();
+        for (phase, (from, to)) in self.phase_ms.iter_mut().zip([
+            (started, edits_done),
+            (edits_done, acquired),
+            (acquired, encoded),
+            (encoded, presenting),
+        ]) {
+            phase.push((to - from).as_secs_f32() * 1000.);
+        }
         self.record_ms
             .push((presenting - started).as_secs_f32() * 1000.);
         self.target.present(slot, [commands])?;

@@ -43,6 +43,8 @@ pub struct Status {
     pub latency_ms: [f32; 2],
     pub record_ms: f32,
     pub present_ms: f32,
+    /// p50 of the recording phases: edits, acquire, publish encode, finish.
+    pub phase_ms: [f32; 4],
     pub error: Option<String>,
     /// Whether the engine runs on its own thread.
     pub threaded: bool,
@@ -65,6 +67,7 @@ impl Status {
             ],
             record_ms: percentile(&engine.record_ms, 0.5),
             present_ms: percentile(&engine.present_ms, 0.5),
+            phase_ms: std::array::from_fn(|i| percentile(&engine.phase_ms[i], 0.5)),
             error,
             threaded,
         }

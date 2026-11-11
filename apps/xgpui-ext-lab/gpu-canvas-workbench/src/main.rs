@@ -611,7 +611,7 @@ mod workbench {
             let stats = self.engine.stats();
             let surface = self.engine.surface().stats();
             format!(
-                "{:.1}s shown: {} window frames, frame interval ms p50 {:.2} p95 {:.2} p99 {:.2} max {:.2}; revision {} published {}, {} snapshots ({} blocked), {} dabs in {} paint passes ({} tiles), edit-to-publish ms p50 {:.2} p95 {:.2} (record p50 {:.2}, present p50 {:.2}), {} submissions, {:.1} MiB GPU publish, {:.1} KiB uploaded, {} B read back, {} GPU objects, ring full {}, {} view changes; {} window, {} presentation, {}",
+                "{:.1}s shown: {} window frames, frame interval ms p50 {:.2} p95 {:.2} p99 {:.2} max {:.2}; revision {} published {}, {} snapshots ({} blocked), {} dabs in {} paint passes ({} tiles), edit-to-publish ms p50 {:.2} p95 {:.2} (record p50 {:.2} = edits {:.2} + acquire {:.2} + publish encode {:.2} + finish {:.2}; present p50 {:.2}), {} submissions, {:.1} MiB GPU publish, {:.1} KiB uploaded, {} B read back, {} GPU objects, ring full {}, {} view changes; {} window, {} presentation, {}",
                 self.started.elapsed().as_secs_f32(),
                 self.frame_times.len() + 1,
                 percentile(&self.frame_times, 0.5),
@@ -628,6 +628,10 @@ mod workbench {
                 self.engine.status().latency_ms[0],
                 self.engine.status().latency_ms[1],
                 self.engine.status().record_ms,
+                self.engine.status().phase_ms[0],
+                self.engine.status().phase_ms[1],
+                self.engine.status().phase_ms[2],
+                self.engine.status().phase_ms[3],
                 self.engine.status().present_ms,
                 stats.submissions,
                 stats.gpu_bytes_published as f64 / (1024. * 1024.),
