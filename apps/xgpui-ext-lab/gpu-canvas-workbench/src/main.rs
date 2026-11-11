@@ -41,7 +41,12 @@ mod workbench {
     use anyhow::{Result, ensure};
     use clap::Parser;
     use gpui::{prelude::*, *};
-    use std::{cell::Cell, rc::Rc, time::Instant};
+    use std::{
+        cell::{Cell, RefCell},
+        rc::Rc,
+        time::Instant,
+    };
+    use xgpui_direct_gpu::EngineSurface;
     use xgpui_ext_lab::{LabApp, LabWindowTitle};
 
     #[cfg(target_os = "macos")]
@@ -70,6 +75,107 @@ mod workbench {
         /// Ring length (2..=8).
         #[arg(long, default_value_t = 3)]
         slots: usize,
+        /// Open a second window placing the same published revision.
+        #[arg(long)]
+        second_window: bool,
+        /// Minimize the main window after this many seconds (hidden-window
+        /// run; the second window keeps stepping the engine).
+        #[arg(long)]
+        minimize_after: Option<f32>,
+        /// Resize the second window every 0.5 s (presentation-only change).
+        #[arg(long)]
+        resize_second: bool,
+    }
+
+    /// Per-window measurements of a second window.
+    #[derive(Default)]
+    struct ViewerStats {
+        frame_times: Vec<f32>,
+        last_frame: Option<Instant>,
+        last_presents: u64,
+        new_frames: u64,
+        repeated_frames: u64,
+        size: Size<Pixels>,
+        sizes_seen: Vec<Size<Pixels>>,
+        wide: bool,
+    }
+
+    /// A second window placing the same published revision as the main one.
+    /// It also steps the engine, so edits progress while the main window is
+    /// hidden.
+    struct Viewer {
+        workbench: WeakEntity<Workbench>,
+        surface: EngineSurface,
+        stats: Rc<RefCell<ViewerStats>>,
+    }
+
+    impl Render for Viewer {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let now = Instant::now();
+            let presents = self.surface.stats().presents;
+            {
+                let mut stats = self.stats.borrow_mut();
+                if let Some(last) = stats.last_frame.replace(now) {
+                    stats
+                        .frame_times
+                        .push(now.duration_since(last).as_secs_f32() * 1000.);
+                }
+                if presents != stats.last_presents {
+                    stats.new_frames += 1;
+                    stats.last_presents = presents;
+                } else {
+                    stats.repeated_frames += 1;
+                }
+                stats.size = window.viewport_size();
+                let size = stats.size;
+                if !stats.sizes_seen.contains(&size) {
+                    stats.sizes_seen.push(size);
+                }
+                stats.wide = window.color_status().effective() == WindowColorMode::WideGamutSdr;
+            }
+            let busy = self
+                .workbench
+                .update(cx, |workbench, cx| workbench.step(cx))
+                .unwrap_or(false);
+            if busy {
+                window.request_animation_frame();
+            }
+            let revision = self
+                .workbench
+                .upgrade()
+                .map(|workbench| workbench.read(cx).engine.stats().published_revision)
+                .unwrap_or(0);
+            let stats = self.stats.borrow();
+            let surface = self.surface.clone();
+            div()
+                .size_full()
+                .bg(rgb(0x1b1b1b))
+                .text_color(rgb(0xe8e8e8))
+                .text_sm()
+                .p_2()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(div().text_color(rgb(0xb0b0b0)).child(format!(
+                    "Second window · revision {revision} · {:.0}×{:.0} · {} · {} new / {} repeated frames",
+                    f32::from(stats.size.width),
+                    f32::from(stats.size.height),
+                    if stats.wide { "wide-gamut" } else { "sRGB preview" },
+                    stats.new_frames,
+                    stats.repeated_frames,
+                )))
+                .child(
+                    div().flex_1().child(
+                        canvas(
+                            |_, _, _| (),
+                            move |bounds, _, window, _| {
+                                surface.paint(window, bounds, Corners::all(px(RADIUS)))
+                            },
+                        )
+                        .size_full(),
+                    ),
+                )
+        }
     }
 
     /// Brush colours, linear Display P3, with an approximate sRGB swatch.
@@ -112,9 +218,157 @@ mod workbench {
         run_seconds: Option<f32>,
         frame_times: Vec<f32>,
         last_frame: Option<Instant>,
+        sdr: bool,
+        resize_second: bool,
+        viewers: Vec<(WeakEntity<Viewer>, Rc<RefCell<ViewerStats>>)>,
+        last_step: Option<Instant>,
+        last_published: u64,
+        minimize_after: Option<f32>,
+        minimized: bool,
+        quitting: bool,
     }
 
     impl Workbench {
+        fn busy(&self) -> bool {
+            let stats = self.engine.stats();
+            self.demo
+                || self.run_seconds.is_some()
+                || self.engine.pending_dabs() > 0
+                || self.engine.inspections_in_flight() > 0
+                || stats.revision != stats.published_revision
+        }
+
+        /// Advance the engine once per display frame, from whichever window
+        /// renders: apply edits, publish, collect inspections, wake the
+        /// other windows when a new revision is published. Returns whether
+        /// more frames are needed.
+        fn step(&mut self, cx: &mut Context<Self>) -> bool {
+            let now = Instant::now();
+            if self
+                .last_step
+                .is_some_and(|last| now.duration_since(last).as_secs_f32() < 0.004)
+            {
+                return self.busy();
+            }
+            self.last_step = Some(now);
+            if let Some(limit) = self.run_seconds
+                && !self.quitting
+                && self.started.elapsed().as_secs_f32() >= limit
+            {
+                self.quitting = true;
+                println!("{}", self.summary());
+                for (_, stats) in &self.viewers {
+                    let stats = stats.borrow();
+                    println!(
+                        "second window: {} frames ({} new / {} repeated), frame interval ms p50 {:.2} p95 {:.2} max {:.2}; {:.0}×{:.0} {}, {} sizes shown",
+                        stats.frame_times.len() + 1,
+                        stats.new_frames,
+                        stats.repeated_frames,
+                        percentile(&stats.frame_times, 0.5),
+                        percentile(&stats.frame_times, 0.95),
+                        percentile(&stats.frame_times, 1.),
+                        f32::from(stats.size.width),
+                        f32::from(stats.size.height),
+                        if stats.wide { "wide" } else { "standard" },
+                        stats.sizes_seen.len(),
+                    );
+                }
+                if let Some(error) = &self.error {
+                    println!("engine error: {error}");
+                }
+                cx.quit();
+            }
+            if self.demo {
+                self.demo_frame();
+            }
+            if let Err(error) = self.engine.frame() {
+                self.error = Some(format!("{error:#}"));
+            }
+            if let Some(found) = self.engine.poll_inspections().pop() {
+                self.inspection = Some(found);
+            }
+            let published = self.engine.stats().published_revision;
+            if published != self.last_published {
+                self.last_published = published;
+                self.viewers
+                    .retain(|(viewer, _)| viewer.upgrade().is_some());
+                let viewers: Vec<_> = self.viewers.iter().map(|(v, _)| v.clone()).collect();
+                cx.defer(move |cx| {
+                    for viewer in viewers {
+                        let _ = viewer.update(cx, |_, cx| cx.notify());
+                    }
+                });
+            }
+            self.busy()
+        }
+
+        /// Open a second window on the same surface. Deferred: the new
+        /// window draws (and steps this engine) as soon as it opens, which
+        /// must happen outside this entity's update.
+        fn open_viewer(&mut self, cx: &mut Context<Self>) {
+            let surface = self.engine.surface().clone();
+            let workbench = cx.entity().downgrade();
+            let sdr = self.sdr;
+            let resize = self.resize_second;
+            cx.defer(move |cx| {
+                let stats = Rc::new(RefCell::new(ViewerStats::default()));
+                let created: Rc<Cell<Option<WeakEntity<Viewer>>>> = Rc::new(Cell::new(None));
+                let (slot, viewer_stats, owner) =
+                    (created.clone(), stats.clone(), workbench.clone());
+                let bounds = Bounds::new(point(px(120.), px(120.)), size(px(560.), px(400.)));
+                let opened = cx.open_lab_window(
+                    WindowOptions {
+                        window_bounds: Some(WindowBounds::Windowed(bounds)),
+                        ..Default::default()
+                    },
+                    move |window, cx| {
+                        if !sdr {
+                            xgpui_ext_lab::negotiate_wide(window);
+                        }
+                        window.set_lab_title("Workbench · second window");
+                        let viewer = cx.new(|_| Viewer {
+                            workbench: owner,
+                            surface,
+                            stats: viewer_stats,
+                        });
+                        slot.set(Some(viewer.downgrade()));
+                        viewer
+                    },
+                );
+                if resize && let Ok(handle) = &opened {
+                    let handle = *handle;
+                    cx.spawn(async move |cx| {
+                        let sizes = [(800., 520.), (360., 260.), (560., 400.)];
+                        for i in 0.. {
+                            cx.background_executor()
+                                .timer(std::time::Duration::from_millis(500))
+                                .await;
+                            let (w, h) = sizes[i % sizes.len()];
+                            let resized = cx.update(|cx| {
+                                handle
+                                    .update(cx, |_, window, _| window.resize(size(px(w), px(h))))
+                                    .is_ok()
+                            });
+                            if !resized {
+                                break;
+                            }
+                        }
+                    })
+                    .detach();
+                }
+                let _ = workbench.update(cx, |workbench, cx| {
+                    match (opened, created.take()) {
+                        (Ok(_), Some(viewer)) => workbench.viewers.push((viewer, stats)),
+                        (Err(error), _) => {
+                            workbench.error = Some(format!("second window: {error:#}"))
+                        }
+                        _ => {}
+                    }
+                    cx.notify();
+                });
+            });
+        }
+
         fn slot_point(&self, position: Point<Pixels>) -> Option<Point<f32>> {
             let bounds = self.canvas_bounds.get();
             if bounds.size.width <= px(0.) {
@@ -406,6 +660,21 @@ mod workbench {
                             },
                         ))),
                 )
+                .child(
+                    row()
+                        .child(label("Windows"))
+                        .child(button("open-window", "Open second window", false).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                this.open_viewer(cx);
+                                cx.notify();
+                            }),
+                        ))
+                        .child(button("minimize", "Minimize", false).on_click(cx.listener(
+                            |_, _, window, _| {
+                                window.minimize_window();
+                            },
+                        ))),
+                )
         }
 
         fn inspection_view(&self) -> impl IntoElement {
@@ -554,31 +823,18 @@ mod workbench {
                 self.frame_times
                     .push(now.duration_since(last).as_secs_f32() * 1000.);
             }
-            if let Some(limit) = self.run_seconds
-                && self.started.elapsed().as_secs_f32() >= limit
+            if let Some(after) = self.minimize_after
+                && !self.minimized
+                && self.started.elapsed().as_secs_f32() >= after
             {
-                println!("{}", self.summary());
-                if let Some(error) = &self.error {
-                    println!("engine error: {error}");
-                }
-                cx.quit();
+                self.minimized = true;
+                window.minimize_window();
+                println!(
+                    "main window minimized at {:.1}s",
+                    self.started.elapsed().as_secs_f32()
+                );
             }
-            if self.demo {
-                self.demo_frame();
-            }
-            if let Err(error) = self.engine.frame() {
-                self.error = Some(format!("{error:#}"));
-            }
-            if let Some(found) = self.engine.poll_inspections().pop() {
-                self.inspection = Some(found);
-            }
-            let stats = self.engine.stats();
-            if self.demo
-                || self.run_seconds.is_some()
-                || self.engine.pending_dabs() > 0
-                || self.engine.inspections_in_flight() > 0
-                || stats.revision != stats.published_revision
-            {
+            if self.step(cx) {
                 window.request_animation_frame();
             }
             div()
@@ -678,6 +934,8 @@ mod workbench {
         }
         gpui_platform::application().run(move |cx: &mut App| {
             let bounds = Bounds::centered(None, size(px(1040.), px(800.)), cx);
+            let main_slot: Rc<Cell<Option<Entity<Workbench>>>> = Rc::new(Cell::new(None));
+            let main = main_slot.clone();
             cx.open_lab_window(
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -693,7 +951,7 @@ mod workbench {
                     let engine = Engine::new(options.slots).expect("workbench engine");
                     window.set_lab_title("XGPUI GPU Canvas Workbench");
                     window.activate_window();
-                    cx.new(|_| Workbench {
+                    let workbench = cx.new(|_| Workbench {
                         engine,
                         color: 0,
                         radius: RADII[1],
@@ -713,10 +971,25 @@ mod workbench {
                         run_seconds: options.run_seconds,
                         frame_times: Vec::new(),
                         last_frame: None,
-                    })
+                        sdr: options.sdr,
+                        resize_second: options.resize_second,
+                        viewers: Vec::new(),
+                        last_step: None,
+                        last_published: 0,
+                        minimize_after: options.minimize_after,
+                        minimized: false,
+                        quitting: false,
+                    });
+                    main.set(Some(workbench.clone()));
+                    workbench
                 },
             )
             .unwrap();
+            if options.second_window
+                && let Some(workbench) = main_slot.take()
+            {
+                workbench.update(cx, |workbench, cx| workbench.open_viewer(cx));
+            }
             cx.activate(true);
         });
         Ok(())

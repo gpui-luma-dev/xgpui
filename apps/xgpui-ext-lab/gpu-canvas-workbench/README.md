@@ -15,6 +15,9 @@ cargo run --release -p xgpui-ext-lab --bin gpu-canvas-workbench
 | `--run-seconds N` | Print a summary after N seconds and exit. |
 | `--check` | Replay an edit script against the CPU reference without a window; exits non-zero on failure. |
 | `--slots N` | Ring length, 2–8 (default 3). |
+| `--second-window` | Open a second window that places the same published revision. |
+| `--minimize-after S` | Minimize the main window after S seconds; the second window keeps stepping the engine. |
+| `--resize-second` | Resize the second window every 0.5 s. This only changes placement; nothing is republished. |
 
 **Interaction:**
 
@@ -74,4 +77,12 @@ Measured on macOS (M-series, wide window, `--demo --run-seconds 6`):
 
 Linux and Windows results are posted on #198.
 
-Not yet included: a second window, pan/zoom, pressure and failure test controls, and generation-replacement recovery. `engine-surface-lab --lose-engine-after` covers engine loss.
+**Windows.** The engine is stepped by whichever window renders, at most once per display frame, so edits keep progressing while the main window is hidden. *Open second window* and *Minimize* are also available as controls.
+
+Measured on macOS:
+
+- **Resizing:** one snapshot served 3 window sizes, with no republishing.
+- **Minimizing:** the second window carried on at 60 fps, after a single stall of about 570 ms during the minimize animation.
+- **Two animating windows:** the second window runs at about 30 fps while the main one animates, even when it paints nothing. That pacing comes from GPUI or macOS, not from engine surfaces.
+
+Not yet included: pan/zoom, pressure and failure test controls, and generation-replacement recovery. `engine-surface-lab --lose-engine-after` covers engine loss.
