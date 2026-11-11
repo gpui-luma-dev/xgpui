@@ -20,6 +20,17 @@ struct Shared {
     frames: Mutex<VecDeque<Arc<SurfaceFrame>>>,
     on_present: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     invalid: AtomicBool,
+    feedback: Arc<Feedback>,
+}
+
+/// Compositor feedback for engines: how quickly presented frames are shown,
+/// and how many are dropped unshown (rendered faster than composited).
+#[derive(Default)]
+struct Feedback {
+    composited: std::sync::atomic::AtomicU64,
+    unshown: std::sync::atomic::AtomicU64,
+    /// Present-to-first-composition delay of the latest composited frame, µs.
+    latency_us: std::sync::atomic::AtomicU64,
 }
 
 /// A ring of shareable slots presented into xgpui (see the crate docs).
@@ -63,6 +74,7 @@ impl EngineSurface {
             frames: Mutex::new(VecDeque::new()),
             on_present: Mutex::new(None),
             invalid: AtomicBool::new(false),
+            feedback: Arc::new(Feedback::default()),
         })))
     }
 
@@ -117,6 +129,9 @@ impl EngineSurface {
             resources: slot.resources,
             sync,
             _lease: lease,
+            presented_at: std::time::Instant::now(),
+            composited: AtomicBool::new(false),
+            feedback: self.0.feedback.clone(),
         });
         let ready = frame.sync.ready();
         let waiter = (!ready).then(|| Arc::downgrade(&frame));
@@ -203,6 +218,10 @@ impl EngineSurface {
             .iter()
             .filter(|frame| !frame.sync.ready())
             .count();
+        let feedback = &self.0.feedback;
+        stats.composited = feedback.composited.load(Ordering::Relaxed);
+        stats.unshown = feedback.unshown.load(Ordering::Relaxed);
+        stats.composite_latency_ms = feedback.latency_us.load(Ordering::Relaxed) as f32 / 1000.;
         stats
     }
 
@@ -259,6 +278,29 @@ struct SurfaceFrame {
     resources: Arc<SlotResources>,
     sync: SyncPoint,
     _lease: Arc<Lease>,
+    presented_at: std::time::Instant,
+    composited: AtomicBool,
+    feedback: Arc<Feedback>,
+}
+impl SurfaceFrame {
+    /// Record the first composition of this frame.
+    fn note_composited(&self) {
+        if !self.composited.swap(true, Ordering::AcqRel) {
+            let feedback = &self.feedback;
+            feedback.composited.fetch_add(1, Ordering::Relaxed);
+            feedback.latency_us.store(
+                self.presented_at.elapsed().as_micros() as u64,
+                Ordering::Relaxed,
+            );
+        }
+    }
+}
+impl Drop for SurfaceFrame {
+    fn drop(&mut self) {
+        if !self.composited.load(Ordering::Acquire) {
+            self.feedback.unshown.fetch_add(1, Ordering::Relaxed);
+        }
+    }
 }
 impl std::fmt::Debug for SurfaceFrame {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -286,6 +328,7 @@ impl CustomContent for FrameView {
     }
     fn prepare(&self, backend: &dyn Any, _: Size<DevicePixels>) -> Result<Box<dyn Any>> {
         let frame = &self.frame;
+        frame.note_composited();
         platform::prepare_frame(
             &frame.desc,
             &frame.resources,

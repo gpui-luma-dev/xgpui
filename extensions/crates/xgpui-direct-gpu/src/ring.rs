@@ -99,6 +99,9 @@ impl Ring {
             presents: state.presents,
             would_block: state.would_block,
             waiting: 0,
+            composited: 0,
+            unshown: 0,
+            composite_latency_ms: 0.,
         }
     }
 

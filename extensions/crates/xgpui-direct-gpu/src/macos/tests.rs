@@ -898,3 +898,31 @@ fn colour_matches_reference_in_preview_and_wide() {
         eprintln!("colour: all patches within tolerance (worst 8-bit distance {worst:.2})");
     });
 }
+
+/// Engine feedback: composited frames record their present-to-composite
+/// delay; frames replaced before any composition count as unshown.
+#[test]
+fn feedback_counts_composited_and_unshown_frames() {
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Bgra8Srgb, 3)).unwrap();
+        let mut engine = Engine::new();
+        let mut renderer = MetalHeadlessRenderer::new().unwrap();
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [1.0, 0.0, 0.0, 1.0]);
+        renderer
+            .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+            .unwrap();
+        // Two more frames; only the last is composited.
+        for color in [[0.0, 1.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]] {
+            let slot = surface.acquire().unwrap();
+            engine.draw_and_present(&surface, slot, color);
+        }
+        renderer
+            .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+            .unwrap();
+        let stats = surface.stats();
+        assert_eq!(stats.composited, 2, "{stats:?}");
+        assert_eq!(stats.unshown, 1, "{stats:?}");
+        assert!(stats.composite_latency_ms >= 0. && stats.composite_latency_ms < 1000.);
+    });
+}

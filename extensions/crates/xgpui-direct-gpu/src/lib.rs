@@ -171,7 +171,7 @@ impl std::fmt::Display for Unsupported {
 impl std::error::Error for Unsupported {}
 
 /// Counters for diagnostics and pressure tests.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SurfaceStats {
     /// Slots available to `acquire`.
     pub free: usize,
@@ -187,6 +187,15 @@ pub struct SurfaceStats {
     /// Presented frames not shown yet because their sync point has not been
     /// observed reached (see `EngineSurface::present`).
     pub waiting: usize,
+    /// Presented frames the compositor has composited at least once.
+    pub composited: u64,
+    /// Presented frames dropped without ever being composited: the engine
+    /// produced them faster than the compositor showed them.
+    pub unshown: u64,
+    /// Delay from `present` to the first composition of the latest
+    /// composited frame. Rising values mean the compositor is falling
+    /// behind (for example, the GPU is saturated); engines can throttle.
+    pub composite_latency_ms: f32,
 }
 
 /// How engine output reaches the compositor.

@@ -97,6 +97,8 @@ impl SyncPoint {
 /// the engine's semaphore (later frames are never waited for).
 const FIRST_FRAME_WAIT: Duration = Duration::from_millis(100);
 
+static ENGINE_LOW_PRIORITY: AtomicBool = AtomicBool::new(false);
+
 const SEMAPHORE_HANDLE: vk::ExternalSemaphoreHandleTypeFlags =
     vk::ExternalSemaphoreHandleTypeFlags::OPAQUE_FD;
 
@@ -577,6 +579,10 @@ impl WgpuSurfaceTarget {
             ..Default::default()
         };
         let name = ash::khr::external_semaphore_fd::NAME;
+        let mut low_priority = false;
+        // Lives until device creation inside `open_with_callback` returns.
+        let mut priority = vk::DeviceQueueGlobalPriorityCreateInfoKHR::default()
+            .global_priority(vk::QueueGlobalPriorityKHR::LOW);
         let open = unsafe { adapter.as_hal::<Vulkan>() }.and_then(|hal_adapter| {
             let available = unsafe {
                 hal_adapter
@@ -585,18 +591,40 @@ impl WgpuSurfaceTarget {
                     .enumerate_device_extension_properties(hal_adapter.raw_physical_device())
             }
             .ok()?;
-            if !available
-                .iter()
-                .any(|extension| extension.extension_name_as_c_str() == Ok(name))
-            {
+            let has = |wanted: &std::ffi::CStr| {
+                available
+                    .iter()
+                    .any(|extension| extension.extension_name_as_c_str() == Ok(wanted))
+            };
+            if !has(name) {
                 return None;
             }
-            let callback: Box<wgpu::hal::vulkan::CreateDeviceCallback> = Box::new(move |args| {
-                if !args.extensions.contains(&name) {
-                    args.extensions.push(name);
-                }
-            });
-            // SAFETY: the callback only adds an extension the adapter supports.
+            // Engines yield to the compositor: a low-priority queue needs no
+            // privileges where the driver supports global priorities.
+            let priority_extension = [
+                ash::khr::global_priority::NAME,
+                ash::ext::global_priority::NAME,
+            ]
+            .into_iter()
+            .find(|extension| has(extension));
+            low_priority = priority_extension.is_some();
+            let priority = &mut priority;
+            let callback: Box<wgpu::hal::vulkan::CreateDeviceCallback<'_>> =
+                Box::new(move |args| {
+                    if !args.extensions.contains(&name) {
+                        args.extensions.push(name);
+                    }
+                    if let Some(extension) = priority_extension
+                        && let Some(queue) = args.queue_create_infos.first_mut()
+                    {
+                        if !args.extensions.contains(&extension) {
+                            args.extensions.push(extension);
+                        }
+                        *queue = queue.push_next(priority);
+                    }
+                });
+            // SAFETY: the callback only adds extensions the adapter supports
+            // and chains a queue priority those extensions define.
             unsafe {
                 hal_adapter.open_with_callback(
                     descriptor.required_features,
@@ -610,10 +638,17 @@ impl WgpuSurfaceTarget {
         if let Some(open) = open {
             // SAFETY: `open` came from this adapter with the descriptor's features.
             if let Ok(pair) = unsafe { adapter.create_device_from_hal(open, &descriptor) } {
+                ENGINE_LOW_PRIORITY.store(low_priority, std::sync::atomic::Ordering::Relaxed);
                 return Ok(pair);
             }
         }
+        ENGINE_LOW_PRIORITY.store(false, std::sync::atomic::Ordering::Relaxed);
         Ok(gpui::block_on(adapter.request_device(&descriptor))?)
+    }
+
+    /// Whether the last `request_device` created a low-priority engine queue.
+    pub fn engine_queue_low_priority() -> bool {
+        ENGINE_LOW_PRIORITY.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Whether frames are handed over with a GPU-side wait (shared timeline
