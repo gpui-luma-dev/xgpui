@@ -35,13 +35,6 @@ pub(super) struct FenceRetirement {
     worker: Option<std::thread::JoinHandle<()>>,
 }
 
-/// Temporary teardown diagnostics: `GPUI_D3D11_RETIREMENT_TRACE=1`.
-fn trace(event: &str) {
-    if std::env::var_os("GPUI_D3D11_RETIREMENT_TRACE").is_some() {
-        eprintln!("trace: d3d11 retirement {event}");
-    }
-}
-
 /// Diagnostic switch: `GPUI_D3D11_FENCE_RETIREMENT=0` keeps query retirement.
 fn disabled() -> bool {
     std::env::var("GPUI_D3D11_FENCE_RETIREMENT").is_ok_and(|value| value == "0")
@@ -95,11 +88,8 @@ impl FenceRetirement {
                             break;
                         }
                     }
-                    trace("worker dropping a snapshot");
                     drop(snapshot);
-                    trace("worker dropped a snapshot");
                 }
-                trace("worker exiting");
                 for (_, snapshot) in receiver.try_iter() {
                     std::mem::forget(snapshot);
                 }
@@ -138,7 +128,6 @@ impl FenceRetirement {
 
 impl Drop for FenceRetirement {
     fn drop(&mut self) {
-        trace("owner dropping (renderer teardown)");
         let _ = unsafe { SetEvent(self.events.stop) };
         self.sender.take();
         if let Some(worker) = self.worker.take() {
@@ -148,6 +137,5 @@ impl Drop for FenceRetirement {
             let _ = CloseHandle(self.events.fence);
             let _ = CloseHandle(self.events.stop);
         }
-        trace("owner dropped");
     }
 }
