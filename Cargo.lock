@@ -8003,9 +8003,11 @@ dependencies = [
  "objc2-io-surface",
  "objc2-metal 0.3.2",
  "wgpu",
+ "windows 0.62.2",
  "xgpui",
  "xgpui-apple",
  "xgpui-wgpu",
+ "xgpui-windows",
 ]
 
 [[package]]

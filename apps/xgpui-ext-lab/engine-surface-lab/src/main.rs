@@ -3,17 +3,17 @@
 //! `EngineSurface`; xgpui composites the latest frame zero-copy beside ordinary
 //! sRGB controls, in two placements.
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 fn main() {
-    eprintln!("engine-surface-lab requires macOS (Metal) or Linux (Vulkan); see issue #197");
+    eprintln!("engine-surface-lab requires macOS, Linux or Windows; see issue #197");
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 fn main() -> anyhow::Result<()> {
     lab::main()
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod lab {
     use anyhow::{Context as _, Result, ensure};
     use clap::Parser;
@@ -40,6 +40,10 @@ mod lab {
     const TRANSPORT: &str = "zero-copy IOSurface ring";
     #[cfg(target_os = "linux")]
     const TRANSPORT: &str = "zero-copy opaque-fd ring";
+    #[cfg(target_os = "windows")]
+    const BACKEND: (wgpu::Backends, &str) = (wgpu::Backends::DX12, "D3D12");
+    #[cfg(target_os = "windows")]
+    const TRANSPORT: &str = "zero-copy shared-handle ring";
     use xgpui_ext_lab::{LabApp, LabWindowTitle};
 
     const WIDTH: u32 = 640;
@@ -53,7 +57,7 @@ mod lab {
         #[arg(long)]
         sdr: bool,
         /// Use RGBA16F linear-P3 slots even without a wide window (Linux shows
-        /// them as a mapped sRGB preview; macOS requires a wide window).
+        /// them as a mapped sRGB preview; macOS and Windows require a wide window).
         #[arg(long)]
         p3: bool,
         /// Ring length (2..=8).
@@ -206,9 +210,9 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             let adapter =
                 gpui::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
                     .with_context(|| format!("no wgpu {} adapter", BACKEND.1))?;
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             let required_features = WgpuSurfaceTarget::required_features();
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(target_os = "macos")]
             let required_features = wgpu::Features::empty();
             let (device, queue) =
                 gpui::block_on(adapter.request_device(&wgpu::DeviceDescriptor {

@@ -19,9 +19,10 @@
 //! signals the sync point. A sync point whose signal is never submitted can
 //! stall composition.
 //!
-//! Implemented: macOS (IOSurface slots, `MTLSharedEvent` sync, GPU-side wait)
-//! and Linux with feature `wgpu` (opaque-fd Vulkan memory from a wgpu engine on
-//! its own device; readiness observed by the engine before `present`).
+//! Implemented: macOS (IOSurface slots, `MTLSharedEvent` sync, GPU-side wait);
+//! with feature `wgpu`, Linux (opaque-fd Vulkan memory) and Windows (shared
+//! NT-handle D3D12 textures opened by the D3D11 compositor). On Linux and
+//! Windows the engine observes completion before `present`.
 use gpui::{DevicePixels, Size, size};
 
 mod ring;
@@ -40,13 +41,26 @@ use linux as platform;
 #[cfg(all(target_os = "linux", feature = "wgpu"))]
 pub use linux::*;
 
-#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "wgpu")))]
+#[cfg(all(target_os = "windows", feature = "wgpu"))]
+mod d3d;
+#[cfg(all(target_os = "windows", feature = "wgpu"))]
+use d3d as platform;
+#[cfg(all(target_os = "windows", feature = "wgpu"))]
+pub use d3d::*;
+
+#[cfg(any(
+    target_os = "macos",
+    all(any(target_os = "linux", target_os = "windows"), feature = "wgpu")
+))]
 mod surface;
-#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "wgpu")))]
+#[cfg(any(
+    target_os = "macos",
+    all(any(target_os = "linux", target_os = "windows"), feature = "wgpu")
+))]
 pub use surface::{EngineSurface, SurfaceSlot};
 
 /// The wgpu version engine adapters are built against; use it for engine devices.
-#[cfg(all(target_os = "macos", feature = "wgpu"))]
+#[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "wgpu"))]
 pub use ::wgpu;
 /// The wgpu version engine adapters are built against; use it for engine devices.
 #[cfg(all(target_os = "linux", feature = "wgpu"))]
@@ -57,9 +71,10 @@ pub use gpui_wgpu::wgpu;
 pub enum SurfaceFormat {
     /// BGRA8, straight alpha, sRGB-encoded channels. Works in every window.
     Bgra8Srgb,
-    /// RGBA16 float, associated alpha, linear Display P3/D65. On macOS this
-    /// requires a window that negotiated `WindowColorMode::WideGamutSdr`; on
-    /// Linux it is shown as a mapped sRGB preview (#146).
+    /// RGBA16 float, associated alpha, linear Display P3/D65. On macOS and
+    /// Windows this requires a window that negotiated
+    /// `WindowColorMode::WideGamutSdr`; on Linux it is shown as a mapped sRGB
+    /// preview (#146).
     Rgba16FloatLinearP3,
 }
 impl SurfaceFormat {
@@ -74,9 +89,9 @@ impl SurfaceFormat {
     pub fn color_mode(self) -> gpui::ImageColorMode {
         match self {
             Self::Bgra8Srgb => gpui::ImageColorMode::EncodedSrgb,
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             Self::Rgba16FloatLinearP3 => gpui::ImageColorMode::LinearP3Wide,
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             Self::Rgba16FloatLinearP3 => gpui::ImageColorMode::LinearP3Preview,
         }
     }

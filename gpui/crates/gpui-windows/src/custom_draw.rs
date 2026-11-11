@@ -173,6 +173,75 @@ impl Dx11CustomContext {
             recording: self.recording.clone(),
         })
     }
+    /// Adopt a texture on this context's `device` (for example a shared NT-handle
+    /// texture opened from another API) as a source-sized output, without a copy.
+    ///
+    /// Accepted: 2D, one mip/array slice/sample, default usage, shader-resource and
+    /// render-target binding, and `B8G8R8A8_UNORM` (straight-alpha encoded sRGB) or
+    /// `R16G16B16A16_FLOAT` (associated linear content per the producer's
+    /// `ImageColorMode`). Keyed-mutex textures are rejected; use `DxgiFrame`.
+    ///
+    /// # Safety
+    /// Every producer write must be complete and visible to this device before the
+    /// host executes work that samples the texture. Its contents must not change
+    /// while this output, a cached copy of it, or a retained scene referencing its
+    /// content can still be sampled.
+    pub unsafe fn adopt_texture(&self, texture: ID3D11Texture2D) -> Result<Dx11CustomOutput> {
+        ensure!(
+            self.recording.state.load(Ordering::Acquire) == PENDING,
+            "DirectX preparation is no longer writable"
+        );
+        ensure!(
+            unsafe { texture.GetDevice()? }.as_raw() == self.device.as_raw(),
+            "adopted texture belongs to another device"
+        );
+        let mut desc = D3D11_TEXTURE2D_DESC::default();
+        unsafe { texture.GetDesc(&mut desc) };
+        ensure!(
+            desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM
+                || desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT,
+            "adopted texture must be B8G8R8A8_UNORM or R16G16B16A16_FLOAT"
+        );
+        ensure!(
+            (1..=16384).contains(&desc.Width)
+                && (1..=16384).contains(&desc.Height)
+                && desc.MipLevels == 1
+                && desc.ArraySize == 1
+                && desc.SampleDesc.Count == 1,
+            "adopted texture must be a single-level 2D texture of 1..=16384 pixels"
+        );
+        let required = (D3D11_BIND_SHADER_RESOURCE.0 | D3D11_BIND_RENDER_TARGET.0) as u32;
+        ensure!(
+            desc.BindFlags & required == required && desc.Usage == D3D11_USAGE_DEFAULT,
+            "adopted texture must be a default-usage shader-readable render target"
+        );
+        ensure!(
+            desc.MiscFlags & (D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX.0 as u32) == 0,
+            "keyed-mutex textures require DxgiFrame's keyed protocol"
+        );
+        let (mut srv, mut rtv) = (None, None);
+        unsafe {
+            self.device
+                .CreateShaderResourceView(&texture, None, Some(&mut srv))?;
+            self.device
+                .CreateRenderTargetView(&texture, None, Some(&mut rtv))?;
+        }
+        Ok(Dx11CustomOutput {
+            bundle: TextureBundle {
+                texture,
+                srv: srv.context("missing adopted shader view")?,
+                rtv: rtv.context("missing adopted target view")?,
+                extent: size(
+                    DevicePixels(desc.Width as i32),
+                    DevicePixels(desc.Height as i32),
+                ),
+                _dxgi_lease: None,
+            },
+            source_sized: true,
+            owner: self.owner.clone(),
+            recording: self.recording.clone(),
+        })
+    }
     /// Worker-safe device handles for source-sized image staging.
     pub fn image_upload_context(&self) -> Dx11ImageUploadContext {
         Dx11ImageUploadContext {
