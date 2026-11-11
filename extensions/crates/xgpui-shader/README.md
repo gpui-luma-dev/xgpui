@@ -41,7 +41,7 @@ convert into extended composition primaries after source clamping. Metal capture
 and normal blending retain extended channels. Artistic blend modes retain bounded
 operand definitions. Native wide output is rejected by wgpu/browser hosts.
 
-See the [brush guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/brushes.md)
+See the [brush guide](https://xgpui.dev/brushes.html)
 for stop limits, coordinates, interpolation, noise and mesh examples.
 
 ## Text fills
@@ -64,7 +64,7 @@ Choose the effect according to what should be filtered:
 
 Layer filters can be combined. Blur is bounded and clipped; it is not an
 unlimited image-processing surface. See the
-[paint and effect guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/extension-paints.md)
+[paint and effect guide](https://xgpui.dev/extension-paints.html)
 for composition order, bounds and caching behavior.
 
 ## Path rendering
@@ -73,20 +73,20 @@ for composition order, bounds and caching behavior.
 `paint_path` uses direct coverage where supported and falls back to native
 coverage. `paint_path_direct` requests the strict direct route; its geometry
 and complexity limits are documented in the
-[path contract](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/brushes.md).
+[path contract](https://xgpui.dev/brushes.html).
 
 ## Custom shaders, shadows and borders
 
 Use `shader_paint::ShaderProgram::new` for reflected shader paints integrated
 with backgrounds, borders and paths. Use `instanced::ShaderProgram<T>::new` for
 typed WGSL programs drawn in the host render pass. Both APIs are experimental.
-See [choosing a rendering model and migrating old names](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/shader-models.md)
+See [choosing a rendering model and migrating old names](https://xgpui.dev/shader-models.html)
 for parameter limits, backend coverage and migration from the removed beta API names.
 
 The `instanced` module draws typed WGSL programs in the host render pass.
 `ShadowPainter` adds programmable rounded-box shadows; `AnimatedBorder` provides
 reusable conic border animation. The application drives animation and reduced
-motion behavior. See [instanced WGSL](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/instanced-wgsl-v2.md)
+motion behavior. See [instanced WGSL](https://xgpui.dev/instanced-wgsl-v2.html)
 for complete programs, parameter layouts and backend limits.
 
 ## Selectable typography
@@ -94,7 +94,7 @@ for complete programs, parameter layouts and backend limits.
 `typography::SelectableText` supports retained, read-only single-line LTR text,
 selection, copy, accessibility, and typewriter/wave/scramble effects. It works
 without `portable-shaders`; brush fills and glyph shadows require that feature.
-See the [typography guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/typography.md)
+See the [typography guide](https://xgpui.dev/typography.html)
 for its supported Unicode subset and editing limits.
 
 ## Features and examples
@@ -119,8 +119,8 @@ cover native demos and the browser companion builds.
 ## GPUI public API changes: additions and compatibility
 
 Use this crate with xgpui's matching framework packages. Its integration depends
-on [xgpui's GPUI API changes](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md#altered-existing-public-types--source-compatibility-risks).
-See the [compatibility guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/extension-paints.md#gpui-public-api-changes-additions-and-compatibility)
+on [xgpui's GPUI API changes](https://xgpui.dev/gpui-public-api.html#altered-existing-public-types--source-compatibility-risks).
+See the [compatibility guide](https://xgpui.dev/extension-paints.html#gpui-public-api-changes-additions-and-compatibility)
 for additions, affected public types and migration requirements.
 
 ## Project

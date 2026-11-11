@@ -57,9 +57,9 @@ lint:
 wasm *args:
     bash apps/xgpui-ext-lab/shader-examples/build.sh "$@"
 
-# Serve an already built WASM companion.
+# Serve the website, including an already built WASM companion, at http://localhost:8000/examples/shaders/.
 serve:
-    python3 apps/xgpui-ext-lab/shader-examples/serve.py
+    python3 -m http.server 8000 --bind 127.0.0.1 --directory pages
 
 # Kinetic typography: typewriter/wave, stable selection, pause/scrub and authentic copy.
 typography *args:

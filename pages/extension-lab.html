@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>xgpui-ext-lab · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/extension-lab.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="xgpui-ext-lab">xgpui-ext-lab</h1>
+<p><strong>Version 0.2.0 · Unpublished development package</strong></p>
+<p><code>xgpui-ext-lab</code> is the shared home for XGPUI's native extension labs,
+benchmarks and browser demos. It contains runnable examples for exploring
+rendering behavior and comparing implementations. The workloads share one Cargo
+manifest and lockfile, with separate executable targets.</p>
+<p>It lives at <code>apps/xgpui-ext-lab/</code>. The reusable extension libraries live separately
+under <code>extensions/crates/</code> and do not depend on this package.</p>
+<h2 id="what-is-in-it">What is in it?</h2>
+<table><thead><tr><th>Workload</th><th>Target</th><th>Root recipe</th></tr></thead><tbody>
+<tr><td>Image loading, mipmaps, adjustments, tiled canvases and paths</td><td><code>media-lab</code></td><td><code>just lab-media</code></td></tr>
+<tr><td>Brushes, gradients, meshes and layer effects</td><td><code>paint-lab</code></td><td><code>just lab-paint</code></td></tr>
+<tr><td>Native wide-gamut presentation</td><td><code>gamut-lab</code></td><td><code>just lab-gamut</code></td></tr>
+<tr><td>Color conversions and gradient comparisons</td><td><code>color-lab</code></td><td><code>just lab-color</code></td></tr>
+<tr><td>Native and Parley text comparisons</td><td><code>text-lab</code></td><td><code>just lab-text</code></td></tr>
+<tr><td>SVG rendering, scaling and scheduling</td><td><code>svg-lab</code></td><td><code>just lab-svg</code></td></tr>
+<tr><td>Spatial cards and native Mandelbrot explorer</td><td><code>canvas-lab</code></td><td><code>just lab-canvas</code></td></tr>
+<tr><td>Dense Metal producer regression (macOS)</td><td><code>metal-producer-regression</code></td><td>See below</td></tr>
+<tr><td>Quad rendering benchmark</td><td><code>quad-bench</code></td><td><code>just lab-quad-bench</code></td></tr>
+<tr><td>Color-field rendering benchmark</td><td><code>color-field-bench</code></td><td><code>just lab-color-field-bench</code></td></tr>
+<tr><td>Native and browser shader examples</td><td><code>shader-examples</code></td><td><code>just lab-shader</code></td></tr>
+<tr><td>Browser extension gallery</td><td><code>extensions-web</code></td><td><code>just web-build</code></td></tr>
+</tbody></table>
+<p>The package also keeps the associated sample assets, fixtures, benchmark scripts
+and recorded reports beside the workloads that use them. Measurements describe
+the recorded workload and machine; use the benchmark commands to measure your own
+setup.</p>
+<h2 id="why-is-it-not-published">Why is it not published?</h2>
+<p>The manifest sets <code>publish = false</code>. This is a development and validation package,
+not a library that applications need to depend on. It follows the local framework
+and extension checkouts, uses repository fixtures, and can change as experiments
+and diagnostic workloads evolve.</p>
+<p>Keeping it unpublished lets the extension libraries have their own release
+contracts without committing to stable lab commands, benchmark output formats or
+sample layouts. Normal applications use the framework and extension libraries;
+they do not pull in the labs or their development dependencies.</p>
+<p>This does not prevent a future release on crates.io. Before publishing, we would
+choose the supported tools, package the required assets, verify registry-only
+dependencies and define the compatibility expectations for the commands and
+outputs. The lab is deliberately absent from the library release map today.</p>
+<h2 id="build-and-test">Build and test</h2>
+<p>Run from the repository root:</p>
+<pre><code class="language-sh">just lab-build
+just lab-test
+</code></pre>
+<p><code>lab-build</code> builds the native lab and benchmark executables in release mode without
+opening a window. <code>lab-test</code> runs unit and compatibility tests. Tests that create
+real platform windows remain opt-in through the <code>native-window-tests</code> feature.</p>
+<p>Choose one workload with its root recipe, or select its binary directly:</p>
+<pre><code class="language-sh">cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --target-dir target
+</code></pre>
+<p>For a bounded benchmark without a window:</p>
+<pre><code class="language-sh">just lab-quad-bench --headless --cpu-only
+</code></pre>
+<p>See <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development</a> for toolchains, native platform
+requirements and the distinction between framework builds and lab builds.</p>
+<h2 id="native-lab-launch-commands">Native lab launch commands</h2>
+<p>These applications run on your desktop, not inside the browser. Run the commands
+from the repository root after following the platform setup in
+<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development</a>.</p>
+<h3 id="canvas-and-mandelbrot">Canvas and Mandelbrot</h3>
+<p>Explore spatial cards, or open the native fractal explorer:</p>
+<pre><code class="language-sh">just lab-canvas
+just lab-canvas --mandelbrot
+</code></pre>
+<p>The native Mandelbrot explorer retains complete frames during navigation, with
+Metal compute for shallow views on supported macOS wide-SDR hosts and CPU
+refinement for deep views. See the <a href="canvas.html">canvas guide</a>.</p>
+<h3 id="metal-producer-regression-macos">Metal producer regression (macOS)</h3>
+<p>Run the supervised control and dense 512-producer workload, including replay,
+scene replacement and pixel checks:</p>
+<pre><code class="language-sh">cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin metal-producer-regression --target-dir target
+</code></pre>
+<p>Each child has a 15-second runtime limit after compilation. A timeout fails the
+check; preparation markers help locate a stall.</p>
+<h3 id="pastel-waves">Pastel waves</h3>
+<p>Open the native paint lab's animated ribbon experiment:</p>
+<pre><code class="language-sh">just lab-paint --pastel-waves
+</code></pre>
+<h3 id="full-paint-lab">Full paint lab</h3>
+<p>Open the desktop brush, gradient, mesh and layer-effect comparisons:</p>
+<pre><code class="language-sh">just lab-paint
+</code></pre>
+<h3 id="native-wide-gamut">Native wide gamut</h3>
+<p>Compare native wide-SDR presentation with ordinary sRGB controls on a supported
+display:</p>
+<pre><code class="language-sh">just lab-gamut
+</code></pre>
+<h3 id="native-text-comparison">Native text comparison</h3>
+<p>Compare native and Parley shaping, editing and virtualized paragraphs. Each
+supported comparison window includes live weight, width, slant and optical-size
+sliders, keyboard controls, presets, wrapping specimens and measured advances:</p>
+<pre><code class="language-sh">just text --backend both
+just lab-test live_axis -- --nocapture
+</code></pre>
+<p>The native/Parley font-controls labs and tests are verified on macOS and Windows.
+Tests run with backtraces. The same sliders also run in the <a href="examples/extensions/?demo=font-controls">Wasm font inspector</a>
+with Parley on WebGPU/WebGL2. See <a href="font-controls.html">font controls</a> for support,
+preview admission limits and core 3.0 migration.</p>
+<h3 id="desktop-svg-lab">Desktop SVG lab</h3>
+<p>Open the native SVG rendering, zoom and scheduling comparisons:</p>
+<pre><code class="language-sh">just lab-svg
+</code></pre>
+<h2 id="browser-demos-and-local-docs">Browser demos and local docs</h2>
+<p>The browser demos are targets of the same package. Their scripts select the
+<code>web</code> feature without the default native targets and generate the JavaScript and
+WASM bundles used by this website:</p>
+<pre><code class="language-sh">just web-build
+just docs-check
+just docs-serve
+</code></pre>
+<p><code>web-build</code> requires the pinned <code>wasm-bindgen</code> CLI, currently <code>0.2.129</code>, and the
+<code>wasm32-unknown-unknown</code> Rust target. It writes the bundles into <code>pages/examples/extensions/</code>
+and <code>pages/examples/shaders/</code>, which <code>just docs-serve</code> serves at the same
+<code>examples/</code> URLs as the website. Reload the page after rebuilding.</p>
+<p><a href="examples/extensions/">Open the browser demo gallery</a> or
+<a href="examples/shaders/">open the shader examples</a>. Their hosted URLs are unchanged
+by the package consolidation. The gallery also lists native-only workloads and
+how to launch them locally.</p>
+<h2 id="how-is-this-different-from-xgpui-lab">How is this different from xgpui-lab?</h2>
+<p><a href="https://github.com/gpui-luma-dev/xgpui-lab"><code>xgpui-lab</code></a> is the separate desktop
+application used to exercise XGPUI together with the Luma SDK. It has its own
+repository and application shell.</p>
+<p><code>xgpui-ext-lab</code> is the development package inside this repository: focused native
+labs, repeatable benchmarks and the source for this website's WASM demos. The two
+names refer to different applications and development roles.</p>
+<p><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab">Browse the package source</a>.</p>
+<h2 id="color-tasks-and-the-native-color-lab">Color tasks and the native color lab</h2>
+<p>The browser gallery includes <a href="examples/extensions/?demo=chromaticity">chromaticity</a> and <a href="examples/extensions/?demo=pixel-metadata">pixels + metadata</a> demos. Both are sRGB previews of Rust/Wasm calculations. The native chromaticity workspace now lives in this package's <code>color-lab</code>, alongside the original swatches. Use <code>just lab-color --chromaticity</code> or switch tabs in <code>just lab-color</code>; see <a href="color-labs.html">color labs</a> for commands, controls and the limits of CPU values, GPU readback and display capability reports.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

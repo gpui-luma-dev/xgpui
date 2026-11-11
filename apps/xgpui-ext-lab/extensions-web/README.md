@@ -37,14 +37,14 @@ rustup target add wasm32-unknown-unknown
 # Match the version recorded for wasm-bindgen in this app's Cargo.lock.
 cargo install wasm-bindgen-cli --version 0.2.129 --locked
 bash apps/xgpui-ext-lab/extensions-web/build.sh
-python3 apps/xgpui-ext-lab/extensions-web/serve.py
+just docs-serve
 ```
 
-Open <http://localhost:8081/>. Add `--release` to the build command for an optimized
-build. The server accepts `--port 8082` if needed. Stop it with Ctrl-C; rebuild and
-reload after changes. The build writes `target/web/extensions/`. `just docs-serve` stages it at
-`target/site/examples/extensions/` for local documentation previews, so `/examples/extensions/?demo=svg` uses the same
-HTML, JavaScript and Wasm as this server. No Trunk, nightly toolchain, worker pool, or shared Wasm
+Open <http://localhost:8000/examples/extensions/>. Add `--release` to the build
+command for an optimized build; rebuild and reload after changes. The build writes
+its generated files next to the checked-in gallery in `pages/examples/extensions/`,
+so the local preview and the website serve the same HTML, JavaScript and Wasm.
+`bash apps/xgpui-ext-lab/extensions-web/clean.sh` removes them. No Trunk, nightly toolchain, worker pool, or shared Wasm
 memory configuration is required. The app opts into wgpu's
 `fragile-send-sync-non-atomic-wasm` compatibility feature because GPUI paint
 producers require `Send + Sync`; GPU handles stay on the browser thread. A
@@ -102,7 +102,6 @@ Build and preview from the repository root:
 
 ```sh
 just web-build
-just docs
 just docs-serve
 ```
 
@@ -261,7 +260,7 @@ triple-click lines; use Home/End and Cmd/Ctrl+A/C. Check combining accents, join
 emoji and flags, selection persistence through size/theme changes, and the narrow
 overflow sample. Paste copied text into another app. The current web platform has no canvas accessibility bridge. Inspect the read-only
 text field and selection with the native demo; full screen reader certification
-remains manual. See [scope and API](../../../docs/extensions/typography.md).
+remains manual. See [scope and API](https://xgpui.dev/typography.html).
 
 
 ## Media and contour-effects acceptance
@@ -296,7 +295,7 @@ The Image filters demo now starts with linear-sRGB EV exposure, contrast,
 saturation and vignette on a rectangular generated RGBA fixture. Switch to
 encoded filters to compare the earlier API. Animate, opacity/corners and reset
 reuse one texture preparation on both WebGPU and WebGL2. See the
-[media pipeline guide](../../../docs/extensions/media-pipeline.md).
+[media pipeline guide](https://xgpui.dev/media-pipeline.html).
 
 
 ### RGBA16F supplied pixels (Phase 3)
@@ -309,7 +308,7 @@ or decoder. Native output compares explicit sRGB preview with accepted wide-SDR;
 both browser panels are sRGB previews. Exposure/saturation, vignette, opacity,
 reset and mode/zoom controls reuse one source upload.
 
-See [media pipeline guide](../../../docs/extensions/media-pipeline.md) for the
+See [media pipeline guide](https://xgpui.dev/media-pipeline.html) for the
 `load_rgba16f` API, input metadata, byte limits and backend validation status.
 The native lab companion and `just lab-test` passed in Windows user testing on
 2026-11-04. Windows browser testing and Linux native runtime retain separate
@@ -330,7 +329,7 @@ availability; view timing ends at reusable upload submission. Browser generation
 is one small page per frame on the host thread. These are functional diagnostics,
 not disk/decoder or sustained frame-time benchmarks. Keep 60 Hz as the baseline.
 
-The [pipeline guide](../../../docs/extensions/media-pipeline.md) documents
+The [pipeline guide](https://xgpui.dev/media-pipeline.html) documents
 `TileProvider`, `TileCanvas`, code examples, budget scope and pending native
 Windows/Linux QA. No new decoder, blur pass or playback engine is added.
 
@@ -365,7 +364,7 @@ pixels. It retains one completed image rather than the native tile cache.
 Refinement is capped at 480×360, zoom at 1e8, iterations at 2,048; f64 limits
 apply. Check reset/resize/rapid navigation and refinement on both backends.
 
-See [extension usage and native/browser differences](../../../docs/extensions/canvas.md).
+See [extension usage and native/browser differences](https://xgpui.dev/canvas.html).
 
 ## Color task demos
 

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Color and wide-gamut workflows · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/color-workflows.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Color tasks.</strong> Pixels, metadata, storage and presentation. <a href="color-workflows.html">Choose a task →</a></p><article class="extension-document"><h1 id="color-and-wide-gamut-workflows">Color and wide-gamut workflows</h1>
+<p>Start with the task you need to complete. XGPUI separates the meaning of your
+pixels from their storage and from the window that presents them.</p>
+<table><thead><tr><th>I want to…</th><th>Start here</th></tr></thead><tbody>
+<tr><td>Display supplied RGB pixels with the right interpretation</td><td><a href="pixels-and-metadata.html">Pixels and metadata</a></td></tr>
+<tr><td>Preserve Adobe RGB or P3 colors through storage</td><td><a href="pixels-and-metadata.html#choose-storage-deliberately">Choose image storage</a></td></tr>
+<tr><td>Enable wide-gamut presentation in a native window</td><td><a href="high-gamut-windows.html">Wide-gamut windows</a></td></tr>
+<tr><td>Use an embedded RGB ICC profile supplied by my decoder</td><td><a href="icc-profiles.html">ICC profiles</a></td></tr>
+<tr><td>Explore the behavior before integrating it</td><td><a href="color-labs.html">Color labs and browser demos</a></td></tr>
+<tr><td>Convert a color or interpolate a gradient</td><td><a href="color-math.html">Color math API</a></td></tr>
+</tbody></table>
+<h2 id="wide-gamut-is-not-another-name-for-p3">Wide gamut is not another name for P3</h2>
+<p><strong>Wide gamut</strong> describes the ability to represent colors beyond a smaller
+reference gamut, commonly sRGB. <strong>Display P3</strong>, <strong>Adobe RGB (1998)</strong> and
+<strong>Rec.2020</strong> name particular color spaces. A wide-gamut display does not
+necessarily cover every color in any of them.</p>
+<p>Use “wide-gamut window” when discussing the presentation capability. Use
+“Display P3” when declaring P3 source pixels, storage, producer output or the
+Metal composition coordinates. There is no Adobe RGB window mode to select.
+The native renderer converts supported sources into its composition space;
+the OS display pipeline and the panel determine the visible result.</p>
+<table><thead><tr><th>Term</th><th>What it tells you</th><th>What it does not establish</th></tr></thead><tbody>
+<tr><td>Source color space / ICC profile</td><td>What supplied RGB numbers mean</td><td>The display's capabilities</td></tr>
+<tr><td>P3 or Rec.2020 storage</td><td>The linear primaries used for stored pixels</td><td>That a window is wide gamut</td></tr>
+<tr><td>RGBA16F</td><td>Channel representation and precision</td><td>Primaries, transfer, ICC interpretation or HDR</td></tr>
+<tr><td><code>WideGamutSdr</code></td><td>Requested native wide-SDR presentation</td><td>Full Adobe RGB/P3 coverage or increased brightness</td></tr>
+<tr><td>Display wide-gamut status</td><td>Platform-reported capability</td><td>Calibration or physical output accuracy</td></tr>
+<tr><td>Browser <code>color-gamut: p3</code></td><td>Browser-reported gamut at least approximately P3</td><td>The canvas's configured color space</td></tr>
+</tbody></table>
+<h2 id="follow-the-pixel-through-the-boundaries">Follow the pixel through the boundaries</h2>
+<ol>
+<li><strong>Interpret.</strong> Supply the source primaries, transfer and alpha meaning, or a
+resolved custom definition from supported ICC bytes.</li>
+<li><strong>Decode and adapt.</strong> Evaluate the declared curves in linear light and adapt
+the declared XYZ reference to D65 where needed.</li>
+<li><strong>Choose storage and mapping.</strong> Select P3 or Rec.2020 and a mapping policy.
+Associate alpha and generate linear-light mipmaps after that choice.</li>
+<li><strong>Compose.</strong> Native wide placement converts storage primaries into the
+renderer's composition space. Metal uses extended linear P3; Windows uses
+extended linear sRGB/scRGB.</li>
+<li><strong>Present.</strong> Request the window mode and inspect its effective status. The
+OS maps the result for the actual display.</li>
+</ol>
+<p>Changing the source interpretation changes the color represented by identical
+RGB numbers. Changing storage or output mapping changes how that color is
+represented or reduced. Changing a display-capability flag does not reinterpret
+the source numbers.</p>
+<h2 id="which-parts-run-where">Which parts run where?</h2>
+<table><thead><tr><th>Task</th><th>Native application</th><th>Browser demos</th></tr></thead><tbody>
+<tr><td>Named/custom color math, curve evaluation, XYZ and mapping</td><td>CPU Rust</td><td>The same Rust compiled to Wasm</td></tr>
+<tr><td>Bounded RGB ICC parsing</td><td>Optional <code>xgpui-color/icc</code></td><td>Bundled-profile demo uses the same optional parser</td></tr>
+<tr><td>Explicit P3/Rec.2020 CPU pixel packing</td><td>Media pipeline</td><td>Pixels + metadata demo shows actual CPU FP16 bytes</td></tr>
+<tr><td>Wide-gamut composition/presentation</td><td>Metal runtime checked; Windows native labs and lab-test passed (owner, 2026-11-04); physical display measurement remains separate</td><td>Current GPUI demo canvas is an explicit sRGB preview</td></tr>
+<tr><td>GPU FP16 composition readback</td><td>On-demand Metal validation</td><td>Not provided by these browser demos</td></tr>
+<tr><td>Physical display measurement</td><td>Requires external measurement</td><td>Not established by a browser capability query</td></tr>
+</tbody></table>
+<p>The browser platform has color-space APIs, but enabling P3 output in this GPUI
+web renderer is a separate implementation task. These demos do not advertise
+that capability. Read the actual canvas report beside the browser's display
+report. See <a href="https://developer.mozilla.org/en-US/docs/Web/API/GPUCanvasContext/configure">WebGPU canvas configuration</a>
+and <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/drawingBufferColorSpace">WebGL drawing-buffer color space</a>.</p>
+<h2 id="a-practical-first-check">A practical first check</h2>
+<p>Open the <a href="examples/extensions/?demo=pixel-metadata">pixels + metadata demo</a>,
+keep Mid gray selected and change the interpretation. Then open the
+<a href="examples/extensions/?demo=chromaticity">chromaticity demo</a> and compare the
+outlines and hatched mapping regions. Use the <a href="color-labs.html#run-the-native-chromaticity-lab">native lab</a>
+when you need to test wide composition or GPU readback.</p>
+<p>For mathematical definitions and numerical contracts, continue to the
+<a href="color-math.html">color math reference</a>. The workflows here require no derivation
+of color-matching functions or chromatic adaptation matrices.</p>
+</article><p class="evidence">Source: <code>docs/extensions/color-workflows.md</code></p>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

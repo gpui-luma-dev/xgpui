@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Explore and verify color behavior · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/color-labs.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Color tasks.</strong> Pixels, metadata, storage and presentation. <a href="color-workflows.html">Choose a task →</a></p><article class="extension-document"><h1 id="explore-and-verify-color-behavior">Explore and verify color behavior</h1>
+<p>Use browser demos to understand the choices. Use the native lab to test the
+native composition path. Both distinguish a wide-gamut capability from a named
+color space. Start with <a href="color-workflows.html">color workflows</a> if you are choosing
+an API rather than investigating a specific sample.</p>
+<h2 id="browser-demos">Browser demos</h2>
+<table><thead><tr><th>Demo</th><th>What to try</th><th>What the result establishes</th></tr></thead><tbody>
+<tr><td><a href="examples/extensions/?demo=chromaticity">Chromaticity and gamut</a></td><td>Keep the pixel fixed, change interpretation; compare simulated gamuts, Y and mapping</td><td>CPU color relationships, locus outlines, mapping and an sRGB fill preview</td></tr>
+<tr><td><a href="examples/extensions/?demo=pixel-metadata">Pixels + metadata</a></td><td>Keep Mid gray fixed, cycle named/ICC interpretation, alpha and storage</td><td>Decoding, XYZ changes and actual CPU-packed FP16 bytes</td></tr>
+<tr><td><a href="examples/extensions/?demo=italy">Italy photo comparison</a></td><td>Select sRGB, Display P3 or highlighted; compare Original / browser color with sRGB preview on the same selected photo</td><td>Browser-managed original JPEGs compared with Rust/Wasm clipped sRGB derivatives; not GPUI canvas wide output</td></tr>
+<tr><td><a href="examples/extensions/?demo=color">Interpolation</a></td><td>Compare encoded/linear/perceptual rows and transparent stops</td><td>Interpolation and mapping differences in an sRGB preview</td></tr>
+</tbody></table>
+<p>The runtime panel reports the actual canvas color space where queryable and
+reports browser display capability separately. A report of P3 display capability
+does not turn an sRGB canvas into a wide-gamut canvas. GPU readback and native
+wide-SDR composition are not part of these browser demos.</p>
+<p>The canvas routes offer forced WebGPU and WebGL2 links in the
+<a href="examples/extensions/">gallery</a>. Source calculations are Rust/Wasm in both
+backends. No image-file decoder, arbitrary file chooser or network profile fetch
+is required. The chromaticity locus is attributed CIE data, not monitor samples.</p>
+<h2 id="italy-compare-the-same-photograph">Italy: compare the same photograph</h2>
+<p>Select <strong>Display P3</strong>, then switch <strong>Original / browser color</strong> and <strong>sRGB preview</strong>.
+Look at the orange/red umbrellas. Original mode uses WebKit’s unmodified JPEG
+with its embedded profile, presented by a browser image element. The preview
+uses the desktop lab’s prepared linear P3 pixels and Rust/Wasm <code>xgpui-color</code>
+clipping to sRGB. Neither control changes your monitor mode. A wide-gamut display
+and browser color management affect visible differences; on an sRGB display they
+may be small. These controls do not configure GPUI WebGPU/WebGL2 presentation.</p>
+<p>The three thumbnails select separate WebKit image versions. The highlighted
+photograph contains diagnostic markings, visible in both presentation modes.
+All assets are served locally, with <a href="https://webkit.org/blog-files/color-gamut/">WebKit attribution</a>.</p>
+<h2 id="pixels--metadata-a-short-walkthrough">Pixels + metadata: a short walkthrough</h2>
+<p>Click the numbered lesson buttons to set up repeatable comparisons. The left
+swatch always interprets the same samples as named sRGB; the right uses the
+selected interpretation. Both are sRGB previews.</p>
+<ol>
+<li><strong>Gray + Adobe:</strong> compare brightness and source XYZ Y. Adobe's transfer
+curve decodes 0.18 differently, so the right swatch should look slightly darker.</li>
+<li><strong>Green + Adobe:</strong> compare XYZ and packed storage values. Saturated green
+may look identical on both sides because the browser clips to sRGB.
+Equal previews do not establish equal source colors.</li>
+<li><strong>Sampled ICC:</strong> inspect XYZ and FP16 words. The sampled sRGB profile's
+differences are small; a visible tint is not expected. Half alpha makes the
+white background contribute to the preview.</li>
+</ol>
+<p>Then cycle <strong>Pixels</strong> to try Red, and <strong>Storage</strong> or <strong>Mapping</strong>. A storage
+change changes coordinates/packing; mapping matters only when a color exceeds
+those storage bounds. Neither necessarily changes the final sRGB preview.
+The native lab is needed to compare actual wide output or inspect GPU readback.</p>
+<h2 id="run-the-native-chromaticity-lab">Run the native chromaticity lab</h2>
+<p>The native chromaticity workspace is integrated into this repository's
+<code>color-lab</code> binary. Run it from the root, then switch between <strong>Swatches</strong> and
+<strong>Chromaticity</strong> with the tabs:</p>
+<pre><code class="language-sh">just lab-color
+just lab-color --chromaticity
+just profile=dev lab-color --icc-sampled
+just lab-color --uv --native-fill
+just lab-color --photo
+just lab-color --help
+just lab-color-test
+</code></pre>
+<p>The launch recipes default to release; <code>profile=dev</code> selects a development
+build. Chromaticity flags select that workspace automatically. Existing
+<code>lab-chromaticity</code> / <code>chromaticity</code> recipes forward to the local color lab;
+no sibling checkout is needed. State is retained when switching tabs.
+<code>lab-gamut</code> remains the separate native wide-output/compositing lab.
+See the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/color-lab/README.md">color-lab README</a>
+for source provenance, fixtures and platform/test scope.</p>
+<h2 id="read-the-controls-in-order">Read the controls in order</h2>
+<ol>
+<li><strong>Source / Metadata / Transfer:</strong> establish what the supplied numbers mean.
+Metadata cycles named input, synthetic probes and published profiles.</li>
+<li><strong>Storage / Map:</strong> choose bounded P3 or Rec.2020 storage and its mapping policy.</li>
+<li><strong>Wide-gamut window:</strong> inspect effective native mode and fallback status.</li>
+<li><strong>Presentation:</strong> choose no fill, sRGB preview or native-wide fill output.</li>
+<li><strong>Simulated gamut / Fill Y:</strong> set the bounds and relative luminance used to
+construct the fill; these do not measure your display.</li>
+</ol>
+<p>The enlarged chart sits beside vertically stacked native and sRGB sample cards.
+Decode tracking is below it. The white cross is D65; the gold cross is the
+selected source color. At black, chromaticity is undefined. A profile's neutral
+ramp can be close to D65 without being mathematically identical to it.</p>
+<h2 id="interpret-the-fill">Interpret the fill</h2>
+<p>The outlines are sRGB, Display P3, Adobe RGB (1998) and Rec.2020 reference
+gamuts. Hatching identifies colors outside the selected simulated RGB bounds
+at the selected relative Y. The reported percentage counts sampled cells in
+that diagram, not the fraction of colors your monitor can display.</p>
+<p>An sRGB presentation adds sRGB clipping. A native-wide presentation can retain
+extended composition channels, but the OS profile and actual panel still limit
+the visible result. This is why changing simulated gamut and changing
+presentation are separate controls.</p>
+<h2 id="inspect-cpu-values-and-check-the-gpu">Inspect CPU values and check the GPU</h2>
+<p>Decode tracking shows source RGB, XYZ, coordinates and actual CPU-packed FP16
+values/bits. Predicted linear-P3 composition is a calculation.</p>
+<p><strong>Check GPU (Metal FP16)</strong> re-renders the painted scene and reads nine center
+pixels from the extended linear-P3 FP16 composition target. Show the full native
+sample, enable wide mode and wait for upload. It compares the measured snapshot
+with an independent reference and reports per-channel budgets. Control changes
+invalidate the previous result.</p>
+<p>The check starts at packed source FP16 bytes; source/ICC interpretation has
+separate precision tests. A constant center checks color preservation through
+blur, not the blur's edge shape. Neither the check nor a screenshot establishes
+physical display accuracy. Windows/Linux floating-point readback is unsupported.</p>
+<h2 id="validation-status">Validation status</h2>
+<p>The integrated color lab passes 24 macOS tests covering independent numerical
+references, ICC interpretation, FP16 storage, pinned WebKit assets, photo loading,
+and native-versus-preview Metal composition. Live macOS verification covers both
+tabs, chromaticity fill, and xy/u′v′ state retention when switching workspaces.
+The owner also confirmed all native labs and <code>just lab-test</code> passed on Windows
+on 2026-11-04; see <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">Windows validation</a>.
+Linux runtime acceptance and physical monitor accuracy remain separate. Source provenance, shared asset
+attribution and exact test scope are recorded in the color-lab README.</p>
+</article><p class="evidence">Source: <code>docs/extensions/color-labs.md</code></p>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

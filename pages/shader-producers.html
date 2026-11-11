@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Shader producer reference · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/shader-producers.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" aria-current="page" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><article class="extension-document"><h1 id="shader-producer-reference">Shader producer reference</h1>
+<p><a href="extension-paints.html">Paint integration</a> · <a href="gpui-public-api.html">GPUI API</a> ·
+<a href="paint-contract-hardening.html">Preparation and recording</a></p>
+<h2 id="metal-mesh-source-and-pipeline">Metal mesh source and pipeline</h2>
+<p>Use <a href="https://github.com/patskovn/MeshGradient">patskovn/MeshGradient</a>, reviewed at
+commit <a href="https://github.com/patskovn/MeshGradient/tree/f16b544336b7bdaf7e3eba4ac6cba50e1160220e"><code>f16b544</code></a>,
+as the primary algorithm and Metal source reference. MeshingKit is useful for
+component ergonomics and presets, but wraps Apple's built-in mesh renderer.</p>
+<h3 id="mapping-into-the-extension">Mapping into the extension</h3>
+<table><thead><tr><th>Reference stage</th><th>Adaptation in xgpui-shader</th></tr></thead><tbody>
+<tr><td>ControlPoint / Grid</td><td>Validated immutable mesh snapshot: dimensions, positions, tangents, RGB colors</td></tr>
+<tr><td>shuffleCoefficients compute kernel</td><td>Build per-patch Hermite geometry/color coefficient matrices</td></tr>
+<tr><td>computeHermitPatchMatrix compute kernel</td><td>Evaluate interpolated positions/colors on a subdivided grid</td></tr>
+<tr><td>computeMeshTrianglePrimitives compute kernel</td><td>Expand evaluated vertices into triangle geometry; consider indexed geometry later</td></tr>
+<tr><td>prepareToDrawShader / drawRasterizedMesh</td><td>Draw geometry into the extension's offscreen texture</td></tr>
+<tr><td>Optional computeNoize</td><td>Not implemented</td></tr>
+<tr><td>MetalMeshRenderer / SwiftUI wrapper</td><td>Replace MTKView, default device, frame loop, and presentation with the retained GPUI element and host-device preparation contract</td></tr>
+</tbody></table>
+<p>The producer records compute and render commands, returns output and commands to
+the host, and never presents or commits them itself. GPUI composites the result
+at scene order with opacity and coverage. The generic integration must support
+this sequence without mesh-specific changes in GPUI.</p>
+<h2 id="mesh-producer">Mesh producer</h2>
+<p><code>MeshGradient</code> implements the same <code>CustomContent</code> protocol as <code>SolidColor</code>.
+The Metal implementation lives in <code>extensions/crates/xgpui-shader/src/mesh/</code>; attribution is in <code>extensions/crates/xgpui-shader/LICENSE-MeshGradient</code>.</p>
+<pre><code class="language-rust">use gpui::{prelude::*, px};
+use std::sync::Arc;
+use xgpui_shader::{MeshGradient, MeshGrid, painted};
+
+let grid = MeshGrid::regular(2, 2, vec![
+    [1.0, 0.1, 0.2], [0.2, 0.4, 1.0],
+    [1.0, 0.8, 0.1], [0.1, 0.8, 0.6],
+])?;
+let mesh = Arc::new(MeshGradient::new(grid, 18)?);
+let element = painted().bg_paint(mesh.clone()).w(px(480.0)).h(px(320.0)).rounded_lg();
+</code></pre>
+<p>Keep the Arc for static reuse. To edit/animate, construct a validated grid from
+new control points and use <code>mesh.with_grid(new_grid)</code>; this creates an immutable
+snapshot while sharing compiled pipelines. <code>with_subdivisions</code> does the same for
+quality changes. Do not call <code>MeshGradient::new</code> every animation frame, which
+would discard the shared pipeline cache.</p>
+<p>Public <code>ControlPoint</code> values have normalized top-left-origin positions, u/v
+patch tangents, and opaque encoded-sRGB RGB colors. <code>MeshGrid::regular</code> initializes
+straight, uniformly spaced geometry. For custom geometry, clone <code>grid.points()</code>,
+edit the points, and validate them with <code>MeshGrid::new(width, height, points)</code>.
+Positions/tangents can produce folds or gaps; clipping and deterministic triangle
+order are supported, but this API does not repair self-intersecting geometry.</p>
+<p>The adapted patskovn pipeline computes Hermite coefficient matrices, evaluates
+patch-local vertices, expands triangles, then records one triangle-list draw.
+Shared-edge samples are duplicated per patch rather than connected by artificial
+cross-patch cells. Each compute dispatch is guarded; tracked-resource encoder
+boundaries order the stages. The host alone commits the recorded command buffer.</p>
+<p>Rust upload records have explicit 16-byte alignment and float4-sized fields;
+Metal compile-time assertions and unit tests check strides/offsets. Colors use
+the reference's Hermite RGB interpolation with zero color tangents. This is not
+Oklab interpolation or high-gamut output. Grain is not included in this slice.</p>
+<p>Resource limits: 2..=16 control points per axis; 2..=64 samples per patch edge;
+64 MiB maximum geometry buffers and 64 MiB maximum output texture per generation.
+Finite positions/tangents must be in -16..=16, RGB in 0..=1. Geometry is immutable
+per snapshot, output is cached by queue/extent, and compilation is
+shared per current host queue across related snapshots. Animated generations
+currently allocate fresh buffers/textures; pooling and total in-flight budgets
+remain future performance work.</p>
+<p>Real-GPU tests compare against an independent CPU Hermite basis evaluator for
+2x2, rectangular 3x2, and deformed 3x3 grids. They also check complete coverage,
+replay, resize/opacity, old snapshot preservation, shared pipeline compilation,
+minimum subdivisions, shared first-use output, and aborted-frame retry.</p>
+<h2 id="analytic-gradients-metal">Analytic gradients (Metal)</h2>
+<p>Linear, elliptical radial, conic and diamond paints use the same <code>CustomContent</code>
+contract as the mesh. No additional GPUI changes are needed. For example:</p>
+<pre><code class="language-rust">use gpui::{prelude::*, *};
+use std::sync::Arc;
+use xgpui_shader::{painted, Gradient, GradientStop, WindowPaintExt};
+
+let stops = vec![
+    GradientStop::new(0.0, [1.0, 0.1, 0.2, 1.0]),
+    GradientStop::new(0.4, [1.0, 0.7, 0.1, 1.0]),
+    GradientStop::new(1.0, [0.1, 0.3, 1.0, 1.0]),
+];
+let radial = Arc::new(Gradient::radial([0.5, 0.5], [0.5, 0.5], stops)?);
+painted().bg_paint(radial.clone());
+painted().border_8().border_paint(radial.clone());
+window.paint_path_with_paint(path, radial.clone());
+</code></pre>
+<p>Constructors: <code>Gradient::linear(angle, stops)</code>,
+<code>Gradient::radial(center, radius, stops)</code>,
+<code>Gradient::conic(center, angle, stops)</code>, and
+<code>Gradient::diamond(center, radius, angle, stops)</code>. <code>Gradient::new(kind, stops)</code>
+also accepts a <code>GradientKind</code>; <code>with_kind</code> and <code>with_stops</code> make immutable
+snapshots sharing a pipeline cache. <code>preparations()</code> counts generated textures;
+<code>pipeline_compilations()</code> counts compilations shared by related snapshots.</p>
+<ul>
+<li>2–32 stops, sorted offsets in 0..=1; duplicates create hard edges. The last
+stop at a duplicate offset wins. Values outside the first/last stops clamp.</li>
+<li>RGBA channels are finite encoded-sRGB values in 0..=1. Interpolation uses
+premultiplied encoded sRGB and returns straight-alpha output, avoiding colored
+fringes from transparent stops. Oklab, linear-light interpolation, dithering,
+repeat/mirror spread and HDR are not implemented in these producers.</li>
+<li>Centers are normalized to the bounds (finite -16..=16). Radius components are
+fractions of full width/height (0.0001..=16); [0.5, 0.5] reaches edge midpoints.</li>
+<li>Linear and conic angles are clockwise degrees, zero pointing up. Linear
+projection and conic angles use physical aspect ratio. At a conic center the
+first angle is chosen deterministically; differing endpoint colors create a seam.</li>
+<li>Diamond sampling uses Manhattan distance after rotation in bounds-normalized
+axes; zero degrees is unrotated. Radial sampling uses elliptical distance.</li>
+<li>Each generated output uses one full-target render draw into BGRA8Unorm,
+followed by GPUI's normal custom paint composition. Static output is cached by
+queue and extent; each texture is capped at 64 MiB. Animation still allocates
+immutable output textures; resource pooling remains later work.</li>
+</ul>
+<p>Run <code>just linear</code>, <code>just radial</code>, <code>just conic</code>, <code>just diamond</code> or <code>just mesh</code> in
+<code>apps/xgpui-ext-lab/paint-lab/</code>. Every type can paint the same
+background, border and path examples. <code>just headless --effect diamond --frames 30</code>
+runs GPU checks and a deterministic static workload.</p>
+<h2 id="built-in-metal-output-cache">Built-in Metal output cache</h2>
+<pre><code class="language-text">SolidColor / Gradient / MeshGradient
+  key: queue identity + exact extent
+  budget: 64 MiB live textures / snapshot
+  eviction: individual LRU entries
+  hit before submission: same pending command + texture
+  hit after submission: texture, no new command
+</code></pre>
+<p>No GPUI API changes. Live-cache bytes exclude geometry buffers, in-flight outputs
+and driver allocations. <code>cached_texture_info()</code> reports all live cached textures.</p>
+<p>Mesh adaptation: MIT, copyright 2022 Nikita Patskov and others; see the crate’s
+<code>LICENSE-MeshGradient</code> for the retained notice.</p>
+</article><p class="evidence">Source: <code>docs/extensions/shader-producers.md</code></p>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

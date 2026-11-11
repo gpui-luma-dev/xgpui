@@ -2,7 +2,7 @@
 
 Issue: <https://github.com/gpui-luma-dev/xgpui/issues/27>
 
-The [web font-controls guide](extensions/font-controls.md) covers usage, support
+The [web font-controls guide](https://xgpui.dev/font-controls.html) covers usage, support
 and core 3.0 migration. This document retains the implementation contract,
 measurements and individual API rationale.
 
@@ -38,7 +38,7 @@ Apple's font-kit backend, Parley, and DirectWrite implement feature and axis
 queries. DirectWrite static axes require the runtime `IDWriteTextLayout4` probe
 to succeed. Native/Parley font-controls labs and tests are verified on macOS
 and Windows. Parley in Wasm supports the same queries and static axes, exposed
-in the [Wasm inspector](extensions/font-controls.md#try-the-live-inspector).
+in the [Wasm inspector](https://xgpui.dev/font-controls.html#try-the-live-inspector).
 Cosmic now implements table access for resolved font files, including collection
 faces, and reports feature/axis inspection support. Its arbitrary static axis
 requests remain rejected. The default Cosmic/Canvas web wrapper still reports

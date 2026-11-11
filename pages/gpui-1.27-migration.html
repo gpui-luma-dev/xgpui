@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>GPUI 1.27.0 integration and API review · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/gpui-1.27-migration.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><article class="extension-document"><h1 id="gpui-1270-integration-and-api-review">GPUI 1.27.0 integration and API review</h1>
+<p>Integrated on <code>codex/sync-gpui-1.27.0</code> from local commit <code>8ed97a3</code>, using upstream
+<code>f98d4e26ca850515c1682ae4cd6e2b8277dae6e7</code>. Implementation is prepared for review;
+public API approval remains pending; the selected crate versions and exact pins
+are applied in this branch. No release or merge has been performed.</p>
+<h2 id="breaking-changes-to-xgpui-api">Breaking changes to XGPUI API</h2>
+<p>This migration changes the API exposed by XGPUI's core and Apple backend crates.
+Applications upgrading from the current XGPUI packages should review the changes
+below even if they do not use an optional extension. The table distinguishes
+upstream changes carried into XGPUI from adaptations to our GPUI interfaces.</p>
+<table><thead><tr><th>Origin</th><th>Breaking change in XGPUI</th><th>Application migration</th></tr></thead><tbody>
+<tr><td>Upstream GPUI</td><td>Keystroke parsing, display, formatting and secondary modifiers use the runtime host OS. Static constructors require static strings; direct keystroke <code>Display</code> implementations are removed.</td><td>Use <code>KeyBinding::load</code> or <code>Keystroke::parse_with_os</code> for dynamic input; pass the host OS or App context when formatting and resolving modifiers.</td></tr>
+<tr><td>Upstream GPUI</td><td><code>Window::text_system()</code> returns an Rc handle; hash-based layout methods are removed.</td><td>Keep window text caches local to their window thread and use ordinary <code>shape_line</code> and <code>layout_line</code> calls.</td></tr>
+<tr><td>Upstream GPUI</td><td>External <code>Platform</code> implementations must provide <code>platform_info</code>.</td><td>Return the host OS and native/web delivery target.</td></tr>
+<tr><td>Upstream Apple changes adapted to XGPUI</td><td>Renderer constructors now return <code>Result</code>; our renderer factory drops its unused native window, view and bounds arguments.</td><td>Propagate initialization errors and remove the unused arguments. XGPUI retains its existing color-mode negotiation and typed resource interfaces.</td></tr>
+<tr><td>Upstream Apple changes</td><td>The public <code>thermal</code> module is replaced by <code>process_info</code>; macOS 12.0 is the minimum.</td><td>Update observer imports and retain the returned observer owner; update deployment requirements.</td></tr>
+</tbody></table>
+<p>XGPUI's own GPUI changes provide the core integration points used by our font,
+color, drawing, media and paragraph extensions. Those maintained differences,
+including earlier breaking changes to font and style structs, are described in
+<a href="gpui-public-api.html">GPUI API changes</a>. The detailed review below
+records each API change in this sync, its origin, compatibility impact and
+application migration. Final API approval remains pending.</p>
+<h2 id="upstream-release-reference">Upstream release reference</h2>
+<p>The <a href="https://github.com/gpui-archipelago/gpui-release-notes/issues/3#issue-5034140647">upstream GPUI release tracker for 1.27.0</a>
+records the Zed GPUI changes from 1.26.2 to 1.27.0, with links to the original
+commits and pull requests. XGPUI's integration notes below describe how those
+changes are combined with our maintained GPUI modifications.</p>
+<h2 id="implementation">Implementation</h2>
+<ul>
+<li>Adopted typed upstream AppKit application, window, event, menu, keyboard,
+display, clipboard and appearance bindings; removed private <code>native_appkit</code>.</li>
+<li>Retained XGPUI Metal resources, custom draw, wide SDR, media surfaces, caches,
+headless capture, and validation interfaces. Ported fallible device, library,
+pipeline, buffer, command queue and CoreVideo-cache initialization. Adopted
+validated atlas uploads while preserving our scoped texture ownership wrapper
+and eviction/lifetime regression tests.</li>
+<li>Preserved local Services submenu registration, nullable pasteboard handling,
+Objective-C protocol/signature audits, optional text-range output handling,
+and attributed-string autorelease behavior. These fixes still apply to the
+upstream typed implementation.</li>
+<li>Adopted power/platform introspection, host-aware key semantics, macOS atomic
+credential insertion, deferred native-close handling, list scroll anchoring,
+subscription activation changes, fallback caching and OHOS target exclusion.</li>
+<li>Replaced window text locks with RefCell state and Rc ownership. Adapted our
+paragraph cache, retained-element reuse and generation invalidation; retained
+font axes/features/fallback controls and missing-glyph reporting.</li>
+<li>Fixed scramble typography to re-shape its source font request when CoreText
+returns a size-specific face absent from reverse lookup. Replacements still
+require an exact native face match, preserving fallback and emoji behavior.</li>
+<li>Supporting crates and provenance now reference 1.27.0. Existing XGPUI package
+versions follow the selected release table below. Final API review remains
+pending. macOS now
+requires 12.0; Metal shader compilation uses the same minimum.</li>
+</ul>
+<h2 id="selected-crate-versions">Selected crate versions</h2>
+<p>Baseline: <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-04-b35309ab9316">release-2026-11-04-b35309ab9316</a>.
+The published column comes from that release’s verified crate table and matches
+crates.io version metadata checked on November 6, 2026. Before review is the version
+already prepared in this development cycle before the version review.
+The 15 selected new versions remain unpublished; color and macros retain their
+published versions. The selected versions are applied to manifests, exact
+dependency requirements and release metadata.</p>
+<p>Version decisions are measured from the last published API. Multiple breaking
+changes in an unpublished major can ship together: core stays at 3.0.0 rather
+than advancing to 4.0.0 merely because another change landed during development.
+The existing repository policy does not automatically propagate dependency
+major bumps; dependent crates with retained public signatures use their already
+prepared patch/minor versions, and consumers upgrade the exact-pinned stack
+together.</p>
+<table><thead><tr><th>Crate</th><th>November 4 published</th><th>Before review</th><th>Selected release</th><th>Review and rationale</th></tr></thead><tbody>
+<tr><td><code>xgpui</code></td><td>2.0.1</td><td>3.0.0</td><td><strong>3.0.0</strong></td><td>Keep the prepared major: font/style fields plus this sync’s keystroke, text-cache and platform contract breaks fit the same unpublished 3.0.0 release.</td></tr>
+<tr><td><code>xgpui-apple</code></td><td>3.0.1</td><td>3.1.0</td><td><strong>4.0.0</strong></td><td>Raise the prepared minor to a major: renderer constructors return Result, the factory drops arguments, and thermal moves to process_info. Includes the prepared font capabilities.</td></tr>
+<tr><td><code>xgpui-macos</code></td><td>3.0.1</td><td>3.0.2</td><td><strong>4.0.0</strong></td><td>Raise the prepared patch to a major: its public test/bench-support MetalHeadlessRenderer re-export now has a fallible constructor. Also adopts typed AppKit and macOS 12 minimum.</td></tr>
+<tr><td><code>xgpui-wgpu</code></td><td>2.0.1</td><td>2.1.0</td><td><strong>2.1.0</strong></td><td>Keep the prepared minor: Cosmic font inspection, Linux DMA-BUF completion guards, and upstream text/layout compatibility fixes.</td></tr>
+<tr><td><code>xgpui-windows</code></td><td>2.0.1</td><td>2.1.0</td><td><strong>2.1.0</strong></td><td>Keep the prepared minor: font axes/introspection, corrected fallback fixture, and upstream DirectWrite/input/power integration; no further changed public constructor signature identified.</td></tr>
+<tr><td><code>xgpui-parley</code></td><td>0.3.1</td><td>0.4.0</td><td><strong>0.4.0</strong></td><td>Keep the prepared pre-1.0 minor: font axes/introspection and VariationPreview. Existing paragraph APIs are retained through the window-cache migration.</td></tr>
+<tr><td><code>xgpui-linux</code></td><td>2.0.1</td><td>2.0.2</td><td><strong>2.0.2</strong></td><td>Keep the prepared patch: matching core/WGPU pins, platform identity and power-mode backend implementation. No new standalone Linux public API identified.</td></tr>
+<tr><td><code>xgpui-platform</code></td><td>2.0.1</td><td>2.0.2</td><td><strong>2.0.2</strong></td><td>Keep the prepared patch: matching backend pins, propagate fallible headless creation through the existing Result API, and OHOS selection guards.</td></tr>
+<tr><td><code>xgpui-web</code></td><td>2.0.1</td><td>2.0.2</td><td><strong>2.0.2</strong></td><td>Keep the prepared patch: matching core/WGPU pins, runtime host identity for correct key semantics, and existing unsupported-axis handling.</td></tr>
+<tr><td><code>xgpui-ios</code></td><td>1.26.3</td><td>1.26.4</td><td><strong>1.26.4</strong></td><td>Keep the prepared patch: matching core/Apple pins and upstream UIKit initialization changes. Its downstream version need not match upstream 1.27.0.</td></tr>
+<tr><td><code>xgpui-shader</code></td><td>0.4.1</td><td>0.4.2</td><td><strong>0.4.2</strong></td><td>Keep the prepared patch: matching core/Apple pins, fallible headless call sites and scramble-font recovery; the shader extension’s own public signatures are retained.</td></tr>
+<tr><td><code>xgpui-media</code></td><td>0.5.1</td><td>0.5.2</td><td><strong>0.5.2</strong></td><td>Keep the prepared patch: matching core/backend/shader/helper pins and headless initialization call sites; media public signatures are retained.</td></tr>
+<tr><td><code>xgpui-gamut</code></td><td>0.3.1</td><td>0.3.2</td><td><strong>0.3.2</strong></td><td>Keep the prepared patch: matching dependency pins and fallible test-renderer construction; gamut public signatures are retained.</td></tr>
+<tr><td><code>xgpui-canvas</code></td><td>0.3.1</td><td>0.3.2</td><td><strong>0.3.2</strong></td><td>Keep the prepared patch: matching core/shader pins and packaged beta documentation; CPU-only canvas APIs are retained.</td></tr>
+<tr><td><code>xgpui-svg</code></td><td>0.3.1</td><td>0.3.2</td><td><strong>0.3.2</strong></td><td>Keep the prepared patch: matching core dependency requirement; SVG public signatures are retained.</td></tr>
+<tr><td><code>xgpui-color</code></td><td>0.3.0</td><td>0.3.0</td><td><strong>0.3.0</strong></td><td>Unchanged packaged source and dependency requirements since the release; reuse published 0.3.0.</td></tr>
+<tr><td><code>xgpui-macros</code></td><td>1.0.1</td><td>1.0.1</td><td><strong>1.0.1</strong></td><td>Unchanged package since the release; reuse published 1.0.1.</td></tr>
+</tbody></table>
+<p>The version review revised two prepared version numbers: <code>xgpui-apple</code> 3.1.0 → 4.0.0
+and <code>xgpui-macos</code> 3.0.2 → 4.0.0. Their exact requirements are updated in normal,
+optional, target-specific and development dependencies, including the registry
+consumer fixture. Release metadata, tracked lockfiles and version documentation
+are refreshed.
+Version selection does not approve the pending public API changes or authorize
+publication.</p>
+<p><code>xgpui-shell</code> is a separate development-cycle addition at 0.1.0 with
+<code>publish = false</code>, intentionally outside the 17-crate release map. Keep it
+unpublished until its public interface is separately reviewed. The lab package
+also remains unpublished.</p>
+<h2 id="concrete-public-api-changes">Concrete public API changes</h2>
+<p>Each row is an individual review item. Origin identifies upstream GPUI changes,
+upstream Apple changes, and adaptations to XGPUI’s existing backend API.
+No serialized struct shape changes were
+identified. Keystroke serialization here means emitted keystroke strings; host
+OS changes their modifier spelling and alias interpretation. Platform identity
+and PowerMode types do not add serde implementations. Existing package exports,
+including <code>ctor</code>, spring types, benchmark macros and typed Metal resource aliases,
+are retained. <code>MetalRenderer::layer</code> already used our CAMetalLayer alias and has
+no new source signature change.</p>
+<table><thead><tr><th>Implemented API change</th><th>Purpose and compatibility impact</th><th>Migration</th><th>Origin</th></tr></thead><tbody>
+<tr><td><code>PlatformInfo { os, target }</code></td><td>Add runtime host identity independent of delivery target; additive type and fields.</td><td>Read <code>App::platform_info()</code>.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>OperatingSystem</code></td><td>Add host OS enum, including unknown hosts.</td><td>Match with appropriate handling of all variants.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>PlatformTarget</code></td><td>Distinguish native and web delivery.</td><td>Avoid inferring host OS from build target.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>PlatformInfo::is_mac</code></td><td>Add convenience predicate.</td><td>Optional use.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Platform::platform_info</code></td><td>Required trait method; breaks external platform implementers.</td><td>Implement host and delivery identity in every platform.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>App::platform_info</code></td><td>Expose platform identity to clients.</td><td>Replace compile-time assumptions where host semantics matter.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>PowerMode</code></td><td>Add Unknown, LowPower, Balanced, HighPower.</td><td>Handle Unknown; macOS reports LowPower or Unknown.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Platform::power_mode</code></td><td>Defaulted trait method; additive.</td><td>Override when supported.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Platform::on_power_mode_change</code></td><td>Defaulted callback registration; additive.</td><td>Notify through safe deferred delivery.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>App::power_mode</code></td><td>Read active energy preference.</td><td>Optional use.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>App::write_credentials_if_not_exists</code></td><td>macOS-only atomic write, returns <code>Task&lt;Result&lt;bool&gt;&gt;</code>.</td><td>Handle false as existing server/account; do not emulate with read then write.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Platform::write_credentials_if_not_exists</code></td><td>macOS-only defaulted hook; unsupported platforms return an error.</td><td>Override with atomic insertion.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>KeyBinding::new</code></td><td>Keystroke argument becomes <code>&amp;'static str</code>; source breaking.</td><td>Use <code>KeyBinding::load</code> for dynamic input or <code>secondary-</code>; static bindings use explicit modifier literals.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Keystroke::parse</code></td><td>Static input only; <code>secondary-</code> needs OS-aware parsing.</td><td>Use literals or <code>parse_with_os</code> for dynamic input.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Keystroke::parse_with_os</code></td><td>Add dynamic parsing with explicit host OS.</td><td>Pass <code>cx.platform_info().os</code>.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Keystroke::unparse</code></td><td>Require OS argument; emitted aliases depend on host conventions.</td><td>Pass intended target OS when persisting strings.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>KeybindingKeystroke::unparse</code></td><td>Same OS-aware string change.</td><td>Pass intended target OS.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Keystroke::display</code></td><td>New explicit OS-aware display adapter.</td><td>Format the returned adapter.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>KeybindingKeystroke::display</code></td><td>Same display adapter for bindings.</td><td>Format the returned adapter.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>KeystrokeDisplay</code></td><td>New public Display wrapper.</td><td>Use instead of direct keystroke formatting.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Display for Keystroke</code> removed</td><td>Direct formatting and <code>to_string()</code> stop compiling.</td><td>Use <code>.display(os)</code> or <code>.unparse(os)</code>.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Display for KeybindingKeystroke</code> removed</td><td>Same source break.</td><td>Use <code>.display(os)</code> or <code>.unparse(os)</code>.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Modifiers::secondary</code></td><td>Add <code>&amp;App</code> argument for host semantics.</td><td>Supply App context.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Modifiers::secondary_key</code></td><td>Add <code>&amp;App</code> argument.</td><td>Supply App context.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>KeyContext::new_with_defaults</code></td><td>Add OperatingSystem argument.</td><td>Supply runtime host OS.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Window::keystroke_text_for</code></td><td>Add <code>&amp;App</code> argument.</td><td>Supply App context.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>TestAppContext::set_platform_info</code></td><td>Add host-identity test override.</td><td>Test native and browser host semantics.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>TestWindow::simulate_close</code></td><td>Add native-close simulation.</td><td>Use for reentrancy regression tests.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>Window::text_system</code></td><td>Return <code>&amp;Rc&lt;WindowTextSystem&gt;</code>; loses Arc ownership and thread sharing.</td><td>Change explicit Arc annotations/clones; keep window-local access on its thread.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>WindowTextSystem::shape_line_by_hash</code> removed</td><td>Remove unused hash cache API; source breaking.</td><td>Use <code>shape_line</code>.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>WindowTextSystem::layout_line_by_hash</code> removed</td><td>Same cache removal.</td><td>Use <code>layout_line</code>.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>WindowTextSystem::try_layout_line_by_hash</code> removed</td><td>Remove lookup-only hash API.</td><td>Request layout through the regular API.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>ListState::set_item_measurement_readiness</code></td><td>Add callback controlling when measurements become final.</td><td>Optional callback; validate scroll anchoring behavior.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>gpui_apple::main_thread_marker</code></td><td>Add cached main-thread identity helper.</td><td>Use typed marker where native APIs require it.</td><td>Upstream Apple</td></tr>
+<tr><td><code>gpui_apple::keychain::write_credentials_if_not_exists</code></td><td>Add atomic insertion returning <code>Result&lt;bool, KeychainError&gt;</code>.</td><td>Handle duplicate result and errors separately.</td><td>Upstream Apple</td></tr>
+<tr><td><code>gpui_apple::thermal</code> removed</td><td>Replace public thermal module.</td><td>Move callers to <code>process_info</code>.</td><td>Upstream Apple</td></tr>
+<tr><td><code>thermal::ThermalObserver</code> removed</td><td>Replace observer type and its constructor.</td><td>Use <code>observe_thermal_state</code> and retain returned owner.</td><td>Upstream Apple</td></tr>
+<tr><td><code>process_info::thermal_state</code></td><td>Move thermal query into new public module.</td><td>Update module path.</td><td>Upstream Apple</td></tr>
+<tr><td><code>process_info::power_mode</code></td><td>Add power query.</td><td>Handle Unknown.</td><td>Upstream Apple</td></tr>
+<tr><td><code>process_info::observe_thermal_state</code></td><td>Add deferred thermal observation factory.</td><td>Retain observer; drop cancels delivery.</td><td>Upstream Apple</td></tr>
+<tr><td><code>process_info::observe_power_mode</code></td><td>Add deferred power observation factory.</td><td>Retain observer.</td><td>Upstream Apple</td></tr>
+<tr><td><code>process_info::ProcessInfoObserver</code></td><td>New shared observer owner.</td><td>Replace ThermalObserver ownership.</td><td>Upstream Apple</td></tr>
+<tr><td><code>metal_renderer::new_renderer</code></td><td>Factory becomes safe, returns <code>Result&lt;Renderer&gt;</code>, and drops unused native window, view, and bounds arguments.</td><td>Remove unused arguments and the unsafe wrapper; propagate errors. The existing Display P3 preference still uses XGPUI color negotiation with SDR fallback.</td><td>Upstream Apple, adapted to XGPUI</td></tr>
+<tr><td><code>MetalRenderer::new</code></td><td>Constructor returns <code>Result&lt;Self&gt;</code>; XGPUI retains its existing two arguments and separate color-mode negotiation.</td><td>Use <code>?</code> or explicit error handling; existing color-mode calls remain valid.</td><td>Upstream Apple, adapted to XGPUI</td></tr>
+<tr><td><code>MetalRenderer::new_headless</code></td><td>Return <code>Result&lt;Self&gt;</code>.</td><td>Propagate initialization failures.</td><td>Upstream Apple</td></tr>
+<tr><td><code>MetalHeadlessRenderer::new</code></td><td>Return <code>Result&lt;Self&gt;</code>; test-support re-exports also affected.</td><td>Update tests and extension callers.</td><td>Upstream Apple</td></tr>
+<tr><td><code>MetalRenderer::from_layer</code></td><td>Return <code>Result&lt;Self&gt;</code> for platform-owned layer initialization.</td><td>Propagate errors; the iOS window constructor now does so.</td><td>Upstream Apple</td></tr>
+<tr><td><code>KeyBinding::load</code> behavior</td><td>Existing signature now resolves <code>secondary-</code> against runtime host OS.</td><td>Use for dynamic keymaps; serialized alias interpretation follows the intended host.</td><td>Upstream GPUI</td></tr>
+<tr><td><code>WindowTextSystem</code> auto traits</td><td>Window-local interior mutability removes Sync; Rc handles are neither Send nor Sync. Shared <code>TextSystem</code> remains Arc-based.</td><td>Do not send window text caches across threads.</td><td>Upstream GPUI</td></tr>
+</tbody></table>
+<p>The removed hash methods on the crate-private LineLayoutCache, private pasteboard
+UTType changes, and private subscriber-set changes are not downstream public
+APIs. Benchmark macros moved into a private module while retaining their exported
+names and availability. The shared Apple source mirror repeats core changes and
+is not a separate public API family.</p>
+<h2 id="xgpui-backend-adaptations">XGPUI backend adaptations</h2>
+<p>The renderer factory drops its unused native window, view and bounds arguments,
+while <code>MetalRenderer::new</code> keeps XGPUI's existing two arguments and separate color
+negotiation. Both adopt upstream's fallible initialization. These changes adapt
+existing Apple backend entry points used to create platform windows; an extension
+cannot change their signatures or initialization error handling.</p>
+<p>XGPUI's existing font, color, drawing, media and paragraph integration points are
+preserved. Their core-versus-extension design belongs in the maintained
+<a href="gpui-public-api.html">GPUI API changes</a> guide. The upstream APIs in
+this migration retain their upstream role and are reviewed for compatibility.</p>
+<h2 id="verification">Verification</h2>
+<p>All 16 suites in the macOS <code>scripts/test_all.sh</code> matrix passed across the full
+run and targeted reruns of release-sync, shader and labs after fixes. This
+includes the 426-test core suite, extension rendering tests, benchmark checks,
+native lab tests, CoreText tests, and iOS simulator test compilation.</p>
+<p>Additional checks passed:</p>
+<ul>
+<li>All shared Apple backend tests: 66 passed, one ignored GPU diagnostic.</li>
+<li>macOS native backend tests: 16 passed, including protocol encoding audits,
+nullable pasteboard handling, optional text-range outputs and layer cleanup.</li>
+<li>Native root <code>cargo check --locked --offline --config .cargo/validation.toml</code>.</li>
+<li>Windows backend test compilation for <code>x86_64-pc-windows-msvc</code>, using the
+installed Homebrew LLVM resource compiler. This does not execute Windows tests.</li>
+<li>Browser application compilation for <code>wasm32-unknown-unknown</code>, using the lab's
+<code>extensions-web</code> binary with feature <code>web</code> and its explicit single-threaded
+wgpu contract. The bare web crate without that application contract is not a
+supported single-threaded build configuration.</li>
+<li>Selected-version audit: all 90 internal dependency requirements match the
+release map; all 200 selected-version entries across tracked lockfiles match.</li>
+<li>Native workspace and every lab target compile with Apple/macOS 4.0.0.</li>
+<li>The updated native consumer fixture compiles with explicit local overrides for
+the unpublished release family. Registry-only verification requires publication.</li>
+<li>Release normalization, generated build-manifest consistency and all ten
+release-sync tests pass.</li>
+<li>Regenerated documentation inventory and its JavaScript verifier.</li>
+</ul>
+<p>Linux and OHOS native execution, browser interaction, iOS interactive execution,
+and physical-display color acceptance were not run in this macOS session.
+Existing ignored GPU diagnostics remain ignored; test success does not claim
+these additional platform acceptance results.</p>
+<h2 id="approval-required">Approval required</h2>
+<p>The repository's <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/AGENTS.md">AGENTS.md</a> requires: “Complete authorized
+implementation and verification, then present the concrete API changes
+individually for user review before finalizing or releasing them.” The items
+above are implemented for that review; implementation authorization does not
+approve their final public API.</p>
+<h2 id="labs-most-affected-by-this-sync">Labs most affected by this sync</h2>
+<p>For manual regression testing on macOS, use the following order. This ranks
+exposure to the changed code; automated rendering tests already pass.</p>
+<table><thead><tr><th>Order</th><th>Lab</th><th>Why it is affected and what to check</th></tr></thead><tbody>
+<tr><td>1</td><td><code>just lab-text</code></td><td>Most direct exposure: layout caches, font fallback, paragraph reuse, native text input and shortcuts. Compare native and Parley; test scrolling, axes, selection, copy/paste and IME.</td></tr>
+<tr><td>2</td><td><code>just lab-shader --example typography</code></td><td>Text shaping alongside custom Metal drawing. The sync exposed a scramble-text regression here, now fixed. Check selection, scramble, shadows and wide output.</td></tr>
+<tr><td>3</td><td><code>just lab-gamut</code></td><td>Our color negotiation against the replaced AppKit window/display bindings. Check SDR/P3 switching, resize and moving between displays.</td></tr>
+<tr><td>4</td><td><code>just lab-media</code></td><td>Renderer initialization, atlas uploads, texture ownership and CoreVideo surfaces. Try tiled images, float images and <code>--video</code>.</td></tr>
+<tr><td>5</td><td><code>just lab-color</code></td><td>Wide-color presentation, compositing and headless capture. Check the photo and chromaticity views.</td></tr>
+<tr><td>6</td><td><code>just lab-paint</code></td><td>Broad coverage of retained Metal rendering: gradients, paths, masks and layers. Pastel waves also exercises frame pacing.</td></tr>
+<tr><td>7</td><td><code>just lab-canvas</code></td><td>Mostly shared-backend exposure. Check pan/zoom, clipping, resize and sustained interaction.</td></tr>
+<tr><td>8</td><td><code>just lab-svg</code></td><td>Mostly shared atlas and renderer exposure. Check progressive loading, scaling and eviction/reloading.</td></tr>
+</tbody></table>
+<p>Across every lab, test window closing, fullscreen, display changes, and animation
+with Low Power Mode enabled. These exercise the backend changes regardless of
+the lab's content.</p>
+</article><p class="evidence">Source: <code>docs/upstream/1.27.0-integration.md</code></p>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

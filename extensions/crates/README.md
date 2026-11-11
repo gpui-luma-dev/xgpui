@@ -6,13 +6,13 @@ never depends on extension crates. Keep renderer integration and API changes sma
 
 - [`xgpui-color`](xgpui-color/README.md): CPU color conversions, gamut mapping, gradient math and reusable WGSL, usable without GPUI.
 - [`xgpui-shader`](xgpui-shader/README.md): mesh, gradients and portable shaders.
-- [Paint integration](../../docs/extensions/extension-paints.md) · [GPUI API changes](../../docs/extensions/gpui-public-api.md)
-- [Producer reference](../../docs/extensions/shader-producers.md) · [preparation and recording](../../docs/extensions/paint-contract-hardening.md)
+- [Paint integration](https://xgpui.dev/extension-paints.html) · [GPUI API changes](https://xgpui.dev/gpui-public-api.html)
+- [Producer reference](https://xgpui.dev/shader-producers.html) · [preparation and recording](https://xgpui.dev/paint-contract-hardening.html)
 - [`xgpui-media`](xgpui-media/README.md): bounded native image loading and dedicated mipmapped SDR textures.
 - [`xgpui-svg`](xgpui-svg/README.md): a reusable full-color SVG element, immutable documents, bounded progressive rendering, and shared job/image-memory scheduling.
 - SVG scaling and native path comparison: [svg-lab](../../apps/xgpui-ext-lab/svg-lab/README.md).
 - Local test/performance apps: [paint-lab](../../apps/xgpui-ext-lab/paint-lab/README.md)
-- [`xgpui-gamut`](xgpui-gamut/README.md): linear-P3 SDR producers; [presentation contract](../../docs/extensions/high-gamut-windows.md).
+- [`xgpui-gamut`](xgpui-gamut/README.md): linear-P3 SDR producers; [presentation contract](https://xgpui.dev/high-gamut-windows.html).
 - [`xgpui-parley`](xgpui-parley/README.md): opt-in Parley text backend: flat LTR, BiDi paragraphs, shared font identity and grayscale rasterization.
 - [Build](../../docs/BUILDING.md) · [web docs generation](../../docs/WEBSITE.md)
 
