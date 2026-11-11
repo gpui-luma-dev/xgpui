@@ -25,7 +25,9 @@
 //! Windows the engine observes completion before `present`.
 use gpui::{DevicePixels, Size, size};
 
+pub(crate) mod heavy;
 mod ring;
+pub use heavy::{HeavyEngine, HeavyStatus};
 
 #[cfg(target_os = "macos")]
 mod macos;
