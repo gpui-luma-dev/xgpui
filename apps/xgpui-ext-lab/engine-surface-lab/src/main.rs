@@ -122,8 +122,7 @@ mod lab {
         /// `pace()` and per-frame chunks from `suggested_chunks()`.
         #[arg(long)]
         heavy: bool,
-        /// Heavy-engine chunk cap (default: the extension's per-platform
-        /// default).
+        /// Heavy-engine chunk cap (default: the extension's default, 64).
         #[arg(long)]
         max_chunks: Option<u32>,
     }

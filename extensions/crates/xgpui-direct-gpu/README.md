@@ -51,12 +51,12 @@ loop {
 Heavy-engine mode combines three measures, because the stress tests showed that each alone falls short:
 
 1. **Observe-only presentation** (`set_gpu_wait(false)`). The compositor never waits for an unfinished engine frame.
-2. **Short submissions** of about `chunk_ms` of GPU time, so the GPU can schedule the compositor between them. At most `max_chunks` per frame: 16 by default on Linux, where Mesa did better with fewer, and 64 elsewhere.
+2. **Short submissions** of about `chunk_ms` of GPU time, so the GPU can schedule the compositor between them. At most `max_chunks` per frame (default 64).
 3. **Throttling on compositor lag.**
 
 On Linux the engine queue is also created at low priority where the driver supports it. The Windows D3D12 queue priority cannot be lowered through wgpu.
 
-Measured with 4 × 4K engines at a GPU-saturating load on an Intel Iris Xe: the UI went from 5–6 frames in 6 s with the defaults to p50 16.7 ms, with a p95 of 33 ms on Windows and 46 ms on Linux. On an Apple M-series running 8 × 4K at a heavier load, it went from starved to p50 16.7 ms and p95 51 ms.
+Measured with 4 × 4K engines at a GPU-saturating load on an Intel Iris Xe: the UI went from 5–6 frames in 6 s with the defaults to p50 16.7 ms, with a p95 of 20.5 ms on Windows and 33.6 ms on Linux. On an Apple M-series running 8 × 4K at a heavier load, it went from starved to p50 16.7 ms and p95 51 ms.
 
 ## Labs
 - `cargo run -p xgpui-ext-lab --bin engine-surface-lab -- --threaded`. Stress testing: `--stress-surfaces N --stress-size WxH --work N [--heavy]`.

@@ -32,10 +32,9 @@ pub struct HeavyEngine {
     pub lag_budget_ms: f32,
     /// GPU time per submission chunk to aim for.
     pub chunk_ms: f32,
-    /// Most submissions to split one frame into. Measured on Iris Xe and
-    /// M-series: Mesa (Linux) did best at 16 with several heavy engines;
-    /// Metal and D3D12 did best with up to 64. Default: 16 on Linux, 64
-    /// elsewhere.
+    /// Most submissions to split one frame into (default 64). Measured
+    /// with 4 heavy 4K engines on Iris Xe and M-series, 64 matched or beat
+    /// 16 on Linux, Windows and macOS.
     pub max_chunks: u32,
 }
 
@@ -46,7 +45,7 @@ impl Default for HeavyEngine {
             min_hz: 0.25,
             lag_budget_ms: 33.,
             chunk_ms: 4.,
-            max_chunks: if cfg!(target_os = "linux") { 16 } else { 64 },
+            max_chunks: 64,
         }
     }
 }
