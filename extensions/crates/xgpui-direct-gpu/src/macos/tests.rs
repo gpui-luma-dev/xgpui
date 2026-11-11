@@ -333,3 +333,67 @@ fn placements_of_different_sizes_show_the_whole_slot() {
         assert!(report.is_empty(), "{}", report.join("\n"));
     });
 }
+
+// Engines present from their own threads; the UI composites on its own.
+const _: () = {
+    const fn send_sync<T: Send + Sync>() {}
+    send_sync::<EngineSurface>();
+    send_sync::<SyncPoint>();
+};
+#[cfg(feature = "wgpu")]
+const _: () = {
+    const fn send<T: Send>() {}
+    send::<WgpuSurfaceTarget>();
+};
+
+#[test]
+fn present_from_engine_thread_composites_on_ui_thread() {
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Bgra8Srgb, 3)).unwrap();
+        let mut renderer = MetalHeadlessRenderer::new().unwrap();
+        let engine_surface = surface.clone();
+        std::thread::spawn(move || {
+            let mut engine = Engine::new();
+            let slot = engine_surface.acquire().unwrap();
+            engine.draw_and_present(&engine_surface, slot, [0.0, 0.0, 1.0, 1.0]);
+        })
+        .join()
+        .unwrap();
+        let image = renderer
+            .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+            .unwrap();
+        assert!(near(image.get_pixel(16, 8).0, [0, 0, 255, 255]));
+    });
+}
+
+#[test]
+fn rounded_placement_clips_corners() {
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Bgra8Srgb, 2)).unwrap();
+        let mut engine = Engine::new();
+        let mut renderer = MetalHeadlessRenderer::new().unwrap();
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [1.0, 1.0, 1.0, 1.0]);
+        let bounds = Bounds::new(
+            point(ScaledPixels(0.), ScaledPixels(0.)),
+            size(ScaledPixels(32.), ScaledPixels(16.)),
+        );
+        let mut rounded = Scene::default();
+        rounded.insert_primitive(CustomDraw {
+            order: 0,
+            bounds,
+            content_mask: ContentMask { bounds },
+            corner_radii: gpui::Corners::all(ScaledPixels(6.)),
+            opacity: 1.,
+            content: surface.content().unwrap(),
+            coverage: None,
+        });
+        rounded.finish();
+        let image = renderer
+            .render_scene_to_image(&rounded, viewport())
+            .unwrap();
+        let corner = image.get_pixel(0, 0).0;
+        assert!(!near(corner, [255; 4]), "corner not clipped: {corner:?}");
+        assert!(near(image.get_pixel(16, 8).0, [255; 4]));
+    });
+}

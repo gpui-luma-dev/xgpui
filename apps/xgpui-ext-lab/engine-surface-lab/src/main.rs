@@ -17,7 +17,16 @@ mod lab {
     use anyhow::{Context as _, Result, ensure};
     use clap::Parser;
     use gpui::{prelude::*, *};
-    use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Instant};
+    use std::{
+        cell::RefCell,
+        path::PathBuf,
+        rc::Rc,
+        sync::{
+            Arc, Mutex,
+            atomic::{AtomicBool, AtomicU64, Ordering},
+        },
+        time::{Duration, Instant},
+    };
     use xgpui_direct_gpu::{
         AcquireError, EngineSurface, SurfaceDesc, SurfaceFormat, WgpuSurfaceTarget,
     };
@@ -25,6 +34,7 @@ mod lab {
 
     const WIDTH: u32 = 640;
     const HEIGHT: u32 = 400;
+    const RADIUS: f32 = 8.;
 
     #[derive(Parser)]
     #[command(about = "wgpu engine on its own device presenting into xgpui (Metal)")]
@@ -49,6 +59,77 @@ mod lab {
         /// Present one frame, then keep recompositing it (isolates compositor cost).
         #[arg(long = "static")]
         static_frame: bool,
+        /// Run the engine on its own thread at its own rate, independent of
+        /// the display. The UI composites whatever frame is latest.
+        #[arg(long)]
+        threaded: bool,
+        /// Engine frame rate with `--threaded`.
+        #[arg(long, default_value_t = 60.)]
+        engine_hz: f32,
+    }
+
+    /// The engine running on its own thread, presenting at its own rate.
+    struct EngineThread {
+        rendered: Arc<AtomicU64>,
+        skipped: Arc<AtomicU64>,
+        error: Arc<Mutex<Option<String>>>,
+        stop: Arc<AtomicBool>,
+        handle: Option<std::thread::JoinHandle<()>>,
+        hz: f32,
+    }
+    impl EngineThread {
+        fn spawn(mut engine: WaveEngine, hz: f32) -> Self {
+            let rendered = Arc::new(AtomicU64::new(0));
+            let skipped = Arc::new(AtomicU64::new(0));
+            let error = Arc::new(Mutex::new(None));
+            let stop = Arc::new(AtomicBool::new(false));
+            let (r, k, e, s) = (
+                rendered.clone(),
+                skipped.clone(),
+                error.clone(),
+                stop.clone(),
+            );
+            let handle = std::thread::Builder::new()
+                .name("engine".into())
+                .spawn(move || {
+                    let period = Duration::from_secs_f32(1. / hz);
+                    let mut next = Instant::now();
+                    while !s.load(Ordering::Acquire) {
+                        match engine.frame() {
+                            Ok(true) => r.fetch_add(1, Ordering::Relaxed),
+                            Ok(false) => k.fetch_add(1, Ordering::Relaxed),
+                            Err(error) => {
+                                *e.lock().unwrap() = Some(format!("{error:#}"));
+                                return;
+                            }
+                        };
+                        next += period;
+                        let now = Instant::now();
+                        if next > now {
+                            std::thread::sleep(next - now);
+                        } else {
+                            next = now;
+                        }
+                    }
+                })
+                .expect("engine thread");
+            Self {
+                rendered,
+                skipped,
+                error,
+                stop,
+                handle: Some(handle),
+                hz,
+            }
+        }
+    }
+    impl Drop for EngineThread {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::Release);
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
     }
 
     const SHADER: &str = r#"
@@ -225,7 +306,11 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     struct Lab {
         surface: EngineSurface,
-        engine: WaveEngine,
+        engine: Option<WaveEngine>,
+        thread: Option<EngineThread>,
+        last_presents: u64,
+        new_frames_shown: u64,
+        repeated_frames_shown: u64,
         wide: bool,
         notice: Option<String>,
         rendered: u64,
@@ -242,19 +327,27 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     }
 
     impl Lab {
+        fn engine_mode(&self) -> String {
+            match &self.thread {
+                Some(thread) => format!("engine thread @ {:.0} Hz", thread.hz),
+                None => "engine on UI thread".into(),
+            }
+        }
         fn surface_view(&self, width: f32, height: f32) -> impl IntoElement {
             let surface = self.surface.clone();
             div()
                 .w(px(width))
                 .h(px(height))
-                .rounded_md()
-                .overflow_hidden()
+                .rounded(px(RADIUS))
                 .border_1()
                 .border_color(rgb(0x3a3a3a))
                 .child(
                     canvas(
                         |_, _, _| (),
-                        move |bounds, _, window, _| surface.paint(window, bounds),
+                        // Inside the 1px border the inner corner radius is one smaller.
+                        move |bounds, _, window, _| {
+                            surface.paint(window, bounds, Corners::all(px(RADIUS - 1.)))
+                        },
                     )
                     .size_full(),
                 )
@@ -276,9 +369,12 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                 times.sort_by(f32::total_cmp);
                 let pick = |q: f32| times[((times.len() - 1) as f32 * q) as usize];
                 println!(
-                    "{:.1}s shown: {} window frames, engine rendered {} / skipped {} (ring full {}), presents {}; frame interval ms p50 {:.2} p95 {:.2} p99 {:.2} max {:.2}; {}",
+                    "{:.1}s shown ({}): {} window frames ({} new / {} repeated engine frames), engine rendered {} / skipped {} (ring full {}), presents {}; frame interval ms p50 {:.2} p95 {:.2} p99 {:.2} max {:.2}; {}",
                     self.started.elapsed().as_secs_f32(),
+                    self.engine_mode(),
                     times.len() + 1,
+                    self.new_frames_shown,
+                    self.repeated_frames_shown,
                     self.rendered,
                     self.skipped,
                     stats.would_block,
@@ -298,11 +394,27 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                 }
                 cx.quit();
             }
-            let step = !(self.static_frame && self.rendered > 0);
-            match if step { self.engine.frame() } else { Ok(false) } {
-                Ok(true) => self.rendered += 1,
-                Ok(false) => self.skipped += 1,
-                Err(error) => self.error = Some(format!("{error:#}")),
+            if let Some(thread) = &self.thread {
+                self.rendered = thread.rendered.load(Ordering::Relaxed);
+                self.skipped = thread.skipped.load(Ordering::Relaxed);
+                if let Some(error) = thread.error.lock().unwrap().take() {
+                    self.error = Some(error);
+                }
+            } else if let Some(engine) = &mut self.engine {
+                let step = !(self.static_frame && self.rendered > 0);
+                match if step { engine.frame() } else { Ok(false) } {
+                    Ok(true) => self.rendered += 1,
+                    Ok(false) => self.skipped += 1,
+                    Err(error) => self.error = Some(format!("{error:#}")),
+                }
+            }
+            // Which frame this UI frame will show: new since the last UI frame, or a repeat.
+            let presents = self.surface.stats().presents;
+            if presents != self.last_presents {
+                self.new_frames_shown += 1;
+                self.last_presents = presents;
+            } else {
+                self.repeated_frames_shown += 1;
             }
             self.window_frames += 1;
             let elapsed = self.window_start.elapsed().as_secs_f32();
@@ -315,7 +427,8 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             let stats = self.surface.stats();
             let desc = self.surface.desc();
             let status = format!(
-                "{} · {}×{} {:?} · {} slots (free {} / writing {} / published {}) · presented {} · ring full {} · {:.0} fps",
+                "{} · {} · {}×{} {:?} · {} slots (free {} / writing {} / published {}) · presented {} · ring full {} · {:.0} fps",
+                self.engine_mode(),
                 if self.wide {
                     "wide-gamut SDR window"
                 } else {
@@ -386,6 +499,10 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         let options = Options::parse();
         ensure!((2..=8).contains(&options.slots), "slots must be 2..=8");
         ensure!(
+            options.engine_hz.is_finite() && (1. ..=1000.).contains(&options.engine_hz),
+            "engine-hz must be 1..=1000"
+        );
+        ensure!(
             (1..=10000).contains(&options.frames),
             "frames must be 1..=10000"
         );
@@ -423,10 +540,19 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                         })
                         .expect("engine surface");
                         let engine = WaveEngine::new(&surface).expect("wgpu engine");
+                        let (engine, thread) = if options.threaded {
+                            (None, Some(EngineThread::spawn(engine, options.engine_hz)))
+                        } else {
+                            (Some(engine), None)
+                        };
                         window.set_lab_title("XGPUI Engine Surface Lab");
                         cx.new(|_| Lab {
                             surface,
                             engine,
+                            thread,
+                            last_presents: 0,
+                            new_frames_shown: 0,
+                            repeated_frames_shown: 0,
                             wide,
                             notice,
                             rendered: 0,

@@ -7,7 +7,7 @@
 use crate::ring::{Lease, Ring, Writing};
 use crate::{AcquireError, SurfaceDesc, SurfaceFormat, SurfaceStats, Transport, Unsupported};
 use anyhow::{Context as _, Result, ensure};
-use gpui::{Bounds, CustomContent, CustomGeometry, DevicePixels, Pixels, Size, Window};
+use gpui::{Bounds, Corners, CustomContent, CustomGeometry, DevicePixels, Pixels, Size, Window};
 use gpui_apple::custom_draw::{MetalCustomContext, MetalCustomOutput, MetalWideSdrOutput};
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
@@ -264,12 +264,19 @@ impl EngineSurface {
     }
 
     /// Paint the latest frame into `bounds`, scaled from the slot size.
-    pub fn paint(&self, window: &mut Window, bounds: Bounds<Pixels>) {
+    /// The host clips the frame to the rounded shape, so it matches rounded
+    /// containers (GPUI's `overflow_hidden` clips to a rectangle only).
+    pub fn paint(
+        &self,
+        window: &mut Window,
+        bounds: Bounds<Pixels>,
+        corner_radii: Corners<Pixels>,
+    ) {
         if let Some(content) = self.content() {
             window.paint_custom(
                 CustomGeometry::RoundedRect {
                     bounds,
-                    corner_radii: Default::default(),
+                    corner_radii,
                 },
                 content,
             );

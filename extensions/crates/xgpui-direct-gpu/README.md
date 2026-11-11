@@ -16,7 +16,7 @@ let surface = EngineSurface::new(SurfaceDesc {
 let slot = surface.acquire()?;          // Err(WouldBlock) when the ring is full
 // ...render into slot.iosurface() on the engine's GPU, submit a signal...
 surface.present(slot, sync_point)?;     // only after the signal is submitted
-surface.paint(window, bounds);          // in an element's paint phase
+surface.paint(window, bounds, radii);   // in an element's paint phase
 ```
 
 - A presented slot is never rewritten while a retained scene or in-flight

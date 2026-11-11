@@ -22,6 +22,11 @@ pub struct WgpuSurfaceTarget {
     textures: Vec<Option<wgpu::Texture>>,
 }
 
+// SAFETY: wgpu handles are Send + Sync on native targets; MTLSharedEvent is
+// thread-safe for retain/release and is only staged on the engine's queue. The
+// target is used from one engine thread at a time (`&mut self` methods).
+unsafe impl Send for WgpuSurfaceTarget {}
+
 impl WgpuSurfaceTarget {
     pub fn new(
         surface: &EngineSurface,
