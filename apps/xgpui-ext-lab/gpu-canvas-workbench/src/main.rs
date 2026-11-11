@@ -798,7 +798,11 @@ mod workbench {
                 .gap_1()
                 .text_xs()
                 .text_color(rgb(0xb0b0b0))
-                .children(lines.into_iter().map(|line| div().child(line)))
+                .children(
+                    lines
+                        .into_iter()
+                        .map(|line| div().w_full().truncate().child(line)),
+                )
         }
     }
 
@@ -865,48 +869,62 @@ mod workbench {
                         .gap_4()
                         .items_start()
                         .child(
+                            // Canvas with the status under it: the status
+                            // lines are truncated to this column's width so
+                            // changing values never re-wrap the layout.
                             div()
-                                .id("canvas")
-                                .cursor_crosshair()
-                                .on_mouse_down(
-                                    MouseButton::Left,
-                                    cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                                        this.last_point = None;
-                                        if let Some(at) = this.slot_point(event.position) {
-                                            this.stroke_to(at);
-                                        }
-                                        cx.notify();
-                                    }),
+                                .w(px(WIDTH as f32))
+                                .flex_none()
+                                .flex()
+                                .flex_col()
+                                .gap_3()
+                                .child(
+                                    div()
+                                        .id("canvas")
+                                        .cursor_crosshair()
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                                                this.last_point = None;
+                                                if let Some(at) = this.slot_point(event.position) {
+                                                    this.stroke_to(at);
+                                                }
+                                                cx.notify();
+                                            }),
+                                        )
+                                        .on_mouse_move(cx.listener(
+                                            |this, event: &MouseMoveEvent, _, cx| {
+                                                if event.pressed_button == Some(MouseButton::Left)
+                                                    && this.last_point.is_some()
+                                                    && let Some(at) =
+                                                        this.slot_point(event.position)
+                                                {
+                                                    this.stroke_to(at);
+                                                    cx.notify();
+                                                }
+                                            },
+                                        ))
+                                        .on_mouse_up(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _: &MouseUpEvent, _, _| {
+                                                this.last_point = None;
+                                            }),
+                                        )
+                                        .on_mouse_down(
+                                            MouseButton::Right,
+                                            cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                                                if let Some(at) = this.slot_point(event.position) {
+                                                    this.inspect_rejected = !this.engine.inspect(
+                                                        at.x.max(0.) as u32,
+                                                        at.y.max(0.) as u32,
+                                                    );
+                                                }
+                                                cx.notify();
+                                            }),
+                                        )
+                                        .child(self.placement(WIDTH as f32, HEIGHT as f32, true)),
                                 )
-                                .on_mouse_move(cx.listener(
-                                    |this, event: &MouseMoveEvent, _, cx| {
-                                        if event.pressed_button == Some(MouseButton::Left)
-                                            && this.last_point.is_some()
-                                            && let Some(at) = this.slot_point(event.position)
-                                        {
-                                            this.stroke_to(at);
-                                            cx.notify();
-                                        }
-                                    },
-                                ))
-                                .on_mouse_up(
-                                    MouseButton::Left,
-                                    cx.listener(|this, _: &MouseUpEvent, _, _| {
-                                        this.last_point = None;
-                                    }),
-                                )
-                                .on_mouse_down(
-                                    MouseButton::Right,
-                                    cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                                        if let Some(at) = this.slot_point(event.position) {
-                                            this.inspect_rejected = !this
-                                                .engine
-                                                .inspect(at.x.max(0.) as u32, at.y.max(0.) as u32);
-                                        }
-                                        cx.notify();
-                                    }),
-                                )
-                                .child(self.placement(WIDTH as f32, HEIGHT as f32, true)),
+                                .child(self.status_view(window)),
                         )
                         .child(
                             div()
@@ -924,7 +942,6 @@ mod workbench {
                                 .child(self.inspection_view()),
                         ),
                 )
-                .child(self.status_view(window))
         }
     }
 
