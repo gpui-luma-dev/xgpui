@@ -85,6 +85,11 @@ mod workbench {
         /// Resize the second window every 0.5 s (presentation-only change).
         #[arg(long)]
         resize_second: bool,
+        /// Destroy the engine's device after this many seconds; the
+        /// workbench keeps the last frame, then rebuilds on a new device by
+        /// replaying its edit log.
+        #[arg(long)]
+        lose_device_after: Option<f32>,
     }
 
     /// Per-window measurements of a second window.
@@ -112,6 +117,10 @@ mod workbench {
     impl Render for Viewer {
         fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
             let now = Instant::now();
+            // Follow the engine across device generations (#197 recovery).
+            if let Some(workbench) = self.workbench.upgrade() {
+                self.surface = workbench.read(cx).engine.surface().clone();
+            }
             let presents = self.surface.stats().presents;
             {
                 let mut stats = self.stats.borrow_mut();
@@ -222,6 +231,8 @@ mod workbench {
         last_frame: Option<Instant>,
         sdr: bool,
         resize_second: bool,
+        lose_after: Option<f32>,
+        lost_at: Option<Instant>,
         viewers: Vec<(WeakEntity<Viewer>, Rc<RefCell<ViewerStats>>)>,
         last_step: Option<Instant>,
         last_published: u64,
@@ -231,9 +242,19 @@ mod workbench {
     }
 
     impl Workbench {
+        fn lose_device(&mut self) {
+            self.engine.lose_device();
+            self.lost_at = Some(Instant::now());
+            println!(
+                "engine device lost at {:.1}s; showing the last frame",
+                self.started.elapsed().as_secs_f32()
+            );
+        }
+
         fn busy(&self) -> bool {
             let stats = self.engine.stats();
-            self.demo
+            self.engine.is_lost()
+                || self.demo
                 || self.run_seconds.is_some()
                 || self.engine.pending_dabs() > 0
                 || self.engine.inspections_in_flight() > 0
@@ -283,10 +304,42 @@ mod workbench {
             if self.demo {
                 self.demo_frame();
             }
-            if let Err(error) = self.engine.frame() {
+            if let Some(after) = self.lose_after
+                && self.lost_at.is_none()
+                && self.engine.stats().recoveries == 0
+                && !self.engine.is_lost()
+                && self.started.elapsed().as_secs_f32() >= after
+            {
+                self.lose_device();
+            }
+            if self.engine.is_lost() {
+                // Keep showing the last frame briefly, then rebuild on a new
+                // device by replaying the edit log.
+                if self
+                    .lost_at
+                    .is_some_and(|lost| lost.elapsed().as_secs_f32() >= 0.5)
+                {
+                    self.lost_at = None;
+                    match self.engine.rebuild() {
+                        Ok(()) => {
+                            let stats = self.engine.stats();
+                            println!(
+                                "engine rebuilt on generation {}: {} dabs replayed in {:.1} ms",
+                                self.engine.generation(),
+                                stats.replayed_dabs,
+                                stats.replay_ms
+                            );
+                            self.error = None;
+                        }
+                        Err(error) => self.error = Some(format!("rebuild failed: {error:#}")),
+                    }
+                }
+            } else if let Err(error) = self.engine.frame() {
                 self.error = Some(format!("{error:#}"));
             }
-            if let Some(found) = self.engine.poll_inspections().pop() {
+            if let Some(found) = self.engine.poll_inspections().pop()
+                && found.generation == self.engine.generation()
+            {
                 self.inspection = Some(found);
             }
             let published = self.engine.stats().published_revision;
@@ -677,6 +730,16 @@ mod workbench {
                             },
                         ))),
                 )
+                .child(row().child(label("Failure")).child(
+                    button("lose", "Lose device", self.engine.is_lost()).on_click(cx.listener(
+                        |this, _, _, cx| {
+                            if !this.engine.is_lost() {
+                                this.lose_device();
+                            }
+                            cx.notify();
+                        },
+                    )),
+                ))
         }
 
         fn inspection_view(&self) -> impl IntoElement {
@@ -752,6 +815,18 @@ mod workbench {
                 format!(
                     "Transport: {TRANSPORT}; {:?}; no CPU copy of frames",
                     self.engine.surface().transport()
+                ),
+                format!(
+                    "Generation {}{} · recoveries {} · last replay {} dabs in {:.1} ms",
+                    self.engine.generation(),
+                    if self.engine.is_lost() {
+                        " (device lost: showing the last frame)"
+                    } else {
+                        ""
+                    },
+                    stats.recoveries,
+                    stats.replayed_dabs,
+                    stats.replay_ms
                 ),
                 format!(
                     "Revision {} · published {} · pending dabs {} · inspections in flight {}",
@@ -992,6 +1067,8 @@ mod workbench {
                         last_frame: None,
                         sdr: options.sdr,
                         resize_second: options.resize_second,
+                        lose_after: options.lose_device_after,
+                        lost_at: None,
                         viewers: Vec::new(),
                         last_step: None,
                         last_published: 0,

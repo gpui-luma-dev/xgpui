@@ -500,3 +500,58 @@ fn linux_compositor_without_gpu_wait_never_blocks_on_the_engine() {
         "PASS compositor without GPU waits showed the last ready frame in {elapsed:?}, then the new frame once woken"
     ));
 }
+
+/// #197 K6: the compositor's own device is replaced. Slots are re-imported on
+/// the new device (never a stale import keyed by a reused address), retained
+/// scenes still composite, and new frames keep flowing.
+#[test]
+fn linux_compositor_device_replacement_reimports_slots() {
+    let (Some((device, queue)), Some(mut first)) = (engine_device(), host()) else {
+        return;
+    };
+    let mut target =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Bgra8Srgb, 3), &device, &queue).unwrap();
+    draw(&mut target, wgpu::Color::RED);
+    let retained = scene(target.surface().content().unwrap());
+    let image = first.render_scene_to_image(&retained, viewport()).unwrap();
+    assert!(near(image.get_pixel(16, 8).0, [255, 0, 0, 255]));
+    // The compositor's device is lost and replaced: drop it, make a new one.
+    drop(first);
+    let Some(mut second) = host() else {
+        return;
+    };
+    // An old retained scene composites on the new device (slot re-imported).
+    let image = second.render_scene_to_image(&retained, viewport()).unwrap();
+    let pixel = image.get_pixel(16, 8).0;
+    assert!(
+        near(pixel, [255, 0, 0, 255]),
+        "retained frame on new compositor: {pixel:?}"
+    );
+    drop(retained);
+    // New frames keep cycling the ring on the new compositor.
+    for (i, color) in [
+        wgpu::Color::GREEN,
+        wgpu::Color::BLUE,
+        wgpu::Color::GREEN,
+        wgpu::Color::BLUE,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        draw(&mut target, color);
+        let image = second
+            .render_scene_to_image(&scene(target.surface().content().unwrap()), viewport())
+            .unwrap();
+        let expected = if i % 2 == 0 {
+            [0, 255, 0, 255]
+        } else {
+            [0, 0, 255, 255]
+        };
+        let pixel = image.get_pixel(16, 8).0;
+        assert!(
+            near(pixel, expected),
+            "frame {i} on new compositor: {pixel:?}"
+        );
+    }
+    report("PASS compositor device replaced: retained and new frames composite on the new device");
+}

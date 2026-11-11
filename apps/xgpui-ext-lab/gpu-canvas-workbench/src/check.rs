@@ -360,6 +360,63 @@ pub fn run(slots: usize) -> Result<()> {
         ),
     );
 
+    // Generation replacement: the device is lost with an inspection in
+    // flight and edits still arriving. The rebuilt engine replays the CPU
+    // edit log on a new device and surface; the old inspection is never
+    // delivered; new inspections report the new generation.
+    ensure!(engine.inspect(300, 200), "inspection rejected");
+    let old_surface = engine.surface().clone();
+    engine.lose_device();
+    let lost_frame_rejected = engine.frame().is_err() && !engine.inspect(10, 10);
+    let during = Dab {
+        x: 300.,
+        y: 200.,
+        radius: 7.,
+        opacity: 1.,
+        color: [0.25, 0.5, 0.75],
+    };
+    engine.dab(during);
+    reference.apply(&during);
+    let old_still_shows = old_surface.content().is_some() && !old_surface.is_valid();
+    let logged = engine.logged_dabs();
+    engine.rebuild()?;
+    let stale = engine.poll_inspections();
+    let (bad, worst) = compare_working(&mut engine, &reference)?;
+    let stats = engine.stats();
+    ensure!(
+        engine.inspect(300, 200),
+        "inspection rejected after rebuild"
+    );
+    let mut fresh = None;
+    for _ in 0..100 {
+        engine.wait_idle();
+        if let Some(found) = engine.poll_inspections().pop() {
+            fresh = Some(found);
+            break;
+        }
+    }
+    let fresh_ok = fresh.as_ref().is_some_and(|found| {
+        found.generation == 1
+            && (0..3).all(|c| {
+                (found.pixels[0][c] - reference.at(300, 200)[c]).abs() <= WORKING_TOLERANCE
+            })
+    });
+    ok &= report(
+        lost_frame_rejected
+            && old_still_shows
+            && stale.is_empty()
+            && bad == 0
+            && stats.recoveries == 1
+            && stats.published_revision == stats.revision
+            && engine.surface().content().is_some()
+            && fresh_ok,
+        format!(
+            "device lost and replaced: {logged} logged dabs replayed in {:.1} ms on generation {} ({bad} mismatches, max error {worst:.2e}); old inspection dropped, new one reports generation 1; last frame kept on the old surface meanwhile",
+            stats.replay_ms,
+            engine.generation(),
+        ),
+    );
+
     // Reset regenerates the image and discards queued edits.
     engine.dab(Dab {
         x: 10.,

@@ -123,6 +123,8 @@ pub struct Inspection {
     pub y: u32,
     /// Edit revision the values belong to.
     pub revision: u64,
+    /// Engine generation (device) that produced them.
+    pub generation: u64,
     /// `INSPECT`×`INSPECT` linear P3 pixels starting at (x, y).
     pub pixels: Vec<[f32; 4]>,
 }
@@ -146,6 +148,11 @@ pub struct EngineStats {
     /// Bytes read back to the CPU (inspection only).
     pub cpu_bytes_read: u64,
     pub inspections: u64,
+    /// Device generations replaced so far.
+    pub recoveries: u64,
+    /// Dabs replayed by the last recovery, and how long it took.
+    pub replayed_dabs: u64,
+    pub replay_ms: f32,
 }
 
 struct Staging {
@@ -170,6 +177,12 @@ pub struct Engine {
     publish_binds: Vec<Option<wgpu::BindGroup>>,
     staging: Vec<Staging>,
     pending: Vec<Dab>,
+    /// Every dab since the last reset: the retained CPU description used to
+    /// rebuild the working image on a new device.
+    log: Vec<Dab>,
+    generation: u64,
+    lost: bool,
+    slots: usize,
     reset_pending: bool,
     exposure: f32,
     dirty_since: Option<Instant>,
@@ -292,6 +305,10 @@ impl Engine {
             paint_bind,
             staging,
             pending: Vec::new(),
+            log: Vec::new(),
+            generation: 0,
+            lost: false,
+            slots,
             reset_pending: true,
             exposure: 0.,
             dirty_since: Some(Instant::now()),
@@ -315,6 +332,53 @@ impl Engine {
     pub fn pending_dabs(&self) -> usize {
         self.pending.len()
     }
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+    pub fn is_lost(&self) -> bool {
+        self.lost
+    }
+    pub fn logged_dabs(&self) -> usize {
+        self.log.len()
+    }
+
+    /// Simulate device loss: destroy the device and invalidate the surface.
+    /// The last published frame keeps displaying; later frames fail until
+    /// `rebuild`.
+    pub fn lose_device(&mut self) {
+        self.device.destroy();
+        self.target.surface().invalidate();
+        self.lost = true;
+    }
+
+    /// Replace a lost generation: a new device, surface and working set,
+    /// with the working image reconstructed by replaying the retained edit
+    /// log (CPU description, not GPU state). In-flight inspections of the
+    /// old generation are dropped with it and never delivered. Publishes
+    /// the reconstructed image as a new revision.
+    pub fn rebuild(&mut self) -> Result<()> {
+        let started = Instant::now();
+        let mut fresh = Engine::new(self.slots)?;
+        fresh.generation = self.generation + 1;
+        fresh.exposure = self.exposure;
+        fresh.log = std::mem::take(&mut self.log);
+        fresh.pending = fresh.log.clone();
+        fresh.latencies_ms = std::mem::take(&mut self.latencies_ms);
+        let replayed = fresh.pending.len() as u64;
+        fresh.stats = EngineStats {
+            revision: self.stats.revision + 1,
+            published_revision: self.stats.published_revision,
+            recoveries: self.stats.recoveries + 1,
+            replayed_dabs: replayed,
+            ..fresh.stats
+        };
+        fresh.frame()?;
+        fresh.wait_idle();
+        fresh.stats.replay_ms = started.elapsed().as_secs_f32() * 1000.;
+        *self = fresh;
+        Ok(())
+    }
+
     pub fn inspections_in_flight(&self) -> usize {
         self.staging.iter().filter(|s| s.request.is_some()).count()
     }
@@ -327,6 +391,7 @@ impl Engine {
     /// Regenerate the image and drop queued dabs. New revision.
     pub fn reset(&mut self) {
         self.pending.clear();
+        self.log.clear();
         self.reset_pending = true;
         self.exposure = 0.;
         self.touch();
@@ -335,6 +400,7 @@ impl Engine {
     /// Queue one dab. Each call is a new revision.
     pub fn dab(&mut self, dab: Dab) {
         self.pending.push(dab);
+        self.log.push(dab);
         self.touch();
     }
 
@@ -438,6 +504,8 @@ impl Engine {
     /// Apply queued edits, then publish a snapshot if the revision changed.
     /// Presentation-only frames (nothing changed) do no GPU work.
     pub fn frame(&mut self) -> Result<()> {
+        // A lost device must not be used; edits keep queuing in the log.
+        ensure!(!self.lost, AcquireError::Invalidated);
         while self.apply_edits() && !self.pending.is_empty() {}
         if self.stats.published_revision == self.stats.revision {
             return Ok(());
@@ -501,6 +569,9 @@ impl Engine {
     /// more edits arrive before it completes. `false` when every staging
     /// buffer is busy (bounded; retry later).
     pub fn inspect(&mut self, x: u32, y: u32) -> bool {
+        if self.lost {
+            return false;
+        }
         let Some(index) = self.staging.iter().position(|s| s.request.is_none()) else {
             return false;
         };
@@ -535,6 +606,9 @@ impl Engine {
 
     /// Completed inspections, without blocking.
     pub fn poll_inspections(&mut self) -> Vec<Inspection> {
+        if self.lost {
+            return Vec::new();
+        }
         let _ = self.device.poll(wgpu::PollType::Poll);
         let mut done = Vec::new();
         for staging in &mut self.staging {
@@ -567,6 +641,7 @@ impl Engine {
                 x,
                 y,
                 revision,
+                generation: self.generation,
                 pixels,
             });
         }
