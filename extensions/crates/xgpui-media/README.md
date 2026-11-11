@@ -20,7 +20,7 @@ gamut mapping and storage deliberately; declaring Adobe RGB does not discover or
 parse an ICC profile. File decoding and metadata discovery belong in application
 adapters. The existing file loader below is an sRGB convenience path.
 
-Use `MediaLoader::load_pixel_buffer` with `PixelColor` for named, custom or extended-linear interpretation. The optional color-crate [ICC adapter](../../../docs/extensions/icc-profiles.md) resolves supplied RGB matrix/TRC bytes into a custom definition. Start with [pixels + metadata](../../../docs/extensions/pixels-and-metadata.md) for the complete path.
+Use `MediaLoader::load_pixel_buffer` with `PixelColor` for named, custom or extended-linear interpretation. The optional color-crate [ICC adapter](https://xgpui.dev/icc-profiles.html) resolves supplied RGB matrix/TRC bytes into a custom definition. Start with [pixels + metadata](https://xgpui.dev/pixels-and-metadata.html) for the complete path.
 
 ## Load an image
 
@@ -63,7 +63,7 @@ image_view(image.clone())
     .filter(ImageFilter::new().brightness(1.1).saturation(1.3))
 ```
 
-The [image guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/media-images.md)
+The [image guide](https://xgpui.dev/media-images.html)
 explains loading budgets, supported pixel formats, color contracts and filters.
 The file loader supports PNG, JPEG and WebP first frames; URL loading and
 animated-image playback are not included.
@@ -91,14 +91,14 @@ Feature/backend support varies by image format and import path.
 
 Run `just media` from the repository root. The
 [media lab](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/media-lab/README.md)
-and [media pipeline guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/media-pipeline.md)
+and [media pipeline guide](https://xgpui.dev/media-pipeline.html)
 cover examples, validation evidence and remaining limits.
 
 ## GPUI public API changes: additions and compatibility
 
 Use this crate with xgpui's matching framework packages. Its integration depends
-on [xgpui's GPUI API changes](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md#added-source-sized-media-textures).
-See the [compatibility guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/media-images.md#gpui-public-api-changes-additions-and-compatibility)
+on [xgpui's GPUI API changes](https://xgpui.dev/gpui-public-api.html#added-source-sized-media-textures).
+See the [compatibility guide](https://xgpui.dev/media-images.html#gpui-public-api-changes-additions-and-compatibility)
 for additions, affected public types and migration requirements.
 
 ## Project

@@ -43,15 +43,15 @@ The existing `apps/xgpui-ext-lab/extensions-web` gallery is not modified.
 ```sh
 # From the repository root; wasm-bindgen-cli must be 0.2.129.
 bash apps/xgpui-ext-lab/shader-examples/build.sh
-python3 apps/xgpui-ext-lab/shader-examples/serve.py
+just docs-serve
 ```
 
-Open http://localhost:8083/ and choose an example and backend. WebGPU needs a
+Open http://localhost:8000/examples/shaders/ and choose an example and backend. WebGPU needs a
 supporting browser/adapter and localhost or HTTPS. WebGL2 is explicitly available;
 errors appear on the page and in the console. No worker, shared memory or atomic
 WASM build is used. For performance comparisons, build with `--release`.
-The build writes `target/web/shaders/`. `just docs-serve` stages the docs
-companion at `target/site/examples/shaders/`.
+The build writes its generated files next to the checked-in page in
+`pages/examples/shaders/`; `clean.sh` removes them.
 
 All effects use the same typed shader API on Metal, D3D11 and wgpu. A compatible
 run is eligible for one instanced draw; composition intentionally splits at the
@@ -65,7 +65,7 @@ must sit above red and below green/blue. Toggle clipping to reveal the full shap
 without moving them; the cyan frame stays fixed. Confirm no
 console errors. Native or translation checks alone do not prove browser behavior.
 
-See [the instanced shader contract](../../../docs/extensions/instanced-wgsl-v2.md) for authoring,
+See [the instanced shader contract](https://xgpui.dev/instanced-wgsl-v2.html) for authoring,
 ABI validation, transport limits and color semantics.
 
 Validated locally on 2026-10-25 in the in-app Chromium browser: minimal shader,
@@ -91,7 +91,7 @@ browser backends: child clicks, card opacity and inset/outset controls worked
 without browser console errors. Metal/wgpu tests also verify paint order and
 ancestor clipping. This is
 an opt-in `painted().shadow_paint(layer)` helper backed by `ShadowPainter`; native GPUI `.shadow(...)` keeps its current API.
-See [richer shadow authoring](../../../docs/extensions/instanced-wgsl-v2.md#richer-shadows)
+See [richer shadow authoring](https://xgpui.dev/instanced-wgsl-v2.html#richer-shadows)
 for gradient stops, paint order, automatic effect bounds and the analytic blur contract.
 
 Borders category acceptance: the native Metal demo was checked before rebuilding
@@ -123,4 +123,4 @@ Run `just typography` here, or `just --justfile apps/xgpui-ext-lab/shader-exampl
 from the root. The shared native/browser demo has Editorial, Ligatures, Unicode
 and Overflow samples, a live source inspector, selection/copy controls, type size,
 width and light/dark controls. Gradient/glow/drop-shadow styling, typewriter reveal, deterministic scramble and bounded wave motion preserve the original selectable source.
-Pause, scrub and reduced-motion controls make each effect inspectable. See [the typography guide](../../../docs/extensions/typography.md).
+Pause, scrub and reduced-motion controls make each effect inspectable. See [the typography guide](https://xgpui.dev/typography.html).

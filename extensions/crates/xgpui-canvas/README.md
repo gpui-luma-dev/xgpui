@@ -88,13 +88,13 @@ cargo run --release --locked --config .cargo/validation.toml \
   --example spatial_queries --target-dir target
 ```
 
-See the [canvas overview](../../../docs/extensions/canvas.md) for the current
+See the [canvas overview](https://xgpui.dev/canvas.html) for the current
 crate/lab boundary, known limits, and proposed next milestones.
 
 ## GPUI public API changes: additions and compatibility
 
 Canvas uses existing GPUI containers, clipping and the xgpui-shader pipeline;
-no GPUI public signature changes are required. Its camera and scene APIs live in the extension. See [canvas integration compatibility](../../../docs/extensions/gpui-public-api.md#canvas-reuses-existing-gpui-apis).
+no GPUI public signature changes are required. Its camera and scene APIs live in the extension. See [canvas integration compatibility](https://xgpui.dev/gpui-public-api.html#canvas-reuses-existing-gpui-apis).
 
 ## Input and grid configuration
 
@@ -117,5 +117,5 @@ additional application state need their own key.
 
 The website includes `?demo=canvas` (retained cards, selection/snapping and density
 minimap) and `?demo=mandelbrot` (bounded progressive CPU fractal). They share this
-crate with the native lab. See [controls, API and browser limits](../../../docs/extensions/canvas.md).
+crate with the native lab. See [controls, API and browser limits](https://xgpui.dev/canvas.html).
 Build with `bash apps/xgpui-ext-lab/extensions-web/build.sh --release`.

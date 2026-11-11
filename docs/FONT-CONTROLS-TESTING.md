@@ -1,7 +1,7 @@
 # Test font controls
 
 Run commands from the repository root. The lab bundles licensed fonts; no font
-installation is needed. See the [font-controls guide](extensions/font-controls.md)
+installation is needed. See the [font-controls guide](https://xgpui.dev/font-controls.html)
 for API usage, backend support and the core 3.0 migration.
 
 ## Wasm inspector

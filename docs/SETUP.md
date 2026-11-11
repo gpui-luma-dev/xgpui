@@ -119,9 +119,9 @@ version; inspect metadata when updating versions. A separate consumer must carry
 its own local package overrides rather than assuming this checkout's config is
 inherited.
 
-Refresh and review the web documentation after each release; regeneration alone
-does not validate the narrative or SVG teaching model. See
-[roadmap maintenance](roadmap/BUILDING.md) and [build options](BUILDING.md).
+Review the website in `pages/` after each release; `just docs-check` catches broken
+links and a stale upstream baseline, not stale narrative. See
+[website maintenance](WEBSITE.md) and [build options](BUILDING.md).
 
 Sync performs no platform validation. Its branch is an unintegrated proposal;
 review and test the chosen integration separately.

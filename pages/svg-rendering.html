@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>xgpui-svg — experimental · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/svg-rendering.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" aria-current="page" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Experimental SVG extension.</strong> Progressive rasterization, shared admission and accounted image budgets.</p><p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=svg">Open Progressive SVG ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p><article class="extension-document"><h1 id="xgpui-svg--experimental">xgpui-svg — experimental</h1>
+<p>Full-color static SVG rendering for GPUI. <code>SvgImage</code> owns progressive raster jobs,
+timers, atlas cleanup and redraws. <code>SvgScheduler</code> optionally shares admission and
+estimated image-memory limits across views/windows. This is an opt-in, unpublished
+extension; its API may change. The GPUI integration adds <a href="gpui-public-api.html#added-svg-viewport-size"><code>ParsedSvg::size()</code></a>.</p>
+<h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
+<p>The reusable element requires <code>ParsedSvg::size()</code> to read the resolved viewport
+without reparsing. That accessor is additive; existing parsing/rasterization
+signatures and whole-document sizing behavior remain unchanged. The document,
+policy, queue, scheduler and element APIs live in <code>xgpui-svg</code>.</p>
+<p>The browser's sharp comparison separately adds <code>SvgSize::Viewport { size, view_box }</code>.
+Downstream exhaustive <code>SvgSize</code> matches must handle the new variant even when
+not using the comparison. This does not add cropped scheduling to <code>SvgImage</code>.
+Viewport output limits do not cap filter intermediates or total process memory.</p>
+<p><strong><a href="gpui-public-api.html#added-svg-viewport-size">GPUI public API changes: additions and compatibility</a>.</strong>
+See also <a href="gpui-public-api.html#added-svg-viewport-rasterization">viewport rasterization and enum compatibility</a>.</p>
+<h2 id="use">Use</h2>
+<p>Add a path dependency on this crate. Parse once (on a worker for complex artwork),
+retain the immutable document in your view, and build the element during render:</p>
+<pre><code class="language-rust,ignore">use gpui::{prelude::*, *};
+use xgpui_svg::{svg_image, SvgDocument, SvgScheduler};
+
+// During loading; retain both handles in the parent view:
+let document = SvgDocument::parse(&amp;cx.svg_renderer(), &amp;svg_bytes)?;
+let scheduler = SvgScheduler::default(); // optional shared pool
+
+// In render(): no queue, timer, subscription or worker setup.
+svg_image("artwork", self.document.clone())
+    .scheduler(self.scheduler.clone())
+    .w(px(640.)).h(px(480.))
+    .bg(rgb(0xf8fafc)).rounded_md()
+    .zoom(2.)
+    .pan(point(px(20.), px(-10.)))
+</code></pre>
+<ul>
+<li>Use a stable ID unique among siblings and clone the same <code>SvgDocument</code> across
+frames. Reparsing each frame restarts refinement.</li>
+<li>The viewport fills its parent by default. Normal <code>Styled</code>/<code>InteractiveElement</code>
+APIs apply. Artwork uses centered contain-fit and its intrinsic aspect ratio.
+<code>.logical_size(size(w, h))</code> overrides the artwork's logical size at 100% zoom.</li>
+<li>Zoom and logical-pixel pan change the artwork, not layout or hitboxes. Mouse
+gestures and file loading stay application-controlled. Parsing accepts the
+application's font/resolver configuration.</li>
+<li>A coarse preview appears first; settled detail follows. Pan and zoom-out reuse
+adequate detail. Removing an element releases its retained image and atlas
+entry. Replacement also explicitly evicts superseded atlas entries.</li>
+<li>Already running synchronous resvg work cannot be interrupted. Stale results
+cannot replace newer documents/settings; a removed element cannot be updated.
+Zero bounds suspend requests. Invalid input fails without retry loops and can
+recover when corrected.</li>
+</ul>
+<table><thead><tr><th>Default</th><th style="text-align: right">Value</th></tr></thead><tbody>
+<tr><td>Maximum supplied SVG data</td><td style="text-align: right">32 MiB</td></tr>
+<tr><td>Per-output RGBA budget</td><td style="text-align: right">16 MiB</td></tr>
+<tr><td>Raster edge cap</td><td style="text-align: right">8192 px</td></tr>
+<tr><td>Preview longest edge</td><td style="text-align: right">640 px</td></tr>
+<tr><td>Detail settle delay</td><td style="text-align: right">120 ms after a changed output target</td></tr>
+<tr><td>Optional shared pool</td><td style="text-align: right">128 MiB accounted image costs, 2 active jobs</td></tr>
+</tbody></table>
+<p>Override per-image settings with <code>.policy(RasterPolicy { .. })</code>.</p>
+<h2 id="shared-scheduling">Shared scheduling</h2>
+<p>Create <strong>one</strong> pool per intended group, then clone it into every participating
+image. Without <code>.scheduler(...)</code>, elements retain independent queues.</p>
+<pre><code class="language-rust,ignore">use xgpui_svg::{SchedulerLimits, SvgScheduler, MIB};
+let scheduler = SvgScheduler::new(SchedulerLimits {
+    max_jobs: 2,
+    max_bytes: 64 * MIB,
+})?;
+</code></pre>
+<p>FIFO admission uses wakeups, not polling or UI-thread blocking. Obsolete queued
+detail is cancelled; useful same-document previews survive zoom bursts. Pending
+requests have unique cancellation tickets. Active work keeps its reservation
+and job slot until the renderer actually finishes, including after unmount.</p>
+<p>Accounting reserves <strong>3 × output RGBA</strong> for in-flight output/conversion/upload
+headroom, then <strong>2 × RGBA</strong> for retained CPU data plus nominal GPU residency.
+Replacements count old retained and new in-flight images together. Retained
+charges remain until deferred atlas eviction. Failed/stale/cancelled work frees
+its reservations. <code>scheduler.stats()</code> exposes membership, queued/active jobs,
+retained/in-flight/current managed bytes and lifetime accounting/concurrency peaks.</p>
+<p>Each member's output cap is also limited to
+<code>max_bytes / (2 * members + 3 * max_jobs)</code>, rounded down to a whole pixel, with a
+one-pixel minimum. This leaves replacement headroom. Membership changes rebalance
+resolution; retiring oversized images can temporarily leave a tile empty while
+its new preview waits. Extremely many members in a tiny pool can exhaust even
+minimum-pixel capacity until members leave.</p>
+<p>Limits are immutable; replace the pool to change them. Old-pool work retains its
+old reservation while draining, so replacement is not an immediate hard-limit
+downgrade across both pools. Do not construct a new pool per frame or per tile
+when you intend sharing.</p>
+<h2 id="optional-status-and-low-level-apis">Optional status and low-level APIs</h2>
+<pre><code class="language-rust,ignore">svg_image("artwork", self.document.clone())
+    .on_status_change(cx.listener(|this, status: &amp;xgpui_svg::SvgStatus, _, cx| {
+        this.svg_status = Some(status.clone());
+        cx.notify();
+    }))
+</code></pre>
+<p>Callbacks are deferred until after drawing and emitted on observable changes.
+<code>SvgStatus</code> reports <code>Empty</code>, <code>Waiting</code>, <code>Queued</code>, <code>Preview</code>, <code>Detail</code>, <code>Ready</code> or
+<code>Failed</code>; requested/budgeted/displayed sizes; raster wall time; completed count;
+and errors. Counts are per mounted ID. Ready means <strong>budgeted</strong> detail is ready.
+The element adds no status overlay of its own.</p>
+<table><thead><tr><th>API</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>SvgDocument</code></td><td>Shared immutable parsed tree, intrinsic size and aspect fitting</td></tr>
+<tr><td><code>RasterPolicy</code> / <code>Resolution</code></td><td>Validated requested, preview and output sizing</td></tr>
+<tr><td><code>RasterQueue</code> / <code>Job</code> / <code>Stage</code></td><td>Deterministic latest-target scheduling for custom hosts</td></tr>
+<tr><td><code>RasterImage</code></td><td>CPU RGBA output and raster/conversion wall time</td></tr>
+<tr><td><code>SvgScheduler</code> / <code>SchedulerLimits</code> / <code>SchedulerStats</code></td><td>Optional shared pool and accounting</td></tr>
+</tbody></table>
+<p>Direct queue users supply monotonic time and generations, request validated
+<code>resolution.output</code>, and deliver every active <code>complete(job, success)</code>. Only
+accept a result when <code>complete</code> returns true. <code>set_current</code> registers retained
+image dimensions; <code>invalidate</code> drops desired/current metadata while old work
+drains. <code>SvgImage</code> handles this lifecycle internally.</p>
+<h2 id="native-sample-and-validation">Native sample and validation</h2>
+<p>The offline native gallery uses committed, attributed SVGs:</p>
+<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/svg-lab/justfile gallery
+</code></pre>
+<p>The browser extension gallery also includes <code>?demo=svg</code>: five attributed samples,
+synchronized bounded and viewport-rerasterized views, wheel zoom and drag pan,
+a ten-tile gallery, and switchable 8/32 MiB shared pools. The rerasterized view
+uses <code>SvgSize::Viewport</code> to render only visible pixels at display density, keeping
+curves sharp at deep zoom. It is a demo comparison outside the bounded scheduler,
+with separate output-size and timing diagnostics. Camera/viewport changes rebuild
+its raster; ordinary redraws reuse it. <strong>Sharp SVG zoom: ON/OFF</strong> switches the
+right view between crisp CPU rerasterization and GPU texture zoom of a cached
+100% raster. With it off, zoom/pan leaves the right raster count unchanged;
+artwork selection or resize can still rebuild the base raster. The notice
+explains the speed/detail tradeoff and that the left bounded view still refines.
+Independent <strong>Bounded view: ON/OFF</strong> and <strong>Comparison view: ON/OFF</strong> controls
+unmount either renderer and release its raster while retaining the shared camera.
+Unmount the gallery too when isolating a single view's cost.
+Its diagnostics report element raster latency and accounted bytes, not total
+browser memory. The current non-atomic Wasm platform runs raster jobs on the
+browser thread: progressive rendering and admission limits apply, but a costly
+filter can still block input. Native worker responsiveness measurements above
+do not establish browser responsiveness. The browser demo caps concurrency at
+one and bounded-element output at 2 MiB. The viewport comparison rejects
+output edges above 8192 device pixels. Complex filter intermediates can still
+be costly; a 1600% leaf render took about 2.5 seconds in one browser check. Use the gallery's artwork credits link for
+creator, source, license and unchanged SVG downloads.</p>
+<h2 id="limits-and-follow-ups">Limits and follow-ups</h2>
+<p>The hard shared invariants are <strong>accounted reservations ≤ pool budget</strong> and
+<strong>admitted jobs ≤ concurrency limit</strong>. Neither output budgets nor accounting are
+a hard process/GPU-memory ceiling. Parsed trees, filters, frame references, atlas
+packing, allocator/driver retention and app baseline are not fully modeled.
+Smaller budgets reduce deep-zoom detail; viewport mounting remains useful.</p>
+<p>Static SVG is supported through GPUI/resvg. Scripting/animation, an SVG DOM,
+arbitrary SVG-to-GPUI-path conversion and viewport tiling are outside this
+iteration. External resources/fonts retain GPUI/resvg behavior; embed assets or
+outline text for portable documents. Parsing and fetching policies remain with
+the host. This is not a sandbox for hostile documents.</p>
+<p><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/svg-lab/README.md?plain=1">SVG lab and attributed samples</a> ·
+<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/svg-lab/bench/README.md?plain=1">measurement index</a> ·
+<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/svg-lab/bench/results/2026-10-24-scheduler/ASSESSMENT.md?plain=1">shared-pool results</a> ·
+<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-svg/FOLLOW_UPS.md?plain=1">documented follow-ups</a></p>
+<p>From the repository root:</p>
+<pre><code class="language-sh">cargo test --offline --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-svg/Cargo.toml --target-dir target
+cargo clippy --offline --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-svg/Cargo.toml --target-dir target --all-targets -- -D warnings
+</code></pre>
+<p>Tests cover actual mounted elements, refinement/timers, sibling identity, pan and
+density changes, stale document/policy results, invalid/zero geometry, atlas
+removal, FIFO/cancellation, accounting, rebalancing and complete pool drainage.</p>
+<h2 id="contour-trim-and-dash-effects">Contour trim and dash effects</h2>
+<p><code>xgpui_svg::path_effects</code> adds programmatic retained vector contours alongside the
+static SVG document API. It does not convert imported SVG documents to native
+paths or modify the existing raster pipeline.</p>
+<pre><code class="language-rust,ignore">use gpui::{point, px};
+use xgpui_svg::path_effects::{Contour, MeasuredPath, PathEffect};
+let contour = Contour::new(point(px(20.), px(100.)))
+    .cubic_to(point(px(60.), px(0.)), point(px(140.), px(180.)), point(px(200.), px(80.)))
+    .quadratic_to(point(px(250.), px(0.)), point(px(300.), px(100.)));
+// Retain this table while animating the effect.
+let measured = MeasuredPath::new(&amp;[contour], px(0.05))?;
+let effect = PathEffect::new()
+    .trim(0.0..0.75)?
+    .dash(&amp;[px(16.), px(8.)], px(5.))?;
+window.paint_path(measured.stroke(&amp;effect, px(4.))?, gpui::rgb(0x9ee3bd));
+</code></pre>
+<p>Contours retain line, quadratic and cubic verbs. Arc-length lookup uses cached
+adaptive subdivisions, including collinear curves with nonlinear parameter speed.
+Trim endpoints use de Casteljau slicing; the resulting segments remain curves
+until the existing GPUI stroke tessellator runs. <code>MeasuredPath::apply</code> returns
+contours when callers need geometry rather than a native stroke.</p>
+<p>Trim is an ordered, nonwrapping range within 0..1 over the <strong>total concatenated
+length</strong> of all contours. Empty trim is empty geometry. Close edges contribute to
+length. Solid full contours retain closure; partial trims have open ends. Trim is
+applied before dashing, and dash phase restarts at each retained contour's start.
+Positive phase advances into the pattern, negative phase wraps. Odd dash arrays
+repeat; an empty array is solid. Visible pieces spanning a full closed contour's
+seam are joined to avoid introducing caps there.</p>
+<p>Lengths, stroke widths, tolerance and dash phase use logical pixels. The table's
+0.001..16 px tolerance bounds each adaptive leaf's control-point deviation from a
+uniformly parameterized chord; it is not a global arc-length error guarantee. Use
+smaller tolerances for more precise animation and retain the measurement cache.
+Native stroke joins/caps use GPUI defaults. Fill effects, SVG arc verbs, automatic
+SVG extraction and Lottie playback are not included.</p>
+<p>Inputs are checked before tessellation: finite coordinates within ±1,000,000 px,
+at most 8,192 contours/segments (including implicit closing edges), 65,536 total
+lookup samples, 64 input dash entries and 16,384 emitted curve pieces. Dash lengths
+must be finite and strictly positive; zero entries are rejected. Stroke widths are
+positive and at most 4,096 px. Excessive subdivision, fragmentation or numerically
+unresolvable dash lengths return errors rather than allowing unbounded work.</p>
+<h3 id="native-visual-test">Native visual test</h3>
+<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/media-lab/justfile paths
+just --justfile apps/xgpui-ext-lab/media-lab/justfile paths-capture
+just --justfile apps/xgpui-ext-lab/media-lab/justfile paths-wgpu-capture
+cargo test --offline --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-svg/Cargo.toml --lib path_effects
+</code></pre>
+<p>The lab shows original, trimmed and trimmed-plus-dashed strokes in three columns.
+Rows cover open Béziers, a closed heart, and multiple contours. Cycle trim through
+100%, 75%, 50%, 25% and 0%; change dash pattern/phase and stroke width; animate trim
+and phase. Animation respects reduced motion. Check curve continuity and closed
+seams as phase changes. The Images button returns to media tests.</p>
+<p>Headless captures have the same three rows/columns, fixed at 68% trim and a 16/8
+pattern with phase 5. They check visible pixel coverage and decreasing coverage
+from original to trim to dashes. Metal and wgpu capture paths are available;
+Windows native labs and <code>just lab-test</code> passed in owner testing on 2026-11-04.
+Dedicated capture commands retain their own artifact evidence; Linux runtime
+acceptance remains separate. See <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">Windows validation</a>.</p>
+<h3 id="browser-contour-effects-comparison">Browser contour-effects comparison</h3>
+<p>Open <a href="examples/extensions/?demo=path-effects">Trim / dash</a>, or append
+<code>&amp;backend=webgpu</code> / <code>&amp;backend=webgl</code>. Three columns compare original, trimmed and
+trimmed/dashed strokes for open curves, a closed heart and multiple contours.
+Cycle trim to zero/full, even/odd dash patterns, phase and width; optional animation
+respects reduced motion. This uses the shared contour effects and native GPUI
+stroke tessellation, not SVG rasterization or CSS dashes. Both forced backends
+were checked locally in release on 2026-10-26. The separate progressive SVG demo
+and its artwork/attribution remain unchanged.</p>
+</article><p class="evidence">Source: <code>docs/extensions/svg-rendering.md</code></p>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

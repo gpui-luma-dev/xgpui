@@ -34,7 +34,7 @@ Recipes use Bash (on Windows, Git for Windows Bash must be on PATH).
 Without just, use `cargo build --release --locked`.
 
 `just lab-build` builds the unpublished extension labs and benchmarks from
-`apps/xgpui-ext-lab/`. See [Labs & benchmarks](docs/extensions/extension-lab.md)
+`apps/xgpui-ext-lab/`. See [Labs & benchmarks](https://xgpui.dev/extension-lab.html)
 for targets, launch commands and why the lab package is unpublished.
 
 `just build` builds the libraries supported by the selected target; it does not
@@ -90,15 +90,15 @@ on stdout. Without just, run `cargo run --locked --manifest-path tools/release-s
 
 ## Documentation website
 
+The website at <https://xgpui.dev/> is the static `pages/` directory: guides,
+crate pages and the browser demos. Preview and check it without building:
+
 ```sh
-cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
+just docs-serve
+just docs-check
 ```
 
-Open `docs/index.html`. The site includes the crate map,
-an architecture reference, an interactive rendering
-pipeline explorer, and an **Extensions to GPUI** section. The extension section
-distinguishes opt-in downstream APIs from upstream GPUI and documents the
-`xgpui-shader` integration. It works offline. Generated pages are not committed.
+See [docs/WEBSITE.md](docs/WEBSITE.md) for layout, demos and publishing.
 
 See [documentation instructions](docs/WEBSITE.md) for maintenance and checks.
 

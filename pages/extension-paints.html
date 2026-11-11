@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Paint and shader extension · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/extension-paints.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" aria-current="page" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><article class="extension-document"><h1 id="paint-and-shader-extension">Paint and shader extension</h1>
+<p>Opt-in downstream extension: <code>xgpui-shader</code>. No app-side OS branches.</p>
+<h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
+<p>This crate requires GPUI's <code>Window::paint_custom</code>, producer/preparation traits,
+geometry and retained custom-draw records, plus backend recording adapters.
+It also alters existing public types: <code>Scene</code> gains <code>custom_draws</code>, and
+<code>Primitive</code> / <code>PrimitiveBatch</code> gain <code>Custom</code> variants. Complete struct literals
+and exhaustive matches must be updated. Ordinary <code>div().bg(...)</code> callers need
+no call-site changes; opting out of the crate does not undo these SDK changes.</p>
+<p><strong><a href="gpui-public-api.html#altered-existing-public-types--source-compatibility-risks">GPUI public API changes: additions and compatibility</a>.</strong>
+See also <a href="gpui-public-api.html#added-window-method">added paint entry point</a>,
+<a href="gpui-public-api.html#added-producer-trait-and-preparation-request">producer/preparation traits</a>,
+<a href="gpui-public-api.html#added-geometry-and-retained-records">geometry and retained records</a>,
+and <a href="gpui-public-api.html#added-backend-crate-public-apis">backend APIs</a>.</p>
+<h2 id="add-the-crate">Add the crate</h2>
+<p>From an app under <code>apps/</code>:</p>
+<pre><code class="language-toml">[dependencies]
+xgpui-shader = { path = "../../extensions/crates/xgpui-shader" }
+
+# For user-authored WGSL: {#for-user-authored-wgsl}
+# xgpui-shader = { path = "../../extensions/crates/xgpui-shader", features = ["portable-shaders"] } {#xgpui-shader---path--extensionscratesxgpui-shader-features--portable-shaders-}
+# Add "wgpu" for the optional wgpu renderer. {#add-wgpu-for-the-optional-wgpu-renderer}
+</code></pre>
+<h2 id="paint-a-rounded-container">Paint a rounded container</h2>
+<pre><code class="language-rust">use anyhow::Result;
+use gpui::{prelude::*, *};
+use std::sync::Arc;
+use xgpui_shader::{painted, Gradient, GradientStop};
+
+fn gradient_panel() -&gt; Result&lt;impl IntoElement&gt; {
+    let gradient = Arc::new(Gradient::radial(
+        [0.5, 0.5],       // Center, normalized to the full outer bounds.
+        [0.5, 0.5],       // Ellipse radii as fractions of width/height.
+        vec![
+            GradientStop::new(0.0, [1.0, 0.2, 0.3, 1.0]),
+            GradientStop::new(0.4, [1.0, 0.7, 0.1, 1.0]),
+            GradientStop::new(1.0, [0.1, 0.3, 1.0, 1.0]),
+        ],
+    )?);
+
+    Ok(painted()
+        .w(px(320.0)).h(px(240.0))
+        .rounded_lg().border_8()
+        .bg_paint(gradient.clone())
+        .border_paint(gradient)
+        .overflow_hidden()
+        .child(div().p_4().child("Native GPUI children")))
+}
+</code></pre>
+<p>Explicit materials override native colors on <code>painted()</code>. Rebuild to change them;
+custom materials do not participate in native hover/theme refinements.</p>
+<h2 id="interaction-and-hover">Interaction and hover</h2>
+<p><code>Painted</code> implements <code>Styled</code> and <code>ParentElement</code>, not <code>InteractiveElement</code>.
+Put <code>.id()</code>, <code>.on_click()</code> and <code>.hover()</code> on a native <code>div()</code>:</p>
+<pre><code class="language-rust">fn clickable_panel(material: Arc&lt;Gradient&gt;) -&gt; impl IntoElement {
+    div()
+        .id("paint-card")
+        .on_click(|_, _, _| println!("Card clicked"))
+        .hover(|s| s.opacity(0.85))
+        .child(painted()
+            .w(px(320.0)).h(px(240.0))
+            .bg_paint(material))
+}
+
+// Or put interaction on native children inside the painted container.
+fn panel_with_action(material: Arc&lt;Gradient&gt;) -&gt; impl IntoElement {
+    painted()
+        .w(px(320.0)).h(px(240.0))
+        .bg_paint(material)
+        .child(div()
+            .id("apply")
+            .on_click(|_, _, _| println!("Apply clicked"))
+            .hover(|s| s.bg(rgb(0x334155)))
+            .child("Apply"))
+}
+</code></pre>
+<p>Wrapper hover styles can change native properties such as opacity. Custom
+materials stay outside GPUI's <code>StyleRefinement</code>: to swap a material on hover,
+update view state with the wrapper's <code>.on_hover(...)</code>, call <code>cx.notify()</code>, and
+select <code>.bg_paint(...)</code> / <code>.border_paint(...)</code> when rebuilding the view.</p>
+<h2 id="choose-a-gradient">Choose a gradient</h2>
+<p>Same <code>stops: Vec&lt;GradientStop&gt;</code>; angles are clockwise degrees, zero pointing up.</p>
+<pre><code class="language-rust">let linear  = Gradient::linear(45.0, stops.clone())?;
+let radial  = Gradient::radial([0.5, 0.5], [0.5, 0.35], stops.clone())?;
+let conic   = Gradient::conic([0.5, 0.5], 90.0, stops.clone())?;
+let diamond = Gradient::diamond([0.5, 0.5], [0.5, 0.5], 30.0, stops)?;
+</code></pre>
+<p>2–32 stops; offsets and encoded-sRGB RGBA channels are in <code>0..=1</code>.
+Duplicate offsets create hard edges. Output is SDR, not HDR/P3.</p>
+<h2 id="create-and-update-a-mesh">Create and update a mesh</h2>
+<pre><code class="language-rust">use xgpui_shader::{MeshGradient, MeshGrid};
+
+let grid = MeshGrid::regular(2, 2, vec![
+    [1.0, 0.1, 0.2], [1.0, 0.8, 0.1],
+    [0.2, 0.3, 1.0], [0.1, 0.9, 0.7],
+])?;
+let mesh = Arc::new(MeshGradient::new(grid.clone(), 18)?);
+
+// New immutable snapshot; related snapshots share compiled pipelines.
+let mut points = grid.points().to_vec();
+points[0].position = [-0.15, 0.2];
+let next_grid = MeshGrid::new(2, 2, points)?;
+let next_mesh = Arc::new(mesh.with_grid(next_grid)?);
+
+let current = painted().bg_paint(mesh.clone());
+let next = painted().bg_paint(next_mesh);
+</code></pre>
+<p>Animation interpolates control points, then builds a new snapshot. Use paint-lab
+for interactive mesh animation and paint editing.</p>
+<pre><code class="language-sh"># Independent CPU Hermite reference; topology, immutable snapshots and retry. {#independent-cpu-hermite-reference-topology-immutable-snapshots-and-retry}
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab native_mesh_matches_cpu
+# Solid output: alpha, clipping, replay, reuse, resize and aborted preparation. {#solid-output-alpha-clipping-replay-reuse-resize-and-aborted-preparation}
+cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab native_producer_pixels
+</code></pre>
+<h2 id="reuse-one-producer-across-paint-sites">Reuse one producer across paint sites</h2>
+<p>Inside an element/canvas paint callback, with an existing <code>path: Path&lt;Pixels&gt;</code>:</p>
+<pre><code class="language-rust">use xgpui_shader::WindowPaintExt;
+
+window.paint_path_with_paint(path, mesh.clone());
+
+window.paint_quad_with_paints(
+    quad(
+        bounds,
+        Corners::all(px(16.0)),
+        transparent_black(),
+        Edges::all(px(8.0)),
+        transparent_black(),
+        BorderStyle::Solid,
+    ),
+    mesh.clone(),       // Fill.
+    mesh.clone(),       // Border: same field over the full outer rectangle.
+);
+</code></pre>
+<p>Clipping never remaps the source. Paths use original path bounds; backgrounds
+and borders use full outer element bounds. GPUI applies coverage and opacity once.</p>
+<h2 id="native-versus-extension-apis">Native versus extension APIs</h2>
+<pre><code class="language-rust">// Upstream-shaped GPUI styling:
+div().bg(rgb(0x223344)).border_1().border_color(rgb(0xffffff));
+
+// Extension-owned values and container:
+use xgpui_shader::Paint;
+let native = Paint::from(rgb(0x223344));
+let custom = Paint::from(mesh.clone());
+painted().bg_paint(custom).border_1().border_paint(native);
+
+// Native Paint values serialize. Custom producer values reject serialization.
+</code></pre>
+<p>Core hook, called during painting:</p>
+<pre><code class="language-rust">use gpui::CustomGeometry;
+
+window.paint_custom(
+    CustomGeometry::RoundedRect {
+        bounds,
+        corner_radii: Corners::all(px(16.0)),
+    },
+    mesh.clone(),
+);
+window.paint_custom(CustomGeometry::Border(border_quad), mesh.clone());
+window.paint_custom(CustomGeometry::Path(path), mesh.clone());
+</code></pre>
+<table><thead><tr><th>GPUI</th><th>xgpui-shader</th></tr></thead><tbody>
+<tr><td><code>CustomContent</code>, <code>PreparationRequest</code></td><td><code>Paint</code>, <code>painted()</code>, <code>WindowPaintExt</code></td></tr>
+<tr><td>Retained geometry, clip, opacity, coverage</td><td>Mesh, analytic gradients, WGSL</td></tr>
+<tr><td>Backend recording, validation, submission</td><td>Producer pipelines and output caches</td></tr>
+</tbody></table>
+<p>Against <code>9b64657</code>, native <code>Fill</code>, <code>Style</code>, <code>Styled</code> and generated border setters
+retain their upstream shape. The independent overflow-axis fix remains in core.
+Source/coverage caches are separate; only the host submits. For current glyph
+fills, glow/drop shadows and paint-only motion with canonical selection, see
+<a href="typography.html">Selectable typography</a>. The <a href="brushes.html">brush guide</a> covers main-pass
+glyph coverage and layer effects; <a href="high-gamut-windows.html">wide-gamut presentation</a>
+has a separate native contract. Shared cross-shape coordinates remain deferred.</p>
+<h2 id="run-the-examples">Run the examples</h2>
+<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/paint-lab/justfile radial
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile mesh
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile metal-test
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-test
+</code></pre>
+<p><a href="shader-producers.html">Producer reference</a> ·
+<a href="paint-contract-hardening.html">Preparation and failure contracts</a> ·
+<a href="portable-paints.html">Portable backend status</a> ·
+<a href="portable-wgsl-v1.html">User-authored WGSL</a></p>
+</article><p class="evidence">Source: <code>docs/extensions/extension-paints.md</code></p>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

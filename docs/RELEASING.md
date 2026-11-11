@@ -136,13 +136,13 @@ Run native validation on macOS, Windows and Linux for changes affecting those
 platforms. A successful Mac run or cross-check does not establish native Windows
 or Linux behavior. Use the relevant lab recipes in [Building](BUILDING.md) and
 [Local development](LOCAL_DEVELOPMENT.md) for graphical acceptance; for the 1.27.0
-integration, follow its [ordered lab checklist](upstream/1.27.0-integration.md).
+integration, follow its [ordered lab checklist](https://xgpui.dev/gpui-1.27-migration.html).
 Record browser, iOS and optional-feature checks where the release affects them.
 CI results supplement this evidence; preparation workflows do not establish that
 all native or graphical validation passed.
 
-`just docs-check` regenerates and verifies the website and requires Node.js.
-Review generated changes before including them. Toolchain and host prerequisites
+`just docs-check` checks the static website in `pages/`; update its pages by
+hand, including the upstream baseline on the overview after a sync. Toolchain and host prerequisites
 are documented in [Setup](SETUP.md) and [Building](BUILDING.md).
 
 ## Preparation and publication tools

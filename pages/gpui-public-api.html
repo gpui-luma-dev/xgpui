@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>GPUI public API changes · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/gpui-public-api.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Downstream extensions to GPUI.</strong> Paints, window color presentation, text backends and SVG rendering are independent opt-in capabilities.</p><article class="extension-document"><h1 id="gpui-public-api-changes">GPUI public API changes</h1>
+<h2 id="breaking-changes-to-xgpui-api">Breaking changes to XGPUI API</h2>
+<p>XGPUI extends GPUI through optional extension crates and a maintained set of core
+integration points. This page documents <strong>our changes to GPUI</strong>: font controls,
+color and rendering contracts, paragraph layout, and the backend interfaces
+needed by those extensions. Optional feature usage can still require changes to
+an application's core GPUI code when public structs, traits or resource handles
+change.</p>
+<p>Check each compatibility section when upgrading. In particular, exhaustive font
+and style literals need new fields, and custom renderers or text backends must
+follow the documented ownership and backend contracts. Constructors and defaults
+preserve existing behavior where the individual section says they do.</p>
+<p>The <a href="gpui-1.27-migration.html">GPUI 1.27.0 migration and API review</a>
+separately identifies upstream changes carried into XGPUI and adaptations to our
+existing APIs. That integration is awaiting final public API approval. Its
+<a href="https://github.com/gpui-archipelago/gpui-release-notes/issues/3#issue-5034140647">upstream release reference</a>
+links the original GPUI commits and pull requests.</p>
+<p>The maintained XGPUI feature changes below are compared with pre-feature main
+<code>9b64657</code>.</p>
+<h2 id="font-axes-and-inspection-core-30">Font axes and inspection: core 3.0</h2>
+<p><code>xgpui 3.0.0</code> adds variable-font controls and resolved-face inspection. Native
+CoreText, DirectWrite and Parley share the same contracts. See
+<a href="font-controls.html">variable fonts and OpenType inspection</a> for examples and
+<a href="whats-new.html#font-controls-crate-versions">the release versions</a> for matching pins.</p>
+<table><thead><tr><th>Core API change</th><th>Compatibility / migration</th></tr></thead><tbody>
+<tr><td><code>Font::variations: FontVariations</code></td><td>Breaking for exhaustive literals/patterns. Add <code>variations: Default::default()</code> or use <code>gpui::font(family)</code>.</td></tr>
+<tr><td><code>TextStyle::font_variations: FontVariations</code></td><td>Breaking for exhaustive literals/patterns. Add <code>font_variations: Default::default()</code>.</td></tr>
+<tr><td><code>TextStyleRefinement::font_variations: Option&lt;FontVariations&gt;</code></td><td>Breaking for exhaustive literals/patterns. Add <code>font_variations: None</code>; absent serialized settings remain unset.</td></tr>
+<tr><td><code>Styled::font_variations(FontVariations)</code></td><td>Additive styling method; settings inherit into fonts and text runs.</td></tr>
+<tr><td><code>FontTag</code>, <code>FontVariations</code></td><td>Additive validated tag and immutable settings types; finite signed coordinates, canonical equality/hash, serde map and schema. <code>FontTag::{WEIGHT, WIDTH, SLANT, OPTICAL_SIZE, ITALIC}</code> supplies the five registered axis constants without parsing.</td></tr>
+<tr><td><code>FontQuery&lt;T&gt;</code>, <code>FontCapabilities</code>, <code>VariationAxisInfo</code>, <code>OpenTypeFeatureInfo</code></td><td>Additive inspection types: distinguish unsupported/success/error, expose supported backends, axis ranges and GSUB/GPOS provenance.</td></tr>
+<tr><td><code>TextSystem::{font_axes, opentype_features, font_capabilities}</code></td><td>Additive application-facing query methods. IDs belong to the resolving text system.</td></tr>
+<tr><td><code>PlatformTextSystem::{font_axes, opentype_features, font_capabilities}</code></td><td>Additive default methods; existing custom backends need no override.</td></tr>
+<tr><td><code>PlatformTextSystem::font_table(FontId, FontTag) -&gt; Result&lt;FontQuery&lt;Option&lt;Vec&lt;u8&gt;&gt;&gt;&gt;</code></td><td>Additive backend hook with unsupported default. Native code supplies resolved-face table bytes; default queries parse them privately in core. Missing tables differ from read failures.</td></tr>
+</tbody></table>
+<p>Constructors/default-based callers generally only need recompilation. Exhaustive
+patterns can use <code>..</code>. Empty variations preserve prior backend axis behavior.
+Author values remain precise, explicit coordinates override corresponding
+implicit axes, ranges clamp per face, and fallback faces resolve independently.
+No existing <code>FontFeatures</code> signature or numeric-value behavior changes.</p>
+<p>Cosmic (<code>xgpui-wgpu 2.1</code>) now implements the existing table hook and reports
+feature/axis inspection support, without enabling explicit static variations.
+This adds no further core API. The default Cosmic/Canvas web wrapper remains
+separate.</p>
+<p>The parser is private core implementation. No parser function, helper package or
+source synchronization enters the application contract. <code>VariationPreview</code>
+belongs to <code>xgpui-parley</code>, returns ordinary GPUI fonts, and adds no further core
+API. Its descriptor admission limit does not implement global budgets or eviction.
+The Windows dependency's explicit default-feature opt-out is corrected; ordinary
+default builds retain existing defaults. Keep core/backend/extension versions
+matched when upgrading.</p>
+<h2 id="gpui-1262-migration">GPUI 1.26.2 migration</h2>
+<p>The update merged after the October 31 release moves the core to <code>xgpui 2.0.0</code>
+while preserving XGPUI’s objc2/objc2-metal integration. The registry versions
+are published; use matching core, backend and extension versions when upgrading.</p>
+<ul>
+<li>Replace <code>PlatformInput::ScrollWheel</code> with <code>Scroll</code> and handle <code>BackGesture</code>
+in exhaustive matches. <code>ScrollWheelEvent</code> and <code>on_scroll_wheel</code> remain
+deprecated compatibility names; new code uses <code>ScrollEvent</code> and <code>on_scroll</code>.</li>
+<li>Complete <code>ScrollEvent</code> literals need <code>source</code>; <code>WindowOptions</code> and
+<code>WindowParams</code> gain <code>use_display_p3</code>; <code>WindowInsets</code> gains <code>corner_radii</code>.</li>
+<li>Construct Metal contexts with <code>MetalCustomContext::new</code>. Producers use
+<code>record()</code> and finish all encoders inside its closure; only the host submits.
+Use <code>queue_identity()</code> for cache identity. Context struct literals and public
+queue access are no longer supported. Resource handles remain objc2 types.</li>
+<li>Custom integrations that mirror GPU sprite layouts need the updated field
+ordering used by the Rust, WGSL and HLSL definitions.</li>
+</ul>
+<p>See <a href="whats-new.html">What’s new</a> for features and the reviewed version family.</p>
+<h2 id="changes-by-extension">Changes by extension</h2>
+<table><thead><tr><th>GPUI change</th><th>Required by</th><th>Role</th></tr></thead><tbody>
+<tr><td><code>ImageTextureData</code>; backend <code>create_image_output</code>; <code>MetalImageOutput</code></td><td><a href="media-images.html">xgpui-media</a></td><td>Validated full mip chains and opt-in source-sized textures; existing output extent contracts remain strict</td></tr>
+<tr><td><code>SvgSize::Viewport { size, view_box }</code></td><td>Browser SVG comparison</td><td>Rerasterize a visible document rectangle at exact device-pixel dimensions</td></tr>
+<tr><td><code>ParsedSvg::size()</code></td><td><a href="svg-rendering.html">xgpui-svg</a></td><td>Read the resolved SVG viewport size without reparsing</td></tr>
+<tr><td>Backend construction override; optional paragraph traits, geometry types, cache and paint entry points</td><td><a href="parley-text.html">xgpui-parley</a></td><td>Install the text backend; retain shaping/reflow and paint BiDi runs</td></tr>
+<tr><td><code>Scene::custom_draws</code>, <code>Primitive::Custom</code>, <code>PrimitiveBatch::Custom</code>, <code>Window::paint_custom</code></td><td><a href="extension-paints.html">xgpui-shader</a>; reused by xgpui-gamut</td><td>Record ordered custom content in the native scene</td></tr>
+<tr><td><code>CustomContent</code>, <code>PreparationRequest</code>, <code>CustomGeometry</code>, <code>CustomCoverage</code>, <code>CustomDraw</code></td><td>xgpui-shader; reused by xgpui-gamut</td><td>Producer preparation, retained geometry and host coverage</td></tr>
+<tr><td>Renderer <code>custom_draw</code> contexts and ordinary outputs</td><td>xgpui-shader; shared contexts also serve xgpui-gamut</td><td>Metal/wgpu/D3D11 producer recording and host submission</td></tr>
+<tr><td>Window color mode/status; typed Metal/D3D11 wide-SDR outputs</td><td><a href="high-gamut-windows.html">xgpui-gamut</a></td><td>Negotiate and compose explicit linear-P3 surfaces</td></tr>
+<tr><td><code>Style::overflow_mask</code> border-inset correction</td><td>Independent fix</td><td>Behavior only; no signature change</td></tr>
+<tr><td>Font variations, resolved-face inspection and backend table access</td><td><a href="font-controls.html">Font controls</a>; native backends and Parley</td><td>Core 3.0 descriptor/style fields and additive inspection hooks</td></tr>
+</tbody></table>
+<p>Paint recording is shared infrastructure; window color negotiation is specific
+to wide-gamut presentation. Parley uses the existing <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Texture_atlas">glyph atlas ↗</a>, not custom-draw
+or wide-gamut APIs. The color math crate is standalone. Gamut depends on color and optionally uses
+shader for instanced drawing; shader does not depend on gamut or color.</p>
+<h2 id="added-text-backend-and-paragraph-seams">ADDED text backend and paragraph seams</h2>
+<p><strong>Required by:</strong> xgpui-parley.</p>
+<ul>
+<li><code>Application::with_platform_and_text_system(platform, text_system)</code> selects
+an <code>Arc&lt;dyn PlatformTextSystem&gt;</code> before constructing GPUI caches; skips
+<code>Platform::text_system()</code>. Existing construction/native initialization is unchanged.</li>
+<li><code>PlatformTextSystem::shape_paragraph</code> is optional and defaults to Unsupported.</li>
+<li><code>WindowTextSystem::layout_paragraph</code> caches immutable
+<code>PlatformParagraphShape</code>/<code>PlatformParagraphLayout</code> results.</li>
+<li><code>paint_paragraph</code> paints visual glyph runs through the existing atlas.
+<code>ParagraphPosition</code> carries logical UTF-8 offset and <code>TextAffinity</code>.</li>
+</ul>
+<p><a href="parley-text.html#contracts">Paragraph contracts</a>.</p>
+<h2 id="altered-existing-public-types--source-compatibility-risks">ALTERED existing public types — source compatibility risks</h2>
+<p><strong>Required by:</strong> xgpui-shader; shared custom-content recording is reused by xgpui-gamut.</p>
+<p><code>gpui/src/scene.rs</code> — structural diff, unchanged members omitted:</p>
+<pre><code class="language-diff"> pub struct Scene {
+     // Existing primitive collections …
++    pub custom_draws: Vec&lt;CustomDraw&gt;,
+ }
+
+ pub enum Primitive {
+     // Existing variants …
++    Custom(CustomDraw),
+ }
+
+ pub enum PrimitiveBatch {
+     // Existing variants …
++    Custom(Range&lt;usize&gt;),
+ }
+</code></pre>
+<table><thead><tr><th>Existing caller</th><th>Impact</th></tr></thead><tbody>
+<tr><td><code>Scene { ... }</code> naming every field</td><td>Must add <code>custom_draws</code>; <code>..Default::default()</code> already accommodates it</td></tr>
+<tr><td>Exhaustive <code>match Primitive</code></td><td>Must handle <code>Primitive::Custom</code></td></tr>
+<tr><td>Exhaustive <code>match PrimitiveBatch</code></td><td>Must handle <code>PrimitiveBatch::Custom</code></td></tr>
+<tr><td>Ordinary native <code>div().bg(...)</code></td><td>No call-site change</td></tr>
+</tbody></table>
+<pre><code class="language-rust">// Constructing a low-level scene:
+let scene = gpui::Scene {
+    custom_draws: Vec::new(),
+    ..Default::default()
+};
+
+// In an existing exhaustive match, add these arms:
+// Primitive::Custom(draw) =&gt; ...,
+// PrimitiveBatch::Custom(range) =&gt; ...,
+</code></pre>
+<h2 id="added-opt-in-window-presentation">ADDED opt-in window presentation</h2>
+<p><strong>Required by:</strong> xgpui-gamut.</p>
+<pre><code class="language-rust">use gpui::WindowColorMode;
+
+// Per-window; call outside drawing. Existing default windows stay unchanged.
+let status = window.set_color_mode(WindowColorMode::WideGamutSdr)?;
+let current = window.color_status();
+
+// Restore before requesting a transparent top-level window:
+window.set_color_mode(WindowColorMode::Default)?;
+</code></pre>
+<table><thead><tr><th>Surface</th><th>Addition</th></tr></thead><tbody>
+<tr><td>GPUI</td><td><code>WindowColorMode</code>, opaque <code>WindowColorStatus</code>, <code>WindowColorFallback</code>; two <code>Window</code> methods.</td></tr>
+<tr><td><code>PlatformWindow</code></td><td>Same request/report pair with defaults; no required backend overrides.</td></tr>
+<tr><td><code>gpui_apple::MetalRenderer</code></td><td>Same pair across the windowing/renderer crate boundary; supports headless checks.</td></tr>
+<tr><td><code>gpui_apple::custom_draw</code></td><td>Opaque <code>MetalWideSdrOutput</code>, explicit linear-P3 constructor and <code>reusable_for</code>.</td></tr>
+</tbody></table>
+<p><code>MetalCustomOutput</code>, <code>CustomContent</code>, <code>PreparationRequest</code>, window-option
+structs and native color/style types keep their existing contracts. New
+configuration/fallback enums are non-exhaustive. Additive method names can still
+collide with downstream extension methods. Unsupported requests preserve state.</p>
+<p><a href="high-gamut-windows.html">Wide surfaces, composition and lifecycle</a>.</p>
+<h2 id="added-window-method">ADDED Window method</h2>
+<p><strong>Required by:</strong> xgpui-shader; also records xgpui-gamut producers.</p>
+<p><code>gpui/src/window.rs</code> — one public recording hook:</p>
+<pre><code class="language-rust">// Signature; body omitted.
+impl Window {
+    pub fn paint_custom(
+        &amp;mut self,
+        geometry: CustomGeometry,
+        content: std::sync::Arc&lt;dyn CustomContent&gt;,
+    );
+}
+</code></pre>
+<p>Existing native <code>paint_quad</code> and <code>paint_path</code> signatures remain unchanged.
+The new method records during painting; it does not expose command submission.</p>
+<h2 id="added-producer-trait-and-preparation-request">ADDED producer trait and preparation request</h2>
+<p><strong>Required by:</strong> xgpui-shader; reused by xgpui-gamut producers.</p>
+<p><code>gpui/src/scene.rs</code> — public signatures; constructor/accessor bodies omitted:</p>
+<pre><code class="language-rust">pub trait CustomContent: std::fmt::Debug + Send + Sync + 'static {
+    fn prepare(
+        &amp;self,
+        backend: &amp;dyn std::any::Any,
+        size: Size&lt;DevicePixels&gt;,
+    ) -&gt; anyhow::Result&lt;Box&lt;dyn std::any::Any&gt;&gt;;
+
+    // Provided method: producers implementing only prepare() keep working.
+    fn prepare_with_request(
+        &amp;self,
+        backend: &amp;dyn std::any::Any,
+        request: &amp;PreparationRequest,
+    ) -&gt; anyhow::Result&lt;Box&lt;dyn std::any::Any&gt;&gt; {
+        self.prepare(backend, request.raster_size())
+    }
+}
+
+pub struct PreparationRequest { /* private fields */ }
+impl PreparationRequest {
+    pub fn new(
+        logical_size: Size&lt;Pixels&gt;,
+        raster_size: Size&lt;DevicePixels&gt;,
+        scale_factor: f32,
+    ) -&gt; anyhow::Result&lt;Self&gt;;
+    pub fn logical_size(&amp;self) -&gt; Size&lt;Pixels&gt;;
+    pub fn raster_size(&amp;self) -&gt; Size&lt;DevicePixels&gt;;
+    pub fn scale_factor(&amp;self) -&gt; f32;
+}
+</code></pre>
+<p>The entire trait is downstream-added versus upstream. The request method
+defaults to <code>prepare()</code>; producers override it only when they need logical geometry.</p>
+<h2 id="added-geometry-and-retained-records">ADDED geometry and retained records</h2>
+<p><strong>Required by:</strong> xgpui-shader; shared recording/coverage for xgpui-gamut.</p>
+<p><code>gpui/src/scene.rs</code> — declarations, derives/docs omitted:</p>
+<pre><code class="language-rust">pub enum CustomGeometry {
+    RoundedRect {
+        bounds: Bounds&lt;Pixels&gt;,
+        corner_radii: Corners&lt;Pixels&gt;,
+    },
+    Border(PaintQuad),
+    Path(Path&lt;Pixels&gt;),
+}
+
+pub enum CustomCoverage {
+    Border { widths: Edges&lt;ScaledPixels&gt;, style: BorderStyle },
+    Path(std::sync::Arc&lt;Path&lt;ScaledPixels&gt;&gt;),
+}
+
+pub struct CustomDraw {
+    pub order: DrawOrder,
+    pub bounds: Bounds&lt;ScaledPixels&gt;,
+    pub content_mask: ContentMask&lt;ScaledPixels&gt;,
+    pub corner_radii: Corners&lt;ScaledPixels&gt;,
+    pub opacity: f32,
+    pub content: std::sync::Arc&lt;dyn CustomContent&gt;,
+    pub coverage: Option&lt;CustomCoverage&gt;,
+}
+
+impl From&lt;CustomDraw&gt; for Primitive { /* Custom(draw) */ }
+</code></pre>
+<h2 id="added-backend-crate-public-apis">ADDED backend-crate public APIs</h2>
+<p><strong>Required by:</strong> xgpui-shader for ordinary outputs; xgpui-gamut for typed wide-SDR outputs and shared contexts.</p>
+<p>These are GPUI renderer SDK additions, not <code>xgpui-shader</code> exports.
+Each renderer crate adds <code>pub mod custom_draw</code>.</p>
+<pre><code class="language-rust">// gpui_apple::custom_draw — shared Apple Metal renderer
+// Handle types below use objc2 and objc2_metal.
+pub struct MetalCustomContext {
+    pub device: Retained&lt;ProtocolObject&lt;dyn MTLDevice&gt;&gt;,
+    // Native queue and shared recording state are private.
+}
+// Public methods: new(device, queue), cache_key(), queue_identity(),
+// record(|host_command| -&gt; anyhow::Result&lt;()&gt;). Only the host submits.
+pub struct MetalCustomOutput {
+    pub texture: Retained&lt;ProtocolObject&lt;dyn MTLTexture&gt;&gt;,
+    pub commands: Vec&lt;Retained&lt;ProtocolObject&lt;dyn MTLCommandBuffer&gt;&gt;&gt;,
+}
+</code></pre>
+<p>wgpu and D3D11 public surface, summarized (not executable declarations):</p>
+<pre><code class="language-text">GPUI renderer crate  Context                Output
+───────────────────  ─────────────────────  ─────────────────
+gpui-wgpu            WgpuCustomContext      WgpuCustomOutput
+gpui-windows         Dx11CustomContext      Dx11CustomOutput
+
+Context public field   device
+Context public methods cache_key(), create_output(extent), record(callback),
+                       can_reuse(output)
+Output public method   texture()
+
+Context constructors, validation, submit(), PreparationBatch and compositor
+pipelines are private to the renderer. They are not producer APIs.
+
+Windows test-support only:
+  gpui_windows::Dx11HeadlessRenderer
+  Dx11HeadlessRenderer::new()
+  implements existing PlatformHeadlessRenderer
+</code></pre>
+<p>Windows also adds an explicit wide-output contract:</p>
+<pre><code class="language-rust">// gpui_windows::custom_draw — additive backend SDK, no GPUI core changes
+pub struct Dx11WideSdrOutput { /* private fields; Clone */ }
+// Dx11CustomContext methods:
+// create_wide_sdr_output(extent) -&gt; Result&lt;Dx11WideSdrOutput&gt;
+// can_reuse_wide_sdr(&amp;output) -&gt; bool
+// record_wide_sdr(&amp;output, callback) -&gt; Result&lt;T&gt;
+// Dx11WideSdrOutput::texture() -&gt; &amp;ID3D11Texture2D
+</code></pre>
+<p><a href="high-gamut-windows.html#typed-windows-output">Typed Windows output and recording example</a>.
+The Windows renderer accepts this output only while <code>WideGamutSdr</code> is active.
+Its existing <code>PlatformWindow</code> overrides implement negotiation/status; no extra
+GPUI core API is added. Existing producer signatures and <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/SRGB">sRGB ↗</a> outputs are unchanged.</p>
+<p>Backend APIs are target/feature dependent. App code normally uses portable
+<code>xgpui-shader</code> producers rather than these low-level recording contracts.</p>
+<h2 id="unchanged-native-styling-sdk">UNCHANGED native styling SDK</h2>
+<pre><code class="language-rust">// These remain GPUI APIs with their upstream type/field shapes:
+div().bg(rgb(0x223344)).border_1().border_color(white());
+
+// Fill still has only its native variant:
+let Fill::Color(background) = fill;
+
+// No extension paint field in Style or StyleRefinement.
+// No GPUI Paint enum or Styled::bg_paint / Styled::border_paint methods.
+</code></pre>
+<p><code>Style::overflow_mask</code> has an independent hidden-axis border-inset correction;
+its signature and native style fields are unchanged.</p>
+<h2 id="extension-only--not-gpui-public-apis">EXTENSION ONLY — not GPUI public APIs</h2>
+<pre><code class="language-rust">use xgpui_shader::{
+    Paint, Painted, Shader, WindowPaintExt,
+    painted, shader,
+    Gradient, GradientKind, GradientStop,
+    MeshGradient, MeshGrid, ControlPoint, SolidColor,
+};
+
+painted().bg_paint(mesh.clone()).border_paint(mesh.clone());
+window.paint_path_with_paint(path, mesh.clone());  // WindowPaintExt trait.
+// window.paint_quad_with_paints(...)             // Same extension trait.
+
+// With the portable-shaders feature:
+use xgpui_shader::shader_paint::{ShaderProgram, ShaderParameters};
+</code></pre>
+<p><code>xgpui_gamut::WideColor</code> and <code>xgpui_parley::ParleyTextSystem</code>, <code>FaceRegistry</code>,
+<code>GlyphRasterizer</code>, <code>ParagraphShape</code> and <code>ParagraphLayout</code> are also extension-owned.</p>
+<h2 id="inspect-the-cumulative-patch">Inspect the cumulative patch</h2>
+<pre><code class="language-sh">git diff 9b64657 -- gpui/crates/gpui/src/scene.rs gpui/crates/gpui/src/window.rs
+git diff 9b64657 -- gpui/crates/gpui/src/style.rs
+# Empty for restored native styling helpers: {#empty-for-restored-native-styling-helpers}
+git diff 9b64657 -- gpui/crates/gpui/src/styled.rs gpui/crates/gpui-macros/src/styles.rs
+</code></pre>
+<p><a href="extension-paints.html">Application examples</a> ·
+<a href="paint-contract-hardening.html">Preparation and failure contracts</a></p>
+<h2 id="added-svg-viewport-size">ADDED SVG viewport size</h2>
+<p><strong>Required by:</strong> <a href="svg-rendering.html">xgpui-svg</a>.</p>
+<p><code>ParsedSvg::size() -&gt; Size&lt;f32&gt;</code> returns the resolved document viewport in SVG
+user units. The extension uses it for aspect-preserving sizing without parsing
+the document a second time. Existing parsing/rasterization signatures remain
+unchanged. <code>SvgImage</code>, policy, scheduler, atlas lifetime handling and aggregate
+image accounting live in the extension and depend on existing GPUI element,
+executor, state and image APIs.</p>
+<h2 id="added-svg-viewport-rasterization">ADDED SVG viewport rasterization</h2>
+<p><code>SvgSize::Viewport { size: Size&lt;DevicePixels&gt;, view_box: Bounds&lt;f32&gt; }</code> lets
+<code>SvgRenderer::render_parsed</code> rasterize a visible rectangle in resolved document
+coordinates into an exact output. The browser comparison uses this to keep curves
+sharp while zooming without growing the whole-document output. It retains the
+parsed tree and caches unchanged camera/viewport output in the demo.</p>
+<p>Each output edge must be 1..=8192; invalid, nonfinite or nonpositive rectangles
+return <code>InvalidSize</code>. Existing sizing modes retain their behavior. Adding an
+enum variant requires downstream exhaustive <code>SvgSize</code> matches to handle it.
+This output bounds the destination buffer, not resvg filter intermediates or
+whole-process memory. It does not add cropped scheduling to <code>SvgImage</code> or make
+browser rasterization run on a worker.</p>
+<h2 id="experimental-instanced-shader-additions">Experimental instanced shader additions</h2>
+<p><code>Scene::shader_draws</code>, <code>Primitive::Shader</code>, <code>PrimitiveBatch::Shaders</code>,
+<code>SceneShaderProgram</code>, <code>ShaderDraw</code> and <code>Window::paint_shader</code> support the
+<a href="instanced-wgsl-v2.html">instanced shader extension</a>. Exhaustive scene literals
+and enum matches must accommodate these additions. Ordinary styled elements
+retain their existing call sites. Programs and backend pipeline ownership are
+separate: the extension validates/translates sources, and each host renderer
+creates pipelines on its own device.</p>
+<h3 id="explicit-instanced-shader-output-encoding">Explicit instanced shader output encoding</h3>
+<p><code>ShaderOutputEncoding</code> is a new non-exhaustive enum with <code>EncodedSrgb</code> and
+<code>LinearDisplayP3</code>. <code>SceneShaderProgram::new</code> retains its signature and sRGB
+behavior; additive <code>new_with_output_encoding</code> and <code>output_encoding</code> methods
+allow extension compilers to declare immutable output meaning. Its fields remain
+private. A wide program's generated wrapper must follow the host color/alpha
+contract; metadata alone does not transform arbitrary user shader source.</p>
+<p><code>MetalHeadlessRenderer::set_color_mode</code> (macOS) and
+<code>Dx11HeadlessRenderer::set_color_mode</code> are additive test-support APIs for native
+offscreen validation. Window APIs and existing scene/primitive layouts are
+unchanged by this addition.</p>
+<h2 id="added-source-sized-media-textures">ADDED source-sized media textures</h2>
+<p><code>ImageTextureData</code> validates an immutable complete <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/RGBA_color_model">RGBA8 ↗</a> <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Mipmap">mip chain ↗</a> within 64 MiB
+and bounded dimensions. Backend <code>create_image_output</code> methods record uploads
+without submitting or waiting. Metal uses a distinct <code>MetalImageOutput</code> type;
+wgpu/D3D11 outputs carry a private source-sized tag set only by these constructors.
+Their old <code>create_output</code> methods still validate exact raster extents.</p>
+<p>The shared custom compositor uses <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Trilinear_filtering">trilinear image sampling ↗</a>; single-level producer
+textures retain their previous filtering behavior. No existing public method
+signature or public scene-record layout changes in this addition. Decoding,
+mip generation, admission policy and image elements belong to <code>xgpui-media</code>.
+See its <a href="media-images.html">resource and color contracts</a>.</p>
+<h3 id="worker-staging-handoff">Worker staging handoff</h3>
+<p>The media extension now stages full images on bounded native workers. Metal's
+<code>stage_image_upload</code> owns a worker autorelease pool. wgpu/D3D11 contexts expose
+owned <code>image_upload_context</code> handles with <code>stage</code>; their opaque staged-image types
+are bound to the original host queue/context and accepted by <code>adopt_image_upload</code>.
+Adoption records copy commands without allocating or copying the source pixels.
+Output <code>is_submitted</code> distinguishes host acceptance from pending/abandoned work;
+GPU completion remains a separate concern. Existing context layouts, recording
+transactions and synchronous image constructors remain compatible.</p>
+<p><code>Window::element_opacity()</code> is now a public read-only getter (previously
+crate-visible). Media painting combines it with bounds/content-mask checks to
+avoid requesting loading frames for empty, fully clipped or zero-opacity content.
+Its calculation and element-drawing-only contract are unchanged.
+<code>Window::with_element_opacity</code> is also public so external custom elements can
+multiply their own style opacity into that inherited value while painting or
+prepainting. The media viewport uses it to apply its opacity style exactly once.</p>
+<h3 id="completion-safe-staging-pools-and-scene-frame-admission">Completion-safe staging pools and scene-frame admission</h3>
+<p><code>ImageStagingPool</code>, <code>ImageStagingLease</code> and their counters provide bounded resource
+reuse for backend SPI. Metal/wgpu opaque staging pools retain exclusive leases
+through GPU completion; wgpu recording transactions drop unsubmitted guards when
+abandoned. The D3D11 staging path remains unpooled pending native validation.</p>
+<p><code>PreparationFrame</code> shares loader-keyed count/byte counters for one scene
+preparation. <code>CustomContent::prepare_in_frame</code> is an optional trait method whose
+default calls <code>prepare_with_request</code>; old producers need no changes. Window
+preparation adapters forward the frame alongside original logical geometry.
+Media's policy and defaults live in <code>xgpui-media</code>, not in GPUI's renderer types.</p>
+<h3 id="custom-content-image-color-transforms">Custom-content image color transforms</h3>
+<p><code>CustomContent::image_color_transform()</code> is a defaulted method returning three
+encoded-sRGB affine RGB rows. Identity is the default, preserving existing
+implementations and outputs. The logical-geometry adapter forwards it. Compositors
+apply it after sampling/unassociation and before coverage and opacity, preserving
+alpha. Native wide-color background adapters retain their separate color contract.
+<code>xgpui-media::ImageFilter</code>, <code>FilteredImage</code>, <code>MediaImage::filtered</code>,
+<code>MediaImage::paint_filtered</code> and <code>MediaImageView::filter</code> expose ordered <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Standard-dynamic-range_video">SDR ↗</a> color
+adjustments while sharing source texture uploads. Private compositor parameter
+blocks grow from four to seven float4 rows; backend context/output layouts and
+public scene record fields are unchanged.</p>
+<h3 id="contour-path-effects">Contour path effects</h3>
+<p><code>xgpui-svg::path_effects</code> adds <code>Contour</code>, <code>Segment</code>, <code>MeasuredPath</code> and <code>PathEffect</code>.
+The measurement cache retains Bézier curves and supports total-length trim plus
+per-contour dash phase before native stroke tessellation. This adds no core GPUI
+API or scene-layout changes; existing <code>PathBuilder</code> and SVG raster APIs retain
+their behavior. Measurement and effect fragmentation have explicit work limits.</p>
+<h3 id="native-video-snapshots-and-bounded-presentation">Native video snapshots and bounded presentation</h3>
+<p><code>xgpui-media</code> adds <code>VideoFrame</code>, <code>VideoStream</code>, <code>VideoSender</code>, <code>VideoStats</code>,
+<code>VideoView</code>, <code>video</code> and <code>video_frame</code>. These are additive APIs; existing image
+loaders and scene records are unchanged. The macOS re-export <code>CoreVideoFrame</code>
+provides a checked BGRA/IOSurface import with an unsafe external synchronization
+and immutability contract. Source-sized Metal outputs now accept <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/RGBA_color_model">BGRA8 ↗</a> as well as
+RGBA8. The Metal compositor retains custom-content producers through sampling
+completion, allowing immutable external frames to outlive their source scenes.</p>
+<p>Legacy Metal <code>PaintSurface</code> rendering accepts BGRA plus the existing full-range
+<a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/YCbCr">NV12 ↗</a> format. Unsupported formats propagate errors and close active encoders;
+CoreVideo views/pixel buffers remain alive until GPU completion. This does not
+change public <code>PaintSurface</code> fields or <code>Window::paint_surface</code> signatures.
+This macOS slice supplies no decoder. Windows DXGI and Linux DMA-BUF adapters
+are described separately below; system playback remains separate issue #40.</p>
+<h3 id="windows-native-bgra-snapshots">Windows native BGRA snapshots</h3>
+<p><code>gpui_windows::custom_draw::dxgi::DxgiFrame</code> imports dedicated immutable same-device
+BGRA8 D3D11 render targets for source-sized sampling; <code>xgpui-media</code> re-exports it
+and adds <code>VideoFrame::dxgi</code>. Construction is unsafe: callers synchronize producer
+writes and preserve immutability through the native resource lifetime. The adapter
+direct constructor rejects keyed mutexes and foreign devices. The separate unsafe
+<code>try_from_shared_bgra</code> constructor opens an NT handle on the host device and
+nonblockingly acquires a keyed read lease; clones/prepared outputs retain it until
+submission/discard, with the last reference handing ownership back to the producer.
+Timeout returns no frame; abandonment requires resource recreation. No decoder or playback API is added. Windows
+compilation is checked; native runtime verification is outstanding.</p>
+<h3 id="linux-vulkan-dma-buf-snapshots">Linux Vulkan DMA-BUF snapshots</h3>
+<p>The opt-in <code>gpui-wgpu/dma-buf</code> module adds <code>DmaBufLayout</code> and <code>DmaBufFrame</code>;
+<code>xgpui-media/wgpu</code> re-exports them and adds <code>VideoFrame::dma_buf</code>. The initial
+unsafe adapter owns an FD for a dedicated immutable linear BGRA snapshot with
+producer synchronization already complete and EXTERNAL/GENERAL Vulkan ownership.
+Preparation imports the native allocation, records host queue acquisition and
+caches a source-sized output. Device capability is enabled only when advertised.
+No decoder, sync-file import, pool-recycle signal or foreign-family GBM/EGL import
+is provided. Linux compilation and host layout tests pass; native GPU validation
+is pending. See the media guide for exact layout and lifetime requirements.</p>
+<h3 id="macos-nv12-snapshots">macOS NV12 snapshots</h3>
+<p><code>CoreVideoFrame::from_nv12(buffer, Nv12Matrix)</code> adds opaque 8-bit two-plane
+CoreVideo NV12 import to the existing styled video element. <code>xgpui-media</code>
+re-exports <code>Nv12Matrix::{Bt601, Bt709}</code>. Range is selected from the buffer's 420f /
+420v format. Construction remains unsafe: producer synchronization, immutable
+pixels/attachments, matching SDR matrix and centered chroma are required.</p>
+<p>Metal imports R8/RG8 plane views and samples/converts them in the existing custom
+compositor pass. Internal prepared output/uniform handling changes; public
+<code>MetalCustomOutput</code> fields and existing generic output contracts remain unchanged.
+Legacy <code>PaintSurface</code> behavior is preserved. No decoder, playback clock, transfer
+conversion or <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/High_dynamic_range">HDR ↗</a> support is added. All four range/matrix combinations have native
+release pixel/lifetime coverage and an interactive generated-source lab mode.</p>
+<h3 id="synchronous-mip-chain-preparation">Synchronous mip-chain preparation</h3>
+<p><code>xgpui_media::mipmapped_rgba8(width, height, rgba)</code> is an additive extension helper
+returning validated <code>gpui::ImageTextureData</code>. It uses the native loader's same
+alpha-aware linear-light area filtering, dimension and complete-payload bounds.
+It performs synchronous CPU work without loader reservations or worker scheduling;
+use it for small already-decoded fixtures or with a host-managed executor. The
+browser media examples use it with the existing wgpu image-output SPI; the native
+loader's threading contract is unchanged. Existing GPUI call sites are unaffected.</p>
+<h2 id="media-pipeline-cpu-contracts-issue-26-phase-1">Media pipeline CPU contracts (issue #26 Phase 1)</h2>
+<p><code>xgpui_media::pipeline</code> adds explicit SDR source/working color metadata, an
+alpha-preserving linear <code>ColorMatrix</code> and <code>Vignette</code> reference, progressive
+publication states with stale-result protection, tile identities/accounting and
+future scheduler budgets. These are extension APIs; this phase adds no GPUI
+renderer SPI or new GPU path. <code>ImageFilter</code> retains its encoded-sRGB contract.</p>
+<p><code>PipelineCapabilities::current()</code> reports the new GPU features as unsupported
+until their respective phases land. See <a href="media-pipeline.html">media pipeline contracts</a>
+for the public types, examples, validation and remaining implementation work.</p>
+<h3 id="linear-image-sampling-parameters-issue-26-phase-2">Linear image sampling parameters (issue #26 Phase 2)</h3>
+<p><code>CustomContent::image_linear_adjustments</code> is a default-None hook that forwards
+through preparation geometry wrappers. <code>LinearImagePaint</code> validates finite f32
+matrix/vignette parameters for encoded-sRGB source images. Metal, wgpu and D3D11
+carry those per-placement parameters separately from retained source resources;
+the existing <code>image_color_transform</code> method keeps its encoded-sRGB behavior.
+The linear hook replaces it when present. The private compositor uniform ABI
+expands consistently in Rust, MSL, WGSL and HLSL.</p>
+<p>The extension exposes <code>pipeline::ImageAdjustments</code>, <code>AdjustedImage</code>,
+<code>MediaImage::adjusted</code>/<code>paint_adjusted</code> and <code>MediaImageView::adjustments</code>.
+The last filter/adjustments setter selects the interpretation explicitly. P3
+working matrices and unsafe f32 conversions are rejected by the rendered path.</p>
+<h3 id="phase-3-source-texture-color-support">Phase 3 source texture color support</h3>
+<p><code>ImageTextureData::new_linear_p3_rgba16f</code> validates full <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Alpha_compositing">premultiplied ↗</a>,
+bounded linear-P3 <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Half-precision_floating-point_format">binary16 ↗</a> mip chains. <code>format()</code> and <code>bytes_per_pixel()</code>
+drive upload size/format on Metal, wgpu and D3D11; staging accounting includes
+the 8-byte pixel size. <code>CustomContent::image_color_mode</code> defaults to the old
+encoded-sRGB interpretation; float preview/wide modes are explicit.
+<code>LinearImagePaint::with_p3</code> declares P3 working primaries.</p>
+<p>The native wide placement uses the existing wide-SDR compositor and requires
+window opt-in. wgpu rejects wide placement; it offers an explicit sRGB preview.
+Core source metadata must match the GPU texture format. Existing producers keep
+their default hooks. See <a href="media-pipeline.html">media pipeline</a> for examples and limits.</p>
+<h3 id="phase-4-tiled-preparation-and-lifetime-support">Phase 4 tiled preparation and lifetime support</h3>
+<p><code>ImageTextureData::page</code> validates a single immutable mip page. Existing
+constructors still require complete whole-image mip chains.
+<code>CustomContent::image_source_size</code> declares source-sized preparation independently
+of a large virtual destination; geometry remains finite and clipped normally.
+<code>image_sample_opacity</code> separates preparation from sampling visibility, allowing a
+page to warm up before replacing its progressive fallback. Defaults preserve
+existing producers.</p>
+<p>wgpu retains source snapshots until queue completion; D3D11 event queries retire
+them after sampling. Metal already retains them through command completion.
+Media payload guards also follow upload completion. These lifetimes let tile
+budget leases count evicted but still-used resources. Per-frame image transfer
+accounting now charges aligned staging bytes instead of only unpadded payload.
+See <a href="media-pipeline.html">progressive tiled canvas</a> for examples and QA limits.</p>
+<h3 id="phase-5-effect-reuse">Phase 5 effect reuse</h3>
+<p><code>xgpui_shader::LayerEffect::paint</code> is public for bounded paint closures.
+<code>xgpui_media::pipeline::ImageBlur</code> validates the existing layer capture/support
+limits and reuses that compositor rather than adding another blur engine.
+Assembled tiled previews share one kernel across page edges. This path filters
+premultiplied encoded sRGB and does not provide wide-SDR or source-space blur.
+<code>VideoFrame::adjusted</code> and <code>VideoView::adjustments</code> forward immutable native
+preparation/ownership with linear placement uniforms; <code>VideoView::blur</code> uses
+the same bounded preview path. See the media pipeline guide for errors, fallbacks,
+separate effect memory and runtime QA limits. No core ABI change was needed.</p>
+<h2 id="canvas-reuses-existing-gpui-apis">Canvas reuses existing GPUI APIs</h2>
+<p>The <code>xgpui-canvas</code> crate uses existing containers,
+content masks and the xgpui-shader instanced pipeline. It adds no GPUI public
+signatures or fields. Its own camera, scene, pan and grid APIs are experimental;
+callers project children explicitly and own application input/selection policy.</p>
+<h2 id="supplied-pixels-custom-rgb-and-native-color-checks">Supplied pixels, custom RGB and native color checks</h2>
+<p>Start with <a href="color-workflows.html">color tasks</a> for practical integration. <code>PixelColor</code> distinguishes named <code>ImageColor</code>, custom <code>RgbDefinition</code> and extended-linear source samples. <code>MediaLoader::load_pixel_buffer</code> accepts that resolved interpretation, an explicit storage space and a mapping policy. Storage can be bounded P3 or Rec.2020 RGBA16F; native-wide placement converts it into the compositor's extended coordinates.</p>
+<p><code>RgbDefinition</code> supports reference-white adaptation and independent channel curves. <code>from_relative_xyz_matrix</code> preserves relative colorants whose sum differs from the declared XYZ reference white. The optional <code>xgpui-color/icc</code> parser constructs definitions from a bounded RGB matrix/TRC subset; it does not add image-file decoding or a general ICC transform engine. See <a href="pixels-and-metadata.html">pixels + metadata</a> and <a href="icc-profiles.html">ICC scope</a>.</p>
+<p>The Metal test-support API <code>Window::render_to_linear_p3</code> reads FP16 composition values before OS display mapping. The ordinary 8-bit screenshot remains an sRGB preview. <a href="color-labs.html">Color labs</a> separates CPU conversion, GPU composition, browser preview and physical display claims.</p>
+<h2 id="desktop-preferences-for-shells">Desktop preferences for shells</h2>
+<p>Proposed for core 3.1.0 and Linux 2.1.0; final release approval is pending. The shell's rendering, typography and window overrides live in <code>xgpui-shell</code>.</p>
+<table><thead><tr><th>Core addition</th><th>Purpose</th><th>Compatibility and migration</th><th>Why core</th></tr></thead><tbody>
+<tr><td><code>DesktopPreferences</code></td><td>Optional accent, contrast, motion, scale, font and title-bar action snapshot</td><td>Additive type; unset fields preserve consumer defaults; no serialization implementation</td><td>Backend owns the preference provider</td></tr>
+<tr><td><code>TitlebarAction</code></td><td>Portable None, ToggleMaximize, Minimize and Menu actions</td><td>New enum; qualify imports if colliding with the shell enum</td><td>Backend/consumer protocol</td></tr>
+<tr><td><code>Platform::desktop_preferences()</code></td><td>Read snapshot</td><td>Default empty snapshot preserves platform implementers</td><td>Reads private platform state</td></tr>
+<tr><td><code>Platform::on_desktop_preferences_changed(...)</code></td><td>Main-thread update notification</td><td>Default no-op preserves implementers; callback runs after borrow release</td><td>Platform event-loop delivery</td></tr>
+<tr><td><code>App::desktop_preferences()</code></td><td>Application snapshot access</td><td>Additive; no automatic application styling changes</td><td>Shared access for any consumer</td></tr>
+<tr><td><code>App::observe_desktop_preferences(...)</code></td><td>Scoped change subscription</td><td>Additive; retain Subscription to observe, drop to stop</td><td>App observer lifecycle</td></tr>
+</tbody></table>
+<p>Existing <code>WindowButtonLayout</code> Linux helpers also become available under <code>test-support</code> for host-independent frame tests. Their production platform availability is unchanged. None of these additions changes an existing serialized format or requires existing applications to migrate.</p>
+<h2>Jump to the current declarations</h2><ul><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/app.rs#L221">gpui::Application::with_platform_and_text_system</a> <code>app.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/platform.rs#L1613">gpui::PlatformTextSystem</a> <code>platform.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/text_system.rs#L932">gpui::WindowTextSystem::layout_paragraph</a> <code>text_system.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/text_system/paragraph.rs#L33">gpui::PlatformParagraphShape</a> <code>text_system/paragraph.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/text_system/paragraph.rs#L42">gpui::PlatformParagraphLayout</a> <code>text_system/paragraph.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/text_system/paragraph.rs#L102">gpui::ParagraphRequest</a> <code>text_system/paragraph.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/text_system/paragraph.rs#L16">gpui::ParagraphPosition</a> <code>text_system/paragraph.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/text_system/paragraph.rs#L74">gpui::paint_paragraph</a> <code>text_system/paragraph.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/svg_renderer.rs#L107">gpui::ParsedSvg::size</a> <code>svg_renderer.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/scene.rs#L41">gpui::Scene</a> <code>scene.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/scene.rs#L490">gpui::Primitive</a> <code>scene.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/scene.rs#L851">gpui::PrimitiveBatch</a> <code>scene.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/scene.rs#L1395">gpui::CustomContent</a> <code>scene.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/scene.rs#L1345">gpui::PreparationRequest</a> <code>scene.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/scene.rs#L1527">gpui::CustomGeometry</a> <code>scene.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/scene.rs#L1543">gpui::CustomCoverage</a> <code>scene.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/scene.rs#L1557">gpui::CustomDraw</a> <code>scene.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/window.rs#L5590">gpui::Window::paint_custom</a> <code>window.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/window.rs#L3135">gpui::Window::set_color_mode</a> <code>window.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/window.rs#L3149">gpui::Window::color_status</a> <code>window.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/platform/color_presentation.rs#L6">gpui::WindowColorMode</a> <code>platform/color_presentation.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui/src/platform/color_presentation.rs#L27">gpui::WindowColorStatus</a> <code>platform/color_presentation.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-apple/src/custom_draw.rs#L315">gpui-apple::MetalWideSdrOutput</a> <code>custom_draw.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-apple/src/metal_renderer.rs#L184">gpui-apple::MetalRenderer::set_color_mode</a> <code>metal_renderer.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-apple/src/custom_draw.rs#L14">gpui-apple::MetalCustomContext</a> <code>custom_draw.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-apple/src/custom_draw.rs#L116">gpui-apple::MetalCustomOutput</a> <code>custom_draw.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-wgpu/src/custom_draw.rs#L192">gpui-wgpu::WgpuCustomContext</a> <code>custom_draw.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-wgpu/src/custom_draw.rs#L584">gpui-wgpu::WgpuCustomOutput</a> <code>custom_draw.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-windows/src/custom_draw.rs#L127">gpui-windows::Dx11CustomContext</a> <code>custom_draw.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-windows/src/custom_draw.rs#L373">gpui-windows::Dx11CustomOutput</a> <code>custom_draw.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-windows/src/custom_draw/wide_output.rs#L12">gpui-windows::Dx11WideSdrOutput</a> <code>custom_draw/wide_output.rs</code></li><li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-windows/src/directx_renderer.rs#L2601">gpui-windows::Dx11HeadlessRenderer</a> <code>directx_renderer.rs</code></li></ul></article><p class="evidence">Source: <code>docs/extensions/gpui-public-api.md</code></p>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

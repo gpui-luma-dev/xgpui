@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Browser windowing, input and rendering with WebGPU and a WebGL2 fallback.">
+<title>gpui-web · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/crates/gpui-web.html">
+<link rel="icon" type="image/svg+xml" href="../favicon.svg"><link rel="icon" sizes="32x32" href="../favicon.ico">
+<link rel="stylesheet" href="../style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="../vendor/prism/prism-core.min.js" data-manual></script><script defer src="../vendor/prism/prism-rust.min.js"></script><script defer src="../code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="../index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="../index.html">Overview</a><a href="../whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="../color-workflows.html">Color &amp; wide gamut</a><a href="../shell.html">Desktop shell</a><a href="../font-controls.html">Fonts &amp; OpenType</a><a href="../extension-lab.html">Labs &amp; benchmarks</a><a href="../performance-study.html">Performance study</a><a href="../gpui-public-api.html">GPUI API changes</a><a href="../gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="../examples/extensions/">Live demos ↗</a><a href="../instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="../crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="../crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="../crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="../crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="../crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="../crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="../crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="../crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="../crates/gpui.html">gpui</a><a class="crate-link" href="../crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="../crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="../crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="../crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="../crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="../crates/gpui-platform.html">gpui-platform</a><a class="crate-link" aria-current="page" href="../crates/gpui-web.html">gpui-web</a><a class="crate-link" href="../crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="../crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<div class="eyebrow">Platforms &amp; rendering</div><h1>gpui-web</h1><p class="lead">Browser windowing, input and rendering with WebGPU and a WebGL2 fallback.</p><p class="muted"><code>xgpui-web</code></p><nav class="tabs" aria-label="Crate sections"><a href="#crate-sources">Role &amp; sources</a><a href="#crate-api">API documentation</a><a href="#crate-dependencies">Dependencies</a><a href="#crate-review">Trim review</a></nav>
+<section id="crate-sources"><h2>Public surface at a glance</h2><p>CanvasFontFallback plus wasm-gated platform, window, dispatcher, HTTP and initialization exports.</p><p><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-web/src/gpui_web.rs">Open library entrypoint ↗</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/gpui/crates/gpui-web">Browse the crate source ↗</a></p></section>
+<section id="crate-api"><h2>API documentation</h2><p>Rustdoc for the published crate is on <a href="https://docs.rs/xgpui-web">docs.rs ↗</a>. It documents the latest release, which can lag the repository.</p></section>
+<section id="crate-dependencies"><h2>Dependencies</h2><p>Dependencies, optional features and target conditions are declared in <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/gpui/crates/gpui-web/Cargo.toml">Cargo.toml ↗</a>.</p></section>
+<section id="crate-review"><h2>Boundary to investigate</h2><div class="notice">Review hypothesis. No visibility changes or removal decisions have been made.</div><p>Keep wasm exports distinct from native fallback text support. The entry documentation describes a single top-level window lifecycle restriction.</p></section>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

@@ -68,4 +68,4 @@ Compared with the earlier local-only shell, scalar preference options are now op
 
 The shell uses additive core desktop-preference types, defaulted platform hooks and scoped App subscriptions. Existing platform implementers remain valid; no serialized representation changes. Its rendering and styling remain in this extension. Final API release approval is pending.
 
-See [the core API ledger](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md#desktop-preferences-for-shells) for the individual additions and why the backend seam belongs in core.
+See [the core API ledger](https://xgpui.dev/gpui-public-api.html#desktop-preferences-for-shells) for the individual additions and why the backend seam belongs in core.

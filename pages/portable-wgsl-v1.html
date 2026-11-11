@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>Shader paints (experimental) · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/portable-wgsl-v1.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" aria-current="page" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><article class="extension-document"><h1 id="shader-paints-experimental">Shader paints (experimental)</h1>
+<p>See <a href="shader-models.html">choosing a shader rendering model and migrating old names</a>.</p>
+<p>Experimental <code>xgpui-shader/portable-shaders</code>. Backend selection stays inside the extension.</p>
+<h2 id="dependency">Dependency</h2>
+<p>From an app under <code>apps/</code>:</p>
+<pre><code class="language-toml">[dependencies]
+xgpui-shader = { path = "../../extensions/crates/xgpui-shader", features = ["portable-shaders"] }
+# Add "wgpu" for the optional wgpu renderer. {#add-wgpu-for-the-optional-wgpu-renderer}
+</code></pre>
+<h2 id="washwgsl">wash.wgsl</h2>
+<pre><code class="language-wgsl">struct Parameters {
+    progress: f32,
+    tint: vec3&lt;f32&gt;,
+    alpha: f32,
+}
+
+fn paint(input: PaintInput) -&gt; vec4&lt;f32&gt; {
+    let blend = clamp(input.uv.x + parameters.progress, 0.0, 1.0);
+    let accent = vec3(
+        0.1,
+        clamp(input.position.y / 160.0, 0.0, 1.0),
+        input.size.x / 400.0,
+    );
+    return vec4(mix(parameters.tint, accent, blend), parameters.alpha);
+}
+</code></pre>
+<p>Extension-supplied type (do not redeclare it in user source):</p>
+<pre><code class="language-wgsl">struct PaintInput {
+    uv: vec2&lt;f32&gt;,        // Full source rectangle, normalized.
+    position: vec2&lt;f32&gt;,  // Local logical GPUI pixels: uv * size.
+    size: vec2&lt;f32&gt;,      // Full logical source size.
+}
+// Also supplied: parameters, bindings, fullscreen geometry and stage entry points.
+</code></pre>
+<p>Origin: top-left; +x right, +y down. UV uses raster pixel centers. Clip and border
+coverage never remap the field; the host applies coverage/opacity.</p>
+<h2 id="rust">Rust</h2>
+<pre><code class="language-rust">use gpui::{prelude::*, *};
+use xgpui_shader::{painted, WindowPaintExt};
+use xgpui_shader::shader_paint::{ShaderProgram, ShaderParameters};
+
+let program = ShaderProgram::new(include_str!("wash.wgsl"))?;
+
+let parameters_at = |progress| {
+    ShaderParameters::new()
+        .float("progress", progress)
+        .vec3("tint", [0.95, 0.15, 0.35])
+        .float("alpha", 1.0)
+};
+
+let paint = program.paint(parameters_at(0.15))?;
+painted().w(px(320.0)).h(px(240.0)).bg_paint(paint.clone());
+painted().border_8().border_paint(paint.clone());
+window.paint_path_with_paint(path, paint.clone());
+
+// Keep program in view state. Animate by creating immutable snapshots.
+let next = program.paint(parameters_at(0.75))?;
+let same = paint.clone(); // Shares parameters + cached output.
+</code></pre>
+<h2 id="parameter-api">Parameter API</h2>
+<p>Signature summary:</p>
+<pre><code class="language-rust">impl ShaderParameters {
+    pub fn new() -&gt; Self;
+    pub fn float(self, name: impl Into&lt;String&gt;, value: f32) -&gt; Self;
+    pub fn vec2(self, name: impl Into&lt;String&gt;, value: [f32; 2]) -&gt; Self;
+    pub fn vec3(self, name: impl Into&lt;String&gt;, value: [f32; 3]) -&gt; Self;
+    pub fn vec4(self, name: impl Into&lt;String&gt;, value: [f32; 4]) -&gt; Self;
+}
+// All members required, even unused ones. Repeated setter: last value wins.
+// Reflected layout/padding is packed by the extension; no Rust layout casts.
+</code></pre>
+<table><thead><tr><th>Constraint</th><th>Shader paints</th></tr></thead><tbody>
+<tr><td>Source size</td><td>≤ 64 KiB</td></tr>
+<tr><td>Parameter members</td><td>1–32</td></tr>
+<tr><td>Packed parameter size</td><td>≤ 1024 bytes</td></tr>
+<tr><td>Types</td><td><code>f32</code>, <code>vec2/3/4&lt;f32&gt;</code></td></tr>
+<tr><td>Values</td><td>Finite; exact reflected names/types</td></tr>
+<tr><td>Allowed</td><td>Math, helpers, local values, conditionals</td></tr>
+<tr><td>Rejected</td><td>Resources/globals, overrides, entry points, textures, storage/compute</td></tr>
+<tr><td>Rejected</td><td>Derivatives, discard, loops, integer/bool parameters, arrays, matrices</td></tr>
+<tr><td>Output</td><td>Straight-alpha encoded-sRGB SDR; channels clamped to <code>0..=1</code></td></tr>
+<tr><td>Shader obligation</td><td>Finite arithmetic; no shape coverage/opacity multiplication</td></tr>
+<tr><td>Versioning</td><td>Color-contract changes require a new version</td></tr>
+</tbody></table>
+<h2 id="compilation-and-cache">Compilation and cache</h2>
+<pre><code class="language-text">new(source)
+  → parse + validate restricted WGSL
+  → reflect parameters/offsets
+  → verify MSL + HLSL SM5 + SPIR-V translation
+
+paint(parameters)
+  → validate names/types/finite values
+  → pack reflected layout
+  → immutable snapshot
+
+prepare(snapshot, request)
+  → backend pipeline (lazy; shared across related snapshots)
+  → cached output OR record draw
+  → host validation/submission/composition
+
+output key = backend queue/context + exact raster extent + logical source size
+budget     = 64 MiB live output/backend; excludes in-flight resource retention
+</code></pre>
+<table><thead><tr><th>Failure</th><th>Result</th></tr></thead><tbody>
+<tr><td>Parse/validation</td><td>Original user line when span available + wrapped diagnostic</td></tr>
+<tr><td>Parameter set</td><td>Field-specific error before snapshot creation</td></tr>
+<tr><td>Driver compilation</td><td>Generated-source diagnostic; full cross-language map deferred</td></tr>
+<tr><td>Preparation/device</td><td>Frame error; no paint skipping</td></tr>
+<tr><td>Rejected recording</td><td>Unsubmitted work discarded on wgpu/D3D11</td></tr>
+</tbody></table>
+<p>Raw Metal commands retain the compatibility submission contract. No new normal-path
+GPU completion waits. Texture parameters, compute/custom geometry, HDR and stable
+API guarantees are outside this shader-paint contract.</p>
+<h2 id="test-and-capture">Test and capture</h2>
+<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-test
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-headless --frames 2 --png /tmp/portable-metal.png
+just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-wgpu --frames 2 --png /tmp/portable-wgpu.png
+cargo test --config .cargo/validation.toml \
+  --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
+  --features wgpu,portable-shaders --target-dir target
+</code></pre>
+<table><thead><tr><th>Test group</th><th>Coverage</th></tr></thead><tbody>
+<tr><td>CPU/Naga</td><td>vec3 padding, bad parameters, subset rejection, source diagnostics, target translation</td></tr>
+<tr><td>Metal + wgpu/Metal</td><td>Alpha, opacity, clipping, logical coordinates, logical-size cache invalidation</td></tr>
+<tr><td>Snapshots</td><td>Parameter immutability, sharing, unused uniforms</td></tr>
+<tr><td>Windows/Vulkan</td><td>Native paint/gamut backend CI passed on 2026-10-25; Windows labs/lab-test passed in owner testing on 2026-11-04. See <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">scope</a>.</td></tr>
+</tbody></table>
+<p>App source: <code>apps/xgpui-ext-lab/paint-lab/src/portable.rs</code>, <code>src/shaders/portable-wash.wgsl</code>.
+<a href="native-dx11-paints.html">Native D3D11</a> · <a href="portable-paints.html">wgpu adapter</a></p>
+</article><p class="evidence">Source: <code>docs/extensions/portable-wgsl-v1.md</code></p>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

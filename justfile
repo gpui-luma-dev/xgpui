@@ -184,23 +184,23 @@ build *args:
 build-full *args:
     cargo build --profile {{ profile }} --locked --features full-capture "$@"
 
-# Generate the documentation inventory and embedded guides.
-docs:
-    cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
+# Check the static website in pages/: links, anchors, assets and legacy routes.
+docs-check:
+    {{ python }} scripts/check_pages.py
 
-# Verify generated documentation (requires Node.js).
-docs-check: docs
-    node docs/verify.mjs
-
-# Serve generated documentation at http://localhost:8000 (optional port argument).
+# Serve pages/ at http://localhost:8000 (optional port). Demos need `just web-build` first.
 docs-serve port="8000":
-    {{ python }} scripts/stage_website.py
-    {{ python }} -m http.server "{{ port }}" --bind 127.0.0.1 --directory target/site
+    {{ python }} -m http.server "{{ port }}" --bind 127.0.0.1 --directory pages
 
-# Build both browser demo collections; requires pinned wasm-bindgen and Python 3.
+# Build both browser demo collections into pages/examples/; requires pinned wasm-bindgen.
 web-build:
     bash apps/xgpui-ext-lab/extensions-web/build.sh --release
     bash apps/xgpui-ext-lab/shader-examples/build.sh --release
+
+# Remove the generated demo bundles from pages/examples/, keeping checked-in pages.
+web-clean:
+    bash apps/xgpui-ext-lab/extensions-web/clean.sh
+    bash apps/xgpui-ext-lab/shader-examples/clean.sh
 
 # Build every native extension lab and benchmark without launching a window.
 lab-build *args:

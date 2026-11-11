@@ -56,8 +56,8 @@ This API does not reinterpret existing shaders or sRGB paints as Display P3.
 
 ## Guides and examples
 
-- [Window color requests, status and backend contract](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/high-gamut-windows.md)
-- [Instanced wide fills and gradients](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/instanced-wgsl-v2.md#reusable-wide-fills-and-gradients)
+- [Window color requests, status and backend contract](https://xgpui.dev/high-gamut-windows.html)
+- [Instanced wide fills and gradients](https://xgpui.dev/instanced-wgsl-v2.html#reusable-wide-fills-and-gradients)
 - [Gamut lab and validation](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/gamut-lab/README.md)
 
 From the repository root, run `just gamut` for the native comparison app.
@@ -65,8 +65,8 @@ From the repository root, run `just gamut` for the native comparison app.
 ## GPUI public API changes: additions and compatibility
 
 Use this crate with xgpui's matching framework packages. Its integration depends
-on [xgpui's GPUI API changes](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md#added-opt-in-window-presentation).
-See the [compatibility guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/high-gamut-windows.md#gpui-public-api-changes-additions-and-compatibility)
+on [xgpui's GPUI API changes](https://xgpui.dev/gpui-public-api.html#added-opt-in-window-presentation).
+See the [compatibility guide](https://xgpui.dev/high-gamut-windows.html#gpui-public-api-changes-additions-and-compatibility)
 for additions, affected public types and migration requirements.
 
 ## Project

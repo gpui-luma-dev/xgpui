@@ -16,8 +16,8 @@ just lab-color-test             # Numerical, fixtures and native tests.
 ```
 
 The compatibility recipes `lab-chromaticity`, `chromaticity` and
-`chromaticity-test` now use this checkout. No sibling repository, network assets,
-Python or Node is needed. The binary remains `color-lab`; its source is now here
+`chromaticity-test` now use this checkout. No sibling repository, network assets
+or scripting runtime is needed. The binary remains `color-lab`; its source is now here
 rather than under gamut-lab. The source build uses the shared lab manifest,
 lockfile and target directory. Override `profile=dev` when iterating.
 

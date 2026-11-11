@@ -5,7 +5,7 @@ Compared with completed tag `release-2026-11-07-4d980860fda6`
 `b7c59ffe6294f652feb8b551ba1bf492cc43e39c` (PR #177).
 
 Scope: CI/test-runner reliability, Rust release tooling, browser compatibility,
-and very-alpha Parley paragraph/typeset/emoji work. See [What's new](../WHATS_NEW.md).
+and very-alpha Parley paragraph/typeset/emoji work. See [What's new](https://xgpui.dev/whats-new.html).
 No new upstream sync or core text descriptor migration is included.
 
 ## Approved version plan — applied

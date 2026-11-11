@@ -16,11 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      - name: Build and verify website
-        run: |
-          cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
-          node docs/verify.mjs
-          node apps/web-support/graphics.test.mjs
+      - name: Check website
+        run: python3 scripts/check_pages.py
       # Detect stale path-dependency lockfiles before compiling the packaging CLI.
       - name: Verify shared extension-lab dependency lockfile
         run: >-
@@ -38,11 +35,14 @@ jobs:
         run: bash apps/xgpui-ext-lab/extensions-web/build.sh --release
       - name: Build instanced shader WASM companion
         run: bash apps/xgpui-ext-lab/shader-examples/build.sh --release
-      - name: Stage documentation and browser demos
-        run: python3 scripts/stage_website.py --require-web
+      - name: Check browser demo bundles
+        run: |
+          test -f pages/examples/extensions/extensions_web_bg.wasm
+          test -f pages/examples/extensions/build-id.txt
+          test -f pages/examples/shaders/shader_examples_bg.wasm
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: target/site
+          path: pages
 
   deploy:
     needs: build

@@ -70,19 +70,9 @@ font's baseline and line-spacing metrics. Contextual CJK spacing and arbitrary
 OpenType features are not reproduced. Other scripts remain on Cosmic Text.
 Browser font availability is assumed stable for the application's lifetime.
 
-With the gallery server running, a browser smoke test checks native-font
-preservation, whole-grapheme rendering, emoji atlas reuse, and input/deletion:
-
-```sh
-node crates/gpui_web/examples/hello_web/test_canvas_fallback.mjs
-```
-
-This requires Node.js 22 or newer and Chrome/Chromium. On macOS it uses the
-standard Google Chrome application path; elsewhere it uses `chromium`. Set
-`CHROME` to override the executable, and pass an optional server URL as the first
-argument. Screenshots and logs are saved under the gallery's ignored `target`
-directory. The test intercepts clipboard writes rather than modifying the system
-clipboard.
+With the gallery server running, check native-font preservation,
+whole-grapheme rendering, emoji atlas reuse, and input/deletion by hand in a
+browser.
 
 ## Where to start
 

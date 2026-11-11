@@ -97,7 +97,7 @@ linear-P3 contract when integrating wide output with `xgpui-shader` or
 
 ## Documentation and validation
 
-The [color guide](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/color-math.md)
+The [color guide](https://xgpui.dev/color-math.html)
 covers types, dependency boundaries and the color/gamut lab. Refer to the
 [source](https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-color/src/lib.rs)
 for the public API and numerical contracts.

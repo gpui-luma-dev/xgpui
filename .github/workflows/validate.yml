@@ -13,16 +13,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test Rust release tooling and manifest generation
         run: cargo test --locked --manifest-path tools/release-sync/Cargo.toml
-      - name: Test optional website staging
-        run: python3 -m unittest discover -s scripts -p 'test_stage_website.py'
       - name: Check normalized capture and generated manifests
         run: |
           cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- normalize --check
           cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests --check
-      - name: Build and verify documentation
-        run: |
-          cargo run --locked --manifest-path tools/crate-roadmap/Cargo.toml
-          node docs/verify.mjs
+      - name: Check website
+        run: python3 scripts/check_pages.py
 
   native-libraries:
     name: Native libraries (${{ matrix.os }})
@@ -107,6 +103,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: shader-examples-wasm
-          path: target/web/shaders/
+          path: pages/examples/shaders/shader_examples*
           if-no-files-found: error
           retention-days: 14

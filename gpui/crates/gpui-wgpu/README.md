@@ -29,7 +29,7 @@ core parses the metadata privately. Missing tables remain distinct from errors.
 
 Arbitrary explicit axis application is not enabled: `static_variations` is false
 and nonempty settings are rejected. Applications can select `xgpui-parley` for
-static axes on Linux. See the [font-controls guide](https://xgpui.dev/#font-controls).
+static axes on Linux. See the [font-controls guide](https://xgpui.dev/font-controls.html).
 
 ## Features
 
@@ -42,7 +42,7 @@ static axes on Linux. See the [font-controls guide](https://xgpui.dev/#font-cont
 ## Documentation
 
 - [Local development and platform prerequisites](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md)
-- [xgpui API additions and compatibility](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/extensions/gpui-public-api.md)
+- [xgpui API additions and compatibility](https://xgpui.dev/gpui-public-api.html)
 - [Release preparation](https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md)
 - [Repository](https://github.com/gpui-luma-dev/xgpui) · [Website](https://xgpui.dev/)
 

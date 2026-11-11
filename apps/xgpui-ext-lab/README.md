@@ -1,6 +1,6 @@
 # XGPUI extension lab
 
-[Read the lab guide](../../docs/extensions/extension-lab.md) for the package
+[Read the lab guide](https://xgpui.dev/extension-lab.html) for the package
 overview, target list, unpublished status and browser workflow.
 
 An unpublished development package containing native labs, benchmarks and browser

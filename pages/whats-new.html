@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>What&#x27;s new · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/whats-new.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="whats-new">What's new</h1>
+<h2 id="in-preparation--november-8-2026">In preparation — November 8, 2026</h2>
+<p><strong>A desktop-aware shell and app-composed title bars.</strong> The first <code>xgpui-shell 0.1.0</code> release adds shared client frames, per-window overrides, desktop typography and explicit drag regions. macOS keeps native traffic lights; a dedicated native lab makes detected preferences and resolved styling inspectable.</p>
+<p><code>xgpui 3.1.0</code> adds desktop-preference snapshots and subscriptions. <code>xgpui-linux 2.1.0</code> reads the Settings portal with optional GNOME/KDE fallbacks. These are additive changes; other crate versions stay unchanged.</p>
+<p><strong>Alpha:</strong> shell APIs may change. Headless checks do not establish interactive desktop or accessibility acceptance. Publication is pending. Read the <a href="shell.html">shell guide</a>, or run <code>just profile=dev lab-shell</code> locally.</p>
+<h2 id="november-7-2026">November 7, 2026</h2>
+<p>CI/testing and browser-build fixes, plus very-alpha Parley 0.5.0 paragraph, typeset and emoji updates — see the <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-08-cb66d2b2238b">GitHub release notes</a>.</p>
+<h2 id="november-5-2026--variable-fonts">November 5, 2026 — variable fonts</h2>
+<p><strong>Variable fonts now work through the full text pipeline on macOS and Windows.</strong>
+<code>xgpui 3.0.0</code> adds precise axis settings and OpenType inspection;
+<code>xgpui-parley 0.4.0</code> adds matching shaping support and a quantized preview utility.
+The native and Parley text-lab panels expose live weight, width, slant and optical
+size controls. The labs and tests were confirmed working on both platforms.</p>
+<h3 id="live-variable-font-controls-and-inspection">Live variable-font controls and inspection</h3>
+<p>Set <code>Font::variations</code> or use <code>.font_variations(...)</code> on styled elements.
+<code>FontTag::WEIGHT</code>, <code>WIDTH</code>, <code>SLANT</code>, <code>OPTICAL_SIZE</code>, and <code>ITALIC</code> provide typed
+constants for the standard axes, so ordinary code needs no string parsing.
+Custom tags still support validated parsing, and serialized tags stay unchanged.</p>
+<p>Signed, finite coordinates preserve negative slant and fractional author values. Each
+resolved face clamps supported axes to its own range; fallback runs retain the
+request and resolve their own coordinates. Explicit settings take precedence
+over corresponding implicit weight/style axes. Metrics, wrapping, caret/selection
+geometry and rasterization use the same resolved instance. Explicit optical size
+stays fixed when text size changes; automatic optical sizing remains separate.</p>
+<p><code>TextSystem::font_axes</code>, <code>opentype_features</code>, and <code>font_capabilities</code> support font
+inspectors without hard-coded tag lists. Results distinguish unsupported queries,
+successful empty lists and errors. Existing <code>FontFeatures</code> continues to accept
+numeric feature parameters. Core privately parses the metadata; the additive
+<code>PlatformTextSystem::font_table</code> hook obtains bytes from CoreText, DirectWrite,
+native Cosmic or Parley's actual resolved face. No helper crate or public parser
+API is added.</p>
+<p>Try the native/Parley comparison and run its tests from the repository root:</p>
+<pre><code class="language-sh">just text --backend both
+just lab-test
+</code></pre>
+<p>Both panels have independent sliders, keyboard/accessibility controls, presets,
+two specimen sizes and a live advance measurement. Arrow keys adjust settings,
+Shift makes larger steps, and Home/End reach the limits. Tests use backtraces by
+default. A Windows interaction-test setup fix now uses real DirectWrite instead
+of the headless platform's no-op text system.</p>
+<p><code>VariationPreview</code> quantizes before font resolution so shaping and painting
+agree. The lab limits each window to 512 admitted combinations and holds its last
+preview when full. This does not promise globally bounded memory or atlas
+reclamation. Frame-safe eviction, automatic optical sizing and Cosmic/browser
+axis parity remain separate work. Native/Parley raster differences are expected;
+a subtle cross-platform slant appearance difference was observed in both panels,
+with matching endpoints and no functional failure.</p>
+<p>The <a href="examples/extensions/?demo=font-controls">Wasm font inspector</a> brings these
+same GPUI sliders and metadata queries to the browser using Parley in Wasm.
+Choose WebGPU or WebGL2 for rendering; shaping and rasterization stay in Rust.
+Native CoreText/DirectWrite comparison remains in the desktop lab.</p>
+<p>Read the <a href="font-controls.html">font-controls guide</a> for API examples,
+backend capabilities, preview policy and migration details.</p>
+<h3 id="cosmic-font-inspection">Cosmic font inspection</h3>
+<p>Linux's default Cosmic backend now reads OpenType features and variable-axis
+ranges from its resolved font files, including the correct face in collections.
+Core performs the private metadata parsing. Missing tables, failed reads and
+invalid IDs retain distinct results. The native text-lab panel shows this
+metadata independently of whether axis editing is available.</p>
+<p>This is inspection support: arbitrary axis application still requires additional
+Cosmic shaping/metrics/raster work. Parley remains the axis-capable Linux option.
+Linux validation includes the Cosmic and Parley suites, a headless native-host
+construction/axis smoke test, and shared slider interaction tests. Physical
+Wayland/X11 output and Linux IME/accessibility remain separate acceptance checks.
+The Linux DMA-BUF import path also uses the current completion guard to retain
+imported textures until preparation commands finish.</p>
+<h3 id="core-30-migration">Core 3.0 migration</h3>
+<p><strong>Exhaustive struct literals need three new fields:</strong> <code>Font::variations</code>,
+<code>TextStyle::font_variations</code>, and <code>TextStyleRefinement::font_variations</code>.
+Use <code>Default::default()</code> for the first two and <code>None</code> for refinements; exhaustive
+patterns can use <code>..</code>. Calls using constructors/defaults generally need only a
+recompile. Empty settings retain existing axis behavior. Upgrade matching backend
+and extension pins together; the remaining inspection APIs are additive, and
+custom backends inherit unsupported defaults. See the
+<a href="gpui-public-api.html#font-axes-and-inspection-core-30">API migration guide</a>.</p>
+<h3 id="font-controls-crate-versions">Font-controls crate versions</h3>
+<table><thead><tr><th>Crates</th><th>Version</th></tr></thead><tbody>
+<tr><td><code>xgpui</code></td><td><strong>3.0.0</strong></td></tr>
+<tr><td><code>xgpui-apple</code></td><td><strong>4.0.0</strong></td></tr>
+<tr><td><code>xgpui-windows</code></td><td><strong>2.1.0</strong></td></tr>
+<tr><td><code>xgpui-parley</code></td><td><strong>0.4.0</strong></td></tr>
+<tr><td><code>xgpui-macos</code></td><td><strong>4.0.0</strong></td></tr>
+<tr><td><code>xgpui-ios</code></td><td>1.26.4</td></tr>
+<tr><td><code>xgpui-linux</code>, <code>xgpui-platform</code>, <code>xgpui-web</code></td><td>2.0.2</td></tr>
+<tr><td><code>xgpui-wgpu</code></td><td><strong>2.1.0</strong></td></tr>
+<tr><td><code>xgpui-gamut</code>, <code>xgpui-canvas</code>, <code>xgpui-svg</code></td><td>0.3.2</td></tr>
+<tr><td><code>xgpui-media</code></td><td>0.5.2</td></tr>
+<tr><td><code>xgpui-shader</code></td><td>0.4.2</td></tr>
+</tbody></table>
+<p>The selected versions combine font controls with the GPUI 1.27.0 sync. Apple
+and macOS receive major releases for breaking renderer constructors and the
+Apple thermal-module migration. Windows and wgpu receive minor capability releases; Parley's new APIs use a
+pre-1.0 minor release. The remaining affected crates receive patch updates for
+backend fixes or matching exact dependency pins. <code>xgpui-color</code> shipped at 0.3.1 and
+<code>xgpui-macros</code> at 1.0.2 after packaged README updates. See the <a href="gpui-1.27-migration.html#selected-crate-versions">combined release version review</a>
+for the full rationale. This version family shipped in <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-07-4d980860fda6">the previous release</a>.</p>
+<h2 id="november-4-2026">November 4, 2026</h2>
+<p>Changes since <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-03-deba615a1d9c">release-2026-11-03-deba615a1d9c</a>:
+better keyboard and macOS accessibility focus for selectable typography, a shared
+moving video fixture on Windows and macOS, an integrated native color lab, and
+release checks that catch changed crates needing new versions.</p>
+<h3 id="selectable-typography-keyboard-focus-and-voiceover">Selectable typography: keyboard focus and VoiceOver</h3>
+<p><strong>Tab and Shift+Tab now reach and leave the selectable text field.</strong> The demo
+handles focus traversal and the retained text handle is a tab stop. On macOS,
+the accessibility adapter now follows the actual first-responder view and starts
+with the correct window-focus state, allowing VoiceOver to reach and read the
+message. Rapid mouse drags commit the final release position, avoiding a stale
+selection endpoint without changing stationary double/triple-click selection.
+(<a href="https://github.com/gpui-luma-dev/xgpui/pull/136">Typography fixes #136</a>)</p>
+<p>The existing typewriter, wave, scramble, gradient and glow effects keep the real
+source intact. Native accessibility checks selected combining accents and joined
+emoji exactly, including the complete source at zero reveal. VoiceOver's
+read-current-selection command read the entire mouse selection; interrupted
+character announcements during dragging do not indicate lost source text.</p>
+<p>macOS checks include 15 focused tests, focus-traversal and platform tests, Retina
+inspection, simulated 1x/1.5x/2x/3x selection geometry, and resource observations.
+A three-minute native wave/glow run stayed around 113–114 MiB of resident memory;
+pausing stopped animation redraws and brought CPU below 1%. A separate offscreen
+Metal run kept GPU allocations stable. These are bounded observations, not a
+performance guarantee. Typography-specific Windows acceptance is deferred, Linux
+acceptance remains unverified, and other physical display scales were not tested.
+Try <code>just lab-shader --example typography</code> and see the
+<a href="typography.html">typography guide</a>.</p>
+<h3 id="one-moving-video-fixture-on-windows-and-macos">One moving video fixture on Windows and macOS</h3>
+<p>The native media lab now uses the <strong>same generated scrolling bands, bouncing
+puck, frame indices and timestamps</strong> on both platforms. Motion is clearly visible
+while fixed color/alpha reference regions remain available for checking output.
+The macOS adapter copies the shared BGRA rows to IOSurfaces and derives its NV12
+variants from the same scene; Windows presents immutable, same-device D3D11 BGRA
+textures. Both placements reuse a presented snapshot.</p>
+<p>Windows WARP capture checks cover color, alpha, corners, clipping, exposure,
+resize/reuse, frame replacement and teardown. Shared fixture checks cover motion,
+BGRA source agreement and NV12 matrix/range vectors. Pause, burst, latest-frame
+replacement and restart exercise stream lifecycle behavior. Run
+<code>just lab-media --video</code> and see the <a href="media-pipeline.html">media guide</a>.
+This lab adds no decoder or new published video API; foreign-device/shared-handle
+producers, Windows YUV conversion, playback clocks and recovery remain separate.
+(<a href="https://github.com/gpui-luma-dev/xgpui/pull/135">Native lab work #135</a>)</p>
+<h3 id="color-workspaces-and-consistent-lab-navigation">Color workspaces and consistent lab navigation</h3>
+<p><strong>The native color app now contains Swatches and Chromaticity workspaces</strong>, with
+settings retained when switching between them. Chromaticity brings CIE xy/u′v′
+charts, primaries and transfer functions, gamut/luminance previews, FP16 storage
+and ICC inspection, hidden-symbol comparisons and the Italy photo comparison
+into this repository. It reuses the checked-in datasets, profiles, photographs
+and attribution; no sibling checkout or runtime asset download is required.
+<code>just lab-color --chromaticity</code> opens it directly. The integrated app has 24
+recorded macOS numerical, fixture and composition tests. See <a href="color-labs.html">color labs</a>.</p>
+<p>The root commands now consistently use <code>just lab-canvas</code>, <code>lab-media</code>,
+<code>lab-shader</code>, <code>lab-paint</code>, <code>lab-gamut</code>, <code>lab-color</code>, <code>lab-text</code> and <code>lab-svg</code>;
+existing short commands remain aliases. <code>lab-parley</code> selects the shared text lab,
+with <code>--backend parley</code> choosing that backend. <code>just lab-build</code> builds native labs
+and <code>just lab-test</code> runs their unit/compatibility tests; native-window tests remain
+opt-in. Shader examples accept an explicit <code>--example</code> selector.</p>
+<p>The card canvas and Mandelbrot now share pointer-anchored wheel, two-finger scroll
+and pinch zoom behavior. Drag empty canvas background to pan; Space+left drag or
+middle drag also pans when starting over a card. Selection, snapping and overview
+controls remain available. See <a href="canvas.html">canvas</a> and <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">local development</a>.</p>
+<h3 id="compatibility-release-checks-and-platform-evidence">Compatibility, release checks and platform evidence</h3>
+<ul>
+<li><strong>Media builds without a native GPU backend again.</strong> The texture output match
+now compiles when all backend variants are disabled, fixing the minimal Linux
+configuration. CI explicitly checks that configuration.
+(<a href="https://github.com/gpui-luma-dev/xgpui/pull/129">Media fix #129</a>)</li>
+<li><strong>Release preflight:</strong> <code>just release-check</code> detects crate and transitive internal
+dependency changes since a verified release baseline, includes working-tree
+changes, and checks crates.io version availability and internal pins. It reports
+required bumps, stale pins, unpublished candidates and blocked checks without
+editing versions or publishing. Verified per-crate release evidence can advance
+the baseline. See the <a href="https://github.com/gpui-luma-dev/xgpui#crate-release-preflight">release-check instructions</a>.
+(<a href="https://github.com/gpui-luma-dev/xgpui/pull/132">Release tooling #132</a>)</li>
+<li><strong>Windows native labs:</strong> the owner confirmed all native labs and <code>just lab-test</code>
+passed on November 4, including the moving video demo. This supplements builds;
+it does not certify every standalone library suite, assistive technology,
+external producer or physical wide-gamut display. See
+<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">Windows validation</a>.</li>
+<li><strong>Reliable benchmark scope tests:</strong> setup exclusion is checked with explicit
+recorded poll timings and exact scope membership, avoiding flaky upper limits
+caused by hosted-runner scheduling delays. Runtime measurement is unchanged.</li>
+<li><strong>Build and documentation upkeep:</strong> corrected the native input example's test
+initialization, refreshed normalized version metadata, documented local website
+preview, and corrected immutable release-source and color-lab guide links.
+The merged work passed native macOS/Windows/Linux CI, browser shader builds,
+iOS simulator compilation and repository/documentation checks.</li>
+</ul>
+<h3 id="november-4-crate-versions">November 4 crate versions</h3>
+<p>The November 4 update uses these patch versions and matching internal pins.</p>
+<table><thead><tr><th>Crates</th><th>Version</th></tr></thead><tbody>
+<tr><td><code>xgpui</code>, <code>xgpui-linux</code>, <code>xgpui-platform</code>, <code>xgpui-web</code>, <code>xgpui-wgpu</code>, <code>xgpui-windows</code></td><td>2.0.1</td></tr>
+<tr><td><code>xgpui-apple</code>, <code>xgpui-macos</code></td><td>3.0.1</td></tr>
+<tr><td><code>xgpui-gamut</code>, <code>xgpui-parley</code>, <code>xgpui-svg</code>, <code>xgpui-canvas</code></td><td>0.3.1</td></tr>
+<tr><td><code>xgpui-media</code></td><td>0.5.1</td></tr>
+<tr><td><code>xgpui-shader</code></td><td>0.4.1</td></tr>
+<tr><td><code>xgpui-ios</code></td><td>1.26.3</td></tr>
+</tbody></table>
+<p><code>xgpui-color</code> remains 0.3.0 and <code>xgpui-macros</code> remains 1.0.1. Labs are development tools. External dependency versions and checksums are
+unchanged by these patch-version updates.</p>
+<h2 id="november-3-2026">November 3, 2026</h2>
+<p>Since the <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-10-31-ed4469267251">October 31, 2026 release</a>,
+XGPUI has gained an upstream framework update, more reliable Metal rendering,
+retained photo viewports and smoother native fractal navigation. These changes
+are included in the <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-03-712732c7cf07">November 3 release</a>;
+the new crate versions are available on crates.io.</p>
+<h3 id="gpui-1262">GPUI 1.26.2</h3>
+<p>The framework now follows <strong>gpui-unofficial 1.26.2</strong>. The update adds optional
+debug hot reload, application lifecycle and memory-warning callbacks, native
+text-selection and content notifications, back gestures and improved touch
+scrolling. It also brings focus cleanup and sprite batching fixes. XGPUI’s
+extensions, wide-gamut rendering and objc2/objc2-metal conversion are preserved.
+(<a href="https://github.com/gpui-luma-dev/xgpui/pull/123">Upstream integration #123</a>)</p>
+<p><strong>The upstream iOS backend is included.</strong> It lives in <code>gpui/crates/gpui-ios</code>
+alongside the other framework backends, with UIKit windows, touch, keyboard and
+native text input. Its implementation files are unchanged from the captured
+upstream source; package wiring is adapted to XGPUI. <code>xgpui-ios</code> follows
+upstream’s <strong>1.26.2</strong> version while that implementation remains unchanged.
+Simulator compilation, linking and app packaging pass; interactive simulator
+and device testing remains pending. See <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">iOS setup</a>.</p>
+<p>The new <code>WindowOptions::use_display_p3</code> option connects to the existing macOS
+wide-gamut SDR compositor. Ordinary UI colors keep their sRGB interpretation;
+wide-gamut content still needs the appropriate content and window configuration.
+iOS wide-SDR presentation remains unsupported.</p>
+<h3 id="metal-rendering-and-photo-viewports">Metal rendering and photo viewports</h3>
+<p><strong>Dense custom-rendered scenes no longer need a separate pending command buffer
+for every producer.</strong> Producers encode through <code>MetalCustomContext::record</code> into
+one shared preparation batch, and the host validates and submits the work.
+This fixes command-buffer exhaustion during dense preparation. A supervised
+512-producer regression covers replay, scene replacement and pixel correctness.
+The objc2 resource ownership model is retained.
+(<a href="https://github.com/gpui-luma-dev/xgpui/pull/121">Rendering update #121</a>)</p>
+<p><strong>Large photos refine while keeping an overview visible.</strong> The media extension’s
+<code>RasterSource</code> builds requested mip pages from bounded decoded pixels and RGB
+metadata, using linear-light, alpha-aware filtering. A source replacement keeps
+the previous overview visible as new pages become ready. <code>CanvasPaint</code> selects
+wide SDR or an sRGB preview and applies existing GPU image adjustments without
+rebuilding source pages or uploading them again. Admission retry also handles
+workers that are still retiring. Applications retain control of decoding and
+source limits; page allowances do not represent total GPU memory.</p>
+<h3 id="smoother-mandelbrot-navigation">Smoother Mandelbrot navigation</h3>
+<p>The native canvas lab now keeps a complete frame on screen and reprojects it
+while a replacement prepares offscreen. Shallow views use cached Metal compute
+into linear-P3 float textures on supported macOS wide-SDR hosts. Deeper views use
+background CPU calculation with preview and detail refinement. Frames replace
+each other as complete images, avoiding partial tile boundaries during navigation.
+(<a href="https://github.com/gpui-luma-dev/xgpui/pull/108">Canvas update #108</a>)</p>
+<p>Run <code>just canvas-lab --mandelbrot</code>, or add <code>--mandelbrot-cpu</code> to compare the CPU
+route. Native runtime validation is currently macOS arm64; the browser explorer
+keeps its separate CPU implementation. See the <a href="canvas.html">canvas guide</a>.</p>
+<h3 id="fixes-and-development-tools">Fixes and development tools</h3>
+<ul>
+<li><strong>macOS objc2 fixes:</strong> corrected Objective-C argument and callback types,
+native text-input/dialog handling, nullable pasteboards, Services menu wiring
+and layer background clearing. These follow the earlier bindings conversion.</li>
+<li><strong>Benchmark support:</strong> restored the matching upstream metrics required by
+<code>bench-support</code>, with allocation, frame and CPU counters and platform benchmarks.
+These remain opt-in; the existing profiler is retained.</li>
+<li><strong>Upstream sync:</strong> release comparisons preserve downstream policies, manifests
+and metadata and use the complete upstream source-package inventory.</li>
+<li><strong>CI coverage:</strong> the update passed Windows, Linux and macOS library builds and
+benchmark checks, iOS simulator compilation, browser shader builds and docs
+checks. These do not establish graphical runtime support on every backend.</li>
+</ul>
+<h3 id="updating-an-application">Updating an application</h3>
+<p>The new core is <strong>xgpui 2.0.0</strong>, with <strong>Apple/macOS 3.0.0</strong> and matching backend
+and extension versions. The <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-03-712732c7cf07">release version table and migration notes</a>
+cover the published family.</p>
+<p>Input matches change from <code>PlatformInput::ScrollWheel</code> to <code>Scroll</code> and gain
+<code>BackGesture</code>; complete scroll/window/inset literals need the added fields.
+Custom Metal integrations use <code>MetalCustomContext::new</code>, <code>record()</code> and
+<code>queue_identity()</code> in place of context struct literals and public queue access.
+See <a href="gpui-public-api.html">GPUI API changes</a>.</p>
+<h2 id="october-31-2026">October 31, 2026</h2>
+<h3 id="color-and-wide-gamut-from-source-pixels-to-the-display">Color and wide gamut, from source pixels to the display</h3>
+<p>XGPUI’s expanded color pipeline connects <strong>sRGB, Display P3, Adobe RGB (1998)
+and Rec.2020</strong> through explicit conversion, image storage and native wide-gamut
+rendering. It covers everyday UI colors, wide-gamut photographs, perceptual
+color editing and custom RGB profiles. Applications choose their own image
+decoder and supply <strong>pixels plus color metadata</strong> to the library.</p>
+<ul>
+<li><strong>Choose the space for the task.</strong> sRGB remains the basis for ordinary UI and
+portable previews. Display P3 supports wide-gamut content and P3 image storage.
+Adobe RGB (1998) adds a photographic source space, while Rec.2020 provides
+wider SDR image storage that can retain Adobe RGB colors outside P3. Each
+source keeps its declared primaries and transfer function during conversion.</li>
+<li><strong>Convert, inspect and interpolate.</strong> Move between the four named RGB spaces,
+inspect XYZ and chromaticity coordinates, and use OkLab/OkLCh for perceptual
+color operations and gradients. Explicit gamut mapping controls how colors
+fit the destination; D50/D65 white-point adaptation supports custom definitions
+and profile interpretation. See the <a href="color-math.html">color math guide</a>.</li>
+<li><strong>Preserve wider colors.</strong> Use Display P3 or Rec.2020 image storage deliberately,
+then retain extended color values through native composition, normal blending,
+blur and linear color filters until output mapping. Ordinary UI colors remain
+sRGB; choosing Rec.2020 storage does not enable HDR.</li>
+<li><strong>Interpret the source correctly.</strong> Named color spaces, custom RGB definitions
+and extended linear pixels share the supplied-pixel pipeline, with explicit
+transfer curves, alpha handling and gamut mapping.</li>
+<li><strong>Use embedded RGB profiles.</strong> The optional ICC adapter resolves a bounded
+matrix/TRC subset, including sampled and parametric curves and white-point
+adaptation. It preserves the profile’s actual values and reports unsupported
+profiles explicitly. See <a href="icc-profiles.html">supported ICC profiles</a>.</li>
+<li><strong>Check the numbers and the rendering.</strong> Independent high-precision references
+cover RGB conversion, white-point adaptation, profile curves, near-black values
+and alpha.
+Metal FP16 readback checks native composition before display color management,
+including colors that an ordinary sRGB screenshot cannot retain.</li>
+</ul>
+<p><strong>Wide gamut is a capability; Display P3 is a particular color space.</strong> Source
+interpretation, image storage, window presentation and the physical display are
+separate choices. The new <a href="color-workflows.html">practical color guides</a>,
+<a href="pixels-and-metadata.html">pixels and metadata guide</a> and
+<a href="color-labs.html">lab walkthroughs</a> explain common tasks without requiring a color
+science background. The <a href="crates/xgpui-color.html">color overview</a> includes
+small examples for everyday conversions, mapping and image input.</p>
+<p>Try the new browser examples:</p>
+<ul>
+<li><a href="examples/extensions/?demo=chromaticity">Chromaticity and gamut</a>: explore gamut
+boundaries, luminance and mapping with an sRGB chart preview.</li>
+<li><a href="examples/extensions/?demo=pixel-metadata">Pixels + metadata</a>: keep the samples
+fixed while changing their interpretation; guided lessons show when to inspect
+XYZ values and packed FP16 bytes rather than expect a large visual change.</li>
+<li><a href="examples/extensions/?demo=italy">Italy photo comparison</a>: compare WebKit’s
+sRGB, Display P3 and highlighted photographs, or switch the selected photo
+between its browser-managed original and a Rust/Wasm sRGB preview.</li>
+</ul>
+<p>The <a href="examples/extensions">gallery</a> now contains <strong>24 examples</strong>. The Italy
+example uses browser image color management; the GPUI web canvas demos remain
+sRGB previews. Native wide-gamut rendering has macOS/Metal validation;
+Windows native paint/gamut CI has a recorded passing baseline; the owner also
+confirmed all native labs and <code>just lab-test</code> passed on 2026-11-04. See
+<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md#windows-validation">Windows validation</a> for the current
+scope and remaining platform-specific checks. Visible output
+still depends on the browser or OS color management and the actual display.</p>
+<h2 id="october-30-2026">October 30, 2026</h2>
+<ul>
+<li><strong>Spatial canvas.</strong> Pan and zoom retained scenes with viewport culling,
+hit testing, selection, snapping and procedural grids. Try the
+<a href="examples/extensions/?demo=canvas">card canvas</a> or
+<a href="examples/extensions/?demo=mandelbrot">Mandelbrot explorer</a>, or start with
+the <a href="canvas.html">canvas guide</a>.</li>
+<li><strong>Spatial Wasm demos.</strong> Explore
+10k/100k-card scenes and a progressive CPU fractal explorer. Both new demos
+support WebGPU and WebGL2. <a href="examples/extensions">Open all demos</a>.</li>
+<li><strong>Modern Apple bindings.</strong> Migrated the Apple renderer and macOS backend to
+objc2, with typed Metal handles and explicit resource ownership.
+<a href="#apple-bindings-why-what-and-impact">Why it changed and what to watch</a>.</li>
+<li><strong>Rendering fixes.</strong> CoreVideo caches now stay alive until pending texture
+work finishes. Empty fractional clips stay empty, fixing rejected typography
+frames caused by stray one-pixel strips.</li>
+<li><strong>Simpler local development.</strong> Build outputs and staged website files now
+live under <code>target/</code>. The canvas guide is shorter, and local docs can still
+be served with Python. <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local development</a>.</li>
+</ul>
+<h2 id="also-recently-added">Also recently added</h2>
+<p><a href="typography.html">Selectable kinetic typography</a>, <a href="media-pipeline.html">media filters and tiled images</a>,
+and a <a href="examples/extensions/?demo=hermite">live Hermite mesh editor</a>.</p>
+<h2 id="apple-bindings-why-what-and-impact">Apple bindings: why, what and impact</h2>
+<p><strong>Why.</strong> The legacy Cocoa/metal-rs dependency paths brought in <code>block 0.1.6</code>,
+which triggers a Rust future-incompatibility warning. Moving to the maintained
+objc2 framework bindings removes those paths from normal macOS rendering and
+windowing, and makes Objective-C object ownership explicit in Rust types.</p>
+<p><strong>What changed.</strong> Metal rendering, atlas textures, custom producers and shader
+caches now use objc2 Metal handles. The macOS window, event, display, clipboard
+and display-link code uses objc2 AppKit/Foundation bindings. CoreVideo sampling
+also retains its texture views and cache until GPU work finishes, releasing
+views before the cache so queued frames can survive renderer teardown.</p>
+<p><strong>Impact on applications.</strong> Ordinary GPUI views largely keep the same APIs.
+Custom Metal integrations need source changes: public device/queue fields and
+texture/command handles now use objc2 types instead of metal-rs types. This is
+why <code>xgpui-apple</code> and <code>xgpui-macos</code> moved to <strong>2.0.0</strong>, and media's exposed Apple
+types moved with <strong>xgpui-media 0.3.0</strong>. Update related crate pins together and
+review conversions at your native producer boundary.</p>
+<p><strong>Watch for:</strong></p>
+<ul>
+<li><strong>Resource lifetime:</strong> closing windows or destroying renderers with queued GPU
+work; rapid video/frame replacement; stale cached textures. Keep ownership
+explicit, and record producer work on the host's device and queue.</li>
+<li><strong>Native behavior:</strong> keyboard shortcuts and IME, clipboard operations, focus,
+resizing, display changes and wide-gamut output. Exercise these in your app;
+successful compilation does not establish runtime correctness.</li>
+<li><strong>Optional legacy dependencies:</strong> screen capture can still bring older bindings
+through <code>zed-scap</code>. Check enabled-feature dependency trees before assuming
+every optional path is free of <code>block 0.1.6</code>.</li>
+</ul>
+<p>The release passed package verification and a registry-only macOS consumer check.
+Native Windows/Linux runtime coverage and app-specific lifecycle testing remain
+separate checks. See <a href="gpui-public-api.html">GPUI API changes</a> for integration contracts.</p>
+</article>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

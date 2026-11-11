@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
+<title>xgpui-color: standalone color math · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/color-math.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/LOCAL_DEVELOPMENT.md">Local Development ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/RELEASING.md">Releasing XGPUI ↗</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" aria-current="page" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Standalone color math.</strong> CPU conversions, gamut mapping, gradients and WGSL source without GPUI.</p><h2>Color comparison · browser and native desktop</h2><p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=chromaticity">Open Chromaticity & gamut ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p><p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=pixel-metadata">Open Pixels + metadata ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p><p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=color">Open Color & gamut ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p><p><a href="color-workflows.html">Start with a color task →</a> · <a href="color-labs.html">What each lab proves →</a></p><p>The browser compares interpolation and gamut mapping as an sRGB preview. Its runtime panel reports source space, mapping, actual canvas color space (or unknown) and browser-reported wide-gamut capability (at least P3).</p><pre><code class="language-sh">cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab</code></pre><p>The native companion pairs mapped sRGB and Display P3 swatches using the same 32 reference samples per row. Check effective <code>WideGamutSdr</code> and display support, then compare on your wide-gamut monitor. Display capability does not verify calibration.</p><article class="extension-document"><h1 id="xgpui-color-standalone-color-math">xgpui-color: standalone color math</h1>
+<p>Use <code>xgpui-color</code> for CPU color conversions, <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Gamut">gamut mapping ↗</a>, two-stop gradient
+math and reusable WGSL helpers. Its default configuration has zero runtime dependencies and needs no GPUI,
+window, GPU context or shader compiler. Naga and native Metal are test-only dependencies.</p>
+<p>For an application under <code>apps/</code>:</p>
+<pre><code class="language-toml">[dependencies]
+xgpui-color = { path = "../../extensions/crates/xgpui-color" }
+</code></pre>
+<h2 id="common-scenarios">Common scenarios</h2>
+<p>All RGB arrays below use normalized channel values. <code>EncodedRgb</code> means values
+with a transfer curve (such as ordinary sRGB bytes); <code>LinearRgb</code> means linear
+light. The examples use <code>?</code> inside a function returning a compatible <code>Result</code>.
+These CPU operations do not configure a window or a browser canvas.</p>
+<h3 id="read-an-8-bit-srgb-color">Read an 8-bit sRGB color</h3>
+<p>Normalize bytes to 0–1, then decode before doing linear-light calculations.</p>
+<pre><code class="language-rust">use xgpui_color::{EncodedRgb, RgbSpace};
+
+let bytes = [64u8, 128, 255];
+let encoded = EncodedRgb::new(RgbSpace::Srgb, bytes.map(|v| f64::from(v) / 255.0))?;
+let linear = encoded.decode()?;
+let channels = linear.components();
+</code></pre>
+<h3 id="convert-srgb-to-display-p3">Convert sRGB to Display P3</h3>
+<p>Decode, convert the primaries, then encode for a consumer expecting encoded P3.
+This preserves the represented color; it does not make it more saturated.</p>
+<pre><code class="language-rust">use xgpui_color::{EncodedRgb, RgbSpace};
+
+let srgb = EncodedRgb::new(RgbSpace::Srgb, [0.2, 0.5, 0.8])?;
+let p3 = srgb.decode()?.convert(RgbSpace::DisplayP3)?.encode()?;
+let encoded_p3 = p3.components();
+</code></pre>
+<h3 id="make-an-srgb-preview-of-adobe-rgb-pixels">Make an sRGB preview of Adobe RGB pixels</h3>
+<p>Choose a mapping policy explicitly. A plain conversion retains out-of-gamut
+channels; mapping makes the result fit the destination. Use <code>Clip</code> for channel
+clipping or <code>ReduceChroma</code> for the core's chroma-reduction policy.</p>
+<pre><code class="language-rust">use xgpui_color::{EncodedRgb, GamutMapping, RgbSpace};
+
+let adobe_green = EncodedRgb::new(RgbSpace::AdobeRgb1998, [0.0, 1.0, 0.0])?.decode()?;
+let preview = adobe_green
+    .map_gamut(RgbSpace::Srgb, GamutMapping::ReduceChroma)?
+    .encode()?;
+let srgb_preview = preview.components();
+</code></pre>
+<p>A preview can discard distinctions between source colors. Keep the original
+pixels and metadata when you also need native wide output; see
+<a href="pixels-and-metadata.html">pixels + metadata</a>.</p>
+<h3 id="inspect-brightness-and-chromaticity">Inspect brightness and chromaticity</h3>
+<p>XYZ Y is relative luminance for the decoded color. xy describes chromaticity,
+without brightness. Black has no defined chromaticity, so guard the denominator.</p>
+<pre><code class="language-rust">use xgpui_color::{EncodedRgb, RgbSpace};
+
+let color = EncodedRgb::new(RgbSpace::Srgb, [0.2, 0.5, 0.8])?.decode()?;
+let [x, y, z] = color.to_xyz()?.components();
+let relative_luminance = y;
+let sum = x + y + z;
+let chromaticity = (sum &gt; 0.0).then(|| [x / sum, y / sum]);
+</code></pre>
+<p>These describe the supplied color, not measured monitor brightness or gamut.</p>
+<h3 id="sample-a-gradient-with-transparency">Sample a gradient with transparency</h3>
+<p>Declare linear-light stops and the interpolation method. Sample, map to the
+output gamut, then associate alpha when the consumer requires it.</p>
+<pre><code class="language-rust">use xgpui_color::{ColorInterpolation, EncodedRgb, GamutMapping, LinearGradient, LinearRgba, RgbSpace};
+
+let red = EncodedRgb::new(RgbSpace::Srgb, [1.0, 0.0, 0.0])?.decode()?;
+let blue = EncodedRgb::new(RgbSpace::Srgb, [0.0, 0.0, 1.0])?.decode()?;
+let gradient = LinearGradient::new(
+    [0.0, 0.0], [100.0, 0.0],
+    [LinearRgba::new(red, 1.0)?, LinearRgba::new(blue, 0.5)?],
+    RgbSpace::Srgb, ColorInterpolation::Oklab,
+)?;
+let midpoint = gradient.sample_at(0.5)?;
+let associated_linear_rgba = midpoint
+    .map_gamut(RgbSpace::Srgb, GamutMapping::ReduceChroma)?
+    .premultiplied();
+</code></pre>
+<p>The result is associated <strong>linear</strong> RGBA, not encoded sRGB bytes. Choose
+<code>ColorInterpolation::LinearRgb</code> to interpolate in the output's linear primaries.</p>
+<h3 id="decode-a-supplied-rgb-icc-profile">Decode a supplied RGB ICC profile</h3>
+<p>Enable <code>features = ["icc"]</code> on the color dependency. Parse once and reuse the
+resolved definition; the application supplies bytes and owns file decoding.</p>
+<pre><code class="language-rust">use xgpui_color::{XyzD65, icc::IccRgbProfile};
+
+fn decode_pixel(profile_bytes: &amp;[u8], encoded_rgb: [f64; 3])
+    -&gt; Result&lt;XyzD65, Box&lt;dyn std::error::Error&gt;&gt;
+{
+    let profile = IccRgbProfile::parse(profile_bytes)?;
+    let xyz = profile.rgb_definition().decode_to_xyz_d65(encoded_rgb)?;
+    Ok(xyz)
+}
+</code></pre>
+<p>Only the documented RGB matrix/TRC subset is supported; propagate rejection
+instead of silently assuming sRGB. See <a href="icc-profiles.html">ICC scope</a>,
+<a href="color-workflows.html">color workflows</a> and <a href="color-labs.html">labs</a>.</p>
+<h2 id="types-and-contracts">Types and contracts</h2>
+<p><code>EncodedRgb</code> and <code>LinearRgb</code> distinguish transfer-encoded values from linear
+light. <code>RgbSpace</code> supplies <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/SRGB">sRGB ↗</a>, <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/DCI-P3">Display P3 ↗</a>, <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Adobe_RGB_color_space">Adobe RGB (1998) ↗</a> and <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Standard-dynamic-range_video">SDR ↗</a> Rec.2020 primaries and
+<a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Transfer_functions_in_imaging">transfer functions ↗</a>. <code>XyzD65</code>, <code>Oklab</code> and <code>Oklch</code> provide conversion coordinates.
+RGB and perceptual conversion retain extended values; gamut mapping is explicit.
+CPU calculations use f64 and reject non-finite inputs/results. All named RGB
+spaces use <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Standard_illuminant">D65 ↗</a>, so these conversions need no white-point adaptation.</p>
+<p><code>LinearRgba</code> validates <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Alpha_compositing">straight alpha ↗</a>. <code>LinearGradient</code> provides two fixed stops,
+linear RGB/OkLab/OkLCh interpolation, alpha-aware components and four hue paths.
+Sampling does not map gamut automatically. Map the interpolated result before
+final output association. These APIs describe color math; they do not draw a
+GPUI element or enable wide-gamut window presentation.</p>
+<p><code>WGSL_COLOR_MATH</code> supplies resource-free, prefixed f32 helpers for conversions,
+mapping and interpolation. Host code must validate input ranges and IDs. The
+crate README documents IDs, tolerances, hue handling and bounded search behavior.</p>
+<h2 id="custom-rgb-definitions">Custom RGB definitions</h2>
+<p>Use <code>RgbDefinition</code> for caller-supplied primaries, transfer curves and a reference white. Neutral-space constructors validate a neutral ramp; <code>from_relative_xyz_matrix</code> preserves an explicit relative XYZ matrix whose column sum can differ from its declared reference white. Conversion adapts that reference white to D65 once. The <a href="icc-profiles.html">ICC guide</a> explains the supported profile path.</p>
+<h2 id="adobe-rgb-input-and-gamut-preservation">Adobe RGB input and gamut preservation</h2>
+<p>Use <code>RgbSpace::AdobeRgb1998</code> for <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Adobe_RGB_color_space">Adobe RGB (1998) ↗</a>
+(<code>a98-rgb</code> in CSS Color 4). The source has D65 primaries and a power-law
+transfer: decode with 563/256 and encode with 256/563. CPU and WGSL conversions,
+OkLab/OkLCh interpolation and explicit mapping all accept it. WGSL IDs remain
+0=sRGB, 1=P3, 2=Rec.2020; Adobe RGB appends ID 3.</p>
+<pre><code class="language-rust">let adobe = EncodedRgb::new(RgbSpace::AdobeRgb1998, [0., 1., 0.])?.decode()?;
+let extended_p3 = adobe.convert(RgbSpace::DisplayP3)?; // negative red retained
+let mapped_p3 = adobe.map_gamut(RgbSpace::DisplayP3, GamutMapping::ReduceChroma)?;
+</code></pre>
+<p>The <a href="media-pipeline.html#supplied-rgba16f-images">supplied-pixel media API</a>
+accepts <code>ImageColor::ADOBE_RGB_1998</code>. Its primaries and transfer are independent:
+declaring <code>TransferFunction::Srgb</code> always applies that curve even with Adobe RGB
+primaries. GPU image adjustments still require sRGB/P3 working matrices and
+explicitly reject an Adobe RGB working matrix. CPU color matrices support Adobe
+RGB. Input interpretation does not infer or load an ICC profile.</p>
+<p>For the practical input contract, see <a href="pixels-and-metadata.html">pixels + metadata</a>.
+The existing P3 loaders map saturated Adobe green/cyan into P3. To retain Adobe
+RGB, use explicit bounded linear Rec.2020 storage. To retain the entire P3 gamut,
+keep P3 storage: P3 red converts to Rec.2020 blue <strong>-0.0012103403545183245</strong>, so
+bounded Rec.2020 does not quite contain P3. Both formats use associated linear
+mipmaps and eight bytes per texel. Mapping policies remain explicit at ingestion.</p>
+<h3 id="preserve-both-source-gamuts">Preserve both source gamuts</h3>
+<p>Native wide placement accepts both P3 and Rec.2020 textures. Metal converts
+Rec.2020 to <strong>extended linear P3</strong>, then retains negative and above-one channels
+through source-over blending, Gaussian blur, capture isolation and linear color
+filters. Existing P3 producers retain their meaning. The native layer remains
+extended linear P3; its conversion from the composition target is the identity.
+Windows converts to extended linear sRGB/scRGB. Neither path implies HDR,
+increased brightness, monitor coverage or calibration.</p>
+<p><code>ShaderProgram::new_linear_rec2020</code> declares bounded straight-alpha linear
+Rec.2020/D65 producer output. The wrapper clamps in that source space, converts
+to native composition primaries and associates alpha. Existing
+<code>new_linear_p3</code> output remains P3. GPU image adjustments continue to use explicit
+sRGB/P3 working matrices; wide placement limits each affine row's absolute sum
+to 4 to keep the supported four nested filters within finite FP16 storage.</p>
+<table><thead><tr><th>Boundary</th><th>Contract</th></tr></thead><tbody>
+<tr><td>Image storage</td><td>Existing bounded P3, plus opt-in bounded Rec.2020 for Adobe RGB; explicit mapping precedes association</td></tr>
+<tr><td>Source sampling</td><td>Convert to extended native composition primaries without an intermediate gamut clamp</td></tr>
+<tr><td>Metal captures</td><td>Associated extended linear P3; normal blending, blur and saturation/brightness/contrast/inversion retain extended channels</td></tr>
+<tr><td>Artistic blend modes</td><td>Existing bounded channel definitions clamp blend operands; they are deliberate color operations and can discard extended values</td></tr>
+<tr><td>Cache</td><td>Extended capture domain has a distinct context revision; mode switches rebuild capture storage</td></tr>
+<tr><td>Metal presentation</td><td>Extended-linear P3 FP16 layer, no extra gamut clamp; native display mapping belongs to the OS</td></tr>
+<tr><td>Windows presentation</td><td>Extended linear sRGB/scRGB FP16; existing capture/path-mask restrictions remain</td></tr>
+<tr><td>Preview</td><td>Explicit clipped encoded-sRGB readback; this is not a wide-gamut export</td></tr>
+</tbody></table>
+<p>Metal runtime tests cover independent FP16 matrix oracles, near-black values,
+negative channels, alpha, nested cached captures, blur, grayscale and mixed P3 /
+Rec.2020 blending. macOS wgpu tests verify sRGB previews and rejection of native
+wide output. HLSL translation is checked separately; Windows/Linux native runtime
+is unverified. Tiled FP16 canvas pages remain P3. Supplied RGB matrix/TRC profiles are supported by the optional <a href="icc-profiles.html">ICC adapter</a>; automatic file metadata inference is separate.</p>
+<h2 id="dependency-boundaries">Dependency boundaries</h2>
+<ul>
+<li><code>xgpui-color</code>: standalone CPU math and WGSL source, zero runtime dependencies by default; optional <code>icc</code> parsing uses moxcms.</li>
+<li><code>xgpui-gamut</code>: depends on color and re-exports it as <code>xgpui_gamut::color</code>;
+owns native wide-SDR producers. The <code>instanced</code> feature adds an optional shader
+adapter; comparison tests also use shader as a development dependency.</li>
+<li><code>xgpui-shader</code>: general rendering infrastructure; no dependency on color or gamut.</li>
+</ul>
+<p>Wide shader output uses an explicit <a href="instanced-wgsl-v2.html">instanced rendering contract</a>.
+Window negotiation and Metal P3 / Windows <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/ScRGB">scRGB ↗</a> composition belong to the
+<a href="high-gamut-windows.html">native presentation backends</a>. The optional <a href="icc-profiles.html">ICC adapter</a> supplies RGB definitions; calibration and <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/High_dynamic_range">HDR ↗</a> are separate work.</p>
+<h2 id="validation">Validation</h2>
+<p>Adobe-specific numerical tests use reproducible 120-digit Decimal oracles,
+independent chromaticity-derived matrices, a full 16-bit ramp and scale-aware
+error budgets. Native transfer tests exercise Metal fast math both on and off;
+media tests check exact FP16 patterns near black. See the
+<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-color/README.md#adobe-rgb-numerical-regression-criteria">numerical regression criteria</a>
+for tolerances, covered domains and fixture regeneration.</p>
+<pre><code class="language-sh">cargo test --locked --manifest-path extensions/crates/xgpui-color/Cargo.toml
+cargo check --locked --manifest-path extensions/crates/xgpui-color/Cargo.toml --lib --target wasm32-unknown-unknown
+</code></pre>
+<p>Tests cover CPU reference vectors, mapping/interpolation boundaries, shader
+translation and, on macOS, native Metal comparison. WASM checks compile the
+standalone library; they do not establish browser GPU presentation support.</p>
+<h2 id="gpui-api-compatibility">GPUI API compatibility</h2>
+<p>This crate introduces no GPUI API changes. Applications can depend on it without
+GPUI. Rendering integrations have their own <a href="gpui-public-api.html">public API contracts</a>.</p>
+<h2 id="browser-color--gamut-lab">Browser Color / Gamut lab</h2>
+<p>The WebAssembly sample app includes <code>?demo=color</code>, with automatic, forced WebGPU
+and forced WebGL2 backends. Open the browser demo from this crate's Use page.
+Compare encoded sRGB, linear RGB, OkLab and shorter-hue OkLCh interpolation;
+cycle three Display P3 endpoint pairs, toggle clipping/chroma reduction, and
+change the ending alpha between 100% and 25%.</p>
+<p>Every row uses 32 CPU-generated samples from <code>xgpui-color</code>, mapped into sRGB
+before ordinary <code>xgpui-shader</code> paints interpolate between them. Amber strips
+mark samples outside sRGB before mapping (ignoring 1e-7 numerical boundary noise).
+The encoded-sRGB row interpolates extended encoded endpoints before mapping;
+all rows use the same source colors. The preview does not enable native P3
+programs or prove physical wide-gamut display output.</p>
+<p>Build and serve from the repository root:</p>
+<pre><code class="language-sh">just web-build
+just docs-serve
+</code></pre>
+<p>Then open <code>http://localhost:8000/examples/extensions/?demo=color</code>. Backend links on the gallery select
+<code>&amp;backend=webgpu</code> or <code>&amp;backend=webgl</code> for comparison.</p>
+<h3 id="runtime-output-diagnostics-and-native-comparison">Runtime output diagnostics and native comparison</h3>
+<p>The browser demo reports source space, preview mapping, the active renderer's
+canvas <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Color_space">color space ↗</a>, and <code>(color-gamut: p3)</code> display capability. WebGL reads
+<code>drawingBufferColorSpace</code>; WebGPU reads <code>getConfiguration().colorSpace</code> when
+available and otherwise reports unknown. These diagnostics observe the renderer's
+own context without creating or reconfiguring a context. Display capability does
+not turn the mapped sRGB demo into P3 output or verify physical calibration.</p>
+<p>For actual native Display P3 output on macOS/Metal or Windows/D3D11:</p>
+<pre><code class="language-sh">cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin color-lab
+</code></pre>
+<p>This companion displays paired sRGB and P3 rows using the browser's same 32 CPU
+reference samples, drawn as discrete swatches. Check the header for effective
+<code>WideGamutSdr</code> and display wide-gamut support, then move the window to your P3
+monitor. Colors, mapping policy, and end alpha can be changed interactively.</p>
+</article><p class="evidence">Source: <code>docs/extensions/color-math.md</code></p>
+</main>
+<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>
