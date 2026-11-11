@@ -1,4 +1,4 @@
-# xgpui-direct-gpu (experimental)
+# xgpui-engine-surface (experimental)
 
 Present output from an independently owned GPU engine into **xgpui**, the way an engine presents to a swapchain. Design and evidence are in issues #197 and #198.
 
@@ -25,7 +25,7 @@ target.surface().paint(window, bounds, radii); // in an element's paint phase
 | Linux (Vulkan) | opaque-fd external memory | exported timeline semaphore | none |
 | Windows (D3D12 engine, D3D11 compositor) | shared NT-handle textures | shared fence | none |
 
-On Linux and Windows the engine needs feature `wgpu`. Use `WgpuSurfaceTarget::request_device` for Linux engines.
+Engines today: on Linux and Windows an engine uses wgpu, through feature `wgpu` and `WgpuSurfaceTarget`. On Linux, create its device with `WgpuSurfaceTarget::request_device`. On macOS a raw Metal engine can also present directly, using `SyncPoint::new` or the `unsafe SyncPoint::submitted`. The shared memory and signals are native to each platform, so adapters for raw Vulkan or D3D12 engines could be added later.
 
 ## Guarantees
 - **Slots are immutable once published.** A presented slot is never rewritten while a retained scene or in-flight composition uses it. It returns to the ring afterwards, even if no further frames are drawn. Size the ring at 3 plus one for each additional window showing the surface: a window that isn't drawing, such as a minimized one, keeps its last frame in its retained scene, and that pins the slot until it draws again.
