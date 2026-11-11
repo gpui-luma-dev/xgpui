@@ -36,13 +36,15 @@ pub struct SyncPoint(Readiness);
 #[derive(Clone)]
 enum Readiness {
     Completed,
-    Timeline(Arc<Timeline>, u64),
+    /// The flag caches "reached" so recompositing a finished frame never
+    /// queries an engine device that may since have been lost.
+    Timeline(Arc<Timeline>, u64, Arc<std::sync::atomic::AtomicBool>),
 }
 impl std::fmt::Debug for SyncPoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
             Readiness::Completed => f.write_str("SyncPoint::Completed"),
-            Readiness::Timeline(_, value) => write!(f, "SyncPoint::Timeline({value})"),
+            Readiness::Timeline(_, value, _) => write!(f, "SyncPoint::Timeline({value})"),
         }
     }
 }
@@ -96,7 +98,12 @@ impl Timeline {
     fn host_semaphore(&self, context: &WgpuCustomContext) -> Result<Option<vk::Semaphore>> {
         let key = context.cache_key();
         let mut host = self.host.lock().unwrap();
-        if let Some(import) = host.as_ref().filter(|import| import.key == key) {
+        // Also match the device object (held alive here): a recreated
+        // compositor queue may reuse the old queue's address (#197 K6).
+        if let Some(import) = host
+            .as_ref()
+            .filter(|import| import.key == key && Arc::ptr_eq(&import._device, &context.device))
+        {
             return Ok(Some(import.semaphore));
         }
         let hal_device = unsafe { context.device.as_hal::<Vulkan>() }
@@ -307,7 +314,12 @@ impl SlotResources {
     ) -> Result<(wgpu::Texture, ash::Device, u32, vk::Image)> {
         let key = context.cache_key();
         let mut host = self.host.lock().unwrap();
-        if let Some(import) = host.as_ref().filter(|import| import.key == key) {
+        // Also match the device object (held alive here): a recreated
+        // compositor queue may reuse the old queue's address (#197 K6).
+        if let Some(import) = host
+            .as_ref()
+            .filter(|import| import.key == key && Arc::ptr_eq(&import.device, &context.device))
+        {
             return Ok((
                 import.texture.clone(),
                 import.raw.clone(),
@@ -406,7 +418,9 @@ pub(crate) fn retire_completed(slots: &[Arc<SlotResources>]) {
     for slot in slots {
         let host = slot.host.lock().unwrap();
         if let Some(import) = host.as_ref()
-            && !devices.iter().any(|device| Arc::ptr_eq(device, &import.device))
+            && !devices
+                .iter()
+                .any(|device| Arc::ptr_eq(device, &import.device))
         {
             devices.push(import.device.clone());
         }
@@ -426,8 +440,12 @@ pub(crate) fn prepare_frame(
         .downcast_ref::<WgpuCustomContext>()
         .ok_or_else(|| Unsupported("engine surfaces require the wgpu compositor".into()))?;
     let (texture, raw, family, image) = resources.host_import(context, desc)?;
-    if let Readiness::Timeline(timeline, value) = &sync.0
-        && !timeline.reached(*value)
+    if let Readiness::Timeline(timeline, value, seen) = &sync.0
+        && !seen.load(std::sync::atomic::Ordering::Acquire)
+        && !(timeline.reached(*value) && {
+            seen.store(true, std::sync::atomic::Ordering::Release);
+            true
+        })
     {
         match timeline.host_semaphore(context)? {
             // SAFETY: imported on the host device from the engine's timeline,
@@ -748,7 +766,11 @@ impl WgpuSurfaceTarget {
             self.queue.submit(commands);
             return self.surface.present(
                 slot,
-                SyncPoint(Readiness::Timeline(timeline.clone(), self.next)),
+                SyncPoint(Readiness::Timeline(
+                    timeline.clone(),
+                    self.next,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                )),
             );
         }
         let index = self.queue.submit(commands);

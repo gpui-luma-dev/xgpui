@@ -139,11 +139,15 @@ pub enum AcquireError {
     /// Every slot is being written, or still referenced by retained scenes or
     /// in-flight composition. Retry after the next presented frame.
     WouldBlock,
+    /// The surface was invalidated (its engine device was lost). Create a new
+    /// surface on a new engine device; the last frame keeps displaying.
+    Invalidated,
 }
 impl std::fmt::Display for AcquireError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::WouldBlock => f.write_str("every surface slot is in use"),
+            Self::Invalidated => f.write_str("the surface was invalidated"),
         }
     }
 }

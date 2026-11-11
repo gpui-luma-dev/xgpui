@@ -338,3 +338,47 @@ fn linux_idle_compositor_releases_slots_without_frames() {
         started.elapsed()
     ));
 }
+
+/// Losing the engine device (#197 K6): new work is rejected, the last frame
+/// keeps compositing from the compositor's own import, and a new engine
+/// device and surface recover.
+#[test]
+fn linux_engine_device_loss_keeps_last_frame_and_recovers() {
+    let (Some((device, queue)), Some(mut renderer)) = (engine_device(), host()) else {
+        return;
+    };
+    let mut target =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Bgra8Srgb, 2), &device, &queue).unwrap();
+    draw(&mut target, wgpu::Color::RED);
+    let surface = target.surface().clone();
+    let image = renderer
+        .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+        .unwrap();
+    assert!(near(image.get_pixel(16, 8).0, [255, 0, 0, 255]));
+    let pending = surface.acquire().unwrap();
+    device.destroy();
+    surface.invalidate();
+    assert_eq!(surface.acquire().err(), Some(AcquireError::Invalidated));
+    assert!(surface.present(pending, SyncPoint::completed()).is_err());
+    drop(target);
+    drop(queue);
+    drop(device);
+    let image = renderer
+        .render_scene_to_image(&scene(surface.content().unwrap()), viewport())
+        .unwrap();
+    assert!(
+        near(image.get_pixel(16, 8).0, [255, 0, 0, 255]),
+        "last frame must survive the engine device"
+    );
+    let Some((device, queue)) = engine_device() else {
+        return;
+    };
+    let mut replacement =
+        WgpuSurfaceTarget::new(desc(SurfaceFormat::Bgra8Srgb, 2), &device, &queue).unwrap();
+    draw(&mut replacement, wgpu::Color::GREEN);
+    let image = renderer
+        .render_scene_to_image(&scene(replacement.surface().content().unwrap()), viewport())
+        .unwrap();
+    assert!(near(image.get_pixel(16, 8).0, [0, 255, 0, 255]));
+    report("PASS engine loss: new work rejected, last frame kept, new surface recovered");
+}

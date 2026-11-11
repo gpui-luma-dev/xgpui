@@ -81,6 +81,11 @@ mod lab {
         /// the fence retirement worker.
         #[arg(long)]
         query_retirement: bool,
+        /// Destroy the engine's device after this many seconds, keep showing
+        /// the last frame for a second, then rebuild the engine on a new
+        /// device (#197 K6). Engine on the UI thread only.
+        #[arg(long)]
+        lose_engine_after: Option<f32>,
         /// Run the engine on its own thread at its own rate, independent of
         /// the display. The UI composites whatever frame is latest.
         #[arg(long)]
@@ -299,6 +304,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             let slot = match self.target.surface().acquire() {
                 Ok(slot) => slot,
                 Err(AcquireError::WouldBlock) => return Ok(false),
+                Err(error @ AcquireError::Invalidated) => return Err(error.into()),
             };
             let texture = self.target.texture(&slot)?;
             let view = texture.create_view(&Default::default());
@@ -355,6 +361,9 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         frame_times: Vec<f32>,
         last_frame: Option<Instant>,
         static_frame: bool,
+        lose_after: Option<f32>,
+        lost_at: Option<Instant>,
+        recoveries: u32,
     }
 
     impl Lab {
@@ -420,15 +429,48 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                     pick(0.99),
                     pick(1.0),
                     format!(
-                        "{} window, {:?} slots",
+                        "{} window, {:?} slots{}",
                         if self.wide { "wide" } else { "SDR" },
-                        self.surface.desc().format
+                        self.surface.desc().format,
+                        if self.lose_after.is_some() {
+                            format!(", engine recoveries {}", self.recoveries)
+                        } else {
+                            String::new()
+                        }
                     ),
                 );
                 if let Some(error) = &self.error {
                     println!("engine error: {error}");
                 }
                 cx.quit();
+            }
+            // Simulated engine device loss and recovery (#197 K6).
+            if let Some(after) = self.lose_after
+                && self.lost_at.is_none()
+                && self.recoveries == 0
+                && self.started.elapsed().as_secs_f32() >= after
+            {
+                if let Some(engine) = self.engine.take() {
+                    engine.device.destroy();
+                }
+                self.surface.invalidate();
+                self.lost_at = Some(Instant::now());
+                println!("engine device lost; showing the last frame");
+            }
+            if let Some(lost) = self.lost_at
+                && lost.elapsed().as_secs_f32() >= 1.
+            {
+                self.lost_at = None;
+                match WaveEngine::new(self.surface.desc()) {
+                    Ok(engine) => {
+                        self.surface = engine.target.surface().clone();
+                        self.gpu_sync = engine.target.gpu_sync();
+                        self.engine = Some(engine);
+                        self.recoveries += 1;
+                        println!("engine rebuilt on a new device");
+                    }
+                    Err(error) => self.error = Some(format!("engine rebuild failed: {error:#}")),
+                }
             }
             if let Some(thread) = &self.thread {
                 self.rendered = thread.rendered.load(Ordering::Relaxed);
@@ -541,6 +583,10 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         }
         ensure!((2..=8).contains(&options.slots), "slots must be 2..=8");
         ensure!(
+            options.lose_engine_after.is_none() || !options.threaded,
+            "--lose-engine-after requires the engine on the UI thread"
+        );
+        ensure!(
             options.engine_hz.is_finite() && (1. ..=1000.).contains(&options.engine_hz),
             "engine-hz must be 1..=1000"
         );
@@ -615,6 +661,9 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                             frame_times: Vec::new(),
                             last_frame: None,
                             static_frame: options.static_frame,
+                            lose_after: options.lose_engine_after,
+                            lost_at: None,
+                            recoveries: 0,
                         })
                     },
                 )
