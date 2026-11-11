@@ -770,6 +770,10 @@ fn generate(root: &Path) -> Result<()> {
             "docs/extensions/pixels-and-metadata.md",
         ),
         ("color-labs", "docs/extensions/color-labs.md"),
+        (
+            "gpu-engines-and-color",
+            "docs/extensions/gpu-engines-and-color.md",
+        ),
         ("icc-profiles", "docs/extensions/icc-profiles.md"),
         ("media-images", "docs/extensions/media-images.md"),
         ("media-pipeline", "docs/extensions/media-pipeline.md"),
