@@ -90,6 +90,22 @@ mod workbench {
         /// replaying its edit log.
         #[arg(long)]
         lose_device_after: Option<f32>,
+        /// Keep GPUI's default animation throttling of unfocused windows
+        /// (about 30 fps). By default the workbench animates every window at
+        /// the display rate, so measurements reflect compositing, not power
+        /// policy.
+        #[arg(long)]
+        throttle_inactive: bool,
+    }
+
+    /// GPUI's per-window throttle for unfocused animating windows
+    /// (`WindowOptions::inactive_frame_interval`, default 33.3 ms).
+    fn inactive_frame_interval(throttle: bool) -> Option<std::time::Duration> {
+        if throttle {
+            WindowOptions::default().inactive_frame_interval
+        } else {
+            None
+        }
     }
 
     /// Per-window measurements of a second window.
@@ -233,6 +249,7 @@ mod workbench {
         resize_second: bool,
         lose_after: Option<f32>,
         lost_at: Option<Instant>,
+        throttle_inactive: bool,
         viewers: Vec<(WeakEntity<Viewer>, Rc<RefCell<ViewerStats>>)>,
         last_step: Option<Instant>,
         last_published: u64,
@@ -365,6 +382,7 @@ mod workbench {
             let workbench = cx.entity().downgrade();
             let sdr = self.sdr;
             let resize = self.resize_second;
+            let throttle = self.throttle_inactive;
             cx.defer(move |cx| {
                 let stats = Rc::new(RefCell::new(ViewerStats::default()));
                 let created: Rc<Cell<Option<WeakEntity<Viewer>>>> = Rc::new(Cell::new(None));
@@ -374,6 +392,7 @@ mod workbench {
                 let opened = cx.open_lab_window(
                     WindowOptions {
                         window_bounds: Some(WindowBounds::Windowed(bounds)),
+                        inactive_frame_interval: inactive_frame_interval(throttle),
                         ..Default::default()
                     },
                     move |window, cx| {
@@ -1033,6 +1052,7 @@ mod workbench {
             cx.open_lab_window(
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    inactive_frame_interval: inactive_frame_interval(options.throttle_inactive),
                     ..Default::default()
                 },
                 |window, cx| {
@@ -1069,6 +1089,7 @@ mod workbench {
                         resize_second: options.resize_second,
                         lose_after: options.lose_device_after,
                         lost_at: None,
+                        throttle_inactive: options.throttle_inactive,
                         viewers: Vec::new(),
                         last_step: None,
                         last_published: 0,
