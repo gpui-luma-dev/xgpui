@@ -128,9 +128,16 @@ fn oklab_reference_and_extended_round_trips() {
         1e-12,
     );
     for space in SPACES {
-        for v in [[0.; 3], [1.; 3], [0.2, 0.4, 0.7], [-0.2, 1.3, 0.1]] {
+        // [0.033, 0.214, 0.604] drifted by ~9e-8 with the published inverse matrices (#196).
+        for v in [
+            [0.; 3],
+            [1.; 3],
+            [0.2, 0.4, 0.7],
+            [-0.2, 1.3, 0.1],
+            [0.033, 0.214, 0.604],
+        ] {
             let lab = LinearRgb::new(space, v).unwrap().to_oklab().unwrap();
-            close(lab.to_linear(space).unwrap().components(), v, 5e-7);
+            close(lab.to_linear(space).unwrap().components(), v, 1e-12);
             close(
                 lab.to_oklch().unwrap().to_oklab().unwrap().components(),
                 lab.components(),

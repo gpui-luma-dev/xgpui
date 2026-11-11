@@ -52,11 +52,13 @@ fn oklab_midpoint_reference() {
         rgba([0., 0., 1.], 1.),
         ColorInterpolation::Oklab,
     );
-    // Published OkLab interpolation of linear sRGB red and blue.
+    // Published OkLab interpolation of linear sRGB red and blue. The reference
+    // used the published 10-decimal inverse matrices; the crate derives exact
+    // inverses (#196), which moves this midpoint by up to about 6e-8.
     near(
         g.sample_at(0.5).unwrap().rgb().components(),
         [0.2637342898, 0.0865716757, 0.3628242654],
-        1e-9,
+        1e-7,
     );
 }
 #[test]
