@@ -535,7 +535,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                 times.sort_by(f32::total_cmp);
                 let pick = |q: f32| times[((times.len() - 1) as f32 * q) as usize];
                 println!(
-                    "{:.1}s shown ({}): {} window frames ({} new / {} repeated engine frames), engine rendered {} / skipped {} (ring full {}), presents {}; frame interval ms p50 {:.2} p95 {:.2} p99 {:.2} max {:.2}; {}",
+                    "{:.1}s shown ({}): {} window frames ({} new / {} repeated engine frames), engine rendered {} / skipped {} (ring full {}), presents {}; frame interval ms p50 {:.2} p95 {:.2} p99 {:.2} max {:.2}; {} window, {:?} slots{}",
                     self.started.elapsed().as_secs_f32(),
                     self.engine_mode(),
                     times.len() + 1,
@@ -549,16 +549,13 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                     pick(0.95),
                     pick(0.99),
                     pick(1.0),
-                    format!(
-                        "{} window, {:?} slots{}",
-                        if self.wide { "wide" } else { "SDR" },
-                        self.surface.desc().format,
-                        if self.lose_after.is_some() {
-                            format!(", engine recoveries {}", self.recoveries)
-                        } else {
-                            String::new()
-                        }
-                    ),
+                    if self.wide { "wide" } else { "SDR" },
+                    self.surface.desc().format,
+                    if self.lose_after.is_some() {
+                        format!(", engine recoveries {}", self.recoveries)
+                    } else {
+                        String::new()
+                    },
                 );
                 if !self.stress.is_empty() || !self.stress_rejected.is_empty() {
                     let (rendered, skipped): (u64, u64) =

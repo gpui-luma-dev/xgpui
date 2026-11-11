@@ -206,10 +206,7 @@ impl EngineDriver {
                 let _ = commands.send(command);
             }
             Mode::Inline {
-                engine,
-                recovery,
-                inspections: _,
-                ..
+                engine, recovery, ..
             } => match command {
                 Command::Dab(dab, _) => engine.dab(dab),
                 Command::Exposure(stops) => engine.set_exposure(stops),

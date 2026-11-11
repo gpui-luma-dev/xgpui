@@ -27,7 +27,7 @@ pub const DISCS: [([f32; 3], f32); 4] = [
 ];
 
 fn checker(x: u32, y: u32) -> f32 {
-    if (x / 16 + y / 16) % 2 == 0 {
+    if (x / 16 + y / 16).is_multiple_of(2) {
         0.18
     } else {
         0.30

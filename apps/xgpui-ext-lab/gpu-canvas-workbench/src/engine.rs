@@ -770,7 +770,9 @@ impl Engine {
                     staging.buffer.unmap();
                     continue;
                 };
-                data.chunks_exact(16)
+                data.as_chunks::<16>()
+                    .0
+                    .iter()
                     .map(|p| {
                         let f =
                             |i: usize| f32::from_ne_bytes(p[i * 4..i * 4 + 4].try_into().unwrap());
@@ -811,7 +813,9 @@ impl Engine {
         self.queue.submit([encoder.finish()]);
         let data = map_blocking(&self.device, &buffer)?;
         Ok(data
-            .chunks_exact(16)
+            .as_chunks::<16>()
+            .0
+            .iter()
             .map(|p| {
                 let f = |i: usize| f32::from_ne_bytes(p[i * 4..i * 4 + 4].try_into().unwrap());
                 [f(0), f(1), f(2), f(3)]
