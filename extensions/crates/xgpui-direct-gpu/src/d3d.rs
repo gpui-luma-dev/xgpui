@@ -70,9 +70,14 @@ impl SyncPoint {
 
 /// The engine's shared D3D12 fence and the compositor's opened view of it.
 pub(crate) struct SharedFence {
+    // Field order is drop order: release the D3D12 fence (and the host's view)
+    // before the engine device clone. wgpu unloads d3d12.dll when its device
+    // is destroyed, so a D3D12 object released afterwards would call into an
+    // unloaded library.
     fence: ID3D12Fence,
-    handle: SharedHandle,
     host: Mutex<Option<(usize, Option<ID3D11Fence>)>>,
+    handle: SharedHandle,
+    _engine: wgpu::Device,
 }
 impl SharedFence {
     fn reached(&self, value: u64) -> bool {
@@ -174,6 +179,9 @@ impl SlotResources {
     }
 }
 
+/// The D3D11 compositor retires frames on its fence worker thread.
+pub(crate) fn retire_completed(_slots: &[Arc<SlotResources>]) {}
+
 pub(crate) fn prepare_frame(
     _desc: &SurfaceDesc,
     resources: &SlotResources,
@@ -236,8 +244,9 @@ impl WgpuSurfaceTarget {
                         .ok()?;
                 Some(Arc::new(SharedFence {
                     fence,
-                    handle: SharedHandle(handle),
                     host: Mutex::new(None),
+                    handle: SharedHandle(handle),
+                    _engine: device.clone(),
                 }))
             });
         let heap = D3D12_HEAP_PROPERTIES {

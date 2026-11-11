@@ -77,6 +77,10 @@ mod lab {
         /// Present one frame, then keep recompositing it (isolates compositor cost).
         #[arg(long = "static")]
         static_frame: bool,
+        /// Diagnostic (Windows): use D3D11 event-query retirement instead of
+        /// the fence retirement worker.
+        #[arg(long)]
+        query_retirement: bool,
         /// Run the engine on its own thread at its own rate, independent of
         /// the display. The UI composites whatever frame is latest.
         #[arg(long)]
@@ -530,6 +534,11 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     pub fn main() -> Result<()> {
         let options = Options::parse();
+        if options.query_retirement {
+            // SAFETY: set before any other thread exists.
+            unsafe { std::env::set_var("GPUI_D3D11_FENCE_RETIREMENT", "0") };
+            eprintln!("lab: D3D11 query retirement forced");
+        }
         ensure!((2..=8).contains(&options.slots), "slots must be 2..=8");
         ensure!(
             options.engine_hz.is_finite() && (1. ..=1000.).contains(&options.engine_hz),
@@ -580,6 +589,11 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                             (Some(engine), None)
                         };
                         window.set_lab_title("XGPUI Engine Surface Lab");
+                        // Windows may open a new program's window behind the
+                        // terminal that launched it; bring ours to the front.
+                        if !options.headless {
+                            window.activate_window();
+                        }
                         cx.new(|_| Lab {
                             surface,
                             gpu_sync,

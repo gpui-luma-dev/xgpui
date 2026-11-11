@@ -1,4 +1,5 @@
 mod color_presentation;
+mod retirement;
 mod wide_sdr;
 
 use std::{
@@ -48,6 +49,8 @@ pub(crate) struct DirectXRenderer {
     pipelines: DirectXRenderPipelines,
     custom_compositor: Option<crate::custom_draw::CustomCompositor>,
     custom_retirement: Vec<(ID3D11Query, Vec<Arc<dyn gpui::CustomContent>>)>,
+    /// Fence-driven retirement (`Some(None)`: unavailable on this device).
+    fence_retirement: Option<Option<retirement::FenceRetirement>>,
     shaders: Option<crate::custom_draw::ShaderRenderer>,
     backdrops: Option<crate::custom_draw::Backdrops>,
     wide_sdr: Option<wide_sdr::Compositor>,
@@ -206,6 +209,7 @@ impl DirectXRenderer {
             pipelines,
             custom_compositor: None,
             custom_retirement: Vec::new(),
+            fence_retirement: None,
             backdrops: None,
             shaders: None,
             wide_sdr: None,
@@ -323,6 +327,7 @@ impl DirectXRenderer {
             // Device removal terminates old queue work; foreign queries cannot
             // be polled on the replacement context.
             self.custom_retirement.clear();
+            self.fence_retirement = None;
         }
 
         let devices = DirectXRendererDevices::new(directx_devices, disable_direct_composition)
@@ -424,8 +429,28 @@ impl DirectXRenderer {
                 result.is_err() || complete == 0
             });
         }
-        // Create the retirement fence before issuing any sampling work.
-        let fence = if !scene.custom_draws.is_empty() {
+        // Prefer fence retirement: snapshots are released when the GPU passes
+        // the frame, even if no later frame is drawn.
+        let use_fence = !scene.custom_draws.is_empty() && {
+            if self.fence_retirement.is_none()
+                && let Some(devices) = &self.devices
+            {
+                self.fence_retirement = Some(retirement::FenceRetirement::new(
+                    &devices.device,
+                    &devices.device_context,
+                ));
+            }
+            matches!(self.fence_retirement, Some(Some(_)))
+        };
+        let fence_snapshot = use_fence.then(|| {
+            scene
+                .custom_draws
+                .iter()
+                .map(|d| d.content.clone())
+                .collect::<Vec<_>>()
+        });
+        // Otherwise create the retirement query before issuing any sampling work.
+        let fence = if !use_fence && !scene.custom_draws.is_empty() {
             let devices = self.devices.as_ref().context("devices missing")?;
             let mut query = None;
             unsafe {
@@ -449,6 +474,11 @@ impl DirectXRenderer {
             None
         };
         let result = self.render_inner(scene, background);
+        if let (Some(snapshot), Some(Some(retirement))) =
+            (fence_snapshot, self.fence_retirement.as_mut())
+        {
+            retirement.retire(snapshot)?;
+        }
         if let Some((query, content)) = fence {
             if let Some(devices) = &self.devices {
                 unsafe {
@@ -2710,6 +2740,7 @@ impl Dx11HeadlessRenderer {
             pipelines,
             custom_compositor: None,
             custom_retirement: Vec::new(),
+            fence_retirement: None,
             backdrops: None,
             shaders: None,
             wide_sdr: None,

@@ -68,8 +68,18 @@ impl EngineSurface {
     }
 
     /// A writable slot, or `WouldBlock` when every slot is in use.
+    ///
+    /// When the ring is full, first lets the compositor retire frames whose GPU
+    /// sampling already finished (no later frame needs to be drawn, #197 K4).
     pub fn acquire(&self) -> Result<SurfaceSlot, AcquireError> {
-        let writing = self.0.ring.acquire().ok_or(AcquireError::WouldBlock)?;
+        let writing = match self.0.ring.acquire(false) {
+            Some(writing) => writing,
+            None => {
+                // No locks are held here: retiring frames frees slots.
+                platform::retire_completed(&self.0.slots);
+                self.0.ring.acquire(true).ok_or(AcquireError::WouldBlock)?
+            }
+        };
         let resources = self.0.slots[writing.index()].clone();
         Ok(SurfaceSlot {
             writing,
