@@ -112,7 +112,10 @@ pub struct SurfaceDesc {
     pub width: u32,
     pub height: u32,
     pub format: SurfaceFormat,
-    /// Ring length: 2..=8. Use at least 3 for continuous animation.
+    /// Ring length: 2..=8. Use at least 3 for continuous animation, plus
+    /// one per additional window showing the surface: a window that is not
+    /// drawing (for example minimized) keeps the frame it last showed in its
+    /// retained scene, which pins that slot until the window draws again.
     pub slots: usize,
 }
 impl SurfaceDesc {

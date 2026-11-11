@@ -100,6 +100,10 @@ mod workbench {
         /// Animate zoom and pan of the main canvas (presentation only).
         #[arg(long)]
         pan_zoom: bool,
+        /// Start with the canvas split: wide gamut on the left half, sRGB
+        /// preview on the right, so out-of-sRGB colour shows as a seam.
+        #[arg(long)]
+        compare: bool,
         /// Upload edits with queued buffer writes instead of the staging
         /// belt (for comparison).
         #[arg(long)]
@@ -267,6 +271,7 @@ mod workbench {
         zoom: f32,
         pan: Point<f32>,
         pan_zoom_script: bool,
+        compare: bool,
         view_changes: u64,
         lost_at: Option<Instant>,
         throttle_inactive: bool,
@@ -556,6 +561,7 @@ mod workbench {
             let surface = self.engine.surface().clone();
             let bounds_cell = self.canvas_bounds.clone();
             let preview = self.presentation == Presentation::Preview;
+            let compare = track && self.compare && self.wide;
             let (zoom, pan) = if track {
                 (self.zoom, self.pan)
             } else {
@@ -590,6 +596,53 @@ mod workbench {
                             } else {
                                 Corners::all(px(RADIUS - 1.))
                             };
+                            if compare {
+                                // Same frame twice: wide gamut on the left,
+                                // sRGB preview on the right. On a wide display
+                                // out-of-sRGB colours (the P3 patches) differ
+                                // between twins; greys must not.
+                                let half = bounds.size.width / 2.;
+                                let left =
+                                    Bounds::new(bounds.origin, size(half, bounds.size.height));
+                                let right = Bounds::new(
+                                    point(bounds.origin.x + half, bounds.origin.y),
+                                    size(bounds.size.width - half, bounds.size.height),
+                                );
+                                // The right half shows the same image region as
+                                // the left (shifted left by half), so every
+                                // patch on the left has its preview twin.
+                                let shifted = Bounds::new(
+                                    point(placed.origin.x + half, placed.origin.y),
+                                    placed.size,
+                                );
+                                for (mask, at, content) in [
+                                    (left, placed, surface.content()),
+                                    (right, shifted, surface.preview_content()),
+                                ] {
+                                    if let Some(content) = content {
+                                        window.with_content_mask(
+                                            Some(ContentMask { bounds: mask }),
+                                            |window| {
+                                                window.paint_custom(
+                                                    CustomGeometry::RoundedRect {
+                                                        bounds: at,
+                                                        corner_radii: corners,
+                                                    },
+                                                    content,
+                                                );
+                                            },
+                                        );
+                                    }
+                                }
+                                window.paint_quad(fill(
+                                    Bounds::new(
+                                        point(bounds.origin.x + half - px(0.5), bounds.origin.y),
+                                        size(px(1.), bounds.size.height),
+                                    ),
+                                    rgb(0x000000),
+                                ));
+                                return;
+                            }
                             window.with_content_mask(Some(ContentMask { bounds }), |window| {
                                 if preview {
                                     if let Some(content) = surface.preview_content() {
@@ -792,7 +845,15 @@ mod workbench {
                                 this.set_view(1., point(0., 0.));
                                 cx.notify();
                             },
-                        ))),
+                        )))
+                        .child(
+                            button("compare", "Compare wide | sRGB", self.compare).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    this.compare = !this.compare;
+                                    cx.notify();
+                                }),
+                            ),
+                        ),
                 )
                 .child(
                     row()
@@ -1202,6 +1263,7 @@ mod workbench {
                         zoom: 1.,
                         pan: point(0., 0.),
                         pan_zoom_script: options.pan_zoom,
+                        compare: options.compare,
                         view_changes: 0,
                         lost_at: None,
                         throttle_inactive: options.throttle_inactive,

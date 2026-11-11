@@ -18,6 +18,7 @@ cargo run --release -p xgpui-ext-lab --bin gpu-canvas-workbench
 | `--second-window` | Open a second window that places the same published revision. |
 | `--minimize-after S` | Minimize the main window after S seconds; the second window keeps stepping the engine. |
 | `--resize-second` | Resize the second window every 0.5 s. This only changes placement; nothing is republished. |
+| `--compare` | Split the canvas: the left half in wide gamut, the right half showing the same region as the sRGB preview. On a wide display the P3 patches look more saturated on the left, and the greys match. *Compare wide \| sRGB* toggles it. |
 | `--pan-zoom` | Animate zoom and pan of the main canvas. This only changes placement; nothing is republished. |
 | `--ui-thread-engine` | Run the engine on the UI thread instead of its own thread, for comparison. |
 | `--lose-device-after S` | Destroy the engine's device after S seconds, then rebuild on a new device by replaying the edit log. |

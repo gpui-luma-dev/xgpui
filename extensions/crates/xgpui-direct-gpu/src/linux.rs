@@ -422,7 +422,11 @@ impl SlotResources {
                     // A failed import leaves fd ownership with the caller.
                     drop(OwnedFd::from_raw_fd(fd));
                     raw.destroy_image(image, None);
-                    bail!("compositor memory import failed: {error:?}");
+                    return Err(Unsupported(format!(
+                        "the compositor cannot import the engine's memory \
+                         (engine and compositor on different GPUs?): {error:?}"
+                    ))
+                    .into());
                 }
             };
             if let Err(error) = raw.bind_image_memory(image, memory, 0) {

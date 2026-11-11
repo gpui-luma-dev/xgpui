@@ -239,7 +239,12 @@ impl SlotResources {
             .cast()
             .map_err(|_| Unsupported("the compositor lacks ID3D11Device1".into()))?;
         let texture: ID3D11Texture2D = unsafe { device.OpenSharedResource1(self.handle.0) }
-            .context("opening the engine's shared texture failed")?;
+            .map_err(|error| {
+                Unsupported(format!(
+                    "the compositor cannot open the engine's shared texture \
+                     (engine and compositor on different adapters?): {error}"
+                ))
+            })?;
         *host = Some((context.device.clone(), texture.clone()));
         Ok(texture)
     }
