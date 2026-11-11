@@ -18,12 +18,15 @@ cargo run --release -p xgpui-ext-lab --bin gpu-canvas-workbench
 | `--second-window` | Open a second window that places the same published revision. |
 | `--minimize-after S` | Minimize the main window after S seconds; the second window keeps stepping the engine. |
 | `--resize-second` | Resize the second window every 0.5 s. This only changes placement; nothing is republished. |
+| `--pan-zoom` | Animate zoom and pan of the main canvas. This only changes placement; nothing is republished. |
+| `--ui-thread-engine` | Run the engine on the UI thread instead of its own thread, for comparison. |
 | `--lose-device-after S` | Destroy the engine's device after S seconds, then rebuild on a new device by replaying the edit log. |
 | `--throttle-inactive` | Keep GPUI's default 30 fps animation throttle for unfocused windows. |
 
 **Interaction:**
 
 - Left-drag paints.
+- Scroll pans the canvas; ⌘/Ctrl-scroll zooms around the cursor, 1–8×. *Fit view* resets. Pan and zoom only move and scale the placement, clipped to the canvas, so they never republish, and dabs land under the cursor at any zoom.
 - Right-click inspects a 4×4 region.
 - The controls set colour (linear Display P3), radius, opacity, exposure, presentation (Auto or forced sRGB preview), demo strokes and reset.
 
@@ -47,6 +50,17 @@ The code is in `src/engine.rs`.
    - The result carries the revision it was requested at, even when more edits arrive before it completes.
    - Requests are bounded: when all four staging buffers are busy, the request is refused.
 6. **Teardown.** Dropping the engine drops its surface. Slots return once the last scene that samples them is gone.
+
+## Threading
+
+By default the engine runs on its own thread (`src/driver.rs`):
+
+- The UI sends edits, exposure, reset, inspection and device-loss commands over a channel, and places the surface's latest published frame. It never waits for the engine.
+- The engine thread applies all queued commands, then edits and publishes in **one submission** per frame (paint and publish passes together). It recovers from device loss by itself, so a rebuild never blocks the UI.
+- It blocks on its command channel when idle, and waits in 1 ms slices while work is in flight.
+- Edit-to-publish latency counts from the moment the UI made the edit. The status also reports CPU time spent recording and inside `present`.
+
+`--ui-thread-engine` runs the same engine on the UI thread for comparison.
 
 ## Evidence
 
@@ -93,4 +107,4 @@ GPUI throttles the animation frames of an unfocused window to `WindowOptions::in
 
 On macOS, 1,697 dabs replayed in 8.3 ms. `--check` verifies the rebuilt image pixel for pixel against the CPU reference.
 
-Not yet included: pan/zoom. Pressure is covered by *Hold snapshot* and `--check`. `engine-surface-lab --lose-engine-after` covers engine loss.
+On macOS, `--pan-zoom` made 236 view changes in 4 s with a single snapshot, and the frame interval p95 stayed at 17.5 ms. Pressure is covered by *Hold snapshot* and `--check`. `engine-surface-lab --lose-engine-after` covers engine loss.

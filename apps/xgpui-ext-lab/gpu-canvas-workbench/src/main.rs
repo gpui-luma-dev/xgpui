@@ -29,6 +29,8 @@ fn main() -> anyhow::Result<()> {
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod check;
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+mod driver;
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod engine;
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod oracle;
@@ -36,7 +38,8 @@ mod oracle;
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod workbench {
     use crate::check::percentile;
-    use crate::engine::{BACKEND, Engine, Inspection};
+    use crate::driver::EngineDriver;
+    use crate::engine::{BACKEND, Inspection};
     use crate::oracle::{Dab, HEIGHT, WIDTH, published};
     use anyhow::{Result, ensure};
     use clap::Parser;
@@ -90,6 +93,13 @@ mod workbench {
         /// replaying its edit log.
         #[arg(long)]
         lose_device_after: Option<f32>,
+        /// Run the engine on the UI thread (for comparison). By default it
+        /// runs on its own thread and the UI never waits for it.
+        #[arg(long)]
+        ui_thread_engine: bool,
+        /// Animate zoom and pan of the main canvas (presentation only).
+        #[arg(long)]
+        pan_zoom: bool,
         /// Keep GPUI's default animation throttling of unfocused windows
         /// (about 30 fps). By default the workbench animates every window at
         /// the display rate, so measurements reflect compositing, not power
@@ -225,7 +235,7 @@ mod workbench {
     }
 
     struct Workbench {
-        engine: Engine,
+        engine: EngineDriver,
         color: usize,
         radius: f32,
         opacity: f32,
@@ -248,6 +258,12 @@ mod workbench {
         sdr: bool,
         resize_second: bool,
         lose_after: Option<f32>,
+        /// Canvas view: zoom (1..=8) and pan (slot pixel at the top-left).
+        /// Presentation only: never republishes.
+        zoom: f32,
+        pan: Point<f32>,
+        pan_zoom_script: bool,
+        view_changes: u64,
         lost_at: Option<Instant>,
         throttle_inactive: bool,
         viewers: Vec<(WeakEntity<Viewer>, Rc<RefCell<ViewerStats>>)>,
@@ -260,22 +276,17 @@ mod workbench {
 
     impl Workbench {
         fn lose_device(&mut self) {
+            // The driver reports the loss and rebuilds by replay (on the
+            // engine thread by default).
             self.engine.lose_device();
             self.lost_at = Some(Instant::now());
-            println!(
-                "engine device lost at {:.1}s; showing the last frame",
-                self.started.elapsed().as_secs_f32()
-            );
         }
 
         fn busy(&self) -> bool {
-            let stats = self.engine.stats();
-            self.engine.is_lost()
-                || self.demo
+            self.demo
+                || self.pan_zoom_script
                 || self.run_seconds.is_some()
-                || self.engine.pending_dabs() > 0
-                || self.engine.inspections_in_flight() > 0
-                || stats.revision != stats.published_revision
+                || self.engine.status().busy()
         }
 
         /// Advance the engine once per display frame, from whichever window
@@ -321,40 +332,26 @@ mod workbench {
             if self.demo {
                 self.demo_frame();
             }
+            if self.pan_zoom_script {
+                let t = self.started.elapsed().as_secs_f32();
+                let zoom = 1. + 3. * (0.5 - 0.5 * (t * 1.7).cos());
+                let visible = point(WIDTH as f32 / zoom, HEIGHT as f32 / zoom);
+                self.set_view(
+                    zoom,
+                    point(
+                        (WIDTH as f32 - visible.x) * (0.5 + 0.5 * (t * 0.9).sin()),
+                        (HEIGHT as f32 - visible.y) * (0.5 + 0.5 * (t * 1.3).cos()),
+                    ),
+                );
+            }
             if let Some(after) = self.lose_after
                 && self.lost_at.is_none()
-                && self.engine.stats().recoveries == 0
-                && !self.engine.is_lost()
                 && self.started.elapsed().as_secs_f32() >= after
             {
                 self.lose_device();
             }
-            if self.engine.is_lost() {
-                // Keep showing the last frame briefly, then rebuild on a new
-                // device by replaying the edit log.
-                if self
-                    .lost_at
-                    .is_some_and(|lost| lost.elapsed().as_secs_f32() >= 0.5)
-                {
-                    self.lost_at = None;
-                    match self.engine.rebuild() {
-                        Ok(()) => {
-                            let stats = self.engine.stats();
-                            println!(
-                                "engine rebuilt on generation {}: {} dabs replayed in {:.1} ms",
-                                self.engine.generation(),
-                                stats.replayed_dabs,
-                                stats.replay_ms
-                            );
-                            self.error = None;
-                        }
-                        Err(error) => self.error = Some(format!("rebuild failed: {error:#}")),
-                    }
-                }
-            } else if let Err(error) = self.engine.frame() {
-                self.error = Some(format!("{error:#}"));
-            }
-            if let Some(found) = self.engine.poll_inspections().pop()
+            self.error = self.engine.step().error.clone();
+            if let Some(found) = self.engine.take_inspections().pop()
                 && found.generation == self.engine.generation()
             {
                 self.inspection = Some(found);
@@ -443,16 +440,67 @@ mod workbench {
             });
         }
 
+        /// Window pixels per slot pixel on the main canvas.
+        fn view_scale(&self) -> Option<f32> {
+            let bounds = self.canvas_bounds.get();
+            (bounds.size.width > px(0.))
+                .then(|| f32::from(bounds.size.width) / WIDTH as f32 * self.zoom)
+        }
+
+        /// Window position to slot pixel, through the current zoom and pan.
         fn slot_point(&self, position: Point<Pixels>) -> Option<Point<f32>> {
             let bounds = self.canvas_bounds.get();
-            if bounds.size.width <= px(0.) {
-                return None;
+            let scale = self.view_scale()?;
+            Some(point(
+                f32::from(position.x - bounds.origin.x) / scale + self.pan.x,
+                f32::from(position.y - bounds.origin.y) / scale + self.pan.y,
+            ))
+        }
+
+        /// Set zoom and pan, keeping the view inside the image.
+        fn set_view(&mut self, zoom: f32, pan: Point<f32>) {
+            let zoom = zoom.clamp(1., 8.);
+            let max = point(
+                WIDTH as f32 * (1. - 1. / zoom),
+                HEIGHT as f32 * (1. - 1. / zoom),
+            );
+            let pan = point(pan.x.clamp(0., max.x), pan.y.clamp(0., max.y));
+            if zoom != self.zoom || pan != self.pan {
+                self.zoom = zoom;
+                self.pan = pan;
+                self.view_changes += 1;
             }
-            let x = f32::from(position.x - bounds.origin.x) * WIDTH as f32
-                / f32::from(bounds.size.width);
-            let y = f32::from(position.y - bounds.origin.y) * HEIGHT as f32
-                / f32::from(bounds.size.height);
-            Some(point(x, y))
+        }
+
+        fn scroll_view(&mut self, event: &ScrollEvent) {
+            let Some(scale) = self.view_scale() else {
+                return;
+            };
+            let delta = event.delta.pixel_delta(px(24.));
+            if event.modifiers.platform || event.modifiers.control {
+                // Zoom about the cursor: its slot pixel stays under it.
+                let Some(anchor) = self.slot_point(event.position) else {
+                    return;
+                };
+                let zoom = (self.zoom * (f32::from(delta.y) * 0.005).exp()).clamp(1., 8.);
+                let bounds = self.canvas_bounds.get();
+                let scale = f32::from(bounds.size.width) / WIDTH as f32 * zoom;
+                self.set_view(
+                    zoom,
+                    point(
+                        anchor.x - f32::from(event.position.x - bounds.origin.x) / scale,
+                        anchor.y - f32::from(event.position.y - bounds.origin.y) / scale,
+                    ),
+                );
+            } else {
+                self.set_view(
+                    self.zoom,
+                    point(
+                        self.pan.x - f32::from(delta.x) / scale,
+                        self.pan.y - f32::from(delta.y) / scale,
+                    ),
+                );
+            }
         }
 
         fn dab_at(&mut self, at: Point<f32>) {
@@ -504,6 +552,11 @@ mod workbench {
             let surface = self.engine.surface().clone();
             let bounds_cell = self.canvas_bounds.clone();
             let preview = self.presentation == Presentation::Preview;
+            let (zoom, pan) = if track {
+                (self.zoom, self.pan)
+            } else {
+                (1., point(0., 0.))
+            };
             div()
                 .w(px(width))
                 .h(px(height))
@@ -518,20 +571,36 @@ mod workbench {
                             }
                         },
                         move |bounds, _, window, _| {
-                            let corners = Corners::all(px(RADIUS - 1.));
-                            if preview {
-                                if let Some(content) = surface.preview_content() {
-                                    window.paint_custom(
-                                        CustomGeometry::RoundedRect {
-                                            bounds,
-                                            corner_radii: corners,
-                                        },
-                                        content,
-                                    );
-                                }
+                            // Zoom and pan place the same frame larger and
+                            // offset, clipped to the canvas: no republish.
+                            let scale = f32::from(bounds.size.width) / WIDTH as f32 * zoom;
+                            let placed = Bounds::new(
+                                point(
+                                    bounds.origin.x - px(pan.x * scale),
+                                    bounds.origin.y - px(pan.y * scale),
+                                ),
+                                size(px(WIDTH as f32 * scale), px(HEIGHT as f32 * scale)),
+                            );
+                            let corners = if zoom > 1. {
+                                Corners::default()
                             } else {
-                                surface.paint(window, bounds, corners);
-                            }
+                                Corners::all(px(RADIUS - 1.))
+                            };
+                            window.with_content_mask(Some(ContentMask { bounds }), |window| {
+                                if preview {
+                                    if let Some(content) = surface.preview_content() {
+                                        window.paint_custom(
+                                            CustomGeometry::RoundedRect {
+                                                bounds: placed,
+                                                corner_radii: corners,
+                                            },
+                                            content,
+                                        );
+                                    }
+                                } else {
+                                    surface.paint(window, placed, corners);
+                                }
+                            });
                         },
                     )
                     .size_full(),
@@ -542,7 +611,7 @@ mod workbench {
             let stats = self.engine.stats();
             let surface = self.engine.surface().stats();
             format!(
-                "{:.1}s shown: {} window frames, frame interval ms p50 {:.2} p95 {:.2} p99 {:.2} max {:.2}; revision {} published {}, {} snapshots ({} blocked), {} dabs in {} paint passes ({} tiles), edit-to-publish ms p50 {:.2} p95 {:.2}, {} submissions, {:.1} MiB GPU publish, {:.1} KiB uploaded, {} B read back, {} GPU objects, ring full {}; {} window, {} presentation",
+                "{:.1}s shown: {} window frames, frame interval ms p50 {:.2} p95 {:.2} p99 {:.2} max {:.2}; revision {} published {}, {} snapshots ({} blocked), {} dabs in {} paint passes ({} tiles), edit-to-publish ms p50 {:.2} p95 {:.2} (record p50 {:.2}, present p50 {:.2}), {} submissions, {:.1} MiB GPU publish, {:.1} KiB uploaded, {} B read back, {} GPU objects, ring full {}, {} view changes; {} window, {} presentation, {}",
                 self.started.elapsed().as_secs_f32(),
                 self.frame_times.len() + 1,
                 percentile(&self.frame_times, 0.5),
@@ -556,16 +625,24 @@ mod workbench {
                 stats.dabs_applied,
                 stats.paint_passes,
                 stats.tiles_touched,
-                percentile(&self.engine.latencies_ms, 0.5),
-                percentile(&self.engine.latencies_ms, 0.95),
+                self.engine.status().latency_ms[0],
+                self.engine.status().latency_ms[1],
+                self.engine.status().record_ms,
+                self.engine.status().present_ms,
                 stats.submissions,
                 stats.gpu_bytes_published as f64 / (1024. * 1024.),
                 stats.cpu_bytes_uploaded as f64 / 1024.,
                 stats.cpu_bytes_read,
                 stats.resources_created,
                 surface.would_block,
+                self.view_changes,
                 if self.wide { "wide" } else { "standard" },
                 self.presentation_label(),
+                if self.engine.threaded() {
+                    "engine thread"
+                } else {
+                    "engine on UI thread"
+                },
             )
         }
 
@@ -701,6 +778,12 @@ mod workbench {
                                 this.inspection = None;
                                 cx.notify();
                             },
+                        )))
+                        .child(button("fit", "Fit view", false).on_click(cx.listener(
+                            |this, _, _, cx| {
+                                this.set_view(1., point(0., 0.));
+                                cx.notify();
+                            },
                         ))),
                 )
                 .child(
@@ -815,8 +898,13 @@ mod workbench {
                     self.presentation_label()
                 ),
                 format!(
-                    "Engine: own {} device, {}; {}×{} {:?} slots, storage writes {}",
+                    "Engine: own {} device on {}, {}; {}×{} {:?} slots, storage writes {}",
                     BACKEND.1,
+                    if self.engine.threaded() {
+                        "its own thread"
+                    } else {
+                        "the UI thread"
+                    },
                     if self.engine.gpu_sync() {
                         "GPU-side wait"
                     } else {
@@ -834,6 +922,10 @@ mod workbench {
                 format!(
                     "Transport: {TRANSPORT}; {:?}; no CPU copy of frames",
                     self.engine.surface().transport()
+                ),
+                format!(
+                    "View: {:.2}× at ({:.0}, {:.0}) · {} view changes, presentation only (scroll pans, ⌘/Ctrl-scroll zooms)",
+                    self.zoom, self.pan.x, self.pan.y, self.view_changes
                 ),
                 format!(
                     "Generation {}{} · recoveries {} · last replay {} dabs in {:.1} ms",
@@ -882,8 +974,8 @@ mod workbench {
                 ),
                 format!(
                     "Edit to publish: p50 {:.2} ms · p95 {:.2} ms",
-                    percentile(&self.engine.latencies_ms, 0.5),
-                    percentile(&self.engine.latencies_ms, 0.95)
+                    self.engine.status().latency_ms[0],
+                    self.engine.status().latency_ms[1]
                 ),
             ];
             div()
@@ -976,6 +1068,13 @@ mod workbench {
                                     div()
                                         .id("canvas")
                                         .cursor_crosshair()
+                                        .on_scroll(cx.listener(
+                                            |this, event: &ScrollEvent, _, cx| {
+                                                this.scroll_view(event);
+                                                cx.stop_propagation();
+                                                cx.notify();
+                                            },
+                                        ))
                                         .on_mouse_down(
                                             MouseButton::Left,
                                             cx.listener(|this, event: &MouseDownEvent, _, cx| {
@@ -1062,7 +1161,9 @@ mod workbench {
                         xgpui_ext_lab::negotiate_wide(window)
                     };
                     let wide = window.color_status().effective() == WindowColorMode::WideGamutSdr;
-                    let engine = Engine::new(options.slots).expect("workbench engine");
+                    let engine =
+                        EngineDriver::new(options.slots, !options.ui_thread_engine, Instant::now())
+                            .expect("workbench engine");
                     window.set_lab_title("XGPUI GPU Canvas Workbench");
                     window.activate_window();
                     let workbench = cx.new(|_| Workbench {
@@ -1088,6 +1189,10 @@ mod workbench {
                         sdr: options.sdr,
                         resize_second: options.resize_second,
                         lose_after: options.lose_device_after,
+                        zoom: 1.,
+                        pan: point(0., 0.),
+                        pan_zoom_script: options.pan_zoom,
+                        view_changes: 0,
                         lost_at: None,
                         throttle_inactive: options.throttle_inactive,
                         viewers: Vec::new(),
