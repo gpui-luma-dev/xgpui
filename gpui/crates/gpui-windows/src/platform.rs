@@ -469,6 +469,8 @@ impl WindowsPlatform {
                 let vsync_provider = VSyncProvider::new();
                 // Set once recovery fails: windows stop drawing, so stop checking and redrawing.
                 let mut device_failed = false;
+                let mut injected_loss =
+                    crate::gpu_fault::InjectedLoss::from_env(std::time::Instant::now());
                 loop {
                     let signal_source = vsync_provider.wait_for_vsync();
                     let signal_at = PlatformFrameSignal::capture(scheduler::Instant::now);
@@ -477,7 +479,8 @@ impl WindowsPlatform {
                     }
                     if !device_failed
                         && (check_device_lost(&directx_device.device)
-                            || invalidate_devices.fetch_and(false, Ordering::Acquire))
+                            || invalidate_devices.fetch_and(false, Ordering::Acquire)
+                            || injected_loss.take_due(std::time::Instant::now()))
                     {
                         if let Err(err) = handle_gpu_device_lost(
                             &mut directx_device,
@@ -1881,6 +1884,7 @@ fn handle_gpu_device_lost(
     std::thread::sleep(std::time::Duration::from_millis(350));
 
     *directx_devices = try_to_recover_from_device_lost(|| {
+        crate::gpu_fault::check_recovery()?;
         DirectXDevices::new().context("Failed to recreate new DirectX devices after device lost")
     })?;
     log::info!("DirectX devices successfully recreated.");

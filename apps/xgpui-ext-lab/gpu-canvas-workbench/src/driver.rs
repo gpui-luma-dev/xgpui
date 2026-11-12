@@ -16,8 +16,12 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use xgpui_surface::EngineSurface;
 
-/// How long a lost engine keeps showing its last frame before rebuilding.
+/// How long a lost engine keeps showing its last frame before rebuilding,
+/// and between rebuild attempts.
 const REBUILD_AFTER: Duration = Duration::from_millis(500);
+/// Rebuild attempts before giving up, about 10 s: a GPU reset can leave only
+/// a software adapter for a few seconds.
+const REBUILD_ATTEMPTS: u32 = 20;
 /// Inspections the engine can have in flight (its staging buffers).
 const INSPECTION_LIMIT: usize = 4;
 
@@ -85,6 +89,7 @@ impl Status {
 struct Recovery {
     lost_at: Option<Instant>,
     started: Instant,
+    failed_rebuilds: u32,
 }
 impl Recovery {
     fn lose(&mut self, engine: &mut Engine) {
@@ -98,6 +103,15 @@ impl Recovery {
     /// Advance the engine once: rebuild when due, otherwise apply and
     /// publish. Returns an error to show, if any.
     fn step(&mut self, engine: &mut Engine) -> Option<String> {
+        if engine.lost_by_driver() {
+            // A real loss (a TDR): recover the same way as a simulated one.
+            engine.mark_lost();
+            self.lost_at = Some(Instant::now());
+            println!(
+                "engine device lost at {:.1}s; showing the last frame",
+                self.started.elapsed().as_secs_f32()
+            );
+        }
         if engine.is_lost() {
             if self
                 .lost_at
@@ -106,16 +120,28 @@ impl Recovery {
                 self.lost_at = None;
                 return match engine.rebuild() {
                     Ok(()) => {
+                        self.failed_rebuilds = 0;
                         let stats = engine.stats();
                         println!(
-                            "engine rebuilt on generation {}: {} dabs replayed in {:.1} ms",
+                            "engine rebuilt on generation {} on {}: {} dabs replayed in {:.1} ms",
                             engine.generation(),
+                            engine.adapter(),
                             stats.replayed_dabs,
                             stats.replay_ms
                         );
                         None
                     }
-                    Err(error) => Some(format!("rebuild failed: {error:#}")),
+                    Err(error) => {
+                        self.failed_rebuilds += 1;
+                        if self.failed_rebuilds < REBUILD_ATTEMPTS {
+                            println!(
+                                "engine rebuild {} failed, retrying: {error:#}",
+                                self.failed_rebuilds
+                            );
+                            self.lost_at = Some(Instant::now());
+                        }
+                        Some(format!("rebuild failed: {error:#}"))
+                    }
                 };
             }
             return None;
@@ -155,6 +181,7 @@ impl EngineDriver {
                     recovery: Recovery {
                         lost_at: None,
                         started,
+                        failed_rebuilds: 0,
                     },
                     error: None,
                     inspections: Vec::new(),
@@ -340,6 +367,7 @@ fn run(
     let mut recovery = Recovery {
         lost_at: None,
         started,
+        failed_rebuilds: 0,
     };
     let mut error = None;
     let mut published = Instant::now();

@@ -33,7 +33,8 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1;
 
 use crate::linux::wayland::{display::WaylandDisplay, serial::SerialKind};
 use crate::linux::{
-    Globals, GpuLossReporter, GpuRecovery, Output, RecoveryStep, WaylandClientStatePtr, get_window,
+    Globals, GpuLossReporter, GpuRecovery, InjectedLoss, Output, RecoveryStep,
+    WaylandClientStatePtr, check_injected_recovery, get_window,
 };
 use gpui::{
     AnyWindowHandle, Bounds, Capslock, Decorations, DevicePixels, ExternalDragPayload,
@@ -136,6 +137,7 @@ pub struct WaylandWindowState {
     redraw_requested: bool,
     gpu_recovery: GpuRecovery,
     gpu_loss: GpuLossReporter,
+    injected_loss: InjectedLoss,
     presentation: PresentationState,
     pending_frame_callback: Option<wl_callback::WlCallback>,
     in_progress_configure: Option<InProgressConfigure>,
@@ -641,6 +643,7 @@ impl WaylandWindowState {
             redraw_requested: false,
             gpu_recovery: GpuRecovery::default(),
             gpu_loss,
+            injected_loss: InjectedLoss::from_env(Instant::now()),
             presentation: PresentationState::Unpresented,
             pending_frame_callback: None,
             in_progress_window_controls: None,
@@ -2024,7 +2027,8 @@ impl PlatformWindow for WaylandWindow {
             return;
         };
 
-        if renderer.device_lost() {
+        let injected = state.injected_loss.is_lost(Instant::now());
+        if renderer.device_lost() || injected {
             let raw_window = RawWindow {
                 window: state.surface.id().as_ptr().cast::<std::ffi::c_void>(),
                 display: state
@@ -2035,11 +2039,15 @@ impl PlatformWindow for WaylandWindow {
                     .display_ptr()
                     .cast::<std::ffi::c_void>(),
             };
-            match state
-                .gpu_recovery
-                .step(Instant::now(), || renderer.recover(&raw_window))
-            {
-                RecoveryStep::Recovered | RecoveryStep::Retry => state.redraw_requested = true,
+            match state.gpu_recovery.step(Instant::now(), || {
+                check_injected_recovery()?;
+                renderer.recover(&raw_window)
+            }) {
+                RecoveryStep::Recovered => {
+                    state.injected_loss.recovered();
+                    state.redraw_requested = true;
+                }
+                RecoveryStep::Retry => state.redraw_requested = true,
                 RecoveryStep::Failed(reason) => state.gpu_loss.report(reason),
                 RecoveryStep::GaveUp => {}
             }

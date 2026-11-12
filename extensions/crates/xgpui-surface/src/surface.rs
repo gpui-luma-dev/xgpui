@@ -245,8 +245,17 @@ impl EngineSurface {
     /// the compositor holds its own reference to that frame's shared memory,
     /// so it outlives the engine device. Recover by creating a new engine
     /// device and surface.
+    ///
+    /// On Windows this also releases every engine D3D12 object the surface
+    /// holds. D3D12 devices are singletons per adapter, so a replacement device
+    /// on the same adapter can only be created once nothing holds the lost one:
+    /// drop your own device, queue and resources (and the surface target)
+    /// before creating the replacement.
     pub fn invalidate(&self) {
         self.0.invalid.store(true, Ordering::Release);
+        for slot in &self.0.slots {
+            slot.release_engine();
+        }
     }
 
     /// `false` after `invalidate`.

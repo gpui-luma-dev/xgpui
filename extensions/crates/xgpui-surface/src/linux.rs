@@ -356,6 +356,10 @@ impl std::fmt::Debug for SlotResources {
 }
 
 impl SlotResources {
+    /// Nothing to release here: only D3D12 devices are per-adapter singletons
+    /// that a surviving object keeps lost (see the Windows transport).
+    pub(crate) fn release_engine(&self) {}
+
     /// The compositor's texture over this slot, imported once per host queue.
     fn host_import(
         &self,
