@@ -1,6 +1,6 @@
 # GPU Canvas Workbench
 
-The #197 example application. A small editable GPU workload runs in an engine on its own wgpu device: Metal on macOS, Vulkan on Linux, D3D12 on Windows. `xgpui-surface` presents it beside ordinary controls. It is not a painting application.
+The #197 example application. A small editable GPU workload runs in an engine on its own wgpu device: Metal on macOS, Vulkan on Linux, D3D12 on Windows. `xgpui-gpu-interop` presents it beside ordinary controls. It is not a painting application.
 
 ## Run
 
@@ -80,7 +80,7 @@ It also checks:
 - the inspection bound;
 - that the GPU-object count is the same after 200 edited frames.
 
-Published values are checked through the same publish shader writing into a check texture; slot transport itself is covered by the `xgpui-surface` tests.
+Published values are checked through the same publish shader writing into a check texture; slot transport itself is covered by the `xgpui-gpu-interop` tests.
 
 Measured on macOS (M-series, wide window, `--demo --run-seconds 6`):
 

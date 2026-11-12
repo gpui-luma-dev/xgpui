@@ -1,6 +1,6 @@
 name: Engine surface compile checks
 
-# Build-only coverage for xgpui-surface and its two labs (#227). Hosted
+# Build-only coverage for xgpui-gpu-interop and its two labs (#227). Hosted
 # runners have no usable GPU, so nothing here runs a surface: runtime checks on
 # real hardware stay with the cross-platform test script. The one exception is
 # the Windows headless retirement test (#199), which renders on WARP (software
@@ -11,7 +11,7 @@ on:
     branches: [main, 'issue-227/epic']
     paths:
       - '.github/workflows/engine-surface.yml'
-      - 'extensions/crates/xgpui-surface/**'
+      - 'extensions/crates/xgpui-gpu-interop/**'
       - 'apps/xgpui-ext-lab/engine-surface-lab/**'
       - 'apps/xgpui-ext-lab/gpu-canvas-workbench/**'
       - 'apps/xgpui-ext-lab/Cargo.toml'
@@ -24,7 +24,7 @@ on:
     branches: [main, 'issue-227/epic']
     paths:
       - '.github/workflows/engine-surface.yml'
-      - 'extensions/crates/xgpui-surface/**'
+      - 'extensions/crates/xgpui-gpu-interop/**'
       - 'apps/xgpui-ext-lab/engine-surface-lab/**'
       - 'apps/xgpui-ext-lab/gpu-canvas-workbench/**'
       - 'apps/xgpui-ext-lab/Cargo.toml'
@@ -74,11 +74,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev
       - name: Lint the crate without features (no engine adapter)
-        run: cargo clippy --locked --config .cargo/validation.toml -p xgpui-surface --lib --tests --no-deps -- -D warnings
+        run: cargo clippy --locked --config .cargo/validation.toml -p xgpui-gpu-interop --lib --tests --no-deps -- -D warnings
       - name: Lint the crate with the wgpu engine adapter
         # Keep reporting after an earlier failure, so one run shows every problem.
         if: ${{ !cancelled() }}
-        run: cargo clippy --locked --config .cargo/validation.toml -p xgpui-surface --features wgpu --lib --tests --no-deps -- -D warnings
+        run: cargo clippy --locked --config .cargo/validation.toml -p xgpui-gpu-interop --features wgpu --lib --tests --no-deps -- -D warnings
       - name: Lint both labs
         if: ${{ !cancelled() }}
         # --tests on the shared lab package selects unrelated lab binaries too.
@@ -86,7 +86,7 @@ jobs:
       - name: Build crate tests and labs without running them
         if: ${{ !cancelled() }}
         run: |
-          cargo test --locked --config .cargo/validation.toml -p xgpui-surface --features wgpu --lib --no-run
+          cargo test --locked --config .cargo/validation.toml -p xgpui-gpu-interop --features wgpu --lib --no-run
           cargo build --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin engine-surface-lab --bin gpu-canvas-workbench
       - name: Run the headless D3D11 retirement test on WARP (#199)
         if: ${{ !cancelled() && runner.os == 'Windows' }}
@@ -96,7 +96,7 @@ jobs:
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
           ## Engine surface validation scope
-          Compiles and lints xgpui-surface (with and without `wgpu`) and links
+          Compiles and lints xgpui-gpu-interop (with and without `wgpu`) and links
           its tests, engine-surface-lab and gpu-canvas-workbench. Hosted runners have
           no usable GPU, so no surface is created, shared, presented or recovered here.
           Runtime coverage needs real hardware (see #227's cross-platform test script).

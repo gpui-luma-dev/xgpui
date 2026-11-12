@@ -1,8 +1,18 @@
-# xgpui-surface (experimental)
+# xgpui-gpu-interop (experimental)
 
-Present output from an independently owned GPU engine into **xgpui**, the way an engine presents to a swapchain. Design and evidence are in issues #197 and #198.
+Zero-copy GPU interop for [xgpui](https://xgpui.dev/): show frames from a GPU engine you own in xgpui windows, the way an engine presents to a swapchain. The engine keeps its own device, queue and thread, and renders or runs compute shaders as it likes; xgpui composites the result with no copies.
 
-The engine keeps its own device, queue and thread. An `EngineSurface` owns a fixed ring of shareable slots:
+Use it when GPUI paints are not enough: long compute passes, image pipelines, simulations or anything that should not run inside GPUI's frame.
+
+0.1 is the first release; the API may change. Guide: [GPU interop](https://xgpui.dev/gpu-interop.html).
+
+## Use it
+
+```sh
+cargo add xgpui-gpu-interop --features wgpu
+```
+
+The central type is `EngineSurface`: a small ring of textures (*slots*) shared between the engine's GPU device and xgpui's compositor. The engine acquires a slot, renders into it and presents it; xgpui shows the newest presented slot wherever the surface is painted.
 
 ```rust,ignore
 let mut target = WgpuSurfaceTarget::new(SurfaceDesc {
@@ -59,14 +69,22 @@ On Linux the engine queue is also created at low priority where the driver suppo
 
 Measured with 4 × 4K engines at a GPU-saturating load on an Intel Iris Xe: the UI went from 5–6 frames in 6 s with the defaults to p50 16.7 ms, with a p95 of 20.5 ms on Windows and 33.6 ms on Linux. On an Apple M-series running 8 × 4K at a heavier load, it went from starved to p50 16.7 ms and p95 51 ms.
 
-## Labs
-- `cargo run -p xgpui-ext-lab --bin engine-surface-lab -- --threaded`. Stress testing: `--stress-surfaces N --stress-size WxH --work N [--heavy]`.
+## Known limits
+
+- **Tested hardware:** Apple M-series; Intel Iris Xe (Fedora 44 and Windows 11); Intel Arc 140T (Windows 11). AMD and NVIDIA GPUs are untested.
+- **One GPU at a time.** The engine must run on the compositor's GPU, and nothing yet helps an app find it; on a machine with two GPUs an engine on the other one is refused with `Unsupported` ([#253](https://github.com/gpui-luma-dev/xgpui/issues/253)).
+- **Colour:** Linux shows wide content as the sRGB preview until [#146](https://github.com/gpui-luma-dev/xgpui/issues/146).
+- **Engines:** wgpu on all three platforms and raw Metal on macOS; raw Vulkan and D3D12 engines have no adapter yet.
+
+## Examples
+
+From the [xgpui repository](https://github.com/gpui-luma-dev/xgpui):
+
 - `cargo run -p xgpui-ext-lab --bin gpu-canvas-workbench`: the example application, with `--check` for automated verification.
+- `cargo run -p xgpui-ext-lab --bin engine-surface-lab -- --threaded`. Stress testing: `--stress-surfaces N --stress-size WxH --work N [--heavy]`.
+
+Design: [#197](https://github.com/gpui-luma-dev/xgpui/issues/197). Transport evidence: [#198](https://github.com/gpui-luma-dev/xgpui/issues/198). Device-loss runs, including a real Windows GPU reset: [#119](https://github.com/gpui-luma-dev/xgpui/issues/119).
 
 ## GPUI public API changes: additions and compatibility
 
-Seven additive hooks in `gpui-wgpu`, `gpui-windows` and `gpui-apple` let this extension adopt shared textures and wait on engine signals. Nothing in `gpui` changes and no application needs to migrate. See [engine surface API changes](https://xgpui.dev/gpui-public-api.html#engine-surfaces-from-independent-gpu-engines-197).
-
-The hooks ship in `xgpui-wgpu` 2.3.0, `xgpui-windows` 2.2.0 and `xgpui-apple` 4.1.0.
-
-Guide: [GPU engine surfaces](https://xgpui.dev/engine-surface.html). This is the first 0.1 release; the API may change.
+Seven additive hooks in `gpui-wgpu`, `gpui-windows` and `gpui-apple` let this extension adopt shared textures and wait on engine signals. They ship in `xgpui-wgpu` 2.3.0, `xgpui-windows` 2.2.0 and `xgpui-apple` 4.1.0. Nothing in `gpui` changes and no application needs to migrate. See [the backend hooks](https://xgpui.dev/gpui-public-api.html#engine-surfaces-from-independent-gpu-engines-197).

@@ -8027,12 +8027,12 @@ dependencies = [
  "xgpui-canvas",
  "xgpui-color",
  "xgpui-gamut",
+ "xgpui-gpu-interop",
  "xgpui-media",
  "xgpui-parley",
  "xgpui-platform",
  "xgpui-shader",
  "xgpui-shell",
- "xgpui-surface",
  "xgpui-svg",
  "xgpui-web",
  "xgpui-wgpu",
@@ -8051,6 +8051,24 @@ dependencies = [
  "xgpui-apple",
  "xgpui-color",
  "xgpui-shader",
+ "xgpui-windows",
+]
+
+[[package]]
+name = "xgpui-gpu-interop"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ash",
+ "objc2 0.6.5",
+ "objc2-core-foundation",
+ "objc2-io-surface",
+ "objc2-metal 0.3.2",
+ "wgpu",
+ "windows 0.62.2",
+ "xgpui",
+ "xgpui-apple",
+ "xgpui-wgpu",
  "xgpui-windows",
 ]
 
@@ -8245,24 +8263,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "xgpui",
-]
-
-[[package]]
-name = "xgpui-surface"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ash",
- "objc2 0.6.5",
- "objc2-core-foundation",
- "objc2-io-surface",
- "objc2-metal 0.3.2",
- "wgpu",
- "windows 0.62.2",
- "xgpui",
- "xgpui-apple",
- "xgpui-wgpu",
- "xgpui-windows",
 ]
 
 [[package]]
