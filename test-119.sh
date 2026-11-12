@@ -163,6 +163,15 @@ panic_line() { # log -> the first panic message, or nothing
 frames() { # log -> frames shown in the main window, or 0
     sed -n 's/.*shown: \([0-9]*\) window frames.*/\1/p' "$1" | head -1 | grep . || echo 0
 }
+interval_p50() { # log -> median frame interval in ms, or nothing
+    sed -n 's/.*frame interval ms p50 \([0-9.]*\).*/\1/p' "$1" | head -1
+}
+# expected_frames LOG SECONDS -> frames the window's own frame rate predicts.
+# Thresholds use this rather than 60 fps: low-power mode (a power-saver
+# profile, or a laptop on battery) caps every window at 30 fps.
+expected_frames() {
+    awk -v p="$(interval_p50 "$1")" -v s="$2" 'BEGIN { if (p > 0) printf "%d", s * 1000 / p; else print 0 }'
+}
 
 if [ -z "${BUILD_FAILED:-}" ]; then
     if [ "$OS" = windows ]; then RECOVERED='DirectX devices successfully recreated'; else RECOVERED='GPU recovered'; fi
@@ -186,10 +195,12 @@ if [ -z "${BUILD_FAILED:-}" ]; then
         record recover FAIL "reported a device loss although recovery should succeed"
     elif ! grep -q "$RECOVERED" "$OUT"; then
         record recover FAIL "no '$RECOVERED' line"
-    elif [ "$N" -lt 250 ]; then
-        record recover FAIL "only $N frames in 8 s: drawing did not resume"
+    elif [ "$(expected_frames "$OUT" 8)" = 0 ]; then
+        record recover FAIL "no frame summary in the output"
+    elif [ "$N" -lt $(( $(expected_frames "$OUT" 8) * 85 / 100 )) ]; then
+        record recover FAIL "only $N of ~$(expected_frames "$OUT" 8) frames in 8 s at p50 $(interval_p50 "$OUT") ms: drawing did not resume"
     else
-        record recover PASS "$N frames in 8 s"
+        record recover PASS "$N of ~$(expected_frames "$OUT" 8) frames in 8 s (p50 $(interval_p50 "$OUT") ms)"
     fi
 
     # --- give-up -------------------------------------------------------------
@@ -263,8 +274,11 @@ if [ -z "${BUILD_FAILED:-}" ]; then
                 record tdr FAIL "reported a device loss after a TDR it should survive"
             elif ! grep -q "$RECOVERED" "$OUT"; then
                 record tdr FAIL "no '$RECOVERED' line: the TDR may not have reached this device"
-            elif [ "$N" -lt 450 ]; then
-                record tdr FAIL "only $N frames in 15 s: drawing did not resume"
+            elif [ "$(expected_frames "$OUT" 15)" = 0 ]; then
+                record tdr FAIL "no frame summary in the output"
+            elif [ "$N" -lt $(( $(expected_frames "$OUT" 15) * 60 / 100 )) ]; then
+                # 60%: the reset itself stalls every window for about 3 s.
+                record tdr FAIL "only $N of ~$(expected_frames "$OUT" 15) frames in 15 s at p50 $(interval_p50 "$OUT") ms: drawing did not resume"
             elif [ "$ENGINE_LOST" = 0 ]; then
                 record tdr PASS "$N frames in 15 s; the engine's device survived"
             else
