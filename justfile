@@ -84,9 +84,31 @@ list-all-labs:
     App-level justfiles also list specialized captures, tests and diagnostics.
     LABS
 
-# Detect changed crates needing version bumps or dependency pin updates.
+# Check versions against the latest published GitHub release (or an explicit --epoch).
 release-check *args:
-    cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-check "$@"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for arg in "$@"; do
+        if [[ "$arg" == --epoch || "$arg" == --epoch=* ]]; then
+            exec cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-check "$@"
+        fi
+    done
+    baseline=$(gh release view --repo gpui-luma-dev/xgpui --json tagName --jq .tagName)
+    git merge-base --is-ancestor "$baseline" HEAD || { echo "Latest published release $baseline must be available locally and an ancestor of HEAD; fetch tags and update your checkout." >&2; exit 1; }
+    exec cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-check --epoch "$baseline" "$@"
+
+# Check the latest release baseline, then verify archives/builds without uploading.
+# Optional output path must be new and outside the checkout; source must be clean.
+release-dry-run out="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    output="$1"
+    if [[ -z "$output" ]]; then
+        output="${XGPUI_RELEASE_ARTIFACTS:-$(dirname "$PWD")/xgpui-release-artifacts}/dry-run-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+    fi
+    just --justfile "{{ justfile() }}" release-check
+    echo "Release dry-run artifacts: $output"
+    exec cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode dry-run --out "$output"
 
 # Preview all ignored Cargo outputs, including standalone crates and old app paths.
 clean-preview:
