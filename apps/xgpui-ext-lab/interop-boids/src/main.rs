@@ -34,7 +34,7 @@ mod lab {
     use clap::Parser;
     use futures::StreamExt as _;
     use gpui::{prelude::*, *};
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
     use std::rc::Rc;
     use std::time::{Duration, Instant};
     use xgpui_ext_lab::{LabApp, LabWindowTitle};
@@ -46,8 +46,9 @@ mod lab {
     #[cfg(target_os = "windows")]
     const TRANSPORT: &str = "shared D3D12/D3D11 textures";
 
-    /// Particle-count choices; wgpu's default is 1,500.
-    const PARTICLE_CHOICES: [u32; 4] = [500, DEFAULT_PARTICLES, 5_000, 15_000];
+    /// Particle-count choices; wgpu's default is 1,500. The compute pass is
+    /// O(n²): 100,000 boids is about 50 ms of GPU time per step on an M4 Max.
+    const PARTICLE_CHOICES: [u32; 5] = [500, DEFAULT_PARTICLES, 15_000, 50_000, 100_000];
     /// Speed slider limits, as multiples of wgpu's speed. The slider is
     /// logarithmic, so 1× sits in the middle.
     const SPEED_MIN: f32 = 0.25;
@@ -77,6 +78,17 @@ mod lab {
         /// responsiveness while the engine animates).
         #[arg(long)]
         resize_test: bool,
+        /// Open the window on this display (an index from the list printed
+        /// at startup).
+        #[arg(long)]
+        display: Option<usize>,
+        /// Start with the engine on the UI thread instead of its own thread.
+        #[arg(long)]
+        ui_thread: bool,
+        /// Switch the engine between its own thread and the UI thread at
+        /// each of these times, in seconds (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        switch_at: Vec<f32>,
         /// Start the speed slider at this multiple of wgpu's speed (0.25 to 4).
         #[arg(long, default_value_t = 1.)]
         speed: f32,
@@ -89,6 +101,9 @@ mod lab {
         started: Instant,
         /// Intervals between UI frames while the engine runs, in ms.
         frame_times: Vec<f32>,
+        /// UI-thread time per frame, from render to paint, in ms (includes
+        /// the engine step when it runs on the UI thread).
+        ui_work: Rc<RefCell<Vec<f32>>>,
         last_frame: Option<Instant>,
         renders: u64,
         /// Evidence for the pause: UI frames and engine steps while paused.
@@ -103,6 +118,8 @@ mod lab {
         skipped: u64,
         last_presents: Option<u64>,
         speed: f32,
+        /// The window's display refresh interval, as last sent to the engine.
+        refresh: Option<Duration>,
         dragging_speed: bool,
         /// Where the speed track was laid out, for mapping the pointer.
         speed_track: Rc<Cell<Bounds<Pixels>>>,
@@ -131,6 +148,7 @@ mod lab {
                 status,
                 started: Instant::now(),
                 frame_times: Vec::new(),
+                ui_work: Rc::default(),
                 last_frame: None,
                 renders: 0,
                 paused_at: None,
@@ -141,6 +159,7 @@ mod lab {
                 skipped: 0,
                 last_presents: None,
                 speed: 1.,
+                refresh: None,
                 dragging_speed: false,
                 speed_track: Rc::new(Cell::new(Bounds::default())),
             }
@@ -297,6 +316,27 @@ mod lab {
             cx.notify();
         }
 
+        fn set_threaded(&mut self, threaded: bool, cx: &mut Context<Self>) {
+            if let Err(error) = self.engine.set_threaded(threaded) {
+                self.status.error = Some(format!("{error:#}"));
+            }
+            // Timings from one mode don't describe the other.
+            self.frame_times.clear();
+            self.ui_work.borrow_mut().clear();
+            self.last_frame = None;
+            println!(
+                "engine on {} at {:.1}s after {} steps",
+                if threaded {
+                    "its own thread"
+                } else {
+                    "the UI thread"
+                },
+                self.started.elapsed().as_secs_f32(),
+                self.engine.status().steps
+            );
+            cx.notify();
+        }
+
         fn set_particles(&mut self, particles: u32, cx: &mut Context<Self>) {
             self.engine.set_particles(particles);
             self.status.particles = particles;
@@ -307,11 +347,17 @@ mod lab {
             let status = self.engine.status();
             let surface = self.engine.surface().stats();
             let seconds = self.started.elapsed().as_secs_f32();
+            let ui_work = self.ui_work.borrow();
             format!(
-                "{seconds:.1}s: {} boids on {} ({}), {} engine steps ({:.1}/s, {:.0}/s in the last second), record+present {:.2} ms; \
-                 {} UI frames, frame interval ms p50 {:.2} p95 {:.2} max {:.2}, {} hitches (> 1.5× p50), {} repeated, {} skipped; display {:.2} ms, {} show timeouts; \
+                "{seconds:.1}s: engine on {}, {} boids on {} ({}), {} engine steps ({:.1}/s, {:.0}/s in the last second), record+present {:.2} ms, GPU {:.2} ms, {}; \
+                 {} UI frames, UI work ms p50 {:.2} p95 {:.2} max {:.2}, frame interval ms p50 {:.2} p95 {:.2} max {:.2}, {} hitches (> 1.5× p50), {} repeated, {} skipped; display {:.2} ms, refresh {:.2} ms, {} show timeouts; \
                  {} presents, {} composited, {} unshown, composite latency {:.2} ms, ring full {}; \
                  {} pauses, {} UI frames and {} steps while paused{}",
+                if status.threaded {
+                    "its own thread"
+                } else {
+                    "the UI thread"
+                },
                 status.particles,
                 status.adapter,
                 status.format,
@@ -319,7 +365,16 @@ mod lab {
                 status.steps as f32 / seconds,
                 status.steps_per_second,
                 status.record_ms,
+                status.gpu_ms,
+                if status.observe_only {
+                    "observe-only"
+                } else {
+                    "GPU wait"
+                },
                 self.renders,
+                percentile(&ui_work, 0.5),
+                percentile(&ui_work, 0.95),
+                percentile(&ui_work, 1.),
                 percentile(&self.frame_times, 0.5),
                 percentile(&self.frame_times, 0.95),
                 percentile(&self.frame_times, 1.),
@@ -327,6 +382,7 @@ mod lab {
                 self.repeated,
                 self.skipped,
                 status.display_ms,
+                status.refresh_ms,
                 status.show_timeouts,
                 surface.presents,
                 surface.composited,
@@ -347,10 +403,10 @@ mod lab {
         /// value is padded and right-aligned in a box of fixed width with
         /// tabular digits, so changing numbers never shift the layout.
         fn stats_view(&self) -> impl IntoElement {
-            let live = &self.frame_times[self.frame_times.len().saturating_sub(LIVE_FRAMES)..];
+            let ui_work = self.ui_work.borrow();
+            let live = &ui_work[ui_work.len().saturating_sub(LIVE_FRAMES)..];
             let running = !self.paused && !live.is_empty();
             let value = |shown: bool, text: String| if shown { text } else { "—".to_owned() };
-            let surface = self.engine.surface().stats();
             div()
                 .flex_none()
                 .flex()
@@ -367,8 +423,10 @@ mod lab {
                             86.,
                             if self.paused {
                                 "paused".to_owned()
+                            } else if self.status.threaded {
+                                "own thread".to_owned()
                             } else {
-                                "running".to_owned()
+                                "UI thread".to_owned()
                             },
                         ))
                         .child(stat(
@@ -378,12 +436,20 @@ mod lab {
                         ))
                         .child(stat("Steps", 80., self.status.steps.to_string()))
                         .child(stat(
-                            "Record + present",
+                            "Engine step CPU",
                             64.,
                             value(!self.paused, format!("{:.2} ms", self.status.record_ms)),
                         ))
                         .child(stat(
-                            "UI frame p50",
+                            "GPU",
+                            64.,
+                            value(
+                                !self.paused && self.status.threaded && self.status.gpu_ms > 0.,
+                                format!("{:.1} ms", self.status.gpu_ms),
+                            ),
+                        ))
+                        .child(stat(
+                            "UI work per frame p50",
                             64.,
                             value(running, format!("{:.1} ms", percentile(live, 0.5))),
                         ))
@@ -391,11 +457,6 @@ mod lab {
                             "p95",
                             64.,
                             value(running, format!("{:.1} ms", percentile(live, 0.95))),
-                        ))
-                        .child(stat(
-                            "Composite latency",
-                            64.,
-                            value(running, format!("{:.2} ms", surface.composite_latency_ms)),
                         )),
                 )
                 .child(line(
@@ -404,8 +465,14 @@ mod lab {
                         "Paused: the engine does no GPU work and the UI does not redraw.".to_owned()
                     } else {
                         format!(
-                            "{} · {WIDTH}×{HEIGHT} {} slots over {TRANSPORT}, zero copies",
-                            self.status.adapter, self.status.format
+                            "{} · {WIDTH}×{HEIGHT} {} slots over {TRANSPORT}, zero copies · {}",
+                            self.status.adapter,
+                            self.status.format,
+                            if self.status.observe_only {
+                                "observe-only presentation (long steps)"
+                            } else {
+                                "presented with a GPU wait"
+                            }
                         )
                     },
                 ))
@@ -435,6 +502,15 @@ mod lab {
                         this.set_paused(paused, cx);
                     })),
                 )
+                .child(div().ml_4().text_color(rgb(0x9a9a9a)).child("Engine on"))
+                .child(
+                    button("own-thread", "Own thread", self.status.threaded)
+                        .on_click(cx.listener(|this, _, _, cx| this.set_threaded(true, cx))),
+                )
+                .child(
+                    button("ui-thread", "UI thread", !self.status.threaded)
+                        .on_click(cx.listener(|this, _, _, cx| this.set_threaded(false, cx))),
+                )
                 .child(div().ml_4().text_color(rgb(0x9a9a9a)).child("Boids"))
                 .children(PARTICLE_CHOICES.iter().map(|&count| {
                     button(
@@ -451,8 +527,22 @@ mod lab {
     }
 
     impl Render for BoidsView {
-        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
             let now = Instant::now();
+            // Tell the engine the display's refresh rate (and when the window
+            // moves to a display with another one).
+            let refresh = window.refresh_interval(cx);
+            if refresh != self.refresh {
+                self.refresh = refresh;
+                if let Some(refresh) = refresh {
+                    self.engine.set_refresh_interval(refresh);
+                }
+            }
+            // On the UI thread the engine steps here, inside the UI's frame,
+            // and keeps the UI animating.
+            if self.engine.step_inline() {
+                window.request_animation_frame();
+            }
             self.renders += 1;
             // Leave the window's first frames out of the timings.
             let warm = self.started.elapsed() >= WARM_UP;
@@ -479,6 +569,7 @@ mod lab {
             }
             self.status = self.engine.status();
             let surface = self.engine.surface().clone();
+            let ui_work = warm.then(|| self.ui_work.clone());
             div()
                 .size_full()
                 .bg(rgb(0x1b1b1b))
@@ -503,9 +594,10 @@ mod lab {
                     cx.listener(|this, _: &MouseUpEvent, _, _| this.dragging_speed = false),
                 )
                 .child(div().text_color(rgb(0xb0b0b0)).child(
-                    "wgpu's boids example on its own wgpu device and thread. \
-                         Every step is a compute pass and a render pass into an xgpui-gpu-interop \
-                         slot; this window shows the newest one.",
+                    "wgpu's boids example on its own wgpu device. Every step is a compute pass \
+                         and a render pass into an xgpui-gpu-interop slot; this window shows the \
+                         newest one. Try 100,000 boids on its own thread, then on the UI thread, \
+                         and drag the speed slider or resize the window.",
                 ))
                 .child(self.controls(cx))
                 .child(
@@ -513,7 +605,12 @@ mod lab {
                         canvas(
                             |_, _, _| (),
                             move |bounds, _, window, _| {
-                                surface.paint(window, letterbox(bounds), Corners::all(px(8.)))
+                                surface.paint(window, letterbox(bounds), Corners::all(px(8.)));
+                                if let Some(ui_work) = ui_work {
+                                    ui_work
+                                        .borrow_mut()
+                                        .push(now.elapsed().as_secs_f32() * 1000.);
+                                }
                             },
                         )
                         .size_full(),
@@ -643,14 +740,35 @@ mod lab {
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
         let options = Options::parse();
         anyhow::ensure!(options.particles > 0, "--particles must be positive");
-        let engine = Engine::spawn(options.particles, false)?;
+        let engine = Engine::new(options.particles, !options.ui_thread)?;
         gpui_platform::application().run(move |cx: &mut App| {
-            let bounds = Bounds::centered(None, size(px(1000.), px(900.)), cx);
+            let displays = cx.displays();
+            for (index, display) in displays.iter().enumerate() {
+                let bounds = display.bounds();
+                println!(
+                    "display {index}: {:.0}×{:.0} at ({:.0}, {:.0})",
+                    f32::from(bounds.size.width),
+                    f32::from(bounds.size.height),
+                    f32::from(bounds.origin.x),
+                    f32::from(bounds.origin.y)
+                );
+            }
+            let display = options
+                .display
+                .and_then(|index| displays.get(index))
+                .map(|display| (display.id(), display.bounds().size));
+            // Fit the window on smaller displays, leaving room for the menu
+            // bar and dock.
+            let height =
+                display.map_or(900., |(_, size)| (f32::from(size.height) - 100.).min(900.));
+            let bounds =
+                Bounds::centered(display.map(|(id, _)| id), size(px(1000.), px(height)), cx);
             let mut created = None;
             let handle = cx
                 .open_lab_window(
                     WindowOptions {
                         window_bounds: Some(WindowBounds::Windowed(bounds)),
+                        display_id: display.map(|(id, _)| id),
                         // Show engine frames at full rate when unfocused too.
                         inactive_frame_interval: None,
                         ..Default::default()
@@ -692,6 +810,12 @@ mod lab {
             }
             if let Some(at) = options.pause_at {
                 after(&view, at, cx, |view, cx| view.set_paused(true, cx));
+            }
+            for at in options.switch_at {
+                after(&view, at, cx, |view, cx| {
+                    let threaded = !view.engine.threaded();
+                    view.set_threaded(threaded, cx);
+                });
             }
             if let Some(at) = options.play_at {
                 after(&view, at, cx, |view, cx| view.set_paused(false, cx));

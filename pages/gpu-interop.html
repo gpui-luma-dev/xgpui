@@ -191,8 +191,10 @@ cargo run -p xgpui-ext-lab --bin gpu-interop-lab -- --threaded
 <p><strong>Interop Boids</strong> shows why the crate exists: wgpu's own boids example,
 ported almost unchanged, runs on its own device and thread inside an xgpui window.
 Each step is a compute pass on persistent particle buffers followed by a render
-pass, which a shader paint can't do. It has Pause/Play, a choice of boid counts,
-and live engine and UI timings.</p>
+pass, which a shader paint can't do. A toggle moves the engine onto the UI thread
+for contrast: at 100,000 boids the UI keeps 60 fps on the engine's own thread and
+drops to 18 fps on the UI thread. It also has Pause/Play, boid counts, a speed
+slider and live engine and UI timings.</p>
 <p>The <strong>GPU Canvas Workbench</strong> is a small editor on a compute engine: edits are
 checked against a CPU reference, with a second window, minimize, resize,
 pan/zoom, wide versus sRGB comparison (<code>--compare</code>) and simulated device loss.
