@@ -142,6 +142,10 @@ unsafe impl Send for SlotResources {}
 unsafe impl Sync for SlotResources {}
 
 impl SlotResources {
+    /// Nothing to release here: only D3D12 devices are per-adapter singletons
+    /// that a surviving object keeps lost (see the Windows transport).
+    pub(crate) fn release_engine(&self) {}
+
     fn new(desc: &SurfaceDesc) -> Result<Self> {
         let keys: [&CFString; 4] = unsafe {
             [

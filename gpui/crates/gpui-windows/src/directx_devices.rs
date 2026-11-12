@@ -118,7 +118,12 @@ fn get_adapter(
             let gpu_name = String::from_utf16_lossy(&desc.Description)
                 .trim_matches(char::from(0))
                 .to_string();
-            log::info!("Using GPU: {}", gpu_name);
+            log::info!(
+                "Using GPU: {} (adapter {:08x}:{:08x})",
+                gpu_name,
+                desc.AdapterLuid.HighPart,
+                desc.AdapterLuid.LowPart
+            );
         }
         // Check to see whether the adapter supports Direct3D 11 and create
         // the device if it does.

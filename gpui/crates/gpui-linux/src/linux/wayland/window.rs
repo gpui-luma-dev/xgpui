@@ -32,7 +32,10 @@ use wayland_protocols_plasma::blur::client::org_kde_kwin_blur;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1;
 
 use crate::linux::wayland::{display::WaylandDisplay, serial::SerialKind};
-use crate::linux::{Globals, Output, WaylandClientStatePtr, get_window};
+use crate::linux::{
+    Globals, GpuLossReporter, GpuRecovery, InjectedLoss, Output, RecoveryStep,
+    WaylandClientStatePtr, check_injected_recovery, get_window,
+};
 use gpui::{
     AnyWindowHandle, Bounds, Capslock, Decorations, DevicePixels, ExternalDragPayload,
     FrameRequestSource, GpuSpecs, Modifiers, Pixels, PlatformAtlas, PlatformDisplay,
@@ -132,6 +135,9 @@ pub struct WaylandWindowState {
     active: bool,
     hovered: bool,
     redraw_requested: bool,
+    gpu_recovery: GpuRecovery,
+    gpu_loss: GpuLossReporter,
+    injected_loss: InjectedLoss,
     presentation: PresentationState,
     pending_frame_callback: Option<wl_callback::WlCallback>,
     in_progress_configure: Option<InProgressConfigure>,
@@ -559,6 +565,7 @@ impl WaylandWindowState {
         appearance: WindowAppearance,
         viewport: Option<wp_viewport::WpViewport>,
         client: WaylandClientStatePtr,
+        gpu_loss: GpuLossReporter,
         globals: Globals,
         gpu_context: gpui_wgpu::GpuContext,
         compositor_gpu: Option<CompositorGpuHint>,
@@ -634,6 +641,9 @@ impl WaylandWindowState {
             active: false,
             hovered: false,
             redraw_requested: false,
+            gpu_recovery: GpuRecovery::default(),
+            gpu_loss,
+            injected_loss: InjectedLoss::from_env(Instant::now()),
             presentation: PresentationState::Unpresented,
             pending_frame_callback: None,
             in_progress_window_controls: None,
@@ -834,6 +844,7 @@ impl WaylandWindow {
         gpu_context: gpui_wgpu::GpuContext,
         compositor_gpu: Option<CompositorGpuHint>,
         client: WaylandClientStatePtr,
+        gpu_loss: GpuLossReporter,
         params: WindowParams,
         appearance: WindowAppearance,
         parent: Option<WaylandWindowStatePtr>,
@@ -868,6 +879,7 @@ impl WaylandWindow {
                 appearance,
                 viewport,
                 client,
+                gpu_loss,
                 globals,
                 gpu_context,
                 compositor_gpu,
@@ -2015,7 +2027,8 @@ impl PlatformWindow for WaylandWindow {
             return;
         };
 
-        if renderer.device_lost() {
+        let injected = state.injected_loss.is_lost(Instant::now());
+        if renderer.device_lost() || injected {
             let raw_window = RawWindow {
                 window: state.surface.id().as_ptr().cast::<std::ffi::c_void>(),
                 display: state
@@ -2026,14 +2039,18 @@ impl PlatformWindow for WaylandWindow {
                     .display_ptr()
                     .cast::<std::ffi::c_void>(),
             };
-            match renderer.recover(&raw_window) {
-                Ok(()) => {}
-                Err(err) => {
-                    log::warn!("GPU recovery failed, will retry on next frame: {err}");
+            match state.gpu_recovery.step(Instant::now(), || {
+                check_injected_recovery()?;
+                renderer.recover(&raw_window)
+            }) {
+                RecoveryStep::Recovered => {
+                    state.injected_loss.recovered();
+                    state.redraw_requested = true;
                 }
+                RecoveryStep::Retry => state.redraw_requested = true,
+                RecoveryStep::Failed(reason) => state.gpu_loss.report(reason),
+                RecoveryStep::GaveUp => {}
             }
-
-            state.redraw_requested = true;
             return;
         }
 

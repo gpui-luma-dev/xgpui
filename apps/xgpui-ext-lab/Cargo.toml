@@ -31,6 +31,7 @@ runtime-shaders = ["gpui_platform/runtime_shaders"]
 xgpui-shell = { path = "../../extensions/crates/xgpui-shell" , package = "xgpui-shell", version = "0.1.0" }
 xgpui-canvas = { path = "../../extensions/crates/xgpui-canvas", features = ["gpui"] , package = "xgpui-canvas", version = "0.3.2" }
 anyhow = "1"
+env_logger = "0.11"
 gpui = { package = "xgpui", path = "../../gpui/crates/gpui", version = "3.0.0" }
 xgpui-color = { path = "../../extensions/crates/xgpui-color", version = "0.3.1", package = "xgpui-color", features = ["icc"] }
 xgpui-gamut = { path = "../../extensions/crates/xgpui-gamut", version = "0.3.2", features = ["instanced"] , package = "xgpui-gamut" }

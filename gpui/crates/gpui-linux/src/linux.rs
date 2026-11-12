@@ -1,5 +1,8 @@
 mod dispatcher;
 mod display_connection;
+// Only the X11 and Wayland windows retry recovery; the reporter is always built.
+#[cfg_attr(not(any(feature = "wayland", feature = "x11")), allow(dead_code))]
+mod gpu_recovery;
 mod headless;
 mod keyboard;
 mod platform;
@@ -18,6 +21,7 @@ mod xdg_desktop_portal;
 
 pub use dispatcher::*;
 pub(crate) use display_connection::{Backend, DisplayConnection, select_backend};
+pub(crate) use gpu_recovery::*;
 pub(crate) use headless::*;
 pub(crate) use keyboard::*;
 pub(crate) use platform::*;

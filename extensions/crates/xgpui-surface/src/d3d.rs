@@ -13,7 +13,7 @@
 //! preparation batch issues `ID3D11DeviceContext4::Wait` on the immediate
 //! context (#197 K3). Without a shared fence the engine waits on its own
 //! thread; without D3D11.4 fences, preparation waits on the CPU.
-use crate::{EngineSurface, SurfaceDesc, SurfaceFormat, SurfaceSlot, Unsupported};
+use crate::{AcquireError, EngineSurface, SurfaceDesc, SurfaceFormat, SurfaceSlot, Unsupported};
 use anyhow::{Context as _, Result, ensure};
 use gpui_windows::custom_draw::Dx11CustomContext;
 use std::any::Any;
@@ -114,11 +114,8 @@ const FIRST_FRAME_WAIT: Duration = Duration::from_millis(100);
 
 /// The engine's shared D3D12 fence and the compositor's opened view of it.
 pub(crate) struct SharedFence {
-    // Field order is drop order: release the D3D12 fence (and the host's view)
-    // before the engine device clone. wgpu unloads d3d12.dll when its device
-    // is destroyed, so a D3D12 object released afterwards would call into an
-    // unloaded library.
-    fence: ID3D12Fence,
+    /// The engine-side objects, released by `EngineSurface::invalidate`.
+    engine: Mutex<Option<EngineFence>>,
     // Keyed by the compositor device object, held so its address cannot be
     // reused by a recreated device (#197 K6).
     host: Mutex<Option<(ID3D11Device, Option<ID3D11Fence>)>>,
@@ -128,12 +125,40 @@ pub(crate) struct SharedFence {
     /// Set by `WgpuSurfaceTarget::set_gpu_wait(false)`: frames are only
     /// observed, never waited for.
     observe_only: AtomicBool,
-    handle: SharedHandle,
-    _engine: wgpu::Device,
 }
+
+/// Everything in a [`SharedFence`] that keeps the engine's D3D12 device alive.
+///
+/// D3D12 devices are singletons per adapter: while any object of a removed
+/// device survives, a new device on that adapter is the removed one again, and
+/// wgpu falls back to a software adapter. So invalidation releases these.
+struct EngineFence {
+    // Field order is drop order: release the D3D12 fence and its handle
+    // before the engine device clone. wgpu unloads d3d12.dll when its device
+    // is destroyed, so a D3D12 object released afterwards would call into an
+    // unloaded library.
+    fence: ID3D12Fence,
+    handle: SharedHandle,
+    _device: wgpu::Device,
+}
+
 impl SharedFence {
+    /// The engine fence, or `None` once released.
+    fn fence(&self) -> Option<ID3D12Fence> {
+        self.engine
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|engine| engine.fence.clone())
+    }
+    /// Release the engine-side objects. Points on a released fence count as
+    /// reached: the engine device is gone, so nothing will signal it.
+    fn release(&self) {
+        drop(self.engine.lock().unwrap().take());
+    }
     fn reached(&self, value: u64) -> bool {
-        unsafe { self.fence.GetCompletedValue() >= value }
+        self.fence()
+            .is_none_or(|fence| unsafe { fence.GetCompletedValue() } >= value)
     }
     /// The compositor's fence, or `None` when it lacks D3D11.4 fences.
     fn host_fence(&self, context: &Dx11CustomContext) -> Result<Option<ID3D11Fence>> {
@@ -143,13 +168,21 @@ impl SharedFence {
         {
             return Ok(fence.clone());
         }
+        let handle = {
+            let engine = self.engine.lock().unwrap();
+            let Some(engine) = engine.as_ref() else {
+                // Released: points on it count as reached, so none waits.
+                return Ok(None);
+            };
+            engine.handle.0
+        };
         let opened = context
             .device
             .cast::<ID3D11Device5>()
             .ok()
             .and_then(|device| {
                 let mut fence: Option<ID3D11Fence> = None;
-                unsafe { device.OpenSharedFence(self.handle.0, &mut fence) }.ok()?;
+                unsafe { device.OpenSharedFence(handle, &mut fence) }.ok()?;
                 fence
             });
         if opened.is_none() {
@@ -164,10 +197,13 @@ impl SharedFence {
         if self.reached(value) {
             return true;
         }
+        let Some(fence) = self.fence() else {
+            return true;
+        };
         let Ok(event) = (unsafe { CreateEventW(None, true, false, PCWSTR::null()) }) else {
             return false;
         };
-        let signalled = unsafe { self.fence.SetEventOnCompletion(value, event) }.is_ok()
+        let signalled = unsafe { fence.SetEventOnCompletion(value, event) }.is_ok()
             && unsafe {
                 WaitForSingleObject(event, timeout.as_millis().min(u32::MAX as u128 - 1) as u32)
             } == WAIT_OBJECT_0;
@@ -205,7 +241,11 @@ impl Drop for SharedHandle {
 
 /// One slot's shared handle plus the compositor's opened view of it.
 pub(crate) struct SlotResources {
-    handle: SharedHandle,
+    /// Released by `EngineSurface::invalidate`: the handle keeps the slot's
+    /// D3D12 resource, and with it the engine device, alive.
+    handle: Mutex<Option<SharedHandle>>,
+    /// The surface's shared fence, released along with the slots.
+    fence: Option<Arc<SharedFence>>,
     adapter: (u32, i32),
     // Keyed by the compositor device object (see `SharedFence::host`).
     host: Mutex<Option<(ID3D11Device, ID3D11Texture2D)>>,
@@ -219,6 +259,18 @@ impl std::fmt::Debug for SlotResources {
 }
 
 impl SlotResources {
+    /// Release every engine-side D3D12 object, so the engine can create a
+    /// replacement device on the same adapter. The compositor keeps the
+    /// texture it already opened, so the last frame keeps displaying.
+    pub(crate) fn release_engine(&self) {
+        // Closing an NT handle is a kernel call; the fence releases its own
+        // D3D12 objects before its device clone (see `EngineFence`).
+        drop(self.handle.lock().unwrap().take());
+        if let Some(fence) = &self.fence {
+            fence.release();
+        }
+    }
+
     /// The compositor's texture over this slot, opened once per host device.
     fn host_texture(&self, context: &Dx11CustomContext) -> Result<ID3D11Texture2D> {
         let mut host = self.host.lock().unwrap();
@@ -230,19 +282,32 @@ impl SlotResources {
         let dxgi: IDXGIDevice = context.device.cast()?;
         let desc = unsafe { dxgi.GetAdapter()?.GetDesc()? };
         let luid = (desc.AdapterLuid.LowPart, desc.AdapterLuid.HighPart);
+        // Adapter IDs as HighPart:LowPart, matching the compositor's log.
+        let engine = format!("{:08x}:{:08x}", self.adapter.1, self.adapter.0);
+        let compositor = format!("{:08x}:{:08x}", luid.1, luid.0);
         ensure!(
             luid == self.adapter,
-            Unsupported("engine and compositor use different GPUs".into())
+            Unsupported(format!(
+                "engine and compositor use different GPUs \
+                 (engine adapter {engine}, compositor adapter {compositor})"
+            ))
         );
         let device: ID3D11Device1 = context
             .device
             .cast()
             .map_err(|_| Unsupported("the compositor lacks ID3D11Device1".into()))?;
-        let texture: ID3D11Texture2D = unsafe { device.OpenSharedResource1(self.handle.0) }
-            .map_err(|error| {
+        let handle = self
+            .handle
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|handle| handle.0)
+            .ok_or_else(|| Unsupported("the surface was invalidated".into()))?;
+        let texture: ID3D11Texture2D =
+            unsafe { device.OpenSharedResource1(handle) }.map_err(|error| {
                 Unsupported(format!(
                     "the compositor cannot open the engine's shared texture \
-                     (engine and compositor on different adapters?): {error}"
+                     (adapter {engine}): {error}"
                 ))
             })?;
         *host = Some((context.device.clone(), texture.clone()));
@@ -322,12 +387,14 @@ impl WgpuSurfaceTarget {
                     unsafe { raw.CreateSharedHandle(&fence, None, GENERIC_ALL.0, PCWSTR::null()) }
                         .ok()?;
                 Some(Arc::new(SharedFence {
-                    fence,
+                    engine: Mutex::new(Some(EngineFence {
+                        fence,
+                        handle: SharedHandle(handle),
+                        _device: device.clone(),
+                    })),
                     host: Mutex::new(None),
                     no_host_wait: AtomicBool::new(false),
                     observe_only: AtomicBool::new(false),
-                    handle: SharedHandle(handle),
-                    _engine: device.clone(),
                 }))
             });
         let heap = D3D12_HEAP_PROPERTIES {
@@ -414,7 +481,8 @@ impl WgpuSurfaceTarget {
                 )
             });
             slots.push(Arc::new(SlotResources {
-                handle,
+                handle: Mutex::new(Some(handle)),
+                fence: fence.clone(),
                 adapter,
                 host: Mutex::new(None),
             }));
@@ -475,10 +543,11 @@ impl WgpuSurfaceTarget {
         let submitted = std::time::Instant::now();
         if let Some(fence) = &self.fence {
             // Signal after this submission; present only once it is submitted.
+            let signal = fence.fence().ok_or(AcquireError::Invalidated)?;
             self.next += 1;
             unsafe { self.queue.as_hal::<Dx12>() }
                 .context("missing D3D12 engine queue")?
-                .add_signal_fence(fence.fence.clone(), self.next);
+                .add_signal_fence(signal, self.next);
             self.queue.submit(commands);
             return self.publish(
                 slot,

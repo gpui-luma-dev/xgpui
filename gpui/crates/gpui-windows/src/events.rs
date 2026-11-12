@@ -27,6 +27,8 @@ pub(crate) const WM_GPUI_DOCK_MENU_ACTION: u32 = WM_USER + 4;
 pub(crate) const WM_GPUI_FORCE_UPDATE_WINDOW: u32 = WM_USER + 5;
 pub(crate) const WM_GPUI_KEYBOARD_LAYOUT_CHANGED: u32 = WM_USER + 6;
 pub(crate) const WM_GPUI_GPU_DEVICE_LOST: u32 = WM_USER + 7;
+/// Device recovery failed. On the platform window, `lparam` owns a `Box<String>` reason.
+pub(crate) const WM_GPUI_GPU_DEVICE_FAILED: u32 = WM_USER + 8;
 pub(crate) const WM_GPUI_DISPLAYS_CHANGED: u32 = WM_USER + 10;
 
 const SIZE_MOVE_LOOP_TIMER_ID: usize = 1;
@@ -169,7 +171,8 @@ impl WindowsWindowInner {
             WM_GETOBJECT => self.handle_wm_getobject(wparam, lparam),
             WM_GPUI_CURSOR_STYLE_CHANGED
             | WM_GPUI_FORCE_UPDATE_WINDOW
-            | WM_GPUI_GPU_DEVICE_LOST => self.handle_gpui_events(handle, msg, wparam, lparam),
+            | WM_GPUI_GPU_DEVICE_LOST
+            | WM_GPUI_GPU_DEVICE_FAILED => self.handle_gpui_events(handle, msg, wparam, lparam),
             _ => None,
         };
         if let Some(n) = handled {
@@ -1330,6 +1333,10 @@ impl WindowsWindowInner {
             WM_GPUI_CURSOR_STYLE_CHANGED => self.handle_cursor_changed(lparam),
             WM_GPUI_FORCE_UPDATE_WINDOW => self.draw_window(handle, true),
             WM_GPUI_GPU_DEVICE_LOST => self.handle_device_lost(lparam),
+            WM_GPUI_GPU_DEVICE_FAILED => {
+                self.state.renderer.borrow_mut().mark_failed();
+                Some(0)
+            }
             _ => unreachable!(),
         }
     }
@@ -1340,13 +1347,19 @@ impl WindowsWindowInner {
         }
         let devices = lparam.0 as *const DirectXDevices;
         let devices = unsafe { &*devices };
-        if let Err(err) = self
+        let recovered = self
             .state
             .renderer
             .borrow_mut()
-            .handle_device_lost(&devices)
-        {
-            panic!("Device lost: {err}");
+            .handle_device_lost(&devices);
+        if let Err(err) = recovered {
+            self.state.renderer.borrow_mut().mark_failed();
+            crate::platform::post_gpu_device_failed(
+                self.platform_window_handle,
+                self.validation_number,
+                format!("window renderer could not use the recovered device: {err:#}"),
+            );
+            return Some(0);
         }
         // Make sure the first `draw_window` after recovery (whether it comes
         // from the forced WM_GPUI_FORCE_UPDATE_WINDOW or a stray WM_PAINT in

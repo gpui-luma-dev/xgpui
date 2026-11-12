@@ -88,6 +88,13 @@ handles it.</li>
 <li><strong>Device loss is recoverable.</strong> Call <code>EngineSurface::invalidate()</code> when the
 engine loses its device and create a new surface. When the compositor's device
 is replaced, slots are re-imported.</li>
+<li><strong>On Windows, drop the lost device before creating its replacement.</strong> D3D12
+devices are singletons per adapter: while any object of a lost device is still
+alive, a "new" device on that adapter is the lost one again, and wgpu falls back
+to the software adapter, whose slots the compositor cannot open. <code>invalidate()</code>
+releases the surface's own D3D12 objects; drop your device, queue, resources and
+<code>WgpuSurfaceTarget</code> yourself. After a TDR the hardware adapter can take a
+moment to return, so retry rather than accept a software adapter.</li>
 </ul>
 <h2 id="heavy-engines">Heavy engines</h2>
 <p><code>SurfaceStats</code> reports frames composited, frames never shown and the latency

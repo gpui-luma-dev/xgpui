@@ -63,6 +63,7 @@ pub(crate) struct TestPlatform {
     menus: RefCell<Vec<OwnedMenu>>,
     pub(crate) app_lifecycle_callback: RefCell<Option<Box<dyn FnMut(AppLifecyclePhase)>>>,
     pub(crate) memory_warning_callback: RefCell<Option<Box<dyn FnMut()>>>,
+    gpu_device_lost_callback: RefCell<Option<Box<dyn FnMut(crate::GpuDeviceLost)>>>,
 }
 
 #[derive(Clone)]
@@ -171,6 +172,15 @@ impl TestPlatform {
     }
 
     #[cfg(test)]
+    pub(crate) fn simulate_gpu_device_lost(&self, lost: crate::GpuDeviceLost) {
+        let callback = self.gpu_device_lost_callback.borrow_mut().take();
+        if let Some(mut callback) = callback {
+            callback(lost);
+            *self.gpu_device_lost_callback.borrow_mut() = Some(callback);
+        }
+    }
+
+    #[cfg(test)]
     pub(crate) fn simulate_desktop_preferences(&self, preferences: crate::DesktopPreferences) {
         *self.desktop_preferences.borrow_mut() = preferences;
         let callback = self.desktop_preferences_callback.borrow_mut().take();
@@ -276,6 +286,7 @@ impl TestPlatform {
             menus: Default::default(),
             app_lifecycle_callback: Default::default(),
             memory_warning_callback: Default::default(),
+            gpu_device_lost_callback: Default::default(),
         })
     }
 
@@ -719,6 +730,10 @@ impl Platform for TestPlatform {
     }
 
     fn on_system_sleep(&self, _callback: Box<dyn FnMut()>) {}
+
+    fn on_gpu_device_lost(&self, callback: Box<dyn FnMut(crate::GpuDeviceLost)>) {
+        *self.gpu_device_lost_callback.borrow_mut() = Some(callback);
+    }
 
     fn on_system_wake(&self, _callback: Box<dyn FnMut()>) {}
 

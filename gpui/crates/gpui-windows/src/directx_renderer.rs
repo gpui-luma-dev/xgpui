@@ -2,6 +2,8 @@ mod color_presentation;
 mod retirement;
 mod wide_sdr;
 #[cfg(test)]
+mod device_failure_tests;
+#[cfg(test)]
 mod headless_retirement_tests;
 
 use std::{
@@ -69,6 +71,8 @@ pub(crate) struct DirectXRenderer {
     /// In that case we want to discard the first frame that we draw as we got reset in the middle of a frame
     /// meaning we lost all the allocated gpu textures and scene resources.
     skip_draws: bool,
+    /// Device recovery failed, so this renderer never draws again.
+    failed: bool,
 }
 
 /// Direct3D objects
@@ -222,6 +226,7 @@ impl DirectXRenderer {
             width: 1,
             height: 1,
             skip_draws: false,
+            failed: false,
         })
     }
 
@@ -1402,7 +1407,15 @@ impl DirectXRenderer {
     }
 
     pub(crate) fn mark_drawable(&mut self) {
-        self.skip_draws = false;
+        if !self.failed {
+            self.skip_draws = false;
+        }
+    }
+
+    /// Stops drawing for good, after device recovery failed.
+    pub(crate) fn mark_failed(&mut self) {
+        self.failed = true;
+        self.skip_draws = true;
     }
 }
 
@@ -2753,6 +2766,7 @@ impl Dx11HeadlessRenderer {
             width: 1,
             height: 1,
             skip_draws: false,
+            failed: false,
         }))
     }
 }
