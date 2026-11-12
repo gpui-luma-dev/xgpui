@@ -1,5 +1,6 @@
-//! Experimental: present output from an independently owned GPU engine into
-//! xgpui, like presenting to a swapchain (design: issue #197).
+//! Experimental zero-copy GPU interop for xgpui: show frames from a GPU engine
+//! you own in xgpui windows, the way an engine presents to a swapchain. See the
+//! [GPU interop guide](https://xgpui.dev/gpu-interop.html).
 //!
 //! The engine keeps its own device, queue and thread. An [`EngineSurface`] owns
 //! a fixed ring of shareable slots:
@@ -19,10 +20,14 @@
 //! signals the sync point. A sync point whose signal is never submitted can
 //! stall composition.
 //!
-//! Implemented: macOS (IOSurface slots, `MTLSharedEvent` sync, GPU-side wait);
-//! with feature `wgpu`, Linux (opaque-fd Vulkan memory) and Windows (shared
-//! NT-handle D3D12 textures opened by the D3D11 compositor). On Linux and
-//! Windows the engine observes completion before `present`.
+//! Implemented: macOS (IOSurface slots, `MTLSharedEvent` sync); with feature
+//! `wgpu`, Linux (opaque-fd Vulkan memory, timeline semaphore) and Windows
+//! (shared NT-handle D3D12 textures and fence, opened by the D3D11
+//! compositor). The compositor waits for each frame on the GPU.
+//!
+//! The engine must run on the compositor's GPU; otherwise the surface reports
+//! [`Unsupported`]. On a machine with two GPUs, nothing yet helps an engine pick
+//! the right one (issue #253).
 use gpui::{DevicePixels, Size, size};
 
 pub(crate) mod heavy;

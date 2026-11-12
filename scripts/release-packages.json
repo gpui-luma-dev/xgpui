@@ -18,7 +18,7 @@
     "xgpui-canvas": "xgpui-canvas",
     "gpui-ios": "xgpui-ios",
     "xgpui-shell": "xgpui-shell",
-    "xgpui-surface": "xgpui-surface"
+    "xgpui-gpu-interop": "xgpui-gpu-interop"
   },
   "version": "1.0.0",
   "versions": {
@@ -40,6 +40,6 @@
     "xgpui-ios": "1.26.5",
     "xgpui-macros": "1.0.2",
     "xgpui-shell": "0.1.0",
-    "xgpui-surface": "0.1.0"
+    "xgpui-gpu-interop": "0.1.0"
   }
 }
