@@ -105,14 +105,14 @@ case "$(uname -s)" in
 esac
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
-LOG="$WORK/results-$OS-$(hostname)-$STAMP.txt"
+LOG="$WORK/results-$OS-$(uname -n)-$STAMP.txt"
 # Keep the terminal on fds 3 and 4: posting results talks to it directly, so
 # nothing it prints can be lost in the log pipe.
 exec 3>&1 4>&2
 exec > >(tee "$LOG") 2>&1
 
 echo "testing: $TEST_BRANCH @ $COMMIT (script $SCRIPT_COMMIT)"
-echo "issue #$ISSUE on $OS, $(hostname), $(date)"
+echo "issue #$ISSUE on $OS, $(uname -n), $(date)"
 if [ "$OS" = windows ]; then
     powershell -NoProfile -Command "Get-CimInstance Win32_OperatingSystem | ForEach-Object { \$_.Caption + ' ' + \$_.Version }; Get-CimInstance Win32_VideoController | ForEach-Object { 'GPU: ' + \$_.Name + ', driver ' + \$_.DriverVersion }" 2>&1 | tr -d '\r' || true
 else
@@ -287,7 +287,7 @@ sleep 1
 COMMENT="$WORK/comment-$STAMP.md"
 write_comment() { # number of log lines to include
     {
-        echo "### #$ISSUE hardware run on $OS ($(hostname))"
+        echo "### #$ISSUE hardware run on $OS ($(uname -n))"
         echo
         echo "\`testing: $TEST_BRANCH @ $COMMIT (script $SCRIPT_COMMIT)\`"
         echo
