@@ -94,6 +94,14 @@ scene replacement and pixel checks:</p>
 </code></pre>
 <p>Each child has a 15-second runtime limit after compilation. A timeout fails the
 check; preparation markers help locate a stall.</p>
+<h3 id="gpu-interop">GPU interop</h3>
+<p>Run wgpu's boids example as an independent engine in an xgpui window, through
+<a href="gpu-interop.html">xgpui-gpu-interop</a>:</p>
+<pre><code class="language-sh">cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin interop-boids --target-dir target
+</code></pre>
+<p><code>gpu-canvas-workbench</code> is an editable compute canvas with automated checks
+(<code>--check</code>), and <code>gpu-interop-lab</code> stress-tests surfaces. All three
+accept <code>--run-seconds N</code>.</p>
 <h3 id="pastel-waves">Pastel waves</h3>
 <p>The animated ribbon experiment has moved to the
 <a href="https://github.com/gpui-luma-dev/xgpui-luma/blob/main/apps/xgpui-lab/docs/pastel-waves.md">xgpui-luma lab</a>.</p>
