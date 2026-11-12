@@ -110,7 +110,7 @@ fn api(name: &str) -> Result<&'static str> {
             "pub fn scheduler() -> xgpui_svg::SvgScheduler { xgpui_svg::SvgScheduler::default() }"
         }
         "xgpui-canvas" => "pub use xgpui_canvas::{Camera2D, Scene};",
-        "xgpui-surface" => "pub use xgpui_surface::{EngineSurface, SurfaceSlot};",
+        "xgpui-gpu-interop" => "pub use xgpui_gpu_interop::{EngineSurface, SurfaceSlot};",
         _ => bail!("Add a consumer API smoke check for {name}"),
     })
 }

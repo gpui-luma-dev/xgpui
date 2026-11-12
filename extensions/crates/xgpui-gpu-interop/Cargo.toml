@@ -1,14 +1,14 @@
 [package]
-name = "xgpui-surface"
+name = "xgpui-gpu-interop"
 version = "0.1.0"
 edition = "2024"
 publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
-description = "Experimental: present output from independently owned GPU engines into xgpui (design: issue #197)"
+description = "Experimental zero-copy GPU interop for xgpui: show frames from your own GPU engine (wgpu or Metal) in xgpui windows"
 license = "Apache-2.0"
 readme = "README.md"
-keywords = ["xgpui", "gpui", "graphics", "gpu", "compute"]
-categories = ["gui", "graphics"]
+keywords = ["gpui", "gpu", "interop", "zero-copy", "wgpu"]
+categories = ["gui", "graphics", "rendering"]
 
 [features]
 default = []

@@ -1,5 +1,5 @@
 //! GPU Canvas Workbench (#197): an editable GPU workload in an engine on its
-//! own wgpu device, presented through `xgpui-surface` beside ordinary
+//! own wgpu device, presented through `xgpui-gpu-interop` beside ordinary
 //! controls.
 //!
 //! - The engine keeps a persistent working image. Pointer strokes append
@@ -50,7 +50,7 @@ mod workbench {
         time::Instant,
     };
     use xgpui_ext_lab::{LabApp, LabWindowTitle};
-    use xgpui_surface::EngineSurface;
+    use xgpui_gpu_interop::EngineSurface;
 
     #[cfg(target_os = "macos")]
     const TRANSPORT: &str = "zero-copy IOSurface ring";

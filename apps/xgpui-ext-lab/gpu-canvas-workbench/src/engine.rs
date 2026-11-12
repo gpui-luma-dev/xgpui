@@ -10,7 +10,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU8, Ordering},
 };
 use std::time::Instant;
-use xgpui_surface::{
+use xgpui_gpu_interop::{
     AcquireError, EngineSurface, SurfaceDesc, SurfaceFormat, WgpuSurfaceTarget, wgpu,
 };
 
