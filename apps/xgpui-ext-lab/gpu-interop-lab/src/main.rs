@@ -1,11 +1,11 @@
-//! Engine surface lab (#197): a wgpu engine on its own device and queue
+//! GPU interop lab (#197): a wgpu engine on its own device and queue
 //! (Metal on macOS, Vulkan on Linux) renders every frame into an
 //! `EngineSurface`; xgpui composites the latest frame zero-copy beside ordinary
 //! sRGB controls, in two placements.
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 fn main() {
-    eprintln!("engine-surface-lab requires macOS, Linux or Windows; see issue #197");
+    eprintln!("gpu-interop-lab requires macOS, Linux or Windows; see issue #197");
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
@@ -948,7 +948,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                         } else {
                             (Some(engine), None)
                         };
-                        window.set_lab_title("XGPUI Engine Surface Lab");
+                        window.set_lab_title("XGPUI GPU Interop Lab");
                         // Windows may open a new program's window behind the
                         // terminal that launched it; bring ours to the front.
                         if !options.headless {

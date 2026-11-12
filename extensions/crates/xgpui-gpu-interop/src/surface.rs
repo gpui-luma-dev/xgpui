@@ -276,7 +276,7 @@ fn notify(shared: &Shared) {
 /// that is never reached keeps only this thread waiting, in short slices.
 fn spawn_waiter(shared: Weak<Shared>, frame: Weak<SurfaceFrame>) {
     let _ = std::thread::Builder::new()
-        .name("engine-surface-wait".into())
+        .name("gpu-interop-wait".into())
         .spawn(move || {
             loop {
                 let Some(waiting) = frame.upgrade() else {

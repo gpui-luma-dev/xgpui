@@ -1,4 +1,4 @@
-name: Engine surface compile checks
+name: GPU interop compile checks
 
 # Build-only coverage for xgpui-gpu-interop and its two labs (#227). Hosted
 # runners have no usable GPU, so nothing here runs a surface: runtime checks on
@@ -10,9 +10,9 @@ on:
   pull_request:
     branches: [main, 'issue-227/epic']
     paths:
-      - '.github/workflows/engine-surface.yml'
+      - '.github/workflows/gpu-interop.yml'
       - 'extensions/crates/xgpui-gpu-interop/**'
-      - 'apps/xgpui-ext-lab/engine-surface-lab/**'
+      - 'apps/xgpui-ext-lab/gpu-interop-lab/**'
       - 'apps/xgpui-ext-lab/gpu-canvas-workbench/**'
       - 'apps/xgpui-ext-lab/Cargo.toml'
       - 'gpui/crates/**'
@@ -23,9 +23,9 @@ on:
   push:
     branches: [main, 'issue-227/epic']
     paths:
-      - '.github/workflows/engine-surface.yml'
+      - '.github/workflows/gpu-interop.yml'
       - 'extensions/crates/xgpui-gpu-interop/**'
-      - 'apps/xgpui-ext-lab/engine-surface-lab/**'
+      - 'apps/xgpui-ext-lab/gpu-interop-lab/**'
       - 'apps/xgpui-ext-lab/gpu-canvas-workbench/**'
       - 'apps/xgpui-ext-lab/Cargo.toml'
       - 'gpui/crates/**'
@@ -38,7 +38,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: engine-surface-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  group: gpu-interop-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 env:
@@ -48,7 +48,7 @@ env:
 
 jobs:
   compile:
-    name: Engine surface compile (${{ matrix.os }})
+    name: GPU interop compile (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -67,7 +67,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: engine-surface-v1
+          shared-key: gpu-interop-v1
       - name: Install Linux development libraries
         if: runner.os == 'Linux'
         run: |
@@ -82,12 +82,12 @@ jobs:
       - name: Lint both labs
         if: ${{ !cancelled() }}
         # --tests on the shared lab package selects unrelated lab binaries too.
-        run: cargo clippy --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin engine-surface-lab --bin gpu-canvas-workbench --no-deps -- -D warnings
+        run: cargo clippy --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gpu-interop-lab --bin gpu-canvas-workbench --no-deps -- -D warnings
       - name: Build crate tests and labs without running them
         if: ${{ !cancelled() }}
         run: |
           cargo test --locked --config .cargo/validation.toml -p xgpui-gpu-interop --features wgpu --lib --no-run
-          cargo build --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin engine-surface-lab --bin gpu-canvas-workbench
+          cargo build --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gpu-interop-lab --bin gpu-canvas-workbench
       - name: Run the headless D3D11 retirement test on WARP (#199)
         if: ${{ !cancelled() && runner.os == 'Windows' }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-windows --features test-support --lib directx_renderer::headless_retirement_tests
@@ -95,9 +95,9 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
-          ## Engine surface validation scope
+          ## GPU interop validation scope
           Compiles and lints xgpui-gpu-interop (with and without `wgpu`) and links
-          its tests, engine-surface-lab and gpu-canvas-workbench. Hosted runners have
+          its tests, gpu-interop-lab and gpu-canvas-workbench. Hosted runners have
           no usable GPU, so no surface is created, shared, presented or recovered here.
           Runtime coverage needs real hardware (see #227's cross-platform test script).
           Exception: on Windows, the headless D3D11 retirement test (#199) runs on

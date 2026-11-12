@@ -81,10 +81,10 @@ Measured with 4 × 4K engines at a GPU-saturating load on an Intel Iris Xe: the 
 From the [xgpui repository](https://github.com/gpui-luma-dev/xgpui):
 
 - `cargo run -p xgpui-ext-lab --bin gpu-canvas-workbench`: the example application, with `--check` for automated verification.
-- `cargo run -p xgpui-ext-lab --bin engine-surface-lab -- --threaded`. Stress testing: `--stress-surfaces N --stress-size WxH --work N [--heavy]`.
+- `cargo run -p xgpui-ext-lab --bin gpu-interop-lab -- --threaded`. Stress testing: `--stress-surfaces N --stress-size WxH --work N [--heavy]`.
 
 Design: [#197](https://github.com/gpui-luma-dev/xgpui/issues/197). Transport evidence: [#198](https://github.com/gpui-luma-dev/xgpui/issues/198). Device-loss runs, including a real Windows GPU reset: [#119](https://github.com/gpui-luma-dev/xgpui/issues/119).
 
 ## GPUI public API changes: additions and compatibility
 
-Seven additive hooks in `gpui-wgpu`, `gpui-windows` and `gpui-apple` let this extension adopt shared textures and wait on engine signals. They ship in `xgpui-wgpu` 2.3.0, `xgpui-windows` 2.2.0 and `xgpui-apple` 4.1.0. Nothing in `gpui` changes and no application needs to migrate. See [the backend hooks](https://xgpui.dev/gpui-public-api.html#engine-surfaces-from-independent-gpu-engines-197).
+Seven additive hooks in `gpui-wgpu`, `gpui-windows` and `gpui-apple` let this extension adopt shared textures and wait on engine signals. They ship in `xgpui-wgpu` 2.3.0, `xgpui-windows` 2.2.0 and `xgpui-apple` 4.1.0. Nothing in `gpui` changes and no application needs to migrate. See [the backend hooks](https://xgpui.dev/gpui-public-api.html#gpu-interop-197).
