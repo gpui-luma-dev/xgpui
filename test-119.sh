@@ -187,12 +187,22 @@ if [ -z "${BUILD_FAILED:-}" ]; then
             PANIC="$(panic_line "$OUT")"
             ENGINE_LOST="$(grep -c 'engine device lost at' "$OUT" | tr -d ' ')"
             ENGINE_REBUILT="$(grep -c 'engine rebuilt on generation' "$OUT" | tr -d ' ')"
+            # Anything the compositor refused after the last rebuild means the
+            # rebuilt engine's frames never reached the window.
+            REBUILT_AT="$(grep -n 'engine rebuilt on generation' "$OUT" | tail -1 | cut -d: -f1)"
+            REFUSED=""
+            if [ -n "$REBUILT_AT" ]; then
+                REFUSED="$(tail -n +"$REBUILT_AT" "$OUT" | grep -m1 'engine surface unsupported' | sed 's/.*engine surface unsupported: //')"
+            fi
+            ON_ADAPTER="$(grep 'engine rebuilt on generation' "$OUT" | tail -1 | sed -n 's/.* on \(.*\): [0-9]* dabs replayed.*/\1/p')"
             if [ -n "$PANIC" ]; then
                 record tdr FAIL "panicked: $PANIC"
             elif [ "$CODE" != 0 ]; then
                 record tdr FAIL "exit $CODE"
             elif [ "$ENGINE_LOST" != 0 ] && [ "$ENGINE_REBUILT" = 0 ]; then
                 record tdr FAIL "the engine lost its device but never rebuilt"
+            elif [ -n "$REFUSED" ]; then
+                record tdr FAIL "the rebuilt engine's surface was refused ($REFUSED); rebuilt on ${ON_ADAPTER:-unknown}"
             elif [ "$LOST" != 0 ]; then
                 record tdr FAIL "reported a device loss after a TDR it should survive"
             elif ! grep -q "$RECOVERED" "$OUT"; then
@@ -202,7 +212,7 @@ if [ -z "${BUILD_FAILED:-}" ]; then
             elif [ "$ENGINE_LOST" = 0 ]; then
                 record tdr PASS "$N frames in 15 s; the engine's device survived"
             else
-                record tdr PASS "$N frames in 15 s; the engine rebuilt on a new device"
+                record tdr PASS "$N frames in 15 s; the engine rebuilt on ${ON_ADAPTER:-a new device}"
             fi
         fi
     fi

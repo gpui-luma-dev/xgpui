@@ -189,6 +189,11 @@ pub struct Engine {
     /// Set by wgpu when the device is lost, including by the driver (a TDR):
     /// after that, nothing may touch the staging belt, whose buffers are gone.
     device_lost: Arc<AtomicBool>,
+    /// The adapter's name and type, for logs.
+    adapter: String,
+    /// Whether the adapter is a software renderer. A rebuild after a GPU
+    /// reset refuses one unless the engine started on one.
+    software: bool,
     slots: usize,
     reset_pending: bool,
     exposure: f32,
@@ -218,6 +223,14 @@ pub static QUEUE_UPLOADS: std::sync::atomic::AtomicBool = std::sync::atomic::Ato
 
 impl Engine {
     pub fn new(slots: usize) -> Result<Self> {
+        Self::create(slots, false)
+    }
+
+    /// `reject_software`: fail instead of using a software adapter. During a
+    /// GPU reset the hardware adapter can be missing for a moment, and an
+    /// engine on a software adapter cannot share textures with the
+    /// compositor's GPU.
+    fn create(slots: usize, reject_software: bool) -> Result<Self> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: BACKEND.0,
             ..wgpu::InstanceDescriptor::new_without_display_handle()
@@ -225,6 +238,14 @@ impl Engine {
         let adapter =
             gpui::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
                 .with_context(|| format!("no wgpu {} adapter", BACKEND.1))?;
+        let info = adapter.get_info();
+        let software = info.device_type == wgpu::DeviceType::Cpu;
+        ensure!(
+            !(reject_software && software),
+            "only a software adapter is available ({})",
+            info.name
+        );
+        let adapter_name = format!("{} ({:?})", info.name, info.device_type);
         #[cfg(target_os = "linux")]
         let (device, queue) = WgpuSurfaceTarget::request_device(&adapter)?;
         #[cfg(not(target_os = "linux"))]
@@ -354,6 +375,8 @@ impl Engine {
             generation: 0,
             lost: false,
             device_lost,
+            adapter: adapter_name,
+            software,
             slots,
             reset_pending: true,
             exposure: 0.,
@@ -389,6 +412,10 @@ impl Engine {
     pub fn is_lost(&self) -> bool {
         self.lost
     }
+    /// The adapter's name and type.
+    pub fn adapter(&self) -> &str {
+        &self.adapter
+    }
     pub fn logged_dabs(&self) -> usize {
         self.log.len()
     }
@@ -422,10 +449,11 @@ impl Engine {
     /// the reconstructed image as a new revision.
     pub fn rebuild(&mut self) -> Result<()> {
         let started = Instant::now();
-        let mut fresh = Engine::new(self.slots)?;
+        let mut fresh = Engine::create(self.slots, !self.software)?;
         fresh.generation = self.generation + 1;
         fresh.exposure = self.exposure;
-        fresh.log = std::mem::take(&mut self.log);
+        // Cloned, not taken: a failed rebuild is retried with the full log.
+        fresh.log = self.log.clone();
         fresh.pending = fresh.log.clone();
         fresh.latencies_ms = std::mem::take(&mut self.latencies_ms);
         fresh.record_ms = std::mem::take(&mut self.record_ms);
