@@ -6,6 +6,9 @@
 # Windows). It fetches and re-runs the newest copy of itself, builds the branch
 # under test in its own worktree, and leaves your checkout alone.
 #
+# `bash test-119.sh --post` posts the newest saved result again, without
+# running anything. Every post is read back from GitHub before it counts.
+#
 # Jobs (PASS / FAIL / SKIP each):
 #   unit     - the #119 unit tests for this OS.
 #   recover  - an injected device loss that recovery survives: no report, and
@@ -20,6 +23,8 @@ ISSUE=119
 SCRIPT_BRANCH=issue-119/hardware-test-harness
 TEST_BRANCH=issue-119/hardware-test-harness
 SCRIPT_NAME=test-119.sh
+# Always this repository, even from a clone whose origin is a fork.
+REPO=gpui-luma-dev/xgpui
 
 # --- self-update -------------------------------------------------------------
 if [ -z "${TEST_119_UPDATED:-}" ]; then
@@ -35,6 +40,54 @@ WORK="$ROOT/target/test-119"
 WT="$WORK/wt"
 export CARGO_TARGET_DIR="$WORK/target"
 mkdir -p "$WORK"
+
+# post_comment FILE: post FILE to the issue, then read the comment back from
+# GitHub and check it carries the file's `testing:` line. Offers to retry on
+# any failure. Returns 0 only for a verified post.
+post_comment() {
+    local file="$1" marker url id attempt=1 answer
+    marker="$(grep -m1 'testing:' "$file")"
+    if ! command -v gh > /dev/null; then
+        echo "gh is not installed. The result is saved at $file."
+        return 1
+    fi
+    while true; do
+        echo "Posting $file to $REPO#$ISSUE (attempt $attempt)..."
+        if url="$(gh issue comment "$ISSUE" --repo "$REPO" --body-file "$file" 2>&1)"; then
+            id="${url##*issuecomment-}"
+            if [ -n "$id" ] && [ "$id" != "$url" ] \
+                && gh api "repos/$REPO/issues/comments/$id" --jq .body 2>/dev/null | grep -qF "$marker"; then
+                echo "Posted and verified: $url"
+                return 0
+            fi
+            echo "gh reported '$url', but the comment could not be read back from GitHub."
+        else
+            echo "Posting failed:"
+            echo "$url"
+        fi
+        if [ ! -t 0 ]; then
+            echo "Not interactive, so not retrying. Post it later with: bash $SCRIPT_NAME --post"
+            return 1
+        fi
+        read -r -p "Retry posting? [Y/n] " answer
+        case "$answer" in
+            n|N) echo "Not posted. Post it later with: bash $SCRIPT_NAME --post"; return 1 ;;
+        esac
+        attempt=$((attempt + 1))
+    done
+}
+
+if [ "${1:-}" = "--post" ]; then
+    LATEST_COMMENT="$(ls -t "$WORK"/comment-*.md 2>/dev/null | head -1)"
+    if [ -z "$LATEST_COMMENT" ]; then
+        echo "No saved result in $WORK. Run bash $SCRIPT_NAME first."
+        exit 1
+    fi
+    echo "Newest saved result:"
+    sed -n '1,12p' "$LATEST_COMMENT"
+    post_comment "$LATEST_COMMENT"
+    exit $?
+fi
 
 git -C "$ROOT" fetch --quiet origin "$TEST_BRANCH" || { echo "git fetch failed"; exit 1; }
 COMMIT="$(git -C "$ROOT" rev-parse --short "origin/$TEST_BRANCH")"
@@ -259,22 +312,15 @@ while [ "$(wc -c < "$COMMENT")" -gt 60000 ] && [ "$LINES" -gt 20 ]; do
 done
 echo "comment: $COMMENT ($(wc -c < "$COMMENT" | tr -d ' ') bytes, last $LINES log lines)"
 
-if ! command -v gh > /dev/null; then
-    echo "gh is not installed, so nothing was posted to #$ISSUE."
-elif [ ! -t 0 ]; then
-    echo "Not an interactive terminal, so nothing was posted to #$ISSUE."
+echo "testing: $TEST_BRANCH @ $COMMIT (script $SCRIPT_COMMIT) on $OS"
+for line in "${RESULTS[@]}"; do echo "  $line"; done
+if [ -t 0 ]; then
+    read -r -p "Post the summary and log tail to issue #$ISSUE? [Y/n] " ANSWER
+    case "$ANSWER" in
+        n|N) echo "Not posted. Post it later with: bash $SCRIPT_NAME --post" ;;
+        *) post_comment "$COMMENT" ;;
+    esac
 else
-    read -r -p "Post the summary and log tail to issue #$ISSUE? [y/N] " ANSWER
-    if [ "$ANSWER" = y ] || [ "$ANSWER" = Y ]; then
-        if URL="$(gh issue comment "$ISSUE" --body-file "$COMMENT" 2>&1)"; then
-            echo "posted: $URL"
-        else
-            echo "Posting failed:"
-            echo "$URL"
-            echo "The comment is saved at $COMMENT."
-        fi
-    else
-        echo "Not posted."
-    fi
+    echo "Not interactive, so nothing was posted. Post it later with: bash $SCRIPT_NAME --post"
 fi
 exit "$FAILED"
