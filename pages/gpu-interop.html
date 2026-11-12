@@ -185,12 +185,12 @@ supported; Windows cannot lower it through wgpu.</li>
 <h2 id="try-it">Try it</h2>
 <p>Run from the repository root:</p>
 <pre><code class="language-sh">cargo run -p xgpui-ext-lab --bin gpu-canvas-workbench
-cargo run -p xgpui-ext-lab --bin engine-surface-lab -- --threaded
+cargo run -p xgpui-ext-lab --bin gpu-interop-lab -- --threaded
 </code></pre>
 <p>The <strong>GPU Canvas Workbench</strong> is a small editor on a compute engine: edits are
 checked against a CPU reference, with a second window, minimize, resize,
 pan/zoom, wide versus sRGB comparison (<code>--compare</code>) and simulated device loss.
-<code>--check</code> runs it as an automated test. The <strong>engine surface lab</strong> stresses
+<code>--check</code> runs it as an automated test. The <strong>GPU interop lab</strong> stresses
 surfaces: <code>--stress-surfaces N --stress-size WxH --work N [--heavy]</code>.</p>
 <p>Run the tests with:</p>
 <pre><code class="language-sh">cargo test -p xgpui-gpu-interop --all-features
@@ -204,7 +204,7 @@ device-loss runs (including a real Windows TDR) in
 <p>Seven additive hooks in <code>gpui-wgpu</code>, <code>gpui-windows</code> and <code>gpui-apple</code> let the
 extension adopt shared textures and wait on engine signals. Nothing in <code>gpui</code>
 itself changes and no application needs to migrate. The hooks ship in <code>xgpui-wgpu 2.3.0</code>, <code>xgpui-windows 2.2.0</code> and <code>xgpui-apple 4.1.0</code>. See
-<a href="gpui-public-api.html#engine-surfaces-from-independent-gpu-engines-197">the backend hooks</a>.</p>
+<a href="gpui-public-api.html#gpu-interop-197">the backend hooks</a>.</p>
 </article>
 </main>
 <footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>

@@ -108,4 +108,4 @@ GPUI throttles the animation frames of an unfocused window to `WindowOptions::in
 
 On macOS, 1,697 dabs replayed in 8.3 ms. `--check` verifies the rebuilt image pixel for pixel against the CPU reference.
 
-On macOS, `--pan-zoom` made 236 view changes in 4 s with a single snapshot, and the frame interval p95 stayed at 17.5 ms. Pressure is covered by *Hold snapshot* and `--check`. `engine-surface-lab --lose-engine-after` covers engine loss.
+On macOS, `--pan-zoom` made 236 view changes in 4 s with a single snapshot, and the frame interval p95 stayed at 17.5 ms. Pressure is covered by *Hold snapshot* and `--check`. `gpu-interop-lab --lose-engine-after` covers engine loss.
