@@ -65,7 +65,7 @@ jobs:
         run: cargo test --locked --config .cargo/validation.toml -p xgpui --features test-support --lib gpu_device_lost
       - name: Test Linux bounded recovery (builds the X11 and Wayland windows)
         if: ${{ !cancelled() && runner.os == 'Linux' }}
-        run: cargo test --locked --config .cargo/validation.toml -p xgpui-linux --features wayland,x11 --lib linux::gpu_recovery::
+        run: "cargo test --locked --config .cargo/validation.toml -p xgpui-linux --features wayland,x11 --lib linux::gpu_recovery::"
       - name: Test the Windows renderer's failed state on WARP
         if: ${{ !cancelled() && runner.os == 'Windows' }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-windows --features test-support --lib directx_renderer::device_failure_tests
