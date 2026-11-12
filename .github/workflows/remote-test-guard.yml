@@ -1,0 +1,28 @@
+name: Remote test script guard
+
+# A branch's .remote-test.sh (see scripts/remote-test.sh) is temporary and must be
+# deleted before an epic branch merges to main.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  no-remote-test-script:
+    name: No .remote-test.sh on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Refuse the temporary remote test script
+        run: |
+          if [ -e .remote-test.sh ]; then
+            echo "::error file=.remote-test.sh::Delete .remote-test.sh before merging to main. It is a temporary per-branch test script for scripts/remote-test.sh."
+            exit 1
+          fi
