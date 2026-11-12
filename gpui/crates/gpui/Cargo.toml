@@ -1,6 +1,6 @@
 [package]
 name = "xgpui"
-version = "3.1.0"
+version = "3.2.0"
 edition = "2024"
 authors = ["Nathan Sobo <nathan@zed.dev>"]
 description = "GPU-accelerated application framework with xgpui rendering extensions"

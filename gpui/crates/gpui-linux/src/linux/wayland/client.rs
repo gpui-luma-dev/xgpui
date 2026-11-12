@@ -1339,6 +1339,7 @@ impl WaylandConnection {
             state.gpu_context.clone(),
             compositor_gpu,
             WaylandClientStatePtr(Rc::downgrade(&self.0)),
+            state.common.borrow().gpu_loss.clone(),
             params,
             appearance,
             parent,

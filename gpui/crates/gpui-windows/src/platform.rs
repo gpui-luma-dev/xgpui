@@ -100,6 +100,8 @@ pub(crate) struct WindowsPlatformState {
     pub(crate) draw_coordinator: Rc<DrawCoordinator>,
     directx_devices: RefCell<Option<DirectXDevices>>,
     low_power_mode_enabled: Cell<bool>,
+    /// Device recovery failed and the app was told.
+    gpu_device_failed: Cell<bool>,
 }
 
 #[derive(Default)]
@@ -115,6 +117,7 @@ struct PlatformCallbacks {
     system_wake: Cell<Option<Box<dyn FnMut()>>>,
     low_power_mode_change: Cell<Option<Box<dyn FnMut()>>>,
     displays_changed: Cell<Option<Box<dyn FnMut()>>>,
+    gpu_device_lost: Cell<Option<Box<dyn FnMut(GpuDeviceLost)>>>,
 }
 
 impl WindowsPlatformState {
@@ -131,6 +134,7 @@ impl WindowsPlatformState {
             draw_coordinator: Rc::new(DrawCoordinator::new()),
             directx_devices: RefCell::new(directx_devices),
             low_power_mode_enabled: Cell::new(false),
+            gpu_device_failed: Cell::new(false),
             menus: RefCell::new(Vec::new()),
         }
     }
@@ -463,14 +467,17 @@ impl WindowsPlatform {
             .name("VSyncProvider".to_owned())
             .spawn(move || {
                 let vsync_provider = VSyncProvider::new();
+                // Set once recovery fails: windows stop drawing, so stop checking and redrawing.
+                let mut device_failed = false;
                 loop {
                     let signal_source = vsync_provider.wait_for_vsync();
                     let signal_at = PlatformFrameSignal::capture(scheduler::Instant::now);
                     if stop.load(Ordering::Acquire) {
                         break;
                     }
-                    if check_device_lost(&directx_device.device)
-                        || invalidate_devices.fetch_and(false, Ordering::Acquire)
+                    if !device_failed
+                        && (check_device_lost(&directx_device.device)
+                            || invalidate_devices.fetch_and(false, Ordering::Acquire))
                     {
                         if let Err(err) = handle_gpu_device_lost(
                             &mut directx_device,
@@ -479,12 +486,21 @@ impl WindowsPlatform {
                             &all_windows,
                             &text_system,
                         ) {
-                            panic!("Device lost: {err}");
+                            device_failed = true;
+                            fail_all_windows(&all_windows, validation_number);
+                            post_gpu_device_failed(
+                                platform_window.as_raw(),
+                                validation_number,
+                                format!("{err:#}"),
+                            );
                         }
                     }
                     let Some(all_windows) = all_windows.upgrade() else {
                         break;
                     };
+                    if device_failed {
+                        continue;
+                    }
                     for hwnd in all_windows.read().iter() {
                         unsafe {
                             if let Some(signal_at) = signal_at {
@@ -898,6 +914,14 @@ impl Platform for WindowsPlatform {
         }
     }
 
+    fn on_gpu_device_lost(&self, callback: Box<dyn FnMut(GpuDeviceLost)>) {
+        self.inner
+            .state
+            .callbacks
+            .gpu_device_lost
+            .set(Some(callback));
+    }
+
     fn on_power_mode_change(&self, callback: Box<dyn FnMut()>) {
         self.inner
             .state
@@ -1237,7 +1261,8 @@ impl WindowsPlatformInner {
             | WM_GPUI_DOCK_MENU_ACTION
             | WM_GPUI_KEYBOARD_LAYOUT_CHANGED
             | WM_GPUI_DISPLAYS_CHANGED
-            | WM_GPUI_GPU_DEVICE_LOST => self.handle_gpui_events(msg, wparam, lparam),
+            | WM_GPUI_GPU_DEVICE_LOST
+            | WM_GPUI_GPU_DEVICE_FAILED => self.handle_gpui_events(msg, wparam, lparam),
             WM_POWERBROADCAST => self.handle_power_broadcast(wparam, lparam),
             WM_DISPLAYCHANGE => self.handle_display_change(handle),
             WM_QUERYENDSESSION => Some(1),
@@ -1252,6 +1277,15 @@ impl WindowsPlatformInner {
     }
 
     fn handle_gpui_events(&self, message: u32, wparam: WPARAM, lparam: LPARAM) -> Option<isize> {
+        if message == WM_GPUI_GPU_DEVICE_FAILED {
+            // Take ownership of the reason first, so a stale message cannot leak it.
+            // SAFETY: `post_gpu_device_failed` passes a `Box<String>` it gave up.
+            let reason = unsafe { Box::from_raw(lparam.0 as *mut String) };
+            if wparam.0 != self.validation_number {
+                return None;
+            }
+            return self.handle_gpu_device_failed(*reason);
+        }
         if wparam.0 != self.validation_number {
             log::error!("Wrong validation number while processing message: {message}");
             return None;
@@ -1441,6 +1475,17 @@ impl WindowsPlatformInner {
             _ => {}
         }
         Some(1)
+    }
+
+    fn handle_gpu_device_failed(&self, reason: String) -> Option<isize> {
+        // Several windows can fail for the same loss; the app hears about it once.
+        if !self.state.gpu_device_failed.replace(true) {
+            self.with_callback(
+                |callbacks| &callbacks.gpu_device_lost,
+                |callback| callback(GpuDeviceLost::new(reason)),
+            );
+        }
+        Some(0)
     }
 
     fn handle_device_lost(&self, lparam: LPARAM) -> Option<isize> {
@@ -1779,6 +1824,49 @@ fn is_window_station_visible() -> bool {
         )
     };
     result.is_ok() && flags.dwFlags & WSF_VISIBLE as u32 != 0
+}
+
+/// Reports a failed device recovery to the platform window, which tells the app once.
+pub(crate) fn post_gpu_device_failed(
+    platform_window: HWND,
+    validation_number: usize,
+    reason: String,
+) {
+    log::error!("GPU device recovery failed; windows stop drawing: {reason}");
+    let reason = Box::into_raw(Box::new(reason));
+    // SAFETY: on success the platform window's handler takes the box back.
+    let posted = unsafe {
+        PostMessageW(
+            Some(platform_window),
+            WM_GPUI_GPU_DEVICE_FAILED,
+            WPARAM(validation_number),
+            LPARAM(reason as isize),
+        )
+    };
+    if posted.is_err() {
+        // SAFETY: the message was not queued, so the box is still ours.
+        drop(unsafe { Box::from_raw(reason) });
+    }
+}
+
+/// Stops every window's renderer after device recovery failed.
+fn fail_all_windows(
+    all_windows: &std::sync::Weak<RwLock<SmallVec<[TrackedWindow; 4]>>>,
+    validation_number: usize,
+) {
+    let Some(all_windows) = all_windows.upgrade() else {
+        return;
+    };
+    for window in all_windows.read().iter() {
+        unsafe {
+            SendMessageW(
+                window.as_raw(),
+                WM_GPUI_GPU_DEVICE_FAILED,
+                Some(WPARAM(validation_number)),
+                None,
+            );
+        }
+    }
 }
 
 fn handle_gpu_device_lost(

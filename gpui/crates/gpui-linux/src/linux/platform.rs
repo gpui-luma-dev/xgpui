@@ -115,6 +115,8 @@ pub(crate) struct LinuxCommon {
     /// X11 uses this to handle events that a runnable's requests read into xcb's queue, where
     /// they would not wake the event loop.
     pub(crate) after_runnable: Option<Rc<dyn Fn()>>,
+    /// Tells the app once that a window gave up recovering its GPU device.
+    pub(crate) gpu_loss: crate::linux::GpuLossReporter,
 }
 
 impl LinuxCommon {
@@ -139,9 +141,11 @@ impl LinuxCommon {
 
         let background_executor = BackgroundExecutor::new(dispatcher.clone());
 
+        let foreground_executor = ForegroundExecutor::new(dispatcher);
         let common = LinuxCommon {
             background_executor,
-            foreground_executor: ForegroundExecutor::new(dispatcher),
+            gpu_loss: crate::linux::GpuLossReporter::new(foreground_executor.clone()),
+            foreground_executor,
             text_system,
             appearance: WindowAppearance::Light,
             desktop_preferences: gpui::DesktopPreferences::default(),
@@ -628,6 +632,10 @@ impl Platform for LinuxPlatform {
 
     fn power_mode(&self) -> PowerMode {
         self.with_common(|common| common.power_mode)
+    }
+
+    fn on_gpu_device_lost(&self, callback: Box<dyn FnMut(gpui::GpuDeviceLost)>) {
+        self.with_common(|common| common.gpu_loss.set_callback(callback));
     }
 
     fn on_power_mode_change(&self, callback: Box<dyn FnMut()>) {
