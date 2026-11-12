@@ -542,6 +542,13 @@ pub trait Platform: 'static {
     /// Registers a callback invoked when the reported power mode changes.
     fn on_power_mode_change(&self, _callback: Box<dyn FnMut()>) {}
 
+    /// Registers a callback invoked on the main thread when the GPU device
+    /// was lost and recovery has given up.
+    ///
+    /// Backends report each failure once. The default does nothing, for
+    /// platforms that cannot detect or report device loss.
+    fn on_gpu_device_lost(&self, _callback: Box<dyn FnMut(GpuDeviceLost)>) {}
+
     /// Sets the application's process-wide identity and user-visible name.
     ///
     /// The identifier is used for platform identity mechanisms such as the
@@ -727,6 +734,27 @@ pub struct SystemNotificationResponse {
     /// The pressed action button's [`SystemNotificationAction::id`], or
     /// `None` when the user activated the notification body itself.
     pub action_id: Option<SharedString>,
+}
+
+/// The GPU device was lost and could not be recovered.
+///
+/// After this is reported, windows stop drawing until the application
+/// restarts. Input, timers and the rest of the application keep running, so
+/// the application can save state and tell the user.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct GpuDeviceLost {
+    /// The backend's last recovery error, for logs and bug reports.
+    pub reason: SharedString,
+}
+
+impl GpuDeviceLost {
+    /// Describes a lost device with the backend's last recovery error.
+    pub fn new(reason: impl Into<SharedString>) -> Self {
+        Self {
+            reason: reason.into(),
+        }
+    }
 }
 
 /// The operating system's preference for energy use versus performance.

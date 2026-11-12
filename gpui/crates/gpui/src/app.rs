@@ -49,12 +49,12 @@ use crate::{
     AnyWindowHandle, AppContext, AppLifecyclePhase, Arena, ArenaBox, Asset, AssetSource,
     BackgroundExecutor, Bounds, ClipboardItem, ClipboardReadError, CursorStyle, DispatchPhase,
     DisplayChanges, DisplayEvent, DisplayId, EventEmitter, ExternalDragPayload, FocusHandle,
-    FocusMap, ForegroundExecutor, Global, KeyBinding, KeyContext, Keymap, Keystroke, LayoutId,
-    Menu, MenuItem, MissingGlyph, OwnedMenu, PathPromptOptions, Pixels, Platform, PlatformDisplay,
-    PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem, Point, PowerMode, Priority,
-    PromptBuilder, PromptButton, PromptHandle, PromptLevel, Render, RenderImage,
-    RenderablePromptHandle, Reservation, ScreenCaptureSource, SharedString, SubscriberSet,
-    Subscription, SvgRenderer, SystemNotification, SystemNotificationResponse, Task,
+    FocusMap, ForegroundExecutor, Global, GpuDeviceLost, KeyBinding, KeyContext, Keymap, Keystroke,
+    LayoutId, Menu, MenuItem, MissingGlyph, OwnedMenu, PathPromptOptions, Pixels, Platform,
+    PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem, Point,
+    PowerMode, Priority, PromptBuilder, PromptButton, PromptHandle, PromptLevel, Render,
+    RenderImage, RenderablePromptHandle, Reservation, ScreenCaptureSource, SharedString,
+    SubscriberSet, Subscription, SvgRenderer, SystemNotification, SystemNotificationResponse, Task,
     TextRenderingMode, TextSystem, ThermalState, Window, WindowAppearance, WindowButtonLayout,
     WindowHandle, WindowId, WindowInvalidator, WindowingRequest,
     colors::{Colors, GlobalColors},
@@ -386,6 +386,7 @@ impl Application {
 type Handler = Box<dyn FnMut(&mut App) -> bool + 'static>;
 type AppLifecycleHandler = Box<dyn FnMut(AppLifecyclePhase, &mut App) -> bool + 'static>;
 type DisplayHandler = Box<dyn FnMut(DisplayEvent, &mut App) -> bool + 'static>;
+type GpuDeviceLostHandler = Box<dyn FnMut(&GpuDeviceLost, &mut App) -> bool + 'static>;
 
 /// The properties of a display that GPUI reports changes to.
 #[derive(Clone, Copy, PartialEq)]
@@ -899,6 +900,7 @@ pub struct App {
     pub(crate) thermal_state_observers: SingleSubscriberSet<Handler>,
     desktop_preferences_observers: SingleSubscriberSet<Handler>,
     pub(crate) display_observers: SingleSubscriberSet<DisplayHandler>,
+    gpu_device_lost_observers: SingleSubscriberSet<GpuDeviceLostHandler>,
     /// The connected displays, as of the platform's last display change
     /// notification.
     displays: HashMap<DisplayId, DisplayState>,
@@ -1055,6 +1057,7 @@ impl App {
                 thermal_state_observers: SingleSubscriberSet::new(),
                 desktop_preferences_observers: SingleSubscriberSet::new(),
                 display_observers: SingleSubscriberSet::new(),
+                gpu_device_lost_observers: SingleSubscriberSet::new(),
                 displays: read_displays(platform.as_ref()),
                 system_sleep_observers: SingleSubscriberSet::new(),
                 system_wake_observers: SingleSubscriberSet::new(),
@@ -1190,6 +1193,19 @@ impl App {
                             .clone()
                             .retain(|callback| callback(cx));
                     });
+                }
+            }
+        }));
+
+        platform.on_gpu_device_lost(Box::new({
+            let app = Rc::downgrade(&app);
+            move |lost| {
+                if let Some(app) = app.upgrade() {
+                    log::error!("GPU device lost and not recovered: {}", lost.reason);
+                    let cx = &mut app.borrow_mut();
+                    cx.gpu_device_lost_observers
+                        .clone()
+                        .retain(|callback| callback(&lost, cx));
                 }
             }
         }));
@@ -1776,6 +1792,23 @@ impl App {
             callback(event, cx);
             true
         }))
+    }
+
+    /// Invokes a handler when the GPU device was lost and recovery gave up.
+    ///
+    /// Windows stop drawing afterwards; the application keeps running, so the
+    /// handler can save state or tell the user. It runs at most once per
+    /// failure, on the main thread. Platforms that cannot detect device loss
+    /// never call it.
+    pub fn on_gpu_device_lost<F>(&self, mut callback: F) -> Subscription
+    where
+        F: 'static + FnMut(&GpuDeviceLost, &mut App),
+    {
+        self.gpu_device_lost_observers
+            .insert(Box::new(move |lost, cx| {
+                callback(lost, cx);
+                true
+            }))
     }
 
     /// Invokes a handler when the system wakes from sleep.
@@ -3724,6 +3757,24 @@ mod test {
         AppContext, Context, Empty, FallbackFontClass, IntoElement, MissingGlyph, Render,
         TestAppContext, Window,
     };
+
+    #[crate::test]
+    fn gpu_device_lost_reaches_subscribers_until_dropped(cx: &mut TestAppContext) {
+        let reasons = Rc::new(RefCell::new(Vec::new()));
+        let subscription = cx.update(|app| {
+            let reasons = reasons.clone();
+            app.on_gpu_device_lost(move |lost, _| {
+                reasons.borrow_mut().push(lost.reason.clone());
+            })
+        });
+        cx.test_platform()
+            .simulate_gpu_device_lost(crate::GpuDeviceLost::new("device removed"));
+        assert_eq!(*reasons.borrow(), ["device removed"]);
+        drop(subscription);
+        cx.test_platform()
+            .simulate_gpu_device_lost(crate::GpuDeviceLost::new("again"));
+        assert_eq!(reasons.borrow().len(), 1);
+    }
 
     fn construction_platform() -> Rc<crate::TestPlatform> {
         let dispatcher = std::sync::Arc::new(crate::TestDispatcher::new(0));

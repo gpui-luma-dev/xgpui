@@ -1,0 +1,71 @@
+name: GPU device-loss recovery
+
+# Headless coverage for #119: the core device-lost API, Linux's bounded retry
+# policy and the Windows renderer's failed state. Forcing a real device loss
+# needs hardware (a TDR on Windows), so that stays with manual runs.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, 'issue-119/epic']
+    paths:
+      - '.github/workflows/gpu-recovery.yml'
+      - 'gpui/crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/validation.toml'
+      - 'rust-toolchain*'
+  push:
+    branches: [main, 'issue-119/epic']
+    paths:
+      - '.github/workflows/gpu-recovery.yml'
+      - 'gpui/crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/validation.toml'
+      - 'rust-toolchain*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpu-recovery-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  RUST_BACKTRACE: '1'
+
+jobs:
+  recovery:
+    name: GPU recovery (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: gpu-recovery-v1
+      - name: Install Linux development libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev
+      - name: Test the core device-lost subscription
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui --features test-support --lib gpu_device_lost
+      - name: Test Linux bounded recovery (builds the X11 and Wayland windows)
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: "cargo test --locked --config .cargo/validation.toml -p xgpui-linux --features wayland,x11 --lib linux::gpu_recovery::"
+      - name: Test the Windows renderer's failed state on WARP
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-windows --features test-support --lib directx_renderer::device_failure_tests

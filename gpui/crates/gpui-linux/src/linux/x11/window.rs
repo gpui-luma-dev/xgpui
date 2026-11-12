@@ -1,7 +1,7 @@
 use anyhow::{Context as _, anyhow};
 use x11rb::connection::RequestConnection;
 
-use crate::linux::X11ClientStatePtr;
+use crate::linux::{GpuLossReporter, GpuRecovery, RecoveryStep, X11ClientStatePtr};
 use gpui::{
     AnyWindowHandle, Bounds, Decorations, DevicePixels, ForegroundExecutor, GpuSpecs, Modifiers,
     Pixels, PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler, PlatformWindow,
@@ -31,6 +31,7 @@ use x11rb::{
 
 use std::{
     cell::RefCell, ffi::c_void, fmt::Display, num::NonZeroU32, ptr::NonNull, rc::Rc, sync::Arc,
+    time::Instant,
 };
 
 use super::{X11Display, XINPUT_ALL_DEVICE_GROUPS, XINPUT_ALL_DEVICES};
@@ -285,6 +286,8 @@ pub struct X11WindowState {
     visibility: WindowVisibility,
     hovered: bool,
     force_render_after_recovery: bool,
+    gpu_recovery: GpuRecovery,
+    gpu_loss: GpuLossReporter,
     fullscreen: bool,
     client_side_decorations_supported: bool,
     decorations: WindowDecorations,
@@ -460,6 +463,7 @@ impl X11WindowState {
         handle: AnyWindowHandle,
         client: X11ClientStatePtr,
         executor: ForegroundExecutor,
+        gpu_loss: GpuLossReporter,
         gpu_context: gpui_wgpu::GpuContext,
         compositor_gpu: Option<CompositorGpuHint>,
         params: WindowParams,
@@ -844,6 +848,8 @@ impl X11WindowState {
                 visibility: WindowVisibility::Hidden,
                 hovered: false,
                 force_render_after_recovery: false,
+                gpu_recovery: GpuRecovery::default(),
+                gpu_loss,
                 fullscreen: false,
                 maximized_vertical: false,
                 maximized_horizontal: false,
@@ -922,6 +928,7 @@ impl X11Window {
         handle: AnyWindowHandle,
         client: X11ClientStatePtr,
         executor: ForegroundExecutor,
+        gpu_loss: GpuLossReporter,
         gpu_context: gpui_wgpu::GpuContext,
         compositor_gpu: Option<CompositorGpuHint>,
         params: WindowParams,
@@ -941,6 +948,7 @@ impl X11Window {
                 handle,
                 client,
                 executor,
+                gpu_loss,
                 gpu_context,
                 compositor_gpu,
                 params,
@@ -1764,14 +1772,16 @@ impl PlatformWindow for X11Window {
                 window_id: self.0.x_window,
                 visual_id: inner.visual_id,
             };
-            match renderer.recover(&raw_window) {
-                Ok(()) => {}
-                Err(err) => {
-                    log::warn!("GPU recovery failed, will retry on next frame: {err}");
+            match inner
+                .gpu_recovery
+                .step(Instant::now(), || renderer.recover(&raw_window))
+            {
+                RecoveryStep::Recovered | RecoveryStep::Retry => {
+                    inner.force_render_after_recovery = true;
                 }
+                RecoveryStep::Failed(reason) => inner.gpu_loss.report(reason),
+                RecoveryStep::GaveUp => {}
             }
-
-            inner.force_render_after_recovery = true;
             return;
         }
 

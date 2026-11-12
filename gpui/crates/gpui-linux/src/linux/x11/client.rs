@@ -1722,6 +1722,7 @@ impl X11Client {
             handle,
             X11ClientStatePtr(Rc::downgrade(&self.0)),
             state.common.borrow().foreground_executor.clone(),
+            state.common.borrow().gpu_loss.clone(),
             state.gpu_context.clone(),
             compositor_gpu,
             params,
