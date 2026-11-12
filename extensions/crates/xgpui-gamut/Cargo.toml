@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-gamut"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2024"
 publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
