@@ -2,7 +2,7 @@
 name = "xgpui-engine-surface"
 version = "0.1.0"
 edition = "2024"
-publish = false
+publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Experimental: present output from independently owned GPU engines into xgpui (design: issue #197)"
 license = "Apache-2.0"
