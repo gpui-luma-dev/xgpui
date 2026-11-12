@@ -101,6 +101,9 @@ fi
 BIN="$CARGO_TARGET_DIR/debug/gpu-canvas-workbench$EXE"
 export RUST_LOG="warn,gpui_windows=info,gpui_linux=info"
 
+panic_line() { # log -> the first panic message, or nothing
+    grep -m1 "panicked at" "$1" | sed 's/^thread //'
+}
 frames() { # log -> frames shown in the main window, or 0
     sed -n 's/.*shown: \([0-9]*\) window frames.*/\1/p' "$1" | head -1 | grep . || echo 0
 }
@@ -116,9 +119,12 @@ if [ -z "${BUILD_FAILED:-}" ]; then
     cat "$OUT"
     N="$(frames "$OUT")"
     LOST="$(grep '^gpu-device-lost: ' "$OUT" | grep -vc 'app still running' | tr -d ' ')"
-    if ! grep -q 'fault injection: reporting a GPU device loss' "$OUT"; then
+    PANIC="$(panic_line "$OUT")"
+    if [ -n "$PANIC" ]; then
+        record recover FAIL "panicked: $PANIC"
+    elif ! grep -q 'fault injection: reporting a GPU device loss' "$OUT"; then
         record recover FAIL "the injected loss never fired (exit $CODE)"
-    elif [ "$CODE" != 0 ] || grep -q 'panicked' "$OUT"; then
+    elif [ "$CODE" != 0 ]; then
         record recover FAIL "exit $CODE"
     elif [ "$LOST" != 0 ]; then
         record recover FAIL "reported a device loss although recovery should succeed"
@@ -140,10 +146,11 @@ if [ -z "${BUILD_FAILED:-}" ]; then
     cat "$OUT"
     LOST="$(grep '^gpu-device-lost: ' "$OUT" | grep -vc 'app still running' | tr -d ' ')"
     ATTEMPTS="$(grep -c 'GPU recovery attempt .* failed' "$OUT" | tr -d ' ')"
-    if ! grep -q 'fault injection: reporting a GPU device loss' "$OUT"; then
+    PANIC="$(panic_line "$OUT")"
+    if [ -n "$PANIC" ]; then
+        record give-up FAIL "panicked: $PANIC"
+    elif ! grep -q 'fault injection: reporting a GPU device loss' "$OUT"; then
         record give-up FAIL "the injected loss never fired (exit $CODE)"
-    elif grep -q 'panicked' "$OUT"; then
-        record give-up FAIL "panicked"
     elif [ "$LOST" != 1 ]; then
         record give-up FAIL "$LOST device-lost reports (want 1)"
     elif ! grep -q 'gpu-device-lost: app still running; exiting' "$OUT"; then
@@ -177,16 +184,25 @@ if [ -z "${BUILD_FAILED:-}" ]; then
             cat "$OUT"
             N="$(frames "$OUT")"
             LOST="$(grep '^gpu-device-lost: ' "$OUT" | grep -vc 'app still running' | tr -d ' ')"
-            if [ "$CODE" != 0 ] || grep -q 'panicked' "$OUT"; then
+            PANIC="$(panic_line "$OUT")"
+            ENGINE_LOST="$(grep -c 'engine device lost at' "$OUT" | tr -d ' ')"
+            ENGINE_REBUILT="$(grep -c 'engine rebuilt on generation' "$OUT" | tr -d ' ')"
+            if [ -n "$PANIC" ]; then
+                record tdr FAIL "panicked: $PANIC"
+            elif [ "$CODE" != 0 ]; then
                 record tdr FAIL "exit $CODE"
+            elif [ "$ENGINE_LOST" != 0 ] && [ "$ENGINE_REBUILT" = 0 ]; then
+                record tdr FAIL "the engine lost its device but never rebuilt"
             elif [ "$LOST" != 0 ]; then
                 record tdr FAIL "reported a device loss after a TDR it should survive"
             elif ! grep -q "$RECOVERED" "$OUT"; then
                 record tdr FAIL "no '$RECOVERED' line: the TDR may not have reached this device"
             elif [ "$N" -lt 450 ]; then
                 record tdr FAIL "only $N frames in 15 s: drawing did not resume"
+            elif [ "$ENGINE_LOST" = 0 ]; then
+                record tdr PASS "$N frames in 15 s; the engine's device survived"
             else
-                record tdr PASS "$N frames in 15 s"
+                record tdr PASS "$N frames in 15 s; the engine rebuilt on a new device"
             fi
         fi
     fi

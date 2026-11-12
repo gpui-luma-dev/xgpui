@@ -98,6 +98,15 @@ impl Recovery {
     /// Advance the engine once: rebuild when due, otherwise apply and
     /// publish. Returns an error to show, if any.
     fn step(&mut self, engine: &mut Engine) -> Option<String> {
+        if engine.lost_by_driver() {
+            // A real loss (a TDR): recover the same way as a simulated one.
+            engine.mark_lost();
+            self.lost_at = Some(Instant::now());
+            println!(
+                "engine device lost at {:.1}s; showing the last frame",
+                self.started.elapsed().as_secs_f32()
+            );
+        }
         if engine.is_lost() {
             if self
                 .lost_at

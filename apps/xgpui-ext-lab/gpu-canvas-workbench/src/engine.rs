@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result, ensure};
 use std::collections::HashSet;
 use std::sync::{
     Arc,
-    atomic::{AtomicU8, Ordering},
+    atomic::{AtomicBool, AtomicU8, Ordering},
 };
 use std::time::Instant;
 use xgpui_surface::{
@@ -186,6 +186,9 @@ pub struct Engine {
     log: Vec<Dab>,
     generation: u64,
     lost: bool,
+    /// Set by wgpu when the device is lost, including by the driver (a TDR):
+    /// after that, nothing may touch the staging belt, whose buffers are gone.
+    device_lost: Arc<AtomicBool>,
     slots: usize,
     reset_pending: bool,
     exposure: f32,
@@ -312,6 +315,17 @@ impl Engine {
                 request: None,
             })
             .collect();
+        let device_lost = Arc::new(AtomicBool::new(false));
+        device.set_device_lost_callback({
+            let device_lost = device_lost.clone();
+            move |reason, message| {
+                // `lose_device` destroys the device on purpose; report the rest.
+                if reason != wgpu::DeviceLostReason::Destroyed {
+                    println!("engine device lost by the driver: {reason:?}: {message}");
+                }
+                device_lost.store(true, Ordering::Release);
+            }
+        });
         let device_for_belt = device.clone();
         let stats = EngineStats {
             // Working image, two params, dabs, two bind groups, staging.
@@ -339,6 +353,7 @@ impl Engine {
             log: Vec::new(),
             generation: 0,
             lost: false,
+            device_lost,
             slots,
             reset_pending: true,
             exposure: 0.,
@@ -376,6 +391,19 @@ impl Engine {
     }
     pub fn logged_dabs(&self) -> usize {
         self.log.len()
+    }
+
+    /// Whether the driver lost a device the engine still uses, for example in
+    /// a TDR. The caller marks it lost and rebuilds, as after `lose_device`.
+    pub fn lost_by_driver(&self) -> bool {
+        !self.lost && self.device_lost.load(Ordering::Acquire)
+    }
+
+    /// Mark a device the driver lost: invalidate the surface. The last
+    /// published frame keeps displaying until `rebuild`.
+    pub fn mark_lost(&mut self) {
+        self.target.surface().invalidate();
+        self.lost = true;
     }
 
     /// Simulate device loss: destroy the device and invalidate the surface.
@@ -472,6 +500,10 @@ impl Engine {
     /// in `encoder`, reusing mapped chunks), or with a queued write that
     /// applies to the whole next submission (`--queue-uploads`).
     fn upload(&mut self, encoder: &mut wgpu::CommandEncoder, which: Upload, bytes: &[u8]) {
+        if self.device_lost.load(Ordering::Acquire) {
+            // The belt's buffers went with the device; this frame is discarded.
+            return;
+        }
         let buffer = match which {
             Upload::Params => &self.params,
             Upload::PaintParams => &self.paint_params,
@@ -511,7 +543,9 @@ impl Engine {
 
     /// Close `encoder` (and the belt's chunks used by it).
     fn finish(&mut self, encoder: wgpu::CommandEncoder) -> wgpu::CommandBuffer {
-        if let Some(belt) = &mut self.belt {
+        if let Some(belt) = &mut self.belt
+            && !self.device_lost.load(Ordering::Acquire)
+        {
             belt.finish();
         }
         encoder.finish()
@@ -519,7 +553,9 @@ impl Engine {
 
     /// After a submission: let the belt reuse chunks once the GPU is done.
     fn recall(&mut self) {
-        if let Some(belt) = &mut self.belt {
+        if let Some(belt) = &mut self.belt
+            && !self.device_lost.load(Ordering::Acquire)
+        {
             belt.recall();
         }
     }
@@ -611,7 +647,10 @@ impl Engine {
     /// Presentation-only frames (nothing changed) do no GPU work.
     pub fn frame(&mut self) -> Result<()> {
         // A lost device must not be used; edits keep queuing in the log.
-        ensure!(!self.lost, AcquireError::Invalidated);
+        ensure!(
+            !self.lost && !self.device_lost.load(Ordering::Acquire),
+            AcquireError::Invalidated
+        );
         let started = Instant::now();
         // Edits and the publish pass share one submission in the common case
         // (one dab batch); extra batches are submitted ahead of it.
