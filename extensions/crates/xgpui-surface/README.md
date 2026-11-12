@@ -1,4 +1,4 @@
-# xgpui-engine-surface (experimental)
+# xgpui-surface (experimental)
 
 Present output from an independently owned GPU engine into **xgpui**, the way an engine presents to a swapchain. Design and evidence are in issues #197 and #198.
 
@@ -67,4 +67,6 @@ Measured with 4 × 4K engines at a GPU-saturating load on an Intel Iris Xe: the 
 
 Seven additive hooks in `gpui-wgpu`, `gpui-windows` and `gpui-apple` let this extension adopt shared textures and wait on engine signals. Nothing in `gpui` changes and no application needs to migrate. See [engine surface API changes](https://xgpui.dev/gpui-public-api.html#engine-surfaces-from-independent-gpu-engines-197).
 
-Guide: [GPU engine surfaces](https://xgpui.dev/engine-surface.html). Not published; the API is under review.
+The hooks ship in `xgpui-wgpu` 2.3.0, `xgpui-windows` 2.2.0 and `xgpui-apple` 4.1.0.
+
+Guide: [GPU engine surfaces](https://xgpui.dev/engine-surface.html). This is the first 0.1 release; the API may change.

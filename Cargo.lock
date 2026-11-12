@@ -7918,7 +7918,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-apple"
-version = "4.0.1"
+version = "4.1.0"
 dependencies = [
  "anyhow",
  "async-task",
@@ -7993,24 +7993,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "xgpui-engine-surface"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ash",
- "objc2 0.6.5",
- "objc2-core-foundation",
- "objc2-io-surface",
- "objc2-metal 0.3.2",
- "wgpu",
- "windows 0.62.2",
- "xgpui",
- "xgpui-apple",
- "xgpui-wgpu",
- "xgpui-windows",
-]
-
-[[package]]
 name = "xgpui-ext-lab"
 version = "0.2.0"
 dependencies = [
@@ -8043,13 +8025,13 @@ dependencies = [
  "xgpui-apple",
  "xgpui-canvas",
  "xgpui-color",
- "xgpui-engine-surface",
  "xgpui-gamut",
  "xgpui-media",
  "xgpui-parley",
  "xgpui-platform",
  "xgpui-shader",
  "xgpui-shell",
+ "xgpui-surface",
  "xgpui-svg",
  "xgpui-web",
  "xgpui-wgpu",
@@ -8265,6 +8247,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "xgpui-surface"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ash",
+ "objc2 0.6.5",
+ "objc2-core-foundation",
+ "objc2-io-surface",
+ "objc2-metal 0.3.2",
+ "wgpu",
+ "windows 0.62.2",
+ "xgpui",
+ "xgpui-apple",
+ "xgpui-wgpu",
+ "xgpui-windows",
+]
+
+[[package]]
 name = "xgpui-svg"
 version = "0.3.3"
 dependencies = [
@@ -8303,7 +8303,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-wgpu"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "anyhow",
  "ash",
@@ -8333,7 +8333,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-windows"
-version = "2.1.1"
+version = "2.2.0"
 dependencies = [
  "accesskit",
  "accesskit_windows",

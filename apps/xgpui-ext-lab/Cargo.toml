@@ -79,7 +79,7 @@ objc2-core-foundation = { version = "=0.3.2", default-features = false, features
 objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVReturn"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
-xgpui-engine-surface = { path = "../../extensions/crates/xgpui-engine-surface", features = ["wgpu"] }
+xgpui-surface = { path = "../../extensions/crates/xgpui-surface", features = ["wgpu"] }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 core-foundation = "0.10"
