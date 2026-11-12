@@ -15,13 +15,13 @@
 <aside>
 <a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
 <nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
-<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" aria-current="page" href="crates/xgpui-engine-surface.html">xgpui-engine-surface</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" aria-current="page" href="crates/xgpui-surface.html">xgpui-surface</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
 <main id="content" tabindex="-1">
 <p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Experimental GPU engine surfaces.</strong> Present frames from your own GPU engine into xgpui, with no copies.</p><article class="extension-document"><h1 id="gpu-engine-surfaces">GPU engine surfaces</h1>
-<aside class="canvas-beta" aria-label="Engine surface experimental warning"><strong>EXPERIMENTAL</strong> — Not published; the API is under review.</aside>
-<p><code>xgpui-engine-surface</code> lets a GPU engine you own present frames into an xgpui
+<aside class="canvas-beta" aria-label="Engine surface experimental warning"><strong>EXPERIMENTAL</strong> — <code>xgpui-surface 0.1.0</code> is being prepared for its first crates.io release; the API may change.</aside>
+<p><code>xgpui-surface</code> lets a GPU engine you own present frames into an xgpui
 window, the way it would present to a swapchain. The engine keeps its own
 device, queue and thread, and can render or run compute shaders as it likes.
 xgpui composites the result like any other element: no copies, no extra
@@ -30,8 +30,11 @@ supports it.</p>
 <p>Use it when <a href="extension-paints.html"><code>xgpui-shader</code> paints</a> are not enough: long compute passes, image
 pipelines, simulations or anything that should not run inside GPUI's frame.</p>
 <h2 id="use-it">Use it</h2>
-<p>For development against this checkout:</p>
-<pre><code class="language-toml">xgpui-engine-surface = { path = "path/to/extensions/crates/xgpui-engine-surface", features = ["wgpu"] }
+<p>Add it with the <code>wgpu</code> engine adapter:</p>
+<pre><code class="language-sh">cargo add xgpui-surface --features wgpu
+</code></pre>
+<p>It depends on the first backend releases with its hooks: <code>xgpui-wgpu 2.3.0</code>, <code>xgpui-windows 2.2.0</code> and <code>xgpui-apple 4.1.0</code>. Until 0.1.0 is on crates.io, use a path dependency on this checkout:</p>
+<pre><code class="language-toml">xgpui-surface = { path = "path/to/extensions/crates/xgpui-surface", features = ["wgpu"] }
 </code></pre>
 <p>Create the target on the engine's thread, render into an acquired slot and
 present it. Paint the surface from any element:</p>
@@ -134,7 +137,7 @@ UI does no work between frames. To keep animation frames at full rate in an
 unfocused window, open it with <code>inactive_frame_interval: None</code>.
 Low-power mode still applies.</p>
 <h2 id="api-reference">API reference</h2>
-<p>The crate is not published, so there is no docs.rs page yet; this is the reference. Every item is re-exported from the crate root. For full rustdoc, run <code>cargo doc --open -p xgpui-engine-surface --features wgpu</code>.</p>
+<p>Rustdoc for released versions is on <a href="https://docs.rs/xgpui-surface">docs.rs ↗</a>; the tables below match this checkout. Every item is re-exported from the crate root. For full rustdoc, run <code>cargo doc --open -p xgpui-surface --features wgpu</code>.</p>
 <h3 id="api-engine-surface">EngineSurface</h3>
 <p>A ring of shareable slots presented into xgpui. Cheap to clone; the engine side and the view each hold one.</p>
 <div class="table-wrap"><table><thead><tr><th>Method</th><th>Purpose</th></tr></thead><tbody><tr><td><code>acquire() -> Result&lt;SurfaceSlot, AcquireError&gt;</code></td><td>A writable slot. Frees slots whose GPU sampling has finished before giving up with <code>WouldBlock</code>.</td></tr><tr><td><code>present(slot, SyncPoint) -> Result&lt;()&gt;</code></td><td>Publish a written slot. Frames with a submitted signal are shown at once with a GPU-side wait; others once their signal is observed reached. Adapters call this for you.</td></tr><tr><td><code>paint(window, bounds, corner_radii)</code></td><td>Paint the latest frame, scaled and clipped to a rounded rectangle; picks wide or preview colour for the window.</td></tr><tr><td><code>content()</code> / <code>preview_content()</code></td><td>The latest frame as <code>CustomContent</code> for a wide-gamut window, or as an sRGB preview for any other window.</td></tr><tr><td><code>on_present(callback)</code></td><td>Called after every present and when a waiting frame becomes ready. Typically wakes the UI.</td></tr><tr><td><code>stats() -> SurfaceStats</code></td><td>Counters for diagnostics and pacing.</td></tr><tr><td><code>invalidate()</code> / <code>is_valid()</code></td><td>Mark the surface dead after engine device loss. The last frame keeps showing; create a new surface on a new device.</td></tr><tr><td><code>unsupported() -> Option&lt;String&gt;</code></td><td>Why the compositor could not use the surface (for example, a different GPU). It then offers no frames.</td></tr><tr><td><code>desc()</code> / <code>transport()</code></td><td>The surface's fixed description, and how frames reach the compositor (always <code>Transport::ZeroCopy</code>).</td></tr></tbody></table></div>
@@ -162,8 +165,9 @@ pan/zoom, wide versus sRGB comparison (<code>--compare</code>) and simulated dev
 <code>--check</code> runs it as an automated test. The <strong>engine surface lab</strong> stresses
 surfaces: <code>--stress-surfaces N --stress-size WxH --work N [--heavy]</code>.</p>
 <p>Run the tests with:</p>
-<pre><code class="language-sh">cargo test -p xgpui-engine-surface --all-features
+<pre><code class="language-sh">cargo test -p xgpui-surface --all-features
 </code></pre>
+<p>Hosted CI compiles and lints the crate and both labs on macOS, Linux and Windows. It has no usable GPU, so surfaces run only on real hardware; the one exception is the Windows headless D3D11 retirement test, which runs on WARP.</p>
 <p>Tested on Apple M-series, Intel Iris Xe (Fedora 44 and Windows 11) and Intel Arc
 140T (Windows 11). Evidence per machine is in
 <a href="https://github.com/gpui-luma-dev/xgpui/issues/198">#198</a>; the design is in
@@ -172,7 +176,7 @@ surfaces: <code>--stress-surfaces N --stress-size WxH --work N [--heavy]</code>.
 <h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
 <p>Seven additive hooks in <code>gpui-wgpu</code>, <code>gpui-windows</code> and <code>gpui-apple</code> let the
 extension adopt shared textures and wait on engine signals. Nothing in <code>gpui</code>
-itself changes and no application needs to migrate. See
+itself changes and no application needs to migrate. The hooks ship in <code>xgpui-wgpu 2.3.0</code>, <code>xgpui-windows 2.2.0</code> and <code>xgpui-apple 4.1.0</code>. See
 <a href="gpui-public-api.html#engine-surfaces-from-independent-gpu-engines-197">engine surface API changes</a>.</p>
 </article>
 </main>

@@ -14,7 +14,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use xgpui_engine_surface::EngineSurface;
+use xgpui_surface::EngineSurface;
 
 /// How long a lost engine keeps showing its last frame before rebuilding.
 const REBUILD_AFTER: Duration = Duration::from_millis(500);
