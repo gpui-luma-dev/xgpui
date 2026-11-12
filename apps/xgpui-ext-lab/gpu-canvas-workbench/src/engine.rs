@@ -162,8 +162,25 @@ struct Staging {
     request: Option<(u32, u32, u64)>,
 }
 
-pub struct Engine {
-    pub device: wgpu::Device,
+/// The live GPU objects, borrowing only the `gpu` field. Only used while the
+/// device is usable: a lost engine returns before touching them.
+macro_rules! gpu {
+    ($engine:expr) => {
+        $engine.gpu.as_ref().expect("engine GPU used while lost")
+    };
+}
+macro_rules! gpu_mut {
+    ($engine:expr) => {
+        $engine.gpu.as_mut().expect("engine GPU used while lost")
+    };
+}
+
+/// The engine's GPU objects. A rebuild drops them all before creating a
+/// replacement device: D3D12 devices are singletons per adapter, so while any
+/// object of the lost device survives, a new device on that adapter is the
+/// lost one again (and wgpu falls back to a software adapter).
+struct Gpu {
+    device: wgpu::Device,
     queue: wgpu::Queue,
     target: WgpuSurfaceTarget,
     working: wgpu::Buffer,
@@ -180,6 +197,17 @@ pub struct Engine {
     paint_bind: wgpu::BindGroup,
     publish_binds: Vec<Option<wgpu::BindGroup>>,
     staging: Vec<Staging>,
+    /// Staging belt for uploads, or `None` for queued writes.
+    belt: Option<wgpu::util::StagingBelt>,
+}
+
+pub struct Engine {
+    /// `None` only while a rebuild after device loss has not succeeded yet.
+    gpu: Option<Gpu>,
+    /// The surface, kept here so its last frame stays visible while `gpu` is
+    /// gone.
+    surface: EngineSurface,
+    gpu_sync: bool,
     pending: Vec<Dab>,
     /// Every dab since the last reset: the retained CPU description used to
     /// rebuild the working image on a new device.
@@ -207,8 +235,6 @@ pub struct Engine {
     /// Recording split into phases: edits, slot acquire (and first-use bind
     /// group), publish pass encoding, `encoder.finish()`.
     pub phase_ms: [Vec<f32>; 4],
-    /// Staging belt for uploads, or `None` for queued writes.
-    belt: Option<wgpu::util::StagingBelt>,
 }
 
 #[derive(Clone, Copy)]
@@ -355,21 +381,29 @@ impl Engine {
             revision: 1,
             ..Default::default()
         };
+        let surface = target.surface().clone();
+        let gpu_sync = target.gpu_sync();
         Ok(Self {
-            publish_binds: vec![None; slots],
-            device,
-            queue,
-            target,
-            working,
-            params,
-            paint_params,
-            dab_buffer,
-            generate,
-            paint,
-            publish,
-            generate_bind,
-            paint_bind,
-            staging,
+            gpu: Some(Gpu {
+                publish_binds: vec![None; slots],
+                device,
+                queue,
+                target,
+                working,
+                params,
+                paint_params,
+                dab_buffer,
+                generate,
+                paint,
+                publish,
+                generate_bind,
+                paint_bind,
+                staging,
+                belt: (!QUEUE_UPLOADS.load(Ordering::Relaxed))
+                    .then(|| wgpu::util::StagingBelt::new(device_for_belt, 64 * 1024)),
+            }),
+            surface,
+            gpu_sync,
             pending: Vec::new(),
             log: Vec::new(),
             generation: 0,
@@ -386,16 +420,14 @@ impl Engine {
             record_ms: Vec::new(),
             present_ms: Vec::new(),
             phase_ms: Default::default(),
-            belt: (!QUEUE_UPLOADS.load(Ordering::Relaxed))
-                .then(|| wgpu::util::StagingBelt::new(device_for_belt, 64 * 1024)),
         })
     }
 
     pub fn surface(&self) -> &EngineSurface {
-        self.target.surface()
+        &self.surface
     }
     pub fn gpu_sync(&self) -> bool {
-        self.target.gpu_sync()
+        self.gpu_sync
     }
     pub fn stats(&self) -> EngineStats {
         self.stats
@@ -429,7 +461,7 @@ impl Engine {
     /// Mark a device the driver lost: invalidate the surface. The last
     /// published frame keeps displaying until `rebuild`.
     pub fn mark_lost(&mut self) {
-        self.target.surface().invalidate();
+        self.surface.invalidate();
         self.lost = true;
     }
 
@@ -437,8 +469,10 @@ impl Engine {
     /// The last published frame keeps displaying; later frames fail until
     /// `rebuild`.
     pub fn lose_device(&mut self) {
-        self.device.destroy();
-        self.target.surface().invalidate();
+        if let Some(gpu) = &self.gpu {
+            gpu.device.destroy();
+        }
+        self.surface.invalidate();
         self.lost = true;
     }
 
@@ -449,16 +483,15 @@ impl Engine {
     /// the reconstructed image as a new revision.
     pub fn rebuild(&mut self) -> Result<()> {
         let started = Instant::now();
+        // Release every object of the lost device first (see `Gpu`). The
+        // surface was invalidated, which released its own D3D12 objects.
+        self.gpu = None;
         let mut fresh = Engine::create(self.slots, !self.software)?;
         fresh.generation = self.generation + 1;
         fresh.exposure = self.exposure;
         // Cloned, not taken: a failed rebuild is retried with the full log.
         fresh.log = self.log.clone();
         fresh.pending = fresh.log.clone();
-        fresh.latencies_ms = std::mem::take(&mut self.latencies_ms);
-        fresh.record_ms = std::mem::take(&mut self.record_ms);
-        fresh.present_ms = std::mem::take(&mut self.present_ms);
-        fresh.phase_ms = std::mem::take(&mut self.phase_ms);
         let replayed = fresh.pending.len() as u64;
         fresh.stats = EngineStats {
             revision: self.stats.revision + 1,
@@ -470,12 +503,20 @@ impl Engine {
         fresh.frame()?;
         fresh.wait_idle();
         fresh.stats.replay_ms = started.elapsed().as_secs_f32() * 1000.;
+        fresh.latencies_ms = std::mem::take(&mut self.latencies_ms);
+        fresh.record_ms = std::mem::take(&mut self.record_ms);
+        fresh.present_ms = std::mem::take(&mut self.present_ms);
+        fresh.phase_ms = std::mem::take(&mut self.phase_ms);
         *self = fresh;
         Ok(())
     }
 
     pub fn inspections_in_flight(&self) -> usize {
-        self.staging.iter().filter(|s| s.request.is_some()).count()
+        // None while a rebuild is pending: in-flight inspections went with the
+        // lost device.
+        self.gpu.as_ref().map_or(0, |gpu| {
+            gpu.staging.iter().filter(|s| s.request.is_some()).count()
+        })
     }
 
     /// Edit-to-publish latency counts from `at` (when the edit was made,
@@ -532,18 +573,19 @@ impl Engine {
             // The belt's buffers went with the device; this frame is discarded.
             return;
         }
+        let gpu = gpu_mut!(self);
         let buffer = match which {
-            Upload::Params => &self.params,
-            Upload::PaintParams => &self.paint_params,
-            Upload::Dabs => &self.dab_buffer,
+            Upload::Params => &gpu.params,
+            Upload::PaintParams => &gpu.paint_params,
+            Upload::Dabs => &gpu.dab_buffer,
         };
-        match &mut self.belt {
+        match &mut gpu.belt {
             Some(belt) => {
                 let size = wgpu::BufferSize::new(bytes.len() as u64).expect("non-empty upload");
                 belt.write_buffer(encoder, buffer, 0, size)
                     .copy_from_slice(bytes);
             }
-            None => self.queue.write_buffer(buffer, 0, bytes),
+            None => gpu.queue.write_buffer(buffer, 0, bytes),
         }
         self.stats.cpu_bytes_uploaded += bytes.len() as u64;
     }
@@ -571,7 +613,7 @@ impl Engine {
 
     /// Close `encoder` (and the belt's chunks used by it).
     fn finish(&mut self, encoder: wgpu::CommandEncoder) -> wgpu::CommandBuffer {
-        if let Some(belt) = &mut self.belt
+        if let Some(belt) = &mut gpu_mut!(self).belt
             && !self.device_lost.load(Ordering::Acquire)
         {
             belt.finish();
@@ -581,7 +623,7 @@ impl Engine {
 
     /// After a submission: let the belt reuse chunks once the GPU is done.
     fn recall(&mut self) {
-        if let Some(belt) = &mut self.belt
+        if let Some(belt) = &mut gpu_mut!(self).belt
             && !self.device_lost.load(Ordering::Acquire)
         {
             belt.recall();
@@ -590,7 +632,7 @@ impl Engine {
 
     fn submit(&mut self, encoder: wgpu::CommandEncoder) {
         let commands = self.finish(encoder);
-        self.queue.submit([commands]);
+        gpu!(self).queue.submit([commands]);
         self.recall();
         self.stats.submissions += 1;
     }
@@ -605,8 +647,8 @@ impl Engine {
             self.write_params(encoder, false, [0, 0], [WIDTH, HEIGHT], 0);
             {
                 let mut pass = encoder.begin_compute_pass(&Default::default());
-                pass.set_pipeline(&self.generate);
-                pass.set_bind_group(0, &self.generate_bind, &[]);
+                pass.set_pipeline(&gpu!(self).generate);
+                pass.set_bind_group(0, &gpu!(self).generate_bind, &[]);
                 pass.dispatch_workgroups(WIDTH.div_ceil(8), HEIGHT.div_ceil(8), 1);
             }
             ran = true;
@@ -662,8 +704,8 @@ impl Engine {
         );
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
-            pass.set_pipeline(&self.paint);
-            pass.set_bind_group(0, &self.paint_bind, &[]);
+            pass.set_pipeline(&gpu!(self).paint);
+            pass.set_bind_group(0, &gpu!(self).paint_bind, &[]);
             pass.dispatch_workgroups((x1 - x0).div_ceil(8), (y1 - y0).div_ceil(8), 1);
         }
         self.stats.paint_passes += 1;
@@ -682,11 +724,15 @@ impl Engine {
         let started = Instant::now();
         // Edits and the publish pass share one submission in the common case
         // (one dab batch); extra batches are submitted ahead of it.
-        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let mut encoder = gpu!(self)
+            .device
+            .create_command_encoder(&Default::default());
         let mut recorded = self.record_edits(&mut encoder);
         while !self.pending.is_empty() {
             self.submit(encoder);
-            encoder = self.device.create_command_encoder(&Default::default());
+            encoder = gpu!(self)
+                .device
+                .create_command_encoder(&Default::default());
             recorded = self.record_edits(&mut encoder);
         }
         let edits_done = Instant::now();
@@ -696,7 +742,7 @@ impl Engine {
             }
             return Ok(());
         }
-        let slot = match self.target.surface().acquire() {
+        let slot = match gpu!(self).target.surface().acquire() {
             Ok(slot) => slot,
             Err(AcquireError::WouldBlock) => {
                 // The working image keeps the edits; publish next frame.
@@ -709,36 +755,38 @@ impl Engine {
             Err(error @ AcquireError::Invalidated) => return Err(error.into()),
         };
         let index = slot.index();
-        if self.publish_binds[index].is_none() {
-            let texture = self.target.texture(&slot)?;
+        if gpu!(self).publish_binds[index].is_none() {
+            let texture = gpu_mut!(self).target.texture(&slot)?;
             let view = texture.create_view(&Default::default());
-            let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("workbench_publish"),
-                layout: &self.publish.get_bind_group_layout(0),
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.working.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.params.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::TextureView(&view),
-                    },
-                ],
-            });
-            self.publish_binds[index] = Some(bind);
+            let bind = gpu!(self)
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("workbench_publish"),
+                    layout: &gpu!(self).publish.get_bind_group_layout(0),
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: gpu!(self).working.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: gpu!(self).params.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::TextureView(&view),
+                        },
+                    ],
+                });
+            gpu_mut!(self).publish_binds[index] = Some(bind);
             self.stats.resources_created += 1;
         }
         let acquired = Instant::now();
         self.write_params(&mut encoder, false, [0, 0], [WIDTH, HEIGHT], 0);
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
-            pass.set_pipeline(&self.publish);
-            pass.set_bind_group(0, self.publish_binds[index].as_ref().unwrap(), &[]);
+            pass.set_pipeline(&gpu!(self).publish);
+            pass.set_bind_group(0, gpu!(self).publish_binds[index].as_ref().unwrap(), &[]);
             pass.dispatch_workgroups(WIDTH.div_ceil(8), HEIGHT.div_ceil(8), 1);
         }
         let encoded = Instant::now();
@@ -754,7 +802,7 @@ impl Engine {
         }
         self.record_ms
             .push((presenting - started).as_secs_f32() * 1000.);
-        let presented = self.target.present(slot, [commands]);
+        let presented = gpu_mut!(self).target.present(slot, [commands]);
         self.recall();
         presented?;
         self.present_ms
@@ -778,14 +826,18 @@ impl Engine {
         if self.lost {
             return false;
         }
-        let Some(index) = self.staging.iter().position(|s| s.request.is_none()) else {
+        let Some(index) = gpu!(self).staging.iter().position(|s| s.request.is_none()) else {
             return false;
         };
-        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let mut encoder = gpu!(self)
+            .device
+            .create_command_encoder(&Default::default());
         self.record_edits(&mut encoder);
         while !self.pending.is_empty() {
             self.submit(encoder);
-            encoder = self.device.create_command_encoder(&Default::default());
+            encoder = gpu!(self)
+                .device
+                .create_command_encoder(&Default::default());
             self.record_edits(&mut encoder);
         }
         let x = x.min(WIDTH - INSPECT);
@@ -794,15 +846,15 @@ impl Engine {
         for r in 0..INSPECT {
             let source = ((y + r) * WIDTH + x) as u64 * PIXEL_BYTES;
             encoder.copy_buffer_to_buffer(
-                &self.working,
+                &gpu!(self).working,
                 source,
-                &self.staging[index].buffer,
+                &gpu!(self).staging[index].buffer,
                 r as u64 * row,
                 row,
             );
         }
         self.submit(encoder);
-        let staging = &mut self.staging[index];
+        let staging = &mut gpu_mut!(self).staging[index];
         staging.request = Some((x, y, self.stats.revision));
         staging.state.store(1, Ordering::Release);
         let state = staging.state.clone();
@@ -820,9 +872,9 @@ impl Engine {
         if self.lost {
             return Vec::new();
         }
-        let _ = self.device.poll(wgpu::PollType::Poll);
+        let _ = gpu!(self).device.poll(wgpu::PollType::Poll);
         let mut done = Vec::new();
-        for staging in &mut self.staging {
+        for staging in &mut gpu_mut!(self).staging {
             let state = staging.state.load(Ordering::Acquire);
             if staging.request.is_none() || state < 2 {
                 continue;
@@ -863,22 +915,24 @@ impl Engine {
 
     /// Check mode only: block until the engine is idle.
     pub fn wait_idle(&self) {
-        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+        let _ = gpu!(self).device.poll(wgpu::PollType::wait_indefinitely());
     }
 
     /// Check mode only: the whole working image (blocking readback).
     pub fn read_working(&mut self) -> Result<Vec<[f32; 4]>> {
         let size = (WIDTH * HEIGHT) as u64 * PIXEL_BYTES;
-        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+        let buffer = gpu!(self).device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("workbench_check_working"),
             size,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        encoder.copy_buffer_to_buffer(&self.working, 0, &buffer, 0, size);
-        self.queue.submit([encoder.finish()]);
-        let data = map_blocking(&self.device, &buffer)?;
+        let mut encoder = gpu!(self)
+            .device
+            .create_command_encoder(&Default::default());
+        encoder.copy_buffer_to_buffer(&gpu!(self).working, 0, &buffer, 0, size);
+        gpu!(self).queue.submit([encoder.finish()]);
+        let data = map_blocking(&gpu!(self).device, &buffer)?;
         Ok(data
             .as_chunks::<16>()
             .0
@@ -894,7 +948,7 @@ impl Engine {
     /// shader and parameters as a slot) and read it back as RGBA halves.
     /// Slot transport itself is covered by the extension's tests.
     pub fn read_published(&mut self) -> Result<Vec<[u16; 4]>> {
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+        let texture = gpu!(self).device.create_texture(&wgpu::TextureDescriptor {
             label: Some("workbench_check_publish"),
             size: wgpu::Extent3d {
                 width: WIDTH,
@@ -909,41 +963,47 @@ impl Engine {
             view_formats: &[],
         });
         let view = texture.create_view(&Default::default());
-        let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("workbench_check_publish"),
-            layout: &self.publish.get_bind_group_layout(0),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.working.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: self.params.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-            ],
-        });
-        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let bind = gpu!(self)
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("workbench_check_publish"),
+                layout: &gpu!(self).publish.get_bind_group_layout(0),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: gpu!(self).working.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: gpu!(self).params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                ],
+            });
+        let mut encoder = gpu!(self)
+            .device
+            .create_command_encoder(&Default::default());
         self.write_params(&mut encoder, false, [0, 0], [WIDTH, HEIGHT], 0);
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
-            pass.set_pipeline(&self.publish);
+            pass.set_pipeline(&gpu!(self).publish);
             pass.set_bind_group(0, &bind, &[]);
             pass.dispatch_workgroups(WIDTH.div_ceil(8), HEIGHT.div_ceil(8), 1);
         }
         self.submit(encoder);
         let row = (WIDTH as u64 * 8).div_ceil(256) * 256;
-        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+        let buffer = gpu!(self).device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("workbench_check_slot"),
             size: row * HEIGHT as u64,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let mut encoder = gpu!(self)
+            .device
+            .create_command_encoder(&Default::default());
         encoder.copy_texture_to_buffer(
             texture.as_image_copy(),
             wgpu::TexelCopyBufferInfo {
@@ -956,8 +1016,8 @@ impl Engine {
             },
             texture.size(),
         );
-        self.queue.submit([encoder.finish()]);
-        let data = map_blocking(&self.device, &buffer)?;
+        gpu!(self).queue.submit([encoder.finish()]);
+        let data = map_blocking(&gpu!(self).device, &buffer)?;
         let mut out = Vec::with_capacity((WIDTH * HEIGHT) as usize);
         for y in 0..HEIGHT as usize {
             for x in 0..WIDTH as usize {
