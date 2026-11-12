@@ -80,6 +80,7 @@ Measured with 4 × 4K engines at a GPU-saturating load on an Intel Iris Xe: the 
 
 From the [xgpui repository](https://github.com/gpui-luma-dev/xgpui):
 
+- `cargo run --release -p xgpui-ext-lab --bin interop-boids`: wgpu's boids example (compute feeding render, on persistent GPU buffers) as an engine in an xgpui window.
 - `cargo run -p xgpui-ext-lab --bin gpu-canvas-workbench`: the example application, with `--check` for automated verification.
 - `cargo run -p xgpui-ext-lab --bin gpu-interop-lab -- --threaded`. Stress testing: `--stress-surfaces N --stress-size WxH --work N [--heavy]`.
 

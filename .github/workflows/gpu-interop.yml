@@ -1,6 +1,6 @@
 name: GPU interop compile checks
 
-# Build-only coverage for xgpui-gpu-interop and its two labs (#227). Hosted
+# Build-only coverage for xgpui-gpu-interop and its labs (#227). Hosted
 # runners have no usable GPU, so nothing here runs a surface: runtime checks on
 # real hardware stay with the cross-platform test script. The one exception is
 # the Windows headless retirement test (#199), which renders on WARP (software
@@ -14,6 +14,7 @@ on:
       - 'extensions/crates/xgpui-gpu-interop/**'
       - 'apps/xgpui-ext-lab/gpu-interop-lab/**'
       - 'apps/xgpui-ext-lab/gpu-canvas-workbench/**'
+      - 'apps/xgpui-ext-lab/interop-boids/**'
       - 'apps/xgpui-ext-lab/Cargo.toml'
       - 'gpui/crates/**'
       - 'Cargo.toml'
@@ -27,6 +28,7 @@ on:
       - 'extensions/crates/xgpui-gpu-interop/**'
       - 'apps/xgpui-ext-lab/gpu-interop-lab/**'
       - 'apps/xgpui-ext-lab/gpu-canvas-workbench/**'
+      - 'apps/xgpui-ext-lab/interop-boids/**'
       - 'apps/xgpui-ext-lab/Cargo.toml'
       - 'gpui/crates/**'
       - 'Cargo.toml'
@@ -79,15 +81,15 @@ jobs:
         # Keep reporting after an earlier failure, so one run shows every problem.
         if: ${{ !cancelled() }}
         run: cargo clippy --locked --config .cargo/validation.toml -p xgpui-gpu-interop --features wgpu --lib --tests --no-deps -- -D warnings
-      - name: Lint both labs
+      - name: Lint the labs
         if: ${{ !cancelled() }}
         # --tests on the shared lab package selects unrelated lab binaries too.
-        run: cargo clippy --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gpu-interop-lab --bin gpu-canvas-workbench --no-deps -- -D warnings
+        run: cargo clippy --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gpu-interop-lab --bin gpu-canvas-workbench --bin interop-boids --no-deps -- -D warnings
       - name: Build crate tests and labs without running them
         if: ${{ !cancelled() }}
         run: |
           cargo test --locked --config .cargo/validation.toml -p xgpui-gpu-interop --features wgpu --lib --no-run
-          cargo build --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gpu-interop-lab --bin gpu-canvas-workbench
+          cargo build --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gpu-interop-lab --bin gpu-canvas-workbench --bin interop-boids
       - name: Run the headless D3D11 retirement test on WARP (#199)
         if: ${{ !cancelled() && runner.os == 'Windows' }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-windows --features test-support --lib directx_renderer::headless_retirement_tests
@@ -97,7 +99,7 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
           ## GPU interop validation scope
           Compiles and lints xgpui-gpu-interop (with and without `wgpu`) and links
-          its tests, gpu-interop-lab and gpu-canvas-workbench. Hosted runners have
+          its tests, gpu-interop-lab, gpu-canvas-workbench and interop-boids. Hosted runners have
           no usable GPU, so no surface is created, shared, presented or recovered here.
           Runtime coverage needs real hardware (see #227's cross-platform test script).
           Exception: on Windows, the headless D3D11 retirement test (#199) runs on

@@ -8003,6 +8003,7 @@ dependencies = [
  "core-foundation 0.10.1",
  "core-text",
  "env_logger",
+ "futures",
  "image",
  "libc",
  "log",
