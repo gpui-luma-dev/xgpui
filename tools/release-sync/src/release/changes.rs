@@ -327,14 +327,24 @@ pub(super) fn identity(root: &Path) -> Result<Json> {
         json!({"commit":commit,"dirty":!git(root,&["status","--porcelain","--untracked-files=all"])?.is_empty(),"sha256":format!("{:x}",digest.finalize()),"scope":"tracked and non-ignored untracked file contents, paths and executable modes; excludes ignored inputs"}),
     )
 }
+fn latest_completed_epoch(root: &Path, fallback: &str, releases: &[Json]) -> Result<String> {
+    let (_, completed) = sources(root, fallback, releases)?;
+    Ok(completed
+        .first()
+        .map(|r| str_at(r, "tag"))
+        .unwrap_or(fallback)
+        .to_owned())
+}
+
 fn report(root: &Path, epoch: Option<&str>) -> Result<Json> {
     let identity = identity(root)?;
     let config = read_json(root.join("scripts/release-check.json"))?;
-    let mut plan = plan_with_history(
-        root,
-        epoch.unwrap_or(str_at(&config, "epoch")),
-        &history(str_at(&config, "repository"))?,
-    )?;
+    let releases = history(str_at(&config, "repository"))?;
+    let baseline = match epoch {
+        Some(epoch) => epoch.to_owned(),
+        None => latest_completed_epoch(root, str_at(&config, "epoch"), &releases)?,
+    };
+    let mut plan = plan_with_history(root, &baseline, &releases)?;
     for row in plan["packages"].as_array_mut().unwrap() {
         let result = (|| -> Result<()> {
             let name = str_at(row, "name").to_owned();
@@ -515,6 +525,29 @@ mod policy_regressions {
             .iter()
             .find(|r| r["name"] == name)
             .unwrap()
+    }
+    #[test]
+    fn default_epoch_uses_completed_ancestor_not_newer_draft_or_unverified_release() {
+        let fixture = repository();
+        let root = fixture.path();
+        assert_eq!(
+            latest_completed_epoch(root, "release-epoch", &[]).unwrap(),
+            "release-epoch"
+        );
+        bump(root, "xgpui-color", "1.0.1");
+        commit(root);
+        git(root, &["tag", "release-completed"]).unwrap();
+        let completed = json!({"tag_name":"release-completed","draft":false,"body":"| xgpui-color | 1.0.1 | published-verified |"});
+        bump(root, "xgpui-color", "1.0.2");
+        commit(root);
+        git(root, &["tag", "release-pending"]).unwrap();
+        let draft = json!({"tag_name":"release-pending","draft":true,"body":"| xgpui-color | 1.0.2 | published-verified |"});
+        let unverified =
+            json!({"tag_name":"release-pending","draft":false,"body":"Publication pending"});
+        assert_eq!(
+            latest_completed_epoch(root, "release-epoch", &[draft, unverified, completed]).unwrap(),
+            "release-completed"
+        );
     }
     #[test]
     fn compatible_release_does_not_propagate_to_dependents() {

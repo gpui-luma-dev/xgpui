@@ -126,6 +126,7 @@ fn execute(
     let mut command = isolated_command(out, "cargo")?;
     command
         .args(args)
+        .arg("--quiet")
         .stdout(stream.try_clone()?)
         .stderr(stream);
     if let Some(token) = token {
@@ -153,23 +154,38 @@ fn execute(
     if code == 124 {
         text += "\nTimed out; verify registry state before retrying.\n";
     }
-    fs::write(&log, &text)?;
+    fs::write(&log, compact_log(&text))?;
     if row.get("commands").is_none() {
         row["commands"] = json!([]);
     }
     let mut full = vec!["cargo".to_owned()];
     full.extend_from_slice(args);
+    full.push("--quiet".to_owned());
     row["commands"]
         .as_array_mut()
         .unwrap()
         .push(json!({"command":full,"exit_code":code,"log":log}));
-    println!(
-        "{}: cargo {} exited {code}; {}",
-        str_at(row, "name"),
-        args.first().map(String::as_str).unwrap_or(""),
-        log.display()
-    );
+    if code != 0 {
+        eprintln!(
+            "{}: Cargo failed ({code}); {}",
+            str_at(row, "name"),
+            log.display()
+        );
+    }
     Ok((code, text))
+}
+
+fn compact_log(text: &str) -> String {
+    const LIMIT: usize = 64 * 1024;
+    const NOTICE: &str = "[Earlier output omitted; log capped at 64 KiB.]\n";
+    if text.len() <= LIMIT {
+        return text.to_owned();
+    }
+    let mut start = text.len() - (LIMIT - NOTICE.len());
+    while !text.is_char_boundary(start) {
+        start += 1;
+    }
+    format!("{NOTICE}{}", &text[start..])
 }
 trait Driver {
     fn package(&mut self, row: &mut Json) -> Result<()>;
@@ -470,8 +486,16 @@ fn transition(report: &mut Json, driver: &mut impl Driver) -> Result<()> {
     Ok(())
 }
 pub(super) fn cli(root: &Path, o: &Options) -> Result<()> {
-    let out = outside(root, Path::new(o.required("--out")?))?;
     let mode = o.get("--mode").unwrap_or("plan");
+    let default_out = root
+        .parent()
+        .context("Repository has no parent directory")?
+        .join("xgpui-release-artifacts")
+        .join(format!(
+            "{mode}-{}",
+            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+        ));
+    let out = outside(root, o.get("--out").map(Path::new).unwrap_or(&default_out))?;
     let commit = git(root, &["rev-parse", "HEAD"])?;
     let token = std::env::var("CARGO_REGISTRY_TOKEN").unwrap_or_default();
     publication_guard(mode, o.get("--confirmation").unwrap_or(""), &commit, &token)?;
@@ -506,7 +530,72 @@ pub(super) fn cli(root: &Path, o: &Options) -> Result<()> {
     }
     report["finished_at"] = json!(now());
     driver.save(&report)?;
+    print!("{}", publication_summary(&report));
+    println!("Report: {}", out.join("report.json").display());
     result
+}
+
+fn publication_summary(report: &Json) -> String {
+    let mut summary =
+        String::from("Crate publication checks (no upload approval or ownership check implied)\n");
+    let mut ready = 0;
+    let mut published = 0;
+    let mut blocked = 0;
+    for row in rows(&report["packages"]) {
+        let status = str_at(row, "status");
+        let label = match status {
+            "verified-not-uploaded" => {
+                ready += 1;
+                "READY: package/build checks passed".to_owned()
+            }
+            "already-published" | "published-verified" => {
+                published += 1;
+                "PUBLISHED: matching registry payload; skip".to_owned()
+            }
+            "blocked-unpublished-dependencies" => {
+                blocked += 1;
+                let dependencies = rows(&row["blocked_by"])
+                    .iter()
+                    .filter_map(Json::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("BLOCKED: publish dependencies first: {dependencies}")
+            }
+            "version-conflict" => {
+                blocked += 1;
+                "BLOCKED: published version has different content; bump version".to_owned()
+            }
+            "publish-needed" => {
+                blocked += 1;
+                "NOT VERIFIED: version available; package/build checks outstanding".to_owned()
+            }
+            _ => {
+                blocked += 1;
+                format!(
+                    "NOT VERIFIED: {}",
+                    if status.is_empty() {
+                        "checks did not complete"
+                    } else {
+                        status
+                    }
+                )
+            }
+        };
+        summary.push_str(&format!(
+            "{:<25} {:<10} {label}\n",
+            str_at(row, "name"),
+            str_at(row, "version")
+        ));
+    }
+    summary.push_str(&format!("\nCan publish all remaining crates now? {}\n{ready} ready, {published} published, {blocked} blocked or unverified.\n",
+        if report["error"].is_string() { "NO — checks failed" }
+        else if blocked > 0 { "NO — see per-crate blockers" }
+        else if ready == 0 { "Nothing to publish" }
+        else { "Package/build checks passed; registry permissions and release approval still required" }));
+    if let Some(error) = report["error"].as_str() {
+        summary.push_str(&format!("Error: {error}\n"));
+    }
+    summary
 }
 pub(super) fn prepare(root: &Path, o: &Options) -> Result<()> {
     let out = outside(root, Path::new(o.required("--out")?))?;
@@ -731,6 +820,42 @@ pub(super) mod tests {
 #[cfg(test)]
 mod retry_regressions {
     use super::*;
+    #[test]
+    fn publication_summary_includes_every_crate_and_names_blockers() {
+        let report = json!({"packages":[
+            {"name":"new","version":"1.0.0","status":"verified-not-uploaded"},
+            {"name":"existing","version":"1.0.0","status":"already-published"},
+            {"name":"dependent","version":"1.0.0","status":"blocked-unpublished-dependencies","blocked_by":["new"]},
+            {"name":"conflict","version":"1.0.0","status":"version-conflict"},
+            {"name":"untested","version":"1.0.0","status":"publish-needed"}
+        ]});
+        let summary = publication_summary(&report);
+        assert!(summary.contains("NO — see per-crate blockers"));
+        assert!(summary.contains("publish dependencies first: new"));
+        assert!(summary.contains("1 ready, 1 published, 3 blocked or unverified"));
+        assert!(summary.contains("bump version"));
+        assert!(summary.contains("NOT VERIFIED: version available"));
+    }
+    #[test]
+    fn publication_summary_does_not_claim_failed_checks_are_ready() {
+        let report = json!({"error":"package failed","packages":[
+            {"name":"new","version":"1.0.0"}
+        ]});
+        assert!(publication_summary(&report).contains("NO — checks failed"));
+        assert!(publication_summary(&report).contains("checks did not complete"));
+        let published = json!({"packages":[{"name":"existing","version":"1.0.0","status":"already-published"}]});
+        assert!(publication_summary(&published).contains("Nothing to publish"));
+    }
+    #[test]
+    fn saved_logs_are_bounded_and_preserve_utf8_diagnostic_tails() {
+        let short = "error: failed to compile\n";
+        assert_eq!(compact_log(short), short);
+        let text = format!("{}\n{short}", "🙂".repeat(40_000));
+        let saved = compact_log(&text);
+        assert!(saved.len() <= 64 * 1024);
+        assert!(saved.starts_with("[Earlier output omitted"));
+        assert!(saved.ends_with(short));
+    }
     #[test]
     fn quota_retries_require_http_429_and_explicit_gmt_deadline() {
         let date = "Sat, 07 Nov 2026 20:00:00 GMT";

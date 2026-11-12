@@ -1,5 +1,8 @@
 # Rust release tooling
 
+See [the command guide](../../scripts/release-sync.md) for Justfile shortcuts,
+baseline selection, preflight results and configuration files.
+
 `xgpui-release` owns downstream normalization, release preparation, archive
 verification, upstream import/review and explicitly confirmed registry publication.
 It replaces the Python release scripts. It is a standalone Cargo workspace;
@@ -38,6 +41,10 @@ cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- COMMAND [OPT
 | `review-notes` | `--report PATH --context MARKDOWN --output PATH`; format upstream review notes |
 | `check-local-dependencies` | `--metadata PATH`; check Cargo metadata identities against provenance |
 
+Run `just release-preflight` for a per-crate READY/PUBLISHED/BLOCKED summary
+using the no-upload registry dry-run. Dry-run defaults to a new directory under
+`../xgpui-release-artifacts/`; `--out NEW_DIR` overrides it.
+
 All commands accept `--root PATH`. Output directories for package and registry
 verification must be new and outside the checkout. Release-check/preparation
 reports must also be outside the checkout. Registry HTTP requests require curl;
@@ -47,7 +54,8 @@ and Git are required. The release path does not invoke Python.
 Publication remains a separate explicit action: `registry-release --mode publish`
 requires `--confirmation 'publish FULL_COMMIT_SHA'`, a clean source commit, and
 `CARGO_REGISTRY_TOKEN`. Credentials are removed from preflight Cargo children and
-redacted from upload logs. All collisions are checked before any upload, and
+redacted from upload logs. Cargo runs quietly; each saved command log is capped
+at 64 KiB, retaining the final diagnostics and marking truncated output. All collisions are checked before any upload, and
 each upload is checksum/payload verified before its dependents proceed. Unknown
 upload outcomes stop; quota retries require an explicit HTTP 429 deadline and a
 fresh absent-version check. Never run publication as part of tests.
