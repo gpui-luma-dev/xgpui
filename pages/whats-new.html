@@ -20,8 +20,8 @@
 </aside>
 <main id="content" tabindex="-1">
 <p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="whats-new">What's new</h1>
-<h2 id="november-12-2026">In preparation — November 12, 2026</h2>
-<p><strong>Release status:</strong> versions approved, merged and tagged as <a href="https://github.com/gpui-luma-dev/xgpui/tree/release-2026-11-12-da99e6bb8e6d"><code>release-2026-11-12-da99e6bb8e6d</code></a>. A draft release is prepared; crate publication is pending. The no-upload registry plan identifies 18 new versions and one unchanged iOS version to verify and skip. Registry-backed build checks verified macros and color; the other 16 candidates await unpublished dependencies and must be verified in publication order.</p>
+<h2 id="november-12-2026">November 12, 2026 — GPU interop and device-loss recovery</h2>
+<p>The November 12 release is available on crates.io: 18 new crate versions, including the first <a href="https://crates.io/crates/xgpui-gpu-interop/0.1.0"><code>xgpui-gpu-interop 0.1.0</code></a> release. Source tag: <a href="https://github.com/gpui-luma-dev/xgpui/tree/release-2026-11-12-da99e6bb8e6d"><code>release-2026-11-12-da99e6bb8e6d</code></a>. The iOS crate remains at <code>1.26.5</code>.</p>
 <h3 id="november-11-2026">GPU interop — first alpha release</h3>
 <p><code>xgpui-gpu-interop 0.1.0</code> presents frames from your own GPU engine in xgpui windows without copies on macOS, Linux and Windows. The engine keeps its own device, queue and thread. Shared texture rings, GPU synchronization, wide-gamut RGBA16F output, device recovery and heavy-engine pacing support independent render and compute workloads.</p>
 <p>Seven additive backend hooks require <code>xgpui-apple 4.1.0</code>, <code>xgpui-wgpu 2.3.0</code> and <code>xgpui-windows 2.2.0</code>; existing applications need no source migration. The engine must use the compositor’s GPU. AMD and NVIDIA are untested; Linux wide content uses an sRGB preview. Read the <a href="gpu-interop.html">GPU interop guide</a> and <a href="crates/xgpui-gpu-interop.html#crate-contact">crate keywords and contact information</a>.</p>
@@ -29,8 +29,8 @@
 <p>When GPU recovery gives up, windows stop drawing and <code>App::on_gpu_device_lost</code> tells the application once, while input and timers continue. Core <code>3.2.0</code> adds the scoped notification; Linux and Windows implement bounded recovery. See the <a href="gpui-public-api.html#gpu-device-loss-reporting-119">individual API and compatibility notes</a>.</p>
 <h3>Color accuracy, examples and documentation</h3>
 <p><code>xgpui-color 0.3.2</code> derives exact OkLab inverse matrices, reducing round-trip drift from about 1e-7 to about 1e-15 without changing signatures or serialized formats. Try the GPU Canvas Workbench, GPU interop lab and threaded boids example. Static website migration updates the packaged README links; the documentation-only patch bumps below ship those changes.</p>
-<h3>Approved candidate versions</h3>
-<table><thead><tr><th>Crate</th><th>Previous completed release</th><th>Candidate</th></tr></thead><tbody>
+<h3>Released versions</h3>
+<table><thead><tr><th>Crate</th><th>Previous release</th><th>Released</th></tr></thead><tbody>
 <tr><td><code>xgpui</code></td><td>3.1.0</td><td>3.2.0</td></tr>
 <tr><td><code>xgpui-apple</code></td><td>4.0.1</td><td>4.1.0</td></tr>
 <tr><td><code>xgpui-canvas</code></td><td>0.3.3</td><td>0.3.4</td></tr>
@@ -51,10 +51,10 @@
 <tr><td><code>xgpui-wgpu</code></td><td>2.2.0</td><td>2.3.0</td></tr>
 <tr><td><code>xgpui-windows</code></td><td>2.1.1</td><td>2.2.0</td></tr>
 </tbody></table>
-<p><strong>Alpha:</strong> GPU interop and desktop shell APIs may change. Headless checks do not establish interactive desktop, compositor, physical gamut or accessibility acceptance. Documentation deployment is a separate step.</p>
+<p><strong>Alpha:</strong> GPU interop and desktop shell APIs may change. Headless checks do not establish interactive desktop, compositor, physical gamut or accessibility acceptance.</p>
 <h2 id="in-preparation--november-8-2026">November 8, 2026 — desktop shell (published November 9 UTC)</h2>
 <p>The first <code>xgpui-shell 0.1.0</code> release adds desktop-aware client frames, per-window overrides, typography and app-composed title bars. <code>xgpui 3.1.0</code> adds desktop-preference snapshots and subscriptions; <code>xgpui-linux 2.1.0</code> reads the Settings portal with optional GNOME/KDE fallbacks. macOS keeps native traffic lights.</p>
-<p>These versions were published and verified in the <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-09-acc3ae63894e">completed desktop shell release</a>. Shell remains alpha. The unfinished shell-colors 0.2.0 draft is separate and is not included in today’s candidate. Read the <a href="shell.html">shell guide</a>.</p>
+<p>These versions were published and verified in the <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-09-acc3ae63894e">completed desktop shell release</a>. Shell remains alpha. Read the <a href="shell.html">shell guide</a>.</p>
 <h2 id="november-7-2026">November 7, 2026</h2>
 <p>CI/testing and browser-build fixes, plus very-alpha Parley 0.5.0 paragraph, typeset and emoji updates — see the <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-08-cb66d2b2238b">GitHub release notes</a>.</p>
 <h2 id="november-5-2026--variable-fonts">November 5, 2026 — variable fonts</h2>
