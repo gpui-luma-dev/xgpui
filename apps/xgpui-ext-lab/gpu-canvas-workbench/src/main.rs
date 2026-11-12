@@ -49,8 +49,8 @@ mod workbench {
         rc::Rc,
         time::Instant,
     };
-    use xgpui_surface::EngineSurface;
     use xgpui_ext_lab::{LabApp, LabWindowTitle};
+    use xgpui_surface::EngineSurface;
 
     #[cfg(target_os = "macos")]
     const TRANSPORT: &str = "zero-copy IOSurface ring";
@@ -1207,7 +1207,29 @@ mod workbench {
         }
     }
 
+    /// Prints one line when GPU recovery gives up (#119), then exits.
+    ///
+    /// Windows stop drawing after that, so `--run-seconds`, which runs from a
+    /// frame, never fires. A timer exits instead, which also shows the event
+    /// loop is still alive. Hardware test scripts match these lines.
+    fn report_gpu_device_lost(cx: &mut App) {
+        cx.on_gpu_device_lost(|lost, cx| {
+            println!("gpu-device-lost: {}", lost.reason);
+            cx.spawn(async move |cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(2))
+                    .await;
+                println!("gpu-device-lost: app still running; exiting");
+                cx.update(|cx| cx.quit());
+            })
+            .detach();
+        })
+        .detach();
+    }
+
     pub fn main() -> Result<()> {
+        // Backend warnings, such as device-loss recovery attempts (#119); RUST_LOG overrides.
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
         let options = Options::parse();
         ensure!((2..=8).contains(&options.slots), "slots must be 2..=8");
         crate::engine::QUEUE_UPLOADS
@@ -1216,6 +1238,7 @@ mod workbench {
             return crate::check::run(options.slots);
         }
         gpui_platform::application().run(move |cx: &mut App| {
+            report_gpu_device_lost(cx);
             let bounds = Bounds::centered(None, size(px(1040.), px(800.)), cx);
             let main_slot: Rc<Cell<Option<Entity<Workbench>>>> = Rc::new(Cell::new(None));
             let main = main_slot.clone();

@@ -1,7 +1,10 @@
 use anyhow::{Context as _, anyhow};
 use x11rb::connection::RequestConnection;
 
-use crate::linux::{GpuLossReporter, GpuRecovery, RecoveryStep, X11ClientStatePtr};
+use crate::linux::{
+    GpuLossReporter, GpuRecovery, InjectedLoss, RecoveryStep, X11ClientStatePtr,
+    check_injected_recovery,
+};
 use gpui::{
     AnyWindowHandle, Bounds, Decorations, DevicePixels, ForegroundExecutor, GpuSpecs, Modifiers,
     Pixels, PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler, PlatformWindow,
@@ -288,6 +291,7 @@ pub struct X11WindowState {
     force_render_after_recovery: bool,
     gpu_recovery: GpuRecovery,
     gpu_loss: GpuLossReporter,
+    injected_loss: InjectedLoss,
     fullscreen: bool,
     client_side_decorations_supported: bool,
     decorations: WindowDecorations,
@@ -850,6 +854,7 @@ impl X11WindowState {
                 force_render_after_recovery: false,
                 gpu_recovery: GpuRecovery::default(),
                 gpu_loss,
+                injected_loss: InjectedLoss::from_env(Instant::now()),
                 fullscreen: false,
                 maximized_vertical: false,
                 maximized_horizontal: false,
@@ -1763,7 +1768,8 @@ impl PlatformWindow for X11Window {
             return;
         };
 
-        if renderer.device_lost() {
+        let injected = inner.injected_loss.is_lost(Instant::now());
+        if renderer.device_lost() || injected {
             let raw_window = RawWindow {
                 connection: as_raw_xcb_connection::AsRawXcbConnection::as_raw_xcb_connection(
                     &*self.0.xcb,
@@ -1772,11 +1778,15 @@ impl PlatformWindow for X11Window {
                 window_id: self.0.x_window,
                 visual_id: inner.visual_id,
             };
-            match inner
-                .gpu_recovery
-                .step(Instant::now(), || renderer.recover(&raw_window))
-            {
-                RecoveryStep::Recovered | RecoveryStep::Retry => {
+            match inner.gpu_recovery.step(Instant::now(), || {
+                check_injected_recovery()?;
+                renderer.recover(&raw_window)
+            }) {
+                RecoveryStep::Recovered => {
+                    inner.injected_loss.recovered();
+                    inner.force_render_after_recovery = true;
+                }
+                RecoveryStep::Retry => {
                     inner.force_render_after_recovery = true;
                 }
                 RecoveryStep::Failed(reason) => inner.gpu_loss.report(reason),

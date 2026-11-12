@@ -8002,6 +8002,7 @@ dependencies = [
  "console_error_panic_hook",
  "core-foundation 0.10.1",
  "core-text",
+ "env_logger",
  "image",
  "libc",
  "log",
