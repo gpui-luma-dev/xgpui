@@ -91,6 +91,17 @@ These files are tracked inputs, not generated logs or publication receipts.
 
 ## Publication and validation
 
+To publish the current clean checkout, with `CARGO_REGISTRY_TOKEN` set securely:
+
+```sh
+just release-publish
+```
+
+This uploads to crates.io. The wrapper supplies the exact current commit SHA to
+the existing publisher; it does not switch source commits. Run it from the
+approved source. Matching published versions are verified and skipped. An output
+directory is generated outside the repository; pass `--out NEW_DIR` to override it.
+
 Publication is a separate explicit action. `registry-release --mode publish`
 requires `--confirmation 'publish FULL_COMMIT_SHA'`, a clean source commit and
 `CARGO_REGISTRY_TOKEN`. Never invoke publish as a test or include credentials in

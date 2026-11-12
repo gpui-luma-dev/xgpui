@@ -96,6 +96,10 @@ release-check *args:
 release-dry-run *args:
     cargo run --quiet --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode dry-run "$@"
 
+# Publish the current clean commit; requires CARGO_REGISTRY_TOKEN. This uploads to crates.io.
+release-publish *args:
+    cargo run --quiet --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode publish --confirmation "publish $(git rev-parse HEAD)" "$@"
+
 # Preview all ignored Cargo outputs, including standalone crates and old app paths.
 clean-preview:
     bash scripts/clean_build_outputs.sh
