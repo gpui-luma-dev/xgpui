@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-platform"
-version = "2.0.3"
+version = "2.0.4"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"

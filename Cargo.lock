@@ -7973,7 +7973,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-canvas"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -7983,7 +7983,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-color"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "moxcms",
  "naga 30.0.1",
@@ -8042,7 +8042,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-gamut"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -8140,7 +8140,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-macos"
-version = "4.0.1"
+version = "4.0.2"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -8181,7 +8181,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-macros"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -8191,7 +8191,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-media"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "half",
@@ -8209,7 +8209,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-parley"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "parley",
@@ -8222,7 +8222,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-platform"
-version = "2.0.3"
+version = "2.0.4"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -8238,7 +8238,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-shader"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -8260,7 +8260,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-shell"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "xgpui",
@@ -8268,7 +8268,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-svg"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "web-time",
@@ -8277,7 +8277,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-web"
-version = "2.0.3"
+version = "2.0.4"
 dependencies = [
  "anyhow",
  "async-channel",
