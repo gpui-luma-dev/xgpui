@@ -53,6 +53,9 @@ esac
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 LOG="$WORK/results-$OS-$(hostname)-$STAMP.txt"
+# Keep the terminal on fds 3 and 4: posting results talks to it directly, so
+# nothing it prints can be lost in the log pipe.
+exec 3>&1 4>&2
 exec > >(tee "$LOG") 2>&1
 
 echo "testing: $TEST_BRANCH @ $COMMIT (script $SCRIPT_COMMIT)"
@@ -223,26 +226,55 @@ echo "testing: $TEST_BRANCH @ $COMMIT (script $SCRIPT_COMMIT) on $OS"
 for line in "${RESULTS[@]}"; do echo "  $line"; done
 echo "log: $LOG"
 
-if [ -t 0 ] && command -v gh > /dev/null && gh auth status > /dev/null 2>&1; then
+# Stop logging and give tee a moment to flush the log file.
+exec 1>&3 2>&4
+sleep 1
+
+# The comment is always written, so it can be posted by hand if needed.
+COMMENT="$WORK/comment-$STAMP.md"
+write_comment() { # number of log lines to include
+    {
+        echo "### #$ISSUE hardware run on $OS ($(hostname))"
+        echo
+        echo "\`testing: $TEST_BRANCH @ $COMMIT (script $SCRIPT_COMMIT)\`"
+        echo
+        echo '```'
+        for line in "${RESULTS[@]}"; do echo "$line"; done
+        echo '```'
+        echo
+        echo '<details><summary>Log tail</summary>'
+        echo
+        echo '```'
+        # Long lines are cut so the comment stays under GitHub's size limit.
+        tail -n "$1" "$LOG" | cut -c1-600
+        echo '```'
+        echo '</details>'
+    } > "$COMMENT"
+}
+LINES=200
+write_comment "$LINES"
+while [ "$(wc -c < "$COMMENT")" -gt 60000 ] && [ "$LINES" -gt 20 ]; do
+    LINES=$((LINES - 20))
+    write_comment "$LINES"
+done
+echo "comment: $COMMENT ($(wc -c < "$COMMENT" | tr -d ' ') bytes, last $LINES log lines)"
+
+if ! command -v gh > /dev/null; then
+    echo "gh is not installed, so nothing was posted to #$ISSUE."
+elif [ ! -t 0 ]; then
+    echo "Not an interactive terminal, so nothing was posted to #$ISSUE."
+else
     read -r -p "Post the summary and log tail to issue #$ISSUE? [y/N] " ANSWER
     if [ "$ANSWER" = y ] || [ "$ANSWER" = Y ]; then
-        {
-            echo "### #$ISSUE hardware run on $OS ($(hostname))"
-            echo
-            echo "\`testing: $TEST_BRANCH @ $COMMIT (script $SCRIPT_COMMIT)\`"
-            echo
-            echo '```'
-            for line in "${RESULTS[@]}"; do echo "$line"; done
-            echo '```'
-            echo
-            echo '<details><summary>Log tail</summary>'
-            echo
-            echo '```'
-            tail -n 120 "$LOG"
-            echo '```'
-            echo '</details>'
-        } > "$WORK/comment-$STAMP.md"
-        gh issue comment "$ISSUE" --body-file "$WORK/comment-$STAMP.md"
+        if URL="$(gh issue comment "$ISSUE" --body-file "$COMMENT" 2>&1)"; then
+            echo "posted: $URL"
+        else
+            echo "Posting failed:"
+            echo "$URL"
+            echo "The comment is saved at $COMMENT."
+        fi
+    else
+        echo "Not posted."
     fi
 fi
 exit "$FAILED"

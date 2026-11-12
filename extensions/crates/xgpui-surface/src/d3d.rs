@@ -230,9 +230,15 @@ impl SlotResources {
         let dxgi: IDXGIDevice = context.device.cast()?;
         let desc = unsafe { dxgi.GetAdapter()?.GetDesc()? };
         let luid = (desc.AdapterLuid.LowPart, desc.AdapterLuid.HighPart);
+        // Adapter IDs as HighPart:LowPart, matching the compositor's log.
+        let engine = format!("{:08x}:{:08x}", self.adapter.1, self.adapter.0);
+        let compositor = format!("{:08x}:{:08x}", luid.1, luid.0);
         ensure!(
             luid == self.adapter,
-            Unsupported("engine and compositor use different GPUs".into())
+            Unsupported(format!(
+                "engine and compositor use different GPUs \
+                 (engine adapter {engine}, compositor adapter {compositor})"
+            ))
         );
         let device: ID3D11Device1 = context
             .device
@@ -242,7 +248,7 @@ impl SlotResources {
             .map_err(|error| {
                 Unsupported(format!(
                     "the compositor cannot open the engine's shared texture \
-                     (engine and compositor on different adapters?): {error}"
+                     (adapter {engine}): {error}"
                 ))
             })?;
         *host = Some((context.device.clone(), texture.clone()));
