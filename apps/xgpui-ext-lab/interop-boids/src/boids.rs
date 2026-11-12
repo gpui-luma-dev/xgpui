@@ -39,7 +39,10 @@ pub struct Boids {
 }
 
 impl Boids {
-    /// The limits the example asks for.
+    /// The limits the example asks for. Unused on Linux, where
+    /// `WgpuSurfaceTarget::request_device` creates the device with wgpu's
+    /// default limits, which are higher than these.
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
     pub fn required_limits() -> wgpu::Limits {
         wgpu::Limits::downlevel_defaults()
     }
