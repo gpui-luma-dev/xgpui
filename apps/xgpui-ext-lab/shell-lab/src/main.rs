@@ -160,6 +160,7 @@ fn control_artwork(state: &ShellControlState, filled: bool) -> AnyElement {
         ShellControl::Maximize => "shell/maximize.svg",
         ShellControl::Restore => "shell/restore.svg",
         ShellControl::Close => "shell/close.svg",
+        _ => "shell/close.svg",
     };
     let colors = state.colors;
     let dark = matches!(

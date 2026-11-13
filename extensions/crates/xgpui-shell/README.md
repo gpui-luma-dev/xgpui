@@ -100,7 +100,7 @@ See the [Shell Lab walkthrough](https://xgpui.dev/shell-lab.html) and [Linux pro
 
 This is the first published interface; APIs may change. Headless macOS, Windows and Linux CI passes, but it does not establish interactive GNOME/KDE acceptance, mixed-DPI behavior or screen-reader acceptance. Unsupported desktop actions remain unavailable; native macOS traffic-light artwork is not restyled.
 
-The window-control presenter is additive: `ShellControl`, `ShellControlState`, `ShellControlPresenter`, `ShellWindow::set_control_presenter` and the `ClientFramePreview::control_presenter` field are new, and existing code compiles unchanged. It isn't a `ShellOptions` field, because adding a public field there would break apps that build `ShellOptions` field by field. `ShellControlState` is `#[non_exhaustive]` so fields can be added later. No core GPUI API changes.
+The window-control presenter is additive: `ShellControl`, `ShellControlState`, `ShellControlPresenter`, `ShellWindow::set_control_presenter` and the `ClientFramePreview::control_presenter` field are new, and existing code compiles unchanged. It isn't a `ShellOptions` field, because adding a public field there would break apps that build `ShellOptions` field by field. `ShellControl` and `ShellControlState` are `#[non_exhaustive]`, so controls and fields can be added later; match `ShellControl` with a fallback arm. No core GPUI API changes.
 
 Compared with the earlier local-only shell, scalar preference options are now optional overrides: use `Some(value)` for an explicit choice, or `..Default::default()` to follow the desktop. The new core APIs are additive, have default platform implementations and introduce no serialization format changes.
 

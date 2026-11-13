@@ -13,6 +13,7 @@ use std::{fmt, rc::Rc};
 /// `Restore` replaces `Maximize` while the window is maximized; both dispatch
 /// the same maximize/restore operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ShellControl {
     Minimize,
     Maximize,
