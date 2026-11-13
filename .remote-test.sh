@@ -17,6 +17,15 @@ if [[ "${XDG_SESSION_TYPE:-}" != wayland || -z "${WAYLAND_DISPLAY:-}" ]]; then
     exit 1
 fi
 
+case ":${XDG_CURRENT_DESKTOP:-}:" in
+    *:GNOME:*) ;;
+    *)
+        note "This is a ${XDG_CURRENT_DESKTOP:-unknown} session; #271 is about GNOME."
+        note "Log out, pick GNOME at the login screen (the gear or session menu), log in and run again."
+        exit 1
+        ;;
+esac
+
 # Runners from before result posting reached main don't post; borrow this
 # branch's copy of the runner's helpers and post from this script instead.
 if [[ -z "${XGPUI_TEST_POSTS:-}" ]]; then
@@ -64,7 +73,7 @@ if command -v vulkaninfo >/dev/null; then
     timeout 60 vulkaninfo >"$vulkan_log" 2>&1
     {
         echo "surface color spaces offered (count of format entries):"
-        grep -oE 'VK_COLOR_SPACE_[A-Z0-9_]+' "$vulkan_log" | sort | uniq -c | sed 's/^/    /'
+        grep -oE 'COLOR_SPACE_[A-Z0-9_]+' "$vulkan_log" | sort | uniq -c | sed 's/^/    /'
     } | report
     echo "full report: $vulkan_log"
 else
