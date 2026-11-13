@@ -121,7 +121,7 @@ impl WindowsWindowInner {
             WM_CLOSE => self.handle_close_msg(),
             WM_DESTROY => self.handle_destroy_msg(handle),
             WM_MOUSEMOVE => self.handle_mouse_move_msg(handle, lparam, wparam),
-            WM_MOUSELEAVE | WM_NCMOUSELEAVE => self.handle_mouse_leave_msg(),
+            WM_MOUSELEAVE | WM_NCMOUSELEAVE => self.handle_mouse_leave_msg(handle),
             WM_NCMOUSEMOVE => self.handle_nc_mouse_move_msg(handle, lparam),
             // Treat double click as a second single click, since we track the double clicks ourselves.
             // If you don't interact with any elements, this will fall through to the windows default
@@ -407,8 +407,22 @@ impl WindowsWindowInner {
         if handled { Some(0) } else { Some(1) }
     }
 
-    fn handle_mouse_leave_msg(&self) -> Option<isize> {
+    fn handle_mouse_leave_msg(&self, handle: HWND) -> Option<isize> {
         self.state.hovered.set(false);
+
+        // Crossing between the client area and the non-client title bar ends one
+        // `TrackMouseEvent` session and starts another, which posts a leave for the
+        // old area even though the pointer is still over this window. Clearing
+        // `hovered` above re-arms tracking on the next move; only report an exit
+        // when the pointer has really left the window (moved off it, or the window
+        // was covered or hidden).
+        let mut cursor_point = POINT::default();
+        if unsafe { GetCursorPos(&mut cursor_point) }.is_ok()
+            && is_window_at_point(handle, cursor_point)
+        {
+            return Some(0);
+        }
+
         // The next window's `WM_SETCURSOR` picks its own cursor, so we just clear
         // the flag for tight `is_cursor_visible()` semantics.
         self.state.cursor_visible.store(true, Ordering::Relaxed);
@@ -418,6 +432,17 @@ impl WindowsWindowInner {
                 .callbacks
                 .hovered_status_change
                 .set(Some(callback));
+        }
+
+        if let Some(mut func) = self.state.callbacks.input.take() {
+            unsafe { ScreenToClient(handle, &mut cursor_point).ok().log_err() };
+            let scale_factor = self.state.scale_factor.get();
+            func(PlatformInput::MouseExited(MouseExitEvent {
+                position: logical_point(cursor_point.x as f32, cursor_point.y as f32, scale_factor),
+                pressed_button: current_pressed_button(),
+                modifiers: current_modifiers(),
+            }));
+            self.state.callbacks.input.set(Some(func));
         }
 
         Some(0)
@@ -1222,7 +1247,8 @@ impl WindowsWindowInner {
         unsafe {
             SetCursor(cursor);
         };
-        Some(0)
+        // TRUE tells Windows the cursor is handled and stops further processing.
+        Some(1)
     }
 
     fn handle_system_settings_changed(
@@ -1813,6 +1839,32 @@ pub(crate) fn current_modifiers() -> Modifiers {
         platform: is_virtual_key_pressed(VK_LWIN) || is_virtual_key_pressed(VK_RWIN),
         function: false,
     }
+}
+
+fn current_pressed_button() -> Option<MouseButton> {
+    if is_virtual_key_pressed(VK_LBUTTON) {
+        Some(MouseButton::Left)
+    } else if is_virtual_key_pressed(VK_RBUTTON) {
+        Some(MouseButton::Right)
+    } else if is_virtual_key_pressed(VK_MBUTTON) {
+        Some(MouseButton::Middle)
+    } else if is_virtual_key_pressed(VK_XBUTTON1) {
+        Some(MouseButton::Navigate(NavigationDirection::Back))
+    } else if is_virtual_key_pressed(VK_XBUTTON2) {
+        Some(MouseButton::Navigate(NavigationDirection::Forward))
+    } else {
+        None
+    }
+}
+
+/// Whether the topmost window under `point` (screen coordinates) belongs to
+/// `handle`'s top-level window.
+fn is_window_at_point(handle: HWND, point: POINT) -> bool {
+    let hit = unsafe { WindowFromPoint(point) };
+    if hit.is_invalid() {
+        return false;
+    }
+    unsafe { GetAncestor(hit, GA_ROOT) == GetAncestor(handle, GA_ROOT) }
 }
 
 #[inline]
