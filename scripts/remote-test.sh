@@ -174,38 +174,38 @@ LAUNCHER
 # --------------------------------------------------------------------------
 # listing
 
-find_python() {
-    local py
-    for py in python3 python; do
-        # The Windows Store `python` stub exists but cannot run code.
-        if command -v "$py" >/dev/null 2>&1 && "$py" -c 'import json' >/dev/null 2>&1; then
-            printf '%s\n' "$py"
-            return 0
-        fi
-    done
-    return 1
-}
-
-# Prints "number<TAB>branch<TAB>title<TAB>draft" for open PRs whose branch is in
-# this repository. Fork PRs are dropped: the runner executes whatever the branch
-# contains.
+# Prints "number<TAB>branch" for open PRs whose branch is in this repository.
+# Uses only curl, grep and git. Fork PRs are dropped because their head commit is
+# not the tip of any branch here: the runner executes whatever the branch contains.
 list_prs() {
-    local py json
-    py=$(find_python) || { echo "note: python not found; showing branches without PR numbers" >&2; return 0; }
+    local json open sha ref number name
     json=$(curl -fsSL --max-time 20 -H 'Accept: application/vnd.github+json' \
-        "https://api.github.com/repos/$REPO_SLUG/pulls?state=open&per_page=50") ||
+        "https://api.github.com/repos/$REPO_SLUG/pulls?state=open&per_page=100") ||
         { echo "note: could not reach the GitHub API; showing branches only" >&2; return 0; }
-    printf '%s' "$json" | "$py" -c '
-import json, sys
-slug = sys.argv[1]
-for pr in json.load(sys.stdin):
-    head = pr.get("head") or {}
-    repo = head.get("repo") or {}
-    if repo.get("full_name") != slug:
-        continue
-    title = " ".join(pr.get("title", "").split())
-    print("\t".join([str(pr["number"]), head["ref"], title, "draft" if pr.get("draft") else ""]))
-' "$REPO_SLUG"
+
+    # Open PR numbers, taken from each PR's own "html_url" field. Text inside a PR
+    # body is escaped (\"html_url\"), so it cannot match.
+    open=$(grep -oE "\"html_url\": *\"https://github.com/$REPO_SLUG/pull/[0-9]+\"" <<<"$json" |
+        grep -oE '[0-9]+"$' | tr -d '"' | sort -un)
+    [[ -n "$open" ]] || return 0
+
+    # Branch tips on origin, by commit.
+    local -A tips=()
+    while read -r sha ref; do
+        name=${ref#refs/remotes/origin/}
+        [[ "$name" == HEAD ]] && continue
+        tips[$sha]="${tips[$sha]:-}${tips[$sha]:+ }$name"
+    done < <(git for-each-ref --format='%(objectname) %(refname)' refs/remotes/origin)
+
+    # GitHub keeps refs/pull/<n>/head pointing at each PR's head commit.
+    while read -r sha ref; do
+        number=${ref#refs/pull/}
+        number=${number%/head}
+        grep -qx "$number" <<<"$open" || continue
+        for name in ${tips[$sha]:-}; do
+            printf '%s\t%s\n' "$number" "$name"
+        done
+    done < <(git ls-remote origin 'refs/pull/*/head')
 }
 
 has_test_script() {
@@ -304,14 +304,15 @@ cmd_run() {
 
     local -a choices=() labels=()
     local -A seen=()
-    local number branch title draft mark
-    while IFS=$'\t' read -r number branch title draft; do
+    local number branch mark
+    while IFS=$'\t' read -r number branch; do
         [[ -n "$number" ]] || continue
         git show-ref --verify --quiet "refs/remotes/origin/$branch" || continue
         seen[$branch]=$number
         mark=""; has_test_script "$branch" && mark=" [test]"
         choices+=("$branch")
-        labels+=("$(printf 'PR #%-5s %s%s%s\n         %s' "$number" "$branch" "${draft:+ (draft)}" "$mark" "$title")")
+        labels+=("$(printf 'PR #%-5s %s%s\n         %s' "$number" "$branch" "$mark" \
+            "$(git log -1 --format=%s "origin/$branch")")")
     done < <(list_prs)
 
     local count=0 when subject
