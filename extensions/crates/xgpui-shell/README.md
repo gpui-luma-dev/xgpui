@@ -34,6 +34,44 @@ Use `ShellApp::open_shell_window_with_titlebar` with a builder returning `(Entit
 
 macOS retains native traffic lights. Windows uses app-composed content and shell controls. Linux/FreeBSD draw the client frame only when the platform reports client decorations; server decorations remain compositor-owned. Fullscreen suppresses the client frame. A decoration request is not proof that the compositor accepted it.
 
+## Replace window-control artwork
+
+A `ShellControlPresenter` replaces what the shell draws inside each window control (background, icon and hover/pressed/inactive treatment) without copying any window-management code:
+
+```rust
+use xgpui_shell::{ShellControl, ShellControlPresenter};
+
+let presenter = ShellControlPresenter::new(|state, _window, _cx| {
+    let icon = match state.control {
+        ShellControl::Minimize => "icons/minimize.svg",
+        ShellControl::Maximize => "icons/maximize.svg",
+        ShellControl::Restore => "icons/restore.svg",
+        ShellControl::Close => "icons/close.svg",
+    };
+    div()
+        .size(px(24. * state.scale))
+        .rounded_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .when(state.hovered || state.pressed, |s| s.bg(rgb(state.colors.hover)))
+        .child(svg().path(icon).size(px(12. * state.scale)).text_color(rgb(state.colors.text)))
+        .into_any_element()
+});
+// Set it right after opening so it is in place before the first frame.
+handle.update(cx, |shell, _, cx| shell.set_control_presenter(Some(presenter), cx))?;
+```
+
+Who owns what:
+
+- **The shell** keeps control order, desktop-configured omissions, capability filtering, Maximize/Restore identity, the clickable target size, accessible names, pointer/keyboard/accessibility activation, drag isolation and the keyboard focus ring. Clicking a control never starts a window drag.
+- **The presenter** draws everything inside the target. Its content is centered in the target and clipped to it; draw the icon smaller than `state.target_size` to keep a comfortable target. Don't attach click handlers in presenter content.
+- `ShellControlState` carries the control, hover, pressed, keyboard focus, window activation, appearance, high contrast, the frame's resolved colors, the focus color, logical scale and target size. With `high_contrast` set, switch to high-contrast artwork; the shell doesn't override presenter colors.
+- `set_control_presenter(None)` restores the built-in look; you can swap presenters at runtime.
+- `ClientFramePreview::control_presenter` previews the same artwork; preview controls stay inert (`state.preview` is `true`).
+
+The presenter applies wherever the shell draws controls: Linux/FreeBSD client frames and Windows app-composed title bars. Native macOS traffic lights and compositor-owned decorations are unaffected.
+
 ## Follow desktop preferences
 
 `ShellOptions::default()` follows available desktop values. Explicit optional fields override them per window, including `Some(false)`, a black accent and `Some(TitlebarAction::None)`. Resetting an override restores desktop/default resolution.
@@ -61,6 +99,8 @@ See the [Shell Lab walkthrough](https://xgpui.dev/shell-lab.html) and [Linux pro
 ## Limits and compatibility
 
 This is the first published interface; APIs may change. Headless macOS, Windows and Linux CI passes, but it does not establish interactive GNOME/KDE acceptance, mixed-DPI behavior or screen-reader acceptance. Unsupported desktop actions remain unavailable; native macOS traffic-light artwork is not restyled.
+
+The window-control presenter is additive: `ShellControl`, `ShellControlState`, `ShellControlPresenter`, `ShellWindow::set_control_presenter` and the `ClientFramePreview::control_presenter` field are new, and existing code compiles unchanged. It isn't a `ShellOptions` field, because adding a public field there would break apps that build `ShellOptions` field by field. `ShellControlState` is `#[non_exhaustive]` so fields can be added later. No core GPUI API changes.
 
 Compared with the earlier local-only shell, scalar preference options are now optional overrides: use `Some(value)` for an explicit choice, or `..Default::default()` to follow the desktop. The new core APIs are additive, have default platform implementations and introduce no serialization format changes.
 

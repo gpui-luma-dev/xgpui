@@ -2,8 +2,10 @@
 //! macOS retains native traffic lights; apps supply their own title-bar content and look.
 use gpui::{prelude::*, *};
 mod app_titlebar;
+mod controls;
 mod typography;
 pub use app_titlebar::ShellDragRegion;
+pub use controls::{ShellControl, ShellControlPresenter, ShellControlState};
 pub use typography::ShellTypography;
 
 use frame::*;
@@ -126,6 +128,7 @@ fn open_shell(
             ShellWindow {
                 _preferences_subscription: preferences_subscription,
                 shell,
+                presenter: None,
                 content,
                 titlebar,
                 show_chrome,
@@ -138,6 +141,7 @@ fn open_shell(
 pub struct ShellWindow {
     _preferences_subscription: Subscription,
     shell: ShellOptions,
+    presenter: Option<ShellControlPresenter>,
     content: AnyView,
     titlebar: Option<AnyView>,
     show_chrome: bool,
@@ -147,6 +151,20 @@ impl ShellWindow {
     /// Replace application-supplied overrides and redraw this window.
     pub fn set_options(&mut self, options: ShellOptions, cx: &mut Context<Self>) {
         self.shell = options;
+        cx.notify();
+    }
+
+    /// Replace the artwork of shell-drawn window controls, or pass `None` for the
+    /// built-in look. Applies wherever the shell draws controls (Linux client
+    /// frames and Windows app-composed title bars); native macOS traffic lights
+    /// and compositor decorations are unaffected. Set it right after opening the
+    /// window to have it in place before the first frame.
+    pub fn set_control_presenter(
+        &mut self,
+        presenter: Option<ShellControlPresenter>,
+        cx: &mut Context<Self>,
+    ) {
+        self.presenter = presenter;
         cx.notify();
     }
 }
@@ -167,13 +185,16 @@ impl Render for ShellWindow {
             && !window.is_fullscreen()
             && let Decorations::Client { .. } = window.window_decorations()
         {
-            let state = ClientFrameState::for_window(&self.shell, window, cx);
+            let mut state = ClientFrameState::for_window(&self.shell, window, cx);
+            state.presenter = self.presenter.clone();
             window.set_client_inset(if state.maximized { px(0.) } else { px(5.) });
             return render_client_frame(
                 state,
                 content.into_any_element(),
                 self.titlebar.clone().map(IntoElement::into_any_element),
                 true,
+                window,
+                cx,
             );
         }
         // Clear any prior client frame when switching to server chrome/fullscreen.
@@ -182,6 +203,7 @@ impl Render for ShellWindow {
             && let Some(titlebar) = self.titlebar.clone()
         {
             let mut state = ClientFrameState::for_window(&self.shell, window, cx);
+            state.presenter = self.presenter.clone();
             let mac_native = cx.platform_info().os == OperatingSystem::Mac;
             let custom_windows = cx.platform_info().os == OperatingSystem::Windows;
             if mac_native || !custom_windows || window.is_fullscreen() {
@@ -198,11 +220,14 @@ impl Render for ShellWindow {
                     .titlebar_height;
                 window.set_traffic_light_position(point(px(9.), px((height - 16.).max(0.) / 2.)));
             }
+            let fullscreen = window.is_fullscreen();
             let header = render_titlebar(
                 &state,
                 Some(titlebar.into_any_element()),
                 true,
-                mac_native && !window.is_fullscreen(),
+                mac_native && !fullscreen,
+                window,
+                cx,
             );
             return div()
                 .size_full()
@@ -228,6 +253,7 @@ struct ClientFrameState {
     title: SharedString,
     preview_focus: bool,
     preview_hover: bool,
+    presenter: Option<ShellControlPresenter>,
 }
 
 impl ClientFrameState {
@@ -251,6 +277,7 @@ impl ClientFrameState {
             title: window.shell_title().into(),
             preview_focus: false,
             preview_hover: false,
+            presenter: None,
         }
     }
 }
@@ -293,6 +320,8 @@ pub struct ClientFramePreview {
     pub show_focus: bool,
     /// Visually simulate hovering over close, without a native window action.
     pub show_hover: bool,
+    /// Draw controls with the same artwork as a real window; they stay inert.
+    pub control_presenter: Option<ShellControlPresenter>,
     content: AnyElement,
 }
 
@@ -314,13 +343,14 @@ impl ClientFramePreview {
             button_layout: None,
             show_focus: false,
             show_hover: false,
+            control_presenter: None,
             content: content.into_any_element(),
         }
     }
 }
 
 impl RenderOnce for ClientFramePreview {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         if self.fullscreen {
             return self.content;
         }
@@ -340,10 +370,13 @@ impl RenderOnce for ClientFramePreview {
                 title: self.title,
                 preview_focus: self.show_focus,
                 preview_hover: self.show_hover,
+                presenter: self.control_presenter,
             },
             self.content,
             None,
             false,
+            window,
+            cx,
         )
     }
 }
@@ -353,6 +386,8 @@ fn render_client_frame(
     content: AnyElement,
     titlebar: Option<AnyElement>,
     interactive: bool,
+    window: &mut Window,
+    cx: &mut App,
 ) -> AnyElement {
     let maximized = state.maximized;
     let tiling = state.tiling;
@@ -361,7 +396,7 @@ fn render_client_frame(
         .resolved_look(state.appearance, state.active)
         .colors;
     let inset = if maximized { px(0.) } else { px(5.) };
-    let title = render_titlebar(&state, titlebar, interactive, false);
+    let title = render_titlebar(&state, titlebar, interactive, false, window, cx);
     // The inset handles resizing; content events must not initiate window moves.
     let mut frame = div()
         .id("shell-frame")
@@ -459,20 +494,20 @@ fn render_titlebar(
     titlebar: Option<AnyElement>,
     interactive: bool,
     mac_native: bool,
+    window: &mut Window,
+    cx: &mut App,
 ) -> AnyElement {
-    let maximized = state.maximized;
     let preferences = &state.preferences;
     let look = preferences.resolved_look(state.appearance, state.active);
     let palette = look.colors;
     let scale = preferences.text_scale;
-    let button_size = px(look.button_size);
     let controls = state.controls;
     let left_buttons = visible_buttons(state.button_layout.left, controls);
     let right_buttons = visible_buttons(state.button_layout.right, controls);
     let side_width = px((left_buttons.len().max(right_buttons.len()) as f32 * 33. + 8.) * scale);
     let custom_header = titlebar.is_some();
-    let buttons = |side: Vec<WindowButton>, right: bool| {
-        div()
+    let mut buttons = |side: Vec<WindowButton>, right: bool| {
+        let mut row = div()
             .flex()
             .items_center()
             .flex_none()
@@ -481,79 +516,38 @@ fn render_titlebar(
             } else {
                 side_width
             })
-            .when(right, |s| s.justify_end())
-            .children(side.into_iter().map(|button| {
-                let label = control_label(button, maximized);
-                control_button(
-                    button.id(),
-                    label,
-                    palette,
-                    look.focus,
-                    button_size,
+            .when(right, |s| s.justify_end());
+        for button in side {
+            let preview_focus =
+                !interactive && state.preview_focus && button == WindowButton::Close;
+            let preview_hover =
+                !interactive && state.preview_hover && button == WindowButton::Close;
+            let element = if let Some(presenter) = &state.presenter {
+                presented_control(
+                    presenter,
+                    button,
+                    state,
+                    &look,
                     interactive,
-                    (
-                        !interactive && state.preview_focus && button == WindowButton::Close,
-                        !interactive && state.preview_hover && button == WindowButton::Close,
-                    ),
+                    (preview_focus, preview_hover),
+                    window,
+                    cx,
                 )
-                .when(interactive && cfg!(target_os = "windows"), |element| {
-                    element.window_control_area(match button {
-                        WindowButton::Close => WindowControlArea::Close,
-                        WindowButton::Minimize => WindowControlArea::Min,
-                        WindowButton::Maximize => WindowControlArea::Max,
-                    })
-                })
-                .when(interactive, |element| {
-                    element
-                        .on_click(move |_, window, cx| {
-                            cx.stop_propagation();
-                            activate_control(button, window);
-                        })
-                        .on_key_down(move |event, window, cx| {
-                            if activation_key(event) {
-                                cx.stop_propagation();
-                                activate_control(button, window);
-                            }
-                        })
-                        .on_a11y_action(AccessibleAction::Click, move |_, window, _| {
-                            activate_control(button, window)
-                        })
-                })
-                .child(if button == WindowButton::Close {
-                    // Draw around the geometric center, independent of font baselines.
-                    canvas(
-                        |_, _, _| (),
-                        move |bounds, _, window, _| {
-                            let margin = px(2. * scale);
-                            let start = bounds.origin + point(margin, margin);
-                            let end = bounds.bottom_right() - point(margin, margin);
-                            for (a, b) in
-                                [(start, end), (point(start.x, end.y), point(end.x, start.y))]
-                            {
-                                let mut path = PathBuilder::stroke(px(2. * scale));
-                                path.move_to(a);
-                                path.line_to(b);
-                                if let Ok(path) = path.build() {
-                                    window.paint_path(path, rgb(palette.text));
-                                }
-                            }
-                        },
-                    )
-                    .size(px(20. * scale))
-                    .into_any_element()
-                } else {
-                    div()
-                        .font(gpui::font(".SystemUIFont"))
-                        .text_size(px(14. * scale))
-                        .child(match button {
-                            WindowButton::Minimize => "−",
-                            WindowButton::Maximize if maximized => "▣",
-                            _ => "□",
-                        })
-                        .into_any_element()
-                })
-            }))
+            } else {
+                builtin_control(
+                    button,
+                    state,
+                    &look,
+                    interactive,
+                    (preview_focus, preview_hover),
+                )
+            };
+            row = row.child(element);
+        }
+        row
     };
+    let left = buttons(left_buttons, false);
+    let right = buttons(right_buttons, true);
     let title = div()
         .id("shell-titlebar")
         .debug_selector(|| "shell-titlebar-bounds".into())
@@ -568,7 +562,7 @@ fn render_titlebar(
         .text_size(px(look.typography.size))
         .border_b_1()
         .border_color(rgb(palette.border))
-        .child(buttons(left_buttons, false))
+        .child(left)
         .pl(px(if mac_native { 80.0 } else { 0.0 }))
         .child(
             div()
@@ -610,8 +604,237 @@ fn render_titlebar(
                         .into_any_element()
                 })),
         )
-        .child(buttons(right_buttons, true));
+        .child(right);
     title.into_any_element()
+}
+
+/// Shell-owned semantics shared by built-in and presented controls: Windows
+/// caption hit-testing, pointer/keyboard/accessibility activation.
+fn with_control_behavior(
+    element: Stateful<Div>,
+    button: WindowButton,
+    interactive: bool,
+) -> Stateful<Div> {
+    element
+        .when(interactive && cfg!(target_os = "windows"), |element| {
+            element.window_control_area(match button {
+                WindowButton::Close => WindowControlArea::Close,
+                WindowButton::Minimize => WindowControlArea::Min,
+                WindowButton::Maximize => WindowControlArea::Max,
+            })
+        })
+        .when(interactive, |element| {
+            element
+                .on_click(move |_, window, cx| {
+                    cx.stop_propagation();
+                    activate_control(button, window);
+                })
+                .on_key_down(move |event, window, cx| {
+                    if activation_key(event) {
+                        cx.stop_propagation();
+                        activate_control(button, window);
+                    }
+                })
+                .on_a11y_action(AccessibleAction::Click, move |_, window, _| {
+                    activate_control(button, window)
+                })
+        })
+}
+
+fn shell_control(button: WindowButton, maximized: bool) -> ShellControl {
+    match button {
+        WindowButton::Minimize => ShellControl::Minimize,
+        WindowButton::Maximize if maximized => ShellControl::Restore,
+        WindowButton::Maximize => ShellControl::Maximize,
+        WindowButton::Close => ShellControl::Close,
+    }
+}
+
+/// Pointer state the shell tracks for presented controls.
+struct ControlInteraction {
+    hovered: bool,
+    pressed: bool,
+    focus: FocusHandle,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn presented_control(
+    presenter: &ShellControlPresenter,
+    button: WindowButton,
+    state: &ClientFrameState,
+    look: &ResolvedShellLook,
+    interactive: bool,
+    (preview_focus, preview_hover): (bool, bool),
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let control = shell_control(button, state.maximized);
+    let label = control.accessible_label();
+    let target_size = px(look.button_size);
+    let interaction = interactive.then(|| {
+        window.use_keyed_state(
+            SharedString::from(format!("shell-control-state-{}", button.id())),
+            cx,
+            |_, cx| ControlInteraction {
+                hovered: false,
+                pressed: false,
+                focus: cx.focus_handle().tab_stop(true),
+            },
+        )
+    });
+    let (hovered, pressed, focused) = match &interaction {
+        Some(interaction) => {
+            let interaction = interaction.read(cx);
+            (
+                interaction.hovered,
+                interaction.pressed,
+                interaction.focus.is_focused(window) && window.last_input_was_keyboard(),
+            )
+        }
+        None => (preview_hover, false, preview_focus),
+    };
+    let control_state = ShellControlState {
+        control,
+        hovered,
+        pressed,
+        focused,
+        window_active: state.active,
+        appearance: state.appearance,
+        high_contrast: state.preferences.high_contrast,
+        colors: look.colors,
+        focus_color: look.focus,
+        scale: state.preferences.text_scale,
+        target_size,
+        preview: !interactive,
+    };
+    let artwork = presenter.render(&control_state, window, cx);
+    let accent = look.focus;
+    // The shell paints only the focus ring; the presenter owns everything inside.
+    let mut element = div()
+        .id(button.id())
+        .debug_selector(move || format!("shell-control-{}", button.id()))
+        .role(if interactive {
+            Role::Button
+        } else {
+            Role::Image
+        })
+        .aria_label(if interactive {
+            label.to_owned()
+        } else {
+            format!("Preview: {label}")
+        })
+        .size(target_size)
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .overflow_hidden()
+        .rounded_full()
+        .border_2()
+        .border_color(transparent_black())
+        .when(focused, |s| s.border_color(rgb(accent)))
+        .child(artwork);
+    if let Some(interaction) = interaction {
+        let focus = interaction.read(cx).focus.clone();
+        let (hover_state, down_state, up_state, out_state) = (
+            interaction.clone(),
+            interaction.clone(),
+            interaction.clone(),
+            interaction,
+        );
+        element = element
+            .track_focus(&focus)
+            .cursor_pointer()
+            .tooltip(move |_, cx| cx.new(|_| ControlTooltip(label)).into())
+            .on_hover(move |hovered, _, cx| {
+                hover_state.update(cx, |state, cx| {
+                    state.hovered = *hovered;
+                    if !*hovered {
+                        state.pressed = false;
+                    }
+                    cx.notify();
+                })
+            })
+            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                // Never let a control press start a window drag.
+                cx.stop_propagation();
+                down_state.update(cx, |state, cx| {
+                    state.pressed = true;
+                    cx.notify();
+                })
+            })
+            .on_mouse_up(MouseButton::Left, move |_, _, cx| {
+                up_state.update(cx, |state, cx| {
+                    state.pressed = false;
+                    cx.notify();
+                })
+            })
+            .on_mouse_up_out(MouseButton::Left, move |_, _, cx| {
+                out_state.update(cx, |state, cx| {
+                    state.pressed = false;
+                    cx.notify();
+                })
+            });
+    }
+    with_control_behavior(element, button, interactive).into_any_element()
+}
+
+fn builtin_control(
+    button: WindowButton,
+    state: &ClientFrameState,
+    look: &ResolvedShellLook,
+    interactive: bool,
+    preview: (bool, bool),
+) -> AnyElement {
+    let maximized = state.maximized;
+    let palette = look.colors;
+    let scale = state.preferences.text_scale;
+    let label = control_label(button, maximized);
+    with_control_behavior(
+        control_button(
+            button.id(),
+            label,
+            palette,
+            look.focus,
+            px(look.button_size),
+            interactive,
+            preview,
+        ),
+        button,
+        interactive,
+    )
+    .child(if button == WindowButton::Close {
+        // Draw around the geometric center, independent of font baselines.
+        canvas(
+            |_, _, _| (),
+            move |bounds, _, window, _| {
+                let margin = px(2. * scale);
+                let start = bounds.origin + point(margin, margin);
+                let end = bounds.bottom_right() - point(margin, margin);
+                for (a, b) in [(start, end), (point(start.x, end.y), point(end.x, start.y))] {
+                    let mut path = PathBuilder::stroke(px(2. * scale));
+                    path.move_to(a);
+                    path.line_to(b);
+                    if let Ok(path) = path.build() {
+                        window.paint_path(path, rgb(palette.text));
+                    }
+                }
+            },
+        )
+        .size(px(20. * scale))
+        .into_any_element()
+    } else {
+        div()
+            .font(gpui::font(".SystemUIFont"))
+            .text_size(px(14. * scale))
+            .child(match button {
+                WindowButton::Minimize => "−",
+                WindowButton::Maximize if maximized => "▣",
+                _ => "□",
+            })
+            .into_any_element()
+    })
+    .into_any_element()
 }
 
 /// Optional per-window overrides. `None` follows desktop preferences, then built-in fallbacks.
@@ -897,7 +1120,7 @@ mod frame {
             }
         }
     }
-    struct ControlTooltip(&'static str);
+    pub(super) struct ControlTooltip(pub(super) &'static str);
     impl Render for ControlTooltip {
         fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             let palette = Palette::new(window.appearance(), true, false);
@@ -1369,5 +1592,188 @@ mod composition_tests {
         visual.simulate_click(button.center(), Modifiers::default());
         assert_eq!(clicks.get(), 1);
         assert_eq!(visual.debug_bounds("app-body").unwrap(), body);
+    }
+}
+
+#[cfg(test)]
+mod presenter_tests {
+    use super::*;
+    use ::core::prelude::v1::test;
+    use std::rc::Rc;
+
+    type Seen = Rc<RefCell<Vec<ShellControlState>>>;
+
+    fn recording(seen: &Seen) -> ShellControlPresenter {
+        let seen = seen.clone();
+        ShellControlPresenter::new(move |state, _, _| {
+            seen.borrow_mut().push(state.clone());
+            div()
+                .debug_selector(|| "app-artwork".into())
+                .size(px(16. * state.scale))
+                .into_any_element()
+        })
+    }
+
+    struct Header;
+    impl Render for Header {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child("App header")
+        }
+    }
+    struct Body;
+    impl Render for Body {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full()
+        }
+    }
+
+    /// A Windows app-composed title bar: the shell draws min/max/close itself.
+    fn open_windows_shell(cx: &mut TestAppContext, seen: &Seen) -> WindowHandle<ShellWindow> {
+        cx.set_platform_info(PlatformInfo {
+            os: OperatingSystem::Windows,
+            target: PlatformTarget::Native,
+        });
+        let presenter = recording(seen);
+        let handle = cx.update(|app| {
+            app.open_shell_window_with_titlebar(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(Bounds {
+                        origin: Point::default(),
+                        size: size(px(600.), px(240.)),
+                    })),
+                    ..Default::default()
+                },
+                ShellOptions::default(),
+                |_, app| (app.new(|_| Header), app.new(|_| Body)),
+            )
+            .unwrap()
+        });
+        handle
+            .update(cx, |shell, _, cx| {
+                shell.set_control_presenter(Some(presenter), cx)
+            })
+            .unwrap();
+        handle
+    }
+
+    fn last_frame(seen: &Seen, count: usize) -> Vec<ShellControlState> {
+        let seen = seen.borrow();
+        seen[seen.len() - count..].to_vec()
+    }
+
+    #[gpui::test]
+    fn presenter_draws_each_visible_control_with_shell_order_and_identity(cx: &mut TestAppContext) {
+        let seen = Seen::default();
+        let handle = open_windows_shell(cx, &seen);
+        let mut visual = VisualTestContext::from_window(handle.into(), cx);
+        visual.update(|window, app| window.draw(app).clear(app));
+        let frame = last_frame(&seen, 3);
+        assert_eq!(
+            frame.iter().map(|s| s.control).collect::<Vec<_>>(),
+            [
+                ShellControl::Minimize,
+                ShellControl::Maximize,
+                ShellControl::Close
+            ]
+        );
+        for state in &frame {
+            assert!(!state.preview && !state.hovered && !state.pressed && !state.focused);
+            assert_eq!(state.target_size, px(33.));
+            assert_eq!(state.scale, 1.);
+        }
+        // The built-in glyphs are replaced, not drawn underneath.
+        assert!(visual.debug_bounds("app-artwork").is_some());
+    }
+
+    #[gpui::test]
+    fn hover_and_press_reach_the_presenter(cx: &mut TestAppContext) {
+        let seen = Seen::default();
+        let handle = open_windows_shell(cx, &seen);
+        let mut visual = VisualTestContext::from_window(handle.into(), cx);
+        visual.update(|window, app| window.draw(app).clear(app));
+        let close = visual.debug_bounds("shell-control-close").unwrap();
+        visual.simulate_mouse_move(close.center(), None, Modifiers::default());
+        visual.update(|window, app| window.draw(app).clear(app));
+        let close_state = last_frame(&seen, 3)[2].clone();
+        assert_eq!(close_state.control, ShellControl::Close);
+        assert!(close_state.hovered);
+        assert!(!last_frame(&seen, 3)[0].hovered, "only Close is hovered");
+        visual.simulate_mouse_down(close.center(), MouseButton::Left, Modifiers::default());
+        visual.update(|window, app| window.draw(app).clear(app));
+        assert!(last_frame(&seen, 3)[2].pressed);
+    }
+
+    #[gpui::test]
+    fn presented_close_activates_once_without_starting_a_window_move(cx: &mut TestAppContext) {
+        let seen = Seen::default();
+        let handle = open_windows_shell(cx, &seen);
+        let mut visual = VisualTestContext::from_window(handle.into(), cx);
+        visual.update(|window, app| window.draw(app).clear(app));
+        let close = visual.debug_bounds("shell-control-close").unwrap();
+        // The test window panics on start_window_move, so a drag would fail here.
+        visual.simulate_click(close.center(), Modifiers::default());
+        cx.run_until_parked();
+        assert!(
+            handle.update(cx, |_, _, _| ()).is_err(),
+            "close removed the window"
+        );
+    }
+
+    #[gpui::test]
+    fn removing_the_presenter_restores_the_builtin_controls(cx: &mut TestAppContext) {
+        let seen = Seen::default();
+        let handle = open_windows_shell(cx, &seen);
+        let mut visual = VisualTestContext::from_window(handle.into(), cx);
+        visual.update(|window, app| window.draw(app).clear(app));
+        assert!(visual.debug_bounds("app-artwork").is_some());
+        handle
+            .update(cx, |shell, _, cx| shell.set_control_presenter(None, cx))
+            .unwrap();
+        let before = seen.borrow().len();
+        let mut visual = VisualTestContext::from_window(handle.into(), cx);
+        visual.update(|window, app| window.draw(app).clear(app));
+        assert_eq!(seen.borrow().len(), before, "presenter no longer called");
+        assert!(visual.debug_bounds("app-artwork").is_none());
+    }
+
+    struct PreviewHost(ShellControlPresenter);
+    impl Render for PreviewHost {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let mut preview =
+                ClientFramePreview::new("Preview", ShellOptions::default(), div().size_full());
+            preview.maximized = true;
+            preview.show_hover = true;
+            preview.show_focus = true;
+            preview.control_presenter = Some(self.0.clone());
+            div().size_full().child(preview)
+        }
+    }
+
+    #[gpui::test]
+    fn preview_uses_the_presenter_with_simulated_state_and_stays_inert(cx: &mut TestAppContext) {
+        let seen = Seen::default();
+        let presenter = recording(&seen);
+        let host = cx.open_window(size(px(600.), px(200.)), move |_, _| PreviewHost(presenter));
+        let mut visual = VisualTestContext::from_window(host.into(), cx);
+        visual.update(|window, app| window.draw(app).clear(app));
+        let frame = last_frame(&seen, 3);
+        assert_eq!(
+            frame.iter().map(|s| s.control).collect::<Vec<_>>(),
+            [
+                ShellControl::Minimize,
+                ShellControl::Restore,
+                ShellControl::Close
+            ]
+        );
+        assert!(frame.iter().all(|s| s.preview));
+        assert!(frame[2].hovered && frame[2].focused);
+        assert!(!frame[0].hovered && !frame[0].focused);
+        let close = visual.debug_bounds("shell-control-close").unwrap();
+        visual.simulate_click(close.center(), Modifiers::default());
+        cx.run_until_parked();
+        assert!(
+            host.update(cx, |_, _, _| ()).is_ok(),
+            "preview close must not close the host"
+        );
     }
 }

@@ -4,7 +4,24 @@ use std::borrow::Cow;
 use xgpui_shell::ShellDragRegion;
 
 pub(super) struct HeaderAssets;
-const ICONS: [(&str, &str); 4] = [
+const ICONS: [(&str, &str); 8] = [
+    // Window-control artwork for the presenter demo (lab-drawn, no third-party assets).
+    (
+        "shell/close.svg",
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4z"/></svg>"#,
+    ),
+    (
+        "shell/minimize.svg",
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 11h14v2H5z"/></svg>"#,
+    ),
+    (
+        "shell/maximize.svg",
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M5 5h14v14H5V5zm2 2v10h10V7H7z"/></svg>"#,
+    ),
+    (
+        "shell/restore.svg",
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M8 4h12v12h-4v4H4V8h4V4zm2 2v2h6v8h2V6h-8zM6 10v8h8v-8H6z"/></svg>"#,
+    ),
     (
         "shell/reset.svg",
         r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 4v6h6V8H7a6 6 0 1 1-1 7H4a8 8 0 1 0 2-9V4z"/></svg>"#,
