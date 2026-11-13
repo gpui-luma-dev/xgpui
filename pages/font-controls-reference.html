@@ -244,8 +244,8 @@ measured previews. macOS and Windows labs and unit tests are confirmed working.
 The public API is reviewed and raw parsers remain private in core. Follow-ups:</p>
 <ul>
 <li><a href="https://github.com/gpui-luma-dev/xgpui/issues/139">#139: measured CPU/GPU budgets and frame-safe eviction</a></li>
-<li><a href="https://github.com/gpui-luma-dev/xgpui/issues/140">#140: DirectWrite static-axis and inspection parity</a></li>
-<li><a href="https://github.com/gpui-luma-dev/xgpui/issues/141">#141: Cosmic/Linux and web static-axis and inspection parity</a></li>
+<li><a href="https://github.com/gpui-luma-dev/xgpui/issues/140">#140: DirectWrite static-axis and inspection parity</a> (completed)</li>
+<li><a href="https://github.com/gpui-luma-dev/xgpui/issues/145">#145: Cosmic/Linux and web static-axis application</a> (replaces #141)</li>
 </ul>
 <p>Those follow-ups retain these gates:</p>
 <ul>
@@ -256,10 +256,10 @@ diagnostic measures isolated atlas allocations, not rendered frames.</li>
 atlas tiles directly; removing glyph keys alone cannot guarantee cached views
 repaint or protect in-flight texture use. Font IDs must remain valid for old
 layouts. Existing removal hooks are not a complete policy.</li>
-<li>Windows lab and unit-test acceptance is confirmed. #140 retains broader
-DirectWrite compatibility/host validation; the five standalone backend fixture
+<li>Windows lab and unit-test acceptance is confirmed, and #140 is closed. Older
+DirectWrite without IDWriteTextLayout4 keeps the existing text path; the five standalone backend fixture
 tests are implemented and cross-checked for MSVC.</li>
-<li>Cosmic inspection and Linux headless font validation are complete. #141 retains
+<li>Cosmic inspection and Linux headless font validation are complete. #145 tracks
 arbitrary-axis integration, interactive Linux desktop acceptance and default
 web backend parity; the bundled Cosmic interface does not expose arbitrary
 axis inputs. The Parley Wasm inspector already supports inspection and axes.</li>
