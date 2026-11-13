@@ -615,7 +615,11 @@ impl rwh::HasDisplayHandle for WindowsWindow {
 impl Drop for WindowsWindow {
     fn drop(&mut self) {
         self.0.dialog_owner.close();
-        unsafe { ShowWindowAsync(self.0.hwnd, SW_HIDE).ok().log_err() };
+        // A window closed through Windows itself (caption Close, Alt+F4) is already
+        // destroyed by the time it is dropped; touching its handle only logs errors.
+        if unsafe { IsWindow(Some(self.0.hwnd)) }.as_bool() {
+            unsafe { ShowWindowAsync(self.0.hwnd, SW_HIDE).ok().log_err() };
+        }
         // `DestroyWindow` below sends `WM_SHOWWINDOW`; without a callback the
         // resulting visibility report has nothing to notify.
         self.0.state.callbacks.visibility_change.take();
@@ -627,8 +631,10 @@ impl Drop for WindowsWindow {
                 this.dialog_owner.when_idle().await;
                 let handle = this.hwnd;
                 unsafe {
-                    RevokeDragDrop(handle).log_err();
-                    DestroyWindow(handle).log_err();
+                    // WM_DESTROY revokes drag and drop.
+                    if IsWindow(Some(handle)).as_bool() {
+                        DestroyWindow(handle).log_err();
+                    }
                 }
             })
             .detach();

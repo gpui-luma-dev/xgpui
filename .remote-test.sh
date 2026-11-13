@@ -96,7 +96,7 @@ step "Choose a few things (for example 'Dark', 'SVG, no circle' and 'High contra
      "Every choice returns to its default: the real title bar shows the built-in controls again and the preview is back to Floating, native appearance and platform buttons."
 
 step "Click 'SVG on filled circle', then close the window with the real Close control." \
-     "The window closes on the first click, and the terminal shows no 'window not found' error."
+     "The window closes on the first click, and the terminal shows no ERROR line (such as 'window not found' or 'Invalid window handle')."
 
 if [[ -n "${self_post:-}" ]]; then
     stop_example

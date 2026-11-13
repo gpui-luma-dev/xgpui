@@ -350,6 +350,8 @@ impl WindowsWindowInner {
 
     fn handle_destroy_msg(&self, handle: HWND) -> Option<isize> {
         let callback = { self.state.callbacks.close.take() };
+        // The handle is still valid here; once destroyed, the drop cleanup skips it.
+        unsafe { windows::Win32::System::Ole::RevokeDragDrop(handle).log_err() };
         // Re-enable parent window if this was a modal dialog
         if let Some(parent_hwnd) = self.parent_hwnd {
             unsafe {
