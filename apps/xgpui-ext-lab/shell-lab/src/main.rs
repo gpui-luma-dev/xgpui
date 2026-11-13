@@ -202,7 +202,9 @@ fn control_artwork(state: &ShellControlState, filled: bool) -> AnyElement {
         .child(
             svg()
                 .path(icon)
-                .size(px(12. * state.scale))
+                // 16px of the 24px icon grid draws the glyphs at about the size of the
+                // shell's 10px built-in symbols.
+                .size(px(16. * state.scale))
                 .text_color(rgb(icon_color)),
         )
         .into_any_element()

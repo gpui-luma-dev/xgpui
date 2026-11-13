@@ -56,7 +56,7 @@ step "Click 'SVG on filled circle' in the preview section." \
      "Both the lab window's real title-bar controls and the preview's controls switch to small icons on grey filled circles. Button order and the set of buttons don't change."
 
 step "Hover each real title-bar control in turn, then press and hold the mouse on Close without releasing, then drag off it and release." \
-     "Each circle darkens on hover and is clearly darker again while pressed. Releasing outside Close does not close the window, and the window never starts moving."
+     "Each circle darkens on hover and is clearly darker again while pressed. Hovering still shows a circle while the window is inactive. Releasing outside Close does not close the window, and the window never starts moving."
 
 step "Click the real Maximize control, then click it again." \
      "The window maximizes and its icon changes to the two-square Restore icon; the second click restores it and the icon changes back."
