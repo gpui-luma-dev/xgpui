@@ -33,6 +33,15 @@
 #   stop_example                stop examples started by run_example
 #   step "do this" "expect"     one manual check; the tester answers pass, fail
 #                               or skip and the answer is recorded
+#   CMD | report                show CMD's output and include it in the posted
+#                               results (digests, versions; not build output)
+#   post_to 271 [...]           post the results to these issues or PRs instead
+#                               of the PR under test
+#
+# When the run ends, the runner posts a comment with the step results and the
+# reported output to the PR under test (or the post_to targets), then reads it
+# back to confirm it landed. It posts with the GitHub CLI (`gh`) and checks that
+# gh is logged in before anything runs, logging in on the spot if it is not.
 #
 # Write each step as one action plus the result it should produce, so that a
 # person or an agent on the machine can follow it. The file must be deleted
@@ -263,6 +272,116 @@ step() {
     printf '%s\t%d\t%s\t%s\n' "$result" "$XGPUI_STEP" "$action" "$reason" >>"$XGPUI_TEST_RESULTS"
 }
 
+report() {
+    tee -a "$XGPUI_TEST_REPORT"
+}
+
+post_to() {
+    printf '%s\n' "${@#\#}" >>"$XGPUI_TEST_POST_TO"
+}
+
+# --------------------------------------------------------------------------
+# posting results (through the GitHub CLI)
+
+# github_ready: make sure `gh` can post before the run starts, so a long test
+# never ends with results that cannot be posted. Sets XGPUI_TEST_GH=1 when ready.
+github_ready() {
+    XGPUI_TEST_GH=""
+    if ! command -v gh >/dev/null; then
+        echo "The GitHub CLI (gh) is not installed, so results cannot be posted."
+        echo "Install it (Fedora: sudo dnf install gh; Windows: winget install GitHub.cli), then run again."
+    elif gh auth status --hostname github.com >/dev/null 2>&1; then
+        XGPUI_TEST_GH=1
+    elif interactive; then
+        echo "gh is not logged in to GitHub; logging in now so the results can be posted."
+        gh auth login --hostname github.com --git-protocol https --web &&
+            gh auth status --hostname github.com >/dev/null 2>&1 && XGPUI_TEST_GH=1
+    else
+        echo "gh is not logged in to GitHub, so results cannot be posted."
+    fi
+    export XGPUI_TEST_GH
+    [[ -n "$XGPUI_TEST_GH" ]] && return 0
+    ask "Run the test anyway without posting results? [y/N] "
+    [[ "$REPLY" == [yY]* ]] || die "stopped before testing; nothing was run"
+}
+
+# post_comment NUMBER BODY_FILE MARKER: post, read back, print the comment's URL.
+post_comment() {
+    local number=$1 body=$2 marker=$3 api url
+    read -r api url < <(gh api "repos/$REPO_SLUG/issues/$number/comments" \
+        -F "body=@$body" --jq '.url + " " + .html_url') || true
+    if [[ -z "${api:-}" || -z "${url:-}" ]]; then
+        echo "posting to #$number failed" >&2
+        return 1
+    fi
+    if ! gh api "$api" --jq .body | grep -qF "$marker"; then
+        echo "posted to #$number but could not read it back: $url" >&2
+        return 1
+    fi
+    printf '%s\n' "$url"
+}
+
+post_results() {
+    local branch=$1 hash=$2 status=$3 results=$4 report=$5 post_to_file=$6 pr=$7 log=$8
+    local -a targets=()
+    local number
+    if [[ -s "$post_to_file" ]]; then
+        while read -r number; do
+            [[ "$number" =~ ^[0-9]+$ ]] && targets+=("$number")
+        done < <(sort -un "$post_to_file")
+    elif [[ -n "$pr" ]]; then
+        targets=("$pr")
+    fi
+    if ((${#targets[@]} == 0)); then
+        echo "No PR or issue to post to (the branch has no open PR and the script named none)."
+        return 0
+    fi
+
+    local marker body result n action reason
+    marker="xgpui-test run $(basename "${log%.log}")"
+    body=$(mktemp "${TMPDIR:-/tmp}/xgpui-body.XXXXXX") || return 1
+    {
+        echo "### Remote test: \`$branch\` @ \`$hash\`"
+        echo
+        echo "machine: \`$(uname -srm)\` · $(date '+%Y-%m-%d %H:%M %z') · $marker"
+        echo
+        if [[ -s "$results" ]]; then
+            while IFS=$'\t' read -r result n action reason; do
+                echo "- **$result** [$n] $action${reason:+ — _${reason}_}"
+            done <"$results"
+        else
+            echo "(no manual steps recorded)"
+        fi
+        echo
+        echo "script exit status: $status"
+        if [[ -s "$report" ]]; then
+            echo
+            echo '~~~~text'
+            head -c 60000 "$report"
+            [[ $(wc -c <"$report") -gt 60000 ]] && printf '\n[report cut at 60000 bytes; full log on the machine: %s]\n' "$log"
+            echo '~~~~'
+        fi
+    } >"$body"
+
+    note "Posting results to GitHub"
+    if [[ -z "${XGPUI_TEST_GH:-}" ]]; then
+        echo "Not posted (gh is not set up). The results are in $log"
+        rm -f "$body"
+        return 1
+    fi
+    local url failed=0
+    for number in "${targets[@]}"; do
+        if url=$(post_comment "$number" "$body" "$marker"); then
+            echo "posted to #$number: $url"
+        else
+            failed=1
+        fi
+    done
+    rm -f "$body"
+    ((failed == 0)) || echo "Some posts failed; the results are in $log"
+    return "$failed"
+}
+
 # --------------------------------------------------------------------------
 # run
 
@@ -286,6 +405,9 @@ cmd_run() {
     [[ -n "$repo" ]] || repo=$(git rev-parse --show-toplevel 2>/dev/null) || die "run inside the xgpui clone or use xgpui-test"
     cd "$repo" || die "cannot enter $repo"
     is_repo_clone . || die "$repo is not a clone of $REPO_SLUG"
+
+    # Results are posted with gh when the run ends; check it works before testing.
+    github_ready
 
     # Local edits would block or be carried across the switch.
     local dirty
@@ -381,10 +503,12 @@ cmd_run() {
         [[ "$REPLY" == q* ]] && { rm -f "$script"; exit 0; }
     fi
 
-    local log_dir=${XGPUI_TEST_LOG_DIR:-$HOME/xgpui-test-logs} log results status
+    local log_dir=${XGPUI_TEST_LOG_DIR:-$HOME/xgpui-test-logs} log results report post_to_file status
     mkdir -p "$log_dir"
     log="$log_dir/$(date +%Y%m%d-%H%M%S)-${target//\//-}-$hash.log"
     results=$(mktemp "${TMPDIR:-/tmp}/xgpui-results.XXXXXX") || die "mktemp failed"
+    report=$(mktemp "${TMPDIR:-/tmp}/xgpui-report.XXXXXX") || die "mktemp failed"
+    post_to_file=$(mktemp "${TMPDIR:-/tmp}/xgpui-post-to.XXXXXX") || die "mktemp failed"
     {
         echo "testing: $target @ $hash"
         echo "machine: $(uname -srm)"
@@ -393,7 +517,8 @@ cmd_run() {
     } | tee "$log"
 
     export XGPUI_TEST_RESULTS=$results XGPUI_TEST_LOG=$log
-    export -f note run_example stop_example step
+    export XGPUI_TEST_REPORT=$report XGPUI_TEST_POST_TO=$post_to_file XGPUI_TEST_POSTS=1
+    export -f note run_example stop_example step report post_to
     bash "$script" 2>&1 | tee -a "$log"
     status=${PIPESTATUS[0]}
 
@@ -411,7 +536,9 @@ cmd_run() {
         ((fails == 0 && status == 0))
     } 2>&1 | tee -a "$log"
     local summary_status=${PIPESTATUS[0]}
-    rm -f "$script" "$results"
+    post_results "$target" "$hash" "$status" "$results" "$report" "$post_to_file" \
+        "${seen[$target]:-}" "$log" 2>&1 | tee -a "$log"
+    rm -f "$script" "$results" "$report" "$post_to_file"
     exit "$summary_status"
 }
 
@@ -425,4 +552,7 @@ main() {
     esac
 }
 
-main "$@"
+# Sourcing defines the helpers without running anything (used by branch scripts).
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
