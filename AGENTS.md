@@ -24,3 +24,17 @@
 - Complete authorized implementation and verification, then present the concrete
   API changes individually for user review before finalizing or releasing them.
 - Implementation approval does not imply approval of the final public API.
+
+## Remote machine tests
+
+- Manual tests on the Windows and Fedora machines go through
+  `scripts/remote-test.sh`. The tester runs `xgpui-test`, picks the PR or branch
+  and the runner switches, pulls and runs that branch's `.remote-test.sh`.
+- Never hand the tester commands, branch names or checkout steps. Put every step
+  in the branch's `.remote-test.sh` at the repository root, using the helpers
+  documented at the top of `scripts/remote-test.sh` (`note`, `run_example`,
+  `step "action" "expected result"`).
+- Commit and push the working branch with its `.remote-test.sh` as soon as it is
+  ready for a run, then give the tester the branch, PR number and short hash.
+- `.remote-test.sh` is temporary: delete it on the epic branch before the epic
+  merges to `main`. CI (`remote-test-guard.yml`) fails if it reaches `main`.
