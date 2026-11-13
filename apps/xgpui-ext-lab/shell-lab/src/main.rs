@@ -1369,6 +1369,7 @@ fn open_lab(
 }
 
 fn main() {
+    env_logger::init();
     let options = Options::parse();
     gpui_platform::application()
         .with_assets(HeaderAssets)

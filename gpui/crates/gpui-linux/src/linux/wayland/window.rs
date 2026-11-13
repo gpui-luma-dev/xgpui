@@ -31,6 +31,7 @@ use wayland_protocols::{
 use wayland_protocols_plasma::blur::client::org_kde_kwin_blur;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1;
 
+use crate::linux::wayland::frame_diagnostics::{self, CallbackWait};
 use crate::linux::wayland::{display::WaylandDisplay, serial::SerialKind};
 use crate::linux::{
     Globals, GpuLossReporter, GpuRecovery, InjectedLoss, Output, RecoveryStep,
@@ -47,7 +48,7 @@ use gpui::{
     popup::PopupOptions,
     px, size,
 };
-use gpui_wgpu::{CompositorGpuHint, WgpuRenderer, WgpuSurfaceConfig, wgpu};
+use gpui_wgpu::{CompositorGpuHint, WgpuRenderer, WgpuSurfaceConfig};
 
 #[derive(Default)]
 pub(crate) struct Callbacks {
@@ -555,6 +556,7 @@ pub struct WaylandWindowStatePtr {
     frame_loop: Rc<Cell<FrameLoop>>,
     frame_ping: Ping,
     scheduled_frame_at: Rc<Cell<Option<Instant>>>,
+    callback_wait: Rc<Cell<CallbackWait>>,
 }
 
 impl WaylandWindowState {
@@ -589,7 +591,7 @@ impl WaylandWindowState {
                 },
                 transparent: true,
                 // Prefer Mailbox to avoid blocking. Falls back to FIFO if Mailbox is unsupported.
-                preferred_present_mode: Some(wgpu::PresentMode::Mailbox),
+                preferred_present_mode: Some(frame_diagnostics::present_mode()),
             };
             WgpuRenderer::new(gpu_context, &raw_window, config, compositor_gpu)?
         };
@@ -890,6 +892,7 @@ impl WaylandWindow {
             frame_loop: Rc::new(Cell::new(FrameLoop::Unconfigured)),
             frame_ping,
             scheduled_frame_at: Rc::new(Cell::new(None)),
+            callback_wait: Rc::new(Cell::new(CallbackWait::default())),
         });
 
         // Kick things off
@@ -948,13 +951,20 @@ impl WaylandWindowStatePtr {
     }
 
     pub fn frame(&self, signal_at: Option<Instant>, signal_source: FrameRequestSource) {
-        self.frame_loop.set(FrameLoop::Ticking);
+        let previous = self.frame_loop.replace(FrameLoop::Ticking);
         let mut state = self.state.borrow_mut();
         state.resize_throttle = false;
         // GPUI may throttle this tick without calling draw, so leave the request
         // latched until a draw actually reaches the renderer.
         let force_render = state.redraw_requested;
         let require_presentation = state.presentation.requires_presentation();
+        log::trace!(
+            target: frame_diagnostics::TARGET,
+            "frame: source={signal_source:?} from={previous:?} force_render={force_render} \
+             presentation={:?} visibility={:?}",
+            state.presentation,
+            state.visibility,
+        );
         drop(state);
 
         let mut callbacks = self.callbacks.borrow_mut();
@@ -972,6 +982,11 @@ impl WaylandWindowStatePtr {
         drop(callbacks);
 
         self.complete_frame();
+        log::trace!(
+            target: frame_diagnostics::TARGET,
+            "frame done: loop={:?}",
+            self.frame_loop.get()
+        );
     }
 
     fn complete_frame(&self) {
@@ -1022,7 +1037,21 @@ impl WaylandWindowStatePtr {
         // Another wl_surface commit may have carried this callback while a retry
         // timer owned the render-loop wakeup.
         self.state.borrow_mut().pending_frame_callback = None;
-        if self.frame_loop.get() == FrameLoop::AwaitingCallback {
+        let frame_loop = self.frame_loop.get();
+        let mut wait = self.callback_wait.get();
+        if let Some(delay) = wait.arrived(Instant::now()) {
+            log::info!(
+                target: frame_diagnostics::TARGET,
+                "frame callback arrived after {delay:?} (loop={frame_loop:?})"
+            );
+        }
+        self.callback_wait.set(wait);
+        log::trace!(
+            target: frame_diagnostics::TARGET,
+            "frame callback: loop={frame_loop:?}{}",
+            if frame_loop == FrameLoop::AwaitingCallback { "" } else { " (no tick: not awaiting)" }
+        );
+        if frame_loop == FrameLoop::AwaitingCallback {
             self.frame(signal_at, FrameRequestSource::NativeCallback);
         }
     }
@@ -1060,10 +1089,43 @@ impl WaylandWindowStatePtr {
             FrameLoop::Ticking => {
                 self.frame_loop.set(FrameLoop::RescheduleRequested);
             }
-            // A wake is already armed: a ping or retry timer is in flight, or a
-            // presented buffer guarantees a compositor frame callback.
+            FrameLoop::AwaitingCallback => self.check_callback_stall(),
+            // A wake is already armed: a ping or retry timer is in flight.
             _ => {}
         }
+    }
+
+    /// A presented buffer should guarantee a compositor frame callback; report one
+    /// that stays outstanding while GPUI wants frames (#271).
+    fn check_callback_stall(&self) {
+        let mut wait = self.callback_wait.get();
+        let Some(age) = wait.newly_stalled(Instant::now()) else {
+            return;
+        };
+        let watchdog = frame_diagnostics::watchdog_enabled();
+        let state = self.state.borrow();
+        log::warn!(
+            target: frame_diagnostics::TARGET,
+            "frame callback outstanding for {age:?} after present #{} while redraws are \
+             requested (visibility={:?}, size={:?}, scale={}, decorations={:?}){}",
+            wait.presents(),
+            state.visibility,
+            state.bounds.size,
+            state.scale,
+            state.decorations,
+            if watchdog { "; watchdog resuming the frame loop" } else { "" },
+        );
+        drop(state);
+        if watchdog {
+            // Treat the callback as lost: the next draw requests a fresh one.
+            wait.abandon();
+            self.state.borrow_mut().pending_frame_callback = None;
+            self.frame_loop.set(FrameLoop::Parked);
+            self.callback_wait.set(wait);
+            self.schedule_frame();
+            return;
+        }
+        self.callback_wait.set(wait);
     }
 
     fn request_redraw(&self) {
@@ -1174,6 +1236,15 @@ impl WaylandWindowStatePtr {
             );
 
             let initial_configure = self.frame_loop.get() == FrameLoop::Unconfigured;
+            log::trace!(
+                target: frame_diagnostics::TARGET,
+                "configure: serial={serial} initial={initial_configure} loop={:?} \
+                 geometry={window_geometry:?} visibility={:?} maximized={} fullscreen={}",
+                self.frame_loop.get(),
+                state.visibility,
+                state.maximized,
+                state.fullscreen,
+            );
             drop(state);
             if initial_configure {
                 self.frame(None, FrameRequestSource::NativeCallback);
@@ -2063,9 +2134,18 @@ impl PlatformWindow for WaylandWindow {
         if renderer.draw(scene) {
             state.presentation = PresentationState::Presented;
             self.0.frame_loop.set(FrameLoop::AwaitingCallback);
+            let mut wait = self.0.callback_wait.get();
+            wait.presented(Instant::now());
+            self.0.callback_wait.set(wait);
+            log::trace!(target: frame_diagnostics::TARGET, "draw: presented #{}", wait.presents());
         } else {
             state.presentation = state.presentation.failed();
             self.0.frame_loop.set(FrameLoop::PresentationFailed);
+            log::debug!(
+                target: frame_diagnostics::TARGET,
+                "draw: presentation failed; now {:?}",
+                state.presentation
+            );
         }
 
         if renderer.needs_redraw() {

@@ -21,6 +21,7 @@ pub(super) fn command(root: &Path, args: &[String]) -> Result<()> {
         Some("preflight") => print_json(&inventory::audit(root)?),
         Some("prepare-registry") => registry::prepare(root, &options),
         Some("registry-release") => registry::cli(root, &options),
+        Some("release-flow") => registry::flow(root, args),
         Some("release-check") => changes::cli(root, &options),
         Some("daily") => daily::cli(root, &options),
         Some("import" | "review" | "context" | "review-notes") => upstream::cli(root, args),
