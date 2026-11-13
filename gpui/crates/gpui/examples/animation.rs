@@ -315,7 +315,8 @@ fn run_example() {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                 None,
-                size(px(300.), px(300.)),
+                // Tall enough for the spring demo and the arrow without scrolling.
+                size(px(420.), px(560.)),
                 cx,
             ))),
             ..Default::default()
