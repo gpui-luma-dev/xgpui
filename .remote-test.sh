@@ -1,5 +1,5 @@
 # Issue #194: window-control presenter hook (app-supplied SVG artwork).
-# Run on Fedora (GNOME Wayland) and on Windows. The shell draws window controls
+# Run on Fedora (Wayland: KDE Plasma or GNOME) and on Windows. The shell draws window controls
 # itself on Linux client frames and on Windows app-composed title bars.
 
 start_shell_lab() {
