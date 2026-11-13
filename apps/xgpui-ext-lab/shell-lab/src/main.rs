@@ -10,9 +10,34 @@ use std::{
 };
 use titlebar::{HeaderAssets, LabTitleBar};
 use xgpui_shell::{
-    ClientFramePreview, ShellApp, ShellOptions, ShellTypography, ShellWindow, ShellWindowTitle,
-    TitlebarAction,
+    ClientFramePreview, ShellApp, ShellControl, ShellControlPresenter, ShellControlState,
+    ShellOptions, ShellTypography, ShellWindow, ShellWindowTitle, TitlebarAction,
 };
+
+actions!(shell_lab, [FocusNext, FocusPrevious]);
+
+/// Tab and Shift-Tab move keyboard focus through the whole window, title-bar
+/// controls included.
+fn bind_focus_keys(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("tab", FocusNext, None),
+        KeyBinding::new("shift-tab", FocusPrevious, None),
+    ]);
+    cx.on_action(|_: &FocusNext, cx| move_focus(cx, true));
+    cx.on_action(|_: &FocusPrevious, cx| move_focus(cx, false));
+}
+
+fn move_focus(cx: &mut App, forward: bool) {
+    if let Some(handle) = cx.active_window() {
+        let _ = handle.update(cx, |_, window, cx| {
+            if forward {
+                window.focus_next(cx)
+            } else {
+                window.focus_prev(cx)
+            }
+        });
+    }
+}
 
 #[derive(Parser)]
 #[command(about = "Inspect desktop preferences and test per-window xgpui-shell overrides")]
@@ -100,6 +125,90 @@ enum Action {
     PreviewFocus(bool),
     PreviewHover(bool),
     PreviewLayout(PreviewLayout),
+    ControlArtwork(ControlArtwork),
+}
+
+/// Window-control artwork: the shell's built-in look, or an app presenter.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum ControlArtwork {
+    #[default]
+    Builtin,
+    /// App SVG icons on a filled circle.
+    FilledCircle,
+    /// The same SVG icons with the circle treatment removed.
+    PlainIcons,
+}
+impl ControlArtwork {
+    fn presenter(self) -> Option<ShellControlPresenter> {
+        match self {
+            Self::Builtin => None,
+            Self::FilledCircle => Some(ShellControlPresenter::new(|state, _, _| {
+                control_artwork(state, true)
+            })),
+            Self::PlainIcons => Some(ShellControlPresenter::new(|state, _, _| {
+                control_artwork(state, false)
+            })),
+        }
+    }
+}
+
+/// Lab artwork: a small SVG icon, optionally on a filled circle. The circle and
+/// icon are deliberately smaller than the shell's clickable target.
+fn control_artwork(state: &ShellControlState, filled: bool) -> AnyElement {
+    let icon = match state.control {
+        ShellControl::Minimize => "shell/minimize.svg",
+        ShellControl::Maximize => "shell/maximize.svg",
+        ShellControl::Restore => "shell/restore.svg",
+        ShellControl::Close => "shell/close.svg",
+        _ => "shell/close.svg",
+    };
+    let colors = state.colors;
+    let dark = matches!(
+        state.appearance,
+        WindowAppearance::Dark | WindowAppearance::VibrantDark
+    );
+    let active = state.hovered || state.pressed;
+    // High contrast: invert on hover/press using the shell's contrast tokens.
+    let (circle, icon_color) = if state.high_contrast {
+        if active {
+            (Some(colors.text), colors.header)
+        } else {
+            (filled.then_some(colors.header), colors.text)
+        }
+    } else {
+        let rest = if dark { 0x4a4a4a } else { 0xdadada };
+        let hover = if dark { 0x5e5e5e } else { 0xc8c8c8 };
+        let pressed = if dark { 0x8a8a8a } else { 0x9a9a9a };
+        let circle = match (filled, state.hovered, state.pressed) {
+            (_, _, true) => Some(pressed),
+            (_, true, _) => Some(hover),
+            // Inactive windows keep only the icon, like native caption buttons.
+            (true, _, _) if state.window_active => Some(rest),
+            _ => None,
+        };
+        (circle, colors.text)
+    };
+    let diameter = px(24. * state.scale);
+    div()
+        .size(diameter)
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .when_some(circle, |s, color| s.bg(rgb(color)))
+        .when(state.high_contrast, |s| {
+            s.border_1().border_color(rgb(colors.text))
+        })
+        .when(!state.window_active && !active, |s| s.opacity(0.6))
+        .child(
+            svg()
+                .path(icon)
+                // 16px of the 24px icon grid draws the glyphs at about the size of the
+                // shell's 10px built-in symbols.
+                .size(px(16. * state.scale))
+                .text_color(rgb(icon_color)),
+        )
+        .into_any_element()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -163,6 +272,7 @@ struct Lab {
     preview_focus: bool,
     preview_hover: bool,
     preview_layout: PreviewLayout,
+    artwork: ControlArtwork,
     events: VecDeque<String>,
     _subscriptions: Vec<Subscription>,
     session: String,
@@ -225,6 +335,7 @@ impl Lab {
             preview_focus: true,
             preview_hover: false,
             preview_layout: PreviewLayout::default(),
+            artwork: ControlArtwork::default(),
             events: VecDeque::from(["Lab opened; following desktop preferences".into()]),
             _subscriptions: subscriptions,
             session: format!(
@@ -233,6 +344,20 @@ impl Lab {
                 std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "not reported".into()),
                 cx.platform_info()
             ),
+        }
+    }
+
+    /// Return the simulated preview and the control artwork to their defaults.
+    fn reset_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.preview_mode = PreviewMode::default();
+        self.preview_appearance = None;
+        self.preview_active = true;
+        self.preview_focus = true;
+        self.preview_hover = false;
+        self.preview_layout = PreviewLayout::default();
+        self.artwork = ControlArtwork::default();
+        if let Some(root) = window.root::<ShellWindow>().flatten() {
+            root.update(cx, |shell, cx| shell.set_control_presenter(None, cx));
         }
     }
 
@@ -253,6 +378,9 @@ impl Lab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if matches!(action, Action::Reset) {
+            self.reset_preview(window, cx);
+        }
         if self.overrides.apply(action) {
             if let Some(root) = window.root::<ShellWindow>().flatten() {
                 root.update(cx, |shell, cx| {
@@ -349,6 +477,19 @@ impl Lab {
             Action::PreviewLayout(layout) => {
                 self.preview_layout = layout;
                 self.record("Changed simulated preview button layout only");
+            }
+            Action::ControlArtwork(artwork) => {
+                self.artwork = artwork;
+                if let Some(root) = window.root::<ShellWindow>().flatten() {
+                    root.update(cx, |shell, cx| {
+                        shell.set_control_presenter(artwork.presenter(), cx)
+                    });
+                    self.record(format!(
+                        "Window-control artwork: {artwork:?} (this window and the preview)"
+                    ));
+                } else {
+                    self.record("Cannot set artwork: this window does not use xgpui-shell");
+                }
             }
             _ => self.record("Operation unavailable in this window state"),
         }
@@ -565,6 +706,7 @@ impl Lab {
         preview.fullscreen = self.preview_mode == PreviewMode::Fullscreen;
         preview.show_focus = self.preview_focus;
         preview.show_hover = self.preview_hover;
+        preview.control_presenter = self.artwork.presenter();
         preview.tiling = if self.preview_mode == PreviewMode::Tiled {
             Tiling {
                 top: true,
@@ -605,7 +747,11 @@ impl Lab {
                 &format!("{mode:?}"),
                 self.preview_mode == mode,
                 true,
-                Action::PreviewMode(mode),
+                Action::PreviewMode(if self.preview_mode == mode {
+                    PreviewMode::default()
+                } else {
+                    mode
+                }),
                 cx,
             ));
         }
@@ -622,7 +768,11 @@ impl Lab {
                 name,
                 self.preview_appearance == appearance,
                 true,
-                Action::PreviewAppearance(appearance),
+                Action::PreviewAppearance(if self.preview_appearance == appearance {
+                    None
+                } else {
+                    appearance
+                }),
                 cx,
             ));
         }
@@ -667,7 +817,32 @@ impl Lab {
                 name,
                 self.preview_layout == layout,
                 true,
-                Action::PreviewLayout(layout),
+                Action::PreviewLayout(if self.preview_layout == layout {
+                    PreviewLayout::default()
+                } else {
+                    layout
+                }),
+                cx,
+            ));
+        }
+        for (i, (name, artwork)) in [
+            ("Built-in controls", ControlArtwork::Builtin),
+            ("SVG on filled circle", ControlArtwork::FilledCircle),
+            ("SVG, no circle", ControlArtwork::PlainIcons),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            controls.push(self.button(
+                ("control-artwork", i),
+                name,
+                self.artwork == artwork,
+                true,
+                Action::ControlArtwork(if self.artwork == artwork {
+                    ControlArtwork::default()
+                } else {
+                    artwork
+                }),
                 cx,
             ));
         }
@@ -680,7 +855,11 @@ impl Lab {
             div().child("Visual preview of the shared client-frame renderer. State, appearance and button-layout choices here are simulated; detected preferences and your native window are unchanged. Frame buttons, dragging and resizing are non-interactive.").into_any_element(),
             div().flex().flex_wrap().gap_2().children(controls).into_any_element(),
             property("Close hover simulation", if self.preview_mode == PreviewMode::Fullscreen { "No title bar in Fullscreen. Choose Floating, Maximized or Tiled.".to_owned() } else { format!("{} — only the Close icon background changes: header #{:06X} → hover #{:06X}. This is a simulated state, not an enable/disable switch for mouse input.", if self.preview_hover { "ON" } else { "OFF" }, look.colors.header, look.colors.hover) }),
-            property("Title-bar icons", "xgpui-shell artwork: vector X, fixed minimize/maximize/restore symbols. Platform preferences supply button placement and availability, not icon artwork. These are not macOS traffic lights or the desktop's native decoration theme."),
+            property("Title-bar icons", match self.artwork {
+                ControlArtwork::Builtin => "xgpui-shell artwork: vector X, fixed minimize/maximize/restore symbols. Platform preferences supply button placement and availability, not icon artwork. These are not macOS traffic lights or the desktop's native decoration theme.",
+                ControlArtwork::FilledCircle => "App presenter (ShellControlPresenter): lab SVG icons on a filled circle, applied to this window's shell-drawn controls and the preview. The shell still owns order, availability, activation and the focus ring.",
+                ControlArtwork::PlainIcons => "App presenter with the circle treatment removed: the same SVG icons, with a circle only on hover/press.",
+            }),
             div().id("client-frame-preview").w_full().h(px(look.titlebar_height + 140.)).min_h(px(180.)).flex_shrink_0().mt_2().child(preview).into_any_element(),
         ])
     }
@@ -757,7 +936,11 @@ impl Render for Lab {
                 label,
                 self.overrides.contrast == value,
                 true,
-                Action::Contrast(value),
+                Action::Contrast(if self.overrides.contrast == value {
+                    None
+                } else {
+                    value
+                }),
                 cx,
             )
         })
@@ -782,7 +965,11 @@ impl Render for Lab {
                 label,
                 self.overrides.accent == value,
                 true,
-                Action::Accent(value),
+                Action::Accent(if self.overrides.accent == value {
+                    None
+                } else {
+                    value
+                }),
                 cx,
             )
         })
@@ -808,7 +995,11 @@ impl Render for Lab {
                 label,
                 self.overrides.scale == value,
                 true,
-                Action::Scale(value),
+                Action::Scale(if self.overrides.scale == value {
+                    None
+                } else {
+                    value
+                }),
                 cx,
             )
         })
@@ -860,7 +1051,7 @@ impl Render for Lab {
                     label,
                     current == value,
                     true,
-                    Action::Titlebar(kind, value),
+                    Action::Titlebar(kind, if current == value { None } else { value }),
                     cx,
                 )
             })
@@ -886,7 +1077,11 @@ impl Render for Lab {
                 name,
                 self.overrides.typography == value,
                 true,
-                Action::Typography(value),
+                Action::Typography(if self.overrides.typography == value {
+                    None
+                } else {
+                    value
+                }),
                 cx,
             )
         })
@@ -916,7 +1111,11 @@ impl Render for Lab {
                 name,
                 self.overrides.reduced_motion == value,
                 true,
-                Action::ReducedMotion(value),
+                Action::ReducedMotion(if self.overrides.reduced_motion == value {
+                    None
+                } else {
+                    value
+                }),
                 cx,
             )
         })
@@ -1057,9 +1256,24 @@ impl Render for Lab {
             .gap_3()
             .child(
                 div()
-                    .text_size(px(26.))
-                    .font_weight(FontWeight::BOLD)
-                    .child(format!("Shell Lab — Window {}", self.id)),
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_4()
+                    .child(
+                        div()
+                            .text_size(px(26.))
+                            .font_weight(FontWeight::BOLD)
+                            .child(format!("Shell Lab — Window {}", self.id)),
+                    )
+                    .child(self.button(
+                        "reset-top",
+                        "Reset everything",
+                        false,
+                        true,
+                        Action::Reset,
+                        cx,
+                    )),
             )
             .child(self.session.clone())
             .child(div().p_3().bg(rgb(0x1e293b)).rounded_md().child(frame_note))
@@ -1109,7 +1323,7 @@ impl Render for Lab {
                             ))
                             .child(self.button(
                                 "reset",
-                                "Reset this window to system defaults",
+                                "Reset everything (overrides, preview and artwork)",
                                 false,
                                 true,
                                 Action::Reset,
@@ -1164,6 +1378,7 @@ fn main() {
     gpui_platform::application()
         .with_assets(HeaderAssets)
         .run(move |cx| {
+            bind_focus_keys(cx);
             cx.on_window_closed(|cx, _| {
                 if cx.windows().is_empty() {
                     cx.quit();
