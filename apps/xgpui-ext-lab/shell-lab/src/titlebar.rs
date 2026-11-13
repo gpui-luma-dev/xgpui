@@ -73,6 +73,7 @@ impl LabTitleBar {
         label: &'static str,
         path: &'static str,
         action: Action,
+        color: u32,
         _cx: &mut Context<Self>,
     ) -> AnyElement {
         let lab = self.lab.clone();
@@ -120,7 +121,8 @@ impl LabTitleBar {
                     lab.dispatch(action, Point::default(), window, cx)
                 });
             })
-            .child(svg().path(path).size(px(18.)))
+            // An SVG paints only with an explicit color.
+            .child(svg().path(path).size(px(18.)).text_color(rgb(color)))
             .into_any_element()
     }
 }
@@ -148,6 +150,7 @@ impl Render for LabTitleBar {
                 "Reset this window's overrides",
                 "shell/reset.svg",
                 Action::Reset,
+                look.colors.text,
                 cx,
             ))
             .child(self.button(
@@ -155,6 +158,7 @@ impl Render for LabTitleBar {
                 "Toggle platform readings",
                 "shell/panel.svg",
                 Action::TogglePlatformReadings,
+                look.colors.text,
                 cx,
             ))
             .child(div().w(px(1.)).h(px(20.)).bg(rgb(look.colors.border)))
@@ -176,6 +180,7 @@ impl Render for LabTitleBar {
                 "Toggle preview appearance",
                 "shell/theme.svg",
                 Action::PreviewAppearance(Some(next)),
+                look.colors.text,
                 cx,
             ))
             .child(self.button(
@@ -183,6 +188,7 @@ impl Render for LabTitleBar {
                 "Open an independent window",
                 "shell/plus.svg",
                 Action::NewWindow { fixed: false },
+                look.colors.text,
                 cx,
             ))
     }

@@ -31,6 +31,9 @@ esac
 note "The XGPUI Shell Lab window opens. Its own title bar has window controls drawn by xgpui-shell."
 note "Scroll to the 'Client-frame preview — simulation' section. Its buttons include 'Built-in controls', 'SVG on filled circle' and 'SVG, no circle'."
 
+step "Look at the lab's own title-bar buttons without hovering them: two on the left of the title, two on the right." \
+     "Each shows a visible icon (reset arrow, panel, half-filled circle, plus) in the title-bar text color, not just a grey box on hover."
+
 if [[ $platform == linux ]]; then
     step "Look at the top of the lab window before changing anything." \
          "The lab draws its own title bar (client-side decorations) with the built-in X and minimize/maximize symbols. If the compositor drew its own title bar instead, answer skip."
