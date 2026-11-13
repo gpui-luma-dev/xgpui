@@ -40,9 +40,8 @@
 #
 # When the run ends, the runner posts a comment with the step results and the
 # reported output to the PR under test (or the post_to targets), then reads it
-# back to confirm it landed. It needs a GitHub token once per machine: GH_TOKEN,
-# GITHUB_TOKEN, a logged-in `gh`, or one pasted at the first prompt (saved to
-# ~/.config/xgpui-test/github-token, mode 600).
+# back to confirm it landed. It posts with the GitHub CLI (`gh`) and checks that
+# gh is logged in before anything runs, logging in on the spot if it is not.
 #
 # Write each step as one action plus the result it should produce, so that a
 # person or an agent on the machine can follow it. The file must be deleted
@@ -282,77 +281,46 @@ post_to() {
 }
 
 # --------------------------------------------------------------------------
-# posting results
+# posting results (through the GitHub CLI)
 
-TOKEN_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/xgpui-test/github-token"
-
-# Sets XGPUI_GH_TOKEN, asking once per machine when nothing else provides one.
-github_auth() {
-    XGPUI_GH_TOKEN=${GH_TOKEN:-${GITHUB_TOKEN:-}}
-    [[ -n "$XGPUI_GH_TOKEN" ]] && return 0
-    if [[ -s "$TOKEN_FILE" ]]; then
-        XGPUI_GH_TOKEN=$(tr -d '[:space:]' <"$TOKEN_FILE")
-        [[ -n "$XGPUI_GH_TOKEN" ]] && return 0
+# github_ready: make sure `gh` can post before the run starts, so a long test
+# never ends with results that cannot be posted. Sets XGPUI_TEST_GH=1 when ready.
+github_ready() {
+    XGPUI_TEST_GH=""
+    if ! command -v gh >/dev/null; then
+        echo "The GitHub CLI (gh) is not installed, so results cannot be posted."
+        echo "Install it (Fedora: sudo dnf install gh; Windows: winget install GitHub.cli), then run again."
+    elif gh auth status --hostname github.com >/dev/null 2>&1; then
+        XGPUI_TEST_GH=1
+    elif interactive; then
+        echo "gh is not logged in to GitHub; logging in now so the results can be posted."
+        gh auth login --hostname github.com --git-protocol https --web &&
+            gh auth status --hostname github.com >/dev/null 2>&1 && XGPUI_TEST_GH=1
+    else
+        echo "gh is not logged in to GitHub, so results cannot be posted."
     fi
-    if command -v gh >/dev/null && XGPUI_GH_TOKEN=$(gh auth token 2>/dev/null) && [[ -n "$XGPUI_GH_TOKEN" ]]; then
-        return 0
-    fi
-    interactive || return 1
-    cat <<EOF
-
-Posting results to GitHub needs a token, asked for once on this machine.
-Create one at https://github.com/settings/personal-access-tokens/new
-  repository access: only $REPO_SLUG
-  permissions: Issues (read and write), Pull requests (read and write)
-It is saved to $TOKEN_FILE (readable only by you).
-EOF
-    local token
-    read -r -s -p "Paste the token (Enter to skip posting this time): " token || token=""
-    echo
-    token=$(tr -d '[:space:]' <<<"$token")
-    [[ -n "$token" ]] || return 1
-    mkdir -p "$(dirname "$TOKEN_FILE")"
-    (umask 077 && printf '%s\n' "$token" >"$TOKEN_FILE")
-    XGPUI_GH_TOKEN=$token
-}
-
-# json_string FILE: the file's text as one JSON string.
-json_string() {
-    awk 'BEGIN { printf "\"" }
-         {
-             gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/\t/, "    ")
-             gsub(/[[:cntrl:]]/, "")
-             printf "%s\\n", $0
-         }
-         END { printf "\"" }' "$1"
+    export XGPUI_TEST_GH
+    [[ -n "$XGPUI_TEST_GH" ]] && return 0
+    ask "Run the test anyway without posting results? [y/N] "
+    [[ "$REPLY" == [yY]* ]] || die "stopped before testing; nothing was run"
 }
 
 # post_comment NUMBER BODY_FILE MARKER: post, read back, print the comment's URL.
 post_comment() {
-    local number=$1 body=$2 marker=$3 payload response api url
-    payload=$(mktemp "${TMPDIR:-/tmp}/xgpui-comment.XXXXXX") || return 1
-    { printf '{"body":'; json_string "$body"; printf '}'; } >"$payload"
-    response=$(curl -sS --max-time 30 -X POST \
-        -H "Authorization: Bearer $XGPUI_GH_TOKEN" -H 'Accept: application/vnd.github+json' \
-        --data-binary @"$payload" "https://api.github.com/repos/$REPO_SLUG/issues/$number/comments")
-    rm -f "$payload"
-    api=$(grep -oE '"url": *"https://api\.github\.com/repos/[^"]+/issues/comments/[0-9]+"' <<<"$response" |
-        head -1 | grep -oE 'https://[^"]+')
-    url=$(grep -oE '"html_url": *"https://github\.com/[^"]+#issuecomment-[0-9]+"' <<<"$response" |
-        head -1 | grep -oE 'https://[^"]+')
-    if [[ -z "$api" || -z "$url" ]]; then
-        echo "posting to #$number failed: $(grep -oE '"message": *"[^"]*"' <<<"$response" | head -1)" >&2
+    local number=$1 body=$2 marker=$3 api url
+    read -r api url < <(gh api "repos/$REPO_SLUG/issues/$number/comments" \
+        -F "body=@$body" --jq '.url + " " + .html_url') || true
+    if [[ -z "${api:-}" || -z "${url:-}" ]]; then
+        echo "posting to #$number failed" >&2
         return 1
     fi
-    if ! curl -fsS --max-time 20 -H "Authorization: Bearer $XGPUI_GH_TOKEN" \
-        -H 'Accept: application/vnd.github+json' "$api" | grep -qF "$marker"; then
+    if ! gh api "$api" --jq .body | grep -qF "$marker"; then
         echo "posted to #$number but could not read it back: $url" >&2
         return 1
     fi
     printf '%s\n' "$url"
 }
 
-# post_results BRANCH HASH STATUS RESULTS REPORT POST_TO PR LOG
 post_results() {
     local branch=$1 hash=$2 status=$3 results=$4 report=$5 post_to_file=$6 pr=$7 log=$8
     local -a targets=()
@@ -396,8 +364,8 @@ post_results() {
     } >"$body"
 
     note "Posting results to GitHub"
-    if ! github_auth; then
-        echo "Not posted (no GitHub token). The results are in $log"
+    if [[ -z "${XGPUI_TEST_GH:-}" ]]; then
+        echo "Not posted (gh is not set up). The results are in $log"
         rm -f "$body"
         return 1
     fi
@@ -437,6 +405,9 @@ cmd_run() {
     [[ -n "$repo" ]] || repo=$(git rev-parse --show-toplevel 2>/dev/null) || die "run inside the xgpui clone or use xgpui-test"
     cd "$repo" || die "cannot enter $repo"
     is_repo_clone . || die "$repo is not a clone of $REPO_SLUG"
+
+    # Results are posted with gh when the run ends; check it works before testing.
+    github_ready
 
     # Local edits would block or be carried across the switch.
     local dirty

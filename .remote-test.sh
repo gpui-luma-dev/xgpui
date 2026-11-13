@@ -27,6 +27,7 @@ if [[ -z "${XGPUI_TEST_POSTS:-}" ]]; then
     XGPUI_TEST_POST_TO=$(mktemp "${TMPDIR:-/tmp}/xgpui-post-to.XXXXXX")
     export XGPUI_TEST_REPORT XGPUI_TEST_POST_TO
     self_post=1
+    github_ready
 fi
 post_to 271
 
