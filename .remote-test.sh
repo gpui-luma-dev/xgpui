@@ -125,8 +125,8 @@ run_variant() {
     start_traced "$name" env "$@" "$animation_bin"
     sleep 3
     check_running "$name" 5
-    step "Watch the animation window for about 5 seconds: the arrow circle spins and the boxes bounce." \
-         "Everything keeps moving smoothly. If it froze after the first frame or two, answer fail."
+    step "Watch the arrow circle under 'Hello Animation' for about 5 seconds. Only the arrow moves on its own; the blue dot and colored bar move only when you click the grey box." \
+         "The arrow keeps turning back and forth without stopping. If it froze after the first frame or two, answer fail."
     step "Resize the window by dragging its corner, then click another window and click back." \
          "The window redraws at each new size and keeps animating after the focus changes."
     note "Leave the window alone for 15 seconds (the script waits)."
