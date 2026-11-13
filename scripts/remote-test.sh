@@ -406,6 +406,21 @@ cmd_run() {
     cd "$repo" || die "cannot enter $repo"
     is_repo_clone . || die "$repo is not a clone of $REPO_SLUG"
 
+    # A copy started straight from a checkout can be older than main (a test
+    # branch made before a runner fix). Always continue with the newest runner.
+    if [[ -z "${XGPUI_RUNNER_REF:-}" ]]; then
+        git fetch --quiet --prune origin || echo "warning: fetch failed; using this copy of the runner" >&2
+        local newest
+        if newest=$(git rev-parse --verify --quiet origin/main:scripts/remote-test.sh) &&
+            [[ "$newest" != "$(git hash-object "${BASH_SOURCE[0]}")" ]]; then
+            local runner
+            runner=$(mktemp "${TMPDIR:-/tmp}/xgpui-test.XXXXXX") || die "mktemp failed"
+            git cat-file blob "$newest" >"$runner" || die "could not read the newest runner"
+            echo "Using the newest test runner from main."
+            XGPUI_RUNNER_REF=origin/main exec bash "$runner" run "$@"
+        fi
+    fi
+
     # Results are posted with gh when the run ends; check it works before testing.
     github_ready
 
