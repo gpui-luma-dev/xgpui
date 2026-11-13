@@ -113,6 +113,11 @@ struct PathRasterizationVertex {
     bounds: Bounds<ScaledPixels>,
 }
 
+/// Log target for surface acquire and present outcomes (#271).
+const PRESENT_LOG_TARGET: &str = "xgpui::present";
+/// An acquire this slow means the presentation engine is withholding images.
+const SLOW_ACQUIRE: std::time::Duration = std::time::Duration::from_millis(50);
+
 pub struct WgpuSurfaceConfig {
     pub size: Size<DevicePixels>,
     pub transparent: bool,
@@ -1165,19 +1170,42 @@ impl WgpuRenderer {
             self.failed_frame_count = 0;
         }
 
-        let frame = match surface.get_current_texture() {
+        // `Instant` is unavailable on wasm32-unknown-unknown.
+        #[cfg(not(target_family = "wasm"))]
+        let acquire_started = std::time::Instant::now();
+        let acquired = surface.get_current_texture();
+        #[cfg(not(target_family = "wasm"))]
+        let acquire_time = Some(acquire_started.elapsed());
+        #[cfg(target_family = "wasm")]
+        let acquire_time: Option<std::time::Duration> = None;
+        if acquire_time.is_some_and(|time| time >= SLOW_ACQUIRE) {
+            log::debug!(
+                target: PRESENT_LOG_TARGET,
+                "surface texture acquire took {acquire_time:?} ({:?})",
+                self.surface_config.present_mode
+            );
+        }
+        let frame = match acquired {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
             wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
+                log::debug!(target: PRESENT_LOG_TARGET, "surface suboptimal; reconfiguring");
                 // Textures must be destroyed before the surface can be reconfigured.
                 drop(frame);
                 surface.configure(&core.resources.device, &self.surface_config);
                 return false;
             }
-            wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
+            outcome @ (wgpu::CurrentSurfaceTexture::Lost
+            | wgpu::CurrentSurfaceTexture::Outdated) => {
+                log::debug!(target: PRESENT_LOG_TARGET, "surface {outcome:?}; reconfiguring");
                 surface.configure(&core.resources.device, &self.surface_config);
                 return false;
             }
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+            outcome @ (wgpu::CurrentSurfaceTexture::Timeout
+            | wgpu::CurrentSurfaceTexture::Occluded) => {
+                log::debug!(
+                    target: PRESENT_LOG_TARGET,
+                    "surface acquire {outcome:?} after {acquire_time:?}; frame skipped"
+                );
                 return false;
             }
             wgpu::CurrentSurfaceTexture::Validation => {
