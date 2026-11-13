@@ -1,7 +1,8 @@
 # Issue #271: GNOME Wayland windows stop presenting after their second frame.
 # Run on the Fedora laptop in a GNOME Wayland session (and on the new Linux box
 # if it runs a Wayland desktop). Each window runs about 40 seconds; the script
-# checks frame counts itself and saves full frame-loop traces next to this log.
+# checks frame counts itself, saves full frame-loop traces next to this log and
+# posts its digests and your answers to #271 when it finishes.
 #
 # It also records versions and Vulkan surface color spaces, for #146.
 
@@ -15,6 +16,19 @@ if [[ "${XDG_SESSION_TYPE:-}" != wayland || -z "${WAYLAND_DISPLAY:-}" ]]; then
     note "Log out and choose the Wayland session at the login screen, then run again."
     exit 1
 fi
+
+# Runners from before result posting reached main don't post; borrow this
+# branch's copy of the runner's helpers and post from this script instead.
+if [[ -z "${XGPUI_TEST_POSTS:-}" ]]; then
+    # shellcheck source=scripts/remote-test.sh
+    source scripts/remote-test.sh
+    set +u +o pipefail
+    XGPUI_TEST_REPORT=$(mktemp "${TMPDIR:-/tmp}/xgpui-report.XXXXXX")
+    XGPUI_TEST_POST_TO=$(mktemp "${TMPDIR:-/tmp}/xgpui-post-to.XXXXXX")
+    export XGPUI_TEST_REPORT XGPUI_TEST_POST_TO
+    self_post=1
+fi
+post_to 271
 
 out_base=${XGPUI_TEST_LOG:-$HOME/xgpui-test-logs/271-$(date +%Y%m%d-%H%M%S).log}
 out_base=${out_base%.log}
@@ -39,16 +53,18 @@ note "System and graphics stack"
     command -v lspci >/dev/null && lspci | grep -Ei 'vga|3d|display' | sed 's/^/gpu:      /'
     # Displays and their scale, as GNOME reports them (no-op elsewhere).
     command -v gdctl >/dev/null && gdctl show 2>/dev/null | sed 's/^/gdctl:    /'
-} 2>&1
+} 2>&1 | report
 
 vulkan_log="$out_base-vulkaninfo.txt"
 if command -v vulkaninfo >/dev/null; then
     note "Vulkan devices and surface color spaces (#146)"
-    vulkaninfo --summary 2>&1 | grep -E 'deviceName|driverName|driverInfo|apiVersion' | sed 's/^ */vulkan:   /'
+    vulkaninfo --summary 2>&1 | grep -E 'deviceName|driverName|driverInfo|apiVersion' | sed 's/^ */vulkan:   /' | report
     # The full report lists each presentable surface's formats and color spaces.
     timeout 60 vulkaninfo >"$vulkan_log" 2>&1
-    echo "surface color spaces offered (count of format entries):"
-    grep -oE 'VK_COLOR_SPACE_[A-Z0-9_]+' "$vulkan_log" | sort | uniq -c | sed 's/^/    /'
+    {
+        echo "surface color spaces offered (count of format entries):"
+        grep -oE 'VK_COLOR_SPACE_[A-Z0-9_]+' "$vulkan_log" | sort | uniq -c | sed 's/^/    /'
+    } | report
     echo "full report: $vulkan_log"
 else
     note "vulkaninfo is not installed (Fedora package vulkan-tools); skipping the color-space report."
@@ -124,16 +140,16 @@ run_variant() {
     note "Animation window: $description"
     start_traced "$name" env "$@" "$animation_bin"
     sleep 3
-    check_running "$name" 5
+    check_running "$name" 5 | report
     step "Watch the arrow circle under 'Hello Animation' for about 5 seconds. Only the arrow moves on its own; the blue dot and colored bar move only when you click the grey box." \
          "The arrow keeps turning back and forth without stopping. If it froze after the first frame or two, answer fail."
     step "Resize the window by dragging its corner, then click another window and click back." \
          "The window redraws at each new size and keeps animating after the focus changes."
     note "Leave the window alone for 15 seconds (the script waits)."
-    check_running "$name" 15
+    check_running "$name" 15 | report
     stop_example
     sleep 1
-    digest "$name"
+    digest "$name" | report
 }
 
 # ---------------------------------------------------------------- runs
@@ -151,7 +167,12 @@ step "Hover over the shell lab's title-bar buttons, then scroll the lab's conten
 step "Resize the shell lab window, then maximize and restore it with its title-bar button." \
      "It redraws at each size and after maximize/restore."
 stop_example
-digest shell
+digest shell | report
 
-note "Done. Paste the digests above (from 'System and graphics stack' down) into issue #271."
 note "Full traces are next to this log: $out_base-*.trace.log"
+
+if [[ -n "${self_post:-}" ]]; then
+    post_results "$(git branch --show-current)" "$(git rev-parse --short HEAD)" 0 \
+        "$XGPUI_TEST_RESULTS" "$XGPUI_TEST_REPORT" "$XGPUI_TEST_POST_TO" "" "$out_base.log"
+    rm -f "$XGPUI_TEST_REPORT" "$XGPUI_TEST_POST_TO"
+fi
