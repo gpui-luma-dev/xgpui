@@ -51,8 +51,8 @@ step "Click the real Maximize control, then click it again." \
 step "Click the real Minimize control, then restore the window from the taskbar or dock." \
      "The window minimizes and restores normally."
 
-step "Press Tab repeatedly until a title-bar control is focused, then press Enter on Maximize." \
-     "A colored focus ring is drawn around the focused control (around its circle), and Enter maximizes the window. Press Enter again to restore."
+step "Click an empty part of the lab, then press Tab repeatedly (Shift-Tab goes back) until the real title-bar Maximize control has a focus ring. Press Enter, then Enter again." \
+     "Tab moves a visible focus ring through the lab's buttons and the title-bar controls. The first Enter maximizes the window, the second restores it."
 
 step "Switch to another app so the lab window is inactive." \
      "The control circles and icons fade while the window is inactive and return to full strength when you switch back."
@@ -68,8 +68,14 @@ step "Click 'Built-in controls'." \
 
 if [[ $platform == windows ]]; then
     step "With 'SVG on filled circle' selected, hover the real Maximize control and wait about a second." \
-         "Windows 11 shows the Snap Layouts flyout under Maximize, as it does with the built-in controls. On Windows 10, answer skip."
+         "Windows 11 shows the Snap Layouts flyout under Maximize, and no 'Maximize window' tooltip covers it. On Windows 10, answer skip."
 fi
+
+step "In the preview section, click 'Buttons on left', then click it again." \
+     "The first click moves the preview's controls to the left; the second turns it off and they return to the platform layout. Every choice in the lab works this way."
+
+step "Choose a few things (for example 'Dark', 'SVG, no circle' and 'High contrast'), then click 'Reset everything' at the top right of the lab." \
+     "Every choice returns to its default: the real title bar shows the built-in controls again and the preview is back to Floating, native appearance and platform buttons."
 
 step "Click 'SVG on filled circle', then close the window with the real Close control." \
      "The window closes on the first click."
