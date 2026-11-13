@@ -641,6 +641,12 @@ fn with_control_behavior(
         })
 }
 
+/// Windows 11 shows its Snap Layouts flyout over a hovered Maximize control; a
+/// tooltip there would cover it.
+fn shows_tooltip(button: WindowButton) -> bool {
+    !(cfg!(target_os = "windows") && button == WindowButton::Maximize)
+}
+
 fn shell_control(button: WindowButton, maximized: bool) -> ShellControl {
     match button {
         WindowButton::Minimize => ShellControl::Minimize,
@@ -745,7 +751,9 @@ fn presented_control(
         element = element
             .track_focus(&focus)
             .cursor_pointer()
-            .tooltip(move |_, cx| cx.new(|_| ControlTooltip(label)).into())
+            .when(shows_tooltip(button), |s| {
+                s.tooltip(move |_, cx| cx.new(|_| ControlTooltip(label)).into())
+            })
             .on_hover(move |hovered, _, cx| {
                 hover_state.update(cx, |state, cx| {
                     state.hovered = *hovered;
@@ -1170,8 +1178,12 @@ mod frame {
             })
             .focus_visible(move |s| s.border_color(rgb(accent)))
             .when(interactive, |s| {
-                s.tooltip(move |_, cx| cx.new(|_| ControlTooltip(label)).into())
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                // No tooltip over the Windows Snap Layouts flyout (see `shows_tooltip`).
+                s.when(
+                    !(cfg!(target_os = "windows") && id == WindowButton::Maximize.id()),
+                    |s| s.tooltip(move |_, cx| cx.new(|_| ControlTooltip(label)).into()),
+                )
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             })
     }
 
