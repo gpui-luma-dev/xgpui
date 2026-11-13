@@ -334,6 +334,8 @@ fn run_example() {
 
 #[cfg(not(target_family = "wasm"))]
 fn main() {
+    // RUST_LOG=xgpui::wayland::frame=trace traces the Linux frame loop (#271).
+    env_logger::init();
     run_example();
 }
 
