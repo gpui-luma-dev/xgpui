@@ -16,6 +16,19 @@ start_shell_lab() {
     sleep 2
 }
 
+# An older runner copy does not post results; borrow this branch's runner
+# helpers and post from this script instead (checking gh before testing).
+if [[ -z "${XGPUI_TEST_POSTS:-}" ]]; then
+    # shellcheck source=scripts/remote-test.sh
+    source scripts/remote-test.sh
+    set +u +o pipefail
+    XGPUI_TEST_REPORT=$(mktemp "${TMPDIR:-/tmp}/xgpui-report.XXXXXX")
+    XGPUI_TEST_POST_TO=$(mktemp "${TMPDIR:-/tmp}/xgpui-post-to.XXXXXX")
+    export XGPUI_TEST_REPORT XGPUI_TEST_POST_TO
+    self_post=1
+    github_ready
+fi
+
 case "$(uname -s)" in
     MINGW* | MSYS* | CYGWIN*)
         platform=windows
@@ -79,3 +92,10 @@ step "Choose a few things (for example 'Dark', 'SVG, no circle' and 'High contra
 
 step "Click 'SVG on filled circle', then close the window with the real Close control." \
      "The window closes on the first click."
+
+if [[ -n "${self_post:-}" ]]; then
+    stop_example
+    post_results "$(git branch --show-current)" "$(git rev-parse --short HEAD)" 0 \
+        "$XGPUI_TEST_RESULTS" "$XGPUI_TEST_REPORT" "$XGPUI_TEST_POST_TO" 274 "${XGPUI_TEST_LOG:-}"
+    rm -f "$XGPUI_TEST_REPORT" "$XGPUI_TEST_POST_TO"
+fi
