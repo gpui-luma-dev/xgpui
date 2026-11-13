@@ -23,6 +23,7 @@ cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- COMMAND [OPT
 | --- | --- |
 | `normalize` | `--check`, `--map PATH`; normalize captured manifests |
 | `build-manifests` | `--check`; generate the development workspace |
+| `release-flow` | `preflight\|check\|publish [--tag TAG]`; compact tagged publication workflow |
 | `preflight` | Read-only all-target manifest inventory as JSON |
 | `prepare-registry` | `--out NEW_DIR`, optional `--archives`; offline release plan / archive inspection |
 | `release-check` | Optional `--epoch TAG`, `--report PATH`, `--json`; read-only GitHub/crates.io version check |
@@ -41,9 +42,12 @@ cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- COMMAND [OPT
 | `review-notes` | `--report PATH --context MARKDOWN --output PATH`; format upstream review notes |
 | `check-local-dependencies` | `--metadata PATH`; check Cargo metadata identities against provenance |
 
-Run `just release-preflight` for a per-crate READY/PUBLISHED/BLOCKED summary
-using the no-upload registry dry-run. Dry-run defaults to a new directory under
-`../xgpui-release-artifacts/`; `--out NEW_DIR` overrides it.
+The tagged release workflow is three commands: `just release-preflight`,
+`just release-check`, then `just release-publish`. Each prints one compact
+per-crate table. Checks are remembered for the exact tag commit; publication
+requires a successful check and uploads in dependency order. The source is a
+tag snapshot, so the working checkout does not need to switch revisions.
+See the command guide for status meanings and `--tag` selection.
 
 All commands accept `--root PATH`. Output directories for package and registry
 verification must be new and outside the checkout. Release-check/preparation

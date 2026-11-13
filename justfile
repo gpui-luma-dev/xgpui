@@ -84,21 +84,21 @@ list-all-labs:
     App-level justfiles also list specialized captures, tests and diagnostics.
     LABS
 
-# Show publication readiness for every release crate without uploading.
+# List registry status for the latest release tag; no uploads.
 release-preflight *args:
-    cargo run --quiet --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode dry-run "$@"
+    @cargo run --quiet --locked --manifest-path tools/release-sync/Cargo.toml -- release-flow preflight "$@"
 
-# Check versions against completed release history; --epoch overrides the baseline.
+# Check that tag's packages/builds; no uploads.
 release-check *args:
-    cargo run --quiet --locked --manifest-path tools/release-sync/Cargo.toml -- release-check "$@"
+    @cargo run --quiet --locked --manifest-path tools/release-sync/Cargo.toml -- release-flow check "$@"
 
-# Same publication checks; optional --out must be new and outside the checkout.
+# Alias for release-check.
 release-dry-run *args:
-    cargo run --quiet --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode dry-run "$@"
+    @cargo run --quiet --locked --manifest-path tools/release-sync/Cargo.toml -- release-flow check "$@"
 
-# Publish the current clean commit; requires CARGO_REGISTRY_TOKEN. This uploads to crates.io.
+# Publish the checked tag in dependency order; requires CARGO_REGISTRY_TOKEN.
 release-publish *args:
-    cargo run --quiet --locked --manifest-path tools/release-sync/Cargo.toml -- registry-release --mode publish --confirmation "publish $(git rev-parse HEAD)" "$@"
+    @cargo run --quiet --locked --manifest-path tools/release-sync/Cargo.toml -- release-flow publish "$@"
 
 # Preview all ignored Cargo outputs, including standalone crates and old app paths.
 clean-preview:

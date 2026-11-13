@@ -417,16 +417,16 @@ fn transition(report: &mut Json, driver: &mut impl Driver) -> Result<()> {
             .any(|r| r["status"] == "version-conflict"),
         "Bump versions with changed published content before any upload"
     );
-    if mode == "plan" {
-        report["status"] = json!("planned");
-        return Ok(());
-    }
     for r in rows(&report["packages"]) {
         ensure!(
             r["status"] == "already-published" || allowed(&r["publish_policy"]),
             "{}: crates.io publication disabled in manifest",
             str_at(r, "name")
         );
+    }
+    if mode == "plan" {
+        report["status"] = json!("planned");
+        return Ok(());
     }
     for i in 0..count {
         if report["packages"][i]["status"] == "already-published" {
@@ -496,17 +496,49 @@ pub(super) fn cli(root: &Path, o: &Options) -> Result<()> {
             SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
         ));
     let out = outside(root, o.get("--out").map(Path::new).unwrap_or(&default_out))?;
-    let commit = git(root, &["rev-parse", "HEAD"])?;
+    let commit = match o.get("--tag") {
+        Some(tag) => git(
+            root,
+            &[
+                "rev-parse",
+                "--verify",
+                &format!("refs/tags/{tag}^{{commit}}"),
+            ],
+        )?,
+        None => git(root, &["rev-parse", "HEAD"])?,
+    };
     let token = std::env::var("CARGO_REGISTRY_TOKEN").unwrap_or_default();
     publication_guard(mode, o.get("--confirmation").unwrap_or(""), &commit, &token)?;
-    ensure!(
-        git(root, &["status", "--porcelain"])?.is_empty(),
-        "Release source must be a clean commit"
-    );
-    let plan = inventory::plan(root)?;
+    if o.get("--tag").is_none() {
+        ensure!(
+            git(root, &["status", "--porcelain"])?.is_empty(),
+            "Release source must be a clean commit"
+        );
+    }
     ensure!(!out.exists(), "Output already exists");
     fs::create_dir_all(&out)?;
-    let mut report = json!({"schema_version":1,"source_commit":commit,"mode":mode,"uploads_enabled":mode=="publish","release_ready":false,"started_at":now(),"packages":plan["packages"]});
+    let source = if o.get("--tag").is_some() {
+        let snapshot = out.join("source");
+        fs::create_dir(&snapshot)?;
+        let archive = out.join("source.tar");
+        git(
+            root,
+            &[
+                "archive",
+                "--format=tar",
+                "--output",
+                archive.to_str().context("Non-UTF8 output path")?,
+                &commit,
+            ],
+        )?;
+        tar::Archive::new(fs::File::open(&archive)?).unpack(&snapshot)?;
+        fs::remove_file(archive)?;
+        snapshot
+    } else {
+        root.to_owned()
+    };
+    let plan = inventory::plan(&source)?;
+    let mut report = json!({"schema_version":1,"source_commit":commit,"source_tag":o.get("--tag"),"mode":mode,"uploads_enabled":mode=="publish","release_ready":false,"started_at":now(),"packages":plan["packages"]});
     let mut driver = Registry {
         out: &out,
         token: token.clone(),
@@ -514,7 +546,7 @@ pub(super) fn cli(root: &Path, o: &Options) -> Result<()> {
     driver.save(&report)?;
     let result = (|| {
         for dir in ["gpui/crates", "extensions/crates"] {
-            copy_tree(&root.join(dir), &out.join("staged").join(dir))?;
+            copy_tree(&source.join(dir), &out.join("staged").join(dir))?;
         }
         fs::create_dir(out.join("prepared"))?;
         transition(&mut report, &mut driver)
@@ -530,9 +562,154 @@ pub(super) fn cli(root: &Path, o: &Options) -> Result<()> {
     }
     report["finished_at"] = json!(now());
     driver.save(&report)?;
-    print!("{}", publication_summary(&report));
-    println!("Report: {}", out.join("report.json").display());
+    if !o.has("--compact") {
+        print!("{}", publication_summary(&report));
+        println!("Report: {}", out.join("report.json").display());
+    }
     result
+}
+
+fn require_stage(report: &Json, commit: &str, stage: &str) -> Result<()> {
+    let expected = if stage == "preflight" {
+        "planned"
+    } else {
+        "dry-run-complete"
+    };
+    ensure!(
+        report["source_commit"] == commit && report["status"] == expected,
+        "Run release-{stage} successfully for this exact tag first"
+    );
+    Ok(())
+}
+
+pub(super) fn flow(root: &Path, args: &[String]) -> Result<()> {
+    ensure!(
+        args.len() == 2 || (args.len() == 4 && args[2] == "--tag"),
+        "Use release-flow preflight|check|publish [--tag TAG]"
+    );
+    let options = Options(args);
+    let stage = args.get(1).map(String::as_str).unwrap_or("");
+    let mode = match stage {
+        "preflight" => "plan",
+        "check" => "dry-run",
+        "publish" => "publish",
+        _ => bail!("Use release-flow preflight|check|publish [--tag TAG]"),
+    };
+    let tag = match options.get("--tag") {
+        Some(tag) => tag.to_owned(),
+        None => git(
+            root,
+            &[
+                "describe",
+                "--tags",
+                "--match",
+                "release-*",
+                "--abbrev=0",
+                "HEAD",
+            ],
+        )?,
+    };
+    let commit = git(
+        root,
+        &[
+            "rev-parse",
+            "--verify",
+            &format!("refs/tags/{tag}^{{commit}}"),
+        ],
+    )?;
+    let state = root
+        .parent()
+        .context("Repository has no parent directory")?
+        .join("xgpui-release-artifacts")
+        .join(&commit);
+    let previous = match stage {
+        "check" => Some("preflight"),
+        "publish" => Some("check"),
+        _ => None,
+    };
+    if let Some(previous) = previous {
+        let report = read_json(state.join(format!("{previous}.json")))
+            .with_context(|| format!("Run just release-{previous} for {tag} first"))?;
+        require_stage(&report, &commit, previous)?;
+    }
+    let out = state.join(format!(
+        "{stage}-{}",
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+    ));
+    let mut command = vec![
+        "registry-release".into(),
+        "--mode".into(),
+        mode.into(),
+        "--tag".into(),
+        tag.clone(),
+        "--out".into(),
+        out.to_string_lossy().into_owned(),
+        "--compact".into(),
+    ];
+    if stage == "publish" {
+        command.extend(["--confirmation".into(), format!("publish {commit}")]);
+    }
+    println!("Release: {tag}\n");
+    let result = cli(root, &Options(&command));
+    if out.join("report.json").exists() {
+        let report = read_json(out.join("report.json"))?;
+        print!("{}", stage_summary(&report, stage));
+        if result.is_ok() {
+            write_json(state.join(format!("{stage}.json")), &report)?;
+        }
+        if result.is_err() {
+            eprintln!("Details: {}", out.join("report.json").display());
+        }
+    }
+    result
+}
+
+fn stage_summary(report: &Json, stage: &str) -> String {
+    let mut text = format!("{:<25} {:<10} STATUS\n", "CRATE", "VERSION");
+    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for row in rows(&report["packages"]) {
+        let (label, detail) = match str_at(row, "status") {
+            "already-published" => ("published", String::new()),
+            "published-verified" => ("uploaded", String::new()),
+            "publish-needed" if stage == "preflight" => ("ready", String::new()),
+            "verified-not-uploaded" => ("passed", String::new()),
+            "blocked-unpublished-dependencies" => (
+                "waiting",
+                format!(
+                    " — {}",
+                    rows(&row["blocked_by"])
+                        .iter()
+                        .filter_map(Json::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            ),
+            "version-conflict" => ("conflict", " — bump version".into()),
+            _ => ("unchecked", String::new()),
+        };
+        *counts.entry(label).or_default() += 1;
+        text.push_str(&format!(
+            "{:<25} {:<10} {label}{detail}\n",
+            str_at(row, "name"),
+            str_at(row, "version")
+        ));
+    }
+    let summary = counts
+        .iter()
+        .map(|(label, count)| format!("{count} {label}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let failed = report["status"] == "failed"
+        || counts.contains_key("conflict")
+        || counts.contains_key("unchecked");
+    text.push_str(&format!(
+        "\n{stage}: {} — {summary}\n",
+        if failed { "FAILED" } else { "PASS" }
+    ));
+    if counts.contains_key("waiting") {
+        text.push_str("Waiting crates are checked again during publication, after their release dependencies upload.\n");
+    }
+    text
 }
 
 fn publication_summary(report: &Json) -> String {
@@ -820,6 +997,47 @@ pub(super) mod tests {
 #[cfg(test)]
 mod retry_regressions {
     use super::*;
+    #[test]
+    fn release_stages_require_successful_evidence_for_the_same_commit() {
+        assert!(
+            require_stage(
+                &json!({"source_commit":"one","status":"planned"}),
+                "one",
+                "preflight"
+            )
+            .is_ok()
+        );
+        assert!(
+            require_stage(
+                &json!({"source_commit":"one","status":"dry-run-complete"}),
+                "one",
+                "check"
+            )
+            .is_ok()
+        );
+        for report in [
+            json!({"source_commit":"other","status":"dry-run-complete"}),
+            json!({"source_commit":"one","status":"failed"}),
+            json!({"source_commit":"one","status":"planned"}),
+        ] {
+            assert!(require_stage(&report, "one", "check").is_err());
+        }
+    }
+    #[test]
+    fn stage_tables_distinguish_available_versions_from_checked_builds() {
+        let mut report = json!({"status":"planned","packages":[
+            {"name":"core","version":"2.0.0","status":"publish-needed"},
+            {"name":"extension","version":"1.0.0","status":"already-published"}
+        ]});
+        let preflight = stage_summary(&report, "preflight");
+        assert!(preflight.contains("preflight: PASS — 1 published, 1 ready"));
+        assert!(stage_summary(&report, "check").contains("check: FAILED"));
+        report["packages"][0]["status"] = json!("blocked-unpublished-dependencies");
+        report["packages"][0]["blocked_by"] = json!(["macros"]);
+        let check = stage_summary(&report, "check");
+        assert!(check.contains("waiting — macros"));
+        assert!(check.contains("checked again during publication"));
+    }
     #[test]
     fn publication_summary_includes_every_crate_and_names_blockers() {
         let report = json!({"packages":[
