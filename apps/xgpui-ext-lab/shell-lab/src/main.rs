@@ -177,11 +177,12 @@ fn control_artwork(state: &ShellControlState, filled: bool) -> AnyElement {
     } else {
         let rest = if dark { 0x4a4a4a } else { 0xdadada };
         let hover = if dark { 0x5e5e5e } else { 0xc8c8c8 };
-        let pressed = if dark { 0x707070 } else { 0xb4b4b4 };
+        let pressed = if dark { 0x8a8a8a } else { 0x9a9a9a };
         let circle = match (filled, state.hovered, state.pressed) {
             (_, _, true) => Some(pressed),
             (_, true, _) => Some(hover),
-            (true, _, _) => Some(rest),
+            // Inactive windows keep only the icon, like native caption buttons.
+            (true, _, _) if state.window_active => Some(rest),
             _ => None,
         };
         (circle, colors.text)

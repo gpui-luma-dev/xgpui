@@ -625,9 +625,13 @@ fn with_control_behavior(
         })
         .when(interactive, |element| {
             element
-                .on_click(move |_, window, cx| {
-                    cx.stop_propagation();
-                    activate_control(button, window);
+                // On Windows a pointer press on a caption area is handled by the
+                // platform (min/max/close, Snap Layouts), like native caption buttons.
+                .when(!NATIVE_CAPTION_CLICKS, |element| {
+                    element.on_click(move |_, window, cx| {
+                        cx.stop_propagation();
+                        activate_control(button, window);
+                    })
                 })
                 .on_key_down(move |event, window, cx| {
                     if activation_key(event) {
@@ -640,6 +644,10 @@ fn with_control_behavior(
                 })
         })
 }
+
+/// Windows routes pointer presses on caption areas to its own caption-button
+/// handling, and its caption buttons are not keyboard tab stops.
+const NATIVE_CAPTION_CLICKS: bool = cfg!(target_os = "windows");
 
 /// Windows 11 shows its Snap Layouts flyout over a hovered Maximize control; a
 /// tooltip there would cover it.
@@ -684,7 +692,7 @@ fn presented_control(
             |_, cx| ControlInteraction {
                 hovered: false,
                 pressed: false,
-                focus: cx.focus_handle().tab_stop(true),
+                focus: cx.focus_handle().tab_stop(!NATIVE_CAPTION_CLICKS),
             },
         )
     });
@@ -764,8 +772,11 @@ fn presented_control(
                 })
             })
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                // Never let a control press start a window drag.
-                cx.stop_propagation();
+                // Never let a control press start a window drag. On Windows the
+                // press must reach the platform's caption-button handling.
+                if !NATIVE_CAPTION_CLICKS {
+                    cx.stop_propagation();
+                }
                 down_state.update(cx, |state, cx| {
                     state.pressed = true;
                     cx.notify();
@@ -811,37 +822,47 @@ fn builtin_control(
         button,
         interactive,
     )
-    .child(if button == WindowButton::Close {
-        // Draw around the geometric center, independent of font baselines.
-        canvas(
-            |_, _, _| (),
-            move |bounds, _, window, _| {
-                let margin = px(2. * scale);
-                let start = bounds.origin + point(margin, margin);
-                let end = bounds.bottom_right() - point(margin, margin);
-                for (a, b) in [(start, end), (point(start.x, end.y), point(end.x, start.y))] {
-                    let mut path = PathBuilder::stroke(px(2. * scale));
-                    path.move_to(a);
-                    path.line_to(b);
-                    if let Ok(path) = path.build() {
-                        window.paint_path(path, rgb(palette.text));
-                    }
+    .child(builtin_symbol(
+        shell_control(button, maximized),
+        scale,
+        palette.text,
+    ))
+    .into_any_element()
+}
+
+/// The built-in control symbols, drawn as vectors in one shared 10px box so all
+/// four have the same visual size whatever fonts the system has.
+fn builtin_symbol(control: ShellControl, scale: f32, color: u32) -> AnyElement {
+    let side = px(10. * scale);
+    canvas(
+        |_, _, _| (),
+        move |bounds, _, window, _| {
+            let unit = |x: f32, y: f32| bounds.origin + point(side * (x / 10.), side * (y / 10.));
+            let lines: &[&[(f32, f32)]] = match control {
+                ShellControl::Minimize => &[&[(0., 5.), (10., 5.)]],
+                ShellControl::Maximize => {
+                    &[&[(0., 0.), (10., 0.), (10., 10.), (0., 10.), (0., 0.)]]
                 }
-            },
-        )
-        .size(px(20. * scale))
-        .into_any_element()
-    } else {
-        div()
-            .font(gpui::font(".SystemUIFont"))
-            .text_size(px(14. * scale))
-            .child(match button {
-                WindowButton::Minimize => "−",
-                WindowButton::Maximize if maximized => "▣",
-                _ => "□",
-            })
-            .into_any_element()
-    })
+                // Front window, then the visible edges of the one behind it.
+                ShellControl::Restore => &[
+                    &[(0., 2.5), (7.5, 2.5), (7.5, 10.), (0., 10.), (0., 2.5)],
+                    &[(2.5, 2.5), (2.5, 0.), (10., 0.), (10., 7.5), (7.5, 7.5)],
+                ],
+                ShellControl::Close => &[&[(0., 0.), (10., 10.)], &[(0., 10.), (10., 0.)]],
+            };
+            for polyline in lines {
+                let mut path = PathBuilder::stroke(px(1.25 * scale));
+                path.move_to(unit(polyline[0].0, polyline[0].1));
+                for &(x, y) in &polyline[1..] {
+                    path.line_to(unit(x, y));
+                }
+                if let Ok(path) = path.build() {
+                    window.paint_path(path, rgb(color));
+                }
+            }
+        },
+    )
+    .size(side)
     .into_any_element()
 }
 
@@ -1162,7 +1183,9 @@ mod frame {
             } else {
                 format!("Preview: {label}")
             })
-            .when(interactive, |s| s.focusable().tab_stop(true))
+            .when(interactive, |s| {
+                s.focusable().tab_stop(!NATIVE_CAPTION_CLICKS)
+            })
             .size(size)
             .flex_none()
             .flex()
@@ -1183,7 +1206,11 @@ mod frame {
                     !(cfg!(target_os = "windows") && id == WindowButton::Maximize.id()),
                     |s| s.tooltip(move |_, cx| cx.new(|_| ControlTooltip(label)).into()),
                 )
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                    if !NATIVE_CAPTION_CLICKS {
+                        cx.stop_propagation()
+                    }
+                })
             })
     }
 

@@ -56,7 +56,7 @@ step "Click 'SVG on filled circle' in the preview section." \
      "Both the lab window's real title-bar controls and the preview's controls switch to small icons on grey filled circles. Button order and the set of buttons don't change."
 
 step "Hover each real title-bar control in turn, then press and hold the mouse on Close without releasing, then drag off it and release." \
-     "Each circle darkens on hover and darkens more while pressed. Releasing outside Close does not close the window, and the window never starts moving."
+     "Each circle darkens on hover and is clearly darker again while pressed. Releasing outside Close does not close the window, and the window never starts moving."
 
 step "Click the real Maximize control, then click it again." \
      "The window maximizes and its icon changes to the two-square Restore icon; the second click restores it and the icon changes back."
@@ -64,11 +64,16 @@ step "Click the real Maximize control, then click it again." \
 step "Click the real Minimize control, then restore the window from the taskbar or dock." \
      "The window minimizes and restores normally."
 
-step "Click an empty part of the lab, then press Tab repeatedly (Shift-Tab goes back) until the real title-bar Maximize control has a focus ring. Press Enter, then Enter again." \
-     "Tab moves a visible focus ring through the lab's buttons and the title-bar controls. The first Enter maximizes the window, the second restores it."
+if [[ $platform == windows ]]; then
+    step "Click an empty part of the lab, then press Tab repeatedly (Shift-Tab goes back)." \
+         "A visible focus ring moves through the lab's buttons. It never lands on the title-bar minimize, maximize or close controls, as with native Windows title bars."
+else
+    step "Click an empty part of the lab, then press Tab repeatedly (Shift-Tab goes back) until the real title-bar Maximize control has a focus ring. Press Enter, then Enter again." \
+         "Tab moves a visible focus ring through the lab's buttons and the title-bar controls. The first Enter maximizes the window, the second restores it."
+fi
 
 step "Switch to another app so the lab window is inactive." \
-     "The control circles and icons fade while the window is inactive and return to full strength when you switch back."
+     "While the window is inactive the circles disappear and only faded icons remain; switching back brings the circles back."
 
 step "Click 'SVG, no circle'." \
      "The real and preview controls show the same icons without circles; a circle appears only while hovering or pressing a control."
@@ -77,7 +82,7 @@ step "In the preview section, turn on 'Simulate Close hover', then click the pre
      "The preview's Close shows its hover circle. Clicking any preview control does nothing to the real window."
 
 step "Click 'Built-in controls'." \
-     "The real and preview controls return to the built-in X and symbols, exactly as before."
+     "The real and preview controls return to the built-in symbols: thin-line minimize, maximize and close, all the same size."
 
 if [[ $platform == windows ]]; then
     step "With 'SVG on filled circle' selected, hover the real Maximize control and wait about a second." \
@@ -91,7 +96,7 @@ step "Choose a few things (for example 'Dark', 'SVG, no circle' and 'High contra
      "Every choice returns to its default: the real title bar shows the built-in controls again and the preview is back to Floating, native appearance and platform buttons."
 
 step "Click 'SVG on filled circle', then close the window with the real Close control." \
-     "The window closes on the first click."
+     "The window closes on the first click, and the terminal shows no 'window not found' error."
 
 if [[ -n "${self_post:-}" ]]; then
     stop_example
