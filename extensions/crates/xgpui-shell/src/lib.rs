@@ -1752,9 +1752,12 @@ mod presenter_tests {
         // The test window panics on start_window_move, so a drag would fail here.
         visual.simulate_click(close.center(), Modifiers::default());
         cx.run_until_parked();
-        assert!(
+        // On Windows the press is left to the platform's caption-button handling,
+        // which the test platform doesn't have, so the shell must not close it.
+        assert_eq!(
             handle.update(cx, |_, _, _| ()).is_err(),
-            "close removed the window"
+            !NATIVE_CAPTION_CLICKS,
+            "the shell closes on click everywhere except Windows"
         );
     }
 
