@@ -114,6 +114,13 @@ jobs:
       - name: macOS backend tests (display link, keyboard, window)
         if: ${{ !cancelled() }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-macos --lib
+      - name: Keep the runner's display awake for the real-window probe
+        if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/macos_frames.rs') != '' }}
+        # macOS stops display-link frames for windows that aren't visible; an idle
+        # runner display made the probe intermittently see 0 frames.
+        run: |
+          sudo pmset -a displaysleep 0 sleep 0 || true
+          caffeinate -u -t 2 || true
       - name: Real-window frame probe (when present on this branch)
         if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/macos_frames.rs') != '' }}
-        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features macos-window-tests --test macos_frames
+        run: caffeinate -d -i -u cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features macos-window-tests --test macos_frames
