@@ -1,0 +1,1772 @@
+{
+  "base_commit": "c0f8d1cbdfe80d815819649f1a6f07f9442277d5",
+  "entries": [
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:e3df2e85857fbb1c0c1bcc8ac80af99aefc63c497d74d34afdbce79a476532c4",
+      "kind": "cargo",
+      "local": "file:51d34b5a626c2610e9675fe190b2d84595682fd83d9a5fd7bc4a8523f3de70a1",
+      "path": "gpui/crates/gpui-apple/Cargo.toml",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:0d1f9acb9356d67758726ccd8643327f4021769d5a233ba51fb23f4d73c64d6c",
+      "kind": "metadata",
+      "local": "file:4af789bd949c8d2961d3944521c37966abb3c3ef67039a6348ce12ca1ca72f8b",
+      "path": "gpui/crates/gpui-apple/README.md",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "added",
+      "downstream_overlap": false,
+      "incoming": "file:8a467ad5a1941dc7c9cebaee34e3ed9364a73b48393034e363e4b528bd711d04",
+      "kind": "code",
+      "local": null,
+      "path": "gpui/crates/gpui-apple/assets/fonts/lilex/Lilex-Regular.ttf",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "added",
+      "downstream_overlap": false,
+      "incoming": "file:a356708a399e3f54b937ec7d9b722c26dabba21365b60f95c56eb7ebca0dee40",
+      "kind": "code",
+      "local": null,
+      "path": "gpui/crates/gpui-apple/assets/fonts/lilex/OFL.txt",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:c28a238493c9fa423d860ca46b2e4741925a9d81f55671eeda1389408f2b9dd5",
+      "kind": "code",
+      "local": "file:900fc506a964cda44ed0cf1f97c01ff28d7268c87c9eeadbf7a4f1bb50e33edd",
+      "path": "gpui/crates/gpui-apple/gpui/src/geometry.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:fcd613681b31b52318f6349e5f63fcf0c08748705b8d71673891df0c303e8756",
+      "kind": "code",
+      "local": "file:564dda85b7e7fbdbd98965aaae922eb264b4341f894e449cb0a02d593a18dba9",
+      "path": "gpui/crates/gpui-apple/gpui/src/platform.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:947af1758b22997a3a2bc18ee1b3512402ecf8c29b58d9c648ef7521ca3dd8d9",
+      "kind": "code",
+      "local": "file:80cbc12c11f5cb20e089254224cbf284294b6072e813569cb08e5d0f0953e914",
+      "path": "gpui/crates/gpui-apple/gpui/src/window.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:3e80cb064a0489b516be7e4fda71b0ef57f2b419cf63074e62b27635e47d9e07",
+      "path": "gpui/crates/gpui-apple/src/custom_draw.metal",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:5a90166a023b5321719f91dc0264ebfaec17ec854f6258273b5e9d4e444a8d03",
+      "path": "gpui/crates/gpui-apple/src/custom_draw.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:f2ce2138e743a332adc9132634953034ce6d6b04ff50803e23b1b5f546c08fea",
+      "path": "gpui/crates/gpui-apple/src/custom_draw/core_video.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:bca7b19c4969e612619c7ffe40ae26a914b706311d194a26be8b475c7f49a913",
+      "path": "gpui/crates/gpui-apple/src/custom_draw/coverage_cache.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:03e12a8d4552b095055071be5993975c7130bcf8b47d242a2a8218920d0401a7",
+      "path": "gpui/crates/gpui-apple/src/custom_draw/coverage_cache/tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:422a02072a03724b178aa3a0a6cb609a1a383a6716375f04240f0f738c5c776c",
+      "path": "gpui/crates/gpui-apple/src/custom_draw/submission_tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:8dba432c65da8563b5a8146d6a5910188d506c5de5bc3d8ff1865f2f9717260b",
+      "path": "gpui/crates/gpui-apple/src/custom_draw/wide_output_tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "added",
+      "downstream_overlap": false,
+      "incoming": "file:1a1776d9a8d5a0083ec07faced6ba16a9a0fa833c256ae2888d4cc784f7e356f",
+      "kind": "code",
+      "local": null,
+      "path": "gpui/crates/gpui-apple/src/display_link.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:699d1bb1676ad55b8edca5020896b00c31c3de901a677227a102cdfcb5960563",
+      "kind": "code",
+      "local": "file:72fd12c5f5c1d1e8acf07072acaf6318d05e442575f805b6222c81d127faf115",
+      "path": "gpui/crates/gpui-apple/src/gpui_apple.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:2b0c244c09caca867586c39c1c89ead4a781ef3ba18e759e35b0796fb209e7b9",
+      "path": "gpui/crates/gpui-apple/src/metal.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:0889f2ff0ec3091bc0749ea629b4c87eab2c6253f84cb459693895a48dcb1e73",
+      "kind": "code",
+      "local": "file:f5fd5f41f327c3c6513cdf0085005d8d40e176f0a16b989353d1d61de709daf8",
+      "path": "gpui/crates/gpui-apple/src/metal_atlas.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:a1b4fa7dcdfe636b0cd311bf7e0d20b3e05399756be8021fb0a2872dda042c99",
+      "kind": "code",
+      "local": "file:8310ff77dd7777999718d4a4e454b674ac24d93466c68081046a71bc11d73371",
+      "path": "gpui/crates/gpui-apple/src/metal_renderer.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:0821a6a75095be13f97180f14becd50bd3a46b29d3d25b39d09d96da82c5ec47",
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/backdrop.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:58bf281e4ddf1983a3ce2f17b02a63b10e69889763816833a79e4a63917547bd",
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/backdrop/groups.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:a4972f4b702c6c371b506de06efe4aef5a174c27a49932a919a8b6001e5479d8",
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/submission_tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:605e1e13af765724e5f50c71cb0a53bbcdaad487ff63c2104c7963babe89d9f4",
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr.metal",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:6e4c9adca50041dc8c29822ee765dce6c9a46c6a9d849904bdc25f74c291250c",
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:fa5c0f710c8428de57ff9b4535aad069a3e6efe14bafeb2988ff264ca627edfb",
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr/rec2020_reference.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:a1b39fbf81f31168a4475ff0a77c1046fc308a73cd9ede4c3f8b15489bd31cf4",
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr/tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:436647169d914d26092fcf3bfd4020a6638a97d1ea3b39466fd2d4641d1c219e",
+      "kind": "code",
+      "local": "file:f575d1f84e1c1b85de93648c22a13f961d88e140446b70f88e7733322def0a1f",
+      "path": "gpui/crates/gpui-apple/src/shaders.metal",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:60d24dc954844660db4d7e3800a6d194514ebdf250bc3d7fe716a043f9d46665",
+      "kind": "code",
+      "local": "file:ea21de1dc91e65004db0cab7a7d31131563b75b03968971d97700333778361ef",
+      "path": "gpui/crates/gpui-apple/src/text_system.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:3b8c53f202150a6151709c4414c703868a87716c88e882eabfaee19cc07aa821",
+      "kind": "cargo",
+      "local": "file:6664741c80d89c4939d20677b257d83d352ec2b749c1be631fa136421c062394",
+      "path": "gpui/crates/gpui-ios/Cargo.toml",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:f5dad57044ac261558b292ef07a8f32c23d4873c79870a43395916dd3c76bd41",
+      "kind": "metadata",
+      "local": "file:2e8673cb87db54f94dc3835bc2ba0894c18ddf9e20e6ef9292b29d159eec2736",
+      "path": "gpui/crates/gpui-ios/README.md",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "executable:08ca7551e7d21dce979374a106ffcd64216e545d87eee1c4ac88622b40eeb7e9",
+      "kind": "code",
+      "local": "executable:df760cd0eac27c53eb46ba26512e77ccdcb3767898492d7c2e0c23f3904989cf",
+      "path": "gpui/crates/gpui-ios/examples/ios/build-simulator.sh",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:d4d19c178f2989875eb8b04e9c3173cae4deb2563fca22f0b6825cc0e4c5d9ad",
+      "kind": "cargo",
+      "local": "file:6ccb6969afa9fbc828a61607eaf1f963a58452a7eaf35e37ca1c8682552b7feb",
+      "path": "gpui/crates/gpui-linux/Cargo.toml",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:20ec99d4c68ed7cdc0b306e43aa05da09e387eb7986054812427b2e1bd3a78df",
+      "kind": "metadata",
+      "local": "file:3f35ed3fcababc22bca481bc43c02ebfc34ce2222fb2f60b5896f71395c1dd8f",
+      "path": "gpui/crates/gpui-linux/README.md",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:3c4b0d62f5252bea02ea070cb71b81cc6dd790902b59d9f57850231dd2d5a88c",
+      "kind": "code",
+      "local": "file:f20bd644046fa9c8fb83105a874d60c79a2d2e3506017ed7e2197f3c452f1c59",
+      "path": "gpui/crates/gpui-linux/src/linux.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:e63bbcac047311ab939c53296db0f651ae9dba9b9014dd43ea3e6bb45c67cae4",
+      "path": "gpui/crates/gpui-linux/src/linux/desktop_settings.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:c7c7393d6440875dd66ed5674bc293469e3ce1b4705ab0592d70c46829075c07",
+      "path": "gpui/crates/gpui-linux/src/linux/gpu_recovery.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:ed51476a3dbf0842a27f6a0f3a0aac3d28d646b7e887cc201c0ee66b603bac13",
+      "kind": "code",
+      "local": "file:6b6bed2c8953358eb6568bd90e503159676dfd9969a83abec585c2f772264a64",
+      "path": "gpui/crates/gpui-linux/src/linux/platform.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:d8b52fcd37912d441ad1c9be3687422ccda2765e41ddc942b25400c89fd3cfe7",
+      "kind": "code",
+      "local": "file:4cbc5e70ce3c80d1c1407d5eec5b7d580fb3b394548c10a053aa5559da9caa2f",
+      "path": "gpui/crates/gpui-linux/src/linux/wayland.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:7629fdc041d402eef6461f2b25b30188e85eb2d7784ac9350ec8f1021dac873b",
+      "kind": "code",
+      "local": "file:64916c16c4b0acea45d80a0c317087dda735d83037bea4eead30e2768aa7df55",
+      "path": "gpui/crates/gpui-linux/src/linux/wayland/client.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:7623f86e78e9081a574c7994ae7bcc07d2b0c2bdea36c8440fc6efd822de7100",
+      "path": "gpui/crates/gpui-linux/src/linux/wayland/frame_diagnostics.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:fc066f931a7dd7ce91acedbed0756161f7a9917b9c67c2f4e722fb9f9551331c",
+      "kind": "code",
+      "local": "file:e45add908e937b0af6897e1a462357e0fc99dcc0c53c802d912c5659ffedc72c",
+      "path": "gpui/crates/gpui-linux/src/linux/wayland/serial.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:ca85aacd35b79e4d390711d6b770c426f1fd821ab12ed57bbe4bfe42217f6b02",
+      "kind": "code",
+      "local": "file:c9ff610a3aadc89f8c8870f550ff0f7b95ed5e64ea71bac67b06cdaa91ccaa0c",
+      "path": "gpui/crates/gpui-linux/src/linux/wayland/window.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:9312432f6a5cea2e816dea192395faf92fe8e88bc52d35e0eb13d090283fc6b4",
+      "kind": "code",
+      "local": "file:f29eeef88e8a8371f6ba5cf1a2a80f1c790efdf75c8a66e24a98630ee1ae04cc",
+      "path": "gpui/crates/gpui-linux/src/linux/x11/client.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:87b737ecda518123196c3f60369120c6a8fb8021b43a4830cc21bf7834eda438",
+      "kind": "code",
+      "local": "file:e50de0b4d506c6246f36204ce808034fef850b1ad6f913d7ef3acc50b85a95cb",
+      "path": "gpui/crates/gpui-linux/src/linux/x11/window.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:2e3a8eb44718dbd31b21fc368ad2f5c2105b340ef04f7e002ee0029adb9f3cc1",
+      "kind": "code",
+      "local": "file:9626d504328b30a7e6575db8da7455b187519e9631a3e4fce13f754816882c9e",
+      "path": "gpui/crates/gpui-linux/src/linux/xdg_desktop_portal.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:fa7f95e5085b0d06eef6a00113d1d3d4495e100a35d988f25f9d1ab2ebb03cbf",
+      "kind": "cargo",
+      "local": "file:0af64b2335e7dfdd8ed5ea3efa23d998336ea0610974fa2cec7f29679168ac89",
+      "path": "gpui/crates/gpui-macos/Cargo.toml",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:30b0f4df5e5fc459c6cd6a7a1195a331c33e23e26c8ed294996e6b933a0fda72",
+      "kind": "metadata",
+      "local": "file:638931213253aa588fa52b5ed7f39eee629f295d17d791361e3299b4ad6a61f9",
+      "path": "gpui/crates/gpui-macos/README.md",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:b74ca5ae9b60a0a585d1105a24ce2c238efc41ca14310a7509b51e93bcc57a5b",
+      "kind": "code",
+      "local": "file:088f3e0b8dd9b242a1f6c090a2c79ef081857cc917564673d61d84a48c6cf1cc",
+      "path": "gpui/crates/gpui-macos/src/display_link.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:6a017f020ba10396e1ef827a036a6181644f2fe62d3ac4a7721781e2f08feeaa",
+      "kind": "code",
+      "local": "file:9f70aa07612b9eaee7ff91817ab436138b9e63f9f68f55ab9b5fae498f008970",
+      "path": "gpui/crates/gpui-macos/src/keyboard.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:cb5079ced3a2a69e130c127a5c723228894d1b232c8d9c5ac4d35359b63c5292",
+      "kind": "code",
+      "local": "file:37257741f63e6070f607bd3a043fc2b5bfbd52f0d44198afb24bdd0d48b3324b",
+      "path": "gpui/crates/gpui-macos/src/pasteboard.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:f27de90e4e9ed878f4dec527f9b07c70e7b76931375de9e0a42219075ff37d39",
+      "kind": "code",
+      "local": "file:d268265d74227eaf00ec46765502e4cb624fd8fceafd65b3c4eba66a7f5490d0",
+      "path": "gpui/crates/gpui-macos/src/platform.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:73fce4ce13ef5f28d1424eabbbccd96e044e7cf81513a3e70993f5c92c32ad70",
+      "kind": "code",
+      "local": "file:d10033a856405f27b4cdf88792e49eb503bac978fcbe7db5a9240d555cd433d8",
+      "path": "gpui/crates/gpui-macos/src/window.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:d093e13b99258abdd3973c566a897325017b180014b53ac0eb8d6d082f575727",
+      "kind": "cargo",
+      "local": "file:ff5b0f1cd2fca651a7e5560a9179f131aee6ee348481707ef2e182b1b7a78d29",
+      "path": "gpui/crates/gpui-macros/Cargo.toml",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:4b4644a235f8a84baa5ac6f2c1cb61a3d3a026ff8668b49c5a582fba69b5c0f6",
+      "kind": "metadata",
+      "local": "file:d48fdb18b1386fe7caa2c65a45ea7d7e1c21e183baa76bd665181b996e0709fc",
+      "path": "gpui/crates/gpui-macros/README.md",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:e4b8b787313bbe973f39c6db6fdfd111dc9f386f21f013433bb0bf238c77abae",
+      "kind": "cargo",
+      "local": "file:6ffabfaa264cfae7fbde08b98cafffb47172a3bbb98bdc4597a7c7521acc1d1a",
+      "path": "gpui/crates/gpui-platform/Cargo.toml",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:bf4af976b88b394fadba10041e9c389521511fac37dc119b322c2ca07a56d951",
+      "kind": "metadata",
+      "local": "file:0322d1d2fbb5f610c91ca76d425277ea24c5c5e525ff81acaac5141e627d99bf",
+      "path": "gpui/crates/gpui-platform/README.md",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:1863bce6031605561447a73a145148a27b37556fe03c870e503f20da0968a3fc",
+      "kind": "code",
+      "local": "file:5a459b2766f9865a96e993ff43a357d5478cf794137dbe8e0a1a35b749960f4b",
+      "path": "gpui/crates/gpui-platform/benches/atlas_upload.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:e6b98a08fe04314d6d0c1a0068c8d8a7cef095588d8d79ffe788723b2d140ab4",
+      "path": "gpui/crates/gpui-platform/benches/focus_cleanup.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:fe2978276f855beec657e9eb5c39796d41387dac64a816049789d4d29c07f414",
+      "kind": "code",
+      "local": "file:01ca089360638e2f45d2a683ea116b89039f0c8fab660ff4db76ff8535015ced",
+      "path": "gpui/crates/gpui-platform/benches/inspector_render.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "added",
+      "downstream_overlap": false,
+      "incoming": "file:85c434697e35c6c5b61b9f9f327c581a1a0d92962709254e069e778031cc1802",
+      "kind": "code",
+      "local": null,
+      "path": "gpui/crates/gpui-platform/benches/primitives.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:77e7d3fc42e29a149bd2270c7488b57a2fb53f7104f53bd9684544fe52ec76f6",
+      "kind": "code",
+      "local": "file:79b787c287a9b23bbda245cf182c7f7aabfbf90366137205650eb760cbe2cbc8",
+      "path": "gpui/crates/gpui-platform/benches/randomized_element_tree.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:d9f9f29a11ed22efdd8cd260ff9582f53f9466064994340ff919be9ef706f075",
+      "kind": "code",
+      "local": "file:b7aea93a16fc55a6ec4e723c62f3911315024aba7a6c07b84c0aad84e734de1f",
+      "path": "gpui/crates/gpui-platform/src/gpui_platform.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:6a7d5347e4beece5fd9ab183eaf4b832ef3ffd5f5d3941df13f8615f76485701",
+      "kind": "cargo",
+      "local": "file:e2c1354021dd455ac28988676e305124613a87343225e10d2fd01238fb6903f1",
+      "path": "gpui/crates/gpui-web/Cargo.toml",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:e05dbad26110e1fe37a8bfea7a9d0dd41fb6e71e34fb57e52c56a27379ecd679",
+      "kind": "metadata",
+      "local": "file:17fc7cfe12a3380e91cfa30dd26e063c556f054712ac516adb7d8e99f2670701",
+      "path": "gpui/crates/gpui-web/README.md",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:0f2f201e48068c360437980b9da8973ca534fa301c70a31381bb734d93a399d0",
+      "kind": "cargo",
+      "local": "file:0690c552cf4332abbe750c8d2d25280695dce610364b596afe4f99a3def6b996",
+      "path": "gpui/crates/gpui-web/examples/hello_web/Cargo.toml",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:f83a7f6e55112d0d7a13aac16dabc0119f152779c782401372fa912666c9ca44",
+      "kind": "code",
+      "local": "file:222eae910dfbbfd0958ee33315292a95923e0151e7fefaa21cdb1a70a33689d1",
+      "path": "gpui/crates/gpui-web/examples/hello_web/http_client_test.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:f66c82eb5b0dff48621855c913372ae2869f3312076f81161884ed011501947f",
+      "kind": "code",
+      "local": "file:4b1cd1c0b44b447ef5aba0fcafadcbb49a533d40e537245e226e3544d0e788f2",
+      "path": "gpui/crates/gpui-web/examples/hello_web/index.html",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "added",
+      "downstream_overlap": true,
+      "incoming": "file:72779b118fbf15bb800c6dead09eb1630cdcfed3b983591631a9669f0248f805",
+      "kind": "code",
+      "local": null,
+      "path": "gpui/crates/gpui-web/examples/hello_web/test_canvas_fallback.mjs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "added",
+      "downstream_overlap": true,
+      "incoming": "file:fa9da7ed599a0658d9d06bfe72baad29d06203a5f31352b364b6f0b6c3ac2a62",
+      "kind": "code",
+      "local": null,
+      "path": "gpui/crates/gpui-web/examples/hello_web/test_http_client.mjs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "added",
+      "downstream_overlap": true,
+      "incoming": "file:eae8067a080a914a78fc7cb48aa615186b64030fb1938a92dcd3b3e67782685b",
+      "kind": "code",
+      "local": null,
+      "path": "gpui/crates/gpui-web/examples/hello_web/test_queue.mjs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:a39e66001519eecfca060b1ef721113cac34ad5c07bbecbe46cbb6da97998278",
+      "kind": "code",
+      "local": "file:2278e642e620a30605fe3ed8c391b0d94151ca79981fbd4c76a2bd61c06e8bb9",
+      "path": "gpui/crates/gpui-web/src/dispatcher.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:5d9e1594c1843b635acf9ae06f06fd4c17c1a08c6aea21193d6bc37cb1a28c2b",
+      "kind": "code",
+      "local": "file:06cabc3449fac1a8878d31b9b8bf01d097cb52ec8993c794dc221f9b848226da",
+      "path": "gpui/crates/gpui-web/src/http_client.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:b273d4b58c61902deb41c9e4193450a95627d1746bdb28d4e2f78403ad4a5a02",
+      "kind": "code",
+      "local": "file:cd049a650e8e70ea673ea0f76d0312ee6c77bcaffb0c486c987d4463e224610d",
+      "path": "gpui/crates/gpui-web/src/platform.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:50d2d9da4a628d4363264dee69ae7eb271655007ccd5ef1bfbdb88954315808f",
+      "kind": "code",
+      "local": "file:b0f186efd6b41cbf911bc23315260aa339a68be23860f600dab0cc18283c6841",
+      "path": "gpui/crates/gpui-web/src/text_system.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:6e7112aa514c609ac7b48035e1468a217219bc14f745c989c0bc5cffd4d5979b",
+      "kind": "cargo",
+      "local": "file:4cb74dd7ffd41742c100f2ac84a1b49793db4fa2dde5d601a560c0d28da163de",
+      "path": "gpui/crates/gpui-wgpu/Cargo.toml",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:88840018ec78fcee672f61a94b6297d9b8ec58e5b970f8e34d625f5c1e7e2318",
+      "kind": "metadata",
+      "local": "file:df653e0baade81f15a2d207b6094bcd014559e11b72726234829aa0a4b06e663",
+      "path": "gpui/crates/gpui-wgpu/README.md",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:2758e283fc2633cbaf04041b0c321e90f24da4c7c23c1bf3d6b79e8e61ebd7ea",
+      "path": "gpui/crates/gpui-wgpu/src/backdrop.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:d4c474935fe8d50edba9a116687e92a045a527d42c01abbb9a60d1711f970681",
+      "path": "gpui/crates/gpui-wgpu/src/backdrop/groups.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:78b726f1dd42938d8d3533ba0c9faf780e2eb72e43037f2b9c22196e8ed57898",
+      "kind": "code",
+      "local": "file:76306c25b8a139399e047f7217aabc8fadf5b500924045a2f8c4098fd3f03033",
+      "path": "gpui/crates/gpui-wgpu/src/cosmic_text_system.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:b330c12eafae5b48e4be888fbdc06c77b46b3b0d75739037012f6ad0878a4bb5",
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:f03e2718462d90448df3d448c6f483eb663b0b45f67154129fa67ed629915ff1",
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw.wgsl",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:bca7b19c4969e612619c7ffe40ae26a914b706311d194a26be8b475c7f49a913",
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/coverage_cache.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:03e12a8d4552b095055071be5993975c7130bcf8b47d242a2a8218920d0401a7",
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/coverage_cache/tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:3cb5a7055ce40daf8a19d2ba9730f9cba8c2d2c234b1a0152379523eb094fa82",
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/dma_buf.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:cca35b7ca02489a4689b2f74ac70105894fa17f3fdce5b3b07f21c25abd6c4e2",
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/dma_buf/native_tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:d69a0573c0e6a09e1152dd65d8460f8e06750b88ee91ae79d7686543ab6121db",
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:b51033ac07d187c89c4079f208d3a557c6fff309b1cd403927ce8974e795afa0",
+      "kind": "code",
+      "local": "file:a178ff4ad2321979853d49ad5e5a96c5c8e7ceb1fd1c6e89dbfbac1e8fa7055e",
+      "path": "gpui/crates/gpui-wgpu/src/gpui_wgpu.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:b91ea9e7493718bf402bf9ef8bd7b58af148ec315df7bef3c186e778630966f9",
+      "path": "gpui/crates/gpui-wgpu/src/surface_frame.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:4d2c8f0d5f2f0a8a6a26764bd894cd59b407b1b9dcc1a8c2bcde5b784827569b",
+      "kind": "code",
+      "local": "file:afa8e25f1b3274d9a97400af59e0482ed8f05ac833cb8fddb6cc366671c50c6d",
+      "path": "gpui/crates/gpui-wgpu/src/wgpu_context.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:de462d75db1bbca68a6e49b85304502b643c5779e28806040adb3804e468eb5f",
+      "kind": "code",
+      "local": "file:3b8889407ce340325ffdd144ddaef3412bd8e89bd2cc20198c4bcb61648839b6",
+      "path": "gpui/crates/gpui-wgpu/src/wgpu_renderer.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:68dbf4b37fd4b47110535ec97850e0d1d0fb1d2be237bdda5e5c60faa191f20f",
+      "kind": "cargo",
+      "local": "file:c2b8aa1dc3836340d9ef2a6540bd626d086179c89e10375ca8793b276bfd58c1",
+      "path": "gpui/crates/gpui-windows/Cargo.toml",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:434dd2d594a8f2761167ae8d00b841ecca50d41991d397ddbcc319b0e774ee79",
+      "kind": "metadata",
+      "local": "file:96a008437dd16f2bae19f70a9d41be019517f3af4b078f8e543579f5d059df60",
+      "path": "gpui/crates/gpui-windows/README.md",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:4f215cd0c2b7c973bc5c98d270a5e2796fcb072cff760d3e487b90246edcbd0f",
+      "path": "gpui/crates/gpui-windows/src/custom_draw.hlsl",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:134692c1c0df0998d72f2409d8b149c2ad86185695525ff480d24041138a111e",
+      "path": "gpui/crates/gpui-windows/src/custom_draw.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:8e5983edd1d63aec93fd3035fff19ceb24827af7c6b26859ad455b09c3a69fc7",
+      "path": "gpui/crates/gpui-windows/src/custom_draw/backdrop.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:bd6cc054c219a082a4672746992624ad7ce1a445e793e98668a5bb5a21a5c9a7",
+      "path": "gpui/crates/gpui-windows/src/custom_draw/backdrop/groups.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:bca7b19c4969e612619c7ffe40ae26a914b706311d194a26be8b475c7f49a913",
+      "path": "gpui/crates/gpui-windows/src/custom_draw/coverage_cache.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:03e12a8d4552b095055071be5993975c7130bcf8b47d242a2a8218920d0401a7",
+      "path": "gpui/crates/gpui-windows/src/custom_draw/coverage_cache/tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:06bcc6355c296218e9feea4c8e4ad75172cab4393823f8222fcfe39e11ebef4b",
+      "path": "gpui/crates/gpui-windows/src/custom_draw/dxgi.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:1eb84015c8c37d6ead49d2ad8050d8a3ef782319d25c3d4d0579a60f195384b3",
+      "path": "gpui/crates/gpui-windows/src/custom_draw/instanced.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:4da866bf433c0c09820ed992947fc1608e633bbd117b57aee560bf3b6d2b4f2c",
+      "path": "gpui/crates/gpui-windows/src/custom_draw/tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:497e622d364ee26cabc735f7db1399a56298b0c7a129bedc8380a1227a244d16",
+      "path": "gpui/crates/gpui-windows/src/custom_draw/wide_output.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:ea527d4f8f1fb7b1fb991163431ba01ee26a0d47726bda7535210b52cc6a5390",
+      "path": "gpui/crates/gpui-windows/src/custom_draw/wide_output/tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:afc643bafd4549b13b87858072da68ed34753da272ec1d547dcabf79438d1692",
+      "kind": "code",
+      "local": "file:61f5f4495bcb3c60f39f41fb927819aefc62626879d87db14946927f277ff0ae",
+      "path": "gpui/crates/gpui-windows/src/direct_write.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:83372170f6225db45033473d118fc43708942ec9687467de09e2b5215c835cf1",
+      "kind": "code",
+      "local": "file:09ca04e1d394cf6d98e5303eea78c35fe4da550d20b8f97aaf4bf46a59adeb45",
+      "path": "gpui/crates/gpui-windows/src/directx_devices.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:36305c79e4f992ca5de4dc8e5dce98ab9b2db376d80b7005fcd7428408d91551",
+      "kind": "code",
+      "local": "file:1e447c596a3704c267ef3f9df485f6ff16780642c3a84b88bf7b5cd2c2307005",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:86fcf0370b526a83d915340d2dd167f75b86b59070435f7d107880f2d0480326",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/color_presentation.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:00225d8de2c5b0ad5a17c38a5f5c8785d0a759aa069be99fb1b1bb06b8f123b9",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/color_presentation/policy.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:bc379b6c0574fdba62d42712dc2612a84663b3efcb99bc90c73d27fdfa880661",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/color_presentation/tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:5ff633ce3efc8d3a6bd9e7425f300c9b474630e88dcfca0a25bec6d60e8692ca",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/device_failure_tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:e3afed2c648306925329c053ea72d8878b8d368aaa7530447f044348b0f7e5d8",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/headless_retirement_tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:57c7c0357a0fd6ccb540a65352075b6f23522c3224ae283a0c9122aa0b6048ef",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/retirement.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:81332ac252b54955175a6bda71d676e7b6edc6e3b80fd520c75a7db82aedc413",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr.hlsl",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:d7a20f6b49f9f19e3aad19b525f2a4ac5f943b660b6a1b06671d68546c1c28fb",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:41ad48f3497902f990c3807dd072ea43c80bb4e859d3d178b99767d28b20f4fb",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr/grayscale.hlsl",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:75926044fe223fe28ca653d6d226aa3dab80f470e366f4c2a7215d2d29f9fff6",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr/reference.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:fc684da9ea5bfe22142eb87257a3be6b83e7bfa799d14d6f8d7b031a9600a922",
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr/tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:110f57879a626d2f09db307824b6cb47ad37765d873ca9203154eceb60190dfd",
+      "kind": "code",
+      "local": "file:d25b9174b8e26b506421e5e082eced024aac9fea608556368069bac7cde3be44",
+      "path": "gpui/crates/gpui-windows/src/events.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:639e52804af8478e3b9397838bf90b9b80ae1fb98aa1be880e8a1cdb92f91695",
+      "path": "gpui/crates/gpui-windows/src/gpu_fault.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:75343c98433a942fa1f4a700592e11361edb9a236a5523fd9a6327523b0c9b6a",
+      "kind": "code",
+      "local": "file:35ca9b13105a7dab0a1992e20ba1417ad6b036a9847966234c3058a5e02c5a47",
+      "path": "gpui/crates/gpui-windows/src/gpui_windows.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:2d53eef4a83155477ed12f5267525c66f0b196d39b0c18dac7bf940e783cb33c",
+      "kind": "code",
+      "local": "file:9c8c75830f1ab256393c3d3a337760e51b715e24e55627ec15e607ad2f355cca",
+      "path": "gpui/crates/gpui-windows/src/platform.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:f57b35718272a6feb67a49fd7a044eea3785605ceb6bcefbd7fc5fa54c649ca9",
+      "kind": "code",
+      "local": "file:64837d89b8d62d2077482e2794561b9c349ee65e802bf52ef3bced2b6e8f349c",
+      "path": "gpui/crates/gpui-windows/src/window.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:9e7e5b8470baad143c828fe1f9e34ad2d856cf515e63ab8654a9eff82c591ce1",
+      "path": "gpui/crates/gpui/.gitignore",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:ed2e87539c7b36738216806a49e98b89b836e74e2bd68c2290527b9a65a9ea8a",
+      "kind": "cargo",
+      "local": "file:58cf2d727ecd9dbb1b124f52adfd5a92ee61544d6b20c56f38073de5c6d7b261",
+      "path": "gpui/crates/gpui/Cargo.toml",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:4c449032e77135226bd1d776e71168d62c558d7aaf47ca590919650ebe211910",
+      "kind": "metadata",
+      "local": "file:74a33293996a9ec587c696d4482c310463831b67495409534282a192350bd363",
+      "path": "gpui/crates/gpui/README.md",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:983e2a228fac901f5916e6eb67db040c6474d8f700efd383a4cd251bb62362ad",
+      "path": "gpui/crates/gpui/bench-metrics-provenance.json",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:7fa416c24854b64f0e0bd5bfed7b39caffba2cf0cdefae01850c0ef805c1c32c",
+      "kind": "code",
+      "local": "file:805d6cfe6fbfefea0b5e2f0a6d9a3d047a06b54d5edd80a5ead34c4d1a86e1d7",
+      "path": "gpui/crates/gpui/examples/README.md",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:0c36449cf96c897e0520cef592933e86759471108c77f53a00cda4e21969df4b",
+      "kind": "code",
+      "local": "file:9e38aa07eedae3a2cce743d24b765a81da0a8b97b83230de436cbd35364c5174",
+      "path": "gpui/crates/gpui/examples/animation.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:6c7ff2a1af12586cf754406b5879ced9cd93a179974e950f898dfe24e308275a",
+      "kind": "code",
+      "local": "file:5e962dc29772bc59cdab236d8adf1a8335475ce045a7beda1d5a04864dd7faea",
+      "path": "gpui/crates/gpui/examples/image/image.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:661ecbf91d9d20d147274a82bfe66e63f0f90f9c980b05881df79011820ff0f4",
+      "kind": "code",
+      "local": "file:aa6bd497f4362a74e99c2840233cf1f56bc84d70dd4f86cae76fb17856203891",
+      "path": "gpui/crates/gpui/examples/image_gallery.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:a8cbe4742513896e9836f55806d7c382322f89570c10134625f92c014cb3787f",
+      "kind": "code",
+      "local": "file:1524e165b17219c86fad7803b224a6727f8ba5ced41bec5b7d06b56ebea66872",
+      "path": "gpui/crates/gpui/examples/input.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:9ef209ac40563ce34fd3585287063f357d0212af9828dce106a64cc6c19aee5d",
+      "kind": "code",
+      "local": "file:b7f7c54ea2efadb7537cd96dabfa07c90ff20c35d0cbd2ab19e87d6425ff4db9",
+      "path": "gpui/crates/gpui/src/app.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:ecf9c43fe3e0fc018694dbef1abc9b8a3d5de72d52529068e83da60e02dd0d74",
+      "kind": "code",
+      "local": "file:3a1948721bca22ccfae2926c6b40722ed3315a33e79c8d87885edc4bd610c115",
+      "path": "gpui/crates/gpui/src/app/async_context.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:2fe59222d05a2dead8cf3e12ed00f61e90362f7a04cadc468e1ef9b08f7c8e47",
+      "kind": "code",
+      "local": "file:8b10db364269e4ec65f5084b9a641b923fb3e1253d034570378029d367aa6619",
+      "path": "gpui/crates/gpui/src/app/bench_context.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:1d715e3bade069c1b0df15c4ffb73f9272e411cd268b540311c23c3bd93d7fe9",
+      "kind": "code",
+      "local": "file:2140fef3a74c237c296e1073daac9a41ff083955f96daad4fac1a283e4d7c580",
+      "path": "gpui/crates/gpui/src/app/entity_map.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:16159a561d50f5167257fb79cf2d24c3202b0a7609a6b635582a658e1af87f35",
+      "path": "gpui/crates/gpui/src/backdrop.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:3d00a3414f0a0340170824928ef083cb3e9411411a8e13f69bf3e11b04128301",
+      "path": "gpui/crates/gpui/src/backdrop_cache.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:485608bf6634a8ef1b2c2a05bcd9a9003e88d155766022fd46a6b0ec69188273",
+      "path": "gpui/crates/gpui/src/bench_metrics.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:53e4121fd9547d2b065804d6fdd4253d34dbb5cbfb8a17f6e0762d038201725a",
+      "kind": "code",
+      "local": "file:bafbb785171954f7fc1a0e2fe7fc735a913a8816972c45332fdf3b58ffcbdf31",
+      "path": "gpui/crates/gpui/src/elements/anchored.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:7b0dde3c811bf1062e532395f5c8f5b76acb10bfe95cf875ba0e5d6c5dc41c9f",
+      "kind": "code",
+      "local": "file:7d8f5a8348e4c0e21094aafe27bb3e73db78a072f7168f688862cef88b6ebac5",
+      "path": "gpui/crates/gpui/src/elements/animation.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:22502ea952d6ffb8b3abb04335adecc616992a97d3509f06f0584f143e2ac90c",
+      "kind": "code",
+      "local": "file:0501cd9c0f041b849e51ea78a69abeb24781e5b5488311c0b87f4cf1ed01f451",
+      "path": "gpui/crates/gpui/src/elements/deferred.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:48b964154e86389428d9cc344c9d8fbfb54ef61ce09a883cbb472d678ccca0c5",
+      "kind": "code",
+      "local": "file:7808e8b4a72c64691299ccf903439709350eae11bd0046240ecc631bbd8f1164",
+      "path": "gpui/crates/gpui/src/elements/div.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:b13aff39d4731ef657f9f91b4870f2bcf0bccc8433499ae6370ef1875ff00e12",
+      "kind": "code",
+      "local": "file:02e68407eb89156de31e05320a4d3565ea6f1c639dd378650b1703e8729b5640",
+      "path": "gpui/crates/gpui/src/executor.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:c28a238493c9fa423d860ca46b2e4741925a9d81f55671eeda1389408f2b9dd5",
+      "kind": "code",
+      "local": "file:900fc506a964cda44ed0cf1f97c01ff28d7268c87c9eeadbf7a4f1bb50e33edd",
+      "path": "gpui/crates/gpui/src/geometry.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:e1c5f74225bd7bd80e19997c83d5283abd3c54c38dda1ba1158867faf25dc978",
+      "kind": "code",
+      "local": "file:36f0556104ec269fd1380deaf3f6b13b1b5c12459856d1a9167c774627514fa8",
+      "path": "gpui/crates/gpui/src/gpui.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:8700f295c6fdb4c68d89f8eefad6df586bbe405054fb2fba1e4cdc8e6851210c",
+      "path": "gpui/crates/gpui/src/image_texture.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:fd61f3cc7a4b2035e98a20840aa40c17adfeedb81a7bb6ae4d1cc6ee19e54be6",
+      "path": "gpui/crates/gpui/src/layer_effect.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:fcd613681b31b52318f6349e5f63fcf0c08748705b8d71673891df0c303e8756",
+      "kind": "code",
+      "local": "file:f0239bed191fde2827627d462584ecaeea55b88558f3cd76a93cc1ad84e79236",
+      "path": "gpui/crates/gpui/src/platform.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:fce3c1fb2b14cc60b10a094a94ffd467c8fbd3f205cca28335efef30a7ea7e67",
+      "path": "gpui/crates/gpui/src/platform/color_presentation.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:36f8b81f73be4694a5f75a1c3dc3076f186e49379cf15b2aea9b4f3c7a04afea",
+      "path": "gpui/crates/gpui/src/platform/desktop_preferences.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:a322d71bb2b3ae6c388b7c53a34ff490b146780030361e9cdc9d5cf482148cac",
+      "kind": "code",
+      "local": "file:995f5791cbf50905b0ea47cca6cd628a546be355fe7b0c044c9689bdacbcb692",
+      "path": "gpui/crates/gpui/src/platform/keystroke.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:7a1d5b9c54574e96a7762c14e23715d2632f3244233f65d8ef9236cca2109ad3",
+      "kind": "code",
+      "local": "file:eecbb42b0ec44fb105d566fdfd6b627d9498c41b008c446d0e0fde15f307a805",
+      "path": "gpui/crates/gpui/src/platform/test/platform.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:46450da2077a4dce7a624c3a6047a1151b35dc04cb8ba896f0623e9501d30c97",
+      "kind": "code",
+      "local": "file:ca0fd3ef36d6ddb7dfa418a0d6298152beb250267fbf6be599d5938d886e7367",
+      "path": "gpui/crates/gpui/src/profiler.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:66b07a3d29c2585d56886c5a6984022fed70cbc6e11f1ceb4ac331315042132a",
+      "kind": "code",
+      "local": "file:86e16e613eb58265e1fec097d980c403f611b61b3f0d1aea97c758cbf1539248",
+      "path": "gpui/crates/gpui/src/profiler/journal.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:ebfcecbeb1862e17daa6822d14617ee7a9b6ad0016f0b322a6a29c137fb6e045",
+      "kind": "code",
+      "local": "file:dc822f5550a9ca249e8aee8c9d4bd5ef95454476e98af019a555cd4f48306186",
+      "path": "gpui/crates/gpui/src/randomized_element_tree.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:b615c926356b9180c81706d84e1033501ff9f4cd70895374b0ce63fcf4bc153e",
+      "kind": "code",
+      "local": "file:3b2b31582b7960c34a6e931fff47ee37fd8d556edd13e0da3d50092949e7087e",
+      "path": "gpui/crates/gpui/src/scene.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:dac752dcabbb782178f2ffe42d626a8480acb541ea4869828979c84defca3651",
+      "path": "gpui/crates/gpui/src/scene/preparation_tests.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:27753a378e4b3a30f535f796a592d1f2191c0f77580c99436ed1bfcd7b6a8da9",
+      "kind": "code",
+      "local": "file:47b195b30b37d135e4393017f2610413a457f6ddb7356f68652ed85c27966372",
+      "path": "gpui/crates/gpui/src/style.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:caa8f1f8b3cbb1ff4a2b53877f4ca5fabb848d63f7a561d46ec27113ec904f27",
+      "kind": "code",
+      "local": "file:226a6244929b42a374dc034fd844b12d186c838b466dd62da783c33f02ca42a1",
+      "path": "gpui/crates/gpui/src/styled.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:863d89c4643f616459cca24417f7060fbcee91a7a82a28243c58365e7dc2c693",
+      "kind": "code",
+      "local": "file:81d0c36b63b24e1269a08920203efc5e9c3388995f117532aa32dcb9a4469410",
+      "path": "gpui/crates/gpui/src/svg_renderer.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:25f479208bf39e0840f9f7f67d33f6370b991459c8b900f2c4faeece08ebffb0",
+      "kind": "code",
+      "local": "file:7a6cbffa4dfabaef0401b9e49c5f6b6dfc06b226efc61554fc8e0147048ac9d8",
+      "path": "gpui/crates/gpui/src/text_system.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:85f901df313e3b8379e65b70a0e69e5dfc7d8280a761e568d1f4293edc4c4834",
+      "kind": "code",
+      "local": "file:b8561125527cf908080417ba5f6e7839c3f285aace73c04c92860cb1fb0777d9",
+      "path": "gpui/crates/gpui/src/text_system/font_features.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:4e48d75080f2a1842a1e6fa708307bb9da6dae3e152872851f7e35f3a0d0fb7f",
+      "path": "gpui/crates/gpui/src/text_system/font_inspection.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:6928875f509f8d791c36a30f6dc3c9766c2ad49be2da040c131dd782860f9224",
+      "path": "gpui/crates/gpui/src/text_system/font_introspection.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:21519d8fd12f3547ad21b45e2d0843eb18a2fad238e7641dbd5a27edcb3b1088",
+      "path": "gpui/crates/gpui/src/text_system/font_variations.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:76589c9dff94185fd52ead6966c1d2cb659a5a0ab943b6f79b5c2326a02b6d8e",
+      "kind": "code",
+      "local": "file:7ae24ae0f77d282259eaa47e88a28abfb7c21e177f86fa87e57c547c1a86883e",
+      "path": "gpui/crates/gpui/src/text_system/line_layout.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:8912c5d16dc00bbcc1f19f56c2f2f4e3b826aa244b4f7c04c62a3934b22f7c4f",
+      "kind": "code",
+      "local": "file:006c274e5c03fdf19bb1cdc09fbb0dc2ac3b077742524d5852a6d61b862cd565",
+      "path": "gpui/crates/gpui/src/text_system/line_wrapper.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:f7631090ced3ec9977d4190a6018f9a08f20ac40d0f5b228af2a2ab183bfa3c4",
+      "path": "gpui/crates/gpui/src/text_system/paragraph.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "deleted",
+      "downstream_overlap": true,
+      "incoming": null,
+      "kind": "code",
+      "local": "file:26004d8c71b4578597613fc52db76552e6abba031fd1a2fa1504814c5f64fe4c",
+      "path": "gpui/crates/gpui/src/text_system/paragraph_cache.rs",
+      "retain_local": true,
+      "upstream_changed": false
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:8b0449debb085f441119f7061e505d17f8e3d97809f2a4b1128eef0be879a110",
+      "kind": "code",
+      "local": "file:2545950b9f43663edb101baeaa4ff9172ddbc6aeefb08da29854ffaabc305054",
+      "path": "gpui/crates/gpui/src/view.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:dc7c4381639ab0c03e1600cbc8347723e6ad08290ec2852dd1e009ac1c0b7538",
+      "kind": "code",
+      "local": "file:e6e0cc1921d2abf9f75fdbf7c403ee9cc25e3156995818156e60040fc0fc3d3f",
+      "path": "gpui/crates/gpui/src/window.rs",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": false,
+      "incoming": "file:5cf27e898f4a3cdccbb41325a41372bc5186f2a5408ad8e5a99fa5e05a533bd6",
+      "kind": "metadata",
+      "local": "file:8d1f6bd604a7c82356c3044f8dd0926aef62b8936015a0a131aa9d1821f9df23",
+      "path": "gpui/crates/transform-metadata.json",
+      "retain_local": false,
+      "upstream_changed": true
+    },
+    {
+      "change": "modified",
+      "downstream_overlap": true,
+      "incoming": "file:317eabdfaa59c766134900d6a09904a2f00fca93fd31eda19e9a7012918f4d79",
+      "kind": "metadata",
+      "local": "file:6680b387b1c6af77870c1043fd98424ab3e670c6ce9bdf212698ac6fe396e03f",
+      "path": "upstream.json",
+      "retain_local": false,
+      "upstream_changed": true
+    }
+  ],
+  "previous_source_commit": "f98d4e26ca850515c1682ae4cd6e2b8277dae6e7",
+  "release": "1.28.1",
+  "source_commit": "c356a29b7be6c4b9cec73d3576152324a34aeaaf",
+  "zed_context": {
+    "base_commit": "c84af5b99cbc366d675064e52b23664a015b6e35",
+    "head_commit": "e8bc16acee5ae1937600d571d441c4b5d7b0d288",
+    "paths": [
+      "crates/collections",
+      "crates/gpui",
+      "crates/gpui_apple",
+      "crates/gpui_ios",
+      "crates/gpui_linux",
+      "crates/gpui_macos",
+      "crates/gpui_macros",
+      "crates/gpui_platform",
+      "crates/gpui_shared_string",
+      "crates/gpui_util",
+      "crates/gpui_web",
+      "crates/gpui_wgpu",
+      "crates/gpui_windows",
+      "crates/http_client",
+      "crates/http_client_tls",
+      "crates/path",
+      "crates/refineable",
+      "crates/refineable/derive_refineable",
+      "crates/reqwest_client",
+      "crates/scheduler",
+      "crates/sum_tree",
+      "crates/tooling/perf",
+      "crates/util",
+      "crates/util_macros",
+      "crates/zlog",
+      "crates/ztracing",
+      "crates/ztracing_macro"
+    ],
+    "repository": "zed-industries/zed"
+  }
+}

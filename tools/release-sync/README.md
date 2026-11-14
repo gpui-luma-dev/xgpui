@@ -37,7 +37,7 @@ cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- COMMAND [OPT
 | `verify-color` | Optional `--out NEW_DIR --offline --native-metal`; dedicated color archive/consumer checks |
 | `import VERSION` | Optional `--source CHECKOUT --expected-sha SHA`; requires matching `release/VERSION` branch |
 | `review prepare` | `--release VERSION --snapshot NEW_DIR --report PATH --normalizer BINARY --map PATH`, optional `--expected-sha SHA` |
-| `review code\|cargo\|metadata` | `--snapshot DIR --report PATH`; apply reviewed tree proposals on a dedicated branch |
+| `review code\|cargo\|metadata` | `--snapshot DIR --report PATH`; apply reviewed tree proposals on a dedicated branch (`sync/*`, `codex/*` or an epic subtask `issue-N/task`; never `main` or `issue-N/epic`). Only files XGPUI has not changed are replaced; downstream-edited files are never overwritten or deleted and must be ported by hand, keeping local behavior |
 | `context` | `--report PATH --output MARKDOWN --json-output JSON`; exact upstream Zed context |
 | `review-notes` | `--report PATH --context MARKDOWN --output PATH`; format upstream review notes |
 | `check-local-dependencies` | `--metadata PATH`; check Cargo metadata identities against provenance |

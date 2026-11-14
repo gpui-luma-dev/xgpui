@@ -231,28 +231,44 @@ fn prepare_manifest(
         if local.starts_with("gpui") {
             document["lib"]["name"] = toml_edit::value(local.replace('-', "_"));
         }
-        // Platform depends on core and iOS. Keep their test/example-only
-        // reverse edges local so Cargo omits them from registry manifests.
-        if matches!(local.as_str(), "gpui" | "gpui-ios") {
-            localize_platform_development_dependency(document.as_item_mut());
-        }
+        // Keep test/example-only reverse edges local so Cargo omits them from
+        // registry manifests; a versioned reverse edge blocks cold publication.
+        localize_reverse_development_dependencies(
+            document.as_item_mut(),
+            reverse_development_dependencies(local),
+        );
     }
     Ok(())
 }
 
-fn localize_platform_development_dependency(item: &mut Item) {
+/// Development-only edges from a package to packages that depend on it.
+/// Platform depends on core and iOS; web depends on core.
+fn reverse_development_dependencies(local: &str) -> &'static [(&'static str, &'static str)] {
+    match local {
+        "gpui" => &[
+            ("gpui_platform", "../gpui-platform"),
+            ("gpui_web", "../gpui-web"),
+        ],
+        "gpui-ios" => &[("gpui_platform", "../gpui-platform")],
+        _ => &[],
+    }
+}
+
+fn localize_reverse_development_dependencies(item: &mut Item, edges: &[(&str, &str)]) {
+    if edges.is_empty() {
+        return;
+    }
     if let Some(table) = item.as_table_like_mut() {
         for (key, value) in table.iter_mut() {
             if key.get() == "dev-dependencies" {
-                if let Some(options) = value
-                    .get_mut("gpui_platform")
-                    .and_then(Item::as_table_like_mut)
-                {
-                    options.insert("path", toml_edit::value("../gpui-platform"));
-                    options.remove("version");
+                for (alias, path) in edges {
+                    if let Some(options) = value.get_mut(alias).and_then(Item::as_table_like_mut) {
+                        options.insert("path", toml_edit::value(*path));
+                        options.remove("version");
+                    }
                 }
             } else {
-                localize_platform_development_dependency(value);
+                localize_reverse_development_dependencies(value, edges);
             }
         }
     }
@@ -1048,6 +1064,63 @@ mod tests {
             assert!(dependency.get("version").is_none());
             assert_eq!(dependency["features"][0].as_str(), Some("test-support"));
         }
+    }
+
+    #[test]
+    fn core_web_wasm_development_dependency_stays_local_across_normalization() {
+        let release = BTreeMap::from([
+            ("gpui".into(), "xgpui".into()),
+            ("gpui-web".into(), "xgpui-web".into()),
+        ]);
+        let registry = Names::new();
+        // Upstream 1.28.1 shape after the package rename.
+        let mut document = "[package]\nname='gpui-unofficial'\nversion='1.28.1'\n[target.'cfg(target_family = \"wasm\")'.dev-dependencies]\ngpui_web={package='xgpui-web',version='1.28.1'}\n[dependencies]\nhttp_client={package='http-client-gpui-unofficial',version='1.28.1'}\n"
+            .parse::<DocumentMut>().unwrap();
+        document["package"]["name"] = toml_edit::value("xgpui");
+        for _ in 0..2 {
+            prepare_manifest(
+                &mut document,
+                &registry,
+                "1.28.1",
+                &release,
+                "3.2.0",
+                &Names::new(),
+            )
+            .unwrap();
+            let dependency = &document["target"]["cfg(target_family = \"wasm\")"]["dev-dependencies"]
+                ["gpui_web"];
+            assert_eq!(dependency["package"].as_str(), Some("xgpui-web"));
+            assert_eq!(dependency["path"].as_str(), Some("../gpui-web"));
+            assert!(dependency.get("version").is_none());
+            // Runtime edges keep their required versions.
+            assert_eq!(
+                document["dependencies"]["http_client"]["version"].as_str(),
+                Some("1.28.1")
+            );
+        }
+    }
+
+    #[test]
+    fn non_reverse_development_dependencies_keep_versions() {
+        let release = BTreeMap::from([
+            ("gpui-web".into(), "xgpui-web".into()),
+            ("gpui-platform".into(), "xgpui-platform".into()),
+        ]);
+        // Web does not sit below platform, so its platform dev edge is not localized.
+        let mut document = "[package]\nname='xgpui-web'\nversion='2.0.3'\n[dev-dependencies]\ngpui_platform={package='xgpui-platform',version='2.0.3'}\n"
+            .parse::<DocumentMut>().unwrap();
+        prepare_manifest(
+            &mut document,
+            &Names::new(),
+            "1.28.1",
+            &release,
+            "2.0.3",
+            &Names::new(),
+        )
+        .unwrap();
+        let dependency = &document["dev-dependencies"]["gpui_platform"];
+        assert!(dependency.get("path").is_none());
+        assert!(dependency.get("version").is_some());
     }
 
     #[test]

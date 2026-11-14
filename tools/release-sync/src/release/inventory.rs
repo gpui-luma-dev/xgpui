@@ -253,9 +253,52 @@ pub(super) fn plan(root: &Path) -> Result<Json> {
         }
         phases.push(json!({"name":phase,"packages":ordered}));
     }
+    cold_publication_order(&audit, &packages)?;
     Ok(
         json!({"schema_version":1,"registry_access":false,"uploads_enabled":false,"release_ready":false,"core_package":"xgpui","phases":phases,"packages":packages,"development_cycles":audit["including_dev_cycle_blocked_packages"],"patches_to_review":audit["patches_to_review_outside_repository"],"next_registry_phase":["Present exact names, versions, ownership, scope, commands and network activity for approval.", "After approval, check availability/ownership and resolve registry dependencies without checkout patches.", "Verify registry-equivalent packaging, including development cycles and Git dependency fallbacks.", "Upload in framework-first dependency order; confirm registry visibility before each dependent.", "Resume only the same commit after comparing already-published archive contents; stop on mismatch.", "Verify downloaded content and version-only consumers before calling a release complete."],"approval_required_before":["any crates.io API/index/download request, including availability checks", "registry-backed cargo package or cargo publish --dry-run", "credentials/ownership setup or enabling extension publication", "any upload, first registration, tag or GitHub release"]}),
     )
+}
+/// Registry manifests keep every versioned dependency, development edges
+/// included, and each upload must resolve against what is already published.
+/// Assume no candidate version exists yet: every versioned internal edge, on
+/// any target and of any kind, must point at a package uploaded earlier. Path-only
+/// development edges are omitted from archives and do not constrain order.
+/// Staging all candidates together (as archive verification does) or relying on
+/// an older published version would hide a violation, so check the plan itself.
+fn cold_publication_order(audit: &Json, ordered: &[Json]) -> Result<()> {
+    let position: BTreeMap<&str, usize> = ordered
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (str_at(r, "name"), i))
+        .collect();
+    let mut problems = Vec::new();
+    for r in rows(&audit["packages"]) {
+        let name = str_at(r, "name");
+        let Some(&at) = position.get(name) else {
+            continue;
+        };
+        for d in rows(&r["dependencies"]) {
+            let target = str_at(d, "package");
+            let Some(&needed) = position.get(target) else {
+                continue;
+            };
+            if d.get("version").is_none() || needed < at {
+                continue;
+            }
+            problems.push(format!(
+                "{name} {}:{}:{} requires unpublished {target}",
+                str_at(d, "kind"),
+                d["target"].as_str().unwrap_or("all"),
+                str_at(d, "alias")
+            ));
+        }
+    }
+    ensure!(
+        problems.is_empty(),
+        "Versioned edges break cold publication order (localize test-only reverse edges): {}",
+        problems.join("; ")
+    );
+    Ok(())
 }
 #[cfg(test)]
 mod tests {
@@ -310,6 +353,52 @@ mod policy_regressions {
             audit["including_dev_cycle_blocked_packages"],
             json!(["xgpui", "xgpui-web"])
         );
+    }
+    #[test]
+    fn versioned_reverse_development_edge_blocks_cold_publication() {
+        // Neither candidate is published: core's versioned Wasm-only dev edge
+        // on web needs web first, while web needs core first.
+        let fixture = repository();
+        let root = fixture.path();
+        let core = root.join("gpui/crates/gpui/Cargo.toml");
+        let original = fs::read_to_string(&core).unwrap();
+        fs::write(
+            &core,
+            format!(
+                "{original}[target.'cfg(target_family = \"wasm\")'.dev-dependencies]\ngpui_web={{package='xgpui-web',version='1.0.0',path='../gpui-web'}}\n"
+            ),
+        )
+        .unwrap();
+        let error = format!("{:#}", plan(root).unwrap_err());
+        assert!(error.contains("cold publication"), "{error}");
+        assert!(
+            error.contains("xgpui dev-dependencies:cfg(target_family = \"wasm\"):gpui_web requires unpublished xgpui-web"),
+            "{error}"
+        );
+        // The normalized (path-only) edge is omitted from the archive.
+        fs::write(
+            &core,
+            format!(
+                "{original}[target.'cfg(target_family = \"wasm\")'.dev-dependencies]\ngpui_web={{package='xgpui-web',path='../gpui-web'}}\n"
+            ),
+        )
+        .unwrap();
+        plan(root).unwrap();
+    }
+    #[test]
+    fn versioned_development_edge_on_earlier_candidate_is_allowed() {
+        let fixture = repository();
+        let root = fixture.path();
+        let color = root.join("extensions/crates/xgpui-color/Cargo.toml");
+        fs::write(
+            &color,
+            format!(
+                "{}[target.'cfg(windows)'.dev-dependencies]\nweb={{package='xgpui-web',version='1.0.0',path='../../../gpui/crates/gpui-web'}}\n",
+                fs::read_to_string(&color).unwrap()
+            ),
+        )
+        .unwrap();
+        plan(root).unwrap();
     }
     #[test]
     fn bad_internal_candidate_and_framework_extension_edges_stop_plan() {
