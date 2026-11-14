@@ -53,7 +53,7 @@ jobs:
         with:
           shared-key: text-layout-v1
       - name: Test DirectWrite shaping, tabs and caret mapping
-        run: cargo test --locked --config .cargo/validation.toml -p xgpui-windows --features test-support --lib direct_write:: -- --test-threads=1
+        run: "cargo test --locked --config .cargo/validation.toml -p xgpui-windows --features test-support --lib direct_write:: -- --test-threads=1"
       - name: Test core line wrapping and layout
         if: ${{ !cancelled() }}
-        run: cargo test --locked --config .cargo/validation.toml -p xgpui --features test-support --lib text_system::
+        run: "cargo test --locked --config .cargo/validation.toml -p xgpui --features test-support --lib text_system::"
