@@ -25,12 +25,11 @@
 </blockquote>
 <p><code>xgpui-shell</code> supplies window chrome built from GPUI elements. Use its shared Linux client frame, or compose your own title bar while retaining native platform structure. It does not load GTK, libadwaita or third-party widget themes.</p>
 <h2 id="add-to-an-application">Add to an application</h2>
-<p>After publication:</p>
+<p>Add both crates:</p>
 <pre><code class="language-toml">[dependencies]
-xgpui = "3.1.0"
-xgpui-shell = "0.1.0"
+xgpui = "4.0.0"
+xgpui-shell = "0.3.0"
 </code></pre>
-<p>While reviewing this release, use local path dependencies instead.</p>
 <pre><code class="language-rust">use xgpui_shell::{ShellApp, ShellOptions, ShellWindowTitle};
 
 // Inside an App callback; MyView is your application's Render implementation.
@@ -43,6 +42,52 @@ cx.open_shell_window(options, ShellOptions::default(), |window, cx| {
 <h2 id="compose-a-title-bar">Compose a title bar</h2>
 <p>Use <code>ShellApp::open_shell_window_with_titlebar</code> with a builder returning <code>(Entity&lt;Titlebar&gt;, Entity&lt;Content&gt;)</code>. Place title text or empty space inside <code>ShellDragRegion</code>; keep interactive buttons and inputs outside that drag region.</p>
 <p>macOS retains native traffic lights. Windows uses app-composed content and shell controls. Linux/FreeBSD draw the client frame only when the platform reports client decorations; server decorations remain compositor-owned. Fullscreen suppresses the client frame. A decoration request is not proof that the compositor accepted it.</p>
+<h2 id="replace-window-control-artwork">Replace window-control artwork</h2>
+<p>A <code>ShellControlPresenter</code> replaces what the shell draws inside each window control (background, icon and hover/pressed/inactive treatment) without copying any window-management code:</p>
+<pre><code class="language-rust">use xgpui_shell::{ShellControl, ShellControlPresenter};
+
+let presenter = ShellControlPresenter::new(|state, _window, _cx| {
+    let icon = match state.control {
+        ShellControl::Minimize =&gt; "icons/minimize.svg",
+        ShellControl::Maximize =&gt; "icons/maximize.svg",
+        ShellControl::Restore =&gt; "icons/restore.svg",
+        ShellControl::Close =&gt; "icons/close.svg",
+    };
+    div()
+        .size(px(24. * state.scale))
+        .rounded_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .when(state.hovered || state.pressed, |s| s.bg(rgb(state.colors.hover)))
+        .child(svg().path(icon).size(px(12. * state.scale)).text_color(rgb(state.colors.text)))
+        .into_any_element()
+});
+// Set it right after opening so it is in place before the first frame.
+handle.update(cx, |shell, _, cx| shell.set_control_presenter(Some(presenter), cx))?;
+</code></pre>
+<p>The shell keeps control order, desktop-configured omissions, capability filtering, Maximize/Restore identity, the clickable target size, accessible names, activation, drag isolation and the keyboard focus ring. The presenter draws everything inside the target, centered and clipped to it; don't attach click handlers in presenter content. <code>ShellControlState</code> carries the control, hover, pressed, focus, activation, appearance, high contrast, the resolved colors, the focus color, scale and target size. <code>set_control_presenter(None)</code> restores the built-in look, and <code>ClientFramePreview::control_presenter</code> previews the same artwork. It applies to Linux/FreeBSD client frames and Windows app-composed title bars; native macOS traffic lights and compositor-owned decorations are unaffected.</p>
+<h2 id="app-owned-shared-chrome-colors">App-owned shared chrome colors</h2>
+<p>Set <code>titlebar_background</code> for a background-only override, or <code>colors</code> for the shared frame palette. Values are opaque sRGB <code>0xRRGGBB</code>; <code>Some(0)</code> means black.</p>
+<pre><code class="language-rust">use xgpui_shell::{ShellColors, ShellOptions};
+
+let background_only = ShellOptions {
+    titlebar_background: Some(0xececed),
+    ..Default::default()
+};
+let themed = ShellOptions {
+    colors: Some(ShellColors {
+        header: 0x202020,
+        text: 0xffffff,
+        border: 0x505050,
+        hover: 0x404040,
+    }),
+    accent: Some(0x80bfff),
+    ..Default::default()
+};
+</code></pre>
+<p>Resolution starts with the appearance/activation/high-contrast palette. <code>colors</code> replaces that palette, then <code>titlebar_background</code> replaces its header. Explicit colors win even in high contrast: the app owns their contrast. The focus color uses the resolved accent, or the palette text color in high contrast. The header background includes reserved native-control space and trailing padding; application content keeps its own styling.</p>
+<p>Supplied colors are literal: the shell does not derive active/inactive or light/dark variants. Update the shell handle with <code>set_options</code> on theme changes and window activation; it replaces all overrides and redraws without rebuilding the content or title bar. Native macOS traffic lights, NSWindow appearance and compositor-owned decorations are not recolored. These fields first shipped in 0.2.0; 0.3.0 keeps them alongside the window-control presenter.</p>
 <h2 id="follow-desktop-preferences">Follow desktop preferences</h2>
 <p><code>ShellOptions::default()</code> follows available desktop values. Explicit optional fields override them per window, including <code>Some(false)</code>, a black accent and <code>Some(TitlebarAction::None)</code>. Resetting an override restores desktop/default resolution.</p>
 <p>The Linux backend reads accent, contrast, reduced motion, logical text scale, font descriptions and supported title-bar actions. Settings portal values take precedence over optional GNOME/KDE native fallbacks. Missing tools or settings leave fields unset. Existing appearance and button-layout APIs remain separate.</p>

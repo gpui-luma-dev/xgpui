@@ -72,6 +72,7 @@ impl Overrides {
             double_click_action: self.double_click,
             middle_click_action: self.middle_click,
             right_click_action: self.right_click,
+            ..Default::default()
         }
     }
 

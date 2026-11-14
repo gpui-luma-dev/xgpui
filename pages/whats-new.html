@@ -30,7 +30,7 @@
 <li><strong>Windows:</strong> repeated synthetic mouse moves are dropped, and real moves, drags and arrivals are still delivered.</li>
 <li><strong>wgpu:</strong> the window surface is configured once at creation, removing 200–500 ms before the first frame on slow drivers. Bounded device-loss recovery is unchanged.</li>
 <li><strong>Core:</strong> configurable low-power and thermal frame intervals with the same defaults as before; <code>cx.notify()</code> redraws stay unthrottled. Send-capable foreground executors, <code>Window::set_client_corner_radii</code>, and cached-view opacity fixes.</li>
-<li><strong>Desktop shell:</strong> <code>xgpui-shell 0.3.0</code> adds a window-control presenter hook and native caption clicks on Windows (<a href="https://github.com/gpui-luma-dev/xgpui/issues/194">#194</a>).</li>
+<li><strong>Desktop shell:</strong> <code>xgpui-shell 0.3.0</code> adds a window-control presenter hook and native caption clicks on Windows (<a href="https://github.com/gpui-luma-dev/xgpui/issues/194">#194</a>), and keeps the app-controlled title-bar colors from 0.2.0 (<a href="https://github.com/gpui-luma-dev/xgpui/issues/192">#192</a>).</li>
 </ul>
 <h3>Migration</h3>
 <ul>
@@ -65,7 +65,7 @@
 <tr><td><code>xgpui-wgpu</code></td><td>2.3.0</td><td><strong>3.0.0</strong></td></tr>
 <tr><td><code>xgpui-windows</code></td><td>2.2.0</td><td>2.2.1</td></tr>
 </tbody></table>
-<p><code>xgpui-shell 0.2.0</code> was published on November 10 from a branch that did not merge, so the next shell release is 0.3.0.</p>
+<p><code>xgpui-shell 0.2.0</code> was published on November 10 from a branch that did not merge to <code>main</code>. 0.3.0 includes everything in 0.2.0.</p>
 <h2 id="november-12-2026">November 12, 2026 — GPU interop and device-loss recovery</h2>
 <p>The November 12 release is available on crates.io: 18 new crate versions, including the first <a href="https://crates.io/crates/xgpui-gpu-interop/0.1.0"><code>xgpui-gpu-interop 0.1.0</code></a> release. Source tag: <a href="https://github.com/gpui-luma-dev/xgpui/tree/release-2026-11-12-da99e6bb8e6d"><code>release-2026-11-12-da99e6bb8e6d</code></a>. The iOS crate remains at <code>1.26.5</code>.</p>
 <h3 id="november-11-2026">GPU interop — first alpha release</h3>
