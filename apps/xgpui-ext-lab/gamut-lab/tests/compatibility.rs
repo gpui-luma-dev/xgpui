@@ -11,6 +11,8 @@ fn explicit_window_options_preserve_default_color_mode() {
         is_movable: true,
         app_owns_titlebar_drag: false,
         inactive_frame_interval: None,
+        low_power_frame_interval: None,
+        thermal_frame_interval: None,
         is_resizable: true,
         is_minimizable: true,
         display_id: None,

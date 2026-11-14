@@ -8,7 +8,7 @@ name: GPU interop compile checks
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, 'issue-227/epic']
+    branches: [main, 'issue-227/epic', 'issue-284/epic']
     paths:
       - '.github/workflows/gpu-interop.yml'
       - 'extensions/crates/xgpui-gpu-interop/**'
@@ -22,7 +22,7 @@ on:
       - '.cargo/validation.toml'
       - 'rust-toolchain*'
   push:
-    branches: [main, 'issue-227/epic']
+    branches: [main, 'issue-227/epic', 'issue-284/epic']
     paths:
       - '.github/workflows/gpu-interop.yml'
       - 'extensions/crates/xgpui-gpu-interop/**'

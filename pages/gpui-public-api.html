@@ -38,6 +38,17 @@ existing APIs. That integration is awaiting final public API approval. Its
 links the original GPUI commits and pull requests.</p>
 <p>The maintained XGPUI feature changes below are compared with pre-feature main
 <code>9b64657</code>.</p>
+<h2 id="gpui-1281-sync-284">GPUI 1.28.1 sync: core 4.0 (#284)</h2>
+<p>Upstream API changes carried in from gpui-unofficial 1.28.1, approved individually in the
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/284">#284</a> API review (2026-11-14).
+The <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.28.1-api-ledger.md">API ledger</a>
+gives each change's purpose, compatibility and migration in full.</p>
+<ul>
+<li><strong>Breaking, <code>xgpui 4.0.0</code>:</strong> <code>WindowOptions</code> gains <code>low_power_frame_interval</code> and <code>thermal_frame_interval</code> (defaults unchanged); <code>gpui::http_client</code> drops the GitHub helpers and <code>anyhow</code> re-exports; <code>AppCell::try_borrow_mut</code> returns <code>anyhow::Result</code>.</li>
+<li><strong>Breaking, <code>xgpui-wgpu 3.0.0</code>:</strong> <code>WgpuContext::new</code> and <code>new_rejecting_software</code> take <code>&amp;WgpuSurfaceConfig</code>.</li>
+<li><strong>Added, core:</strong> <code>SendForegroundExecutor</code>, <code>ForegroundExecutor::to_send</code>, <code>SchedulerLocalExecutor::to_send</code>, <code>Anchored::attach</code>, <code>Pixels::to_i32</code>, <code>Keystroke::is_modifier_key</code>, <code>Window::set_client_corner_radii</code> with a defaulted <code>PlatformWindow</code> hook, <code>#[track_caller]</code> on window updates, and <code>bench-support</code> helpers.</li>
+<li><strong>Added, backends:</strong> <code>xgpui_apple::display_link::MetalFrameSource</code>, <code>MetalRenderer::set_frame_drawable</code> and <code>set_display_link_attached</code>; public <code>xgpui_web::FetchHttpClient::new</code> and <code>with_user_agent</code>.</li>
+</ul>
 <h2 id="font-axes-and-inspection-core-30">Font axes and inspection: core 3.0</h2>
 <p><code>xgpui 3.0.0</code> adds variable-font controls and resolved-face inspection. Native
 CoreText, DirectWrite and Parley share the same contracts. See

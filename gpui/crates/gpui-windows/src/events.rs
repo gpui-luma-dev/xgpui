@@ -377,10 +377,10 @@ impl WindowsWindowInner {
         self.start_tracking_mouse(handle, TME_LEAVE);
         self.restore_cursor_after_hide();
 
-        let Some(mut func) = self.state.callbacks.input.take() else {
-            return Some(1);
-        };
+        let x = lparam.signed_loword() as f32;
+        let y = lparam.signed_hiword() as f32;
         let scale_factor = self.state.scale_factor.get();
+        let position = logical_point(x, y, scale_factor);
 
         let pressed_button = match MODIFIERKEYS_FLAGS(wparam.loword() as u32) {
             flags if flags.contains(MK_LBUTTON) => Some(MouseButton::Left),
@@ -394,10 +394,27 @@ impl WindowsWindowInner {
             }
             _ => None,
         };
-        let x = lparam.signed_loword() as f32;
-        let y = lparam.signed_hiword() as f32;
+
+        // Windows posts a synthetic WM_MOUSEMOVE when the window repaints under a
+        // stationary cursor (for example when a popover opens). It must not move
+        // hover state or a text selection. A real move has a new position or a
+        // held button. Compare against the last position the app received from
+        // either a client or a non-client move, so returning from the title bar
+        // to the same pixel is still delivered.
+        if is_synthetic_mouse_move(
+            pressed_button,
+            self.state.last_mouse_position.get(),
+            position,
+        ) {
+            return Some(1);
+        }
+        self.state.last_mouse_position.set(Some(position));
+
+        let Some(mut func) = self.state.callbacks.input.take() else {
+            return Some(1);
+        };
         let input = PlatformInput::MouseMove(MouseMoveEvent {
-            position: logical_point(x, y, scale_factor),
+            position,
             pressed_button,
             modifiers: current_modifiers(),
         });
@@ -422,6 +439,10 @@ impl WindowsWindowInner {
         {
             return Some(0);
         }
+
+        // The pointer really left: the next move into the window is always real,
+        // even at the pixel where it left.
+        self.state.last_mouse_position.set(None);
 
         // The next window's `WM_SETCURSOR` picks its own cursor, so we just clear
         // the flag for tight `is_cursor_visible()` semantics.
@@ -1083,8 +1104,10 @@ impl WindowsWindowInner {
             y: lparam.signed_hiword().into(),
         };
         unsafe { ScreenToClient(handle, &mut cursor_point).ok().log_err() };
+        let position = logical_point(cursor_point.x as f32, cursor_point.y as f32, scale_factor);
+        self.state.last_mouse_position.set(Some(position));
         let input = PlatformInput::MouseMove(MouseMoveEvent {
-            position: logical_point(cursor_point.x as f32, cursor_point.y as f32, scale_factor),
+            position,
             pressed_button: None,
             modifiers: current_modifiers(),
         });
@@ -1838,6 +1861,50 @@ pub(crate) fn current_modifiers() -> Modifiers {
         shift: is_virtual_key_pressed(VK_SHIFT),
         platform: is_virtual_key_pressed(VK_LWIN) || is_virtual_key_pressed(VK_RWIN),
         function: false,
+    }
+}
+
+/// A client-area move is synthetic (posted for a repaint, not by the user) when
+/// no button is held and the pointer is exactly where the app last saw it.
+/// `last` is `None` after the pointer left the window, so re-entry is real.
+fn is_synthetic_mouse_move(
+    pressed_button: Option<MouseButton>,
+    last: Option<Point<Pixels>>,
+    position: Point<Pixels>,
+) -> bool {
+    pressed_button.is_none() && last == Some(position)
+}
+
+#[cfg(test)]
+mod synthetic_mouse_move_tests {
+    use super::is_synthetic_mouse_move;
+    use gpui::{MouseButton, point, px};
+
+    #[test]
+    fn stationary_move_without_button_is_synthetic() {
+        let at = point(px(10.), px(20.));
+        assert!(is_synthetic_mouse_move(None, Some(at), at));
+    }
+
+    #[test]
+    fn new_position_held_button_or_reentry_is_real() {
+        let at = point(px(10.), px(20.));
+        // A real move.
+        assert!(!is_synthetic_mouse_move(
+            None,
+            Some(at),
+            point(px(11.), px(20.))
+        ));
+        // Dragging without moving still reports.
+        assert!(!is_synthetic_mouse_move(
+            Some(MouseButton::Left),
+            Some(at),
+            at
+        ));
+        // After a real leave, re-entering at the same pixel reports.
+        assert!(!is_synthetic_mouse_move(None, None, at));
+        // The first move after the window opens at the origin reports.
+        assert!(!is_synthetic_mouse_move(None, None, point(px(0.), px(0.))));
     }
 }
 

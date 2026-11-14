@@ -1,5 +1,5 @@
 {
-  "commit": "f98d4e26ca850515c1682ae4cd6e2b8277dae6e7",
+  "commit": "c356a29b7be6c4b9cec73d3576152324a34aeaaf",
   "destination": "gpui",
   "distribution": {
     "packages": {
@@ -27,21 +27,21 @@
     "versions": {
       "xgpui": "3.2.0",
       "xgpui-apple": "4.1.0",
-      "xgpui-canvas": "0.3.3",
-      "xgpui-color": "0.3.1",
-      "xgpui-gamut": "0.3.3",
+      "xgpui-canvas": "0.3.4",
+      "xgpui-color": "0.3.2",
+      "xgpui-gamut": "0.3.4",
       "xgpui-gpu-interop": "0.1.0",
       "xgpui-ios": "1.26.5",
       "xgpui-linux": "2.1.1",
-      "xgpui-macos": "4.0.1",
-      "xgpui-macros": "1.0.2",
-      "xgpui-media": "0.5.3",
-      "xgpui-parley": "0.5.0",
-      "xgpui-platform": "2.0.3",
-      "xgpui-shader": "0.4.3",
-      "xgpui-shell": "0.1.0",
-      "xgpui-svg": "0.3.3",
-      "xgpui-web": "2.0.3",
+      "xgpui-macos": "4.0.2",
+      "xgpui-macros": "1.0.3",
+      "xgpui-media": "0.5.4",
+      "xgpui-parley": "0.5.1",
+      "xgpui-platform": "2.0.4",
+      "xgpui-shader": "0.4.4",
+      "xgpui-shell": "0.1.1",
+      "xgpui-svg": "0.3.4",
+      "xgpui-web": "2.0.4",
       "xgpui-wgpu": "2.3.0",
       "xgpui-windows": "2.2.0"
     }
@@ -90,7 +90,7 @@
     "gpui-wgpu": "gpui/crates/gpui-wgpu",
     "gpui-windows": "gpui/crates/gpui-windows"
   },
-  "ref": "release/1.27.0",
+  "ref": "release/1.28.1",
   "registry_packages": {
     "packages": {
       "collections": "collections-gpui-unofficial",
@@ -111,7 +111,7 @@
       "ztracing": "ztracing-gpui-unofficial",
       "ztracing-macro": "ztracing-macro-gpui-unofficial"
     },
-    "version": "1.27.0"
+    "version": "1.28.1"
   },
   "repository": "https://github.com/gpui-archipelago/gpui-unofficial",
   "source_packages": {
@@ -143,6 +143,6 @@
     "ztracing-gpui-unofficial": "gpui/crates/ztracing-gpui-unofficial",
     "ztracing-macro-gpui-unofficial": "gpui/crates/ztracing-macro-gpui-unofficial"
   },
-  "zed_commit": "c84af5b99cbc366d675064e52b23664a015b6e35",
-  "zed_tag": "v1.27.0"
+  "zed_commit": "e8bc16acee5ae1937600d571d441c4b5d7b0d288",
+  "zed_tag": "v1.28.1"
 }

@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-apple"
-version = "4.1.0"
+version = "4.2.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -25,13 +25,13 @@ runtime_shaders = []
 font-kit = ["dep:font-kit", "dep:core-text", "dep:objc2-core-text", "dep:pathfinder_geometry"]
 
 [dependencies]
-gpui = { package = "xgpui", version = "3.0.0" }
+gpui = { package = "xgpui", version = "4.0.0" }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 anyhow = { version = "1.0.86" }
 async-task = { version = "4.7" }
 block2 = { version = "0.6" }
-collections = { package = "collections-gpui-unofficial", version = "=1.27.0" }
+collections = { package = "collections-gpui-unofficial", version = "=1.28.1" }
 core-foundation = { version = "0.10" }
 core-foundation-sys = { version = "0.8.6" }
 core-graphics = { version = "0.24" }
@@ -41,7 +41,7 @@ dispatch2 = { version = "0.3", default-features = false, features = ["std", "blo
 etagere = { version = "0.2" }
 futures = { version = "0.3.34" }
 font-kit = { version = "0.14.1-zed", package = "zed-font-kit", default-features = false, features = ["source"], optional = true }
-gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.27.0" }
+gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.28.1" }
 image = { version = "0.25.1", default-features = false, features = [
     "bmp",
     "dds",
@@ -79,7 +79,7 @@ thiserror = { version = "2.0.12" }
 cbindgen = { version = "0.28.0", default-features = false }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dev-dependencies]
-gpui = { package = "xgpui", version = "3.0.0", features = ["test-support"] }
+gpui = { package = "xgpui", version = "4.0.0", features = ["test-support"] }
 objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVBuffer", "CVImageBuffer", "CVBase"] }
 
 [lints]

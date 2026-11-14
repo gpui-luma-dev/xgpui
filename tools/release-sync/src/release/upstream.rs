@@ -11,6 +11,33 @@ fn stable_version(v: &str) -> bool {
         && p.iter()
             .all(|s| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()))
 }
+// Reviewed proposals land on a branch whose PR is reviewed before merging.
+// Epic subtask branches (`issue-N/task`) qualify; the epic itself and main
+// only receive merged PRs, so proposals are never applied there directly.
+fn review_branch(branch: &str) -> bool {
+    fn named(rest: &str) -> bool {
+        !rest.is_empty()
+            && rest
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.' | b'/'))
+            && rest
+                .split('/')
+                .all(|part| !part.is_empty() && part != "." && part != "..")
+    }
+    if let Some(rest) = branch
+        .strip_prefix("sync/")
+        .or_else(|| branch.strip_prefix("codex/"))
+    {
+        return named(rest);
+    }
+    let Some((issue, task)) = branch
+        .strip_prefix("issue-")
+        .and_then(|rest| rest.split_once('/'))
+    else {
+        return false;
+    };
+    !issue.is_empty() && issue.bytes().all(|c| c.is_ascii_digit()) && task != "epic" && named(task)
+}
 fn safe_link(path: &Path, link: &Path) -> Result<()> {
     let mut target = path.parent().context("Missing link parent")?.to_path_buf();
     for component in link.components() {
@@ -259,9 +286,15 @@ fn apply(root: &Path, incoming: &Path, report: &Json, kind: &str) -> Result<()> 
         matches!(kind, "code" | "cargo" | "metadata"),
         "Unknown review kind"
     );
+    // Downstream changes win: a file XGPUI changed relative to the previous
+    // upstream baseline is never replaced or deleted wholesale. Those
+    // overlaps are ported by hand, keeping local behavior. Entries that do not
+    // record `downstream_overlap` are treated as overlaps.
     let entries: Vec<_> = rows(&report["entries"])
         .iter()
-        .filter(|e| e["kind"] == kind && e["retain_local"] != true)
+        .filter(|e| {
+            e["kind"] == kind && e["retain_local"] != true && e["downstream_overlap"] == false
+        })
         .collect();
     for entry in &entries {
         let name = str_at(entry, "path");
@@ -507,7 +540,7 @@ fn review_notes(report: &Json, context: &str) -> String {
         .filter(|e| e["retain_local"] == true)
         .collect();
     let mut out = format!(
-        "Incoming gpui-unofficial {} tree proposal.\nSource commit: `{}`.\n\nUnintegrated proposal: complete incoming files, not resolved patches. Downstream overlaps require manual review before merging.\n",
+        "Incoming gpui-unofficial {} tree proposal.\nSource commit: `{}`.\n\nUnintegrated proposal: complete incoming files, not resolved patches. Downstream changes win: files marked NOT APPLIED keep local contents and need a manual port that preserves local behavior.\n",
         str_at(report, "release"),
         str_at(report, "source_commit")
     );
@@ -523,8 +556,8 @@ fn review_notes(report: &Json, context: &str) -> String {
                 } else {
                     "upstream unchanged"
                 },
-                if e["downstream_overlap"] == true {
-                    "; MANUAL REVIEW: downstream differs"
+                if e["downstream_overlap"] != false {
+                    "; NOT APPLIED: downstream differs, port manually and keep local behavior"
                 } else {
                     ""
                 }
@@ -604,8 +637,8 @@ pub(super) fn cli(root: &Path, args: &[String]) -> Result<()> {
             if action != "prepare" {
                 let branch = git(root, &["branch", "--show-current"])?;
                 ensure!(
-                    branch.starts_with("sync/") || branch.starts_with("codex/"),
-                    "Apply only on dedicated review branch"
+                    review_branch(&branch),
+                    "Apply only on a dedicated review branch (sync/*, codex/* or issue-N/task), not {branch:?}"
                 );
                 return apply(root, &snapshot, &read_json(report_path)?, action);
             }
@@ -691,16 +724,76 @@ mod tests {
         let incoming = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join("gpui")).unwrap();
         fs::write(root.path().join("gpui/a"), "local").unwrap();
-        let report =
-            json!({"entries":[{"path":"gpui/a","kind":"code","local":"stale","incoming":null}]});
+        let report = json!({"entries":[{"path":"gpui/a","kind":"code","downstream_overlap":false,"local":"stale","incoming":null}]});
         assert!(apply(root.path(), incoming.path(), &report, "code").is_err());
         assert_eq!(
             fs::read_to_string(root.path().join("gpui/a")).unwrap(),
             "local"
         );
-        let report =
-            json!({"entries":[{"path":"../outside","kind":"code","local":null,"incoming":null}]});
+        let report = json!({"entries":[{"path":"../outside","kind":"code","downstream_overlap":false,"local":null,"incoming":null}]});
         assert!(apply(root.path(), incoming.path(), &report, "code").is_err());
+    }
+    #[test]
+    fn review_application_branches() {
+        for ok in [
+            "sync/1.28.1",
+            "codex/review",
+            "issue-284/sync-tooling",
+            "issue-284/core-cache",
+            "issue-7/a/b",
+        ] {
+            assert!(review_branch(ok), "{ok}");
+        }
+        for bad in [
+            "",
+            "main",
+            "release/1.28.1",
+            "issue-284/epic",
+            "issue-284/",
+            "issue-/task",
+            "issue-28x/task",
+            "issue-284",
+            "issue-284/../main",
+            "issue-284/a//b",
+            "sync/",
+            "codex/",
+            "feature/sync/x",
+        ] {
+            assert!(!review_branch(bad), "{bad}");
+        }
+    }
+    #[test]
+    fn downstream_overlaps_are_never_overwritten_or_deleted() {
+        let root = tempfile::tempdir().unwrap();
+        let incoming = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("gpui")).unwrap();
+        fs::create_dir_all(incoming.path().join("gpui")).unwrap();
+        for name in ["edited", "deleted_upstream", "legacy", "clean"] {
+            fs::write(root.path().join("gpui").join(name), "ours").unwrap();
+        }
+        for name in ["edited", "legacy", "clean"] {
+            fs::write(incoming.path().join("gpui").join(name), "upstream").unwrap();
+        }
+        let ours = signature(&root.path().join("gpui/clean")).unwrap();
+        let upstream = signature(&incoming.path().join("gpui/clean")).unwrap();
+        let report = json!({"entries":[
+            {"path":"gpui/edited","kind":"code","retain_local":false,"downstream_overlap":true,"local":ours,"incoming":upstream},
+            {"path":"gpui/deleted_upstream","kind":"code","retain_local":false,"downstream_overlap":true,"local":ours,"incoming":null},
+            {"path":"gpui/legacy","kind":"code","retain_local":false,"local":ours,"incoming":upstream},
+            {"path":"gpui/clean","kind":"code","retain_local":false,"downstream_overlap":false,"local":ours,"incoming":upstream}
+        ]});
+        apply(root.path(), incoming.path(), &report, "code").unwrap();
+        for name in ["edited", "deleted_upstream", "legacy"] {
+            assert_eq!(
+                fs::read_to_string(root.path().join("gpui").join(name)).unwrap(),
+                "ours",
+                "{name}"
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(root.path().join("gpui/clean")).unwrap(),
+            "upstream"
+        );
     }
     #[test]
     fn retain_local_entries_are_not_applied() {
@@ -853,7 +946,7 @@ mod import_regressions {
         let incoming = tempfile::tempdir().unwrap();
         fs::create_dir(root.path().join("gpui")).unwrap();
         std::os::unix::fs::symlink(outside.path(), root.path().join("gpui/escape")).unwrap();
-        let report = json!({"entries":[{"path":"gpui/escape/a","kind":"code","local":null,"incoming":null}]});
+        let report = json!({"entries":[{"path":"gpui/escape/a","kind":"code","downstream_overlap":false,"local":null,"incoming":null}]});
         assert!(apply(root.path(), incoming.path(), &report, "code").is_err());
         assert!(!outside.path().join("a").exists());
     }

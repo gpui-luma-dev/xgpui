@@ -1473,6 +1473,7 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
         WindowControls::default()
     }
     fn set_client_inset(&self, _inset: Pixels) {}
+    fn set_client_corner_radii(&self, _radii: Corners<Pixels>) {}
     fn gpu_specs(&self) -> Option<GpuSpecs>;
 
     fn update_ime_position(&self, _bounds: Bounds<Pixels>);
@@ -2783,16 +2784,32 @@ pub struct WindowOptions {
     /// window that is not active and is not receiving input at 60 or more events
     /// per second. A redraw requested only with `cx.notify()` is not throttled.
     ///
-    /// Other caps on those same animation frames, independent of this setting:
-    ///
-    /// - In low-power mode (reported on macOS, Windows and Linux), animation frames
-    ///   are capped at 30 fps in every window, including inactive windows with `None`.
-    /// - Under serious or critical thermal pressure (reported on macOS only), animation
-    ///   frames in an active window are capped at 60 fps.
+    /// Other caps on those same animation frames, independent of this setting, are
+    /// [`low_power_frame_interval`](Self::low_power_frame_interval) and
+    /// [`thermal_frame_interval`](Self::thermal_frame_interval). When several apply,
+    /// the longest interval wins. Mandatory platform presentations bypass every limit.
     ///
     /// [`Window::on_next_frame`]: crate::Window::on_next_frame
     /// [`Window::request_animation_frame`]: crate::Window::request_animation_frame
     pub inactive_frame_interval: Option<Duration>,
+
+    /// The minimum interval between animation frames while the platform reports
+    /// low-power mode (macOS, Windows and Linux), in every window.
+    ///
+    /// Defaults to 33.3 ms (about 30 fps). Set to `None` to disable this limit. Like
+    /// [`inactive_frame_interval`](Self::inactive_frame_interval), it applies only to
+    /// animation frames and forced renders, not to redraws requested with `cx.notify()`.
+    /// It can only be set when the window is created.
+    pub low_power_frame_interval: Option<Duration>,
+
+    /// The minimum interval between animation frames under serious or critical
+    /// thermal pressure (reported on macOS only).
+    ///
+    /// Defaults to 16.7 ms (about 60 fps). Set to `None` to disable this limit. Like
+    /// [`inactive_frame_interval`](Self::inactive_frame_interval), it applies only to
+    /// animation frames and forced renders, not to redraws requested with `cx.notify()`.
+    /// It can only be set when the window is created.
+    pub thermal_frame_interval: Option<Duration>,
 
     /// Whether the window should be resizable by the user
     pub is_resizable: bool,
@@ -2948,6 +2965,8 @@ impl Default for WindowOptions {
             is_movable: true,
             app_owns_titlebar_drag: false,
             inactive_frame_interval: Some(Duration::from_micros(33_333)),
+            low_power_frame_interval: Some(Duration::from_micros(33_333)),
+            thermal_frame_interval: Some(Duration::from_micros(16_667)),
             is_resizable: true,
             is_minimizable: true,
             display_id: None,
