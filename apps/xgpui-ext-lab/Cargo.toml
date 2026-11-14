@@ -80,7 +80,7 @@ objc2-core-foundation = { version = "=0.3.2", default-features = false, features
 objc2-core-video = { version = "=0.3.2", default-features = false, features = ["CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVReturn"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
-xgpui-gpu-interop = { path = "../../extensions/crates/xgpui-gpu-interop", features = ["wgpu"] }
+xgpui-gpu-interop = { path = "../../extensions/crates/xgpui-gpu-interop", features = ["wgpu"] , package = "xgpui-gpu-interop", version = "0.1.0" }
 futures = "0.3"
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]

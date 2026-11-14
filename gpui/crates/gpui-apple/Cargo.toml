@@ -31,7 +31,7 @@ gpui = { package = "xgpui", version = "3.0.0" }
 anyhow = { version = "1.0.86" }
 async-task = { version = "4.7" }
 block2 = { version = "0.6" }
-collections = { package = "collections-gpui-unofficial", version = "=1.27.0" }
+collections = { package = "collections-gpui-unofficial", version = "=1.28.1" }
 core-foundation = { version = "0.10" }
 core-foundation-sys = { version = "0.8.6" }
 core-graphics = { version = "0.24" }
@@ -41,7 +41,7 @@ dispatch2 = { version = "0.3", default-features = false, features = ["std", "blo
 etagere = { version = "0.2" }
 futures = { version = "0.3.34" }
 font-kit = { version = "0.14.1-zed", package = "zed-font-kit", default-features = false, features = ["source"], optional = true }
-gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.27.0" }
+gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.28.1" }
 image = { version = "0.25.1", default-features = false, features = [
     "bmp",
     "dds",
