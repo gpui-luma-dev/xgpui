@@ -11,6 +11,33 @@ fn stable_version(v: &str) -> bool {
         && p.iter()
             .all(|s| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()))
 }
+// Reviewed proposals land on a branch whose PR is reviewed before merging.
+// Epic subtask branches (`issue-N/task`) qualify; the epic itself and main
+// only receive merged PRs, so proposals are never applied there directly.
+fn review_branch(branch: &str) -> bool {
+    fn named(rest: &str) -> bool {
+        !rest.is_empty()
+            && rest
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.' | b'/'))
+            && rest
+                .split('/')
+                .all(|part| !part.is_empty() && part != "." && part != "..")
+    }
+    if let Some(rest) = branch
+        .strip_prefix("sync/")
+        .or_else(|| branch.strip_prefix("codex/"))
+    {
+        return named(rest);
+    }
+    let Some((issue, task)) = branch
+        .strip_prefix("issue-")
+        .and_then(|rest| rest.split_once('/'))
+    else {
+        return false;
+    };
+    !issue.is_empty() && issue.bytes().all(|c| c.is_ascii_digit()) && task != "epic" && named(task)
+}
 fn safe_link(path: &Path, link: &Path) -> Result<()> {
     let mut target = path.parent().context("Missing link parent")?.to_path_buf();
     for component in link.components() {
@@ -604,8 +631,8 @@ pub(super) fn cli(root: &Path, args: &[String]) -> Result<()> {
             if action != "prepare" {
                 let branch = git(root, &["branch", "--show-current"])?;
                 ensure!(
-                    branch.starts_with("sync/") || branch.starts_with("codex/"),
-                    "Apply only on dedicated review branch"
+                    review_branch(&branch),
+                    "Apply only on a dedicated review branch (sync/*, codex/* or issue-N/task), not {branch:?}"
                 );
                 return apply(root, &snapshot, &read_json(report_path)?, action);
             }
@@ -701,6 +728,35 @@ mod tests {
         let report =
             json!({"entries":[{"path":"../outside","kind":"code","local":null,"incoming":null}]});
         assert!(apply(root.path(), incoming.path(), &report, "code").is_err());
+    }
+    #[test]
+    fn review_application_branches() {
+        for ok in [
+            "sync/1.28.1",
+            "codex/review",
+            "issue-284/sync-tooling",
+            "issue-284/core-cache",
+            "issue-7/a/b",
+        ] {
+            assert!(review_branch(ok), "{ok}");
+        }
+        for bad in [
+            "",
+            "main",
+            "release/1.28.1",
+            "issue-284/epic",
+            "issue-284/",
+            "issue-/task",
+            "issue-28x/task",
+            "issue-284",
+            "issue-284/../main",
+            "issue-284/a//b",
+            "sync/",
+            "codex/",
+            "feature/sync/x",
+        ] {
+            assert!(!review_branch(bad), "{bad}");
+        }
     }
     #[test]
     fn retain_local_entries_are_not_applied() {
