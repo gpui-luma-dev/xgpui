@@ -42,6 +42,7 @@ pub struct TypographyDemo {
     large: bool,
     light: bool,
     status: SharedString,
+    presentation_error: Option<String>,
     _subscriptions: Vec<Subscription>,
     motion: MotionMode,
     playing: bool,
@@ -76,6 +77,7 @@ impl TypographyDemo {
             large: false,
             light: false,
             status: "Select a phrase to inspect its authentic source.".into(),
+            presentation_error: None,
             _subscriptions: subscriptions,
             motion: MotionMode::Static,
             playing: false,
@@ -90,6 +92,15 @@ impl TypographyDemo {
         };
         demo.apply_style(cx);
         demo
+    }
+    pub fn set_presentation(
+        &mut self,
+        mode: WindowColorMode,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.presentation_error = window.set_color_mode(mode).err().map(|e| e.to_string());
+        cx.notify();
     }
     fn apply_style(&mut self, cx: &mut Context<Self>) {
         let fill = match self.fill {
@@ -282,6 +293,24 @@ impl Render for TypographyDemo {
                     .child(div().text_size(px(42.)).line_height(px(50.)).child("Bright ideas. Real words."))
                     .child(div().text_size(px(16.)).line_height(px(25.)).text_color(rgb(muted))
                         .child("Only the painted glyphs move or disappear. Select across the original line, then copy: the source stays complete.")))
+                .child(div().flex().flex_col().gap_2()
+                    .child(div().flex().flex_wrap().gap_2()
+                        .child(button("presentation-default", "Default SDR", window.color_status().requested() == WindowColorMode::Default)
+                            .on_click(cx.listener(|this, _, window, cx| this.set_presentation(WindowColorMode::Default, window, cx))))
+                        .child(button("presentation-wide", "Wide-gamut SDR", window.color_status().requested() == WindowColorMode::WideGamutSdr)
+                            .on_click(cx.listener(|this, _, window, cx| this.set_presentation(WindowColorMode::WideGamutSdr, window, cx)))))
+                    .child(div().text_size(px(13.)).child(format!(
+                        "Requested: {:?} · Effective: {:?} · Display wide gamut: {:?} · Scale: {}",
+                        window.color_status().requested(), window.color_status().effective(),
+                        window.color_status().display_wide_gamut(), window.scale_factor())))
+                    .child(div().text_size(px(13.)).child(self.presentation_error.clone().unwrap_or_else(|| {
+                        if window.color_status().requested() == WindowColorMode::WideGamutSdr
+                            && window.color_status().effective() != WindowColorMode::WideGamutSdr {
+                            "Wide gamut is not effective: this run does not validate issue #53.".into()
+                        } else {
+                            "Issue #53: verify effects with Effective: WideGamutSdr on native macOS/Metal.".into()
+                        }
+                    }))))
                 .child(div().flex().flex_wrap().gap_2().children(SAMPLES.iter().enumerate().map(|(index, (label, _, _))| {
                     button(("sample", index), *label, self.active == index)
                         .on_click(cx.listener(move |this, _, window, cx| this.choose(index, window, cx)))
@@ -404,7 +433,10 @@ mod tests {
                 break;
             }
         }
-        assert!(reached_text, "Tab must reach the selectable text from startup");
+        assert!(
+            reached_text,
+            "Tab must reach the selectable text from startup"
+        );
         cx.simulate_keystrokes("shift-tab");
         assert!(!cx.update(|window, _| text_focus.is_focused(window)));
         cx.simulate_keystrokes("tab");

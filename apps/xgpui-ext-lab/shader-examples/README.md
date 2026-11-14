@@ -124,3 +124,15 @@ from the root. The shared native/browser demo has Editorial, Ligatures, Unicode
 and Overflow samples, a live source inspector, selection/copy controls, type size,
 width and light/dark controls. Gradient/glow/drop-shadow styling, typewriter reveal, deterministic scramble and bounded wave motion preserve the original selectable source.
 Pause, scrub and reduced-motion controls make each effect inspectable. See [the typography guide](https://xgpui.dev/typography.html).
+
+
+### Metal wide-gamut validation (issue #53)
+
+From the repository root, run `just lab-shader --example typography --wide-gamut`.
+The presentation panel shows requested/effective color mode, display gamut and
+scale, plus any request error. Wide-gamut acceptance requires native macOS/Metal
+and **Effective: WideGamutSdr**; a fallback or browser run does not establish it.
+Use the Default SDR / Wide-gamut SDR buttons to verify repeated mode switching.
+Check glow and offset shadows at 4/8/12px, all motion modes, light/dark, size,
+width, resize, reduced motion and exact Unicode selection/copy. Inspect Retina
+blur edges and terminal errors. The branch's `.remote-test.sh` records the steps.
