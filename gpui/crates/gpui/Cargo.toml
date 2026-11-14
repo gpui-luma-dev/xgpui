@@ -199,6 +199,9 @@ proptest = { version = "1.12.0", features = ["attr-macro"] }
 reqwest_client = { package = "reqwest-client-gpui-unofficial", version = "=1.28.1", features = ["test-support"] }
 
 [target.'cfg(target_family = "wasm")'.dev-dependencies]
+# Repository-only image examples: kept path-only so the published crate omits it
+# (web depends on core, so a versioned edge would block cold publication).
+gpui_web = { package = "xgpui-web", path = "../gpui-web" }
 wasm-bindgen = { version = "0.2.120" }
 web-sys = { version = "0.3" }
 
