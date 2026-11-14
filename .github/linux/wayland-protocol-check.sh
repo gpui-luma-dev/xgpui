@@ -9,6 +9,9 @@
 # - The opaque-region requests are counted for evidence.
 set -euo pipefail
 results=${1:?results directory}
+# --require-activation: fail unless the compositor offers xdg_activation_v1 and
+# at least one token round trip happened (used for the Mutter run).
+require_activation=${2:-}
 log="$results/wayland-smoke.log"
 [[ -s "$log" ]] || { echo "missing Wayland smoke log: $log"; exit 1; }
 summary="$results/wayland-protocol-check.txt"
@@ -42,6 +45,13 @@ if grep -qE 'global\([0-9]+, "xdg_activation_v1"' "$log"; then
         say "FAIL: more tokens returned than requested"
         exit 1
     fi
+    if [[ "$require_activation" == --require-activation && "$done_events" -eq 0 ]]; then
+        say "FAIL: activation offered but no token round trip happened"
+        exit 1
+    fi
+elif [[ "$require_activation" == --require-activation ]]; then
+    say "FAIL: compositor does not offer xdg_activation_v1, so activation cannot be checked"
+    exit 1
 else
     say "activation: compositor does not offer xdg_activation_v1; pairing not exercised"
 fi
