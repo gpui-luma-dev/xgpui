@@ -20,6 +20,52 @@
 </aside>
 <main id="content" tabindex="-1">
 <p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="whats-new">What's new</h1>
+<h2 id="gpui-1-28-1">In preparation — GPUI 1.28.1 upstream sync</h2>
+<p>The GPUI sources now follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/releases/tag/v1.28.1">1.28.1</a> (Zed <code>v1.28.1</code>). Where an upstream change conflicted with XGPUI behavior, XGPUI’s behavior was kept. These versions are not yet published; tracking issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/284">#284</a>.</p>
+<h3>Highlights</h3>
+<ul>
+<li><strong>macOS frame pacing:</strong> on macOS 14 and later, windows draw from <code>CAMetalDisplayLink</code>. Animation runs at the display rate instead of stalling at about 30 fps, and idle windows stop drawing. Earlier systems keep <code>CVDisplayLink</code>.</li>
+<li><strong>Text:</strong> ICU grapheme-aware wrapping, right-to-left and shaped-cluster breaks, a CoreText point-size fix, and invisible tab glyphs on DirectWrite.</li>
+<li><strong>Wayland:</strong> activation requests no longer overwrite each other (no stuck GNOME launch indicator), blur through <code>ext-background-effect-v1</code> with a KDE fallback, and blur and input regions that follow client corner radii.</li>
+<li><strong>Windows:</strong> repeated synthetic mouse moves are dropped, and real moves, drags and arrivals are still delivered.</li>
+<li><strong>wgpu:</strong> the window surface is configured once at creation, removing 200–500 ms before the first frame on slow drivers. Bounded device-loss recovery is unchanged.</li>
+<li><strong>Core:</strong> configurable low-power and thermal frame intervals with the same defaults as before; <code>cx.notify()</code> redraws stay unthrottled. Send-capable foreground executors, <code>Window::set_client_corner_radii</code>, and cached-view opacity fixes.</li>
+<li><strong>Desktop shell:</strong> <code>xgpui-shell 0.3.0</code> adds a window-control presenter hook and native caption clicks on Windows (<a href="https://github.com/gpui-luma-dev/xgpui/issues/194">#194</a>).</li>
+</ul>
+<h3>Migration</h3>
+<ul>
+<li><code>WindowOptions</code> has two new fields, <code>low_power_frame_interval</code> and <code>thermal_frame_interval</code>. Struct literals that list every field need them or <code>..Default::default()</code>.</li>
+<li><code>gpui::http_client</code> no longer re-exports the GitHub download helpers or <code>anyhow</code>. Depend on <code>anyhow</code> directly.</li>
+<li><code>AppCell::try_borrow_mut</code> returns <code>anyhow::Result</code>. Only code that names <code>BorrowMutError</code> needs changes.</li>
+<li><code>WgpuContext::new</code> and <code>new_rejecting_software</code> take the <code>&amp;WgpuSurfaceConfig</code> the renderer will use. Code that creates renderers through <code>WgpuRenderer</code> is unaffected.</li>
+<li><code>ShellControl</code> is non-exhaustive; add a wildcard arm to matches.</li>
+</ul>
+<p>Update the GPUI family together: <code>xgpui 4</code> types are distinct from 3.x types. Every change is listed with its compatibility notes in the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.28.1-api-ledger.md">API ledger</a> and the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.28.1-accounting.md">upstream change accounting</a>.</p>
+<h3>Validation</h3>
+<p>Each backend’s test suite runs in CI, along with real-window checks. On macOS, display-rate animation (about 60 fps), no frames while idle, and a live screenshot. On Windows, synthetic mouse-move filtering. On Wayland, protocol checks under Weston and headless Mutter (activation tokens requested, returned and used in pairs) and an X11 run under Xvfb. All 19 crate archives pass offline inspection and the publication-order check; the iOS backend compiles for the simulator. Interactive iOS validation and physical-display gamut checks are not covered.</p>
+<h3>Proposed versions</h3>
+<table><thead><tr><th>Crate</th><th>Previous release</th><th>Proposed</th></tr></thead><tbody>
+<tr><td><code>xgpui</code></td><td>3.2.0</td><td><strong>4.0.0</strong></td></tr>
+<tr><td><code>xgpui-apple</code></td><td>4.1.0</td><td>4.2.0</td></tr>
+<tr><td><code>xgpui-canvas</code></td><td>0.3.4</td><td>0.3.5</td></tr>
+<tr><td><code>xgpui-color</code></td><td>0.3.2</td><td>0.3.2</td></tr>
+<tr><td><code>xgpui-gamut</code></td><td>0.3.4</td><td>0.3.5</td></tr>
+<tr><td><code>xgpui-gpu-interop</code></td><td>0.1.0</td><td>0.1.1</td></tr>
+<tr><td><code>xgpui-ios</code></td><td>1.26.5</td><td>1.26.6</td></tr>
+<tr><td><code>xgpui-linux</code></td><td>2.1.1</td><td>2.2.0</td></tr>
+<tr><td><code>xgpui-macos</code></td><td>4.0.2</td><td>4.1.0</td></tr>
+<tr><td><code>xgpui-macros</code></td><td>1.0.3</td><td>1.0.3</td></tr>
+<tr><td><code>xgpui-media</code></td><td>0.5.4</td><td>0.5.5</td></tr>
+<tr><td><code>xgpui-parley</code></td><td>0.5.1</td><td>0.5.2</td></tr>
+<tr><td><code>xgpui-platform</code></td><td>2.0.4</td><td>2.0.5</td></tr>
+<tr><td><code>xgpui-shader</code></td><td>0.4.4</td><td>0.4.5</td></tr>
+<tr><td><code>xgpui-shell</code></td><td>0.1.1</td><td><strong>0.3.0</strong></td></tr>
+<tr><td><code>xgpui-svg</code></td><td>0.3.4</td><td>0.3.5</td></tr>
+<tr><td><code>xgpui-web</code></td><td>2.0.4</td><td>2.1.0</td></tr>
+<tr><td><code>xgpui-wgpu</code></td><td>2.3.0</td><td><strong>3.0.0</strong></td></tr>
+<tr><td><code>xgpui-windows</code></td><td>2.2.0</td><td>2.2.1</td></tr>
+</tbody></table>
+<p><code>xgpui-shell 0.2.0</code> was published on November 10 from a branch that did not merge, so the next shell release is 0.3.0.</p>
 <h2 id="november-12-2026">November 12, 2026 — GPU interop and device-loss recovery</h2>
 <p>The November 12 release is available on crates.io: 18 new crate versions, including the first <a href="https://crates.io/crates/xgpui-gpu-interop/0.1.0"><code>xgpui-gpu-interop 0.1.0</code></a> release. Source tag: <a href="https://github.com/gpui-luma-dev/xgpui/tree/release-2026-11-12-da99e6bb8e6d"><code>release-2026-11-12-da99e6bb8e6d</code></a>. The iOS crate remains at <code>1.26.5</code>.</p>
 <h3 id="november-11-2026">GPU interop — first alpha release</h3>

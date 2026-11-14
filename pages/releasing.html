@@ -375,13 +375,12 @@ pulls of the upstream framework alongside the local fork.</p>
 version overrides for ten framework/backend crates and seven extensions.
 Normalization applies those versions while keeping directory names, library names
 and dependency aliases stable. The helper package version follows the captured
-<code>release/1.27.0</code> provenance independently. <code>upstream.json</code> records both sets.</p>
+<code>release/1.28.1</code> provenance independently. <code>upstream.json</code> records both sets.</p>
 <p>For example, the local <code>gpui</code> crate is packaged as <code>xgpui</code>; applications retain
 <code>use gpui::*</code> through a Cargo alias. Internal dependencies use exact requirements
 from the release map. Supporting packages retain their upstream identities and
-<code>=1.27.0</code> requirements. The selected downstream family uses core 3.0.0 and Apple/macOS 4.0.0, with
-matching exact pins. The integration still requires final public API review
-before release.
+<code>=1.28.1</code> requirements. The selected downstream family uses core 4.0.0, Apple 4.2.0 and macOS 4.1.0, with
+matching pins.
 Interactive iOS simulator/device validation remains pending.</p>
 <h2 id="website-deployment">Website deployment</h2>
 <p><code>.github/workflows/pages.yml</code> runs on manual dispatch only. It checks <code>pages/</code>,
