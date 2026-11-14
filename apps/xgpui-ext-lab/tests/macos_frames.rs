@@ -73,10 +73,24 @@ fn main() {
                 waited += 100;
             }
 
-            // 1. Animate: warm up, then measure two seconds.
+            // Whether macOS reports the window as presented (`NSWindow.occlusionState`).
+            // Hidden runner windows get throttled or no display-link frames at all.
+            let visible = |cx: &mut AsyncApp| {
+                window
+                    .update(cx, |_, window, _| window.is_visible())
+                    .unwrap_or(false)
+            };
+
+            // 1. Animate: warm up, then measure two seconds, sampling visibility.
             sleep(750).await;
             let start = Instant::now();
-            sleep(2000).await;
+            let mut hidden_samples = 0;
+            for _ in 0..20 {
+                sleep(100).await;
+                if !visible(cx) {
+                    hidden_samples += 1;
+                }
+            }
             let animated = count_since(start);
             let fps = animated as f64 / start.elapsed().as_secs_f64();
 
@@ -93,16 +107,17 @@ fn main() {
                 .map_err(|e| format!("window gone: {e:#}"))
                 .and_then(|result| result.map_err(|e| format!("render_to_image failed: {e:#}")));
 
-            if animated == 0 {
-                // macOS delivers no display-link updates to windows that aren't
-                // visible (display asleep, screen locked, no foreground session),
-                // on both the Metal and CVDisplayLink paths: the environment, not
-                // frame pacing. The screenshot must still work; the frame rate is
-                // inconclusive, which exit code 2 tells the workflow.
+            if animated == 0 || hidden_samples > 0 {
+                // macOS throttles or stops display-link updates for windows that
+                // aren't presented (covered, display asleep, screen locked, no
+                // foreground session), on both the Metal and CVDisplayLink paths:
+                // the environment, not frame pacing. The screenshot must still
+                // work; the frame rate is inconclusive, which exit code 2 tells the
+                // workflow. A low rate while the window stays visible still fails.
                 match image {
                     Ok(image) if image.width() > 0 && image.height() > 0 => {
                         eprintln!(
-                            "macOS frame delivery probe inconclusive: no frames after the first (window not visible); live screenshot {}x{} worked",
+                            "macOS frame delivery probe inconclusive: {animated} frames in 2 s while the window was hidden for {hidden_samples} of 20 samples; live screenshot {}x{} worked",
                             image.width(),
                             image.height()
                         );
@@ -120,7 +135,7 @@ fn main() {
             }
             let result = if fps < 45.0 {
                 Err(format!(
-                    "animation ran at {fps:.1} fps ({animated} frames in 2 s); expected the display rate, not a ~30 fps cap"
+                    "animation ran at {fps:.1} fps ({animated} frames in 2 s) with the window visible throughout; expected the display rate, not a ~30 fps cap"
                 ))
             } else if idle > 2 {
                 Err(format!("idle window kept rendering: {idle} frames in 1.5 s"))
