@@ -1,6 +1,6 @@
 # Experimental desktop shell
 
-> **ALPHA — expect API changes.** `xgpui-shell 0.1.0` is being prepared for its first crates.io release. The code is available locally; publication is still pending.
+> **ALPHA — expect API changes.** `xgpui-shell` is published on crates.io as an alpha; breaking changes raise the minor version.
 
 `xgpui-shell` supplies window chrome built from GPUI elements. Use its shared Linux client frame, or compose your own title bar while retaining native platform structure. It does not load GTK, libadwaita or third-party widget themes.
 
