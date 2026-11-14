@@ -8012,6 +8012,7 @@ dependencies = [
  "objc2-core-video",
  "objc2-foundation 0.3.2",
  "parley",
+ "raw-window-handle",
  "serde",
  "serde_json",
  "sha2",
