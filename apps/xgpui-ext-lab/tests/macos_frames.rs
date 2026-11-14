@@ -93,7 +93,12 @@ fn main() {
                 .map_err(|e| format!("window gone: {e:#}"))
                 .and_then(|result| result.map_err(|e| format!("render_to_image failed: {e:#}")));
 
-            let result = if fps < 45.0 {
+            let result = if animated == 0 {
+                // macOS delivers no display-link updates to windows that aren't
+                // visible (display asleep, screen locked), on both the Metal and
+                // CVDisplayLink paths. That is the environment, not frame pacing.
+                Err("no frames after the first: the display is asleep or the window isn't visible (keep the display awake for this probe)".into())
+            } else if fps < 45.0 {
                 Err(format!(
                     "animation ran at {fps:.1} fps ({animated} frames in 2 s); expected the display rate, not a ~30 fps cap"
                 ))
