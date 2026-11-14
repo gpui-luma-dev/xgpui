@@ -61,6 +61,18 @@ fn main() {
             let sleep = move |ms| executor.timer(Duration::from_millis(ms));
             let count_since = |since: Instant| frames.borrow().iter().filter(|t| **t >= since).count();
 
+            // 0. Wait for the first frame. A freshly built binary's first window can
+            //    take seconds to appear, which must not count as a slow frame rate.
+            let mut waited = 0;
+            while frames.borrow().is_empty() {
+                if waited >= 15_000 {
+                    eprintln!("macOS frame delivery probe failed: the window never rendered a frame in 15 s");
+                    std::process::exit(1);
+                }
+                sleep(100).await;
+                waited += 100;
+            }
+
             // 1. Animate: warm up, then measure two seconds.
             sleep(750).await;
             let start = Instant::now();
