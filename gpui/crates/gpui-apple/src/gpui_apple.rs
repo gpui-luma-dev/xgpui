@@ -7,6 +7,7 @@
 
 pub mod custom_draw;
 mod dispatcher;
+pub mod display_link;
 pub mod keychain;
 pub mod metal;
 mod metal_atlas;

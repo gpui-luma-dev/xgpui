@@ -21,8 +21,10 @@ native = []
 web = ["xgpui-color/icc"]
 native-window-tests = ["native"]
 linux-window-tests = ["native"]
-# Real-window behavior probe for #284 package 09, run by the epic validation workflow.
+# Real-window behavior probes for #284 (packages 09 and 06), run by the epic
+# validation workflow.
 windows-window-tests = ["native"]
+macos-window-tests = ["native", "test-support"]
 # Enable the tests in the shared GPUI input example reused by text-lab.
 test-support = ["gpui/test-support"]
 portable-shaders = ["xgpui-shader/portable-shaders"]
@@ -216,3 +218,9 @@ name = "windows_input"
 path = "tests/windows_input.rs"
 harness = false
 required-features = ["windows-window-tests"]
+
+[[test]]
+name = "macos_frames"
+path = "tests/macos_frames.rs"
+harness = false
+required-features = ["macos-window-tests"]
