@@ -425,7 +425,23 @@ fn normalize(root: &Path, names: &Names, check: bool) -> Result<Json> {
         .or_else(|| core["package"]["version"].as_str())
         .context("Missing upstream release version")?
         .to_owned();
-    let version = upstream_version.as_str();
+    // Registry helper pins can move ahead of the captured source (an epic
+    // prepares helpers before it finishes the source capture), so an explicit
+    // helper version wins over the source ref.
+    let helper_version = provenance
+        .get("registry_packages")
+        .and_then(|r| r.get("version"))
+        .and_then(Json::as_str)
+        .map(str::to_owned)
+        .unwrap_or_else(|| upstream_version.clone());
+    ensure!(
+        helper_version.split('.').count() == 3
+            && helper_version
+                .split('.')
+                .all(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit())),
+        "Invalid registry helper version {helper_version}"
+    );
+    let version = helper_version.as_str();
     let mut packages = BTreeMap::new();
     let mut removals = Vec::new();
     for (old, value) in &source {
@@ -1038,6 +1054,36 @@ mod tests {
         normalize(root, &names, true).unwrap();
         normalize(root, &names, false).unwrap();
         normalize(root, &names, true).unwrap();
+
+        // Helper pins move ahead of the captured source without changing its provenance.
+        let mut data: Json =
+            serde_json::from_str(&fs::read_to_string(root.join("upstream.json")).unwrap()).unwrap();
+        data["registry_packages"]["version"] = json!("1.26.2");
+        fs::write(root.join("upstream.json"), data.to_string()).unwrap();
+        assert!(normalize(root, &names, true).is_err());
+        normalize(root, &names, false).unwrap();
+        normalize(root, &names, true).unwrap();
+        let manifest: toml::Value =
+            toml::from_str(&fs::read_to_string(root.join("gpui/crates/gpui/Cargo.toml")).unwrap())
+                .unwrap();
+        assert_eq!(
+            manifest["dependencies"]["helper"]["version"].as_str(),
+            Some("=1.26.2")
+        );
+        let data: Json =
+            serde_json::from_str(&fs::read_to_string(root.join("upstream.json")).unwrap()).unwrap();
+        assert_eq!(data["ref"], "release/1.25.3");
+        assert_eq!(data["registry_packages"]["version"], "1.26.2");
+
+        data_with_helper_version(root, "1.26");
+        assert!(normalize(root, &names, false).is_err());
+    }
+
+    fn data_with_helper_version(root: &Path, version: &str) {
+        let mut data: Json =
+            serde_json::from_str(&fs::read_to_string(root.join("upstream.json")).unwrap()).unwrap();
+        data["registry_packages"]["version"] = json!(version);
+        fs::write(root.join("upstream.json"), data.to_string()).unwrap();
     }
 
     #[test]
