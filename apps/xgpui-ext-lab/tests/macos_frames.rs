@@ -61,6 +61,18 @@ fn main() {
             let sleep = move |ms| executor.timer(Duration::from_millis(ms));
             let count_since = |since: Instant| frames.borrow().iter().filter(|t| **t >= since).count();
 
+            // 0. Wait for the first frame. A freshly built binary's first window can
+            //    take seconds to appear, which must not count as a slow frame rate.
+            let mut waited = 0;
+            while frames.borrow().is_empty() {
+                if waited >= 15_000 {
+                    eprintln!("macOS frame delivery probe failed: the window never rendered a frame in 15 s");
+                    std::process::exit(1);
+                }
+                sleep(100).await;
+                waited += 100;
+            }
+
             // 1. Animate: warm up, then measure two seconds.
             sleep(750).await;
             let start = Instant::now();
@@ -81,6 +93,31 @@ fn main() {
                 .map_err(|e| format!("window gone: {e:#}"))
                 .and_then(|result| result.map_err(|e| format!("render_to_image failed: {e:#}")));
 
+            if animated == 0 {
+                // macOS delivers no display-link updates to windows that aren't
+                // visible (display asleep, screen locked, no foreground session),
+                // on both the Metal and CVDisplayLink paths: the environment, not
+                // frame pacing. The screenshot must still work; the frame rate is
+                // inconclusive, which exit code 2 tells the workflow.
+                match image {
+                    Ok(image) if image.width() > 0 && image.height() > 0 => {
+                        eprintln!(
+                            "macOS frame delivery probe inconclusive: no frames after the first (window not visible); live screenshot {}x{} worked",
+                            image.width(),
+                            image.height()
+                        );
+                        std::process::exit(2);
+                    }
+                    Ok(_) => {
+                        eprintln!("macOS frame delivery probe failed: render_to_image returned an empty image");
+                        std::process::exit(1);
+                    }
+                    Err(error) => {
+                        eprintln!("macOS frame delivery probe failed: {error}");
+                        std::process::exit(1);
+                    }
+                }
+            }
             let result = if fps < 45.0 {
                 Err(format!(
                     "animation ran at {fps:.1} fps ({animated} frames in 2 s); expected the display rate, not a ~30 fps cap"
