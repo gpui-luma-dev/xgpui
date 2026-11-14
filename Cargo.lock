@@ -7914,6 +7914,7 @@ dependencies = [
  "windows 0.62.2",
  "xgpui-macros",
  "xgpui-platform",
+ "xgpui-web",
  "zed-scap",
 ]
 
