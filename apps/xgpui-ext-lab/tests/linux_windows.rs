@@ -17,6 +17,9 @@ fn main() {
             if self.frames == 1 {
                 let title = format!("{} (updated)", self.title);
                 window.on_next_frame(move |window, _| window.set_lab_title(&title));
+                // Ask the compositor to activate this window. On Wayland this runs an
+                // xdg_activation token round trip that wayland-protocol-check.sh verifies.
+                window.activate_window();
             }
             if self.frames == 3 {
                 let completed = self.completed.clone();
@@ -75,6 +78,9 @@ fn main() {
                         size(px(480.), px(320.)),
                     ))),
                     window_decorations: decorations,
+                    // Wayland activation tokens carry the app id; without one the
+                    // backend doesn't request a token (as for real apps, which set it).
+                    app_id: Some("dev.xgpui.linux-smoke".into()),
                     ..Default::default()
                 },
                 move |window, cx| {
