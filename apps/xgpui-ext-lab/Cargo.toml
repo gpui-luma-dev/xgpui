@@ -21,6 +21,8 @@ native = []
 web = ["xgpui-color/icc"]
 native-window-tests = ["native"]
 linux-window-tests = ["native"]
+# Real-window behavior probe for #284 package 09, run by the epic validation workflow.
+windows-window-tests = ["native"]
 # Enable the tests in the shared GPUI input example reused by text-lab.
 test-support = ["gpui/test-support"]
 portable-shaders = ["xgpui-shader/portable-shaders"]
@@ -70,7 +72,8 @@ ash = { version = "0.38", default-features = false }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 gpui-windows = { package = "xgpui-windows", path = "../../gpui/crates/gpui-windows", version = "2.1.0" }
-windows = { version = "0.62", features = ["Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi_Common"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
+raw-window-handle = { version = "0.6" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-apple = { package = "xgpui-apple", path = "../../gpui/crates/gpui-apple", version = "4.0.0", features = ["test-support", "font-kit"] }
@@ -207,3 +210,9 @@ name = "linux_windows"
 path = "tests/linux_windows.rs"
 harness = false
 required-features = ["linux-window-tests"]
+
+[[test]]
+name = "windows_input"
+path = "tests/windows_input.rs"
+harness = false
+required-features = ["windows-window-tests"]
