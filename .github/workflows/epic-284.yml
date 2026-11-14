@@ -96,6 +96,9 @@ jobs:
       - name: Real-window input probe (when present on this branch)
         if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/windows_input.rs') != '' }}
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features windows-window-tests --test windows_input
+      - name: xgpui-shader custom paint in a real window (DirectX 11)
+        if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/shader_window.rs') != '' }}
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features shader-window-tests --test shader_window
 
   macos:
     name: Apple backend and real-window frame delivery
