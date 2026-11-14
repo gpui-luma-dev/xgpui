@@ -111,7 +111,7 @@
       "ztracing": "ztracing-gpui-unofficial",
       "ztracing-macro": "ztracing-macro-gpui-unofficial"
     },
-    "version": "1.27.0"
+    "version": "1.28.1"
   },
   "repository": "https://github.com/gpui-archipelago/gpui-unofficial",
   "source_packages": {

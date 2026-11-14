@@ -26,7 +26,7 @@ naga = { version = "30.0.1", optional = true, features = ["wgsl-in", "msl-out", 
 gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", optional = true , package = "xgpui-wgpu", version = "2.2.0" }
 bytemuck = { version = "1", optional = true, features = ["derive"] }
 gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "3.0.0" }
-refineable = { package = "refineable-gpui-unofficial", version = "=1.27.0" }
+refineable = { package = "refineable-gpui-unofficial", version = "=1.28.1" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-apple = { path = "../../../gpui/crates/gpui-apple" , package = "xgpui-apple", version = "4.0.0" }
