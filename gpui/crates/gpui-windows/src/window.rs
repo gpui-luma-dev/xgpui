@@ -92,6 +92,11 @@ pub struct WindowsWindowState {
     initial_placement: Cell<Option<WindowOpenStatus>>,
     hwnd: HWND,
     pub(crate) a11y: RefCell<Option<A11yState>>,
+    /// Last pointer position delivered to the app by a client or non-client
+    /// mouse move; `None` after the pointer really leaves the window. Used to
+    /// drop the synthetic `WM_MOUSEMOVE` Windows posts when the window repaints
+    /// under a stationary cursor.
+    pub(crate) last_mouse_position: Cell<Option<Point<Pixels>>>,
 }
 
 pub(crate) struct WindowsWindowInner {
@@ -195,6 +200,7 @@ impl WindowsWindowState {
             draw_coordinator,
             direct_manipulation,
             a11y: RefCell::new(None),
+            last_mouse_position: Cell::new(None),
         })
     }
 
