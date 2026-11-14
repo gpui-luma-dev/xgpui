@@ -5,7 +5,7 @@ edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Apple rendering and platform services for xgpui"
-include = ["src/**/*", "build.rs", "gpui/**/*", "assets/**/*", "Cargo.toml", "LICENSE*"]
+include = ["src/**/*", "build.rs", "gpui/**/*", "Cargo.toml", "LICENSE*"]
 homepage = "https://xgpui.dev/"
 documentation = "https://xgpui.dev/#crate=gpui-apple"
 readme = "README.md"
