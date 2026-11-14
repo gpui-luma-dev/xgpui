@@ -1,7 +1,10 @@
 //! Main-target instanced draws. Deferred lists restore the surrounding native state.
 use super::*;
 use gpui::{Scene, SceneShaderProgram};
-use std::{collections::HashMap, ops::Range};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Range,
+};
 
 struct Pipeline {
     shader: CompositorPipeline,
@@ -37,6 +40,11 @@ impl Pipeline {
 
 pub(crate) struct ShaderRenderer {
     pipelines: HashMap<u64, Pipeline>,
+    /// Programs whose HLSL failed to compile on this device. FXC can spend seconds
+    /// before rejecting a shader, so a failure is not retried: retrying on every
+    /// frame froze the window. Their draws are skipped; the renderer (and this
+    /// set) is rebuilt with the device.
+    failed: HashSet<u64>,
     instances: ID3D11Buffer,
     capacity: usize,
     globals: ID3D11Buffer,
@@ -69,6 +77,7 @@ impl ShaderRenderer {
         }
         Ok(Self {
             pipelines: HashMap::new(),
+            failed: HashSet::new(),
             instances: instance_buffer(device, 176)?,
             capacity: 176,
             globals: dynamic_uniform_buffer(device)?,
@@ -102,9 +111,18 @@ impl ShaderRenderer {
         }
         for draw in &scene.shader_draws {
             draw.validate_masks()?;
-            if !self.pipelines.contains_key(&draw.program.id()) {
-                self.pipelines
-                    .insert(draw.program.id(), Pipeline::new(device, &draw.program)?);
+            let id = draw.program.id();
+            if !self.pipelines.contains_key(&id) && !self.failed.contains(&id) {
+                match Pipeline::new(device, &draw.program) {
+                    Ok(pipeline) => {
+                        self.pipelines.insert(id, pipeline);
+                    }
+                    Err(error) => {
+                        // Skip this program's draws rather than failing the frame.
+                        log::error!("shader program {id:#x} is not drawn: {error:#}");
+                        self.failed.insert(id);
+                    }
+                }
             }
         }
         if bytes > self.capacity {
@@ -143,7 +161,10 @@ impl ShaderRenderer {
         range: Range<usize>,
         glyph_texture: Option<[Option<ID3D11ShaderResourceView>; 1]>,
     ) -> Result<()> {
-        let pipeline = &self.pipelines[&program];
+        let Some(pipeline) = self.pipelines.get(&program) else {
+            // Its compilation failed in `prepare`; that was logged once.
+            return Ok(());
+        };
         let dc = &self.deferred;
         pipeline.shader.bind(dc);
         let globals = [

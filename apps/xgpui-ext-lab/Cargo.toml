@@ -56,6 +56,8 @@ log = "0.4"
 
 [dev-dependencies]
 sha2 = "0.10"
+# Instance structs in the shader_failure_window probe.
+bytemuck = { version = "1", features = ["derive"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -229,6 +231,12 @@ required-features = ["windows-window-tests"]
 [[test]]
 name = "shader_window"
 path = "tests/shader_window.rs"
+harness = false
+required-features = ["shader-window-tests"]
+
+[[test]]
+name = "shader_failure_window"
+path = "tests/shader_failure_window.rs"
 harness = false
 required-features = ["shader-window-tests"]
 

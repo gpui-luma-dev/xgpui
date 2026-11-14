@@ -102,6 +102,9 @@ jobs:
       - name: xgpui-shader custom paint in a real window (DirectX 11)
         if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/shader_window.rs') != '' }}
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features shader-window-tests --test shader_window
+      - name: A shader DirectX cannot compile leaves the rest of the window drawing
+        if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/shader_failure_window.rs') != '' }}
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features shader-window-tests --test shader_failure_window
 
   macos:
     name: Apple backend and real-window frame delivery
