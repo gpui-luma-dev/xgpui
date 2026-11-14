@@ -93,12 +93,32 @@ fn main() {
                 .map_err(|e| format!("window gone: {e:#}"))
                 .and_then(|result| result.map_err(|e| format!("render_to_image failed: {e:#}")));
 
-            let result = if animated == 0 {
+            if animated == 0 {
                 // macOS delivers no display-link updates to windows that aren't
-                // visible (display asleep, screen locked), on both the Metal and
-                // CVDisplayLink paths. That is the environment, not frame pacing.
-                Err("no frames after the first: the display is asleep or the window isn't visible (keep the display awake for this probe)".into())
-            } else if fps < 45.0 {
+                // visible (display asleep, screen locked, no foreground session),
+                // on both the Metal and CVDisplayLink paths: the environment, not
+                // frame pacing. The screenshot must still work; the frame rate is
+                // inconclusive, which exit code 2 tells the workflow.
+                match image {
+                    Ok(image) if image.width() > 0 && image.height() > 0 => {
+                        eprintln!(
+                            "macOS frame delivery probe inconclusive: no frames after the first (window not visible); live screenshot {}x{} worked",
+                            image.width(),
+                            image.height()
+                        );
+                        std::process::exit(2);
+                    }
+                    Ok(_) => {
+                        eprintln!("macOS frame delivery probe failed: render_to_image returned an empty image");
+                        std::process::exit(1);
+                    }
+                    Err(error) => {
+                        eprintln!("macOS frame delivery probe failed: {error}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            let result = if fps < 45.0 {
                 Err(format!(
                     "animation ran at {fps:.1} fps ({animated} frames in 2 s); expected the display rate, not a ~30 fps cap"
                 ))
