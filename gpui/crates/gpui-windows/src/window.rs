@@ -75,6 +75,9 @@ pub struct WindowsWindowState {
     pub force_render_pending: Cell<bool>,
     pub color_profile_dirty: Cell<bool>,
     pub(crate) pending_renderer_size: Cell<Option<Size<DevicePixels>>>,
+    /// A color mode requested while a draw was in progress (for example from
+    /// `defer_in` inside `render`), applied by the next `prepare_frame`.
+    pub(crate) pending_color_mode: Cell<Option<WindowColorMode>>,
 
     pub click_state: ClickState,
     pub current_cursor: Cell<Option<HCURSOR>>,
@@ -187,6 +190,7 @@ impl WindowsWindowState {
             renderer: RefCell::new(renderer),
             color_profile_dirty: Cell::new(true),
             pending_renderer_size: Cell::new(None),
+            pending_color_mode: Cell::new(None),
             force_render_pending: Cell::new(false),
             click_state,
             current_cursor: Cell::new(current_cursor),
@@ -920,28 +924,40 @@ impl PlatformWindow for WindowsWindow {
     fn set_color_mode(&mut self, mode: WindowColorMode) -> Result<WindowColorStatus> {
         // ClearState/ResizeBuffers affect the shared immediate context. Serialize
         // against every window and defer WM_PAINT re-entry during the transition.
-        let _transition = self
-            .state
-            .draw_coordinator
-            .try_begin_renderer_update()
-            .ok_or_else(|| {
-                anyhow::anyhow!("cannot change color mode during a Windows draw/transition")
-            })?;
-        let result = self
-            .state
-            .renderer
-            .borrow_mut()
-            .set_color_mode(mode, self.state.background_appearance.get());
-        if result.is_err() && self.state.renderer.borrow().needs_color_recovery() {
+        let Some(_transition) = self.state.draw_coordinator.try_begin_renderer_update() else {
+            // Requested while a draw is in progress, typically from `defer_in` inside
+            // `render`, whose callbacks run before `draw_window` returns. Refusing
+            // here left callers retrying every frame without ever switching. Queue
+            // the request for the next frame's `prepare_frame`; `Window::set_color_mode`
+            // refreshes the window, so that frame is drawn.
+            anyhow::ensure!(
+                mode != WindowColorMode::WideGamutSdr
+                    || self.state.background_appearance.get() == WindowBackgroundAppearance::Opaque,
+                "wide SDR requires an opaque window"
+            );
+            let effective = self.state.renderer.borrow().color_status().effective();
             self.state
-                .invalidate_devices
-                .store(true, std::sync::atomic::Ordering::SeqCst);
-        }
-        result
+                .pending_color_mode
+                .set((mode != effective).then_some(mode));
+            return Ok(self.color_status());
+        };
+        self.state.pending_color_mode.set(None);
+        apply_color_mode(&self.state, &mut self.state.renderer.borrow_mut(), mode)
     }
 
     fn color_status(&self) -> WindowColorStatus {
-        self.state.renderer.borrow().color_status()
+        let status = self.state.renderer.borrow().color_status();
+        match self.state.pending_color_mode.get() {
+            // A queued request is accepted but not yet negotiated.
+            Some(requested) => WindowColorStatus::new(
+                requested,
+                status.effective(),
+                status.supports_wide_gamut_sdr(),
+                status.display_wide_gamut(),
+                status.fallback(),
+            ),
+            None => status,
+        }
     }
 
     fn prepare_frame(&self) -> bool {
@@ -962,10 +978,20 @@ impl PlatformWindow for WindowsWindow {
         } else {
             false
         };
+        // Inside `draw_window`, so re-entrant paints are already deferred, as for
+        // the resize above. Views are refreshed so they see the new mode.
+        let recolored = if let Some(mode) = self.state.pending_color_mode.take() {
+            if let Err(error) = apply_color_mode(&self.state, &mut renderer, mode) {
+                log::error!("deferred color mode change to {mode:?} failed: {error:#}");
+            }
+            true
+        } else {
+            false
+        };
         if self.state.color_profile_dirty.replace(false) {
             renderer.mark_color_profile_dirty();
         }
-        renderer.refresh_color_profile().log_err().unwrap_or(false) || resized
+        renderer.refresh_color_profile().log_err().unwrap_or(false) || resized || recolored
     }
 
     fn set_title(&mut self, title: &str) {
@@ -1810,4 +1836,20 @@ mod tests {
             1
         );
     }
+}
+
+/// Applies a color mode outside GPUI drawing. A failed transition that leaves the
+/// renderer unusable schedules device recovery.
+fn apply_color_mode(
+    state: &WindowsWindowState,
+    renderer: &mut DirectXRenderer,
+    mode: WindowColorMode,
+) -> Result<WindowColorStatus> {
+    let result = renderer.set_color_mode(mode, state.background_appearance.get());
+    if result.is_err() && renderer.needs_color_recovery() {
+        state
+            .invalidate_devices
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    result
 }
