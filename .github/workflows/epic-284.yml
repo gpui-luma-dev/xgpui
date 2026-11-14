@@ -1,0 +1,110 @@
+name: Epic validation (#284)
+
+# Automated platform evidence for the GPUI 1.28.1 integration, so no step needs a
+# person at a Windows, Linux or Mac machine. Each job runs its backend's full test
+# suite plus real-window probes. Probes live with the package PR that needs them
+# and run whenever their test target exists on the branch.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, 'issue-284/epic']
+  push:
+    branches: ['issue-284/epic']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: epic-284-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  RUST_BACKTRACE: '1'
+
+jobs:
+  linux:
+    name: Linux backend and real Wayland/X11 windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      XDG_RUNTIME_DIR: /tmp/xgpui-epic-284-runtime
+      LINUX_CI_RESULTS: ${{ github.workspace }}/target/epic-284/linux
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: epic-284-linux-v1
+      - name: Install native libraries, Mesa and virtual display servers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev mesa-vulkan-drivers vulkan-tools weston xvfb openbox x11-utils dbus-x11
+          mkdir -p "$XDG_RUNTIME_DIR" "$LINUX_CI_RESULTS"
+          chmod 700 "$XDG_RUNTIME_DIR"
+      - name: Linux backend tests (Wayland and X11, including activation and frame loop)
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-linux --features wayland,x11 --lib
+      - name: wgpu renderer tests (surface configuration, recovery)
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-wgpu --lib
+      - name: Real windows under Weston (Wayland) and Xvfb (X11)
+        if: ${{ !cancelled() }}
+        run: dbus-run-session -- bash .github/linux/window-smoke.sh
+      - name: Wayland protocol checks (when present on this branch)
+        if: ${{ !cancelled() && hashFiles('.github/linux/wayland-protocol-check.sh') != '' }}
+        run: bash .github/linux/wayland-protocol-check.sh "$LINUX_CI_RESULTS"
+      - name: Upload Linux logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: epic-284-linux-${{ github.sha }}
+          path: ${{ env.LINUX_CI_RESULTS }}
+          if-no-files-found: ignore
+
+  windows:
+    name: Windows backend and real-window input
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: epic-284-windows-v1
+      - name: Windows backend tests (DirectWrite, input, renderer)
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-windows --features test-support --lib -- --test-threads=1
+      - name: Real-window input probe (when present on this branch)
+        if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/windows_input.rs') != '' }}
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features windows-window-tests --test windows_input
+
+  macos:
+    name: Apple backend and real-window frame delivery
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: epic-284-macos-v1
+      - name: Apple renderer and text tests (Metal)
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-apple --features test-support,font-kit,runtime_shaders --lib
+      - name: macOS backend tests (display link, keyboard, window)
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-macos --lib
+      - name: Real-window frame probe (when present on this branch)
+        if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/macos_frames.rs') != '' }}
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features macos-window-tests --test macos_frames
