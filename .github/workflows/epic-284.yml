@@ -53,6 +53,9 @@ jobs:
       - name: wgpu renderer tests (surface configuration, recovery)
         if: ${{ !cancelled() }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-wgpu --lib
+      - name: Build the real-window test (outside the smoke script's 60 s run limit)
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features linux-window-tests,runtime-shaders,portable-shaders,wgpu --test linux_windows --no-run
       - name: Real windows under Weston (Wayland) and Xvfb (X11)
         if: ${{ !cancelled() }}
         run: dbus-run-session -- bash .github/linux/window-smoke.sh
