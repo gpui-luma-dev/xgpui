@@ -40,5 +40,6 @@ for ((attempt=0; attempt<100; attempt++)); do
     sleep 0.1
 done
 [[ -S "$XDG_RUNTIME_DIR/wayland-ci" ]] || { echo 'Weston socket did not become ready'; exit 1; }
-env -u DISPLAY WAYLAND_DISPLAY=wayland-ci timeout 60s cargo "${common[@]}" 2>&1 | tee "$LINUX_CI_RESULTS/wayland-smoke.log"
+# WAYLAND_DEBUG records the client protocol for wayland-protocol-check.sh.
+env -u DISPLAY WAYLAND_DISPLAY=wayland-ci WAYLAND_DEBUG=client timeout 60s cargo "${common[@]}" 2>&1 | tee "$LINUX_CI_RESULTS/wayland-smoke.log"
 env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET DISPLAY=:99 timeout 60s cargo "${common[@]}" 2>&1 | tee "$LINUX_CI_RESULTS/x11-smoke.log"
