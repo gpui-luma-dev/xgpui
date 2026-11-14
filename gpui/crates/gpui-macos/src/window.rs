@@ -4118,6 +4118,12 @@ mod tests {
             }
             result
         }
+        for core in [c"NSWindowDelegate", c"NSTextInputClient"] {
+            assert!(
+                AnyProtocol::get(core).is_some(),
+                "{core:?} must be registered to check window callbacks"
+            );
+        }
         let mut checked = 0;
         for name in [
             c"GPUIView",
@@ -4139,7 +4145,12 @@ mod tests {
                     c"CALayerDelegate",
                     c"NSKeyedArchiverDelegate",
                 ] {
-                    let protocol = AnyProtocol::get(protocol_name).unwrap();
+                    // A protocol exists in the runtime only once something in the
+                    // process has loaded it, which differs between macOS images.
+                    // Check the ones present; the core ones are required below.
+                    let Some(protocol) = AnyProtocol::get(protocol_name) else {
+                        continue;
+                    };
                     for required in [Bool::YES, Bool::NO] {
                         let description = unsafe {
                             objc2::ffi::protocol_getMethodDescription(
