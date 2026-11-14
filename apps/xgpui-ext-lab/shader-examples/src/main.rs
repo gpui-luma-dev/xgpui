@@ -39,7 +39,7 @@ fn main() {
     app.text_system()
         .add_fonts(vec![Cow::Borrowed(FONT)])
         .unwrap();
-    let handle = app.run_embedded(move |cx| open(mode, cx));
+    let handle = app.run_embedded(move |cx| open(mode, false, cx));
     APP.with(|cell| *cell.borrow_mut() = Some(handle));
 }
 #[cfg(not(target_family = "wasm"))]
@@ -55,6 +55,9 @@ fn main() {
         /// Select an example using a named option instead of a positional value.
         #[arg(long, value_enum)]
         example: Option<examples::Mode>,
+        /// Request wide-gamut SDR for typography validation (issue #53).
+        #[arg(long)]
+        wide_gamut: bool,
     }
 
     let options = Options::parse();
@@ -62,13 +65,22 @@ fn main() {
         .example
         .or(options.mode)
         .unwrap_or(examples::Mode::Minimal);
+    if options.wide_gamut && mode != examples::Mode::Typography {
+        use clap::CommandFactory;
+        Options::command()
+            .error(
+                clap::error::ErrorKind::ArgumentConflict,
+                "--wide-gamut requires the typography example",
+            )
+            .exit();
+    }
     let app = gpui_platform::application();
     app.text_system()
         .add_fonts(vec![Cow::Borrowed(FONT)])
         .unwrap();
-    app.run(move |cx| open(mode, cx));
+    app.run(move |cx| open(mode, options.wide_gamut, cx));
 }
-fn open(mode: examples::Mode, cx: &mut App) {
+fn open(mode: examples::Mode, wide_gamut: bool, cx: &mut App) {
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
             None,
@@ -80,7 +92,13 @@ fn open(mode: examples::Mode, cx: &mut App) {
     if mode == examples::Mode::Typography {
         cx.open_lab_window(options, |window, cx| {
             window.set_lab_title("Selectable Typography · xgpui-shader");
-            cx.new(|cx| typography::TypographyDemo::new(window, cx))
+            cx.new(|cx| {
+                let mut demo = typography::TypographyDemo::new(window, cx);
+                if wide_gamut {
+                    demo.set_presentation(WindowColorMode::WideGamutSdr, window, cx);
+                }
+                demo
+            })
         })
         .expect("open typography demo");
         cx.activate(true);
