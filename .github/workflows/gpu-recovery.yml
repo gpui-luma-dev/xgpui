@@ -6,7 +6,7 @@ name: GPU device-loss recovery
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, 'issue-119/epic']
+    branches: [main, 'issue-119/epic', 'issue-284/epic']
     paths:
       - '.github/workflows/gpu-recovery.yml'
       - 'gpui/crates/**'
@@ -15,7 +15,7 @@ on:
       - '.cargo/validation.toml'
       - 'rust-toolchain*'
   push:
-    branches: [main, 'issue-119/epic']
+    branches: [main, 'issue-119/epic', 'issue-284/epic']
     paths:
       - '.github/workflows/gpu-recovery.yml'
       - 'gpui/crates/**'
