@@ -78,6 +78,9 @@ fn main() {
                         size(px(480.), px(320.)),
                     ))),
                     window_decorations: decorations,
+                    // Wayland activation tokens carry the app id; without one the
+                    // backend doesn't request a token (as for real apps, which set it).
+                    app_id: Some("dev.xgpui.linux-smoke".into()),
                     ..Default::default()
                 },
                 move |window, cx| {
