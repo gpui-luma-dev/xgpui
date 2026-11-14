@@ -1,7 +1,9 @@
-# Issue #284, package 09: Windows input and composition from GPUI 1.28.1.
-# Windows only. Checks that suppressing synthetic WM_MOUSEMOVE does not break
-# real pointer input, title-bar crossings or re-entry, and that the
-# DirectComposition target change (not topmost) leaves our content visible.
+# Issue #284, packages 04 and 09 from GPUI 1.28.1. Windows only.
+# 09: suppressing synthetic WM_MOUSEMOVE must not break real pointer input,
+#     title-bar crossings or re-entry; the DirectComposition target change
+#     (not topmost) must leave our content visible.
+# 04: DirectWrite tabs get real advances (carets land on tab stops) and the new
+#     ICU line breaking wraps mixed Latin/CJK text sensibly.
 
 case "$(uname -s)" in
     MINGW* | MSYS* | CYGWIN*) ;;
@@ -11,9 +13,11 @@ esac
 testing_line="testing: $(git rev-parse --abbrev-ref HEAD) @ $(git rev-parse --short HEAD)"
 echo "$testing_line" | report
 
-note "Unit tests for the synthetic-move rule (build output is not posted)"
+note "Unit tests: synthetic-move rule and DirectWrite tabs/caret mapping (build output is not posted)"
 cargo test --locked --config .cargo/validation.toml -p xgpui-windows --features test-support \
     --lib events::synthetic_mouse_move_tests 2>&1 | grep -E '^test |test result' | report
+cargo test --locked --config .cargo/validation.toml -p xgpui-windows --features test-support \
+    --lib direct_write:: -- --test-threads=1 2>&1 | grep -E 'tabs_preserve|test result' | report
 
 start_lab() {
     local name=$1 features=$2
@@ -41,6 +45,25 @@ step "Move the mouse slowly back and forth over the text fields without clicking
 
 step "Rest the mouse over the text without moving it, then press Shift+Left a few times with the keyboard." \
      "The keyboard extends the selection from the caret. Resting the mouse does not change it."
+
+note "Tabs (package 04). Open Notepad, type: a, Tab, b, Tab, Tab, c  (so 'a<Tab>b<Tab><Tab>c'), select it all and copy it with Ctrl+C."
+
+step "Click in the first text field, press Ctrl+A to select its text, then paste with Ctrl+V." \
+     "The pasted text shows clear gaps where the tabs are, wider after a short word, like Notepad's tab stops. The letters do not run together."
+
+step "Press Home, then press Right one character at a time across the whole text." \
+     "Each press moves the caret one character. Across a tab the caret jumps the whole gap to the next tab stop in a single press, and it never jumps backwards or sits inside a letter."
+
+step "Click in the middle of each tab gap, then click just left and just right of each letter." \
+     "Clicking in a gap puts the caret at the nearer edge of that tab. Clicking next to a letter puts the caret beside that letter."
+
+stop_example
+
+run_example text_wrapper
+note "The 'text_wrapper' example shows the same English, Chinese and Japanese sentence in several boxes (wrapped, ellipsis, truncate, nowrap)."
+
+step "Look at the wrapped boxes, then drag the window's right edge slowly narrower and wider." \
+     "Lines break between English words and between Chinese or Japanese characters, never inside an English word or in the middle of a character. Punctuation such as '，' stays attached to the character before it. Ellipsis boxes end in '…' and truncate boxes cut cleanly."
 
 stop_example
 
