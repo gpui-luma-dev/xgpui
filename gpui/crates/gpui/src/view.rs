@@ -324,6 +324,8 @@ struct ViewElementState {
     prepaint_range: Range<PrepaintStateIndex>,
     paint_range: Range<PaintIndex>,
     cache_key: ViewElementCacheKey,
+    /// The entities the view accessed while it was last drawn, in any phase,
+    /// restored when its prepaint is reused so the window stays subscribed.
     accessed_entities: FxHashSet<EntityId>,
 }
 
@@ -334,6 +336,7 @@ struct ViewElementCacheKey {
     glyph_brush: Option<crate::window::GlyphBrushCacheKey>,
     layer_captured: bool,
     layer_clip: Option<Bounds<Pixels>>,
+    opacity: f32,
 }
 
 #[cfg(not(gpui_hot_reload))]
@@ -548,7 +551,10 @@ fn prepaint_view(
                 let glyph_brush = window.glyph_brush_cache_key();
                 let layer_captured = window.is_layer_captured();
                 let layer_clip = window.layer_capture_visible_bounds();
+                let opacity = window.element_opacity();
 
+                // Opacity is compared by bits so that a NaN opacity still matches itself
+                // and the view keeps using its cache.
                 if let Some(mut element_state) = element_state
                     && element_state.cache_key.bounds == bounds
                     && element_state.cache_key.content_mask == content_mask
@@ -556,13 +562,14 @@ fn prepaint_view(
                     && element_state.cache_key.glyph_brush == glyph_brush
                     && element_state.cache_key.layer_captured == layer_captured
                     && element_state.cache_key.layer_clip == layer_clip
+                    && element_state.cache_key.opacity.to_bits() == opacity.to_bits()
                     && !window.dirty_views.contains(&entity_id)
                     && !window.refreshing
                 {
                     let prepaint_start = window.prepaint_index();
                     window.reuse_prepaint(element_state.prepaint_range.clone());
                     cx.entities
-                        .extend_accessed(&element_state.accessed_entities);
+                        .extend_accessed(element_state.accessed_entities.iter().copied());
                     let prepaint_end = window.prepaint_index();
                     element_state.prepaint_range = prepaint_start..prepaint_end;
 
@@ -594,6 +601,7 @@ fn prepaint_view(
                             glyph_brush,
                             layer_captured,
                             layer_clip,
+                            opacity,
                         },
                     },
                 )
@@ -633,13 +641,25 @@ fn paint_view(
                     let mut element_state = element_state.unwrap();
 
                     let paint_start = window.paint_index();
+                    let opacity = window.element_opacity();
 
+                    // Prepaint can only predict the opacity paint applies: an ancestor's
+                    // hover or drag-over style depends on this frame's hit test, which
+                    // isn't known until prepaint finishes. The key records what was
+                    // actually painted, and output replayed under a different opacity is
+                    // redrawn on the next frame.
                     if let Some(element) = element {
                         let refreshing = mem::replace(&mut window.refreshing, true);
-                        element.paint(window, cx);
+                        let ((), accessed_entities) =
+                            cx.detect_accessed_entities(|cx| element.paint(window, cx));
+                        element_state.accessed_entities.extend(accessed_entities);
                         window.refreshing = refreshing;
+                        element_state.cache_key.opacity = opacity;
                     } else {
                         window.reuse_paint(element_state.paint_range.clone());
+                        if element_state.cache_key.opacity.to_bits() != opacity.to_bits() {
+                            window.request_animation_frame();
+                        }
                     }
 
                     let paint_end = window.paint_index();
