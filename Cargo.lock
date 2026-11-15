@@ -8000,6 +8000,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "ash",
+ "bytemuck",
  "clap",
  "console_error_panic_hook",
  "core-foundation 0.10.1",
