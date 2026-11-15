@@ -24,7 +24,7 @@ let mut target = WgpuSurfaceTarget::new(SurfaceDesc {
 let slot = target.surface().acquire()?;       // Err(WouldBlock) when the ring is full
 let texture = target.texture(&slot)?;         // render, or compute into it (RGBA16F)
 target.present(slot, [encoder.finish()])?;    // submits, then publishes the frame
-target.surface().paint(window, bounds, radii); // in an element's paint phase
+target.surface().paint(window, cx, bounds, radii); // in an element's paint phase
 ```
 
 ## Platforms
@@ -43,6 +43,31 @@ Engines today: on Linux and Windows an engine uses wgpu, through feature `wgpu` 
 - **A misbehaving engine can't stall composition.** The compositor waits on the GPU only for frames whose signal is known to be submitted. Every `WgpuSurfaceTarget` frame qualifies, and so does a macOS frame presented with the `unsafe SyncPoint::submitted`. Any other frame is shown only once its signal has been seen reached, and until then the last ready frame stays on screen. Not covered: submitted work that never finishes (a GPU hang), which ends with the driver's timeout and device-loss handling.
 - **Unsupported compositors.** A compositor that can't use the surface, for example because the engine is on a different GPU, fails the first preparation with `Unsupported`. The surface latches that reason, reported by `EngineSurface::unsupported()`, and offers no further frames.
 - **Recovery.** `EngineSurface::invalidate()` on engine device loss: the last frame keeps showing, and a new surface on a new device recovers. Replacement of the compositor's own device re-imports slots. On Windows, D3D12 devices are singletons per adapter, so drop every object of the lost device (device, queue, resources, `WgpuSurfaceTarget`) before creating the replacement; `invalidate()` releases the surface's own D3D12 objects.
+
+## Pacing and presentation
+
+**Step once per composited frame.** For an animating engine, present a frame, wait until the window has shown it, then render the next one:
+
+```rust,ignore
+target.set_presentation(Presentation::Auto); // GPU wait or observe-only, per frame
+loop {
+    let slot = target.surface().acquire()?;
+    render_into(target.texture(&slot)?)?;
+    target.present(slot, [encoder.finish()])?;
+    target.surface().wait_composited(Duration::from_millis(100)); // false while hidden
+}
+```
+
+Each frame is then shown exactly once, at the display's rate, so motion is even. An engine on a timer of its own drifts against vsync and drops frames, which shows as jumps: `interop-boids` lost 4–5% of its frames that way (13% while resizing), and none paced like this. Prefer this to redrawing from `on_present`, which suits engines that render on demand. `on_composited` is the callback form, run on the UI thread.
+
+**Presentation.** `set_presentation` chooses how the compositor treats frames:
+- **`GpuWait`** (the default): the compositor waits on the GPU, so the next UI frame shows each frame. Best while a frame's GPU work fits in a display frame.
+- **`ObserveOnly`**: frames are shown once complete, so slow work never holds up the UI.
+- **`Auto`**: switches between the two from the measured GPU time (`step_gpu_ms()`): observe-only above one refresh interval, GPU waits again below ¾ of one. In `interop-boids`, GPU waits held a 54 ms step's UI to 18 fps while resizing, and observe-only cost 9 ms steps a second UI frame (60 → 38 steps/s); `Auto` avoids both.
+
+`presentation()` reports the mode in effect. `set_gpu_wait(bool)` is shorthand for `GpuWait` / `ObserveOnly`.
+
+**Refresh interval.** `paint(window, cx, …)` records the window's refresh interval, which `Auto` uses and engines can read with `EngineSurface::refresh_interval()`, for example as a time step. It follows the window to another display.
 
 ## Feedback and heavy engines
 
