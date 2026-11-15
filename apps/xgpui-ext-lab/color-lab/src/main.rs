@@ -34,7 +34,7 @@ impl Render for ColorLab {
             .child(div().flex().gap_4()
                 .child(div().id("preset").cursor_pointer().child(format!("Colors: {}", color_samples::PRESETS[self.preset])).on_click(cx.listener(|this,_,_,cx| { this.preset=(this.preset+1)%3; cx.notify(); })))
                 .child(div().id("mapping").cursor_pointer().child(format!("Mapping: {:?}",self.policy)).on_click(cx.listener(|this,_,_,cx| {this.policy=if this.policy==GamutMapping::Clip {GamutMapping::ReduceChroma} else {GamutMapping::Clip};cx.notify();})))
-                .child(div().id("alpha").cursor_pointer().child(format!("End alpha: {}",if self.translucent {"25%"} else {"100%"})).on_click(cx.listener(|this,_,_,cx|{this.translucent=!this.translucent;cx.notify();}))))
+                .child(div().id("alpha").cursor_pointer().child(format!("End alpha: {}",if self.translucent {"25%"} else {"100%"})).on_click(cx.listener(|this,_,_,cx|{this.translucent = !this.translucent;cx.notify();}))))
             .children(srgb.into_iter().zip(p3).map(|(srgb,p3)| {
                 div().flex().flex_col().gap_2()
                     .child(srgb.label)

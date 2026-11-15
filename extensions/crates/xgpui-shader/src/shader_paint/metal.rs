@@ -145,7 +145,7 @@ impl Snapshot {
                 encoder.setFragmentBytes_length_atIndex(
                 std::ptr::NonNull::new(self.bytes.as_ptr().cast::<std::ffi::c_void>() as *mut _)
                     .expect("non-null bytes"),
-                self.bytes.len() as usize,
+                self.bytes.len(),
                 1,
             )
             };

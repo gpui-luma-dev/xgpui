@@ -65,7 +65,7 @@ fn direct_path_geometry_programs_and_zero_mask_transport() {
 // Independent polygon/pixel clipping reference, without the shader's edge integral.
 fn coverage(path: &Path<Pixels>, x: u32, y: u32, scale: f64) -> f64 {
     let mut area = 0.;
-    for triangle in path.vertices.chunks_exact(3) {
+    for triangle in path.vertices.as_chunks::<3>().0 {
         let mut polygon: Vec<[f64; 2]> = triangle
             .iter()
             .map(|v| {

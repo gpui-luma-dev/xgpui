@@ -155,6 +155,10 @@ fn backdrop_pixels_blur_clip_refresh_and_leave_children_sharp() {
 
 #[cfg(feature = "wgpu")]
 #[test]
+#[allow(
+    clippy::needless_range_loop,
+    reason = "x and y are pixel coordinates, used for sampling as well as indexing"
+)]
 fn backdrop_checkerboard_matches_separable_reference() {
     // Double-precision reference, including bilinear reconstruction and each
     // intermediate's UNORM rounding. Both axes vary to catch a missing pass.

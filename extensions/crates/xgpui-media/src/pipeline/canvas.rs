@@ -860,8 +860,8 @@ impl TileCanvas {
                 },
             )?;
         }
-        if let Some(next) = current {
-            if !self
+        if let Some(next) = current
+            && !self
                 .presented
                 .as_ref()
                 .is_some_and(|front| Arc::ptr_eq(front, &next))
@@ -875,7 +875,6 @@ impl TileCanvas {
                     },
                 )?;
             }
-        }
         Ok(())
     }
     pub fn stats(&self) -> CanvasStats {

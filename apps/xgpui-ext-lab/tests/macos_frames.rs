@@ -30,7 +30,7 @@ fn main() {
             let n = self.frames.borrow().len();
             div()
                 .size_full()
-                .bg(if n % 2 == 0 { rgb(0x224466) } else { rgb(0x446622) })
+                .bg(if n.is_multiple_of(2) { rgb(0x224466) } else { rgb(0x446622) })
         }
     }
 

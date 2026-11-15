@@ -91,8 +91,13 @@ impl<T: ShaderInstance> ShaderProgram<T> {
     }
     pub(crate) fn pack(&self, instance: &T) -> Result<[[f32; 4]; gpui::SHADER_DATA_SLOTS]> {
         let mut slots = [[0.; 4]; gpui::SHADER_DATA_SLOTS];
-        for (index, bytes) in bytemuck::bytes_of(instance).chunks_exact(4).enumerate() {
-            let value = f32::from_ne_bytes(bytes.try_into().unwrap());
+        for (index, bytes) in bytemuck::bytes_of(instance)
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .enumerate()
+        {
+            let value = f32::from_ne_bytes(*bytes);
             ensure!(
                 value.is_finite(),
                 "shader instance contains non-finite data at byte {}",

@@ -213,7 +213,7 @@ impl MeshGradient {
                     patches: self.stats.patches,
                 };
                 compute(
-                    &command,
+                    command,
                     &pipelines.coefficients,
                     &controls,
                     &patches,
@@ -221,7 +221,7 @@ impl MeshGradient {
                     self.stats.patches,
                 );
                 compute(
-                    &command,
+                    command,
                     &pipelines.evaluate,
                     &patches,
                     &vertices,
@@ -229,7 +229,7 @@ impl MeshGradient {
                     self.stats.evaluated_vertices,
                 );
                 compute(
-                    &command,
+                    command,
                     &pipelines.triangles,
                     &vertices,
                     &triangles,
@@ -279,6 +279,10 @@ impl MeshGradient {
         Ok(Box::new(output))
     }
 }
+
+// SAFETY: pipeline state is immutable; the cache mutex serializes replacement and retains its device/queue.
+unsafe impl Send for PipelineCache {}
+unsafe impl Sync for PipelineCache {}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,7 +303,3 @@ mod tests {
         );
     }
 }
-
-// SAFETY: pipeline state is immutable; the cache mutex serializes replacement and retains its device/queue.
-unsafe impl Send for PipelineCache {}
-unsafe impl Sync for PipelineCache {}

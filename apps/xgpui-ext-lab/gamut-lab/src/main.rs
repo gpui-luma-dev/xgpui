@@ -54,8 +54,8 @@ impl Lab {
         }
     }
     fn surface(&self, x: f32, y: f32, w: f32, h: f32, color: [f64; 4]) -> AnyElement {
-        if self.wide {
-            if let Some(painter) = self.painter.clone() {
+        if self.wide
+            && let Some(painter) = self.painter.clone() {
                 let gradient = if self.gradient {
                     let first = LinearRgba::new(
                         LinearRgb::new(RgbSpace::DisplayP3, [color[0], color[1], color[2]])
@@ -106,7 +106,6 @@ impl Lab {
                     )
                     .into_any_element();
             }
-        }
         painted()
             .absolute()
             .left(px(x))

@@ -26,7 +26,7 @@ pub(super) fn pixels(index: u64) -> Vec<u8> {
             if (MOTION_TOP..MOTION_BOTTOM).contains(&y) {
                 // Moving diagonal bands make continuous playback obvious even
                 // when the puck is near its turning points or partly clipped.
-                [r, g, b] = if ((x + y + phase) / 24) % 2 == 0 {
+                [r, g, b] = if ((x + y + phase) / 24).is_multiple_of(2) {
                     [24, 48, 96]
                 } else {
                     [48, 176, 224]
@@ -59,8 +59,10 @@ mod tests {
         let next = pixels(8);
         assert_eq!(first.len(), (WIDTH * HEIGHT * 4) as usize);
         let changed = first
-            .chunks_exact(4)
-            .zip(next.chunks_exact(4))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(next.as_chunks::<4>().0)
             .filter(|(a, b)| a != b)
             .count();
         assert!(
@@ -128,7 +130,7 @@ pub(super) fn nv12(index: u64, matrix: Matrix, video_range: bool) -> Nv12 {
     let bgra = pixels(index);
     let quantize = |value: f32| value.round().clamp(0., 255.) as u8;
     let mut y = Vec::with_capacity((WIDTH * HEIGHT) as usize);
-    for pixel in bgra.chunks_exact(4) {
+    for pixel in bgra.as_chunks::<4>().0 {
         y.push(quantize(codes(pixel, matrix, video_range)[0]));
     }
     let mut uv = Vec::with_capacity((WIDTH * HEIGHT / 2) as usize);

@@ -179,10 +179,10 @@ fn coefficients(points: &[BrushMeshPoint; 4], scale: [f64; 2]) -> Result<[[f32; 
         }
     }
     let mut bounds = [[0_f64; 2]; 2];
-    for y in 0..4 {
+    for row in &bezier {
         for x in 0..3 {
             for axis in 0..2 {
-                let derivative = 3. * (bezier[y][x + 1][axis] - bezier[y][x][axis]) * scale[0];
+                let derivative = 3. * (row[x + 1][axis] - row[x][axis]) * scale[0];
                 bounds[axis][0] =
                     bounds[axis][0].max((derivative - if axis == 0 { 1. } else { 0. }).abs());
             }
