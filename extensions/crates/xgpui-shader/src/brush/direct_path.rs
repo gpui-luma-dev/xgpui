@@ -219,7 +219,9 @@ impl Brush {
             program
         } else {
             let triangles: Vec<Triangle> = positions
-                .chunks_exact(3)
+                .as_chunks::<3>()
+                .0
+                .iter()
                 .map(|v| [v[0], v[1], v[2]])
                 .collect();
             let Some(edges) = boundary(&triangles) else {

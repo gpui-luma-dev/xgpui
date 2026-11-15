@@ -54,11 +54,11 @@ impl RasterSource {
         let black = [black[0], black[1], black[2]];
         let mut decode = [[[0.; 3]; 256]; 3];
         for channel in 0..3 {
-            for value in 0..256 {
+            for (value, slot) in decode[channel].iter_mut().enumerate() {
                 let mut rgba = [0., 0., 0., 1.];
                 rgba[channel] = value as f64 / 255.;
                 let rgb = color.decode(rgba, ImagePrimaries::DisplayP3)?.rgba();
-                decode[channel][value] = std::array::from_fn(|i| rgb[i] - black[i]);
+                *slot = std::array::from_fn(|i| rgb[i] - black[i]);
             }
         }
         static NEXT: AtomicU64 = AtomicU64::new(1);
@@ -157,8 +157,10 @@ mod tests {
         let source = RasterSource::new(image, ImageColor::SRGB, 12)?;
         let data = page(&source, 1, false)?;
         let c: Vec<f32> = data.levels()[0]
-            .chunks_exact(2)
-            .map(|b| f16::from_bits(u16::from_le_bytes([b[0], b[1]])).to_f32())
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| f16::from_bits(u16::from_le_bytes(*b)).to_f32())
             .collect();
         for value in &c[..3] {
             assert!((*value - 1. / 3.).abs() < 0.001);
@@ -212,8 +214,10 @@ mod custom_color_tests {
         )?;
         let data = source.tile(tile, &AtomicBool::new(false))?;
         let values: Vec<f64> = data.levels()[0]
-            .chunks_exact(2)
-            .map(|b| f16::from_bits(u16::from_le_bytes([b[0], b[1]])).to_f64())
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| f16::from_bits(u16::from_le_bytes(*b)).to_f64())
             .collect();
         for i in 0..3 {
             assert!(

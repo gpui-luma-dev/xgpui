@@ -1,10 +1,10 @@
 name: Build warnings (#280)
 
 # Fails when the workspace builds with any rustc warning or Cargo manifest
-# warning on Linux, Windows or macOS, and runs the xgpui-macros tests. Clippy
-# runs on every platform, so the Linux and Windows backends get linted too.
-# Clippy only reports for now; it becomes a gate once the #280 Clippy policy
-# lands (set CLIPPY_ENFORCE to 'true').
+# warning on Linux, Windows or macOS, and runs the xgpui-macros and xgpui-media
+# tests. Clippy runs on every platform under the #280 policy in
+# .github/scripts/clippy.sh (also `just clippy`), so the Linux and Windows
+# backends are linted too, and any Clippy warning fails the job.
 on:
   workflow_dispatch:
   pull_request:
@@ -22,7 +22,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: never
   CARGO_INCREMENTAL: '0'
-  CLIPPY_ENFORCE: 'false'
 
 jobs:
   warnings:
@@ -74,31 +73,6 @@ jobs:
         if: ${{ !cancelled() && runner.os == 'Windows' }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-media --lib -- --nocapture --test-threads=1
 
-      - name: Clippy, workspace
+      - name: Clippy (#280 policy)
         if: ${{ !cancelled() }}
-        run: |
-          set +e
-          cargo clippy --locked --workspace --all-targets --all-features --no-deps 2>&1 | tee clippy.log
-          status=${PIPESTATUS[0]}
-          set -e
-          {
-            echo "### Clippy on ${{ matrix.os }}"
-            echo
-            echo '| Target | Warnings |'
-            echo '| --- | --- |'
-            grep -E '^warning: `[^`]+` \([^)]+\) generated [0-9]+ warning' clippy.log \
-              | sed -E 's/^warning: `([^`]+)` \(([^)]+)\) generated ([0-9]+) warnings?.*/| `\1` (\2) | \3 |/'
-          } >> "$GITHUB_STEP_SUMMARY"
-          total=$(grep -cE '^(warning|error)(\[|:)' clippy.log | tr -d ' ')
-          echo "Clippy diagnostics (including summary lines): $total, exit $status"
-          if [[ $status -ne 0 ]]; then
-            echo "::error title=Clippy failed::cargo clippy exited with $status"
-            exit "$status"
-          fi
-          if grep -qE '^warning: `[^`]+` \([^)]+\) generated' clippy.log; then
-            if [[ "$CLIPPY_ENFORCE" == 'true' ]]; then
-              echo "::error title=Clippy warnings::see the job summary"
-              exit 1
-            fi
-            echo "::warning title=Clippy warnings (not enforced yet)::see the job summary"
-          fi
+        run: bash .github/scripts/clippy.sh

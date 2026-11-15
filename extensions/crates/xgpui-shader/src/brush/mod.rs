@@ -35,9 +35,7 @@ fn base_program() -> Result<ShaderProgram<BrushInstance>> {
         .get_or_init(|| {
             let source = format!("{}{BASE_BRUSH_COLOR}", include_str!("brush.wgsl"));
             ShaderProgram::new(&source).map_err(|error| format!("{error:#}"))
-        })
-        .as_ref()
-        .map(Clone::clone)
+        }).clone()
         .map_err(|error| anyhow::anyhow!("{error}"))
 }
 

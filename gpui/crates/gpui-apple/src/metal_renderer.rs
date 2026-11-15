@@ -105,7 +105,7 @@ impl InstanceBufferPool {
 
             metal::Buffer(
                 device
-                    .newBufferWithLength_options(self.buffer_size as usize, options)
+                    .newBufferWithLength_options(self.buffer_size, options)
                     .expect("Metal buffer allocation failed"),
             )
         });
@@ -1505,7 +1505,7 @@ impl MetalRenderer {
         unsafe {
             command_encoder.setVertexBuffer_offset_atIndex(
                 Some(&vertex_instance_bindings.buffer),
-                vertex_instance_bindings.offset as usize,
+                vertex_instance_bindings.offset,
                 PathRasterizationInputIndex::Vertices as usize,
             )
         };
@@ -1522,7 +1522,7 @@ impl MetalRenderer {
         unsafe {
             command_encoder.setFragmentBuffer_offset_atIndex(
                 Some(&vertex_instance_bindings.buffer),
-                vertex_instance_bindings.offset as usize,
+                vertex_instance_bindings.offset,
                 PathRasterizationInputIndex::Vertices as usize,
             )
         };
@@ -1530,7 +1530,7 @@ impl MetalRenderer {
             command_encoder.drawPrimitives_vertexStart_vertexCount(
                 metal::MTLPrimitiveType::Triangle,
                 0,
-                vertices.len() as usize,
+                vertices.len(),
             )
         };
 
@@ -1560,14 +1560,14 @@ impl MetalRenderer {
         unsafe {
             command_encoder.setVertexBuffer_offset_atIndex(
                 Some(&instance_bindings.shadows.buffer),
-                instance_bindings.shadows.offset as usize,
+                instance_bindings.shadows.offset,
                 ShadowInputIndex::Shadows as usize,
             )
         };
         unsafe {
             command_encoder.setFragmentBuffer_offset_atIndex(
                 Some(&instance_bindings.shadows.buffer),
-                instance_bindings.shadows.offset as usize,
+                instance_bindings.shadows.offset,
                 ShadowInputIndex::Shadows as usize,
             )
         };
@@ -1587,8 +1587,8 @@ impl MetalRenderer {
                 metal::MTLPrimitiveType::Triangle,
                 0,
                 6,
-                shadows.len() as usize,
-                shadows.start as usize,
+                shadows.len(),
+                shadows.start,
             )
         };
     }
@@ -1619,7 +1619,7 @@ impl MetalRenderer {
         unsafe {
             encoder.setVertexBuffer_offset_atIndex(
                 Some(&bindings.shaders.buffer),
-                (bindings.shaders.offset + range.start * 176) as usize,
+                bindings.shaders.offset + range.start * 176,
                 0,
             )
         };
@@ -1656,7 +1656,7 @@ impl MetalRenderer {
                 metal::MTLPrimitiveType::Triangle,
                 0,
                 6,
-                range.len() as usize,
+                range.len(),
             )
         };
     }
@@ -1683,14 +1683,14 @@ impl MetalRenderer {
         unsafe {
             command_encoder.setVertexBuffer_offset_atIndex(
                 Some(&instance_bindings.quads.buffer),
-                instance_bindings.quads.offset as usize,
+                instance_bindings.quads.offset,
                 QuadInputIndex::Quads as usize,
             )
         };
         unsafe {
             command_encoder.setFragmentBuffer_offset_atIndex(
                 Some(&instance_bindings.quads.buffer),
-                instance_bindings.quads.offset as usize,
+                instance_bindings.quads.offset,
                 QuadInputIndex::Quads as usize,
             )
         };
@@ -1710,8 +1710,8 @@ impl MetalRenderer {
                 metal::MTLPrimitiveType::Triangle,
                 0,
                 6,
-                quads.len() as usize,
-                quads.start as usize,
+                quads.len(),
+                quads.start,
             )
         };
     }
@@ -1784,7 +1784,7 @@ impl MetalRenderer {
         unsafe {
             command_encoder.setVertexBuffer_offset_atIndex(
                 Some(&sprite_instance_bindings.buffer),
-                sprite_instance_bindings.offset as usize,
+                sprite_instance_bindings.offset,
                 SpriteInputIndex::Sprites as usize,
             )
         };
@@ -1794,7 +1794,7 @@ impl MetalRenderer {
                 metal::MTLPrimitiveType::Triangle,
                 0,
                 6,
-                sprites.len() as usize,
+                sprites.len(),
             )
         };
         Ok(())
@@ -1822,14 +1822,14 @@ impl MetalRenderer {
         unsafe {
             command_encoder.setVertexBuffer_offset_atIndex(
                 Some(&instance_bindings.underlines.buffer),
-                instance_bindings.underlines.offset as usize,
+                instance_bindings.underlines.offset,
                 UnderlineInputIndex::Underlines as usize,
             )
         };
         unsafe {
             command_encoder.setFragmentBuffer_offset_atIndex(
                 Some(&instance_bindings.underlines.buffer),
-                instance_bindings.underlines.offset as usize,
+                instance_bindings.underlines.offset,
                 UnderlineInputIndex::Underlines as usize,
             )
         };
@@ -1849,8 +1849,8 @@ impl MetalRenderer {
                 metal::MTLPrimitiveType::Triangle,
                 0,
                 6,
-                underlines.len() as usize,
-                underlines.start as usize,
+                underlines.len(),
+                underlines.start,
             )
         };
     }
@@ -1885,7 +1885,7 @@ impl MetalRenderer {
         unsafe {
             command_encoder.setVertexBuffer_offset_atIndex(
                 Some(&instance_bindings.monochrome_sprites.buffer),
-                instance_bindings.monochrome_sprites.offset as usize,
+                instance_bindings.monochrome_sprites.offset,
                 SpriteInputIndex::Sprites as usize,
             )
         };
@@ -1912,7 +1912,7 @@ impl MetalRenderer {
         unsafe {
             command_encoder.setFragmentBuffer_offset_atIndex(
                 Some(&instance_bindings.monochrome_sprites.buffer),
-                instance_bindings.monochrome_sprites.offset as usize,
+                instance_bindings.monochrome_sprites.offset,
                 SpriteInputIndex::Sprites as usize,
             )
         };
@@ -1926,8 +1926,8 @@ impl MetalRenderer {
                 metal::MTLPrimitiveType::Triangle,
                 0,
                 6,
-                sprites.len() as usize,
-                sprites.start as usize,
+                sprites.len(),
+                sprites.start,
             )
         };
     }
@@ -1962,7 +1962,7 @@ impl MetalRenderer {
         unsafe {
             command_encoder.setVertexBuffer_offset_atIndex(
                 Some(&instance_bindings.polychrome_sprites.buffer),
-                instance_bindings.polychrome_sprites.offset as usize,
+                instance_bindings.polychrome_sprites.offset,
                 SpriteInputIndex::Sprites as usize,
             )
         };
@@ -1989,7 +1989,7 @@ impl MetalRenderer {
         unsafe {
             command_encoder.setFragmentBuffer_offset_atIndex(
                 Some(&instance_bindings.polychrome_sprites.buffer),
-                instance_bindings.polychrome_sprites.offset as usize,
+                instance_bindings.polychrome_sprites.offset,
                 SpriteInputIndex::Sprites as usize,
             )
         };
@@ -2003,8 +2003,8 @@ impl MetalRenderer {
                 metal::MTLPrimitiveType::Triangle,
                 0,
                 6,
-                sprites.len() as usize,
-                sprites.start as usize,
+                sprites.len(),
+                sprites.start,
             )
         };
     }
@@ -2033,7 +2033,7 @@ impl MetalRenderer {
         unsafe {
             command_encoder.setVertexBuffer_offset_atIndex(
                 Some(&instance_bindings.surfaces.buffer),
-                instance_bindings.surfaces.offset as usize,
+                instance_bindings.surfaces.offset,
                 SurfaceInputIndex::Surfaces as usize,
             )
         };
@@ -2148,7 +2148,7 @@ impl MetalRenderer {
                     0,
                     6,
                     1,
-                    (first_surface + index) as usize,
+                    first_surface + index,
                 )
             };
         }
@@ -2223,7 +2223,7 @@ fn read_texture_to_image(texture: &metal::TextureRef) -> Result<RgbaImage> {
         texture.getBytes_bytesPerRow_fromRegion_mipmapLevel(
             std::ptr::NonNull::new(pixels.as_mut_ptr() as *mut std::ffi::c_void)
                 .expect("non-null readback"),
-            bytes_per_row as usize,
+            bytes_per_row,
             region,
             0,
         )
