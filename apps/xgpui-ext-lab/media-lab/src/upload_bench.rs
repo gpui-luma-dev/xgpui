@@ -63,6 +63,11 @@ impl TimedImage {
             {
                 trace.backend = format!("Metal / {}", context.device.name());
             }
+            #[cfg(target_os = "windows")]
+            if backend.is::<gpui_windows::custom_draw::Dx11CustomContext>() {
+                trace.backend =
+                    "D3D11 (adapter name not exposed by custom context; staging not pooled)".into();
+            }
             #[cfg(feature = "wgpu")]
             if backend.is::<gpui_wgpu::custom_draw::WgpuCustomContext>() {
                 trace.backend = "wgpu (adapter name not exposed by custom context)".into();

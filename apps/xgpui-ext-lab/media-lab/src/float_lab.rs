@@ -120,7 +120,7 @@ impl Render for FloatLab {
                 .child(button("float-reset","Reset").on_click(cx.listener(|s,_,_,cx|{s.exposure=0;s.saturation=0;s.vignette=false;s.opacity=false;s.wide=true;cx.notify();}))))
             .child(panels)
             .child(self.image.as_ref().map(|i|format!("1280 × 800 · {:?} · {:?} · preparations {} · {:?}",i.format(),i.source_color(),i.upload_count(),i.upload_status())).unwrap_or_default())
-            .child(format!("Staging pool: {:?}",self.loader.staging_pool_stats()))
+            .child(if cfg!(target_os = "windows") { "Staging pool: D3D11 staging is not pooled".to_string() } else { format!("Staging pool: {:?}",self.loader.staging_pool_stats()) })
             .child("Both views share one retained RGBA16F texture. Adjustments run in linear P3; output clips once to the selected gamut.")
             .child("A screenshot is an sRGB preview, not evidence of the display’s wider gamut. Panel labels describe the active output, independently of the source color space.")
     }
