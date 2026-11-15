@@ -6,7 +6,7 @@ name: Text layout
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, 'issue-284/epic']
+    branches: [main]
     paths:
       - '.github/workflows/text-layout.yml'
       - 'gpui/crates/gpui/src/text_system/**'
@@ -15,7 +15,7 @@ on:
       - 'gpui/crates/gpui/Cargo.toml'
       - 'Cargo.lock'
   push:
-    branches: [main, 'issue-284/epic']
+    branches: [main]
     paths:
       - '.github/workflows/text-layout.yml'
       - 'gpui/crates/gpui/src/text_system/**'
