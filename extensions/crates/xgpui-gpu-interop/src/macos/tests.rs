@@ -1028,7 +1028,7 @@ fn unsupported_compositor_is_reported_once_and_detaches() {
             .unwrap_err();
         assert!(error.downcast_ref::<Unsupported>().is_some(), "{error:#}");
         let reason = surface.unsupported().expect("reason latched");
-        assert!(reason.contains("Metal compositor"), "{reason}");
+        assert!(reason.reason().contains("Metal compositor"), "{reason}");
         assert!(
             surface.content().is_none(),
             "no frames after an unsupported compositor"

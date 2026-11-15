@@ -36,6 +36,25 @@ impl WgpuSurfaceTarget {
         wgpu::Features::empty()
     }
 
+    /// Create an engine device on `adapter` with [`Self::required_features`].
+    /// Available on every platform so engines need no per-platform setup; on
+    /// Linux it also enables GPU-side handoff and, where supported, a
+    /// low-priority engine queue.
+    pub fn request_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue)> {
+        let descriptor = wgpu::DeviceDescriptor {
+            label: Some("engine"),
+            required_features: Self::required_features(),
+            ..Default::default()
+        };
+        Ok(gpui::block_on(adapter.request_device(&descriptor))?)
+    }
+
+    /// Whether the last `request_device` created a low-priority engine queue.
+    /// Only Linux does; always `false` here.
+    pub fn engine_queue_low_priority() -> bool {
+        false
+    }
+
     /// Create a surface for `desc` and a target that renders into it.
     pub fn new(desc: SurfaceDesc, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Self> {
         let surface = EngineSurface::new(desc)?;
@@ -160,12 +179,16 @@ impl WgpuSurfaceTarget {
         self.gpu_wait = enabled;
     }
 
-    /// See [`Self::set_gpu_wait`].
+    /// Whether frames presented now get a GPU-side wait: the mode chosen with
+    /// [`Self::set_gpu_wait`] (on by default). `false` means observe-only
+    /// presentation.
     pub fn gpu_wait(&self) -> bool {
         self.gpu_wait
     }
 
-    /// Frames are always handed over with GPU synchronization on macOS.
+    /// Whether this device can hand frames over with GPU-side synchronization
+    /// at all. Always `true` on macOS (`MTLSharedEvent`); on Linux and Windows
+    /// it depends on the device. [`Self::gpu_wait`] is the mode in use.
     pub fn gpu_sync(&self) -> bool {
         true
     }
