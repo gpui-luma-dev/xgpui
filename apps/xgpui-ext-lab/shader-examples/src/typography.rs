@@ -196,6 +196,30 @@ impl TypographyDemo {
         .into();
         cx.notify();
     }
+    /// Switch motion mode. Typewriter and Scramble share `progress`, so entering
+    /// either one restarts its reveal and plays it instead of inheriting a stale
+    /// value (1.0 looked like Static; 0.0 left the line blank and paused).
+    fn set_motion(&mut self, mode: MotionMode, cx: &mut Context<Self>) {
+        self.motion = mode;
+        if matches!(mode, MotionMode::Typewriter | MotionMode::Scramble) {
+            self.progress = 0.;
+            self.phase = 0.;
+        }
+        self.playing = mode != MotionMode::Static;
+        self.last_tick = Instant::now();
+        cx.notify();
+    }
+    /// Rewind the current motion. A reveal at 0% shows no glyphs, so Typewriter
+    /// and Scramble play from the start rather than sitting blank.
+    fn restart(&mut self, cx: &mut Context<Self>) {
+        self.progress = 0.;
+        self.phase = 0.;
+        if matches!(self.motion, MotionMode::Typewriter | MotionMode::Scramble) {
+            self.playing = true;
+        }
+        self.last_tick = Instant::now();
+        cx.notify();
+    }
 }
 fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, active: bool) -> Stateful<Div> {
     let label = label.into();
@@ -321,8 +345,7 @@ impl Render for TypographyDemo {
                         (MotionMode::Static, "Static"), (MotionMode::Typewriter, "Typewriter"), (MotionMode::Scramble, "Scramble"), (MotionMode::Wave, "Wave")
                     ].into_iter().map(|(mode, label)| button(label, label, self.motion == mode)
                         .on_click(cx.listener(move |this, _, _, cx| {
-                            this.motion = mode; this.playing = mode == MotionMode::Wave;
-                            this.last_tick = Instant::now(); cx.notify();
+                            this.set_motion(mode, cx);
                         })))))
                     .child(div().flex().flex_wrap().gap_2()
                         .child(button("motion-play", if self.playing { "Pause" } else { "Play" }, self.playing)
@@ -332,7 +355,7 @@ impl Render for TypographyDemo {
                                 this.playing = !this.playing; this.last_tick = Instant::now(); cx.notify();
                             })))
                         .child(button("restart", "Restart", false).on_click(cx.listener(|this, _, _, cx| {
-                            this.progress = 0.; this.phase = 0.; this.last_tick = Instant::now(); cx.notify();
+                            this.restart(cx);
                         })))
                         .child(button("motion-step-back", "−10%", false).on_click(cx.listener(|this, _, _, cx| {
                             if this.motion != MotionMode::Scramble { this.motion = MotionMode::Typewriter; } this.playing = false; this.progress = (this.progress - 0.1).max(0.); cx.notify();
@@ -445,5 +468,44 @@ mod tests {
         assert!(!cx.update(|window, _| text_focus.is_focused(window)));
         cx.simulate_keystrokes("shift-tab");
         assert!(cx.update(|window, _| text_focus.is_focused(window)));
+    }
+
+    #[::core::prelude::v1::test]
+    fn entering_a_reveal_mode_or_restarting_never_leaves_it_stale_or_blank() {
+        let mut app = TestAppContext::build_with_text_system(
+            TestDispatcher::new(0),
+            None,
+            std::sync::Arc::new(gpui_wgpu::CosmicTextSystem::new_without_system_fonts(
+                "IBM Plex Sans",
+            )),
+        );
+        app.text_system()
+            .add_fonts(vec![std::borrow::Cow::Borrowed(super::super::FONT)])
+            .unwrap();
+        let (demo, cx) = app.add_window_view(TypographyDemo::new);
+        cx.update(|_, cx| {
+            demo.update(cx, |demo, cx| {
+                for mode in [MotionMode::Typewriter, MotionMode::Scramble] {
+                    // A finished run used to make the mode button look inert.
+                    demo.progress = 1.;
+                    demo.playing = false;
+                    demo.set_motion(mode, cx);
+                    assert_eq!(demo.progress, 0.);
+                    assert!(demo.playing, "entering a reveal mode plays it");
+                    // Restart used to rewind to 0% and stay paused: a blank line.
+                    demo.progress = 0.6;
+                    demo.playing = false;
+                    demo.restart(cx);
+                    assert_eq!(demo.progress, 0.);
+                    assert!(demo.playing, "restart replays the reveal");
+                }
+                demo.set_motion(MotionMode::Wave, cx);
+                assert!(demo.playing);
+                demo.set_motion(MotionMode::Static, cx);
+                assert!(!demo.playing);
+                demo.restart(cx);
+                assert!(!demo.playing, "restart does not animate Static");
+            })
+        });
     }
 }
