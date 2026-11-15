@@ -437,10 +437,10 @@ a headless native-host construction/axis smoke check and the shared slider tests
 on Ubuntu. This is distinct from interactive Wayland/X11, IME and accessibility
 acceptance on a Linux desktop.</p>
 <h3 id="lab-tests">Lab tests</h3>
-<pre><code class="language-sh">just lab-test
+<pre><code class="language-sh">just labs test
 </code></pre>
 <p>Backtraces are enabled automatically. To isolate slider interaction failures:</p>
-<pre><code class="language-sh">just lab-test live_axis -- --nocapture
+<pre><code class="language-sh">just labs test live_axis -- --nocapture
 </code></pre>
 <p>These tests send actual pointer and keyboard events through GPUI's simulated test
 windows, checking endpoint values, focus/keyboard changes, drag release, presets,

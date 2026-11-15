@@ -310,7 +310,7 @@ reset and mode/zoom controls reuse one source upload.
 
 See [media pipeline guide](https://xgpui.dev/media-pipeline.html) for the
 `load_rgba16f` API, input metadata, byte limits and backend validation status.
-The native lab companion and `just lab-test` passed in Windows user testing on
+The native lab companion and `just labs test` passed in Windows user testing on
 2026-11-04. Windows browser testing and Linux native runtime retain separate
 coverage; 60 Hz stays the performance baseline.
 

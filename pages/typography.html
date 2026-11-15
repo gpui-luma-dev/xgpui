@@ -28,7 +28,7 @@ native acceptance also identified the macOS accessibility adapter fix recorded b
 <p>Open the browser typography demo through
 <strong>Browser extension demos → Text → Selectable typography</strong> (<code>?demo=typography</code>).
 The same demo runs natively:</p>
-<pre><code class="language-sh">just lab-shader --example typography
+<pre><code class="language-sh">just shader --example typography
 </code></pre>
 <p>Choose Editorial, Ligatures, Unicode or Overflow. Drag to select, double-click a
 word, triple-click the line, or use the keyboard. The source inspector shows the
@@ -277,7 +277,7 @@ available to accessibility.</p>
 <p>Tested source revision: <code>4f05c321ac4b6773eb7349834cc4cd33132e838d</code>, on
 macOS 27.2 (26B123), arm64. The focused command above passed <strong>15 tests</strong>,
 with zero failures or ignored tests. The native demo build also passed:</p>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/shader-examples/justfile build
+<pre><code class="language-sh">just labs build
 </code></pre>
 <p>The secondary browser build, <code>bash apps/xgpui-ext-lab/extensions-web/build.sh</code>,
 also passed and generated <code>target/web/extensions</code>. Browser runtime interaction
@@ -294,7 +294,7 @@ use headless WGPU and Metal with Apple shaping; they are gated to macOS. These
 results do not establish desktop clipboard integration, screen-reader behavior,
 physical display appearance or sustained resource behavior.</p>
 <table><thead><tr><th>Acceptance area</th><th>Windows</th><th>Linux</th><th>macOS</th></tr></thead><tbody>
-<tr><td>Native build / focused tests</td><td>Owner reported native labs and <code>just lab-test</code> passing through <code>efe173d</code>; standalone typography suite unverified</td><td>Unverified</td><td>Native shader demo build and 15 focused tests passed at revision above</td></tr>
+<tr><td>Native build / focused tests</td><td>Owner reported native labs and <code>just labs test</code> passing through <code>efe173d</code>; standalone typography suite unverified</td><td>Unverified</td><td>Native shader demo build and 15 focused tests passed at revision above</td></tr>
 <tr><td>Desktop interaction / exact OS clipboard</td><td>Unverified</td><td>Unverified</td><td>Owner reported native demo working on 2026-11-04; detailed interaction/clipboard coverage not recorded</td></tr>
 <tr><td>Rendering / scale / reduced motion</td><td>Unverified</td><td>Unverified</td><td>Retina visual and headless pixel checks passed; simulated 1x/1.5x/2x/3x logical geometry passed; other physical scales unavailable</td></tr>
 <tr><td>Assistive-technology reading / focus / selection</td><td>Unverified</td><td>Unverified</td><td>Owner confirmed VoiceOver focus/reading and complete mouse selection read via VO-Fn-F6; native Unicode and hidden-source selection actions passed</td></tr>

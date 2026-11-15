@@ -1,14 +1,7 @@
 name: Prepare registry release
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/prepare-registry-release.yml'
-      - 'tools/release-sync/**'
-      - 'scripts/test_all.sh'
-      - 'justfile'
-      - '.github/workflows/prepare-daily-release.yml'
-      - 'scripts/release-packages.json'
+  # Manual only: the tests job runs first in every plan, dry-run or publish.
   workflow_dispatch:
     inputs:
       mode:

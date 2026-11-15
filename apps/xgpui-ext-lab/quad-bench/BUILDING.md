@@ -8,24 +8,24 @@ This first app tests one workload: colored rectangles. It is deliberately small 
 
 Both patterns normally produce one quad batch. Overlap increases ordering depth and overdraw; it does not inherently increase batch count. This app does not test text, images, layout-heavy widgets or custom shaders.
 
-## Just recipes and arguments
+## Lab commands and arguments
 
-From the repository's `apps/xgpui-ext-lab/quad-bench/` directory:
+From the repository root:
 
 ```sh
-just                         # List recipes; opens no window
-just args                    # Print the application's CLI help
-just build                   # Optimized build only
-just ui --count 5000 --pattern overlap
-just mtl --count 5000 --pattern overlap  # macOS Metal FPS/GPU HUD; quits when done
-just mtl --exit-delay-secs 10          # Leave final frame visible for 10 seconds
-just ui --continuous                   # Draw until the window is closed
-just headless --pattern grid --frames 30 --json apps/xgpui-ext-lab/quad-bench/results/grid.json --png apps/xgpui-ext-lab/quad-bench/results/grid.png
-just cpu --count 20000 --frames 30
-just check                   # Formatting, tests and Clippy
+just labs quad-bench                                # List tasks; opens no window
+just quad-bench -- --help                           # Print the application's CLI help
+just labs build                                     # Optimized build of every lab
+just quad-bench --count 5000 --pattern overlap
+just quad-bench mtl --count 5000 --pattern overlap  # macOS Metal FPS/GPU HUD; quits when done
+just quad-bench mtl --exit-delay-secs 10            # Leave final frame visible for 10 seconds
+just quad-bench --continuous                        # Draw until the window is closed
+just quad-bench headless --pattern grid --frames 30 --json apps/xgpui-ext-lab/quad-bench/results/grid.json --png apps/xgpui-ext-lab/quad-bench/results/grid.png
+just quad-bench cpu --count 20000 --frames 30
+just quad-bench test                                # Tests (Clippy: just clippy ours)
 ```
 
-From the repository root, use `just --justfile apps/xgpui-ext-lab/quad-bench/justfile <recipe>`. Recipes always run Cargo from the repository root, so **output paths are relative to the repository root**, including when invoked inside `apps/xgpui-ext-lab/quad-bench/`. The headless and CPU recipes create `apps/xgpui-ext-lab/quad-bench/results/`; other output directories must already exist. Quote paths containing spaces. The UI, Metal, headless and CPU recipes forward additional arguments as separate shell arguments. `ui` and `mtl` open a window. Repeated app flags use the last value, so arguments after a recipe override its defaults.
+Commands run Cargo from the repository root, so **output paths are relative to the repository root**. The headless, CPU and Metal tasks create `apps/xgpui-ext-lab/quad-bench/results/`; other output directories must already exist. Quote paths containing spaces. Extra arguments after the lab or task go to the app as separate shell arguments. `run` and `mtl` open a window. Repeated app flags use the last value, so arguments after a task override its defaults.
 
 | Argument | Default | Meaning and limits |
 | --- | --- | --- |
@@ -38,13 +38,13 @@ From the repository root, use `just --justfile apps/xgpui-ext-lab/quad-bench/jus
 | `--warmup N` | 10 | Unmeasured UI or headless frames before sampling; 0–1000 |
 | `--json PATH` | none | Write a bounded UI or headless report; JSON also goes to stdout |
 | `--png PATH` | none | Save the last headless rendered frame; incompatible with CPU-only mode |
-| `--headless` | off | No-window execution; supplied by the headless and CPU recipes |
-| `--cpu-only` | off | Skip the renderer; requires headless; supplied by the CPU recipe |
+| `--headless` | off | No-window execution; supplied by the headless and CPU tasks |
+| `--cpu-only` | off | Skip the renderer; requires headless; supplied by the CPU task |
 | `--exit-delay-secs N` | 0 | Seconds to retain the final UI after saving results, then quit; 0–3600; incompatible with headless and continuous modes |
 | `--continuous` | off | Keep the UI drawing; incompatible with headless mode and JSON output |
 | `--help` | — | Print CLI help and exit without opening a window |
 
-Use the Cargo commands below when selecting Cargo features such as `runtime-shaders`; flags after a recipe name go to the app, not Cargo.
+Use the Cargo commands below when selecting Cargo features such as `runtime-shaders`; flags after a task or lab name go to the app, not Cargo.
 
 ## Run the UI
 
@@ -62,16 +62,16 @@ CPU paint time includes generating geometry and enqueueing paint operations. It 
 
 ## Metal frame-rate testing (macOS)
 
-From `apps/xgpui-ext-lab/quad-bench/`:
+From the repository root:
 
 ```sh
-just mtl
-just mtl --count 10000 --pattern overlap --frames 1200 --warmup 120 --json apps/xgpui-ext-lab/quad-bench/results/mtl-overlap.json
+just quad-bench mtl
+just quad-bench mtl --count 10000 --pattern overlap --frames 1200 --warmup 120 --json apps/xgpui-ext-lab/quad-bench/results/mtl-overlap.json
 ```
 
-The `mtl` recipe sets `MTL_HUD_ENABLED=1` for this process, enabling [Apple's Metal Performance HUD](https://developer.apple.com/videos/play/tech-talks/110339/). The overlay provides FPS and GPU performance metrics. It does not change global macOS settings.
+The `mtl` task sets `MTL_HUD_ENABLED=1` for this process, enabling [Apple's Metal Performance HUD](https://developer.apple.com/videos/play/tech-talks/110339/). The overlay provides FPS and GPU performance metrics. It does not change global macOS settings.
 
-Defaults for this recipe are 120 warmup frames, 600 measured frames and `apps/xgpui-ext-lab/quad-bench/results/mtl.json`. Running it again replaces that report; use distinct `--json` paths to retain runs. Duration depends on frame cadence. The app saves the report and quits at the endpoint. Use `--exit-delay-secs 10` to inspect the final image and summary before automatic exit. During that delay the HUD may show idle performance; inspect its metrics while the workload is running.
+Defaults for this task are 120 warmup frames, 600 measured frames and `apps/xgpui-ext-lab/quad-bench/results/mtl.json`. Running it again replaces that report; use distinct `--json` paths to retain runs. Duration depends on frame cadence. The app saves the report and quits at the endpoint. Use `--exit-delay-secs 10` to inspect the final image and summary before automatic exit. During that delay the HUD may show idle performance; inspect its metrics while the workload is running.
 
 The saved windowed report measures **paint callback cadence**, not confirmed display presentations or GPU completion. Its `callback_fps` is the number of sampled intervals divided by their total duration; `callback_interval_ms` and `cpu_paint_ms` provide median/p95/min/max. The final interval ends at the next frame callback after the final paint was submitted. HUD numbers are separate and are not exported into this JSON. Headless JSON keeps its existing composition/render/readback fields; the two report modes are distinct.
 

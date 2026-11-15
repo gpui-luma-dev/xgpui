@@ -1,6 +1,6 @@
 # Canvas integration prototype
 
-Run `just lab-canvas` from the repository root. Two-finger scrolling, the mouse wheel and pinch zoom around the pointer,
+Run `just canvas` from the repository root. Two-finger scrolling, the mouse wheel and pinch zoom around the pointer,
 matching Mandelbrot navigation. Drag the empty background to pan; Space +
 left-button drag or middle-button drag pans even when starting over a card. Left-click a card to select it. Press **G** for line/dot grids, **R** to
 reset the camera, **O** for a 1% overview, and **B** to switch between 10,000 and
@@ -80,8 +80,8 @@ cargo test --locked --config .cargo/validation.toml \
 Native checks and profiling (both quit after completion):
 
 ```sh
-just lab-canvas --smoke /tmp/canvas-smoke
-just lab-canvas --benchmark /tmp/canvas-profile.json
+just canvas --smoke /tmp/canvas-smoke
+just canvas --benchmark /tmp/canvas-profile.json
 ```
 
 Smoke captures show default zoom, minimum/maximum zoom, a distant world origin,
@@ -134,8 +134,8 @@ recorded in [`docs/extensions/canvas.md`](https://xgpui.dev/canvas.html).
 Press **F** to switch between cards and Mandelbrot, or start directly with:
 
 ```sh
-just lab-canvas --mandelbrot
-MTL_HUD_ENABLED=1 just lab-canvas --mandelbrot
+just canvas --mandelbrot
+MTL_HUD_ENABLED=1 just canvas --mandelbrot
 ```
 
 Left drag pans; two-finger scrolling or the mouse wheel zooms around the pointer.
@@ -182,7 +182,7 @@ hosts retain the xgpui-media upload/preview route. Other native backends and
 unaccepted wide-SDR hosts use this route with the explicit sRGB preview where
 needed. Runtime validation of the redesigned path is currently macOS arm64 only.
 GPU perturbation/deep-zoom GPU arithmetic is not implemented. Force the CPU route
-for comparison with `just lab-canvas --mandelbrot --mandelbrot-cpu`.
+for comparison with `just canvas --mandelbrot --mandelbrot-cpu`.
 
 The palette is authored in Display P3, with saturated bands outside sRGB.
 Presentation is wide SDR, not HDR, and does not establish physical display
@@ -195,8 +195,8 @@ separate bounded CPU-slice implementation.
 Capture a refined native frame or reproduce a specific view:
 
 ```sh
-just lab-canvas --mandelbrot --mandelbrot-capture /tmp/mandelbrot.png
-just lab-canvas --mandelbrot --mandelbrot-zoom 1e10 \
+just canvas --mandelbrot --mandelbrot-capture /tmp/mandelbrot.png
+just canvas --mandelbrot --mandelbrot-zoom 1e10 \
   --mandelbrot-center -73.0931661111453 39.547771261599 \
   --mandelbrot-capture /tmp/mandelbrot-deep.png
 ```
@@ -205,7 +205,7 @@ Run a bounded native camera sweep through zoom-in, zoom-out, maximum zoom and
 reset, saving settled captures plus frame-callback timing JSON:
 
 ```sh
-just lab-canvas --mandelbrot --mandelbrot-check /tmp/mandelbrot-check
+just canvas --mandelbrot --mandelbrot-check /tmp/mandelbrot-check
 ```
 
 The bounded sweep disables the normal inactive-window frame throttle so focus

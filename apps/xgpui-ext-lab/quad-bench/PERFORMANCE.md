@@ -16,7 +16,7 @@ Use an optimized, locked build with default build-time shaders and no Metal HUD.
 
 All cases use opacity 0.65. For each headless trial, run the four cases in table order; repeat that sequence five times. Then run the windowed case five times. Windowed and headless resolutions differ at 2× scale: their render times are not directly comparable.
 
-From the repository root, first build with `just --justfile apps/xgpui-ext-lab/quad-bench/justfile build`. Then invoke `target/release/quad-bench` directly for each case. Example with a process timeout:
+From the repository root, first build with `just labs build`. Then invoke `target/release/quad-bench` directly for each case. Example with a process timeout:
 
 ```sh
 mkdir -p apps/xgpui-ext-lab/quad-bench/results/my-run

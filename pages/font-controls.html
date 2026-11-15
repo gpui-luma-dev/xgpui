@@ -41,10 +41,10 @@ The large specimen, wrapping specimen and measured advance update together.
 Focus a slider and use arrows, Shift for larger steps, or Home/End for limits.
 Feature tags and available axis ranges appear with the static samples.</p>
 <p>Run the lab tests, with backtraces enabled:</p>
-<pre><code class="language-sh">just lab-test
+<pre><code class="language-sh">just labs test
 </code></pre>
 <p>To focus on the slider interaction tests:</p>
-<pre><code class="language-sh">just lab-test live_axis -- --nocapture
+<pre><code class="language-sh">just labs test live_axis -- --nocapture
 </code></pre>
 <p>The labs and tests were confirmed working on macOS and Windows on November 5,
 2026. Native and Parley output need not be pixel-identical. A subtle slant

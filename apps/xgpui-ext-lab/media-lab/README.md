@@ -6,10 +6,10 @@ standard image atlas with dedicated mipmapped textures at matching zoom and pan.
 From the repository root (launch/build/capture recipes default to **release**):
 
 ```sh
-just --justfile apps/xgpui-ext-lab/media-lab/justfile ui
-just --justfile apps/xgpui-ext-lab/media-lab/justfile ui --image /absolute/path/photo.png
-just --justfile apps/xgpui-ext-lab/media-lab/justfile capture
-just --justfile apps/xgpui-ext-lab/media-lab/justfile wgpu-capture
+just media
+just media --image /absolute/path/photo.png
+just media capture
+just media wgpu-capture
 ```
 
 Without `just`, run:
@@ -42,7 +42,7 @@ the host, enforces one upload per image, and fails on errors or timeout. It writ
 an unlabeled contact sheet: atlas left, media right; frequency, alpha and terrain
 rows, followed by your optional image. Native capture is `/tmp/media-lab.png`;
 wgpu capture is `/tmp/media-lab-wgpu.png`. The wgpu feature selects only the headless
-backend; interactive macOS windows use Metal. Windows native labs and `just lab-test` passed in user testing on 2026-11-04;
+backend; interactive macOS windows use Metal. Windows native labs and `just labs test` passed in user testing on 2026-11-04;
 Linux runtime QA remains outstanding.
 
 ## Color filter checks
@@ -57,9 +57,9 @@ Append `--vivid` to UI or headless commands for a combined adjustment capture.
 ## Path effects
 
 ```sh
-just --justfile apps/xgpui-ext-lab/media-lab/justfile paths
-just --justfile apps/xgpui-ext-lab/media-lab/justfile paths-capture
-just --justfile apps/xgpui-ext-lab/media-lab/justfile paths-wgpu-capture
+just media paths
+just media paths-capture
+just media paths-wgpu-capture
 ```
 
 Use **Path effects →** from the Images view or start with `--paths`. Three columns
@@ -82,8 +82,8 @@ fresh IOSurfaces; Windows initializes source-sized D3D11 textures from them.
 No published-crate API or renderer change is needed for these lab fixtures.
 
 ```sh
-just --justfile apps/xgpui-ext-lab/media-lab/justfile video
-just --justfile apps/xgpui-ext-lab/media-lab/justfile video-capture
+just media video
+just media video-capture
 ```
 
 On macOS, the Video surfaces button opens a generated ~30 fps IOSurface source. Format
@@ -109,25 +109,25 @@ retained import reuse, saving the requested BGRA PNG and four NV12 sibling PNGs.
 No sample file is required.
 
 All launch/build/capture recipes default to release. The window title identifies
-RELEASE/DEBUG. Use `just --justfile apps/xgpui-ext-lab/media-lab/justfile profile=dev ui` for an
+RELEASE/DEBUG. Use `just labs --profile dev media` for an
 explicit development override. The synthetic video source needs no sample file.
 
 ## Windows GPU surface checks
 
-On a Windows SDK host, `just --justfile apps/xgpui-ext-lab/media-lab/justfile dxgi-test` runs the
+On a Windows SDK host, `just media dxgi-test` runs the
 native BGRA and keyed NT-handle snapshot regressions in release mode. Separate
 WARP devices test busy acquisition, handle lifetime, retained ownership, compositor
 pixels and producer-key handoff. This requires no video file or decoder. The
-interactive Windows demo and root `just lab-test` passed in user testing on
+interactive Windows demo and root `just labs test` passed in user testing on
 2026-11-04. These runs cover same-device BGRA presentation; the separate keyed
 NT-handle ownership suite above is not established by the root lab-test result.
 
 ### Windows synthetic video surfaces (#133)
 
 ```sh
-just lab-media --video
-just lab-media --headless --video --png "target/video-lab.png"
-just lab-test video_lab:: -- --test-threads=1
+just media --video
+just media --headless --video --png "target/video-lab.png"
+just labs test video_lab:: -- --test-threads=1
 ```
 
 Windows now has a generated ~30 fps BGRA8 source using native D3D11/DXGI.
@@ -164,14 +164,14 @@ producer closure and restart. The Windows apps workflow builds the media lab and
 runs these tests. Default video capture output uses the system temporary directory
 on each OS. Native video rejects `--wgpu` explicitly.
 
-The project owner confirmed all native labs and `just lab-test` passed on Windows
+The project owner confirmed all native labs and `just labs test` passed on Windows
 on 2026-11-04, including the video demo and selected capture/lifecycle checks.
 NV12/YUV conversion, decoding, A/V clocks,
 shared producer pools and device-loss recovery are outside this demo's scope.
 
 ## Linux DMA-BUF layout checks
 
-`just --justfile apps/xgpui-ext-lab/media-lab/justfile dma-buf-layout-test` runs release layout
+`just media dma-buf-layout-test` runs release layout
 contract tests on the current host, without a sample file. The initial opt-in
 Linux Vulkan adapter imports dedicated immutable single-plane linear BGRA buffers
 whose producer fence and EXTERNAL/GENERAL release have already completed. It
@@ -183,7 +183,7 @@ macOS do not establish Linux GPU import or pixel correctness.
 On a compatible Linux Vulkan host, run:
 
 ```sh
-just --justfile apps/xgpui-ext-lab/media-lab/justfile dma-buf-native-test
+just media dma-buf-native-test
 ```
 
 This generates and exports its own four-quadrant GPU surface,
@@ -198,8 +198,8 @@ macOS development host. See the web guide for exact coverage and remaining limit
 ## Release upload CPU benchmark
 
 ```sh
-just --justfile apps/xgpui-ext-lab/media-lab/justfile upload-bench
-just --justfile apps/xgpui-ext-lab/media-lab/justfile upload-wgpu-bench
+just media upload-bench
+just media upload-wgpu-bench
 ```
 
 This generates six 2048² noisy PNGs with marker colors, warms the pipeline, then
@@ -223,7 +223,7 @@ interpretation and versioned macOS observations; do not use those as thresholds.
 ## Visible-window cadence run
 
 ```sh
-just --justfile apps/xgpui-ext-lab/media-lab/justfile ui-perf
+just media ui-perf
 ```
 
 Keep the window visible and foreground without changing controls until
@@ -246,7 +246,7 @@ See the media web guide for three versioned macOS observations and review status
 ## Sustained scrolling with large-image replacements (60 Hz baseline)
 
 ```sh
-just --justfile apps/xgpui-ext-lab/media-lab/justfile scroll-perf
+just media scroll-perf
 ```
 
 Select **60 Hertz** for the test display in System Settings → Displays first.
@@ -286,7 +286,7 @@ for the fixed-60-Hz M4 Max observations and raw reports.
 
 ## Linear adjustments (issue #26 Phase 2)
 
-Run `just lab-media --adjustments` from the repository root. Both panels share one
+Run `just media --adjustments` from the repository root. Both panels share one
 source upload: original on the left, linear-sRGB matrix/vignette on the right.
 Cycle EV exposure, contrast around 0.18, saturation and vignette, then animate,
 reset, zoom/pan and check alpha/opacity/corners. The upload count stays at one.
@@ -298,7 +298,7 @@ RGBA16F/P3 uploads are available in Phase 3 below. Progressive/tiled images are 
 
 ### RGBA16F supplied pixels (Phase 3)
 
-Run `just lab-media --float-images` from the repository root for the release native
+Run `just media --float-images` from the repository root for the release native
 comparison, or open `?demo=media-float&backend=webgpu` /
 `?demo=media-float&backend=webgl` in the rebuilt extensions web app.
 Generated P3 colors, a near-black gradient and alpha edges need no external asset
@@ -315,7 +315,7 @@ runtime QA remains pending; this does not add sustained performance evidence.
 
 ### Progressive tiled canvas (Phase 4)
 
-`just lab-media --tiled` opens the release native app. Rebuild the web app and open
+`just media --tiled` opens the release native app. Rebuild the web app and open
 `?demo=media-tiles&backend=webgpu` or `?demo=media-tiles&backend=webgl`.
 The shared view displays a generated 12,000 × 6,000 source without allocating it
 in full. Fit/1:1, drag, wheel zoom and arrow controls change visible pages; source
@@ -338,7 +338,7 @@ quality. It blurs assembled pages once, avoiding internal tile seams. Nonzero
 blur uses a smaller preview to fit the existing 1,024-device-pixel capture limit,
 including halo. Filtering is premultiplied encoded sRGB; capture/filter textures
 are additional to page budgets. Media uploads/imports and target allocations are
-reused, but custom media captures refresh each paint. Native `just lab-media --video`
+reused, but custom media captures refresh each paint. Native `just media --video`
 also offers exposure, saturation, vignette and blur on generated BGRA/NV12
 surfaces. Native imports are not available in Wasm; test portable blur via
 `?demo=media-tiles&backend=webgpu` and `?demo=media-tiles&backend=webgl`.
@@ -346,7 +346,7 @@ surfaces. Native imports are not available in Wasm; test portable blur via
 
 ### Linux synthetic video surfaces
 
-`just lab-media --video` supports an animated BGRA source on Linux through
+`just media --video` supports an animated BGRA source on Linux through
 Vulkan DMA-BUF import. The existing pause/resume, burst, stop/restart, original
 and adjusted previews, opacity, corners and blur controls share one imported
 snapshot. The UI identifies this as standard SDR, independently of P3 output.
@@ -366,8 +366,8 @@ shows a notice with Retry and Images controls; technical details go to the
 terminal. To explicitly select Vulkan and run the headless pixel/lifetime check:
 
 ```sh
-WGPU_BACKEND=vulkan just lab-media --headless --video --wgpu --png /tmp/linux-video.png
-just --justfile apps/xgpui-ext-lab/media-lab/justfile video-native-test
+WGPU_BACKEND=vulkan just media --headless --video --wgpu --png /tmp/linux-video.png
+just media video-native-test
 ```
 
 The native check is opt-in and requires GPU access. It verifies generated colors,

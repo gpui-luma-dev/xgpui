@@ -5,21 +5,21 @@ without losing either workspace's settings. `lab-gamut` remains the separate
 native wide-output/compositing lab.
 
 ```sh
-just lab-color                         # Swatches, the original default.
-just lab-color --chromaticity          # CIE xy/u′v′, storage/ICC inspector.
-just lab-color --mode chromaticity --uv
-just lab-color --native-fill
-just lab-color --icc-sampled
-just lab-color --photo                 # WebKit Italy native-wide/sRGB comparison.
-just lab-color --help
-just lab-color-test             # Numerical, fixtures and native tests.
+just color                         # Swatches, the original default.
+just color --chromaticity          # CIE xy/u′v′, storage/ICC inspector.
+just color --mode chromaticity --uv
+just color --native-fill
+just color --icc-sampled
+just color --photo                 # WebKit Italy native-wide/sRGB comparison.
+just color --help
+just color test             # Numerical, fixtures and native tests.
 ```
 
-The compatibility recipes `lab-chromaticity`, `chromaticity` and
-`chromaticity-test` now use this checkout. No sibling repository, network assets
+`just color chromaticity` and `just color test` (also the older
+`chromaticity` and `chromaticity-test` aliases) use this checkout. No sibling repository, network assets
 or scripting runtime is needed. The binary remains `color-lab`; its source is now here
 rather than under gamut-lab. The source build uses the shared lab manifest,
-lockfile and target directory. Override `profile=dev` when iterating.
+lockfile and target directory. Use `just labs --profile dev color` when iterating.
 
 Chromaticity options automatically select that workspace. An explicit
 `--mode swatches` cannot be combined with them. `--effects` enables the existing
@@ -59,6 +59,6 @@ paths and attribution replace duplicate fixture copies.
 The integrated app passes 24 tests on macOS, including independent numerical,
 ICC/FP16, pinned WebKit asset and Metal photo-composition checks. The color binary
 and tests also cross-check for Windows. Live macOS verification covers both tabs,
-the chromaticity fill and xy/u′v′ setting retention across tab switches. The owner additionally confirmed all native labs and `just lab-test` passed on
+the chromaticity fill and xy/u′v′ setting retention across tab switches. The owner additionally confirmed all native labs and `just labs test` passed on
 Windows on 2026-11-04.
 Linux runtime and monitor color accuracy remain separate.

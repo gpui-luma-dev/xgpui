@@ -25,13 +25,13 @@ preferences and uses the same <code>ShellOptions::resolved_preferences</code> re
 client frame. It never writes desktop settings.</p>
 <h2 id="run">Run</h2>
 <p>From the xgpui repository:</p>
-<pre><code class="language-sh">just profile=dev lab-shell
+<pre><code class="language-sh">just labs --profile dev shell
 
 # Ask for the xgpui client frame on Linux (the compositor can decline).
-just profile=dev lab-shell --client-decorations
+just labs --profile dev shell --client-decorations
 
 # Exercise a non-resizable window.
-just profile=dev lab-shell --client-decorations --fixed-size
+just labs --profile dev shell --client-decorations --fixed-size
 </code></pre>
 <p>Repository builds use the local workspace crate. The first build uses the existing native extension-lab workspace and its dependencies.</p>
 <h2 id="what-to-inspect">What to inspect</h2>
@@ -255,8 +255,8 @@ no new core GPUI public API or serialization changes. Implementers of the
 <code>ShellApp</code> trait need the new method; application callers using the
 existing method need no changes. Prerequisite #182 core API review remains separate.</p>
 <h3 id="final-manual-acceptance">Final manual acceptance</h3>
-<p>From this branch, run <code>just profile=dev lab-shell</code> on macOS/Windows, and also
-<code>just profile=dev lab-shell --client-decorations</code> on Linux. Check:</p>
+<p>From this branch, run <code>just labs --profile dev shell</code> on macOS/Windows, and also
+<code>just labs --profile dev shell --client-decorations</code> on Linux. Check:</p>
 <ol>
 <li>App icons render; each action works with pointer, Tab/Enter/Space and accessibility.</li>
 <li>Native traffic lights (macOS) or frame controls stay usable and do not overlap app controls.</li>

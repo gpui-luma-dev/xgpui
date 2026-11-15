@@ -21,7 +21,7 @@
 <main id="content" tabindex="-1">
 <div class="eyebrow">Extensions</div><h1>xgpui-gamut</h1><p class="lead">Explicit wide SDR content alongside normal sRGB controls.</p><p class="muted"><a href="crates/xgpui-gamut.html">xgpui-gamut</a> · Backend owners: <a href="crates/gpui-apple.html">gpui-apple</a> / <a href="crates/gpui-windows.html">gpui-windows</a>.</p><nav class="tabs" aria-label="Wide-gamut sections"><a href="high-gamut-windows.html" aria-current="page">Use &amp; contract</a><a href="#typed-windows-output">Windows output</a><a href="gpui-public-api.html">GPUI API changes</a></nav><section class="demo-entry" aria-label="Wide-gamut demos"><div class="demo-entry-heading"><span>EXPLORE COLOR &amp; WIDE GAMUT</span><a href="examples/extensions/">All demos →</a></div><div class="demo-launch-grid"><article class="demo-launch gamut-native"><div class="demo-thumb gamut-thumb" aria-hidden="true"></div><strong>Native Display P3 lab</strong><span>Compare wide SDR content with ordinary sRGB controls on macOS or Windows. Run from the repository root:</span><pre><code class="language-sh">cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab</code></pre><span>Move the window to a wide-gamut display. Check <code>Effective: WideGamutSdr</code> and <code>Display wide gamut: Some(true)</code>. These report negotiated support, not display calibration.</span></article><a class="demo-launch" href="examples/extensions/?demo=color"><div class="demo-thumb gamut-preview-thumb" aria-hidden="true"></div><strong>Open color comparison ↗</strong><span>Interactive browser preview of interpolation and gamut mapping. Rendered as sRGB; use the native lab to compare actual Display P3 output.</span></a></div></section><article class="extension-document"><p><strong>Wide gamut is a capability; Display P3 is a specific RGB space.</strong> <code>WideGamutSdr</code> requests native wide presentation. It does not select an Adobe RGB monitor mode. Metal uses extended linear P3; Windows uses scRGB. Source Adobe RGB pixels can travel through either contract. Start with <a href="color-workflows.html">color tasks</a>, <a href="pixels-and-metadata.html">pixels + metadata</a> and <a href="color-labs.html">lab limits</a>.</p>
 <p>Opt-in <strong>macOS Metal / Windows D3D11</strong> presentation: wide <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Standard-dynamic-range_video">SDR ↗</a> surfaces and normal
-<a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/SRGB">sRGB ↗</a> controls in one window. Windows native labs and <code>just lab-test</code> passed in owner
+<a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/SRGB">sRGB ↗</a> controls in one window. Windows native labs and <code>just labs test</code> passed in owner
 testing on 2026-11-04; the earlier native paint/gamut CI baseline also passed. Physical display checks
 retain their separate scope. Linux, <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/High_dynamic_range">HDR ↗</a>
 content and transparent wide windows remain deferred.</p>
@@ -239,7 +239,7 @@ OkLCh. Change endpoint presets, gamut mapping and end alpha interactively.</p>
 <p>Move the window to your wide-gamut monitor and check <code>Effective: WideGamutSdr</code> and
 <code>Display wide gamut: Some(true)</code>. <code>None</code> means display capability is unknown.
 macOS Metal presentation was checked; the owner confirmed Windows native labs
-and <code>just lab-test</code> passed on 2026-11-04. Physical display measurement remains separate.
+and <code>just labs test</code> passed on 2026-11-04. Physical display measurement remains separate.
 The status reports negotiation and capability, not calibrated color accuracy.</p>
 <p>The <a href="color-math.html#browser-color--gamut-lab">browser comparison and runtime diagnostics</a>
 remain an sRGB preview. A wide-gamut display alone does not change its output:
@@ -247,16 +247,16 @@ WebGL reads <code>drawingBufferColorSpace</code>, and WebGPU queries its canvas 
 where supported. Unavailable queries report unknown. Screenshots cannot prove
 physical P3 output.</p>
 <h2 id="run-gamut-lab">Run gamut-lab</h2>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui
-just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui --instanced
-just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui --instanced --gradient
-just --justfile apps/xgpui-ext-lab/gamut-lab/justfile baseline
-just --justfile apps/xgpui-ext-lab/gamut-lab/justfile headless --frames 60
-just --justfile apps/xgpui-ext-lab/gamut-lab/justfile capture
-just --justfile apps/xgpui-ext-lab/gamut-lab/justfile metal-test
-just --justfile apps/xgpui-ext-lab/gamut-lab/justfile test
-just --justfile apps/xgpui-ext-lab/gamut-lab/justfile lint
-just --justfile apps/xgpui-ext-lab/gamut-lab/justfile ui --ui-png /tmp/gamut-lab-ui.png
+<pre><code class="language-sh">just gamut
+just gamut --instanced
+just gamut --instanced --gradient
+just gamut sdr
+just gamut headless --frames 60
+just gamut capture
+just gamut metal-test
+just gamut test
+just clippy ours
+just gamut --ui-png /tmp/gamut-lab-ui.png
 </code></pre>
 <p>On Windows (PowerShell), no <code>just</code> installation required:</p>
 <pre><code class="language-powershell">cargo run --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin gamut-lab

@@ -3,23 +3,17 @@
 A local native app for issue #21, with companion WASM builds. The native app is
 the primary demo: select all six examples inside one window.
 
-Run here with `just ui`, following the other lab apps. Bare `just` lists recipes.
+Run from the repository root with `just shader`; `just labs` shows every lab.
 
 ```sh
-just ui                    # Local native app; choose examples in the window
-just minimal               # Custom fragment shader
-just glow                  # 100 animated badges
-just particles             # Adjustable particle workload
-just composition           # Clipping, opacity and ordering
-just shadows               # Native vs programmable shadows
-just borders               # Soft animated border on a light panel
-just --set profile release ui  # Optimized native app
-```
-
-From the repository root:
-
-```sh
-just --justfile apps/xgpui-ext-lab/shader-examples/justfile ui
+just shader                     # Native app; choose examples in the window
+just shader minimal             # Custom fragment shader
+just shader glow                # 100 animated badges
+just shader particles           # Adjustable particle workload
+just shader composition         # Clipping, opacity and ordering
+just shader shadows             # Native vs programmable shadows
+just shader borders             # Soft animated border on a light panel
+just labs --profile dev shader  # Debug build
 ```
 
 The in-app selector switches between:
@@ -78,7 +72,7 @@ poll timeout; the tested examples continued rendering without console errors.
 The shader crate's 23 tests passed, including Metal/wgpu pixel checks. The native
 example app initially compiled for macOS and cross-compiled for Windows. That
 checkpoint is superseded by the owner's 2026-11-04 Windows native-lab and
-`just lab-test` pass.
+`just labs test` pass.
 
 Native app acceptance on 2026-10-25: launched the macOS Metal app, switched
 between Minimal, Glow and Particles using the in-app selector, and verified the
@@ -119,7 +113,7 @@ rather than copying a wildcard listening address from a server's output.
 
 ## Selectable typography (issue #28, static, motion and styling milestones)
 
-Run `just typography` here, or `just --justfile apps/xgpui-ext-lab/shader-examples/justfile typography`
+Run `just typography` here, or `just shader typography`
 from the root. The shared native/browser demo has Editorial, Ligatures, Unicode
 and Overflow samples, a live source inspector, selection/copy controls, type size,
 width and light/dark controls. Gradient/glow/drop-shadow styling, typewriter reveal, deterministic scramble and bounded wave motion preserve the original selectable source.
@@ -128,7 +122,7 @@ Pause, scrub and reduced-motion controls make each effect inspectable. See [the 
 
 ### Metal wide-gamut validation (issue #53)
 
-From the repository root, run `just lab-shader --example typography --wide-gamut`.
+From the repository root, run `just shader --example typography --wide-gamut`.
 The presentation panel shows requested/effective color mode, display gamut and
 scale, plus any request error. Wide-gamut acceptance requires native macOS/Metal
 and **Effective: WideGamutSdr**; a fallback or browser run does not establish it.

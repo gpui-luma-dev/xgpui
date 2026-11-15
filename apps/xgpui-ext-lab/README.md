@@ -13,23 +13,36 @@ later after checking the package's bundled assets and consumer requirements.
 From the repository root:
 
 ```sh
-just lab-build                         # Build native labs and benchmarks.
-just lab-test                          # Run unit/compatibility tests.
-just lab-media                         # Open the media lab.
-just lab-shader                        # Open the shader examples.
-just lab-quad-bench --headless --cpu-only   # Run a bounded CPU benchmark.
-just pages-demos                       # Build and package both browser demos.
+just labs                   # Pick a lab, then a view or task, from a menu.
+just media                  # Open a lab directly.
+just media tiled            # Open one of its views.
+just media capture          # Run one of its tasks.
+just labs media             # List the media lab's views and tasks.
+just labs build             # Build native labs and benchmarks.
+just labs test              # Run unit/compatibility tests.
+just labs check             # Check labs.toml against Cargo.toml and the justfile.
+just pages-demos            # Build and package both browser demos.
 ```
 
-Each extension has a `lab-*` recipe: `lab-canvas`, `lab-media`, `lab-shader`,
-`lab-paint`, `lab-gamut`, `lab-color`, `lab-text` (also `lab-parley`) and `lab-svg`.
-Use `just lab-media --help`, or the corresponding lab's `--help`, to see all app
-options. Every recipe forwards arguments, including quoted file paths. The old
-short names and `*-lab` names remain aliases. Native launch recipes enable runtime shaders,
-portable shaders and wgpu; platform-specific capabilities still apply.
-Target names and output executable names are unchanged. `lab-color` includes
-Swatches/Chromaticity tabs and accepts `--chromaticity`; its old chromaticity
-recipes now run locally without a sibling checkout. See [Color lab](color-lab/README.md).
+You only need to remember `just labs`: it lists the labs for this OS, then the
+chosen lab's views and tasks, and prints the short command (`just media capture`)
+before running it.
+
+[`labs.toml`](labs.toml) is the single list of labs: each lab's binary or
+example, its views (named flag presets) and its tasks (captures, benchmarks,
+platform tests). The launcher in `tools/lab` reads it. `just labs check`, run in
+CI, fails when a `[[bin]]` or example here isn't registered, or a lab has no
+`just <lab>` recipe. To add a lab, view or task, edit `labs.toml` (and add the
+one-line recipe for a new lab); there are no per-lab justfiles.
+
+Arguments after a lab, view or task go to the app, including quoted file paths;
+`just media -- --help` shows a lab's options. `just labs -n media capture` prints
+the command without running it, and `just labs --profile dev media` builds a
+debug binary. Every lab runs with runtime shaders, portable shaders and wgpu;
+platform-specific capabilities still apply. The older names (`lab-media`,
+`media-lab`, `paints`, `shaders`, …) remain aliases.
+
+`just color` includes Swatches/Chromaticity tabs; see [Color lab](color-lab/README.md).
 
 Select one executable directly:
 
@@ -43,5 +56,8 @@ names and the hosted `/examples/extensions/` and `/examples/shaders/`
 destinations remain unchanged. Source, fixtures and benchmark reports are grouped
 by target under this package.
 
-The `native_windows` integration target is opt-in via `native-window-tests` because
-it creates real platform windows. Unit and compatibility recipes do not enable it.
+Tests that create real platform windows (`native_windows`, the Windows, Linux and
+macOS window probes) are opt-in through their `*-window-tests` features, and
+`just labs test` doesn't enable them. Run them with `just window-probes <probe>`;
+`just labs window-probes` lists the probes for this OS. `just labs check` fails if a
+window test isn't registered.

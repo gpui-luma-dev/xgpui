@@ -1,0 +1,531 @@
+# Lab registry (#310): every lab binary and example in this package, with its
+# views (named flag presets) and tasks (captures, benchmarks, platform tests).
+#
+#   just labs                     pick a lab, then a view or task, from a menu
+#   just media                    open a lab
+#   just media tiled --vivid      open a view, plus app arguments
+#   just media capture            run a task
+#   just labs check               registry matches Cargo.toml and the justfile (CI)
+#
+# Views and tasks share one namespace per lab: `just <lab> <name>`. Every lab
+# also needs a one-line `<lab> *args:` recipe in the root justfile.
+#
+# Task kinds (exactly one per step):
+#   args    = run this lab's binary with these arguments
+#   cargo   = a cargo command; without --manifest-path it targets this package
+#             and gets the default features, otherwise only the common flags
+#   command = any program, run from the repository root
+# "{args}" in a step marks where `-- extra args` go; otherwise they're appended
+# to the last step. `mkdir` lists directories to create before a task runs.
+# Every cargo invocation gets --locked, --config and --target-dir, and
+# --profile unless the step sets its own (`just labs --profile dev …` overrides).
+
+[defaults]
+manifest = "apps/xgpui-ext-lab/Cargo.toml"
+config = ".cargo/validation.toml"
+target-dir = "target"
+profile = "release"
+features = ["runtime-shaders", "portable-shaders", "wgpu"]
+# Other packages whose examples are registered here as tasks (checked).
+example-packages = ["extensions/crates/xgpui-canvas"]
+
+[[lab]]
+name = "shell"
+bin = "shell-lab"
+group = "Main interactive labs"
+title = "Shell / window controls"
+about = "Desktop preference inspector and per-window shell override and state controls"
+
+[[lab]]
+name = "canvas"
+bin = "canvas-lab"
+group = "Main interactive labs"
+title = "Canvas / spatial cards"
+about = "Spatial viewport with 10,000 selectable cards (--smoke DIR, --benchmark FILE)"
+views = [{ name = "mandelbrot", title = "Mandelbrot explorer", args = ["--mandelbrot"] }]
+
+[[lab.task]]
+name = "group-moves"
+about = "xgpui-canvas example: CPU-only bounds-update benchmark"
+cargo = ["run", "--manifest-path", "extensions/crates/xgpui-canvas/Cargo.toml", "--example", "group_moves"]
+
+[[lab.task]]
+name = "pan"
+about = "xgpui-canvas example: headless gesture policy without card IDs or GPUI"
+cargo = ["run", "--manifest-path", "extensions/crates/xgpui-canvas/Cargo.toml", "--example", "pan"]
+
+[[lab.task]]
+name = "spatial-queries"
+about = "xgpui-canvas example: dependency-free CPU query comparison"
+cargo = ["run", "--manifest-path", "extensions/crates/xgpui-canvas/Cargo.toml", "--example", "spatial_queries"]
+
+[[lab]]
+name = "media"
+bin = "media-lab"
+group = "Main interactive labs"
+title = "Media / mipmaps"
+about = "Image mipmapping, filters, GPU surfaces and path effects (--image PATH)"
+views = [
+  { name = "tiled", title = "Tiled image canvas", args = ["--tiled"] },
+  { name = "float-images", title = "Floating-point images", args = ["--float-images"] },
+  { name = "adjustments", title = "Image adjustments", args = ["--adjustments"] },
+  { name = "paths", title = "Path effects (trim and dash)", args = ["--paths"] },
+  { name = "video", title = "Synthetic video surfaces", args = ["--video"] },
+]
+
+[[lab.task]]
+name = "capture"
+about = "Atlas (left) versus mipmapped media (right) to /tmp/media-lab.png"
+args = ["--headless", "--png", "/tmp/media-lab.png"]
+
+[[lab.task]]
+name = "wgpu-capture"
+about = "The same capture through the portable wgpu renderer"
+args = ["--headless", "--wgpu", "--png", "/tmp/media-lab-wgpu.png"]
+
+[[lab.task]]
+name = "paths-capture"
+about = "Native path comparisons with pixel coverage checks"
+args = ["--headless", "--paths", "--png", "/tmp/path-effects.png"]
+
+[[lab.task]]
+name = "paths-wgpu-capture"
+about = "Path comparisons through wgpu"
+args = ["--headless", "--paths", "--wgpu", "--png", "/tmp/path-effects-wgpu.png"]
+
+[[lab.task]]
+name = "video-capture"
+about = "Synthetic video surfaces to /tmp/video-lab.png"
+args = ["--headless", "--video", "--png", "/tmp/video-lab.png"]
+
+[[lab.task]]
+name = "video-native-test"
+about = "Synthetic video colors, motion, alpha, clipping and lifetimes (real Vulkan GPU with DMA-BUF)"
+platforms = ["linux"]
+env = { WGPU_BACKEND = "vulkan", WGPU_DEBUG = "1", WGPU_VALIDATION = "1" }
+cargo = ["test", "--bin", "media-lab", "video_lab::linux::tests::dma_buf_video_capture_pixels_and_lifetimes", "--", "--ignored", "--exact", "--nocapture", "--test-threads=1"]
+
+[[lab.task]]
+name = "dxgi-test"
+about = "Native Windows surface, import and ownership regressions"
+platforms = ["windows"]
+cargo = ["test", "--manifest-path", "gpui/crates/gpui-windows/Cargo.toml", "--features", "test-support", "--lib", "dxgi_"]
+
+[[lab.task]]
+name = "dma-buf-layout-test"
+about = "DMA-BUF layout contract; no native video needed"
+cargo = ["test", "--manifest-path", "gpui/crates/gpui-wgpu/Cargo.toml", "--features", "dma-buf", "--lib", "dma_buf"]
+
+[[lab.task]]
+name = "dma-buf-native-test"
+about = "GPU export/import, rendered PNG and strict Vulkan validation"
+platforms = ["linux"]
+env = { WGPU_BACKEND = "vulkan", WGPU_DEBUG = "1", WGPU_VALIDATION = "1", VK_INSTANCE_LAYERS = "VK_LAYER_KHRONOS_validation" }
+cargo = ["test", "--manifest-path", "gpui/crates/gpui-wgpu/Cargo.toml", "--features", "dma-buf,test-support", "--lib", "custom_draw::dma_buf::native_tests::dma_buf_native_generated_snapshot", "--", "--ignored", "--exact", "--nocapture", "--test-threads=1"]
+
+[[lab.task]]
+name = "upload-bench"
+about = "Upload CPU work versus cached rendering (on Windows the headless renderer is WARP)"
+args = ["--headless", "--upload-bench", "--bench-report", "/tmp/media-upload-bench.json", "--png", "/tmp/media-upload-bench.png"]
+
+[[lab.task]]
+name = "upload-wgpu-bench"
+about = "Upload benchmark through wgpu"
+args = ["--headless", "--wgpu", "--upload-bench", "--bench-report", "/tmp/media-upload-bench-wgpu.json", "--png", "/tmp/media-upload-bench-wgpu.png"]
+
+[[lab.task]]
+name = "ui-perf"
+about = "Keep the window foreground until the report is written (~7 s)"
+args = ["--ui-perf-report", "/tmp/media-ui-perf.json"]
+
+[[lab.task]]
+name = "scroll-perf"
+about = "Real display baseline: select fixed 60 Hz, keep the window foreground ~45 s"
+args = ["--scroll-perf-report", "/tmp/media-scroll-60hz.json"]
+
+[[lab]]
+name = "paint"
+bin = "paint-lab"
+group = "Main interactive labs"
+title = "Paints / gradients"
+about = "Paints, gradients, brushes and layer effects"
+views = [
+  { name = "linear", title = "Linear gradients", args = ["--effect", "linear"] },
+  { name = "radial", title = "Radial gradients", args = ["--effect", "radial"] },
+  { name = "conic", title = "Conic gradients", args = ["--effect", "conic"] },
+  { name = "diamond", title = "Diamond gradients", args = ["--effect", "diamond"] },
+  { name = "mesh", title = "Hermite mesh", args = ["--effect", "mesh"] },
+]
+
+[[lab.task]]
+name = "headless"
+about = "GPU coverage checks and repeated readback timing"
+args = ["--headless"]
+
+[[lab.task]]
+name = "capture"
+about = "Coverage checks, then the selected gradient examples to /tmp/paint-lab.png"
+args = ["--headless", "--frames", "60", "--png", "/tmp/paint-lab.png"]
+
+[[lab.task]]
+name = "test"
+about = "Native coverage parity, alpha, clipping, replay, resize and sharing checks"
+cargo = ["test", "--bin", "paint-lab"]
+
+[[lab.task]]
+name = "metal-test"
+about = "The paint tests under Metal API validation"
+platforms = ["macos"]
+env = { MTL_DEBUG_LAYER = "1" }
+cargo = ["test", "--bin", "paint-lab"]
+
+[[lab.task]]
+name = "wgpu-test"
+about = "The same paint and coverage checks through the portable wgpu renderer"
+cargo = ["test", "--bin", "paint-lab", "wgpu_"]
+
+[[lab.task]]
+name = "wgpu-headless"
+about = "Capture or time portable effects (--effect, --frames, --png)"
+args = ["--headless", "--wgpu"]
+
+[[lab.task]]
+name = "portable-test"
+about = "User WGSL: identical source and parameters on the native backend and wgpu"
+cargo = ["test", "--bin", "paint-lab"]
+
+[[lab.task]]
+name = "portable-headless"
+about = "Portable WGSL paints on the native backend"
+args = ["--headless", "--portable-shader"]
+
+[[lab.task]]
+name = "portable-wgpu"
+about = "Portable WGSL paints through wgpu"
+args = ["--headless", "--wgpu", "--portable-shader"]
+
+[[lab]]
+name = "gamut"
+bin = "gamut-lab"
+group = "Main interactive labs"
+title = "Gamut comparison"
+about = "Native wide-SDR gamut comparison"
+views = [
+  { name = "sdr", title = "Standard SDR baseline", args = ["--sdr"] },
+  { name = "instanced", title = "Instanced gamut fills", args = ["--instanced"] },
+  { name = "instanced-gradient", title = "Instanced gamut gradients", args = ["--instanced", "--gradient"] },
+]
+
+[[lab.task]]
+name = "headless"
+about = "Headless gamut checks"
+args = ["--headless"]
+
+[[lab.task]]
+name = "capture"
+about = "sRGB preview to gamut-lab-srgb-preview.png"
+args = ["--headless", "--png", "gamut-lab-srgb-preview.png"]
+
+[[lab.task]]
+name = "ui-capture"
+about = "Window capture to gamut-lab-ui.png"
+args = ["--ui-png", "gamut-lab-ui.png"]
+
+[[lab.task]]
+name = "test"
+about = "Gamut lab tests"
+cargo = ["test", "--bin", "gamut-lab"]
+
+[[lab.task]]
+name = "metal-test"
+about = "Apple renderer tests under Metal API validation"
+platforms = ["macos"]
+env = { MTL_DEBUG_LAYER = "1" }
+cargo = ["test", "--manifest-path", "gpui/crates/gpui-apple/Cargo.toml", "--features", "test-support", "--lib"]
+
+[[lab]]
+name = "color"
+bin = "color-lab"
+group = "Main interactive labs"
+title = "Color swatches"
+about = "Color swatches and CIE chromaticity"
+views = [
+  { name = "chromaticity", title = "CIE chromaticity", args = ["--chromaticity"] },
+  { name = "uv", title = "CIE u-prime/v-prime", args = ["--uv"] },
+  { name = "photo", title = "Italy photo comparison", args = ["--photo"] },
+]
+
+[[lab.task]]
+name = "test"
+about = "Numerical, ICC, CIE dataset and color workspace checks"
+cargo = ["test", "--bin", "color-lab"]
+
+[[lab]]
+name = "text"
+bin = "text-lab"
+group = "Main interactive labs"
+title = "Text / native and Parley"
+about = "Native versus Parley text, paragraphs, scrolling and font axes"
+views = [
+  { name = "parley", title = "Parley text only", args = ["--backend", "parley"] },
+  { name = "paragraph", title = "Paragraph comparison", args = ["--workload", "paragraph"] },
+  { name = "scroll", title = "Text scrolling", args = ["--workload", "scroll"] },
+  { name = "timings", title = "Text CPU timings", args = ["--timings-only"] },
+]
+
+[[lab.task]]
+name = "test"
+about = "Text lab tests"
+cargo = ["test", "--bin", "text-lab"]
+
+[[lab.task]]
+name = "axes-test"
+about = "Pointer, keyboard, preset and preview-budget tests on native and Parley"
+cargo = ["test", "--bin", "text-lab", "axes::tests"]
+
+[[lab.task]]
+name = "font-inspect-test"
+about = "Private core font-table readers"
+cargo = ["test", "--manifest-path", "gpui/crates/gpui/Cargo.toml", "--features", "gpui_platform/runtime_shaders", "--lib", "font_inspection"]
+
+[[lab]]
+name = "svg"
+bin = "svg-lab"
+group = "Main interactive labs"
+title = "SVG comparison"
+about = "SVG rendering, zoom and scheduling comparisons"
+views = [
+  { name = "gallery", title = "SVG artwork gallery (committed samples)", args = ["--gallery", "apps/xgpui-ext-lab/svg-lab/samples", "--scheduler-mib", "64", "--scheduler-jobs", "2"] },
+]
+
+[[lab.task]]
+name = "test"
+about = "SVG lab tests"
+cargo = ["test", "--bin", "svg-lab"]
+
+[[lab.task]]
+name = "corpus"
+about = "Fetch the optional historical corpus to /tmp/xgpui-svg-corpus (see samples/ATTRIBUTION.md)"
+command = ["python3", "apps/xgpui-ext-lab/svg-lab/bench/fetch.py", "/tmp/xgpui-svg-corpus"]
+
+[[lab.task]]
+name = "benchmark"
+about = "Isolated CPU latency and RSS measurements over the corpus; serial workers"
+steps = [
+  { cargo = ["build", "--bin", "svg-lab"] },
+  { command = ["python3", "apps/xgpui-ext-lab/svg-lab/bench/run.py", "--corpus", "/tmp/xgpui-svg-corpus", "--output", "/tmp/svg-bench-results", "{args}"] },
+  { command = ["python3", "apps/xgpui-ext-lab/svg-lab/bench/report.py", "/tmp/svg-bench-results"] },
+]
+
+[[lab.task]]
+name = "policy-benchmark"
+about = "Compare 16/32 MiB budgets and replay recorded zoom bursts"
+steps = [
+  { cargo = ["build", "--bin", "svg-lab"] },
+  { command = ["python3", "apps/xgpui-ext-lab/svg-lab/bench/policy_run.py", "--output", "/tmp/svg-policy-results"] },
+  { command = ["python3", "apps/xgpui-ext-lab/svg-lab/bench/policy_report.py", "/tmp/svg-policy-results"] },
+]
+
+[[lab]]
+name = "shader"
+bin = "shader-examples"
+group = "Main interactive labs"
+title = "Shader examples"
+about = "Six shader examples and selectable typography"
+views = [
+  { name = "minimal", title = "Minimal shader", args = ["--example", "minimal"] },
+  { name = "glow", title = "Animated glow badges", args = ["--example", "glow"] },
+  { name = "particles", title = "Particles", args = ["--example", "particles"] },
+  { name = "composition", title = "Composition / clipping", args = ["--example", "composition"] },
+  { name = "shadows", title = "Shadows", args = ["--example", "shadows"] },
+  { name = "borders", title = "Borders", args = ["--example", "borders"] },
+  { name = "typography", title = "Selectable typography", args = ["--example", "typography"] },
+]
+
+[[lab.task]]
+name = "wasm"
+about = "Build the browser companion into pages/examples (needs wasm-bindgen)"
+command = ["bash", "apps/xgpui-ext-lab/shader-examples/build.sh"]
+
+[[lab]]
+name = "gpu-interop"
+bin = "gpu-interop-lab"
+group = "GPU interop"
+title = "Engine surface lab"
+about = "wgpu engine on its own device presenting into xgpui (--sdr, --stress-surfaces N)"
+views = [{ name = "threaded", title = "Engine on its own thread", args = ["--threaded"] }]
+
+[[lab]]
+name = "interop-boids"
+bin = "interop-boids"
+group = "GPU interop"
+title = "Boids engine"
+about = "wgpu's boids example as an independent engine (--particles N, --run-seconds N)"
+views = [{ name = "ui-thread", title = "Engine on the UI thread", args = ["--ui-thread"] }]
+
+[[lab]]
+name = "gpu-canvas-workbench"
+bin = "gpu-canvas-workbench"
+group = "GPU interop"
+title = "GPU canvas workbench"
+about = "Editable GPU canvas in an independent wgpu engine"
+
+[[lab.task]]
+name = "check"
+about = "Replay an edit script against the CPU reference, without a window"
+args = ["--check"]
+
+[[lab]]
+name = "quad-bench"
+bin = "quad-bench"
+group = "Benchmarks"
+title = "Quad benchmark"
+about = "Quad rendering benchmark (bounded run by default)"
+
+[[lab.task]]
+name = "test"
+about = "Workload tests; opens no window"
+cargo = ["test", "--bin", "quad-bench"]
+
+[[lab.task]]
+name = "headless"
+about = "Headless GPU run"
+mkdir = ["apps/xgpui-ext-lab/quad-bench/results"]
+args = ["--headless"]
+
+[[lab.task]]
+name = "cpu"
+about = "Scene composition only, without a renderer"
+mkdir = ["apps/xgpui-ext-lab/quad-bench/results"]
+args = ["--headless", "--cpu-only"]
+
+[[lab.task]]
+name = "mtl"
+about = "Window run with the Metal HUD; JSON to quad-bench/results/mtl.json"
+mkdir = ["apps/xgpui-ext-lab/quad-bench/results"]
+platforms = ["macos"]
+env = { MTL_HUD_ENABLED = "1" }
+args = ["--frames", "600", "--warmup", "120", "--json", "apps/xgpui-ext-lab/quad-bench/results/mtl.json"]
+
+[[lab]]
+name = "color-field-bench"
+bin = "color-field-bench"
+group = "Benchmarks"
+title = "Color-field benchmark"
+about = "Color-field rendering benchmark (bounded run by default)"
+
+[[lab.task]]
+name = "test"
+about = "Workload tests; opens no window"
+cargo = ["test", "--bin", "color-field-bench"]
+
+[[lab.task]]
+name = "headless"
+about = "Headless GPU run"
+mkdir = ["apps/xgpui-ext-lab/color-field-bench/results"]
+args = ["--headless"]
+
+[[lab.task]]
+name = "cpu"
+about = "Scene composition only, without a renderer"
+mkdir = ["apps/xgpui-ext-lab/color-field-bench/results"]
+args = ["--headless", "--cpu-only"]
+
+[[lab.task]]
+name = "mtl"
+about = "Animated window run with the Metal HUD; JSON to color-field-bench/results/mtl.json"
+mkdir = ["apps/xgpui-ext-lab/color-field-bench/results"]
+platforms = ["macos"]
+env = { MTL_HUD_ENABLED = "1" }
+args = ["--animate", "--json", "apps/xgpui-ext-lab/color-field-bench/results/mtl.json"]
+
+[[lab.task]]
+name = "benchmark"
+about = "Five recorded trials of both methods into results/RUN (pass the run name after --)"
+steps = [
+  { cargo = ["build", "--bin", "color-field-bench"] },
+  { command = ["bash", "apps/xgpui-ext-lab/color-field-bench/benchmark.sh", "{args}"] },
+]
+
+[[lab]]
+name = "window-probes"
+group = "Diagnostics"
+title = "Real-window probes"
+about = "Automated checks in real platform windows (the same probes CI runs)"
+
+[[lab.task]]
+name = "native"
+about = "Native windows on the process main thread, not a mocked platform"
+profile = "dev"
+cargo = ["test", "--features", "native-window-tests", "--test", "native_windows"]
+
+[[lab.task]]
+name = "linux"
+about = "Display-server smoke check; run inside a Wayland or X11 session"
+platforms = ["linux"]
+profile = "dev"
+cargo = ["test", "--features", "linux-window-tests", "--test", "linux_windows"]
+
+[[lab.task]]
+name = "windows-input"
+about = "Synthetic WM_MOUSEMOVE suppression on a live window"
+platforms = ["windows"]
+profile = "dev"
+cargo = ["test", "--features", "windows-window-tests", "--test", "windows_input"]
+
+[[lab.task]]
+name = "color-mode"
+about = "A color-mode change requested during a draw applies and redraws"
+platforms = ["windows"]
+profile = "dev"
+cargo = ["test", "--features", "windows-window-tests", "--test", "color_mode_window"]
+
+[[lab.task]]
+name = "shader"
+about = "xgpui-shader custom paint read back from a live window"
+platforms = ["windows", "macos"]
+profile = "dev"
+cargo = ["test", "--features", "shader-window-tests", "--test", "shader_window"]
+
+[[lab.task]]
+name = "shader-failure"
+about = "A shader DirectX can't compile leaves the rest of the window drawing"
+platforms = ["windows"]
+profile = "dev"
+cargo = ["test", "--features", "shader-window-tests", "--test", "shader_failure_window"]
+
+[[lab.task]]
+name = "macos-frames"
+about = "CAMetalDisplayLink delivery: >30 fps animating, idle stops, live readback (exit 2 = window not visible; rerun)"
+platforms = ["macos"]
+profile = "dev"
+cargo = ["test", "--features", "macos-window-tests", "--test", "macos_frames"]
+
+[[lab]]
+name = "metal-producer"
+bin = "metal-producer-regression"
+group = "Diagnostics"
+title = "Metal producer regression"
+about = "Metal custom-producer deadlock regression (#110)"
+platforms = ["macos"]
+
+[[lab]]
+name = "font-variations"
+example = "native_variations"
+group = "Diagnostics"
+title = "Font variations"
+about = "Isolated native font-variation investigation"
+platforms = ["macos"]
+
+[[lab]]
+name = "extensions-web"
+bin = "extensions-web"
+group = "Browser galleries"
+title = "Extension demos (browser)"
+about = "Canvas, media and other extension demos for the website (wasm)"
+platforms = ["web"]
+
+[[lab.task]]
+name = "build"
+about = "Build the browser gallery into pages/examples (needs wasm-bindgen)"
+command = ["bash", "apps/xgpui-ext-lab/extensions-web/build.sh", "--release"]
