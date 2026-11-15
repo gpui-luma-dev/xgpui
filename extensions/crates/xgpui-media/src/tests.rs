@@ -1,5 +1,5 @@
 use super::*;
-use anyhow::{Result, bail};
+use anyhow::{Result, bail, ensure};
 use gpui::{
     ContentMask, CustomDraw, DevicePixels, DrawOrder, PlatformHeadlessRenderer, ScaledPixels,
     Scene, Size, point, size,
@@ -9,6 +9,54 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
     time::{Duration, Instant},
 };
+
+/// Makes a fresh D3D11 headless renderer on one adapter.
+#[cfg(target_os = "windows")]
+pub(crate) type Dx11Factory = Box<dyn Fn() -> Result<gpui_windows::Dx11HeadlessRenderer>>;
+
+/// D3D11 adapters the `dx11_*` tests run on: WARP always, so hosted CI
+/// covers the path, plus every hardware adapter, so a real Windows machine
+/// tests its own GPU without extra flags.
+#[cfg(target_os = "windows")]
+pub(crate) fn dx11_adapters() -> Vec<(String, Dx11Factory)> {
+    use gpui_windows::Dx11HeadlessRenderer;
+    use windows::Win32::Graphics::Dxgi::{
+        CreateDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE, IDXGIFactory1,
+    };
+    let warp: Dx11Factory = Box::new(Dx11HeadlessRenderer::new);
+    let mut adapters = vec![("WARP".to_string(), warp)];
+    let factory: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.expect("DXGI factory");
+    let mut index = 0;
+    while let Ok(adapter) = unsafe { factory.EnumAdapters1(index) } {
+        index += 1;
+        let Ok(desc) = (unsafe { adapter.GetDesc1() }) else {
+            continue;
+        };
+        // The Basic Render Driver (Microsoft, 0x8c) is WARP again, and on some
+        // machines it lacks the software flag.
+        let basic_render = desc.VendorId == 0x1414 && desc.DeviceId == 0x8c;
+        if basic_render || desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 {
+            continue;
+        }
+        let name = String::from_utf16_lossy(&desc.Description)
+            .trim_end_matches('\0')
+            .to_string();
+        let hardware: Dx11Factory = Box::new(move || Dx11HeadlessRenderer::with_adapter(&adapter));
+        adapters.push((name, hardware));
+    }
+    adapters
+}
+
+/// Runs `check` on every D3D11 adapter, naming the adapter in any failure.
+#[cfg(target_os = "windows")]
+pub(crate) fn on_dx11_adapters(check: impl Fn(&Dx11Factory) -> Result<()>) -> Result<()> {
+    use anyhow::Context as _;
+    for (name, factory) in dx11_adapters() {
+        eprintln!("dx11 adapter: {name}");
+        check(&factory).with_context(|| format!("D3D11 adapter {name}"))?;
+    }
+    Ok(())
+}
 
 struct Fixture(PathBuf);
 impl Fixture {
@@ -130,6 +178,24 @@ fn image_scene(image: &MediaImage, side: f32, clipped: bool) -> Scene {
     scene.finish();
     scene
 }
+/// What the renderer leaves where nothing is drawn: opaque black from the
+/// Metal and wgpu headless renderers, transparent from the D3D11 one.
+fn background(
+    renderer: &mut dyn PlatformHeadlessRenderer,
+    extent: Size<DevicePixels>,
+) -> Result<[u8; 4]> {
+    let mut empty = Scene::default();
+    empty.finish();
+    let clear = renderer
+        .render_scene_to_image(&empty, extent)?
+        .get_pixel(0, 0)
+        .0;
+    ensure!(
+        clear[..3] == [0, 0, 0] && (clear[3] == 0 || clear[3] == 255),
+        "unexpected headless background {clear:?}"
+    );
+    Ok(clear)
+}
 fn render_ready(
     renderer: &mut dyn PlatformHeadlessRenderer,
     image: &MediaImage,
@@ -159,6 +225,7 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
     let mut alpha_job = MediaLoader::default().load(&alpha_fixture.0)?;
     let alpha_image = finish(&mut alpha_job)?;
     let extent = size(DevicePixels(24), DevicePixels(24));
+    let clear = background(renderer, extent)?;
     let mut alpha_scene = image_scene(&alpha_image, 8., false);
     alpha_scene.custom_draws[0].content =
         Arc::new(alpha_image.filtered(ImageFilter::new().saturation(0.)));
@@ -173,7 +240,7 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
     let first = renderer.render_scene_to_image(&image_scene(&image, 8., false), extent)?;
     assert_eq!(
         first.get_pixel(6, 6).0,
-        [0, 0, 0, 255],
+        clear,
         "first paint uses transparent placeholder"
     );
     for side in [8., 16., 8.] {
@@ -181,7 +248,7 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
         let p = pixels.get_pixel(6, 6).0;
         assert!(p[0].abs_diff(188) <= 3, "mipmapped checkerboard: {p:?}");
         assert_eq!(p[3], 255);
-        assert_eq!(pixels.get_pixel(1, 1).0, [0, 0, 0, 255]);
+        assert_eq!(pixels.get_pixel(1, 1).0, clear);
     }
     assert_eq!(
         image.upload_count(),
@@ -206,11 +273,7 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
     );
     assert_eq!(image.upload_count(), 1, "filter updates do not reupload");
     let pixels = renderer.render_scene_to_image(&image_scene(&image, 8., true), extent)?;
-    assert_eq!(
-        pixels.get_pixel(6, 8).0,
-        [0, 0, 0, 255],
-        "native content mask"
-    );
+    assert_eq!(pixels.get_pixel(6, 8).0, clear, "native content mask");
     assert_eq!(pixels.get_pixel(9, 8).0[3], 255);
     assert!(
         pixels.get_pixel(11, 4).0[0] < 180,
@@ -275,6 +338,21 @@ fn wgpu_mips_clipping_and_resize_reuse() -> Result<()> {
         "shared headless queue reuses texture"
     );
     Ok(())
+}
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_mips_clipping_and_resize_reuse() -> Result<()> {
+    on_dx11_adapters(|renderer| {
+        let image = check_rendering(&mut renderer()?)?;
+        render_ready(
+            &mut renderer()?,
+            &image,
+            &image_scene(&image, 8., false),
+            size(DevicePixels(24), DevicePixels(24)),
+        )?;
+        assert_eq!(image.upload_count(), 2, "new device rebuilds texture");
+        Ok(())
+    })
 }
 
 #[cfg(feature = "wgpu")]
@@ -431,6 +509,8 @@ fn stage_only(renderer: &mut dyn PlatformHeadlessRenderer, image: &MediaImage) -
         std::thread::sleep(Duration::from_millis(2));
     }
 }
+// Only Metal and wgpu pool staging; D3D11 uses verify_unpooled_staging.
+#[cfg(any(target_os = "macos", feature = "wgpu"))]
 fn verify_pool_reuse(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
     let fixture = Fixture::new();
     let loader = MediaLoader::default();
@@ -525,6 +605,43 @@ fn wgpu_completion_pool_refills_and_frame_limits() -> Result<()> {
     verify_pool_reuse(&mut renderer)?;
     verify_frame_limits(&mut renderer)
 }
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_unpooled_staging_and_frame_limits() -> Result<()> {
+    on_dx11_adapters(|renderer| {
+        let mut renderer = renderer()?;
+        verify_unpooled_staging(&mut renderer)?;
+        verify_frame_limits(&mut renderer)
+    })
+}
+/// D3D11 staging isn't pooled yet ("pending native validation" in
+/// pages/gpui-public-api.html). Pin that, so adding a D3D11 pool fails here
+/// and this test switches to `verify_pool_reuse`. Successive uploads must
+/// still show their own pixels.
+#[cfg(target_os = "windows")]
+fn verify_unpooled_staging(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
+    let fixture = Fixture::new();
+    let loader = MediaLoader::default();
+    let extent = size(DevicePixels(24), DevicePixels(24));
+    let first = finish(&mut loader.load(&fixture.0)?)?;
+    let pixels = render_ready(renderer, &first, &image_scene(&first, 8., false), extent)?;
+    assert!(pixels.get_pixel(6, 6).0[0].abs_diff(188) <= 3);
+    image::RgbaImage::from_pixel(64, 64, image::Rgba([255, 0, 0, 255])).save(&fixture.0)?;
+    let second = finish(&mut loader.load(&fixture.0)?)?;
+    let pixels = render_ready(renderer, &second, &image_scene(&second, 8., false), extent)?;
+    assert_eq!(
+        pixels.get_pixel(6, 6).0,
+        [255, 0, 0, 255],
+        "second upload shows its own pixels"
+    );
+    let stats = loader.staging_pool_stats();
+    assert_eq!(
+        (stats.allocations, stats.reuses, stats.cached_bytes),
+        (0, 0, 0),
+        "D3D11 staging is unpooled; switch to verify_pool_reuse once it is pooled"
+    );
+    Ok(())
+}
 
 fn check_linear_adjustments(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
     use crate::pipeline::{
@@ -541,6 +658,7 @@ fn check_linear_adjustments(renderer: &mut dyn PlatformHeadlessRenderer) -> Resu
         ImagePrimaries::Srgb,
     )?;
     let extent = size(DevicePixels(28), DevicePixels(28));
+    let clear = background(renderer, extent)?;
     for ev in [0., 1., -1., 2., 0.] {
         let matrix = ColorMatrix::identity(ImagePrimaries::Srgb)
             .exposure(ev)?
@@ -566,11 +684,7 @@ fn check_linear_adjustments(renderer: &mut dyn PlatformHeadlessRenderer) -> Resu
                 );
             }
         }
-        assert_eq!(
-            pixels.get_pixel(2, 2).0,
-            [0, 0, 0, 255],
-            "native content mask"
-        );
+        assert_eq!(pixels.get_pixel(2, 2).0, clear, "native content mask");
         assert_eq!(
             image.upload_count(),
             1,
@@ -601,6 +715,11 @@ fn metal_linear_adjustments_match_cpu_and_reuse_uploads() -> Result<()> {
 #[test]
 fn wgpu_linear_adjustments_match_cpu_and_reuse_uploads() -> Result<()> {
     check_linear_adjustments(&mut gpui_wgpu::WgpuHeadlessRenderer::new()?)
+}
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_linear_adjustments_match_cpu_and_reuse_uploads() -> Result<()> {
+    on_dx11_adapters(|renderer| check_linear_adjustments(&mut renderer()?))
 }
 
 fn check_float_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
@@ -682,6 +801,11 @@ fn metal_rgba16f_matches_cpu_and_reuses_source() -> Result<()> {
         &mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
             .expect("Metal renderer initialization"),
     )
+}
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_rgba16f_matches_cpu_and_reuses_source() -> Result<()> {
+    on_dx11_adapters(|renderer| check_float_preview(&mut renderer()?))
 }
 #[cfg(feature = "wgpu")]
 #[test]
@@ -898,6 +1022,11 @@ fn metal_adobe_rgb_input_with_explicit_mapping() -> Result<()> {
 fn wgpu_adobe_rgb_input_with_explicit_mapping() -> Result<()> {
     check_adobe_rgb_preview(&mut gpui_wgpu::WgpuHeadlessRenderer::new()?)
 }
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_adobe_rgb_input_with_explicit_mapping() -> Result<()> {
+    on_dx11_adapters(|renderer| check_adobe_rgb_preview(&mut renderer()?))
+}
 
 fn check_rec2020_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
     use pipeline::*;
@@ -975,6 +1104,11 @@ fn metal_rec2020_storage_and_preview() -> Result<()> {
         &mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
             .expect("Metal renderer initialization"),
     )
+}
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_rec2020_storage_and_preview() -> Result<()> {
+    on_dx11_adapters(|renderer| check_rec2020_preview(&mut renderer()?))
 }
 #[cfg(feature = "wgpu")]
 #[test]

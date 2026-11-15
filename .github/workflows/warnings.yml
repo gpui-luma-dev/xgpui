@@ -1,0 +1,104 @@
+name: Build warnings (#280)
+
+# Fails when the workspace builds with any rustc warning or Cargo manifest
+# warning on Linux, Windows or macOS, and runs the xgpui-macros tests. Clippy
+# runs on every platform, so the Linux and Windows backends get linted too.
+# Clippy only reports for now; it becomes a gate once the #280 Clippy policy
+# lands (set CLIPPY_ENFORCE to 'true').
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, 'issue-*/epic']
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: warnings-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: '0'
+  CLIPPY_ENFORCE: 'false'
+
+jobs:
+  warnings:
+    name: Warnings (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-15]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: warnings-${{ matrix.os }}-v1
+      - name: Install Linux development libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake pkg-config libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev libasound2-dev libudev-dev libvulkan-dev libpipewire-0.3-dev libgbm-dev libegl-dev libdbus-1-dev
+      - name: Record toolchain
+        run: rustc --version && cargo --version
+
+      # Cargo replays cached rustc warnings, so a warm cache still reports them.
+      # Manifest lints aren't covered by RUSTFLAGS, so the log is checked instead.
+      - name: Workspace, all targets, default features
+        if: ${{ !cancelled() }}
+        run: bash .github/scripts/no-warnings.sh "check default" cargo check --locked --workspace --all-targets
+      - name: Workspace, all targets, all features
+        if: ${{ !cancelled() }}
+        run: bash .github/scripts/no-warnings.sh "check all-features" cargo check --locked --workspace --all-targets --all-features
+      - name: Release tooling
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: bash .github/scripts/no-warnings.sh "check release-sync" cargo check --locked --manifest-path tools/release-sync/Cargo.toml --all-targets
+      - name: xgpui-macros tests
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p xgpui-macros
+      # The dx11_* tests run on WARP here and on every hardware adapter on a
+      # real Windows machine (`just test --only media`).
+      - name: xgpui-media tests (DirectX 11 on WARP)
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-media --lib -- --nocapture --test-threads=1
+
+      - name: Clippy, workspace
+        if: ${{ !cancelled() }}
+        run: |
+          set +e
+          cargo clippy --locked --workspace --all-targets --all-features --no-deps 2>&1 | tee clippy.log
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "### Clippy on ${{ matrix.os }}"
+            echo
+            echo '| Target | Warnings |'
+            echo '| --- | --- |'
+            grep -E '^warning: `[^`]+` \([^)]+\) generated [0-9]+ warning' clippy.log \
+              | sed -E 's/^warning: `([^`]+)` \(([^)]+)\) generated ([0-9]+) warnings?.*/| `\1` (\2) | \3 |/'
+          } >> "$GITHUB_STEP_SUMMARY"
+          total=$(grep -cE '^(warning|error)(\[|:)' clippy.log | tr -d ' ')
+          echo "Clippy diagnostics (including summary lines): $total, exit $status"
+          if [[ $status -ne 0 ]]; then
+            echo "::error title=Clippy failed::cargo clippy exited with $status"
+            exit "$status"
+          fi
+          if grep -qE '^warning: `[^`]+` \([^)]+\) generated' clippy.log; then
+            if [[ "$CLIPPY_ENFORCE" == 'true' ]]; then
+              echo "::error title=Clippy warnings::see the job summary"
+              exit 1
+            fi
+            echo "::warning title=Clippy warnings (not enforced yet)::see the job summary"
+          fi

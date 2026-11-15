@@ -1558,4 +1558,13 @@ mod tests {
         gpu_canvas(&mut renderer, 1.)?;
         gpu_canvas(&mut renderer, 64.)
     }
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn dx11_tiled_halos_clipping_and_transparency_match_reference() -> Result<()> {
+        crate::tests::on_dx11_adapters(|renderer| {
+            let mut renderer = renderer()?;
+            gpu_canvas(&mut renderer, 1.)?;
+            gpu_canvas(&mut renderer, 64.)
+        })
+    }
 }

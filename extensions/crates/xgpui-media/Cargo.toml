@@ -39,3 +39,7 @@ gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", features = ["test-support
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui-apple = { path = "../../../gpui/crates/gpui-apple", features = ["test-support"] , package = "xgpui-apple", version = "5.0.0" }
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+gpui-windows = { path = "../../../gpui/crates/gpui-windows", features = ["test-support"] , package = "xgpui-windows", version = "3.0.0" }
+windows = { version = "0.62", features = ["Win32_Graphics_Dxgi"] }
