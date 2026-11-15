@@ -509,6 +509,8 @@ fn stage_only(renderer: &mut dyn PlatformHeadlessRenderer, image: &MediaImage) -
         std::thread::sleep(Duration::from_millis(2));
     }
 }
+// Only Metal and wgpu pool staging; D3D11 uses verify_unpooled_staging.
+#[cfg(any(target_os = "macos", feature = "wgpu"))]
 fn verify_pool_reuse(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
     let fixture = Fixture::new();
     let loader = MediaLoader::default();
