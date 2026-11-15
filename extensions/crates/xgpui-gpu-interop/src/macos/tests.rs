@@ -129,6 +129,59 @@ fn bgra_frame_composites_scaled_without_copy() {
 }
 
 #[test]
+fn wait_composited_and_on_composited_follow_the_compositor() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    objc2::rc::autoreleasepool(|_| {
+        let surface = EngineSurface::new(desc(SurfaceFormat::Bgra8Srgb, 3)).unwrap();
+        assert!(
+            surface.wait_composited(Duration::ZERO),
+            "nothing presented yet"
+        );
+        let calls = Arc::new(AtomicUsize::new(0));
+        {
+            let calls = calls.clone();
+            surface.on_composited(move || {
+                calls.fetch_add(1, Ordering::Relaxed);
+            });
+        }
+        let mut engine = Engine::new();
+        let mut renderer = MetalHeadlessRenderer::new().unwrap();
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [0.2, 0.6, 0.9, 1.0]);
+        let started = Instant::now();
+        assert!(
+            !surface.wait_composited(Duration::from_millis(20)),
+            "a frame no window has shown"
+        );
+        assert!(started.elapsed() >= Duration::from_millis(20));
+        let content = surface.content().unwrap();
+        renderer
+            .render_scene_to_image(&scene(content.clone()), viewport())
+            .unwrap();
+        assert!(surface.wait_composited(Duration::ZERO));
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        // Compositing the same frame again is not a new frame.
+        renderer
+            .render_scene_to_image(&scene(content), viewport())
+            .unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        // A frame replaced before any window showed it also resolves the wait.
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [0.9, 0.2, 0.2, 1.0]);
+        let slot = surface.acquire().unwrap();
+        engine.draw_and_present(&surface, slot, [0.2, 0.9, 0.2, 1.0]);
+        let content = surface.content().unwrap();
+        renderer
+            .render_scene_to_image(&scene(content), viewport())
+            .unwrap();
+        assert!(surface.wait_composited(Duration::ZERO));
+        assert_eq!(surface.stats().unshown, 1);
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
+        surface.invalidate();
+    });
+}
+
+#[test]
 fn wide_frame_composites_in_wide_window() {
     objc2::rc::autoreleasepool(|_| {
         let surface = EngineSurface::new(desc(SurfaceFormat::Rgba16FloatLinearP3, 2)).unwrap();

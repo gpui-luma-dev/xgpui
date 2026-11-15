@@ -566,6 +566,7 @@ pub struct WgpuSurfaceTarget {
     next: u64,
     heavy: Option<crate::heavy::Heavy>,
     heavy_sync: Option<SyncPoint>,
+    presenter: crate::presentation::Presenter,
 }
 
 impl Drop for WgpuSurfaceTarget {
@@ -673,6 +674,14 @@ impl WgpuSurfaceTarget {
     /// Costs up to a frame of latency. Applies to frames presented after the
     /// call.
     pub fn set_gpu_wait(&mut self, enabled: bool) {
+        self.set_presentation(if enabled {
+            crate::Presentation::GpuWait
+        } else {
+            crate::Presentation::ObserveOnly
+        });
+    }
+
+    fn apply_gpu_wait(&self, enabled: bool) {
         if let Some(shared) = &self.timeline {
             shared.observe_only.store(!enabled, Ordering::Release);
         }
@@ -693,6 +702,32 @@ impl WgpuSurfaceTarget {
     /// [`Self::set_gpu_wait`] says; [`Self::gpu_wait`] is the mode in use.
     pub fn gpu_sync(&self) -> bool {
         self.timeline.is_some()
+    }
+
+    /// How the compositor treats this target's frames; `GpuWait` by default.
+    /// `Auto` chooses per frame from [`Self::step_gpu_ms`] and the window's
+    /// refresh interval. Without [`Self::gpu_sync`] every frame is
+    /// observe-only. Applies to frames presented after the call.
+    pub fn set_presentation(&mut self, mode: crate::Presentation) {
+        self.presenter.set(mode);
+        self.apply_gpu_wait(self.presenter.gpu_wait());
+    }
+
+    /// The presentation in effect for the next frame: `GpuWait` or
+    /// `ObserveOnly` (`Auto` resolves to one of them).
+    pub fn presentation(&self) -> crate::Presentation {
+        if self.gpu_wait() {
+            crate::Presentation::GpuWait
+        } else {
+            crate::Presentation::ObserveOnly
+        }
+    }
+
+    /// Smoothed GPU time per present, from submission to observed
+    /// completion, once measured (after a few presents). Measured in every
+    /// mode.
+    pub fn step_gpu_ms(&self) -> Option<f32> {
+        self.presenter.gpu_ms()
     }
 
     /// Allocate exportable slots on the engine device and create the surface.
@@ -819,6 +854,7 @@ impl WgpuSurfaceTarget {
             next: 0,
             heavy: None,
             heavy_sync: None,
+            presenter: crate::presentation::Presenter::new(device),
         })
     }
 
@@ -838,6 +874,8 @@ impl WgpuSurfaceTarget {
         slot: SurfaceSlot,
         commands: impl IntoIterator<Item = wgpu::CommandBuffer>,
     ) -> Result<()> {
+        let gpu_wait = self.presenter.update(self.surface.refresh_interval());
+        self.apply_gpu_wait(gpu_wait);
         let submitted = std::time::Instant::now();
         let texture = &self.textures[slot.index()];
         let image = self.images[slot.index()];
@@ -886,7 +924,8 @@ impl WgpuSurfaceTarget {
             unsafe { self.queue.as_hal::<Vulkan>() }
                 .context("missing Vulkan engine queue")?
                 .add_signal_semaphore(timeline.semaphore, Some(self.next));
-            self.queue.submit(commands);
+            let index = self.queue.submit(commands);
+            self.presenter.submitted(index, submitted);
             return self.publish(
                 slot,
                 SyncPoint(Readiness::Timeline(
@@ -898,6 +937,7 @@ impl WgpuSurfaceTarget {
             );
         }
         let index = self.queue.submit(commands);
+        self.presenter.submitted(index.clone(), submitted);
         self.device
             .poll(wgpu::PollType::Wait {
                 submission_index: Some(index),

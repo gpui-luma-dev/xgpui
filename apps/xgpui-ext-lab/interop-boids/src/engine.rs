@@ -11,36 +11,36 @@
 //!   would. A heavy step then stretches every UI frame.
 //!
 //! Pacing: the engine steps once per frame the window composites. On its own
-//! thread, after each present it waits until the compositor has shown that
-//! frame (the surface's `composited` feedback), then steps again. Every step
+//! thread, after each present it blocks in `EngineSurface::wait_composited`
+//! until the compositor has shown that frame, then steps again. Every step
 //! is shown exactly once, at the display's rate, so motion is even. A timer
 //! of its own at a similar rate drifts against vsync and drops a frame every
 //! few seconds, which shows as a jump. The time step follows the measured
 //! display interval, so the flock moves at the same speed on 60 Hz and
 //! 120 Hz displays.
 //!
-//! Presentation adapts to the step's GPU time, as the crate's heavy-engine
-//! guidance suggests (on its own thread; on the UI thread it is always
-//! observe-only). Short steps present with a GPU-side wait, so the next
-//! UI frame shows them. Once steps take longer than the display's refresh
-//! interval (`Window::refresh_interval`, passed in by the view), the
-//! engine switches to observe-only presentation (`set_gpu_wait(false)`): the
-//! compositor never waits on the GPU for an engine frame, and shows each one
-//! once it is complete. With GPU waits, a 50 ms step held up the UI's own
-//! frames too; with observe-only, a 3 ms step was sometimes not ready for the
-//! UI frame that its present triggered, and took a second one.
+//! Presentation adapts to the step's GPU time through the target's
+//! `Presentation::Auto` (on its own thread; on the UI thread it is always
+//! observe-only). Short steps present with a GPU-side wait, so the next UI
+//! frame shows them. Once steps take longer than the display's refresh
+//! interval (which `EngineSurface::paint` records from the window), the
+//! target switches to observe-only: the compositor never waits on the GPU for
+//! an engine frame, and shows each one once it is complete. With GPU waits, a
+//! 50 ms step held up the UI's own frames too; with observe-only, a 3 ms step
+//! was sometimes not ready for the UI frame that its present triggered, and
+//! took a second one.
 //!
 //! While paused the engine does no GPU work; the last presented frame stays
 //! on screen because the compositor keeps showing it.
 use crate::boids::Boids;
 use anyhow::{Context as _, Result};
 use std::collections::VecDeque;
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use xgpui_gpu_interop::{
-    AcquireError, EngineSurface, SurfaceDesc, SurfaceFormat, WgpuSurfaceTarget, wgpu,
+    AcquireError, EngineSurface, Presentation, SurfaceDesc, SurfaceFormat, WgpuSurfaceTarget, wgpu,
 };
 
 #[cfg(target_os = "macos")]
@@ -58,22 +58,13 @@ const SLOTS: usize = 3;
 /// How long to wait for the window to show a frame before stepping anyway,
 /// so the simulation carries on (slowly) while the window is hidden.
 const SHOW_TIMEOUT: Duration = Duration::from_millis(100);
-/// How often to check the compositor feedback while waiting.
+/// How long to wait before retrying when every slot is in use.
 const POLL: Duration = Duration::from_micros(500);
-/// Step GPU time, as a fraction of the display's refresh interval, above which
-/// presentation turns observe-only, and below which it returns to GPU waits
-/// (hysteresis).
-const OBSERVE_ONLY_ABOVE: f32 = 1.;
-const GPU_WAIT_BELOW: f32 = 0.75;
-/// Steps not measured after a new flock: the first ones include pipeline
-/// warm-up.
-const WARM_UP_STEPS: u32 = 5;
 
 enum Command {
     Pause(bool),
     Particles(u32),
     Speed(f32),
-    Refresh(Duration),
     /// Hand the simulation back to the UI thread.
     Stop,
 }
@@ -169,11 +160,6 @@ impl Engine {
     pub fn set_speed(&mut self, speed: f32) {
         self.send(Command::Speed(speed));
     }
-    /// The display's refresh interval, which sets when steps are long
-    /// enough to present observe-only.
-    pub fn set_refresh_interval(&mut self, refresh: Duration) {
-        self.send(Command::Refresh(refresh));
-    }
     /// Start a new flock of `particles` boids.
     pub fn set_particles(&mut self, particles: u32) {
         self.send(Command::Particles(particles));
@@ -244,15 +230,6 @@ struct Gpu {
     queue: wgpu::Queue,
     target: WgpuSurfaceTarget,
     boids: Boids,
-    /// When the last step was submitted, until its GPU work is done.
-    submitted: Option<Instant>,
-    /// Set by the queue when the last step's GPU work is done.
-    done: Arc<Mutex<Option<Instant>>>,
-    /// Step GPU time, smoothed, in ms.
-    gpu_ms: f32,
-    /// Steps left before measuring (`WARM_UP_STEPS`).
-    unmeasured: u32,
-    observe_only: bool,
 }
 
 impl Gpu {
@@ -297,11 +274,6 @@ impl Gpu {
                 queue,
                 target,
                 boids,
-                submitted: None,
-                done: Arc::default(),
-                gpu_ms: 0.,
-                unmeasured: WARM_UP_STEPS,
-                observe_only: false,
             },
             adapter_name,
         ))
@@ -324,49 +296,8 @@ impl Gpu {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         self.boids.render(&mut encoder, &view, step);
-        *self.done.lock().unwrap() = None;
-        self.submitted = Some(Instant::now());
         self.target.present(slot, [encoder.finish()])?;
-        let done = self.done.clone();
-        self.queue.on_submitted_work_done(move || {
-            *done.lock().unwrap() = Some(Instant::now());
-        });
         Ok(true)
-    }
-
-    /// Learn the last step's GPU time once it is done, and pick the
-    /// presentation mode from it. Accurate only while polled often, as the
-    /// engine thread does while it waits for the compositor.
-    fn measure_gpu(&mut self, refresh: Duration) {
-        let _ = self.device.poll(wgpu::PollType::Poll);
-        let (Some(submitted), Some(done)) = (self.submitted, *self.done.lock().unwrap()) else {
-            return;
-        };
-        self.submitted = None;
-        if self.unmeasured > 0 {
-            self.unmeasured -= 1;
-            return;
-        }
-        let ms = (done - submitted).as_secs_f32() * 1000.;
-        self.gpu_ms = if self.gpu_ms == 0. {
-            ms
-        } else {
-            self.gpu_ms * 0.7 + ms * 0.3
-        };
-        let frame_ms = refresh.as_secs_f32() * 1000.;
-        let observe_only = if self.observe_only {
-            self.gpu_ms > GPU_WAIT_BELOW * frame_ms
-        } else {
-            self.gpu_ms > OBSERVE_ONLY_ABOVE * frame_ms
-        };
-        self.set_observe_only(observe_only);
-    }
-
-    fn set_observe_only(&mut self, observe_only: bool) {
-        if observe_only != self.observe_only {
-            self.observe_only = observe_only;
-            self.target.set_gpu_wait(!observe_only);
-        }
     }
 }
 
@@ -388,10 +319,6 @@ struct Sim {
     last_shown: Option<Instant>,
     /// Display interval, smoothed; starts at 60 Hz.
     display: Duration,
-    /// The display's refresh interval, from the window
-    /// (`Window::refresh_interval`). A slow engine is shown less often than
-    /// the display refreshes, so `display` can't stand in for it.
-    refresh: Duration,
 }
 
 /// What `advance` did.
@@ -423,7 +350,6 @@ impl Sim {
             awaiting: None,
             last_shown: None,
             display: Duration::from_secs_f32(1. / 60.),
-            refresh: Duration::from_secs_f32(1. / 60.),
         })
     }
 
@@ -432,24 +358,24 @@ impl Sim {
         self.awaiting = None;
         self.last_shown = None;
         self.recent.clear();
-        if !threaded {
-            // On the UI thread the step's GPU time can't be measured (the
-            // queue is polled once per UI frame), so always present
-            // observe-only, as a heavy engine would. Every UI frame still
-            // shows one new step, one frame after it was recorded. On its own
-            // thread the engine measures again and adapts.
-            self.gpu.set_observe_only(true);
-            self.gpu.submitted = None;
-        }
+        // On its own thread the target chooses the presentation from each
+        // step's GPU time (`Presentation::Auto`). On the UI thread the queue is
+        // polled only once per UI frame, too seldom to time a step, so it
+        // always presents observe-only, as a heavy engine would: every UI frame
+        // still shows one new step, one frame after it was recorded.
+        self.gpu.target.set_presentation(if threaded {
+            Presentation::Auto
+        } else {
+            Presentation::ObserveOnly
+        });
         let mut status = self.status.lock().unwrap();
         status.threaded = threaded;
-        status.observe_only = self.gpu.observe_only;
+        status.observe_only = self.gpu.target.presentation() == Presentation::ObserveOnly;
     }
 
     fn apply(&mut self, command: Command) {
         match command {
             Command::Speed(speed) => self.speed = speed,
-            Command::Refresh(refresh) => self.refresh = refresh,
             Command::Pause(pause) => {
                 if self.paused && !pause {
                     // The pause is not a display interval.
@@ -459,8 +385,6 @@ impl Sim {
             }
             Command::Particles(particles) => {
                 self.gpu.boids = Boids::new(&self.gpu.device, self.gpu.target.format(), particles);
-                self.gpu.gpu_ms = 0.;
-                self.gpu.unmeasured = WARM_UP_STEPS;
                 self.redraw = true;
             }
             Command::Stop => {}
@@ -551,9 +475,13 @@ impl Sim {
         status.steps_per_second = self.recent.len() as f32;
         status.record_ms = record_ms;
         status.display_ms = self.display.as_secs_f32() * 1000.;
-        status.refresh_ms = self.refresh.as_secs_f32() * 1000.;
-        status.gpu_ms = self.gpu.gpu_ms;
-        status.observe_only = self.gpu.observe_only;
+        let target = &self.gpu.target;
+        status.refresh_ms = target
+            .surface()
+            .refresh_interval()
+            .map_or(0., |refresh| refresh.as_secs_f32() * 1000.);
+        status.gpu_ms = target.step_gpu_ms().unwrap_or(0.);
+        status.observe_only = target.presentation() == Presentation::ObserveOnly;
         status.ring_full = self.ring_full;
         status.show_timeouts = self.show_timeouts;
         advanced
@@ -563,20 +491,18 @@ impl Sim {
     /// frame until paused. Returns on `Stop` or when the UI side is gone.
     fn run(&mut self, commands: Receiver<Command>) {
         loop {
-            self.gpu.measure_gpu(self.refresh);
-            self.note_shown();
-            // Wait for a command while paused, or briefly while the last
-            // frame is still waiting to be shown.
+            // Step once per composited frame: block until the window has
+            // shown the last one (or the timeout passes while it's hidden).
+            if self.awaiting.is_some() {
+                let surface = self.gpu.target.surface().clone();
+                surface.wait_composited(SHOW_TIMEOUT);
+                self.note_shown();
+            }
+            // Wait for a command while paused; otherwise take any pending one.
             let command = if self.paused && !self.redraw {
                 match commands.recv() {
                     Ok(command) => Some(command),
                     Err(_) => return,
-                }
-            } else if self.awaiting.is_some() {
-                match commands.recv_timeout(POLL) {
-                    Ok(command) => Some(command),
-                    Err(RecvTimeoutError::Timeout) => continue,
-                    Err(RecvTimeoutError::Disconnected) => return,
                 }
             } else {
                 match commands.try_recv() {

@@ -213,8 +213,8 @@ mod workbench {
                     div().flex_1().min_h_0().child(
                         canvas(
                             |_, _, _| (),
-                            move |bounds, _, window, _| {
-                                surface.paint(window, bounds, Corners::all(px(RADIUS)))
+                            move |bounds, _, window, cx| {
+                                surface.paint(window, cx, bounds, Corners::all(px(RADIUS)))
                             },
                         )
                         .size_full(),
@@ -580,7 +580,7 @@ mod workbench {
                                 bounds_cell.set(bounds);
                             }
                         },
-                        move |bounds, _, window, _| {
+                        move |bounds, _, window, cx| {
                             // Zoom and pan place the same frame larger and
                             // offset, clipped to the canvas: no republish.
                             let scale = f32::from(bounds.size.width) / WIDTH as f32 * zoom;
@@ -655,7 +655,7 @@ mod workbench {
                                         );
                                     }
                                 } else {
-                                    surface.paint(window, placed, corners);
+                                    surface.paint(window, cx, placed, corners);
                                 }
                             });
                         },

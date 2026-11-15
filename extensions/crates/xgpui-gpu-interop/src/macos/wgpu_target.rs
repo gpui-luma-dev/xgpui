@@ -20,7 +20,7 @@ pub struct WgpuSurfaceTarget {
     event: Retained<ProtocolObject<dyn MTLSharedEvent>>,
     next: u64,
     textures: Vec<Option<wgpu::Texture>>,
-    gpu_wait: bool,
+    presenter: crate::presentation::Presenter,
     heavy: Option<crate::heavy::Heavy>,
     heavy_sync: Option<SyncPoint>,
 }
@@ -70,7 +70,7 @@ impl WgpuSurfaceTarget {
             event,
             next: 0,
             textures: vec![None; desc.slots],
-            gpu_wait: true,
+            presenter: crate::presentation::Presenter::new(device),
             heavy: None,
             heavy_sync: None,
         })
@@ -154,13 +154,15 @@ impl WgpuSurfaceTarget {
         slot: SurfaceSlot,
         commands: impl IntoIterator<Item = wgpu::CommandBuffer>,
     ) -> Result<()> {
+        let gpu_wait = self.presenter.update(self.surface.refresh_interval());
         let submitted = std::time::Instant::now();
         self.next += 1;
         unsafe { self.queue.as_hal::<Metal>() }
             .context("Metal hal queue")?
             .add_signal_event(self.event.clone(), self.next);
-        self.queue.submit(commands);
-        let sync = if self.gpu_wait {
+        let index = self.queue.submit(commands);
+        self.presenter.submitted(index, submitted);
+        let sync = if gpu_wait {
             // SAFETY: the signal was staged on the submission above.
             unsafe { SyncPoint::submitted(self.event.clone(), self.next) }
         } else {
@@ -176,14 +178,18 @@ impl WgpuSurfaceTarget {
     /// Costs up to a frame of latency. Applies to frames presented after the
     /// call.
     pub fn set_gpu_wait(&mut self, enabled: bool) {
-        self.gpu_wait = enabled;
+        self.set_presentation(if enabled {
+            crate::Presentation::GpuWait
+        } else {
+            crate::Presentation::ObserveOnly
+        });
     }
 
     /// Whether frames presented now get a GPU-side wait: the mode chosen with
     /// [`Self::set_gpu_wait`] (on by default). `false` means observe-only
     /// presentation.
     pub fn gpu_wait(&self) -> bool {
-        self.gpu_wait
+        self.presenter.gpu_wait()
     }
 
     /// Whether this device can hand frames over with GPU-side synchronization
@@ -191,6 +197,30 @@ impl WgpuSurfaceTarget {
     /// it depends on the device. [`Self::gpu_wait`] is the mode in use.
     pub fn gpu_sync(&self) -> bool {
         true
+    }
+
+    /// How the compositor treats this target's frames; `GpuWait` by default.
+    /// `Auto` chooses per frame from [`Self::step_gpu_ms`] and the window's
+    /// refresh interval. Applies to frames presented after the call.
+    pub fn set_presentation(&mut self, mode: crate::Presentation) {
+        self.presenter.set(mode);
+    }
+
+    /// The presentation in effect for the next frame: `GpuWait` or
+    /// `ObserveOnly` (`Auto` resolves to one of them).
+    pub fn presentation(&self) -> crate::Presentation {
+        if self.gpu_wait() {
+            crate::Presentation::GpuWait
+        } else {
+            crate::Presentation::ObserveOnly
+        }
+    }
+
+    /// Smoothed GPU time per present, from submission to observed
+    /// completion, once measured (after a few presents). Measured in every
+    /// mode.
+    pub fn step_gpu_ms(&self) -> Option<f32> {
+        self.presenter.gpu_ms()
     }
 
     /// Heavy-engine mode (see the `heavy` module): observe-only

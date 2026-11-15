@@ -42,6 +42,11 @@ pub(crate) mod heavy;
 mod ring;
 pub use heavy::{HeavyEngine, HeavyStatus};
 
+#[cfg(feature = "wgpu")]
+mod presentation;
+#[cfg(feature = "wgpu")]
+pub use presentation::Presentation;
+
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]

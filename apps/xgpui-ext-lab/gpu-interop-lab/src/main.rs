@@ -502,8 +502,8 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                     canvas(
                         |_, _, _| (),
                         // Inside the 1px border the inner corner radius is one smaller.
-                        move |bounds, _, window, _| {
-                            surface.paint(window, bounds, Corners::all(px(RADIUS - 1.)))
+                        move |bounds, _, window, cx| {
+                            surface.paint(window, cx, bounds, Corners::all(px(RADIUS - 1.)))
                         },
                     )
                     .size_full(),
@@ -800,8 +800,8 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                             div().w(px(150.)).h(px(84.)).child(
                                 canvas(
                                     |_, _, _| (),
-                                    move |bounds, _, window, _| {
-                                        surface.paint(window, bounds, Corners::all(px(4.)))
+                                    move |bounds, _, window, cx| {
+                                        surface.paint(window, cx, bounds, Corners::all(px(4.)))
                                     },
                                 )
                                 .size_full(),

@@ -118,8 +118,6 @@ mod lab {
         skipped: u64,
         last_presents: Option<u64>,
         speed: f32,
-        /// The window's display refresh interval, as last sent to the engine.
-        refresh: Option<Duration>,
         dragging_speed: bool,
         /// Where the speed track was laid out, for mapping the pointer.
         speed_track: Rc<Cell<Bounds<Pixels>>>,
@@ -159,7 +157,6 @@ mod lab {
                 skipped: 0,
                 last_presents: None,
                 speed: 1.,
-                refresh: None,
                 dragging_speed: false,
                 speed_track: Rc::new(Cell::new(Bounds::default())),
             }
@@ -529,15 +526,6 @@ mod lab {
     impl Render for BoidsView {
         fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
             let now = Instant::now();
-            // Tell the engine the display's refresh rate (and when the window
-            // moves to a display with another one).
-            let refresh = window.refresh_interval(cx);
-            if refresh != self.refresh {
-                self.refresh = refresh;
-                if let Some(refresh) = refresh {
-                    self.engine.set_refresh_interval(refresh);
-                }
-            }
             // On the UI thread the engine steps here, inside the UI's frame,
             // and keeps the UI animating.
             if self.engine.step_inline() {
@@ -604,8 +592,8 @@ mod lab {
                     div().flex_1().min_h_0().child(
                         canvas(
                             |_, _, _| (),
-                            move |bounds, _, window, _| {
-                                surface.paint(window, letterbox(bounds), Corners::all(px(8.)));
+                            move |bounds, _, window, cx| {
+                                surface.paint(window, cx, letterbox(bounds), Corners::all(px(8.)));
                                 if let Some(ui_work) = ui_work {
                                     ui_work
                                         .borrow_mut()
