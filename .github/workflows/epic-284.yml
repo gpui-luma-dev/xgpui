@@ -97,6 +97,9 @@ jobs:
       - name: Color mode change requested during a draw applies and redraws
         if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/color_mode_window.rs') != '' }}
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features windows-window-tests --test color_mode_window
+      - name: Closing a window logs no errors (#277)
+        if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/windows_close.rs') != '' }}
+        run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features windows-window-tests --test windows_close
       - name: xgpui-shader custom paint in a real window (DirectX 11)
         if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/shader_window.rs') != '' }}
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features shader-window-tests --test shader_window
