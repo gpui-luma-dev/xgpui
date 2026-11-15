@@ -47,3 +47,6 @@ gpui-web = { path = "../../gpui/crates/gpui-web", package = "xgpui-web", optiona
 
 [target.'cfg(target_os = "windows")'.dependencies]
 gpui-windows = { path = "../../gpui/crates/gpui-windows", package = "xgpui-windows", optional = true }
+
+[lints.cargo]
+unused_dependencies = "allow"

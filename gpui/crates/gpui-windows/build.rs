@@ -1,5 +1,11 @@
 #![allow(clippy::disallowed_methods, reason = "build scripts are exempt")]
 
+// `windows-registry` is only called by the release-only shader compile path
+// below. Reference it in every profile so Cargo's `unused_dependencies` lint
+// does not flag the build dependency in debug builds.
+#[cfg(target_os = "windows")]
+use windows_registry as _;
+
 fn main() {
     #[cfg(not(all(target_os = "windows", not(debug_assertions))))]
     println!("cargo:rerun-if-changed=build.rs");
