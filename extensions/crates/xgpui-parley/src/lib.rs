@@ -5,6 +5,11 @@ use anyhow::{Result, ensure};
 use gpui::{FontId, GlyphId, LineLayout, Pixels, ShapedGlyph, ShapedRun, point, px};
 use parley::{Alignment, Layout, PositionedLayoutItem, Run};
 
+// `native-test` only exists so the `construction` test can use a real platform;
+// the library itself never calls `gpui-platform`.
+#[cfg(feature = "native-test")]
+use gpui_platform as _;
+
 mod preview;
 pub use preview::VariationPreview;
 

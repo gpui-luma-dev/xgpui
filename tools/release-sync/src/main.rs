@@ -812,6 +812,8 @@ fn build_manifests(root: &Path, check: bool) -> Result<()> {
         }
         let _ = path;
     }
+    // The harness exists only to compile its dependencies; it never calls them.
+    harness += "\n[lints.cargo]\nunused_dependencies = \"allow\"\n";
     for (file, text) in [
         ("Cargo.toml", workspace),
         ("tools/build-all/Cargo.toml", harness),

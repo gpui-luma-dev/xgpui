@@ -3725,6 +3725,9 @@ pub const fn relative(fraction: f32) -> DefiniteLength {
 }
 
 /// Returns the Golden Ratio, i.e. `~(1.0 + sqrt(5.0)) / 2.0`.
+// `f32::consts::GOLDEN_RATIO` is unstable and `sqrt` isn't const, so keep the
+// literal; it parses to the same f32 as the exact golden ratio.
+#[allow(clippy::approx_constant)]
 pub const fn phi() -> DefiniteLength {
     relative(1.618_034)
 }
