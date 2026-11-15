@@ -10,6 +10,51 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Makes a fresh D3D11 headless renderer on one adapter.
+#[cfg(target_os = "windows")]
+pub(crate) type Dx11Factory = Box<dyn Fn() -> Result<gpui_windows::Dx11HeadlessRenderer>>;
+
+/// D3D11 adapters the `dx11_*` tests run on: WARP always, so hosted CI
+/// covers the path, plus every hardware adapter, so a real Windows machine
+/// tests its own GPU without extra flags.
+#[cfg(target_os = "windows")]
+pub(crate) fn dx11_adapters() -> Vec<(String, Dx11Factory)> {
+    use gpui_windows::Dx11HeadlessRenderer;
+    use windows::Win32::Graphics::Dxgi::{
+        CreateDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE, IDXGIFactory1,
+    };
+    let warp: Dx11Factory = Box::new(Dx11HeadlessRenderer::new);
+    let mut adapters = vec![("WARP".to_string(), warp)];
+    let factory: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.expect("DXGI factory");
+    let mut index = 0;
+    while let Ok(adapter) = unsafe { factory.EnumAdapters1(index) } {
+        index += 1;
+        let Ok(desc) = (unsafe { adapter.GetDesc1() }) else {
+            continue;
+        };
+        if desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 {
+            continue;
+        }
+        let name = String::from_utf16_lossy(&desc.Description)
+            .trim_end_matches('\0')
+            .to_string();
+        let hardware: Dx11Factory = Box::new(move || Dx11HeadlessRenderer::with_adapter(&adapter));
+        adapters.push((name, hardware));
+    }
+    adapters
+}
+
+/// Runs `check` on every D3D11 adapter, naming the adapter in any failure.
+#[cfg(target_os = "windows")]
+pub(crate) fn on_dx11_adapters(check: impl Fn(&Dx11Factory) -> Result<()>) -> Result<()> {
+    use anyhow::Context as _;
+    for (name, factory) in dx11_adapters() {
+        eprintln!("dx11 adapter: {name}");
+        check(&factory).with_context(|| format!("D3D11 adapter {name}"))?;
+    }
+    Ok(())
+}
+
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
@@ -276,6 +321,21 @@ fn wgpu_mips_clipping_and_resize_reuse() -> Result<()> {
     );
     Ok(())
 }
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_mips_clipping_and_resize_reuse() -> Result<()> {
+    on_dx11_adapters(|renderer| {
+        let image = check_rendering(&mut renderer()?)?;
+        render_ready(
+            &mut renderer()?,
+            &image,
+            &image_scene(&image, 8., false),
+            size(DevicePixels(24), DevicePixels(24)),
+        )?;
+        assert_eq!(image.upload_count(), 2, "new device rebuilds texture");
+        Ok(())
+    })
+}
 
 #[cfg(feature = "wgpu")]
 #[test]
@@ -525,6 +585,15 @@ fn wgpu_completion_pool_refills_and_frame_limits() -> Result<()> {
     verify_pool_reuse(&mut renderer)?;
     verify_frame_limits(&mut renderer)
 }
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_completion_pool_refills_and_frame_limits() -> Result<()> {
+    on_dx11_adapters(|renderer| {
+        let mut renderer = renderer()?;
+        verify_pool_reuse(&mut renderer)?;
+        verify_frame_limits(&mut renderer)
+    })
+}
 
 fn check_linear_adjustments(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
     use crate::pipeline::{
@@ -601,6 +670,11 @@ fn metal_linear_adjustments_match_cpu_and_reuse_uploads() -> Result<()> {
 #[test]
 fn wgpu_linear_adjustments_match_cpu_and_reuse_uploads() -> Result<()> {
     check_linear_adjustments(&mut gpui_wgpu::WgpuHeadlessRenderer::new()?)
+}
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_linear_adjustments_match_cpu_and_reuse_uploads() -> Result<()> {
+    on_dx11_adapters(|renderer| check_linear_adjustments(&mut renderer()?))
 }
 
 fn check_float_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
@@ -682,6 +756,11 @@ fn metal_rgba16f_matches_cpu_and_reuses_source() -> Result<()> {
         &mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
             .expect("Metal renderer initialization"),
     )
+}
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_rgba16f_matches_cpu_and_reuses_source() -> Result<()> {
+    on_dx11_adapters(|renderer| check_float_preview(&mut renderer()?))
 }
 #[cfg(feature = "wgpu")]
 #[test]
@@ -898,6 +977,11 @@ fn metal_adobe_rgb_input_with_explicit_mapping() -> Result<()> {
 fn wgpu_adobe_rgb_input_with_explicit_mapping() -> Result<()> {
     check_adobe_rgb_preview(&mut gpui_wgpu::WgpuHeadlessRenderer::new()?)
 }
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_adobe_rgb_input_with_explicit_mapping() -> Result<()> {
+    on_dx11_adapters(|renderer| check_adobe_rgb_preview(&mut renderer()?))
+}
 
 fn check_rec2020_preview(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
     use pipeline::*;
@@ -975,6 +1059,11 @@ fn metal_rec2020_storage_and_preview() -> Result<()> {
         &mut gpui_apple::metal_renderer::MetalHeadlessRenderer::new()
             .expect("Metal renderer initialization"),
     )
+}
+#[cfg(target_os = "windows")]
+#[test]
+fn dx11_rec2020_storage_and_preview() -> Result<()> {
+    on_dx11_adapters(|renderer| check_rec2020_preview(&mut renderer()?))
 }
 #[cfg(feature = "wgpu")]
 #[test]

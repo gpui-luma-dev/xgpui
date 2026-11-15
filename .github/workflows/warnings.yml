@@ -68,6 +68,11 @@ jobs:
       - name: xgpui-macros tests
         if: ${{ !cancelled() }}
         run: cargo test --locked -p xgpui-macros
+      # The dx11_* tests run on WARP here and on every hardware adapter on a
+      # real Windows machine (`just test --only media`).
+      - name: xgpui-media tests (DirectX 11 on WARP)
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-media --lib -- --nocapture --test-threads=1
 
       - name: Clippy, workspace
         if: ${{ !cancelled() }}
