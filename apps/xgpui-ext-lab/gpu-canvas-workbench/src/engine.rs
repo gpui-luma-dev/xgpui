@@ -272,14 +272,7 @@ impl Engine {
             info.name
         );
         let adapter_name = format!("{} ({:?})", info.name, info.device_type);
-        #[cfg(target_os = "linux")]
         let (device, queue) = WgpuSurfaceTarget::request_device(&adapter)?;
-        #[cfg(not(target_os = "linux"))]
-        let (device, queue) = gpui::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("workbench_engine"),
-            required_features: WgpuSurfaceTarget::required_features(),
-            ..Default::default()
-        }))?;
         let format = SurfaceFormat::Rgba16FloatLinearP3;
         ensure!(format.supports_storage(), "slots must allow storage writes");
         let target = WgpuSurfaceTarget::new(
@@ -752,7 +745,7 @@ impl Engine {
                 self.stats.publish_blocked += 1;
                 return Ok(());
             }
-            Err(error @ AcquireError::Invalidated) => return Err(error.into()),
+            Err(error) => return Err(error.into()),
         };
         let index = slot.index();
         if gpu!(self).publish_binds[index].is_none() {

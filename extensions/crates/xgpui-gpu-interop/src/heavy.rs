@@ -164,6 +164,7 @@ impl Heavy {
 
 /// Snapshot of a target's heavy-engine state.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct HeavyStatus {
     pub config: HeavyEngine,
     /// Current paced frame rate.

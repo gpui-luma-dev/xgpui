@@ -35,7 +35,7 @@ target.surface().paint(window, bounds, radii); // in an element's paint phase
 | Linux (Vulkan) | opaque-fd external memory | exported timeline semaphore | none |
 | Windows (D3D12 engine, D3D11 compositor) | shared NT-handle textures | shared fence | none |
 
-Engines today: on Linux and Windows an engine uses wgpu, through feature `wgpu` and `WgpuSurfaceTarget`. On Linux, create its device with `WgpuSurfaceTarget::request_device`. On macOS a raw Metal engine can also present directly, using `SyncPoint::new` or the `unsafe SyncPoint::submitted`. The shared memory and signals are native to each platform, so adapters for raw Vulkan or D3D12 engines could be added later.
+Engines today: on Linux and Windows an engine uses wgpu, through feature `wgpu` and `WgpuSurfaceTarget`. Create its device with `WgpuSurfaceTarget::request_device`, which works on every platform (on Linux it also enables GPU-side handoff and a low-priority queue). On macOS a raw Metal engine can also present directly, using `SyncPoint::new` or the `unsafe SyncPoint::submitted`. The shared memory and signals are native to each platform, so adapters for raw Vulkan or D3D12 engines could be added later.
 
 ## Guarantees
 - **Slots are immutable once published.** A presented slot is never rewritten while a retained scene or in-flight composition uses it. It returns to the ring afterwards, even if no further frames are drawn. Size the ring at 3 plus one for each additional window showing the surface: a window that isn't drawing, such as a minimized one, keeps its last frame in its retained scene, and that pins the slot until it draws again.
@@ -71,8 +71,8 @@ Measured with 4 × 4K engines at a GPU-saturating load on an Intel Iris Xe: the 
 
 ## Known limits
 
-- **Tested hardware:** Apple M-series; Intel Iris Xe (Fedora 44 and Windows 11); Intel Arc 140T (Windows 11). AMD and NVIDIA GPUs are untested.
-- **One GPU at a time.** The engine must run on the compositor's GPU, and nothing yet helps an app find it; on a machine with two GPUs an engine on the other one is refused with `Unsupported` ([#253](https://github.com/gpui-luma-dev/xgpui/issues/253)).
+- **Tested hardware:** Apple M-series; Intel Iris Xe (Fedora 44 and Windows 11); Intel Arc 140T (Windows 11); AMD Radeon 780M (Linux). NVIDIA GPUs are untested.
+- **One GPU at a time.** The engine must run on the compositor's GPU; on a machine with two GPUs an engine on the other one is refused with `Unsupported`. Helping engines pick the compositor's GPU is not planned; contributions are welcome ([#253](https://github.com/gpui-luma-dev/xgpui/issues/253)).
 - **Colour:** Linux shows wide content as the sRGB preview until [#146](https://github.com/gpui-luma-dev/xgpui/issues/146).
 - **Engines:** wgpu on all three platforms and raw Metal on macOS; raw Vulkan and D3D12 engines have no adapter yet.
 

@@ -83,6 +83,7 @@ pub use gpui_wgpu::wgpu;
 
 /// Pixel storage and color interpretation of every slot in a surface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SurfaceFormat {
     /// BGRA8, straight alpha, sRGB-encoded channels. Works in every window.
     Bgra8Srgb,
@@ -102,7 +103,16 @@ impl SurfaceFormat {
     }
     /// The color interpretation the host applies when compositing into a
     /// window whose effective color mode is (`wide`) or is not wide-gamut SDR.
-    pub fn color_mode(self, wide: bool) -> gpui::ImageColorMode {
+    /// Internal: [`EngineSurface::paint`] chooses for the window.
+    // Only the surface calls this; Linux and Windows have none without `wgpu`.
+    #[cfg_attr(
+        not(any(
+            target_os = "macos",
+            all(any(target_os = "linux", target_os = "windows"), feature = "wgpu")
+        )),
+        allow(dead_code)
+    )]
+    pub(crate) fn color_mode(self, wide: bool) -> gpui::ImageColorMode {
         match self {
             Self::Bgra8Srgb => gpui::ImageColorMode::EncodedSrgb,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -160,6 +170,7 @@ impl SurfaceDesc {
 
 /// Why `acquire` returned no slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum AcquireError {
     /// Every slot is being written, or still referenced by retained scenes or
     /// in-flight composition. Retry after the next presented frame.
@@ -179,8 +190,15 @@ impl std::fmt::Display for AcquireError {
 impl std::error::Error for AcquireError {}
 
 /// Returned when the platform or configuration cannot support a surface.
-#[derive(Debug)]
-pub struct Unsupported(pub String);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Unsupported(pub(crate) String);
+impl Unsupported {
+    /// Why the surface is unsupported, for example that the engine and
+    /// compositor are on different GPUs.
+    pub fn reason(&self) -> &str {
+        &self.0
+    }
+}
 impl std::fmt::Display for Unsupported {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "engine surface unsupported: {}", self.0)
@@ -190,6 +208,7 @@ impl std::error::Error for Unsupported {}
 
 /// Counters for diagnostics and pressure tests.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub struct SurfaceStats {
     /// Slots available to `acquire`.
     pub free: usize,
@@ -218,6 +237,7 @@ pub struct SurfaceStats {
 
 /// How engine output reaches the compositor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Transport {
     /// The compositor samples the engine's memory directly.
     ZeroCopy,

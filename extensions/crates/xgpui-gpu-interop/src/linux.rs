@@ -666,8 +666,6 @@ impl WgpuSurfaceTarget {
         ENGINE_LOW_PRIORITY.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    /// Whether frames are handed over with a GPU-side wait (shared timeline
-    /// semaphore) rather than the engine waiting on its own thread.
     /// Whether the compositor may wait on the GPU for this target's frames
     /// (default). With `false` (observe-only) a frame is shown only once its
     /// GPU work is observed complete, so a slow engine frame never holds up
@@ -680,13 +678,19 @@ impl WgpuSurfaceTarget {
         }
     }
 
-    /// See [`Self::set_gpu_wait`].
+    /// Whether frames presented now get a GPU-side wait: the mode chosen with
+    /// [`Self::set_gpu_wait`] (on by default), and only when [`Self::gpu_sync`]
+    /// is available. `false` means observe-only presentation.
     pub fn gpu_wait(&self) -> bool {
         self.timeline
             .as_ref()
             .is_some_and(|shared| !shared.observe_only.load(Ordering::Acquire))
     }
 
+    /// Whether this device can hand frames over with GPU-side synchronization
+    /// at all (a shared timeline semaphore), fixed when the target is created.
+    /// When `false`, every frame is observe-only whatever
+    /// [`Self::set_gpu_wait`] says; [`Self::gpu_wait`] is the mode in use.
     pub fn gpu_sync(&self) -> bool {
         self.timeline.is_some()
     }
