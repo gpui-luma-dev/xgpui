@@ -94,6 +94,10 @@ pub struct WindowsWindowState {
     fullscreen: Cell<Option<StyleAndBounds>>,
     initial_placement: Cell<Option<WindowOpenStatus>>,
     hwnd: HWND,
+    /// Set in `WM_DESTROY`. Windows has destroyed (or is destroying) `hwnd`, so
+    /// no further Win32 call may use it; GPUI can still hold this window until
+    /// its next update (#277).
+    pub(crate) destroyed: Cell<bool>,
     pub(crate) a11y: RefCell<Option<A11yState>>,
     /// Last pointer position delivered to the app by a client or non-client
     /// mouse move; `None` after the pointer really leaves the window. Used to
@@ -194,6 +198,7 @@ impl WindowsWindowState {
             force_render_pending: Cell::new(false),
             click_state,
             current_cursor: Cell::new(current_cursor),
+            destroyed: Cell::new(false),
             cursor_visible,
             nc_button_pressed: Cell::new(nc_button_pressed),
             display: Cell::new(display),
@@ -226,6 +231,9 @@ impl WindowsWindowState {
 
     // Calculate the bounds used for saving and whether the window is maximized.
     fn calculate_window_bounds(&self) -> (Bounds<Pixels>, bool) {
+        if self.destroyed.get() {
+            return (self.bounds(), false);
+        }
         let placement = unsafe {
             let mut placement = WINDOWPLACEMENT {
                 length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
@@ -625,6 +633,11 @@ impl rwh::HasDisplayHandle for WindowsWindow {
 impl Drop for WindowsWindow {
     fn drop(&mut self) {
         self.0.dialog_owner.close();
+        // Closed through Windows (caption Close, Alt+F4): the handle is already
+        // destroyed and drag-drop was revoked in `WM_DESTROY` (#277).
+        if self.0.state.destroyed.get() {
+            return;
+        }
         unsafe { ShowWindowAsync(self.0.hwnd, SW_HIDE).ok().log_err() };
         // `DestroyWindow` below sends `WM_SHOWWINDOW`; without a callback the
         // resulting visibility report has nothing to notify.
@@ -635,11 +648,12 @@ impl Drop for WindowsWindow {
             .executor
             .spawn(async move {
                 this.dialog_owner.when_idle().await;
-                let handle = this.hwnd;
-                unsafe {
-                    RevokeDragDrop(handle).log_err();
-                    DestroyWindow(handle).log_err();
+                // Windows may have destroyed the window while the dialog was open.
+                if this.state.destroyed.get() {
+                    return;
                 }
+                // `WM_DESTROY` revokes drag-drop while the handle is still valid.
+                unsafe { DestroyWindow(this.hwnd).log_err() };
             })
             .detach();
     }
@@ -704,6 +718,9 @@ impl PlatformWindow for WindowsWindow {
     }
 
     fn mouse_position(&self) -> Point<Pixels> {
+        if self.state.destroyed.get() {
+            return Point::default();
+        }
         let scale_factor = self.scale_factor();
         let point = unsafe {
             let mut point: POINT = std::mem::zeroed();

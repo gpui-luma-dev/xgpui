@@ -349,6 +349,11 @@ impl WindowsWindowInner {
     }
 
     fn handle_destroy_msg(&self, handle: HWND) -> Option<isize> {
+        // From here on the handle is being destroyed: nothing may call Win32 on it
+        // again (#277). Revoke drag-drop now, while it's still valid; this also
+        // releases the drop target's reference to this window.
+        self.state.destroyed.set(true);
+        unsafe { windows::Win32::System::Ole::RevokeDragDrop(handle).log_err() };
         let callback = { self.state.callbacks.close.take() };
         // Re-enable parent window if this was a modal dialog
         if let Some(parent_hwnd) = self.parent_hwnd {

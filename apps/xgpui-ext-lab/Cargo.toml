@@ -229,6 +229,12 @@ harness = false
 required-features = ["windows-window-tests"]
 
 [[test]]
+name = "windows_close"
+path = "tests/windows_close.rs"
+harness = false
+required-features = ["windows-window-tests"]
+
+[[test]]
 name = "shader_window"
 path = "tests/shader_window.rs"
 harness = false

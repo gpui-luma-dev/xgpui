@@ -314,6 +314,11 @@ impl WindowsPlatform {
             .read()
             .iter()
             .for_each(|handle| unsafe {
+                // A window Windows has destroyed stays listed until its
+                // `WM_GPUI_CLOSE_ONE_WINDOW` is handled; posting to it fails (#277).
+                if !IsWindow(Some(handle.as_raw())).as_bool() {
+                    return;
+                }
                 PostMessageW(Some(handle.as_raw()), message, wparam, lparam).log_err();
             });
     }
