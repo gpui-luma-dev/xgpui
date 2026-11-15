@@ -1,5 +1,5 @@
 use super::*;
-use anyhow::{Result, bail};
+use anyhow::{Result, bail, ensure};
 use gpui::{
     ContentMask, CustomDraw, DevicePixels, DrawOrder, PlatformHeadlessRenderer, ScaledPixels,
     Scene, Size, point, size,
@@ -32,7 +32,10 @@ pub(crate) fn dx11_adapters() -> Vec<(String, Dx11Factory)> {
         let Ok(desc) = (unsafe { adapter.GetDesc1() }) else {
             continue;
         };
-        if desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 {
+        // The Basic Render Driver (Microsoft, 0x8c) is WARP again, and on some
+        // machines it lacks the software flag.
+        let basic_render = desc.VendorId == 0x1414 && desc.DeviceId == 0x8c;
+        if basic_render || desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 {
             continue;
         }
         let name = String::from_utf16_lossy(&desc.Description)
@@ -175,6 +178,24 @@ fn image_scene(image: &MediaImage, side: f32, clipped: bool) -> Scene {
     scene.finish();
     scene
 }
+/// What the renderer leaves where nothing is drawn: opaque black from the
+/// Metal and wgpu headless renderers, transparent from the D3D11 one.
+fn background(
+    renderer: &mut dyn PlatformHeadlessRenderer,
+    extent: Size<DevicePixels>,
+) -> Result<[u8; 4]> {
+    let mut empty = Scene::default();
+    empty.finish();
+    let clear = renderer
+        .render_scene_to_image(&empty, extent)?
+        .get_pixel(0, 0)
+        .0;
+    ensure!(
+        clear[..3] == [0, 0, 0] && (clear[3] == 0 || clear[3] == 255),
+        "unexpected headless background {clear:?}"
+    );
+    Ok(clear)
+}
 fn render_ready(
     renderer: &mut dyn PlatformHeadlessRenderer,
     image: &MediaImage,
@@ -204,6 +225,7 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
     let mut alpha_job = MediaLoader::default().load(&alpha_fixture.0)?;
     let alpha_image = finish(&mut alpha_job)?;
     let extent = size(DevicePixels(24), DevicePixels(24));
+    let clear = background(renderer, extent)?;
     let mut alpha_scene = image_scene(&alpha_image, 8., false);
     alpha_scene.custom_draws[0].content =
         Arc::new(alpha_image.filtered(ImageFilter::new().saturation(0.)));
@@ -218,7 +240,7 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
     let first = renderer.render_scene_to_image(&image_scene(&image, 8., false), extent)?;
     assert_eq!(
         first.get_pixel(6, 6).0,
-        [0, 0, 0, 255],
+        clear,
         "first paint uses transparent placeholder"
     );
     for side in [8., 16., 8.] {
@@ -226,7 +248,7 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
         let p = pixels.get_pixel(6, 6).0;
         assert!(p[0].abs_diff(188) <= 3, "mipmapped checkerboard: {p:?}");
         assert_eq!(p[3], 255);
-        assert_eq!(pixels.get_pixel(1, 1).0, [0, 0, 0, 255]);
+        assert_eq!(pixels.get_pixel(1, 1).0, clear);
     }
     assert_eq!(
         image.upload_count(),
@@ -251,11 +273,7 @@ fn check_rendering(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<MediaI
     );
     assert_eq!(image.upload_count(), 1, "filter updates do not reupload");
     let pixels = renderer.render_scene_to_image(&image_scene(&image, 8., true), extent)?;
-    assert_eq!(
-        pixels.get_pixel(6, 8).0,
-        [0, 0, 0, 255],
-        "native content mask"
-    );
+    assert_eq!(pixels.get_pixel(6, 8).0, clear, "native content mask");
     assert_eq!(pixels.get_pixel(9, 8).0[3], 255);
     assert!(
         pixels.get_pixel(11, 4).0[0] < 180,
@@ -587,12 +605,40 @@ fn wgpu_completion_pool_refills_and_frame_limits() -> Result<()> {
 }
 #[cfg(target_os = "windows")]
 #[test]
-fn dx11_completion_pool_refills_and_frame_limits() -> Result<()> {
+fn dx11_unpooled_staging_and_frame_limits() -> Result<()> {
     on_dx11_adapters(|renderer| {
         let mut renderer = renderer()?;
-        verify_pool_reuse(&mut renderer)?;
+        verify_unpooled_staging(&mut renderer)?;
         verify_frame_limits(&mut renderer)
     })
+}
+/// D3D11 staging isn't pooled yet ("pending native validation" in
+/// pages/gpui-public-api.html). Pin that, so adding a D3D11 pool fails here
+/// and this test switches to `verify_pool_reuse`. Successive uploads must
+/// still show their own pixels.
+#[cfg(target_os = "windows")]
+fn verify_unpooled_staging(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
+    let fixture = Fixture::new();
+    let loader = MediaLoader::default();
+    let extent = size(DevicePixels(24), DevicePixels(24));
+    let first = finish(&mut loader.load(&fixture.0)?)?;
+    let pixels = render_ready(renderer, &first, &image_scene(&first, 8., false), extent)?;
+    assert!(pixels.get_pixel(6, 6).0[0].abs_diff(188) <= 3);
+    image::RgbaImage::from_pixel(64, 64, image::Rgba([255, 0, 0, 255])).save(&fixture.0)?;
+    let second = finish(&mut loader.load(&fixture.0)?)?;
+    let pixels = render_ready(renderer, &second, &image_scene(&second, 8., false), extent)?;
+    assert_eq!(
+        pixels.get_pixel(6, 6).0,
+        [255, 0, 0, 255],
+        "second upload shows its own pixels"
+    );
+    let stats = loader.staging_pool_stats();
+    assert_eq!(
+        (stats.allocations, stats.reuses, stats.cached_bytes),
+        (0, 0, 0),
+        "D3D11 staging is unpooled; switch to verify_pool_reuse once it is pooled"
+    );
+    Ok(())
 }
 
 fn check_linear_adjustments(renderer: &mut dyn PlatformHeadlessRenderer) -> Result<()> {
@@ -610,6 +656,7 @@ fn check_linear_adjustments(renderer: &mut dyn PlatformHeadlessRenderer) -> Resu
         ImagePrimaries::Srgb,
     )?;
     let extent = size(DevicePixels(28), DevicePixels(28));
+    let clear = background(renderer, extent)?;
     for ev in [0., 1., -1., 2., 0.] {
         let matrix = ColorMatrix::identity(ImagePrimaries::Srgb)
             .exposure(ev)?
@@ -635,11 +682,7 @@ fn check_linear_adjustments(renderer: &mut dyn PlatformHeadlessRenderer) -> Resu
                 );
             }
         }
-        assert_eq!(
-            pixels.get_pixel(2, 2).0,
-            [0, 0, 0, 255],
-            "native content mask"
-        );
+        assert_eq!(pixels.get_pixel(2, 2).0, clear, "native content mask");
         assert_eq!(
             image.upload_count(),
             1,
