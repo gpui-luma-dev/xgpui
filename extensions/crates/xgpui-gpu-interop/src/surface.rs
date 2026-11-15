@@ -176,8 +176,8 @@ impl EngineSurface {
     /// engine and compositor are on different GPUs), once a preparation has
     /// failed with [`Unsupported`](crate::Unsupported). The surface then
     /// offers no frames, so it costs at most one failed composition.
-    pub fn unsupported(&self) -> Option<String> {
-        self.0.feedback.unsupported.lock().unwrap().clone()
+    pub fn unsupported(&self) -> Option<crate::Unsupported> {
+        self.0.feedback.unsupported.lock().unwrap().clone().map(crate::Unsupported)
     }
 
     fn content_for(&self, wide: bool) -> Option<Arc<dyn CustomContent>> {

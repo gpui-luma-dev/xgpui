@@ -312,16 +312,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             let adapter =
                 gpui::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
                     .with_context(|| format!("no wgpu {} adapter", BACKEND.1))?;
-            // Linux engines also need semaphore export for GPU-side handoff.
-            #[cfg(target_os = "linux")]
             let (device, queue) = WgpuSurfaceTarget::request_device(&adapter)?;
-            #[cfg(not(target_os = "linux"))]
-            let (device, queue) =
-                gpui::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-                    label: Some("engine"),
-                    required_features: WgpuSurfaceTarget::required_features(),
-                    ..Default::default()
-                }))?;
             let target = WgpuSurfaceTarget::new(desc, &device, &queue)?;
             let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("engine_waves"),
@@ -400,7 +391,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             let slot = match self.target.surface().acquire() {
                 Ok(slot) => slot,
                 Err(AcquireError::WouldBlock) => return Ok(false),
-                Err(error @ AcquireError::Invalidated) => return Err(error.into()),
+                Err(error) => return Err(error.into()),
             };
             let texture = self.target.texture(&slot)?;
             let view = texture.create_view(&Default::default());
