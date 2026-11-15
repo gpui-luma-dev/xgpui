@@ -45,6 +45,8 @@ let presenter = ShellControlPresenter::new(|state, _window, _cx| {
         ShellControl::Maximize => "icons/maximize.svg",
         ShellControl::Restore => "icons/restore.svg",
         ShellControl::Close => "icons/close.svg",
+        // `ShellControl` is non-exhaustive; new controls may be added.
+        _ => "icons/close.svg",
     };
     div()
         .size(px(24. * state.scale))
@@ -53,7 +55,7 @@ let presenter = ShellControlPresenter::new(|state, _window, _cx| {
         .items_center()
         .justify_center()
         .when(state.hovered || state.pressed, |s| s.bg(rgb(state.colors.hover)))
-        .child(svg().path(icon).size(px(12. * state.scale)).text_color(rgb(state.colors.text)))
+        .child(svg().path(icon).size(px(16. * state.scale)).text_color(rgb(state.colors.text)))
         .into_any_element()
 });
 // Set it right after opening so it is in place before the first frame.
@@ -69,6 +71,8 @@ Who owns what:
 - `ClientFramePreview::control_presenter` previews the same artwork; preview controls stay inert (`state.preview` is `true`).
 
 The presenter applies wherever the shell draws controls: Linux/FreeBSD client frames and Windows app-composed title bars. Native macOS traffic lights and compositor-owned decorations are unaffected.
+
+On Windows the controls behave like native caption buttons, with or without a presenter: pointer presses go through Windows' caption-button handling (so Windows 11 shows Snap Layouts on Maximize, with no shell tooltip over it), and the controls are not Tab stops. Screen readers and other accessibility clients can still activate them. On Linux client frames the controls are Tab stops and respond to Enter and Space.
 
 ## Follow desktop preferences
 

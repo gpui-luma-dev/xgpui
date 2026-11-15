@@ -58,7 +58,13 @@ asynchronously; inspect the reported result.</li>
 Refresh View only rereads displayed state; it does not force a portal request.</li>
 </ul>
 <p>All interactive buttons support pointer activation, Tab focus, Enter/Space and
-accessible click actions. Unsupported operations are dimmed and do not dispatch.</p>
+accessible click actions. Tab and Shift-Tab move focus through the whole window.
+Unsupported operations are dimmed and do not dispatch. Clicking a selected choice
+again turns it off and returns that group to its default (System, Floating, native
+appearance, platform button layout or built-in controls).
+<strong>Reset everything</strong>, at the top right of the lab and at the bottom of the right
+pane, clears this window's overrides and also resets the preview simulation and the
+control artwork.</p>
 <h2 id="client-frame-preview-on-mac-or-any-host">Client-frame preview on Mac (or any host)</h2>
 <p>The left pane contains a clearly labeled <strong>simulation</strong>, using the same renderer
 as the production client frame. The right pane scrolls independently, keeping the
@@ -70,6 +76,11 @@ so accent changes remain visible without making preview controls actionable.
 Show Hover independently simulates the close-button hover background.</li>
 <li>Select Floating, Maximized, Tiled or Fullscreen, Light/Dark/native appearance,
 Active/Inactive, and alternate button layouts in the preview controls.</li>
+<li>Choose <strong>Built-in controls</strong>, <strong>SVG on filled circle</strong> or <strong>SVG, no circle</strong> to
+switch the window-control artwork. The SVG choices install a lab
+<code>ShellControlPresenter</code> on both the real title bar (Windows, or a Linux client frame)
+and the preview. The filled circle drops while the window is inactive; hover and
+press still show it. See <a href="shell.html#replace-window-control-artwork">Replace window-control artwork</a>.</li>
 <li>Toggle the long title in Window Operations to inspect truncation in the preview.</li>
 <li>Preview buttons are decorative images; clicks, double-clicks, drag regions and
 resize borders do not close, move, resize or change the host window. Use the
@@ -116,8 +127,9 @@ cargo test --locked --config .cargo/validation.toml -p xgpui-shell --lib
 of unavailable fixed-window operations. Shared shell tests cover preference
 resolution. New headless tests verify Mac operation guards, simulation-state
 isolation and that clicks/double-clicks on rendered preview controls preserve the
-host window, its bounds, decorations and insets. These do not establish real GNOME/KDE input, rendering, accessibility,
-portal service behavior or resolution of the recorded Wayland frame stall.</p>
+host window, its bounds, decorations and insets. These do not establish real GNOME/KDE input, rendering, accessibility or
+portal service behavior. The recorded GNOME Wayland frame stall
+(<a href="https://github.com/gpui-luma-dev/xgpui/issues/271">#271</a>) no longer reproduces and is closed.</p>
 <p>The lab adds no core platform public API beyond the separate #182 prerequisite.
 The shell extension exposes its existing resolver and result fields for accurate
 diagnostics instead of duplicating resolution logic in the app.</p>
@@ -137,13 +149,14 @@ foreground color instead of the accent. Toggle Show Hover to inspect its
 background independently; both can be visible together.</li>
 <li>Toggle reduced-motion policy. The inspector shows the resolved policy without
 pretending there is an animation to disable. Current hover/focus changes are instant.</li>
-<li>Reset this window. Desktop values or built-in fallbacks return. Open another
+<li>Click <strong>Reset everything</strong>. Desktop values or built-in fallbacks return. Open another
 window to check independent settings. Actual pointer/keyboard behavior on a
 native Linux client frame remains part of final platform validation.</li>
 </ol>
 <p>Fonts are <strong>requested</strong>, not reported as actual matched faces. GPUI may substitute
-an installed family or fall back for particular glyphs. The close icon is a vector;
-other control symbols use stable system typography independently of the title.
+an installed family or fall back for particular glyphs. The built-in minimize,
+maximize, restore and close symbols are thin vector lines of one size, independent
+of fonts and of the title.
 Native/server decorations retain OS-controlled typography and colors; the app-owned
 bar inside or alongside them can use the shell look or app-supplied styles.</p>
 <h3 id="typography-contract-and-limits">Typography contract and limits</h3>
@@ -202,13 +215,16 @@ spacing. No icon-theme catalog or layout presets are added.</p>
 </ul>
 <p>On macOS, the real native traffic lights remain at the left, with reserved space;
 the app bar fills the transparent title area. On Windows the app-composed bar
-uses the shell's window controls and native hit-test regions. On Linux a negotiated
+uses the shell's window controls and native hit-test regions: pointer presses go
+through Windows' caption-button handling (Snap Layouts appears on Maximize), and
+the controls are not Tab stops, as on native title bars. On Linux a negotiated
 client frame wraps the app bar with window controls and resize edges. If the
 compositor supplies server decorations, the app bar sits inside the native frame
 and does not duplicate window controls. In fullscreen the app bar remains useful
 while window controls and native traffic-light clearance are omitted.</p>
-<p>The separate <strong>client-frame preview</strong> still shows built-in frame defaults; it is
-not a clone of the actionable app toolbar. Its decorative buttons remain inert.</p>
+<p>The separate <strong>client-frame preview</strong> shows the built-in frame, with the same
+control artwork as the real title bar; it is not a clone of the actionable app
+toolbar. Its decorative buttons remain inert.</p>
 <h3 id="developer-entry-point">Developer entry point</h3>
 <p>Use <code>ShellApp::open_shell_window_with_titlebar</code> instead of <code>open_shell_window</code>:</p>
 <pre><code class="language-rust">cx.open_shell_window_with_titlebar(
@@ -376,8 +392,8 @@ in the shell's headless test build so platform-only type errors can be caught.</
 <p>This macOS environment cannot establish GNOME/KDE behavior. Portal parsing is also
 tested through an isolated host harness including the actual Linux source; that
 is not a full Linux backend build or a live portal/service-restart test.</p>
-<p>Issue 149 still requires provider/fallback acceptance on real desktops, app-composed title-bar native acceptance, visual polish, native input/accessibility validation,
-diagnosis of the recorded GNOME frame stall, and a separately reviewed release.
+<p>Issue 149 still requires provider/fallback acceptance on real desktops, app-composed title-bar native acceptance, visual polish, native input/accessibility validation
+and a separately reviewed release. The recorded GNOME frame stall (<a href="https://github.com/gpui-luma-dev/xgpui/issues/271">#271</a>) no longer reproduces.
 No GUI launch or publication is authorized by this document.</p>
 <h4 id="checks-recorded-for-this-subtask">Checks recorded for this subtask</h4>
 <ul>

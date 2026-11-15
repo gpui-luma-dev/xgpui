@@ -42,6 +42,7 @@ cx.open_shell_window(options, ShellOptions::default(), |window, cx| {
 <h2 id="compose-a-title-bar">Compose a title bar</h2>
 <p>Use <code>ShellApp::open_shell_window_with_titlebar</code> with a builder returning <code>(Entity&lt;Titlebar&gt;, Entity&lt;Content&gt;)</code>. Place title text or empty space inside <code>ShellDragRegion</code>; keep interactive buttons and inputs outside that drag region.</p>
 <p>macOS retains native traffic lights. Windows uses app-composed content and shell controls. Linux/FreeBSD draw the client frame only when the platform reports client decorations; server decorations remain compositor-owned. Fullscreen suppresses the client frame. A decoration request is not proof that the compositor accepted it.</p>
+<p>On Windows the shell's controls behave like native caption buttons: pointer presses go through Windows' caption-button handling, so Windows 11 shows Snap Layouts when hovering Maximize (the shell adds no tooltip there), and the controls are not Tab stops. Screen readers can still activate them. On Linux client frames the controls are Tab stops and respond to Enter and Space.</p>
 <h2 id="replace-window-control-artwork">Replace window-control artwork</h2>
 <p>A <code>ShellControlPresenter</code> replaces what the shell draws inside each window control (background, icon and hover/pressed/inactive treatment) without copying any window-management code:</p>
 <pre><code class="language-rust">use xgpui_shell::{ShellControl, ShellControlPresenter};
@@ -52,6 +53,8 @@ let presenter = ShellControlPresenter::new(|state, _window, _cx| {
         ShellControl::Maximize =&gt; "icons/maximize.svg",
         ShellControl::Restore =&gt; "icons/restore.svg",
         ShellControl::Close =&gt; "icons/close.svg",
+        // `ShellControl` is non-exhaustive; new controls may be added.
+        _ =&gt; "icons/close.svg",
     };
     div()
         .size(px(24. * state.scale))
@@ -60,13 +63,19 @@ let presenter = ShellControlPresenter::new(|state, _window, _cx| {
         .items_center()
         .justify_center()
         .when(state.hovered || state.pressed, |s| s.bg(rgb(state.colors.hover)))
-        .child(svg().path(icon).size(px(12. * state.scale)).text_color(rgb(state.colors.text)))
+        .child(svg().path(icon).size(px(16. * state.scale)).text_color(rgb(state.colors.text)))
         .into_any_element()
 });
 // Set it right after opening so it is in place before the first frame.
 handle.update(cx, |shell, _, cx| shell.set_control_presenter(Some(presenter), cx))?;
 </code></pre>
-<p>The shell keeps control order, desktop-configured omissions, capability filtering, Maximize/Restore identity, the clickable target size, accessible names, activation, drag isolation and the keyboard focus ring. The presenter draws everything inside the target, centered and clipped to it; don't attach click handlers in presenter content. <code>ShellControlState</code> carries the control, hover, pressed, focus, activation, appearance, high contrast, the resolved colors, the focus color, scale and target size. <code>set_control_presenter(None)</code> restores the built-in look, and <code>ClientFramePreview::control_presenter</code> previews the same artwork. It applies to Linux/FreeBSD client frames and Windows app-composed title bars; native macOS traffic lights and compositor-owned decorations are unaffected.</p>
+<ul>
+<li><strong>The shell keeps</strong> control order, desktop-configured omissions, capability filtering, Maximize/Restore identity, the clickable target size, accessible names, pointer/keyboard/accessibility activation, drag isolation and the keyboard focus ring. Clicking a control never starts a window drag.</li>
+<li><strong>The presenter draws</strong> everything inside the target. Its content is centered in the target and clipped to it; draw the icon smaller than <code>state.target_size</code> to keep a comfortable target. Don't attach click handlers in presenter content.</li>
+<li><code>ShellControlState</code> carries the control, hover, pressed, keyboard focus, window activation, appearance, high contrast, the frame's resolved colors, the focus color, logical scale and target size. With <code>high_contrast</code> set, switch to high-contrast artwork; the shell doesn't override presenter colors.</li>
+<li><code>set_control_presenter(None)</code> restores the built-in look, and presenters can be swapped at runtime. <code>ClientFramePreview::control_presenter</code> previews the same artwork with inert controls (<code>state.preview</code> is <code>true</code>).</li>
+</ul>
+<p>The presenter applies wherever the shell draws controls: Linux/FreeBSD client frames and Windows app-composed title bars. Native macOS traffic lights and compositor-owned decorations are unaffected. Without a presenter, the shell draws its built-in minimize, maximize, restore and close symbols as thin vector lines of one size.</p>
 <h2 id="app-owned-shared-chrome-colors">App-owned shared chrome colors</h2>
 <p>Set <code>titlebar_background</code> for a background-only override, or <code>colors</code> for the shared frame palette. Values are opaque sRGB <code>0xRRGGBB</code>; <code>Some(0)</code> means black.</p>
 <pre><code class="language-rust">use xgpui_shell::{ShellColors, ShellOptions};
@@ -103,11 +112,12 @@ just profile=dev lab-shell --client-decorations --fixed-size
 <p>The lab shows detected and resolved preferences, per-window overrides and window state. Its client-frame preview is a simulation: preview controls never move, resize or close the host window.</p>
 <p>See the <a href="shell-lab.html">Shell Lab walkthrough</a> and <a href="shell-lab.html">Linux provider details</a>.</p>
 <h2 id="limits-and-compatibility">Limits and compatibility</h2>
-<p>This is the first published interface; APIs may change. Headless macOS, Windows and Linux CI passes, but it does not establish interactive GNOME/KDE acceptance, mixed-DPI behavior or screen-reader acceptance. Unsupported desktop actions remain unavailable; native macOS traffic-light artwork is not restyled.</p>
+<p>This is the first published interface; APIs may change. Headless macOS, Windows and Linux CI passes, but it does not establish interactive GNOME/KDE acceptance, mixed-DPI behavior or screen-reader acceptance. Manual runs on Windows 11 and Fedora 44 KDE Plasma (Wayland) passed the window-control checks for the presenter; see <a href="https://github.com/gpui-luma-dev/xgpui/pull/274">#274</a>. Unsupported desktop actions remain unavailable; native macOS traffic-light artwork is not restyled.</p>
 <p>Compared with the earlier local-only shell, scalar preference options are now optional overrides: use <code>Some(value)</code> for an explicit choice, or <code>..Default::default()</code> to follow the desktop. The new core APIs are additive, have default platform implementations and introduce no serialization format changes.</p>
 <h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
 <p>The shell uses additive core desktop-preference types, defaulted platform hooks and scoped App subscriptions. Existing platform implementers remain valid; no serialized representation changes. Its rendering and styling remain in this extension. Final API release approval is pending.</p>
 <p>See <a href="gpui-public-api.html#desktop-preferences-for-shells">the core API ledger</a> for the individual additions and why the backend seam belongs in core.</p>
+<p>The window-control presenter (<code>ShellControl</code>, <code>ShellControlState</code>, <code>ShellControlPresenter</code>, <code>ShellWindow::set_control_presenter</code> and <code>ClientFramePreview::control_presenter</code>) is additive and lives entirely in this extension; it adds no core API. <code>ShellControl</code> and <code>ShellControlState</code> are <code>#[non_exhaustive]</code>, so match <code>ShellControl</code> with a fallback arm. Separately, the Windows backend's <code>Window::zoom_window</code> now restores a maximized window, matching its documented toggle on macOS and Linux; this is a behavior fix with no API change.</p>
 </article>
 </main>
 <footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
