@@ -16,7 +16,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-/// Experimental flat-LTR backend with an opt-in paragraph path. Select fonts before constructing GPUI;
+/// Flat-LTR backend with an opt-in paragraph path. Select fonts before constructing GPUI;
 /// GPUI owns the font-metric, line-layout, wrapping and final raster caches.
 pub struct ParleyTextSystem {
     state: Mutex<State>,

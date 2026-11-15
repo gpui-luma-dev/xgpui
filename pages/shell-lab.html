@@ -14,7 +14,7 @@
 <body><a class="skip" href="#content">Skip to content</a>
 <aside>
 <a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
-<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
 <div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
@@ -33,7 +33,7 @@ just profile=dev lab-shell --client-decorations
 # Exercise a non-resizable window.
 just profile=dev lab-shell --client-decorations --fixed-size
 </code></pre>
-<p>The shell is experimental. This release prepares its first crates.io publication; repository builds use the local workspace crate. The first build uses the existing native extension-lab workspace and its dependencies.</p>
+<p>Repository builds use the local workspace crate. The first build uses the existing native extension-lab workspace and its dependencies.</p>
 <h2 id="what-to-inspect">What to inspect</h2>
 <ul>
 <li><strong>Detected:</strong> actual values exposed by the platform snapshot. Missing values
@@ -175,7 +175,7 @@ invalid descriptions fall back; the raw description remains visible. Explicit
 <code>gpui::Font</code> overrides can supply features/fallbacks/variations directly.</p>
 <p>Format references: <a href="https://docs.gtk.org/Pango/type_func.FontDescription.from_string.html">Pango descriptions</a>
 and <a href="https://doc.qt.io/qt-6/qfont.html#toString">QFont serialization</a>.</p>
-<h3 id="experimental-extension-api-migration">Experimental extension API migration</h3>
+<h3 id="experimental-extension-api-migration">Extension API migration</h3>
 <p>This subtask adds <code>ShellTypography</code>, <code>ShellColors</code>, <code>ResolvedShellLook</code>,
 <code>ResolvedShellPreferences::resolved_look</code>, typography/motion option and result
 fields, and <code>ClientFramePreview::show_hover</code>. Use <code>..Default::default()</code> when
@@ -252,7 +252,7 @@ further native positioning can use existing GPUI window APIs from their header.
 Linux decoration requests continue to be negotiated with the compositor.</p>
 <p>This is an extension-only addition (<code>ShellApp</code> method and <code>ShellDragRegion</code>);
 no new core GPUI public API or serialization changes. Implementers of the
-experimental <code>ShellApp</code> trait need the new method; application callers using the
+<code>ShellApp</code> trait need the new method; application callers using the
 existing method need no changes. Prerequisite #182 core API review remains separate.</p>
 <h3 id="final-manual-acceptance">Final manual acceptance</h3>
 <p>From this branch, run <code>just profile=dev lab-shell</code> on macOS/Windows, and also
@@ -270,7 +270,7 @@ click isolation, platform option setup, app toolbar toggling, SVG rasterization 
 all earlier preview safety/override regressions. They do not replace native
 macOS/Windows/Linux interaction and visual checks. No GUI launch is performed.</p>
 <p>This completes the currently requested implementation scope; platform acceptance
-is the next step. It is not a declaration that the experimental crate is publishable.</p>
+is the next step.</p>
 <p>Titlebar-composition checks: 16 shell and seven lab tests passed, focused strict
 Clippy passed, formatting and diff checks passed, and the lab built without launch.</p>
 <h2 id="ci-and-actions">CI and Actions</h2>
@@ -363,7 +363,7 @@ New visuals remain pending manual acceptance at the end of issue 149.</p>
 <a href="https://github.com/GNOME/gsettings-desktop-schemas/blob/master/schemas/org.gnome.desktop.interface.gschema.xml.in">GNOME interface schema</a>,
 <a href="https://github.com/KDE/xdg-desktop-portal-kde/blob/master/src/settings.cpp">KDE portal settings</a>,
 and <a href="https://github.com/KDE/kwin/blob/master/src/kwin.kcfg">KWin settings</a>.</p>
-<h3 id="experimental-shell-migration">Experimental shell migration</h3>
+<h3 id="experimental-shell-migration">Shell migration</h3>
 <p>The earlier local-only shell's scalar options are now optional overrides. Replace
 <code>high_contrast: true</code> with <code>high_contrast: Some(true)</code>, and similarly wrap explicit
 accent, scale and double-click values. New middle/right-click override fields can
@@ -428,6 +428,6 @@ and an explicit drag-region element; see <a href="#app-composed-titleapp-bar">th
 It adds no layout-preset catalog. Native platform acceptance remains outstanding.</p>
 </article>
 </main>
-<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+<footer>Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
 </body>
 </html>

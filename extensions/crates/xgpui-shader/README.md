@@ -79,7 +79,7 @@ and complexity limits are documented in the
 
 Use `shader_paint::ShaderProgram::new` for reflected shader paints integrated
 with backgrounds, borders and paths. Use `instanced::ShaderProgram<T>::new` for
-typed WGSL programs drawn in the host render pass. Both APIs are experimental.
+typed WGSL programs drawn in the host render pass.
 See [choosing a rendering model and migrating old names](https://xgpui.dev/shader-models.html)
 for parameter limits, backend coverage and migration from the removed beta API names.
 

@@ -14,7 +14,7 @@
 <body><a class="skip" href="#content">Skip to content</a>
 <aside>
 <a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
-<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
 <div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
@@ -117,15 +117,14 @@ inspect coverage or <code>just test --only native-libraries</code> to isolate a 
 Prerequisite failures must be resolved or recorded as outstanding gates.</p>
 <p>Run native validation on macOS, Windows and Linux for changes affecting those
 platforms. A successful Mac run or cross-check does not establish native Windows
-or Linux behavior. Use the relevant lab recipes in <a href="local-development.html#build-harness-and-test-runner">Building</a> and
-<a href="local-development.html">Local development</a> for graphical acceptance; for the 1.27.0
+or Linux behavior. Use the relevant <code>just lab-*</code> recipes for graphical acceptance; for the 1.27.0
 integration, follow its <a href="gpui-1.27-migration.html">ordered lab checklist</a>.
 Record browser, iOS and optional-feature checks where the release affects them.
 CI results supplement this evidence; preparation workflows do not establish that
 all native or graphical validation passed.</p>
 <p><code>just pages-check</code> checks the static website in <code>pages/</code>; update its pages by
 hand, including the upstream baseline on the overview after a sync. Toolchain and host prerequisites
-are documented in <a href="#upstream-release-imports">Upstream release imports</a> and <a href="local-development.html#build-harness-and-test-runner">Building</a>.</p>
+are documented in <a href="#upstream-release-imports">Upstream release imports</a>.</p>
 <h2 id="preparation-and-publication-tools">Preparation and publication tools</h2>
 <p>Work in the normal repository checkout. Keep builds and downloaded workflow
 reports under <code>target/</code>. Use a named, persistent release-artifacts directory
@@ -305,8 +304,7 @@ version; inspect metadata when updating versions. A separate consumer must carry
 its own local package overrides rather than assuming this checkout's config is
 inherited.</p>
 <p>Review the website in <code>pages/</code> after each release; <code>just pages-check</code> catches broken
-links and a stale upstream baseline, not stale narrative. See
-<a href="local-development.html#edit-this-website">website maintenance</a> and <a href="local-development.html#build-harness-and-test-runner">build options</a>.</p>
+links and a stale upstream baseline, not stale narrative.</p>
 <p>Sync performs no platform validation. Its branch is an unintegrated proposal;
 review and test the chosen integration separately.</p>
 <h3 id="github-settings">GitHub settings</h3>
@@ -420,6 +418,6 @@ and <a href="https://docs.github.com/en/pages/configuring-a-custom-domain-for-yo
 guides have the details.</p>
 </article>
 </main>
-<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+<footer>Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
 </body>
 </html>

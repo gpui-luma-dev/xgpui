@@ -1,6 +1,6 @@
 # xgpui-svg
 
-Experimental SVG extension for **xgpui**. Display full-color SVG documents with
+SVG extension for **xgpui**. Display full-color SVG documents with
 progressive refinement, optional shared raster scheduling and programmatic path
 effects.
 
@@ -65,7 +65,7 @@ contains examples and artwork attribution. The
 [media lab](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/media-lab/README.md)
 also includes a `--paths` comparison view.
 
-This API is experimental. Consult the
+Consult the
 [performance evidence](https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/svg-lab/bench/README.md)
 and [follow-ups](https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-svg/FOLLOW_UPS.md)
 for validated behavior and remaining work.

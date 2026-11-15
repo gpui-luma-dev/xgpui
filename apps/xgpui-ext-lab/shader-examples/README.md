@@ -78,7 +78,7 @@ poll timeout; the tested examples continued rendering without console errors.
 The shader crate's 23 tests passed, including Metal/wgpu pixel checks. The native
 example app initially compiled for macOS and cross-compiled for Windows. That
 checkpoint is superseded by the owner's 2026-11-04 Windows native-lab and
-`just lab-test` pass; see [Windows validation](https://xgpui.dev/local-development.html#windows-validation).
+`just lab-test` pass.
 
 Native app acceptance on 2026-10-25: launched the macOS Metal app, switched
 between Minimal, Glow and Particles using the in-app selector, and verified the

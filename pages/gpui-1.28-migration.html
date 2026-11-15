@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="What changed in the XGPUI GPUI 1.28.1 sync: breaking changes and migration, new APIs, behavior changes, versions and validation.">
+<title>GPUI 1.28.1 sync: changes and migration · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/gpui-1.28-migration.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="whats-new.html">← What's new</a></p><article class="extension-document"><h1 id="gpui-1281-sync">GPUI 1.28.1 sync: changes and migration</h1>
+<p>Released on crates.io on November 15, 2026 from tag <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-15-04ba149f08ca"><code>release-2026-11-15-04ba149f08ca</code></a>. The GPUI sources follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/releases/tag/v1.28.1">1.28.1</a> (Zed v1.28.1). Where an upstream change conflicted with XGPUI behavior, XGPUI's behavior was kept. Tracking issue: <a href="https://github.com/gpui-luma-dev/xgpui/issues/284">#284</a>. <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-15-04ba149f08ca">Release notes on GitHub</a>.</p>
+<p>This page collects the details. The complete entry-by-entry record is in the <a href="https://github.com/gpui-luma-dev/xgpui/blob/release-2026-11-15-04ba149f08ca/docs/upstream/1.28.1-api-ledger.md">API ledger</a> and the <a href="https://github.com/gpui-luma-dev/xgpui/blob/release-2026-11-15-04ba149f08ca/docs/upstream/1.28.1-accounting.md">upstream change accounting</a>.</p>
+
+<h2 id="update-together">Update the GPUI family together</h2>
+<p><code>xgpui</code> 4 types are distinct from 3.x types. Every crate whose public API exposes them took a breaking version: a major from 1.0, a minor before 1.0. Move all of them in one step, using the versions in the <a href="#versions">table below</a>. <code>xgpui-color</code> and <code>xgpui-macros</code> are unchanged.</p>
+
+<h2 id="breaking-changes">Breaking changes and migration</h2>
+<table><thead><tr><th>Change</th><th>Crate</th><th>Migration</th></tr></thead><tbody>
+<tr><td><code>WindowOptions</code> gains <code>low_power_frame_interval</code> and <code>thermal_frame_interval</code> (<code>Option&lt;Duration&gt;</code>, defaults 33.3 ms and 16.7 ms, the limits 1.27 already used).</td><td><code>xgpui</code></td><td>Struct literals that list every field need the two fields or <code>..Default::default()</code>.</td></tr>
+<tr><td><code>gpui::http_client</code> no longer re-exports <code>github</code>, <code>github_download</code> (and its feature), <code>Result</code> or <code>anyhow</code>.</td><td><code>xgpui</code></td><td>Depend on <code>anyhow</code> directly; use a GitHub client of your choice.</td></tr>
+<tr><td><code>AppCell::try_borrow_mut</code> returns <code>anyhow::Result&lt;AppRefMut&gt;</code>; the error names both borrow locations.</td><td><code>xgpui</code></td><td>Only code that names <code>BorrowMutError</code> changes. <code>?</code>, <code>.unwrap()</code> and <code>.is_ok()</code> keep working.</td></tr>
+<tr><td><code>WgpuContext::new</code> and <code>new_rejecting_software</code> take <code>&amp;WgpuSurfaceConfig</code>.</td><td><code>xgpui-wgpu</code></td><td>Pass the configuration you create the renderer with. Code that goes through <code>WgpuRenderer</code> is unaffected.</td></tr>
+<tr><td><code>ShellControl</code> is <code>#[non_exhaustive]</code>.</td><td><code>xgpui-shell</code></td><td>Add a fallback arm to matches. The example in the packaged 0.3.0 README is missing it; see <a href="#known-issues">known issues</a>.</td></tr>
+<tr><td>Backends, platform and extensions use core 4 types.</td><td>all GPUI-facing crates</td><td>Update the family together. <code>xgpui-ios</code> moves from 1.26.x numbering to 2.0.0.</td></tr>
+</tbody></table>
+<p>Serialized formats are unchanged. Log and error text for double borrows and window operations now name locations.</p>
+
+<h2 id="new-apis">New APIs</h2>
+<ul>
+<li><strong>Send-capable foreground executor:</strong> <code>gpui::SendForegroundExecutor</code> and <code>ForegroundExecutor::to_send()</code> let a worker thread submit a <code>Send</code> future that is polled on the main thread.</li>
+<li><strong>Anchoring:</strong> <code>Anchored::attach(target, corner)</code> places an element on a corner of a target and flips to the other side when that fits better.</li>
+<li><strong>Client corner radii:</strong> <code>Window::set_client_corner_radii</code> and <code>PlatformWindow::set_client_corner_radii</code> (default no-op) let apps that draw rounded corners tell the platform, so Wayland blur and input regions match.</li>
+<li><strong>Small helpers:</strong> <code>Pixels::to_i32</code> (truncates, saturates, NaN is zero) and <code>Keystroke::is_modifier_key</code>.</li>
+<li><strong>macOS frame source:</strong> <code>xgpui_apple::display_link::MetalFrameSource</code> wraps <code>CAMetalDisplayLink</code> (macOS 14+, iOS 17+); <code>MetalRenderer::set_frame_drawable</code> and <code>set_display_link_attached</code> connect it to the renderer.</li>
+<li><strong>Web HTTP client:</strong> <code>gpui_web::FetchHttpClient::new</code> and <code>with_user_agent</code> are public and take a <code>SendForegroundExecutor</code>.</li>
+<li><strong>Benchmarks</strong> (feature <code>bench-support</code>): <code>BenchWindowContext::simulate_resize</code>, <code>Window::rendered_scene</code>, new <code>RandomizedElementTree</code> builders and a <code>primitives</code> benchmark.</li>
+<li><strong>Desktop shell:</strong> <code>xgpui-shell</code> 0.3.0 adds the window-control presenter (<a href="shell.html#replace-window-control-artwork">guide</a>) and keeps the app-controlled title-bar colors from 0.2.0.</li>
+</ul>
+
+<h2 id="behavior-changes">Behavior changes</h2>
+<ul>
+<li><strong>macOS frame pacing:</strong> on macOS 14 and later, windows present through <code>CAMetalDisplayLink</code>, removing the roughly 33 ms <code>nextDrawable</code> stall that held animation at about 30 fps. Idle windows stop drawing. Earlier systems keep <code>CVDisplayLink</code>. Code that calls <code>MetalRenderer::draw</code> directly on an attached renderer must do so from the link's update.</li>
+<li><strong>Text:</strong> line breaks follow ICU/UAX #14 segments with grapheme awareness. Shaped clusters are never split and right-to-left runs wrap by segment, so line counts can change for CJK, RTL, hyphenated and punctuated text. CoreText keeps the first run's exact point size. DirectWrite draws tabs as invisible glyphs with their advance, so carets land on tab stops.</li>
+<li><strong>Frame limits:</strong> a frame pacer keeps throttled frames on a steady cadence. Redraws requested with <code>cx.notify()</code> stay unthrottled (see <a href="#not-adopted">not adopted</a>).</li>
+<li><strong>Cached views:</strong> reuse is invalidated when inherited opacity changes, and observers of entities read by reused cached content stay subscribed.</li>
+<li><strong>Wayland:</strong> each activation token carries its own request, so concurrent requests no longer overwrite each other (no stuck GNOME launch indicator). <code>Blurred</code> windows use <code>ext-background-effect-v1</code>, or KDE blur as a fallback. Blur and input regions follow client corner radii.</li>
+<li><strong>Windows:</strong> repeated synthetic mouse moves are dropped while real moves, drags and arrivals are delivered. A color-mode change requested during a draw is applied on the next frame instead of failing (<a href="https://github.com/gpui-luma-dev/xgpui/pull/302">#302</a>). A shader program DirectX cannot compile is logged once and skipped instead of failing every frame (<a href="https://github.com/gpui-luma-dev/xgpui/pull/303">#303</a>).</li>
+<li><strong>wgpu:</strong> the window surface is configured once at creation, removing 200–500 ms before the first frame on drivers with slow swapchain creation. Bounded device-loss recovery is unchanged.</li>
+<li><strong>Modifiers and keys:</strong> an unfinished standalone modifier sequence is flushed after the timeout, and macOS Spanish-ISO key equivalents are corrected.</li>
+<li><strong>Animations:</strong> <code>with_animation</code> uses the executor clock, so tests and benchmarks follow simulated time. Real-time behavior is unchanged.</li>
+</ul>
+
+<h2 id="bug-fixes">Bug fixes</h2>
+<p>Fixes merged since the November 12 release, outside the upstream sync:</p>
+<ul>
+<li><strong>Windows pointer:</strong> leaving the window now sends <code>MouseExited</code>, so hover states and popovers clear; moving between the client area and the title bar doesn't count. The cursor set in <code>WM_SETCURSOR</code> is no longer overridden (<a href="https://github.com/gpui-luma-dev/xgpui/pull/267">#267</a>, <a href="https://github.com/gpui-luma-dev/xgpui/issues/70">#70</a>).</li>
+<li><strong>Windows maximize:</strong> <code>Window::zoom_window</code> restores a maximized window, matching its documented toggle on macOS and Linux (<a href="https://github.com/gpui-luma-dev/xgpui/pull/278">#278</a>).</li>
+<li><strong>Windows drawing:</strong> the color-mode (<a href="https://github.com/gpui-luma-dev/xgpui/pull/302">#302</a>) and shader-compile (<a href="https://github.com/gpui-luma-dev/xgpui/pull/303">#303</a>) fixes listed under behavior changes.</li>
+<li><strong>Wayland diagnostics:</strong> frame-loop trace logging under <code>xgpui::wayland::frame</code> and a one-time warning when a frame callback is outstanding for over 500 ms, added while investigating the GNOME stall, which no longer reproduces (<a href="https://github.com/gpui-luma-dev/xgpui/pull/276">#276</a>, <a href="https://github.com/gpui-luma-dev/xgpui/issues/271">#271</a>).</li>
+</ul>
+<p>The typography lab can also validate wide-gamut SDR presentation of glow and shadow effects (<a href="https://github.com/gpui-luma-dev/xgpui/pull/282">#282</a>).</p>
+
+<h2 id="not-adopted">Not adopted from upstream</h2>
+<ul>
+<li><strong>Notify-redraw throttling:</strong> upstream applies the low-power and inactive limits to <code>cx.notify()</code> redraws. That would cap engine surfaces at about 30 fps in unfocused windows and Low Power Mode, so XGPUI limits only animation-frame demand.</li>
+<li><strong>Web platform constructors:</strong> upstream stops attaching a Fetch HTTP client in <code>gpui_platform::application()</code> on Wasm. XGPUI keeps it, so <code>cx.http_client()</code>, URL images and requests keep working by default.</li>
+<li><strong>Inspector benchmark rewrite:</strong> it would drop XGPUI's render-count and child-validity checks.</li>
+<li><strong>Node test scripts</strong> for <code>hello_web</code>: XGPUI doesn't use Node.</li>
+</ul>
+
+<h2 id="versions">Versions</h2>
+<table><thead><tr><th>Crate</th><th>Previous</th><th>Released</th><th>Reason</th></tr></thead><tbody>
+<tr><td><code>xgpui</code></td><td>3.2.0</td><td>4.0.0</td><td>Breaking changes above; new executor, anchoring, corner-radius and benchmark APIs.</td></tr>
+<tr><td><code>xgpui-apple</code></td><td>4.1.0</td><td>5.0.0</td><td>Core 4 types; <code>MetalFrameSource</code>, display-link hooks, CoreText fix.</td></tr>
+<tr><td><code>xgpui-canvas</code></td><td>0.3.4</td><td>0.4.0</td><td>Core 4 and shader 0.5 types in the <code>gpui</code> integration.</td></tr>
+<tr><td><code>xgpui-color</code></td><td>0.3.2</td><td>0.3.2</td><td>Unchanged.</td></tr>
+<tr><td><code>xgpui-gamut</code></td><td>0.3.4</td><td>0.4.0</td><td>Core 4 producers.</td></tr>
+<tr><td><code>xgpui-gpu-interop</code></td><td>0.1.0</td><td>0.2.0</td><td>Core 4 and backend types.</td></tr>
+<tr><td><code>xgpui-ios</code></td><td>1.26.5</td><td>2.0.0</td><td>Returns the core 4 <code>Platform</code>.</td></tr>
+<tr><td><code>xgpui-linux</code></td><td>2.1.1</td><td>3.0.0</td><td>Core 4 <code>Platform</code>; Wayland blur, corner regions and activation fixes.</td></tr>
+<tr><td><code>xgpui-macos</code></td><td>4.0.2</td><td>5.0.0</td><td>Core 4 <code>Platform</code>; <code>CAMetalDisplayLink</code> frames, keyboard fixes.</td></tr>
+<tr><td><code>xgpui-macros</code></td><td>1.0.3</td><td>1.0.3</td><td>Unchanged.</td></tr>
+<tr><td><code>xgpui-media</code></td><td>0.5.4</td><td>0.6.0</td><td>Core 4 traits.</td></tr>
+<tr><td><code>xgpui-parley</code></td><td>0.5.1</td><td>0.6.0</td><td>Core 4 text system.</td></tr>
+<tr><td><code>xgpui-platform</code></td><td>2.0.4</td><td>3.0.0</td><td>Re-exports core 4 <code>Platform</code> and <code>Application</code>.</td></tr>
+<tr><td><code>xgpui-shader</code></td><td>0.4.4</td><td>0.5.0</td><td>Core 4 traits.</td></tr>
+<tr><td><code>xgpui-shell</code></td><td>0.1.1</td><td>0.3.0</td><td>Non-exhaustive <code>ShellControl</code>, presenter, 0.2.0 colors. 0.2.0 was published from an unmerged branch; 0.3.0 includes it.</td></tr>
+<tr><td><code>xgpui-svg</code></td><td>0.3.4</td><td>0.4.0</td><td>Core 4 elements.</td></tr>
+<tr><td><code>xgpui-web</code></td><td>2.0.4</td><td>3.0.0</td><td>Core 4 and wgpu 3 types; public <code>FetchHttpClient</code> constructors.</td></tr>
+<tr><td><code>xgpui-wgpu</code></td><td>2.3.0</td><td>3.0.0</td><td><code>WgpuContext</code> constructors; core 4 types.</td></tr>
+<tr><td><code>xgpui-windows</code></td><td>2.2.0</td><td>3.0.0</td><td>Core 4 <code>Platform</code>; input, text, color-mode and shader-compile fixes.</td></tr>
+</tbody></table>
+
+<h2 id="validation">Validation</h2>
+<ul>
+<li>Each backend's test suite runs in CI, with real-window checks: display-rate animation, no frames while idle and a live screenshot on macOS; synthetic mouse-move filtering on Windows; Wayland protocol checks under Weston and headless Mutter, and an X11 run under Xvfb.</li>
+<li>All 22 macOS validation steps passed with zero warnings, including Wasm and iOS simulator compilation.</li>
+<li>All 17 uploads were verified against crates.io checksums. A fresh project using only crates.io resolved all 19 exact versions, then built and ran on macOS.</li>
+</ul>
+<p>Not covered: interactive iOS, physical-display gamut, compositor and screen-reader acceptance.</p>
+
+<h2 id="known-issues">Known issues</h2>
+<ul>
+<li>The code example in the packaged <code>xgpui-shell</code> 0.3.0 README matches <code>ShellControl</code> without the fallback arm it needs outside the crate. The <a href="shell.html#replace-window-control-artwork">Desktop shell guide</a> has the corrected example.</li>
+<li>GNOME offers no background blur protocol, so <code>Blurred</code> windows are not blurred there.</li>
+<li>The <code>hello_web</code> example remains unbuildable (upstream directory names in its paths) and needs nightly.</li>
+</ul>
+</article>
+</main>
+<footer>Source evidence and review hypotheses are kept distinct.</footer>
+</body>
+</html>

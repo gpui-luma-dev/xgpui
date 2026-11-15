@@ -14,24 +14,32 @@
 <body><a class="skip" href="#content">Skip to content</a>
 <aside>
 <a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
-<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
 <div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
 <main id="content" tabindex="-1">
 <p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="whats-new">What's new</h1>
-<h2 id="gpui-1-28-1">In preparation — GPUI 1.28.1 upstream sync</h2>
-<p>The GPUI sources now follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/releases/tag/v1.28.1">1.28.1</a> (Zed <code>v1.28.1</code>). Where an upstream change conflicted with XGPUI behavior, XGPUI’s behavior was kept. These versions are not yet published; tracking issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/284">#284</a>.</p>
+<h2 id="gpui-1-28-1">November 15, 2026 — GPUI 1.28.1 upstream sync</h2>
+<p>The GPUI sources now follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/releases/tag/v1.28.1">1.28.1</a> (Zed <code>v1.28.1</code>). Where an upstream change conflicted with XGPUI behavior, XGPUI’s behavior was kept. The release is available on crates.io: 17 new crate versions, from tag <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-15-04ba149f08ca"><code>release-2026-11-15-04ba149f08ca</code></a>; <code>xgpui-color</code> and <code>xgpui-macros</code> are unchanged. Tracking issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/284">#284</a>. Every change, migration step and version reason: <a href="gpui-1.28-migration.html">GPUI 1.28.1 sync: changes and migration</a>. Full <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-15-04ba149f08ca">release notes on GitHub</a>.</p>
 <h3>Highlights</h3>
 <ul>
 <li><strong>macOS frame pacing:</strong> on macOS 14 and later, windows draw from <code>CAMetalDisplayLink</code>. Animation runs at the display rate instead of stalling at about 30 fps, and idle windows stop drawing. Earlier systems keep <code>CVDisplayLink</code>.</li>
 <li><strong>Text:</strong> ICU grapheme-aware wrapping, right-to-left and shaped-cluster breaks, a CoreText point-size fix, and invisible tab glyphs on DirectWrite.</li>
 <li><strong>Wayland:</strong> activation requests no longer overwrite each other (no stuck GNOME launch indicator), blur through <code>ext-background-effect-v1</code> with a KDE fallback, and blur and input regions that follow client corner radii.</li>
-<li><strong>Windows:</strong> repeated synthetic mouse moves are dropped, and real moves, drags and arrivals are still delivered. Color-mode changes requested during a draw are applied on the next frame instead of failing, and shader programs DirectX cannot compile are skipped (logged once) instead of failing every frame.</li>
+<li><strong>Windows:</strong> repeated synthetic mouse moves are dropped, and real moves, drags and arrivals are still delivered.</li>
 <li><strong>wgpu:</strong> the window surface is configured once at creation, removing 200–500 ms before the first frame on slow drivers. Bounded device-loss recovery is unchanged.</li>
 <li><strong>Core:</strong> configurable low-power and thermal frame intervals with the same defaults as before; <code>cx.notify()</code> redraws stay unthrottled. Send-capable foreground executors, <code>Window::set_client_corner_radii</code>, and cached-view opacity fixes.</li>
 <li><strong>Desktop shell:</strong> <code>xgpui-shell 0.3.0</code> adds a window-control presenter hook and native caption clicks on Windows (<a href="https://github.com/gpui-luma-dev/xgpui/issues/194">#194</a>), and keeps the app-controlled title-bar colors from 0.2.0 (<a href="https://github.com/gpui-luma-dev/xgpui/issues/192">#192</a>).</li>
 </ul>
+<h3>Bug fixes</h3>
+<ul>
+<li><strong>Windows pointer:</strong> leaving the window now sends <code>MouseExited</code>, so hover states and popovers clear; moving between the client area and the title bar doesn't count. The cursor set in <code>WM_SETCURSOR</code> is no longer overridden (<a href="https://github.com/gpui-luma-dev/xgpui/pull/267">#267</a>, <a href="https://github.com/gpui-luma-dev/xgpui/issues/70">#70</a>).</li>
+<li><strong>Windows maximize:</strong> <code>Window::zoom_window</code> restores a maximized window, matching its documented toggle on macOS and Linux (<a href="https://github.com/gpui-luma-dev/xgpui/pull/278">#278</a>).</li>
+<li><strong>Windows drawing:</strong> color-mode changes requested during a draw no longer fail (<a href="https://github.com/gpui-luma-dev/xgpui/pull/302">#302</a>), and a shader DirectX cannot compile no longer stops the window drawing (<a href="https://github.com/gpui-luma-dev/xgpui/pull/303">#303</a>).</li>
+<li><strong>Wayland diagnostics:</strong> frame-loop trace logging under <code>xgpui::wayland::frame</code> and a one-time warning when a frame callback is outstanding for over 500 ms, added while investigating the GNOME stall, which no longer reproduces (<a href="https://github.com/gpui-luma-dev/xgpui/pull/276">#276</a>, <a href="https://github.com/gpui-luma-dev/xgpui/issues/271">#271</a>).</li>
+</ul>
+<p>The typography lab can also validate wide-gamut SDR presentation of glow and shadow effects (<a href="https://github.com/gpui-luma-dev/xgpui/pull/282">#282</a>).</p>
 <h3>Migration</h3>
 <ul>
 <li><code>WindowOptions</code> has two new fields, <code>low_power_frame_interval</code> and <code>thermal_frame_interval</code>. Struct literals that list every field need them or <code>..Default::default()</code>.</li>
@@ -42,9 +50,9 @@
 </ul>
 <p>Update the GPUI family together: <code>xgpui 4</code> types are distinct from 3.x types. Every change is listed with its compatibility notes in the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.28.1-api-ledger.md">API ledger</a> and the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.28.1-accounting.md">upstream change accounting</a>.</p>
 <h3>Validation</h3>
-<p>Each backend’s test suite runs in CI, along with real-window checks. On macOS, display-rate animation (about 60 fps), no frames while idle, and a live screenshot. On Windows, synthetic mouse-move filtering. On Wayland, protocol checks under Weston and headless Mutter (activation tokens requested, returned and used in pairs) and an X11 run under Xvfb. All 19 crate archives pass offline inspection and the publication-order check; the iOS backend compiles for the simulator. Interactive iOS validation and physical-display gamut checks are not covered.</p>
-<h3>Proposed versions</h3>
-<table><thead><tr><th>Crate</th><th>Previous release</th><th>Proposed</th></tr></thead><tbody>
+<p>Each backend’s test suite runs in CI, along with real-window checks. On macOS, display-rate animation (about 60 fps), no frames while idle, and a live screenshot. On Windows, synthetic mouse-move filtering. On Wayland, protocol checks under Weston and headless Mutter (activation tokens requested, returned and used in pairs) and an X11 run under Xvfb. All 19 crate archives pass offline inspection and the publication-order check; the iOS backend compiles for the simulator. All 17 uploads were verified against crates.io, and a fresh project using only crates.io built and ran on macOS. Interactive iOS validation and physical-display gamut checks are not covered.</p>
+<h3>Versions</h3>
+<table><thead><tr><th>Crate</th><th>Previous release</th><th>Released</th></tr></thead><tbody>
 <tr><td><code>xgpui</code></td><td>3.2.0</td><td><strong>4.0.0</strong></td></tr>
 <tr><td><code>xgpui-apple</code></td><td>4.1.0</td><td><strong>5.0.0</strong></td></tr>
 <tr><td><code>xgpui-canvas</code></td><td>0.3.4</td><td><strong>0.4.0</strong></td></tr>
@@ -66,6 +74,7 @@
 <tr><td><code>xgpui-windows</code></td><td>2.2.0</td><td><strong>3.0.0</strong></td></tr>
 </tbody></table>
 <p><code>xgpui-shell 0.2.0</code> was published on November 10 from a branch that did not merge to <code>main</code>. 0.3.0 includes everything in 0.2.0.</p>
+<p>The code example in the packaged <code>xgpui-shell</code> 0.3.0 README is missing the fallback arm that the non-exhaustive <code>ShellControl</code> needs; the <a href="shell.html#replace-window-control-artwork">Desktop shell guide</a> has the corrected example.</p>
 <h2 id="november-12-2026">November 12, 2026 — GPU interop and device-loss recovery</h2>
 <p>The November 12 release is available on crates.io: 18 new crate versions, including the first <a href="https://crates.io/crates/xgpui-gpu-interop/0.1.0"><code>xgpui-gpu-interop 0.1.0</code></a> release. Source tag: <a href="https://github.com/gpui-luma-dev/xgpui/tree/release-2026-11-12-da99e6bb8e6d"><code>release-2026-11-12-da99e6bb8e6d</code></a>. The iOS crate remains at <code>1.26.5</code>.</p>
 <h3 id="november-11-2026">GPU interop — first alpha release</h3>
@@ -252,7 +261,7 @@ opt-in. Shader examples accept an explicit <code>--example</code> selector.</p>
 <p>The card canvas and Mandelbrot now share pointer-anchored wheel, two-finger scroll
 and pinch zoom behavior. Drag empty canvas background to pan; Space+left drag or
 middle drag also pans when starting over a card. Selection, snapping and overview
-controls remain available. See <a href="canvas.html">canvas</a> and <a href="local-development.html">local development</a>.</p>
+controls remain available. See <a href="canvas.html">canvas</a>.</p>
 <h3 id="compatibility-release-checks-and-platform-evidence">Compatibility, release checks and platform evidence</h3>
 <ul>
 <li><strong>Media builds without a native GPU backend again.</strong> The texture output match
@@ -269,8 +278,7 @@ the baseline. See the <a href="https://github.com/gpui-luma-dev/xgpui#crate-rele
 <li><strong>Windows native labs:</strong> the owner confirmed all native labs and <code>just lab-test</code>
 passed on November 4, including the moving video demo. This supplements builds;
 it does not certify every standalone library suite, assistive technology,
-external producer or physical wide-gamut display. See
-<a href="local-development.html#windows-validation">Windows validation</a>.</li>
+external producer or physical wide-gamut display.</li>
 <li><strong>Reliable benchmark scope tests:</strong> setup exclusion is checked with explicit
 recorded poll timings and exact scope membership, avoiding flaky upper limits
 caused by hosted-runner scheduling delays. Runtime measurement is unchanged.</li>
@@ -311,7 +319,7 @@ native text input. Its implementation files are unchanged from the captured
 upstream source; package wiring is adapted to XGPUI. <code>xgpui-ios</code> follows
 upstream’s <strong>1.26.2</strong> version while that implementation remains unchanged.
 Simulator compilation, linking and app packaging pass; interactive simulator
-and device testing remains pending. See <a href="local-development.html">iOS setup</a>.</p>
+and device testing remains pending.</p>
 <p>The new <code>WindowOptions::use_display_p3</code> option connects to the existing macOS
 wide-gamut SDR compositor. Ordinary UI colors keep their sRGB interpretation;
 wide-gamut content still needs the appropriate content and window configuration.
@@ -422,9 +430,7 @@ between its browser-managed original and a Rust/Wasm sRGB preview.</li>
 example uses browser image color management; the GPUI web canvas demos remain
 sRGB previews. Native wide-gamut rendering has macOS/Metal validation;
 Windows native paint/gamut CI has a recorded passing baseline; the owner also
-confirmed all native labs and <code>just lab-test</code> passed on 2026-11-04. See
-<a href="local-development.html#windows-validation">Windows validation</a> for the current
-scope and remaining platform-specific checks. Visible output
+confirmed all native labs and <code>just lab-test</code> passed on 2026-11-04. Visible output
 still depends on the browser or OS color management and the actual display.</p>
 <h2 id="october-30-2026">October 30, 2026</h2>
 <ul>
@@ -444,7 +450,7 @@ work finishes. Empty fractional clips stay empty, fixing rejected typography
 frames caused by stray one-pixel strips.</li>
 <li><strong>Simpler local development.</strong> Build outputs and staged website files now
 live under <code>target/</code>. The canvas guide is shorter, and local docs can still
-be served with Python. <a href="local-development.html">Local development</a>.</li>
+be served with Python.</li>
 </ul>
 <h2 id="also-recently-added">Also recently added</h2>
 <p><a href="typography.html">Selectable kinetic typography</a>, <a href="media-pipeline.html">media filters and tiled images</a>,
@@ -482,6 +488,6 @@ Native Windows/Linux runtime coverage and app-specific lifecycle testing remain
 separate checks. See <a href="gpui-public-api.html">GPUI API changes</a> for integration contracts.</p>
 </article>
 </main>
-<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+<footer>Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
 </body>
 </html>

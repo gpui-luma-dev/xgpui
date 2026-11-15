@@ -1,4 +1,4 @@
-//! Experimental zero-copy GPU interop for xgpui: show frames from a GPU engine
+//! Zero-copy GPU interop for xgpui: show frames from a GPU engine
 //! you own in xgpui windows, the way an engine presents to a swapchain. See the
 //! [GPU interop guide](https://xgpui.dev/gpu-interop.html).
 //!

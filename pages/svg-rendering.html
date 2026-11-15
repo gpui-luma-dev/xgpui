@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="XGPUI extends GPUI, the GPU-accelerated Rust UI framework, with paints and shaders, wide-gamut color, text, SVG and media. Guides, live demos and API notes.">
-<title>xgpui-svg — experimental · XGPUI - Extended GPUI</title>
+<title>xgpui-svg · XGPUI - Extended GPUI</title>
 <link rel="canonical" href="https://xgpui.dev/svg-rendering.html">
 <link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
 <link rel="stylesheet" href="style.css">
@@ -14,12 +14,12 @@
 <body><a class="skip" href="#content">Skip to content</a>
 <aside>
 <a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
-<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="local-development.html">Local Development</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.27-migration.html">GPUI 1.27 migration</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a><a href="instanced-wgsl-v2.html">Instanced shaders</a></nav>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
 <div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" aria-current="page" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
 <main id="content" tabindex="-1">
-<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Experimental SVG extension.</strong> Progressive rasterization, shared admission and accounted image budgets.</p><p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=svg">Open Progressive SVG ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p><article class="extension-document"><h1 id="xgpui-svg--experimental">xgpui-svg — experimental</h1>
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>SVG extension.</strong> Progressive rasterization, shared admission and accounted image budgets.</p><p class="demo-actions"><a class="demo-open" href="examples/extensions/?demo=svg">Open Progressive SVG ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p><article class="extension-document"><h1 id="xgpui-svg--experimental">xgpui-svg</h1>
 <p>Full-color static SVG rendering for GPUI. <code>SvgImage</code> owns progressive raster jobs,
 timers, atlas cleanup and redraws. <code>SvgScheduler</code> optionally shares admission and
 estimated image-memory limits across views/windows. This is an opt-in, unpublished
@@ -237,7 +237,7 @@ pattern with phase 5. They check visible pixel coverage and decreasing coverage
 from original to trim to dashes. Metal and wgpu capture paths are available;
 Windows native labs and <code>just lab-test</code> passed in owner testing on 2026-11-04.
 Dedicated capture commands retain their own artifact evidence; Linux runtime
-acceptance remains separate. See <a href="local-development.html#windows-validation">Windows validation</a>.</p>
+acceptance remains separate.</p>
 <h3 id="browser-contour-effects-comparison">Browser contour-effects comparison</h3>
 <p>Open <a href="examples/extensions/?demo=path-effects">Trim / dash</a>, or append
 <code>&amp;backend=webgpu</code> / <code>&amp;backend=webgl</code>. Three columns compare original, trimmed and
@@ -249,6 +249,6 @@ were checked locally in release on 2026-10-26. The separate progressive SVG demo
 and its artwork/attribution remain unchanged.</p>
 </article>
 </main>
-<footer>Experimental GPUI · Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+<footer>Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
 </body>
 </html>

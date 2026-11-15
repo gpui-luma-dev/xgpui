@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Every way to draw with XGPUI: GPUI primitives, CPU rasterization, brushes, paints, shader paints, instanced shaders, layer effects, native and wgpu producers, and GPU interop for your own pipeline.">
+<title>Shader options · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/shader-options.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" aria-current="page" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><article class="extension-document"><h1 id="shader-options">Shader options</h1>
+<p>XGPUI gives you several ways to put pixels on screen, from GPUI's built-in primitives to your own GPU engine. They all draw into the same window and keep GPUI's ordering, clipping and opacity. Start with the simplest option that does the job and move down the list only when you need more.</p>
+
+<h2 id="compare">Compare</h2>
+<table><thead><tr><th>Option</th><th>Crate</th><th>Runs on</th><th>Draws</th><th>You write</th></tr></thead><tbody>
+<tr><td><a href="#gpui-primitives">GPUI primitives</a></td><td>core</td><td>Window GPU</td><td>Main pass</td><td>Element styles</td></tr>
+<tr><td><a href="#gpui-quads">GPUI quads</a></td><td>core</td><td>Window GPU</td><td>Main pass</td><td><code>paint_quad</code> calls in a <code>canvas()</code></td></tr>
+<tr><td><a href="#cpu-rasterization">CPU rasterization</a></td><td>core, <code>xgpui-svg</code>, <code>xgpui-parley</code></td><td>CPU</td><td>Atlas sprites</td><td>SVG or text</td></tr>
+<tr><td><a href="#brushes">Brushes</a></td><td><code>xgpui-shader</code></td><td>Window GPU</td><td>Main pass, no offscreen texture</td><td>Brush values</td></tr>
+<tr><td><a href="#paints">Paints</a></td><td><code>xgpui-shader</code></td><td>Window GPU</td><td>Cached offscreen texture</td><td>Paint values</td></tr>
+<tr><td><a href="#shader-paints">Shader paints</a></td><td><code>xgpui-shader</code></td><td>Window GPU</td><td>Cached offscreen texture</td><td>WGSL <code>paint</code> function</td></tr>
+<tr><td><a href="#instanced-shaders">Instanced shaders</a></td><td><code>xgpui-shader</code></td><td>Window GPU</td><td>Main pass, batched in order</td><td>WGSL <code>shade</code> function and instance struct</td></tr>
+<tr><td><a href="#layer-effects">Layer effects</a></td><td><code>xgpui-shader</code></td><td>Window GPU</td><td>Captured region</td><td>Effect values</td></tr>
+<tr><td><a href="#native-and-wgpu-producers">Native and wgpu producers</a></td><td><code>xgpui-wgpu</code>, <code>xgpui-windows</code>, <code>xgpui-apple</code></td><td>Window GPU</td><td>Output texture, composited in GPUI's frame</td><td>wgpu, D3D11 or Metal commands</td></tr>
+<tr><td><a href="#your-own-pipeline">GPU interop</a></td><td><code>xgpui-gpu-interop</code></td><td>Your device and thread</td><td>Your frames, composited with zero copies</td><td>Anything</td></tr>
+</tbody></table>
+
+<h2 id="gpui-primitives">GPUI primitives</h2>
+<p><strong>Core GPUI, no extension.</strong> Quads (with corner radii, borders and the built-in linear gradient, slash and checkerboard backgrounds), shadows, paths, underlines, glyph and image sprites, and platform surfaces.</p>
+<ul>
+<li><strong>Use for:</strong> almost all application UI. Styling a <code>div()</code> produces these.</li>
+<li><strong>Why it's special:</strong> it's the fastest path and always available. The renderer batches primitives by kind with fixed, tuned shaders on Metal, DirectX and wgpu, so there is nothing to compile, validate or manage.</li>
+<li><strong>Limits:</strong> a fixed set of looks. Anything beyond them needs one of the options below.</li>
+</ul>
+
+<h2 id="gpui-quads">GPUI quads</h2>
+<p><strong>Core GPUI, no extension.</strong> Draw directly in a <code>canvas()</code> element's paint callback with <code>window.paint_quad(…)</code>, using <code>fill(bounds, background)</code>, <code>outline(bounds, color, style)</code> or <code>quad(…)</code> for corner radii, borders and border styles, plus <code>window.paint_path</code> for vector shapes.</p>
+<pre><code class="language-rust">canvas(|_, _, _| {}, |bounds, _, window, _| {
+    window.paint_quad(fill(bounds, rgb(0x202830)));
+    for (i, value) in values.iter().enumerate() {
+        let bar = bounds_for(bounds, i, *value);
+        window.paint_quad(quad(bar, px(3.), rgb(0x4aa3ff), px(0.), rgb(0x000000), BorderStyle::Solid));
+    }
+})</code></pre>
+<ul>
+<li><strong>Use for:</strong> custom drawing that doesn't fit an element tree: charts, timelines, grids, meters, editors' gutters and selections.</li>
+<li><strong>Why it's special:</strong> you get the speed of GPUI primitives with immediate-mode control. Quads go through the same batched, tuned renderer as styled elements, with GPUI's clipping, opacity and pixel snapping, and there is no shader to write.</li>
+<li><strong>Limits:</strong> the built-in quad and path looks only, and each quad is recorded on the CPU every frame it's painted.</li>
+</ul>
+
+<h2 id="cpu-rasterization">CPU rasterization (tiny-skia)</h2>
+<p><strong>Core GPUI SVG, <a href="crates/xgpui-svg.html"><code>xgpui-svg</code></a> and <a href="crates/xgpui-parley.html"><code>xgpui-parley</code></a>.</strong> Vector content is rasterized on the CPU with tiny-skia (through resvg for SVG), then drawn from the sprite atlas like any image.</p>
+<ul>
+<li><strong>Use for:</strong> SVG icons and illustrations, full-color SVG documents with progressive preview and detail, and Parley text rasterization (including the browser font lab).</li>
+<li><strong>Why it's special:</strong> exact, deterministic output that looks the same on every backend, and no GPU code to write. <code>xgpui-svg</code> adds shared scheduling and image-memory accounting so large documents don't stall the UI.</li>
+<li><strong>Limits:</strong> costs CPU time and atlas memory, and redraws at a new size need a new raster.</li>
+</ul>
+<p>Guide: <a href="svg-rendering.html">xgpui-svg</a> · <a href="parley-text.html">Parley text</a></p>
+
+<h2 id="brushes">Brushes</h2>
+<p><strong><code>xgpui-shader</code>, <code>Brush</code>.</strong> Solid, linear and elliptical radial fills, procedural noise, freeform and regular mesh fields and distorted Hermite patches, applied to painted backgrounds, borders, text glyphs and vector fills and strokes.</p>
+<ul>
+<li><strong>Use for:</strong> rich fills on ordinary elements: gradient cards and borders, gradient text, noise texture, mesh backgrounds.</li>
+<li><strong>Why it's special:</strong> brushes draw in the main render pass with no intermediate color texture, no mask texture and no extra render-pass boundary. They cost about the same as a quad, scale perfectly and work on Metal, D3D11 and wgpu.</li>
+<li><strong>Limits:</strong> a fixed set of brush kinds. For your own shading, use shader paints or instanced shaders.</li>
+</ul>
+<p>Guide: <a href="brushes.html">Main-pass brushes</a> · <a href="examples/extensions/?demo=brushes">brush gallery ↗</a></p>
+
+<h2 id="paints">Paints</h2>
+<p><strong><code>xgpui-shader</code>, <code>Paint</code>.</strong> <code>SolidColor</code>, <code>Gradient</code> and <code>MeshGradient</code> render into a cached offscreen texture through GPUI's custom-draw path, then fill backgrounds and paths with <code>bg_paint</code> and <code>paint_path_with_paint</code>.</p>
+<ul>
+<li><strong>Use for:</strong> expensive fills you want to compute once and reuse, above all Hermite mesh gradients built with GPU compute.</li>
+<li><strong>Why it's special:</strong> output is cached and reused until its inputs or size change, so heavy work isn't repeated every frame. Native producers run on Metal and D3D11, with a wgpu path elsewhere, and need no app-side OS branches.</li>
+<li><strong>Limits:</strong> each paint uses an offscreen texture; for many small, changing effects, brushes or instanced shaders are cheaper.</li>
+</ul>
+<p>Guide: <a href="extension-paints.html">Paint and shader extension</a> · <a href="native-dx11-paints.html">Native D3D11 paints</a> · <a href="portable-paints.html">Portable wgpu paints</a> · <a href="shader-producers.html">Producer reference</a></p>
+
+<h2 id="shader-paints">Shader paints</h2>
+<p><strong><code>xgpui-shader</code>, <code>shader_paint</code>, feature <code>portable-shaders</code>.</strong> Write one WGSL function, <code>fn paint(input: PaintInput) -&gt; vec4&lt;f32&gt;</code>, and drive it from Rust with named <code>ShaderParameters</code> (up to 32 <code>f32</code> scalars and vectors).</p>
+<ul>
+<li><strong>Use for:</strong> custom procedural fills (patterns, animated fields, generative backgrounds) on styled elements, borders and paths.</li>
+<li><strong>Why it's special:</strong> you write portable WGSL once; it's validated and translated to MSL, HLSL and SPIR-V for each backend. Parameters are reflected from the source, so there's no manual buffer layout, and output is cached like any paint.</li>
+<li><strong>Limits:</strong> a deliberately safe subset: no loops, no <code>discard</code>, no textures, resource bindings or compute.</li>
+</ul>
+<p>Guide: <a href="portable-wgsl-v1.html">Shader paints</a> · <a href="shader-models.html">Shader paints vs instanced shaders</a></p>
+
+<h2 id="instanced-shaders">Instanced shaders</h2>
+<p><strong><code>xgpui-shader</code>, <code>instanced</code>, feature <code>portable-shaders</code>.</strong> Typed WGSL fragment shaders, <code>fn shade(input: ShaderInput, parameters: Parameters)</code>, drawn directly in the main render pass with one small, typed instance record per draw.</p>
+<ul>
+<li><strong>Use for:</strong> many repeated effects in scene order: particles, glows, rounded and custom shapes, configurable gradient shadows, soft animated borders. The spatial canvas grid draws this way.</li>
+<li><strong>Why it's special:</strong> consecutive compatible instances batch into one draw while keeping exact scene order, so thousands of effects stay cheap; the regression suite renders 5,000 instances in a single run. It's the widest-reaching option: Metal, D3D11, wgpu, browser WebGPU and WebGL2. Programs can opt into linear Display P3 output on wide-gamut windows.</li>
+<li><strong>Limits:</strong> instance records are up to 128 bytes of <code>f32</code> scalars and vectors; no textures, resource bindings or compute.</li>
+</ul>
+<p>Guide: <a href="instanced-wgsl-v2.html">Instanced shaders</a> · <a href="examples/shaders/">shader playground ↗</a></p>
+
+<h2 id="layer-effects">Layer effects</h2>
+<p><strong><code>xgpui-shader</code>, <code>LayerEffect</code> and <code>BackdropBlur</code>.</strong> Capture a finished subtree, then apply group opacity, blur, saturation, grayscale, brightness, contrast, inversion or destination blend modes; or blur what is behind an element.</p>
+<ul>
+<li><strong>Use for:</strong> frosted-glass panels, dimmed or desaturated disabled regions, blend-mode compositions, true group opacity.</li>
+<li><strong>Why it's special:</strong> effects apply to whatever the subtree draws, including text, images and other extensions, without changing that content's code. Group opacity fades a subtree as one image, so overlapping children don't show through each other.</li>
+<li><strong>Limits:</strong> each effect captures its region, so use them for regions, not for every element.</li>
+</ul>
+<p>Guide: <a href="brushes.html#subtree-blur">Subtree blur and layer effects</a> · <a href="examples/extensions/?demo=brushes">layer effects demo ↗</a></p>
+
+<h2 id="native-and-wgpu-producers">Native and wgpu producers</h2>
+<p><strong>Backend custom-draw contexts: <code>WgpuCustomContext</code>, <code>Dx11CustomContext</code> and <code>MetalCustomContext</code>.</strong> Implement a producer and record your own GPU commands on the window's device into an output texture that GPUI composes in order.</p>
+<ul>
+<li><strong>Use for:</strong> anything the WGSL subsets can't express: compute passes, your own textures and pipelines, existing Metal, HLSL or wgpu rendering code.</li>
+<li><strong>Why it's special:</strong> full access to the GPU API on the host device, with GPUI still handling placement, clipping, opacity, caching and retirement. The wgpu context is portable across Vulkan, Metal, DX12 and the browser; the native contexts give you Metal and D3D11 directly.</li>
+<li><strong>Limits:</strong> you own correctness on each backend you target, and the work runs on the window's device and frame. For a pipeline that runs on its own, see <a href="#your-own-pipeline">GPU interop</a>.</li>
+</ul>
+<p>Guide: <a href="portable-paints.html">Portable wgpu paints</a> · <a href="native-dx11-paints.html">Native D3D11 paints</a> · <a href="shader-producers.html">Producer reference</a></p>
+<h2 id="your-own-pipeline">Your own pipeline: GPU interop</h2>
+<p><strong><a href="crates/xgpui-gpu-interop.html"><code>xgpui-gpu-interop</code></a>.</strong> Every option above runs inside GPUI's renderer: on the window's GPU device, as part of its frame. GPU interop is the exception. Your engine is a completely separate pipeline with its own device, queue, thread and frame loop, presenting finished frames into an <code>EngineSurface</code> the way it would present to a swapchain.</p>
+<ul>
+<li><strong>Use for:</strong> game engines, 3D viewports, simulations, image pipelines, long compute passes, and anything with its own render loop or frames too heavy for GPUI's frame budget.</li>
+<li><strong>Why it's special:</strong> there are no restrictions on what the engine does: any shaders, render passes, compute, resources and frame rate, in wgpu (macOS, Linux, Windows) or raw Metal (macOS). Frames reach the window through a shared texture ring with zero copies and GPU-side synchronisation (IOSurface and <code>MTLSharedEvent</code> on macOS, Vulkan external memory and timeline semaphores on Linux, shared D3D12 textures and fences on Windows). Because the pipelines are separate, a slow or misbehaving engine can't freeze the UI: the last ready frame stays on screen. Device loss is recoverable, and heavy mode splits engine work into short submissions so the UI keeps its frame rate even when engines saturate the GPU. RGBA16F slots carry wide-gamut linear Display P3 and accept compute-shader writes directly.</li>
+<li><strong>Limits:</strong> the engine must use the same GPU as the window; there is no automatic adapter matching. Linux shows wide content as an sRGB preview for now.</li>
+</ul>
+<p>Guide: <a href="gpu-interop.html">GPU interop</a></p>
+
+</article>
+</main>
+<footer>Source evidence and review hypotheses are kept distinct.</footer>
+</body>
+</html>

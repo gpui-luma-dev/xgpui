@@ -63,7 +63,6 @@ have their own platform limits.
 
 ## Documentation
 
-- [Local development and platform prerequisites](https://xgpui.dev/local-development.html)
 - [xgpui API additions and compatibility](https://xgpui.dev/gpui-public-api.html)
 - [Release preparation](https://xgpui.dev/releasing.html)
 - [Repository](https://github.com/gpui-luma-dev/xgpui) · [Website](https://xgpui.dev/)

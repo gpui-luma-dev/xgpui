@@ -1,4 +1,4 @@
-//! Experimental independent GPU content as normal styled GPUI elements.
+//! Independent GPU content as normal styled GPUI elements.
 #[cfg(any(target_os = "macos", target_os = "windows", feature = "wgpu"))]
 mod mesh;
 #[cfg(any(target_os = "macos", target_os = "windows", feature = "wgpu"))]
@@ -22,7 +22,7 @@ pub use surface::{Painted, PaintedElement, Shader, painted, shader};
 #[cfg(feature = "wgpu")]
 mod wgpu;
 
-/// Experimental shader paints with reflected parameters and declarative paint integration.
+/// Shader paints with reflected parameters and declarative paint integration.
 #[cfg(feature = "portable-shaders")]
 pub mod shader_paint;
 
@@ -37,7 +37,7 @@ mod hlsl;
 #[cfg(target_os = "macos")]
 mod metal_cache;
 
-/// Experimental typed shaders drawn directly in the host render pass.
+/// Typed shaders drawn directly in the host render pass.
 #[cfg(feature = "portable-shaders")]
 pub mod instanced;
 #[cfg(feature = "portable-shaders")]
