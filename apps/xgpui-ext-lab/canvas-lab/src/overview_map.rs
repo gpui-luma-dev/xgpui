@@ -174,13 +174,12 @@ fn paint(
     };
     window.with_content_mask(Some(ContentMask { bounds }), |window| {
         window.paint_quad(fill(bounds, rgb(0x101824)));
-        if let Some(thumbnail) = thumbnail {
-            if let Err(error) =
+        if let Some(thumbnail) = thumbnail
+            && let Err(error) =
                 window.paint_image(bounds, bounds, Corners::default(), thumbnail, 0, false)
             {
                 eprintln!("minimap thumbnail: {error}");
             }
-        }
         let a = screen(visible.min);
         let b = screen(visible.max);
         // Keep tiny high-zoom viewports visible without changing navigation math.

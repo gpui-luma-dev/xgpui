@@ -10,7 +10,7 @@ pub(super) fn validate_path(path: &Path<Pixels>, opacity: f32, scale: f32) -> Re
         "invalid path brush opacity"
     );
     ensure!(
-        !path.vertices.is_empty() && path.vertices.len() <= 65_536 && path.vertices.len() % 3 == 0,
+        !path.vertices.is_empty() && path.vertices.len() <= 65_536 && path.vertices.len().is_multiple_of(3),
         "path brush requires 1..65536 triangle vertices"
     );
     ensure!(

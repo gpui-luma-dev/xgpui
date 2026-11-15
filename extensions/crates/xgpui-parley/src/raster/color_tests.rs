@@ -30,7 +30,7 @@ fn system_emoji_font() -> Option<(Vec<u8>, &'static str)> {
 }
 
 fn colorful(raster: &ColorRaster) -> bool {
-    raster.bgra.chunks_exact(4).any(|p| {
+    raster.bgra.as_chunks::<4>().0.iter().any(|p| {
         let (b, g, r, a) = (p[0] as i32, p[1] as i32, p[2] as i32, p[3]);
         a > 200 && r.max(g).max(b) - r.min(g).min(b) > 60
     })
@@ -245,13 +245,18 @@ mod synthetic {
 
     /// Fraction of opaque pixels that are mostly red and mostly blue.
     fn red_and_blue(raster: &ColorRaster) -> (usize, usize) {
-        raster.bgra.chunks_exact(4).fold((0, 0), |(red, blue), p| {
-            let (b, r, a) = (p[0], p[2], p[3]);
-            (
-                red + (a > 200 && r > 200 && b < 60) as usize,
-                blue + (a > 200 && b > 200 && r < 60) as usize,
-            )
-        })
+        raster
+            .bgra
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .fold((0, 0), |(red, blue), p| {
+                let (b, r, a) = (p[0], p[2], p[3]);
+                (
+                    red + (a > 200 && r > 200 && b < 60) as usize,
+                    blue + (a > 200 && b > 200 && r < 60) as usize,
+                )
+            })
     }
 
     #[test]
@@ -319,7 +324,7 @@ mod synthetic {
         // Average red and blue over the opaque pixels of each half of the glyph.
         let width = raster.width as usize;
         let mut sums = [[0u64; 3]; 2];
-        for (index, p) in raster.bgra.chunks_exact(4).enumerate() {
+        for (index, p) in raster.bgra.as_chunks::<4>().0.iter().enumerate() {
             if p[3] > 200 {
                 let half = ((index % width) * 2 / width).min(1);
                 sums[half][0] += p[2] as u64;

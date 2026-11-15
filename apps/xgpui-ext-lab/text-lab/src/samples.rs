@@ -65,29 +65,6 @@ pub fn samples() -> Result<Vec<Sample>> {
     Ok(samples)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn corpus_has_real_fallback_and_three_variable_weights() -> Result<()> {
-        let rows = samples()?;
-        let ch = rows[2].text.chars().nth(1).unwrap();
-        assert!(FontRef::new(INTER)?.charmap().map(ch).is_none());
-        assert!(FontRef::new(PLEX)?.charmap().map(ch).is_some());
-        assert_eq!(
-            rows[3..]
-                .iter()
-                .map(|s| s.font.weight.0)
-                .collect::<Vec<_>>(),
-            vec![100.0, 400.0, 900.0]
-        );
-        for sample in rows {
-            assert_eq!(sample.runs()[0].len, sample.text.len());
-        }
-        Ok(())
-    }
-}
-
 pub const FLEX: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../extensions/crates/xgpui-parley/tests/fonts/RobotoFlex.ttf"
@@ -118,4 +95,27 @@ pub fn axis_samples() -> Result<Vec<Sample>> {
         font,
     });
     Ok(samples)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn corpus_has_real_fallback_and_three_variable_weights() -> Result<()> {
+        let rows = samples()?;
+        let ch = rows[2].text.chars().nth(1).unwrap();
+        assert!(FontRef::new(INTER)?.charmap().map(ch).is_none());
+        assert!(FontRef::new(PLEX)?.charmap().map(ch).is_some());
+        assert_eq!(
+            rows[3..]
+                .iter()
+                .map(|s| s.font.weight.0)
+                .collect::<Vec<_>>(),
+            vec![100.0, 400.0, 900.0]
+        );
+        for sample in rows {
+            assert_eq!(sample.runs()[0].len, sample.text.len());
+        }
+        Ok(())
+    }
 }

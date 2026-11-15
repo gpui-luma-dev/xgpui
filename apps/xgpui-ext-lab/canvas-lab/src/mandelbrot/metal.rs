@@ -185,6 +185,57 @@ fn encode(
     Ok(())
 }
 
+// Small interactive CPU frames do not need the media loader's multi-stage
+// background staging lifecycle. Convert pixels off-thread, then record one
+// source-sized upload on the host queue; the displayed front remains unchanged.
+pub(super) struct CpuFrame {
+    data: ImageTextureData,
+    cached: Mutex<Option<gpui_apple::custom_draw::MetalImageOutput>>,
+    failure: Mutex<Option<String>>,
+}
+impl CpuFrame {
+    pub fn new(data: ImageTextureData) -> Self {
+        Self {
+            data,
+            cached: Mutex::new(None),
+            failure: Mutex::new(None),
+        }
+    }
+    pub fn ready(&self) -> bool {
+        self.cached
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(|output| output.is_submitted())
+    }
+    pub fn error(&self) -> Option<String> {
+        self.failure.lock().unwrap().clone()
+    }
+    pub fn prepare(&self, backend: &dyn Any) -> Result<Box<dyn Any>> {
+        let result = self.prepare_inner(backend);
+        if let Err(error) = &result {
+            *self.failure.lock().unwrap() = Some(error.to_string());
+        }
+        result
+    }
+    fn prepare_inner(&self, backend: &dyn Any) -> Result<Box<dyn Any>> {
+        let context = backend
+            .downcast_ref::<MetalCustomContext>()
+            .context("native CPU frame upload requires Metal")?;
+        let mut cached = self
+            .cached
+            .lock()
+            .map_err(|_| anyhow::anyhow!("CPU frame upload poisoned"))?;
+        if let Some(output) = cached.as_ref() {
+            return Ok(Box::new(output.reusable_for(context)?));
+        }
+        let output = context.create_image_output(&self.data)?;
+        let returned = output.reusable_for(context)?;
+        *cached = Some(output);
+        Ok(Box::new(returned))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -285,56 +336,5 @@ mod tests {
                 }
             }
         }
-    }
-}
-
-// Small interactive CPU frames do not need the media loader's multi-stage
-// background staging lifecycle. Convert pixels off-thread, then record one
-// source-sized upload on the host queue; the displayed front remains unchanged.
-pub(super) struct CpuFrame {
-    data: ImageTextureData,
-    cached: Mutex<Option<gpui_apple::custom_draw::MetalImageOutput>>,
-    failure: Mutex<Option<String>>,
-}
-impl CpuFrame {
-    pub fn new(data: ImageTextureData) -> Self {
-        Self {
-            data,
-            cached: Mutex::new(None),
-            failure: Mutex::new(None),
-        }
-    }
-    pub fn ready(&self) -> bool {
-        self.cached
-            .lock()
-            .unwrap()
-            .as_ref()
-            .is_some_and(|output| output.is_submitted())
-    }
-    pub fn error(&self) -> Option<String> {
-        self.failure.lock().unwrap().clone()
-    }
-    pub fn prepare(&self, backend: &dyn Any) -> Result<Box<dyn Any>> {
-        let result = self.prepare_inner(backend);
-        if let Err(error) = &result {
-            *self.failure.lock().unwrap() = Some(error.to_string());
-        }
-        result
-    }
-    fn prepare_inner(&self, backend: &dyn Any) -> Result<Box<dyn Any>> {
-        let context = backend
-            .downcast_ref::<MetalCustomContext>()
-            .context("native CPU frame upload requires Metal")?;
-        let mut cached = self
-            .cached
-            .lock()
-            .map_err(|_| anyhow::anyhow!("CPU frame upload poisoned"))?;
-        if let Some(output) = cached.as_ref() {
-            return Ok(Box::new(output.reusable_for(context)?));
-        }
-        let output = context.create_image_output(&self.data)?;
-        let returned = output.reusable_for(context)?;
-        *cached = Some(output);
-        Ok(Box::new(returned))
     }
 }

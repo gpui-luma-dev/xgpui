@@ -364,7 +364,7 @@ mod tests {
                 width: DevicePixels(2),
                 height: DevicePixels(2),
             };
-            let pixels = vec![13, 27, 61, 255].repeat(4);
+            let pixels = [13, 27, 61, 255].repeat(4);
             let key = make_image_key(42, 0);
             let tile = atlas
                 .get_or_insert_with(key.clone(), &mut || {

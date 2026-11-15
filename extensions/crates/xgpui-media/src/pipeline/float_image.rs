@@ -282,7 +282,7 @@ mod tests {
         assert_ne!(reduced.levels()[0], data.levels()[0]);
         assert_eq!(pixel(&reduced.levels()[0][16..]), [0.; 4]);
         for level in reduced.levels() {
-            for bytes in level.chunks_exact(8) {
+            for bytes in level.as_chunks::<8>().0 {
                 let rgba = pixel(bytes);
                 assert!(rgba.iter().all(|v| (0. ..=1.).contains(v)));
                 assert!(rgba[..3].iter().all(|v| *v <= rgba[3]));

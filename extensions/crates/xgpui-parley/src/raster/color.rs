@@ -80,7 +80,7 @@ fn render_bitmap(font: &FontRef, glyph: GlyphId, ppem: f32) -> Result<Option<Col
         BitmapData::Bgra(bgra) => {
             // Premultiplied BGRA in the font; tiny-skia stores premultiplied RGBA.
             let mut rgba = bgra.to_vec();
-            for pixel in rgba.chunks_exact_mut(4) {
+            for pixel in rgba.as_chunks_mut::<4>().0 {
                 pixel.swap(0, 2);
             }
             let size = tiny_skia::IntSize::from_wh(bitmap.width, bitmap.height)

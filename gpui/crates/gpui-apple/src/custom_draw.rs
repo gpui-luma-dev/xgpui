@@ -274,7 +274,7 @@ impl MetalCustomContext {
             Ok(metal::Buffer(
                 self.device
                     .newBufferWithLength_options(
-                        bytes as usize,
+                        bytes,
                         MTLResourceOptions::StorageModeShared,
                     )
                     .expect("Metal buffer allocation failed"),
@@ -283,7 +283,7 @@ impl MetalCustomContext {
         let desc = TextureDescriptor::new();
         unsafe { desc.setWidth(data.width() as usize) };
         unsafe { desc.setHeight(data.height() as usize) };
-        unsafe { desc.setMipmapLevelCount(data.levels().len() as usize) };
+        unsafe { desc.setMipmapLevelCount(data.levels().len()) };
         desc.setPixelFormat(match data.format() {
             gpui::ImageTextureFormat::Rgba8Srgb => MTLPixelFormat::RGBA8Unorm,
             gpui::ImageTextureFormat::LinearP3Rgba16Float
@@ -314,17 +314,17 @@ impl MetalCustomContext {
             let width = (data.width() >> level).max(1) as usize;
             let height = (data.height() >> level).max(1) as usize;
             let bpp = data.bytes_per_pixel();
-            let row = (width * bpp as usize).div_ceil(256) * 256;
-            for y in 0..height as usize {
-                mapped[offset + y * row as usize..offset + y * row as usize + width as usize * bpp]
+            let row = (width * bpp).div_ceil(256) * 256;
+            for y in 0..height {
+                mapped[offset + y * row..offset + y * row + width * bpp]
                     .copy_from_slice(
-                        &pixels[y * width as usize * bpp..(y + 1) * width as usize * bpp],
+                        &pixels[y * width * bpp..(y + 1) * width * bpp],
                     );
             }
             unsafe {
-                encoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_options(buffer, offset as usize, row, row * height, MTLSize { width: width, height: height, depth: 1 }, &texture, 0, level as usize, MTLOrigin { x: 0, y: 0, z: 0 }, MTLBlitOption::empty())
+                encoder.copyFromBuffer_sourceOffset_sourceBytesPerRow_sourceBytesPerImage_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_options(buffer, offset, row, row * height, MTLSize { width: width, height: height, depth: 1 }, &texture, 0, level, MTLOrigin { x: 0, y: 0, z: 0 }, MTLBlitOption::empty())
             };
-            offset += row as usize * height as usize;
+            offset += row * height;
         }
         encoder.endEncoding();
         let completion = std::sync::Mutex::new(Some((allocation, guard)));

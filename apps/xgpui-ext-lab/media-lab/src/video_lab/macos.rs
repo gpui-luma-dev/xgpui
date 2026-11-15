@@ -193,8 +193,8 @@ mod tests {
             for row in 0..HEIGHT as usize {
                 let from = row * WIDTH as usize * 4;
                 ensure!(
-                    &actual[row * stride..row * stride + WIDTH as usize * 4]
-                        == &expected[from..from + WIDTH as usize * 4],
+                    actual[row * stride..row * stride + WIDTH as usize * 4]
+                        == expected[from..from + WIDTH as usize * 4],
                     "IOSurface row {row} differs at frame {index}"
                 );
             }

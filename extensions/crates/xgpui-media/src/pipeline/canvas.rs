@@ -860,8 +860,8 @@ impl TileCanvas {
                 },
             )?;
         }
-        if let Some(next) = current {
-            if !self
+        if let Some(next) = current
+            && !self
                 .presented
                 .as_ref()
                 .is_some_and(|front| Arc::ptr_eq(front, &next))
@@ -875,7 +875,6 @@ impl TileCanvas {
                     },
                 )?;
             }
-        }
         Ok(())
     }
     pub fn stats(&self) -> CanvasStats {
@@ -1557,5 +1556,14 @@ mod tests {
         let mut renderer = gpui_wgpu::WgpuHeadlessRenderer::new()?;
         gpu_canvas(&mut renderer, 1.)?;
         gpu_canvas(&mut renderer, 64.)
+    }
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn dx11_tiled_halos_clipping_and_transparency_match_reference() -> Result<()> {
+        crate::tests::on_dx11_adapters(|renderer| {
+            let mut renderer = renderer()?;
+            gpu_canvas(&mut renderer, 1.)?;
+            gpu_canvas(&mut renderer, 64.)
+        })
     }
 }

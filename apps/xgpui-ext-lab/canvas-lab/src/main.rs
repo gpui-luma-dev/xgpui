@@ -458,9 +458,8 @@ fn smoke_click(entity: &Entity<Lab>, window: &mut Window, cx: &mut App) {
             }),
             cx,
         );
-        assert_eq!(
+        assert!(
             entity.read(cx).selected.contains(&expected),
-            true,
             "native viewport selection"
         );
         window.dispatch_event(

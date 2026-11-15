@@ -10,6 +10,10 @@ struct Patch {
     pending: Arc<Mutex<Vec<metal::CommandBuffer>>>,
 }
 impl Patch {
+    #[allow(
+        clippy::arc_with_non_send_sync,
+        reason = "Patch is Send + Sync by the unsafe impls below; the mutex serializes access"
+    )]
     fn new(color: [f64; 4]) -> Self {
         Self {
             color,
@@ -124,11 +128,11 @@ fn half(v: u16) -> f32 {
 }
 fn snapshot(r: &MetalRenderer) -> (metal::Buffer, usize, usize) {
     let t = r.wide_sdr.as_ref().unwrap().target.as_ref().unwrap();
-    let stride = (t.width() as usize * 8).div_ceil(256) * 256;
+    let stride = (t.width() * 8).div_ceil(256) * 256;
     let output = r
         .device
         .newBufferWithLength_options(
-            (stride * t.height() as usize) as usize,
+            stride * t.height(),
             metal::MTLResourceOptions::StorageModeShared,
         )
         .expect("Metal buffer allocation failed");
@@ -144,11 +148,11 @@ fn snapshot(r: &MetalRenderer) -> (metal::Buffer, usize, usize) {
             width: t.width(),
             height: t.height(),
             depth: 1,
-        }, &output, 0, stride as usize, (stride * t.height() as usize) as usize, metal::MTLBlitOption::empty())
+        }, &output, 0, stride, stride * t.height(), metal::MTLBlitOption::empty())
     };
     blit.endEncoding();
     command.commit();
-    (metal::Buffer(output), stride, t.height() as usize)
+    (metal::Buffer(output), stride, t.height())
 }
 fn sample(s: &(metal::Buffer, usize, usize), x: usize, y: usize) -> [f32; 4] {
     let words =

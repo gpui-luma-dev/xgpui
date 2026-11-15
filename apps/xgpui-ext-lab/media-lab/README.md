@@ -31,7 +31,8 @@ user PNG/JPEG/WebP. ICC profiles and EXIF orientation are not applied.
 2. Select Alpha edges and vary opacity/corners. Look for colored fringes, clipping
    leaks or unexpected dark borders; pan beyond the viewport to exercise clipping.
 3. Click Burst ×12. Waiting jobs should progress under bounded admission; completed
-   snapshots retire to free source reservations. Repeat to inspect staging reuse.
+   snapshots retire to free source reservations. Repeat to inspect staging reuse
+   (macOS/wgpu; D3D11 creates staging per upload, so Windows shows "not pooled").
 4. Change count/byte presets, reload and repeat. Inspect upload counts and status;
    retained snapshots should upload once rather than once per redraw.
 
@@ -209,6 +210,9 @@ are checked. The JSON contains raw CPU samples, nearest-rank summaries, sampled
 resource peaks and pool allocations/reuses. The matching PNG verifies final pixels.
 Native outputs are `/tmp/media-upload-bench.json` and `.png`; portable outputs use
 `media-upload-bench-wgpu`. No personal image/video is needed.
+On Windows the native benchmark runs on the D3D11 headless renderer, which uses
+WARP (software), so its timings are not hardware numbers; D3D11 staging is not
+pooled, so its pool counters stay at zero.
 
 Decode/mip wall time is reported separately from timed rendering. Generation,
 warmup, pacing sleep and final readback are excluded. CPU `render_scene` and

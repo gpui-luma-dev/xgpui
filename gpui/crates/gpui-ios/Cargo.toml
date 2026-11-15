@@ -7,7 +7,7 @@ repository = "https://github.com/gpui-luma-dev/xgpui"
 description = "Upstream-derived UIKit and Metal backend for xgpui on iOS"
 publish = ["crates-io"]
 homepage = "https://xgpui.dev/"
-documentation = "https://xgpui.dev/"
+documentation = "https://xgpui.dev/#crate=gpui-ios"
 readme = "README.md"
 keywords = ["xgpui", "gpui", "gui", "ios"]
 categories = ["gui", "graphics"]
@@ -32,15 +32,13 @@ harness = false
 [features]
 runtime_shaders = ["gpui_apple/runtime_shaders"]
 
-[dependencies]
-gpui = { package = "xgpui", version = "4.0.0" }
-
 [target.'cfg(target_os = "ios")'.dev-dependencies]
 gpui_platform = { package = "xgpui-platform", path = "../gpui-platform" }
 objc2-ui-kit = { version = "0.3.2", default-features = false, features = ["std", "block2", "objc2-quartz-core", "objc2-core-foundation", "NSText", "UIApplication", "UICommand", "UICornerConfiguration", "UICornerRadius", "UIEvent", "UIGeometry", "UIGestureRecognizer", "UIPanGestureRecognizer", "UIScreenEdgePanGestureRecognizer", "UIInterface", "UIOpenURLContext", "UIPasteboard", "UIResponder", "UIScene", "UISceneConfiguration", "UISceneDefinitions", "UISceneOptions", "UISceneSession", "UIScreen", "UITextInput", "UITextInputTraits", "UITouch", "UITraitCollection", "UIView", "UIViewController", "UIWindow", "UIWindowScene", "UIConversationContext"] }
 slotmap = { version = "1.0.6" }
 
 [target.'cfg(target_os = "ios")'.dependencies]
+gpui = { package = "xgpui", version = "4.0.0" }
 anyhow = { version = "1.0.86" }
 block2 = { version = "0.6" }
 futures = { version = "0.3.34" }

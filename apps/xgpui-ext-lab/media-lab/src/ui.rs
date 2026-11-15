@@ -285,8 +285,11 @@ impl Lab {
             .child(eyebrow("PIPELINE / LIVE"))
             .child(metric("Background staging workers",format!("{} / 2",usage.active_jobs)))
             .child(metric("Staging reservations",mib(usage.staging_bytes)))
-            .child(metric("Pool allocated / idle",format!("{} / {}",mib(pool.allocated_bytes),mib(pool.cached_bytes))))
-            .child(metric("Buffer allocations / reuse",format!("{} / {}",pool.allocations,pool.reuses)))
+            // D3D11 staging is created per upload, not pooled, so the counters stay at zero there.
+            .when(!cfg!(target_os = "windows"), |d| d
+                .child(metric("Pool allocated / idle",format!("{} / {}",mib(pool.allocated_bytes),mib(pool.cached_bytes))))
+                .child(metric("Buffer allocations / reuse",format!("{} / {}",pool.allocations,pool.reuses))))
+            .when(cfg!(target_os = "windows"), |d| d.child(metric("Staging pool","D3D11: not pooled")))
             .child(metric("Redraw interval p95",self.p95().map(|v|format!("{v:.1} ms")).unwrap_or_else(||"—".into())))
             .child(div().mt_2().text_xs().text_color(rgb(MUTED)).child("Redraw intervals include UI work; they are not GPU timings. Native atlas memory is excluded."))
     }

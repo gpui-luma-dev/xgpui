@@ -221,6 +221,10 @@ lab-build *args:
 test *args:
     bash scripts/test_all.sh "$@"
 
+# Clippy under the #280 policy, as CI runs it (optional: upstream | ours).
+clippy *args:
+    bash .github/scripts/clippy.sh "$@"
+
 # Run unit and compatibility tests; native window tests remain opt-in.
 lab-test *args:
     RUST_BACKTRACE=1 cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --lib --bins --test compatibility --target-dir target "$@"
