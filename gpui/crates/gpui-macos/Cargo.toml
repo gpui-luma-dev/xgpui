@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-macos"
-version = "4.1.0"
+version = "5.0.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -40,7 +40,7 @@ ctor = { version = "1.0.12" }
 dispatch2 = { version = "0.3", default-features = false, features = ["std", "block2", "objc2"] }
 foreign-types = { version = "0.5" }
 futures = { version = "0.3.34" }
-gpui_apple = { package = "xgpui-apple", version = "4.2.0" }
+gpui_apple = { package = "xgpui-apple", version = "5.0.0" }
 gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.28.1" }
 image = { version = "0.25.1", default-features = false, features = [
     "bmp",
@@ -83,7 +83,7 @@ uuid = { version = "1.1", features = ["serde"] }
 # `cfg(test)`, so dev-dependencies enable those APIs only for test builds.
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui = { package = "xgpui", version = "4.0.0", features = ["test-support"] }
-gpui_apple = { package = "xgpui-apple", version = "4.2.0", features = ["test-support"] }
+gpui_apple = { package = "xgpui-apple", version = "5.0.0", features = ["test-support"] }
 
 [lints]
 rust = { unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }, deprecated = "allow" }

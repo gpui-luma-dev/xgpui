@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-parley"
-version = "0.5.2"
+version = "0.6.0"
 edition = "2024"
 publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -22,7 +22,7 @@ gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "4.0.
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
 skrifa = "=0.44.0"
 tiny-skia = { version = "=0.12.0", default-features = false, features = ["std", "simd", "png-format"] }
-gpui-platform = { path = "../../../gpui/crates/gpui-platform", optional = true , package = "xgpui-platform", version = "2.0.5" }
+gpui-platform = { path = "../../../gpui/crates/gpui-platform", optional = true , package = "xgpui-platform", version = "3.0.0" }
 
 [[test]]
 name = "construction"

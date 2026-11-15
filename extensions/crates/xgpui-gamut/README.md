@@ -8,8 +8,8 @@ of existing UI paints.
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui", version = "2.0.0" }
-xgpui-gamut = "0.3.0"
+gpui = { package = "xgpui", version = "4.0.0" }
+xgpui-gamut = "0.4.0"
 ```
 
 ## Enable wide content
@@ -32,7 +32,7 @@ painted()
     .child("Normal sRGB controls")
 ```
 
-Add `xgpui-shader = "0.2.0"` for that container example. The default producer can
+Add `xgpui-shader = "0.5.0"` for that container example. The default producer can
 also be used without the shader extension. Inspect the window's reported color
 status; requesting wide output is not proof that the display is presenting it.
 
