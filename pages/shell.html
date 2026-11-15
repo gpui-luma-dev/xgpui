@@ -100,11 +100,11 @@ let themed = ShellOptions {
 <p>Desktop font descriptions style the shell title; logical text scale is clamped to 0.5–4 and stays separate from display DPI. Reduced motion is exposed as policy; the static frame has no animations. Application content retains its own styling.</p>
 <p>Core <code>App::desktop_preferences()</code> reads the snapshot, and <code>App::observe_desktop_preferences(...)</code> subscribes to changes. Keep the returned subscription alive. Other platforms currently return an empty optional snapshot.</p>
 <h2 id="try-the-lab">Try the lab</h2>
-<pre><code class="language-sh">just profile=dev lab-shell
+<pre><code class="language-sh">just labs --profile dev shell
 # Linux: request a client frame {#linux-request-a-client-frame}
-just profile=dev lab-shell --client-decorations
+just labs --profile dev shell --client-decorations
 # Check capabilities on a fixed-size window {#check-capabilities-on-a-fixed-size-window}
-just profile=dev lab-shell --client-decorations --fixed-size
+just labs --profile dev shell --client-decorations --fixed-size
 </code></pre>
 <p>The lab shows detected and resolved preferences, per-window overrides and window state. Its client-frame preview is a simulation: preview controls never move, resize or close the host window.</p>
 <p>See the <a href="shell-lab.html">Shell Lab walkthrough</a> and <a href="shell-lab.html">Linux provider details</a>.</p>

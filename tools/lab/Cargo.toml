@@ -1,0 +1,13 @@
+[package]
+name = "xgpui-lab"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Lab launcher for apps/xgpui-ext-lab, driven by apps/xgpui-ext-lab/labs.toml (#310)"
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"

@@ -8,7 +8,7 @@ name: Build warnings (#280)
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, 'issue-*/epic']
+    branches: [main]
   push:
     branches: [main]
 
@@ -64,6 +64,13 @@ jobs:
       - name: Release tooling
         if: ${{ !cancelled() && runner.os == 'Linux' }}
         run: bash .github/scripts/no-warnings.sh "check release-sync" cargo check --locked --manifest-path tools/release-sync/Cargo.toml --all-targets
+      # #310: every lab binary and example in apps/xgpui-ext-lab/Cargo.toml must
+      # be registered in apps/xgpui-ext-lab/labs.toml.
+      - name: Lab registry
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: |
+          bash .github/scripts/no-warnings.sh "check lab launcher" cargo check --locked --manifest-path tools/lab/Cargo.toml --all-targets
+          cargo run --quiet --locked --manifest-path tools/lab/Cargo.toml -- check
       - name: xgpui-macros tests
         if: ${{ !cancelled() }}
         run: cargo test --locked -p xgpui-macros

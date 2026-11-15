@@ -134,7 +134,7 @@ image dimensions; <code>invalidate</code> drops desired/current metadata while o
 drains. <code>SvgImage</code> handles this lifecycle internally.</p>
 <h2 id="native-sample-and-validation">Native sample and validation</h2>
 <p>The offline native gallery uses committed, attributed SVGs:</p>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/svg-lab/justfile gallery
+<pre><code class="language-sh">just svg gallery
 </code></pre>
 <p>The browser extension gallery also includes <code>?demo=svg</code>: five attributed samples,
 synchronized bounded and viewport-rerasterized views, wheel zoom and drag pan,
@@ -222,9 +222,9 @@ must be finite and strictly positive; zero entries are rejected. Stroke widths a
 positive and at most 4,096 px. Excessive subdivision, fragmentation or numerically
 unresolvable dash lengths return errors rather than allowing unbounded work.</p>
 <h3 id="native-visual-test">Native visual test</h3>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/media-lab/justfile paths
-just --justfile apps/xgpui-ext-lab/media-lab/justfile paths-capture
-just --justfile apps/xgpui-ext-lab/media-lab/justfile paths-wgpu-capture
+<pre><code class="language-sh">just media paths
+just media paths-capture
+just media paths-wgpu-capture
 cargo test --offline --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-svg/Cargo.toml --lib path_effects
 </code></pre>
 <p>The lab shows original, trimmed and trimmed-plus-dashed strokes in three columns.
@@ -235,7 +235,7 @@ seams as phase changes. The Images button returns to media tests.</p>
 <p>Headless captures have the same three rows/columns, fixed at 68% trim and a 16/8
 pattern with phase 5. They check visible pixel coverage and decreasing coverage
 from original to trim to dashes. Metal and wgpu capture paths are available;
-Windows native labs and <code>just lab-test</code> passed in owner testing on 2026-11-04.
+Windows native labs and <code>just labs test</code> passed in owner testing on 2026-11-04.
 Dedicated capture commands retain their own artifact evidence; Linux runtime
 acceptance remains separate.</p>
 <h3 id="browser-contour-effects-comparison">Browser contour-effects comparison</h3>

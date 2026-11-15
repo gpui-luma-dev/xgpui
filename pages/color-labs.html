@@ -72,19 +72,18 @@ The native lab is needed to compare actual wide output or inspect GPU readback.<
 <p>The native chromaticity workspace is integrated into this repository's
 <code>color-lab</code> binary. Run it from the root, then switch between <strong>Swatches</strong> and
 <strong>Chromaticity</strong> with the tabs:</p>
-<pre><code class="language-sh">just lab-color
-just lab-color --chromaticity
-just profile=dev lab-color --icc-sampled
-just lab-color --uv --native-fill
-just lab-color --photo
-just lab-color --help
-just lab-color-test
+<pre><code class="language-sh">just color
+just color --chromaticity
+just labs --profile dev color --icc-sampled
+just color --uv --native-fill
+just color --photo
+just color --help
+just color test
 </code></pre>
-<p>The launch recipes default to release; <code>profile=dev</code> selects a development
-build. Chromaticity flags select that workspace automatically. Existing
-<code>lab-chromaticity</code> / <code>chromaticity</code> recipes forward to the local color lab;
+<p>Labs build in release; <code>just labs --profile dev color</code> selects a development
+build. Chromaticity flags select that workspace automatically. <code>just color chromaticity</code> (also the older <code>chromaticity</code> alias) opens the chromaticity workspace;
 no sibling checkout is needed. State is retained when switching tabs.
-<code>lab-gamut</code> remains the separate native wide-output/compositing lab.
+<code>just gamut</code> remains the separate native wide-output/compositing lab.
 See the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/color-lab/README.md">color-lab README</a>
 for source provenance, fixtures and platform/test scope.</p>
 <h2 id="read-the-controls-in-order">Read the controls in order</h2>
@@ -127,7 +126,7 @@ physical display accuracy. Windows/Linux floating-point readback is unsupported.
 references, ICC interpretation, FP16 storage, pinned WebKit assets, photo loading,
 and native-versus-preview Metal composition. Live macOS verification covers both
 tabs, chromaticity fill, and xy/u′v′ state retention when switching workspaces.
-The owner also confirmed all native labs and <code>just lab-test</code> passed on Windows
+The owner also confirmed all native labs and <code>just labs test</code> passed on Windows
 on 2026-11-04.
 Linux runtime acceptance and physical monitor accuracy remain separate. Source provenance, shared asset
 attribution and exact test scope are recorded in the color-lab README.</p>

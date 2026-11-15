@@ -88,50 +88,53 @@ unpublished status, and how it differs from the separate <code>xgpui-lab</code> 
 <code>xgpui-ext-lab</code> package under <code>apps/xgpui-ext-lab/</code>. They share one manifest and
 lockfile, with a separate binary target for each lab. Its <code>publish = false</code>
 setting keeps development workloads out of the extension library release.</p>
-<p>Use <code>just lab-build</code> to compile all native lab/benchmark binaries and
-<code>just lab-test</code> to run unit and compatibility tests. The individual launch
-recipes below retain their names. Browser build scripts select the <code>web</code> feature
+<p>Use <code>just labs build</code> to compile all native lab/benchmark binaries and
+<code>just labs test</code> to run unit and compatibility tests. Each lab has a <code>just &lt;lab&gt;</code> command, listed below. Browser build scripts select the <code>web</code> feature
 without the default native targets; hosted demo URLs remain the same.</p>
 <h2 id="choose-a-sample-app">Choose a sample app</h2>
-<p>Run <code>just</code> (or <code>just --list</code>) to list recipes without opening a window. All native
-app recipes use release mode, committed lockfiles, the repository compatibility
+<p>Run <code>just labs</code> for a menu of every lab on this OS; pick one, then a view or task,
+and it prints the short command (for example <code>just media capture</code>) before running it.
+Run a lab directly with <code>just &lt;lab&gt;</code>, or a view or task with <code>just &lt;lab&gt; &lt;name&gt;</code>.
+Labs, views and tasks are defined in <code>apps/xgpui-ext-lab/labs.toml</code>;
+<code>just labs check</code> verifies it against the package manifest and the justfile. All native labs use release mode, committed lockfiles, the repository compatibility
 configuration and the shared <code>target/</code> directory.</p>
 <table><thead><tr><th>Command</th><th>Opens</th></tr></thead><tbody>
-<tr><td><code>just lab-canvas</code></td><td>Spatial canvas, navigation and selection</td></tr>
-<tr><td><code>just lab-media</code></td><td>Image <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Mipmap">mipmapping ↗</a>, filters, GPU surfaces and path effects</td></tr>
-<tr><td><code>just lab-shader</code></td><td>Shader examples and typography</td></tr>
-<tr><td><code>just lab-paint</code></td><td>Paints, gradients, brushes and layer effects</td></tr>
-<tr><td><code>just lab-gamut</code></td><td>Native wide-SDR <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Gamut">gamut ↗</a> comparison</td></tr>
-<tr><td><code>just lab-color</code></td><td>Swatches and CIE chromaticity/FP16/ICC workspaces</td></tr>
-<tr><td><code>just lab-text</code> / <code>just lab-parley</code></td><td>Native/Parley text, live font-axis sliders, paragraphs and scrolling</td></tr>
-<tr><td><code>just lab-svg</code></td><td>SVG rendering, zoom and scheduling</td></tr>
-<tr><td><code>just lab-quad-bench</code></td><td>Quad rendering benchmark</td></tr>
-<tr><td><code>just lab-color-field-bench</code></td><td>Color-field rendering benchmark</td></tr>
+<tr><td><code>just canvas</code></td><td>Spatial canvas, navigation and selection</td></tr>
+<tr><td><code>just media</code></td><td>Image <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Mipmap">mipmapping ↗</a>, filters, GPU surfaces and path effects</td></tr>
+<tr><td><code>just shader</code></td><td>Shader examples and typography</td></tr>
+<tr><td><code>just paint</code></td><td>Paints, gradients, brushes and layer effects</td></tr>
+<tr><td><code>just gamut</code></td><td>Native wide-SDR <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Gamut">gamut ↗</a> comparison</td></tr>
+<tr><td><code>just color</code></td><td>Swatches and CIE chromaticity/FP16/ICC workspaces</td></tr>
+<tr><td><code>just text</code> / <code>just text</code></td><td>Native/Parley text, live font-axis sliders, paragraphs and scrolling</td></tr>
+<tr><td><code>just svg</code></td><td>SVG rendering, zoom and scheduling</td></tr>
+<tr><td><code>just gpu-interop</code></td><td>wgpu engine on its own device presenting into xgpui</td></tr>
+<tr><td><code>just interop-boids</code></td><td>wgpu's boids example as an independent engine</td></tr>
+<tr><td><code>just gpu-canvas-workbench</code></td><td>Editable GPU canvas in an independent wgpu engine</td></tr>
+<tr><td><code>just quad-bench</code></td><td>Quad rendering benchmark</td></tr>
+<tr><td><code>just color-field-bench</code></td><td>Color-field rendering benchmark</td></tr>
 </tbody></table>
 <p>Every lab accepts <code>--help</code> to list its complete command-line options without
-opening a window. Arguments after the recipe name go directly to the app,
-including quoted paths. The short names <code>media</code>, <code>shaders</code>, <code>paints</code>, <code>gamut</code>,
-<code>color</code>, <code>text</code> and <code>svg</code>, and the previous <code>*-lab</code> names, remain aliases with
-identical options. Canonical launch commands start with <code>lab-</code> so they appear
-together in <code>just --list</code>.</p>
-<pre><code class="language-sh">just lab-media --help
-just lab-shader --help
-just lab-shader --example composition # Positional `composition` also works.
-just lab-media --paths
-just lab-media --tiled # Generated 72 MP canvas; pan/zoom/cache pressure, blur/quality
-just lab-media --float-images # Supplied RGBA16F pixels; native wide/sRGB comparison
-just lab-media --adjustments
-just lab-media --image "photos/my image.png"
-just lab-media --headless --wgpu --png "target/media preview.png"
-just lab-color --chromaticity
-just lab-color --help
-just lab-text --help
-just lab-parley --backend parley --workload paragraph
+opening a window. Arguments after the lab, view or task go directly to the app,
+including quoted paths. The older names (<code>lab-media</code>, <code>media-lab</code>, <code>shaders</code>,
+<code>paints</code>, …) remain aliases with identical options.</p>
+<pre><code class="language-sh">just media --help
+just shader --help
+just shader --example composition # Positional `composition` also works.
+just media --paths
+just media --tiled # Generated 72 MP canvas; pan/zoom/cache pressure, blur/quality
+just media --float-images # Supplied RGBA16F pixels; native wide/sRGB comparison
+just media --adjustments
+just media --image "photos/my image.png"
+just media --headless --wgpu --png "target/media preview.png"
+just color --chromaticity
+just color --help
+just text --help
+just text --backend parley --workload paragraph
 </code></pre>
 <p>The text comparison has independent weight, width, slant and optical-size sliders
 on native and Parley windows. macOS and Windows labs/tests are verified. Run
-<code>just text --backend both</code> to compare them, <code>just lab-test</code> for the suite, or
-<code>just lab-test live_axis -- --nocapture</code> for slider interactions. The existing
+<code>just text --backend both</code> to compare them, <code>just labs test</code> for the suite, or
+<code>just labs test live_axis -- --nocapture</code> for slider interactions. The existing
 lab-test command enables backtraces automatically. See <a href="font-controls.html">font controls</a>
 for capabilities, preview limits and the core 3.0 migration.</p>
 <p>Parley uses the same text lab; pass <code>--backend parley</code> for only that engine or
@@ -139,14 +142,14 @@ leave the default to compare both. Color lab has Swatches/Chromaticity tabs; <co
 and its ICC flags select the chromaticity workspace. Preset, mapping and alpha
 controls remain available in the window. It no longer needs the sibling lab. Shader/typography
 controls also remain available in the window.</p>
-<p>Native launch recipes enable <code>runtime-shaders</code>, <code>portable-shaders</code> and <code>wgpu</code>
+<p>Every lab runs with <code>runtime-shaders</code>, <code>portable-shaders</code> and <code>wgpu</code>
 so feature-gated app options are available without changing the Cargo command.
 Host/GPU restrictions still apply: media's synthetic video option supports
 macOS Metal (BGRA/NV12), Windows D3D11 (BGRA), and Linux Vulkan DMA-BUF (linear BGRA); native wide output
 requires a supported backend/display.
-Select a debug build with <code>just profile=dev lab-media</code>. App arguments are not
-Cargo arguments. The app-level justfiles remain available for specialized
-captures and benchmarks.</p>
+Select a debug build with <code>just labs --profile dev media</code>. App arguments are not
+Cargo arguments. Specialized captures, benchmarks and platform tests are tasks:
+<code>just labs media</code> lists the media lab's, and <code>just media capture</code> runs one.</p>
 <h2 id="ios-backend">iOS backend</h2>
 <p>The iOS source follows captured upstream 1.28.1 with XGPUI package and shared
 renderer integration. Its downstream version is 2.0.0, with core 4.0.0 and Apple 5.0.0
@@ -168,14 +171,14 @@ MSVC tools available. Select the native MSVC Rust toolchain, such as
 <code>x86_64-pc-windows-msvc</code> on an x64 machine; the native renderer uses Direct3D 11.</p>
 <pre><code class="language-powershell">rustc -vV
 just build
-just lab-shader
+just shader
 </code></pre>
 <p>The first recipe builds the libraries for Windows. The second builds and
 opens the shader example application. Commands below also work in PowerShell;
 they use single lines rather than shell-specific continuation characters.</p>
 <h3 id="windows-validation">Windows validation</h3>
 <p>On <strong>2026-11-04</strong>, the project owner confirmed that <strong>all native labs and
-<code>just lab-test</code> passed on Windows</strong> using the existing Git/Bash, Rust/Windows
+<code>just labs test</code> passed on Windows</strong> using the existing Git/Bash, Rust/Windows
 build tools and Just setup. This includes the shared BGRA video-surface demo on
 <code>codex/extension-lab-commands</code>. The <a href="https://github.com/gpui-luma-dev/xgpui/issues/133">Windows testing issue</a>
 records the original reports and fixes; the successful retest was reported in
@@ -183,7 +186,7 @@ the development chat. This supersedes blanket descriptions of these labs as
 Windows-untested or cross-compilation-only.</p>
 <table><thead><tr><th>Coverage</th><th>Evidence</th></tr></thead><tbody>
 <tr><td>Native lab applications, including media/video, color/chromaticity, gamut, shaders, canvas, SVG and text</td><td>User-confirmed Windows pass, 2026-11-04</td></tr>
-<tr><td>Root <code>just lab-test</code>: native lab binary tests and compatibility target</td><td>User-confirmed Windows pass, 2026-11-04; native-window tests remain opt-in</td></tr>
+<tr><td>Root <code>just labs test</code>: native lab binary tests and compatibility target</td><td>User-confirmed Windows pass, 2026-11-04; native-window tests remain opt-in</td></tr>
 <tr><td>Media video capture and snapshot lifecycle checks selected by <code>lab-test</code></td><td>Windows lab-test pass; same-device generated BGRA/D3D11 path</td></tr>
 <tr><td>Windows x64 source and lab test compilation</td><td>Cross-check passed from macOS with the installed LLVM resource compiler; a separate compile result</td></tr>
 <tr><td>Earlier native paint/gamut backend baseline</td><td><a href="https://github.com/gpui-luma-dev/xgpui/actions/runs/40207704397">2026-10-25 CI</a>: Windows D3D11/WARP, Windows wgpu/DX12 and Linux Vulkan jobs passed at <code>ece8ddfb88969e43503a8ab3f37315718383b2ac</code></td></tr>
@@ -203,7 +206,7 @@ and libraries must be available, along with fontconfig, FreeType and xkbcommon.
 The app uses the wgpu renderer. An SSH shell without a display can build the
 libraries but cannot open the example window.</p>
 <pre><code class="language-sh">just build
-just lab-shader
+just shader
 </code></pre>
 <p>Run inside your normal Wayland or X11 desktop session. Native labs provide a
 shared title bar and resize frame when the compositor requires client-side
@@ -215,8 +218,8 @@ standard SDR with a visible notice when it is unavailable. The gamut lab keeps
 its sRGB baseline; the color lab keeps its mapped sRGB swatches and chromaticity
 workspace. Native P3 content and unsupported wide-gamut controls are disabled.
 This fallback does not add native wide-gamut presentation to the Linux backend.
-<code>just lab-gamut --sdr</code> still explicitly selects the standard SDR baseline.</p>
-<p>For windowing diagnostics only, <code>env -u WAYLAND_DISPLAY just lab-text</code> selects
+<code>just gamut --sdr</code> still explicitly selects the standard SDR baseline.</p>
+<p>For windowing diagnostics only, <code>env -u WAYLAND_DISPLAY just text</code> selects
 X11/XWayland when <code>DISPLAY</code> is set. Vulkan rendering is independent of that
 window-system selection.</p>
 <p>Run inside your normal Wayland or X11 desktop session. The repository's <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/paints-backend.yml">Linux Vulkan CI workflow</a> lists the native packages used on Ubuntu if a linker reports
@@ -225,7 +228,7 @@ a missing system library.</p>
 <p>Use the native Rust toolchain for your machine. The default renderer is Metal;
 the active Xcode installation must include the Metal compiler.</p>
 <pre><code class="language-sh">just build
-just lab-shader
+just shader
 </code></pre>
 <p>If the build fails because the Metal compiler is unavailable, the root harness
 can embed shader source for compilation at runtime:</p>
@@ -261,13 +264,13 @@ Without it, standalone workspaces use their own target directories. No personal
 Cargo configuration or manifest edits are required for these recipes.</p>
 <h2 id="run-the-media-lab">Run the media lab</h2>
 <p>The lab generates its own image samples; no photo or video file is needed.</p>
-<pre><code class="language-sh">just lab-media
+<pre><code class="language-sh">just media
 </code></pre>
 <p>Compare <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Texture_atlas">atlas ↗</a> and mipmapped images, change filters, zoom and pan. Run
-<code>just lab-media --adjustments</code> for linear <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Exposure_value">exposure ↗</a> and <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Vignetting">vignette ↗</a> with a shared-source
+<code>just media --adjustments</code> for linear <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Exposure_value">exposure ↗</a> and <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/Vignetting">vignette ↗</a> with a shared-source
 original/adjusted comparison. Open the path
 effects view with:</p>
-<pre><code class="language-sh">just lab-media --paths
+<pre><code class="language-sh">just media --paths
 </code></pre>
 <p>Use release mode for visual performance testing. Debug builds are useful for
 stepping through code, but are not representative of rendering performance.
@@ -276,7 +279,7 @@ validation on Windows/Linux remains tracked in
 <a href="https://github.com/gpui-luma-dev/xgpui/issues/23">issue #23</a>.
 See the <a href="media-images.html">media guide</a> for backend limits and measurements.</p>
 <p>The tiled lab's blur controls use a bounded <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/SRGB">sRGB ↗</a> preview so the capture and halo
-fit the compositor's 1,024-device-pixel limit. <code>just lab-media --video</code> also offers
+fit the compositor's 1,024-device-pixel limit. <code>just media --video</code> also offers
 linear adjustments, vignette and blur on generated native macOS Metal frames;
 no video file is needed. See the <a href="media-pipeline.html">media pipeline guide</a> for
 resource reuse, output color and backend limits.</p>

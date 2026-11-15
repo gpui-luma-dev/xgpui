@@ -133,9 +133,9 @@ budget     = 64 MiB live output/backend; excludes in-flight resource retention
 GPU completion waits. Texture parameters, compute/custom geometry, HDR and stable
 API guarantees are outside this shader-paint contract.</p>
 <h2 id="test-and-capture">Test and capture</h2>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-test
-just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-headless --frames 2 --png /tmp/portable-metal.png
-just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-wgpu --frames 2 --png /tmp/portable-wgpu.png
+<pre><code class="language-sh">just paint portable-test
+just paint portable-headless --frames 2 --png /tmp/portable-metal.png
+just paint portable-wgpu --frames 2 --png /tmp/portable-wgpu.png
 cargo test --config .cargo/validation.toml \
   --manifest-path extensions/crates/xgpui-shader/Cargo.toml \
   --features wgpu,portable-shaders --target-dir target

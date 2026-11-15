@@ -9,14 +9,14 @@ All windows start at 1200 logical pixels high.
 From the repository root:
 
 ```sh
-just --justfile apps/xgpui-ext-lab/text-lab/justfile ui
-just --justfile apps/xgpui-ext-lab/text-lab/justfile timings
-just --justfile apps/xgpui-ext-lab/text-lab/justfile scroll
-just --justfile apps/xgpui-ext-lab/text-lab/justfile scroll --scroll-frames 640 --exit-after-scroll
-just --justfile apps/xgpui-ext-lab/text-lab/justfile paragraph
-just --justfile apps/xgpui-ext-lab/text-lab/justfile paragraph --timings-only
-just --justfile apps/xgpui-ext-lab/text-lab/justfile test
-just --justfile apps/xgpui-ext-lab/text-lab/justfile lint
+just text
+just text timings
+just text scroll
+just text scroll --scroll-frames 640 --exit-after-scroll
+just text paragraph
+just text paragraph --timings-only
+just text test
+just clippy ours
 ```
 
 `ui` uses debug; timing, scroll and paragraph recipes use release. Common flags:
@@ -123,7 +123,7 @@ The shared adapter uses GPUI's Windows/DX11 or Linux/Wayland/X11 host. Native
 window, clipboard, input and GPU initialization stay with GPUI. Windows needs
 Visual Studio C++ tools and the Windows SDK (`fxc.exe` for release shaders);
 Linux needs native build prerequisites and a Vulkan driver/display session.
-Windows native labs and `just lab-test` passed in user testing on 2026-11-04.
+Windows native labs and `just labs test` passed in user testing on 2026-11-04.
 The current Windows x64 source/test cross-check also passes with the installed
 LLVM resource compiler. These replace the earlier missing-`llvm-rc` build notice.
 Conversion IME and assistive-technology behavior require their dedicated checks.
@@ -159,7 +159,7 @@ Windows fixture tests, visual checks, and headless comparison commands.
 
 ```sh
 just text --backend both
-just lab-test axes::tests -- --nocapture
+just labs test axes::tests -- --nocapture
 ```
 
 Drag any slider or focus it and use arrows (Shift for larger steps), Home, or
@@ -175,6 +175,6 @@ previously visited settings, including Default, still work. Restart the lab for
 a fresh session. This is a descriptor admission limit, not a global CPU/GPU
 memory guarantee. Timings-only runs do not construct the live inspector.
 
-`just lab-test` runs the lab suite with backtraces enabled. The filtered command
+`just labs test` runs the lab suite with backtraces enabled. The filtered command
 above runs the pointer/keyboard/preset/preview-limit subset against the real
 backends.

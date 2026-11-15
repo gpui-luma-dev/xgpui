@@ -27,13 +27,13 @@ From the repository root:
 ```sh
 just         # List sample apps and development commands.
 just build   # Build optimized native libraries.
-just lab-shader # Launch the shader examples.
+just shader # Launch the shader examples.
 ```
 
 Recipes use Bash (on Windows, Git for Windows Bash must be on PATH).
 Without just, use `cargo build --release --locked`.
 
-`just lab-build` builds the unpublished extension labs and benchmarks from
+`just labs build` builds the unpublished extension labs and benchmarks from
 `apps/xgpui-ext-lab/`. See [Labs & benchmarks](https://xgpui.dev/extension-lab.html)
 for targets, launch commands and why the lab package is unpublished.
 

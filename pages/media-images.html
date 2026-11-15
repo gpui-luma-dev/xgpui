@@ -185,8 +185,8 @@ phase and stroke width on open and closed curves.</li>
 synchronous; they do not demonstrate the native background loader or native video
 imports. WebGPU and WebGL2 have both been checked locally.</p>
 <p>For the native app, run from the repository root:</p>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/media-lab/justfile ui
-just --justfile apps/xgpui-ext-lab/media-lab/justfile video
+<pre><code class="language-sh">just media
+just media video
 </code></pre>
 <p>Both commands use release mode and generate their own sample content.</p>
 <h2 id="current-platform-status">Current platform status</h2>
@@ -370,10 +370,10 @@ is ignored. Blur and LUT grading remain pending.</p>
 is filtered, so the left remains a source reference. Watch the upload counter while
 changing filters: it should stay at one. Append <code>--vivid</code> to <code>ui</code> or a headless run
 to start with combined brightness, contrast and saturation adjustments:</p>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/media-lab/justfile ui --vivid
+<pre><code class="language-sh">just media --vivid
 cargo run --release --offline --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin media-lab --target-dir target -- --headless --vivid --png /tmp/media-filter.png
 </code></pre>
-<p>The lab also has a <strong>Path effects</strong> view; launch it with <code>just --justfile apps/xgpui-ext-lab/media-lab/justfile paths</code>. See the SVG rendering guide for contour semantics and limits.</p>
+<p>The lab also has a <strong>Path effects</strong> view; launch it with <code>just media paths</code>. See the SVG rendering guide for contour semantics and limits.</p>
 <h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
 <p><a href="gpui-public-api.html#added-source-sized-media-textures">GPUI API additions</a>
 cover <code>ImageTextureData</code>, image output constructors and trilinear compositor
@@ -469,8 +469,8 @@ below. Linux has an initial Vulkan DMA-BUF snapshot adapter described below;
 full synchronization/import negotiation remains pending. Windows cross-compilation covers the portable API and initial
 BGRA adapter; the interactive synthetic source remains macOS-only.</p>
 <h3 id="native-video-lab">Native video lab</h3>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/media-lab/justfile video
-just --justfile apps/xgpui-ext-lab/media-lab/justfile video-capture
+<pre><code class="language-sh">just media video
+just media video-capture
 </code></pre>
 <p>The source generates fresh 320×180 IOSurfaces at about 30 fps on a background
 thread. It writes synthetic CPU pixels; only presentation avoids the texture
@@ -491,8 +491,8 @@ cargo test --offline --config .cargo/validation.toml --manifest-path gpui/crates
 </code></pre>
 <p>Video capture saves the requested BGRA PNG plus four sibling PNGs suffixed
 <code>-nv12-full-601</code>, <code>-nv12-video-601</code>, <code>-nv12-full-709</code> and <code>-nv12-video-709</code>.
-All media-lab launch/build/capture recipes default to release. The title identifies
-RELEASE/DEBUG; <code>profile=dev</code> is an explicit development override. The synthetic
+Every media lab view and task builds in release. The title identifies
+RELEASE/DEBUG; <code>just labs --profile dev media</code> is the development override. The synthetic
 video lab generates its own frames and requires no sample file.</p>
 <h2 id="windows-bgra-surfaces--initial-adapter">Windows BGRA surfaces — initial adapter</h2>
 <p><code>DxgiFrame</code> (re-exported by <code>xgpui-media</code> on Windows) retains a native
@@ -507,7 +507,7 @@ the native resource lifetime, including references held by queued D3D11 commands
 Dropping a Rust frame is not a pool-recycle signal. The direct constructor rejects keyed-mutex resources; use the shared-handle
 constructor below for those. Device negotiation, decoder array slices and YUV
 conversion remain unsupported.</p>
-<p>Windows native BGRA lab presentation and <code>just lab-test</code> passed in owner testing
+<p>Windows native BGRA lab presentation and <code>just labs test</code> passed in owner testing
 on 2026-11-04. A separate Windows-only WARP library regression covers
 native resource identity (no copy), retained pixels, resize-independent source
 extent, wrong backend/device and unsupported format rejection; execution of
@@ -542,7 +542,7 @@ acquisition and borrowed-handle closure, verifies clones/prepared outputs delay
 producer access, renders the shared pixels through the compositor, then checks
 producer-key handoff and captured color. The tests compile from macOS but have
 not yet been executed on Windows. On a Windows SDK host, run in release mode:</p>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/media-lab/justfile dxgi-test
+<pre><code class="language-sh">just media dxgi-test
 </code></pre>
 <p>See Microsoft's <a href="https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgikeyedmutex-acquiresync">AcquireSync contract</a>,
 <a href="https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgikeyedmutex-releasesync">ReleaseSync contract</a>
@@ -593,13 +593,13 @@ Linux GPU. Native FD import, validation-layer synchronization and pixel capture
 remain <strong>unverified</strong> until run on a compatible Linux Vulkan host. Phase 5 remains
 incomplete. The existing interactive synthetic source is still macOS-only.</p>
 <pre><code class="language-sh"># Layout contract checks on the current host (no DMA-BUF/video fixture required): {#layout-contract-checks-on-the-current-host-no-dma-bufvideo-fixture-required}
-just --justfile apps/xgpui-ext-lab/media-lab/justfile dma-buf-layout-test
+just media dma-buf-layout-test
 </code></pre>
 <p>The ownership/FD contract follows the Vulkan <a href="https://docs.vulkan.org/refpages/latest/refpages/source/VkImportMemoryFdInfoKHR.html">external FD import specification</a>
 and <a href="https://docs.vulkan.org/spec/latest/chapters/synchronization.html#synchronization-queue-transfers">queue-family synchronization rules</a>.</p>
 <h3 id="generated-linux-native-validation-fixture">Generated Linux native validation fixture</h3>
 <p>On a compatible Linux Vulkan host, run:</p>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/media-lab/justfile dma-buf-native-test
+<pre><code class="language-sh">just media dma-buf-native-test
 </code></pre>
 <p>This recipe defaults to release and supplies its own raw GPU test image; there is
 no sample video, decoder, GBM dependency, or user asset to load. It requires a
@@ -687,10 +687,10 @@ just pages-check
 normal Pages workflow.</p>
 <h2 id="visual-media-lab">Visual media lab</h2>
 <p>From the repository root:</p>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/media-lab/justfile ui
-just --justfile apps/xgpui-ext-lab/media-lab/justfile ui --image /absolute/path/photo.png
-just --justfile apps/xgpui-ext-lab/media-lab/justfile capture
-just --justfile apps/xgpui-ext-lab/media-lab/justfile wgpu-capture
+<pre><code class="language-sh">just media
+just media --image /absolute/path/photo.png
+just media capture
+just media wgpu-capture
 </code></pre>
 <p>The app generates frequency, transparent-edge and color-detail samples offline.
 Both image panels share zoom and pan. Scroll to zoom, drag to pan, and use the
@@ -754,8 +754,8 @@ GPU timing, browser-wide compatibility or accessibility certification.</p>
 <details>
 <summary>Benchmark results and review notes</summary>
 <h2 id="release-upload-cpu-benchmark">Release upload CPU benchmark</h2>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/media-lab/justfile upload-bench
-just --justfile apps/xgpui-ext-lab/media-lab/justfile upload-wgpu-bench
+<pre><code class="language-sh">just media upload-bench
+just media upload-wgpu-bench
 </code></pre>
 <p>Both commands generate their own inputs and require no user assets. Each writes
 <code>/tmp/media-upload-bench[-wgpu].json</code> and a matching PNG. The native recipe selects
@@ -798,7 +798,7 @@ with the commands above to inspect the PNG on your own machine. Each report
 includes all raw timed frames and pool evidence. Neither observation establishes
 a result for other machines, Windows or Linux.</p>
 <h2 id="visible-window-performance-and-branch-review">Visible-window performance and branch review</h2>
-<p>Run <code>just --justfile apps/xgpui-ext-lab/media-lab/justfile ui-perf</code> for a release native window
+<p>Run <code>just media ui-perf</code> for a release native window
 and <code>/tmp/media-ui-perf.json</code>. Keep it foreground and avoid interacting until the
 report is written, normally about seven seconds. After warming the primary image,
 the lab requests continuous frames with a zoom sweep: 180 baseline intervals,
@@ -869,7 +869,7 @@ is independent of the connected monitor; use this visible run to compare cadence
 <h2 id="sustained-large-image-scrolling--60-hz-baseline">Sustained large-image scrolling — 60 Hz baseline</h2>
 <p>The baseline remains <strong>60 Hz</strong>. Higher-refresh testing is additional coverage,
 not a requirement for developers or a substitute for 60 Hz testing.
-Run <code>just --justfile apps/xgpui-ext-lab/media-lab/justfile scroll-perf</code> after selecting fixed
+Run <code>just media scroll-perf</code> after selecting fixed
 <strong>60 Hertz</strong> for the target display in System Settings → Displays. Keep the
 release window visible and foreground without interacting during measurement;
 restore the previous display preference afterward. The app reports the platform's
@@ -942,7 +942,7 @@ See <a href="media-pipeline.html">color contracts and small examples</a>.</p>
 <a href="examples/extensions/?demo=media-float">RGBA16F browser preview</a>,
 <a href="examples/extensions/?demo=media-float&amp;backend=webgpu">WebGPU</a> or
 <a href="examples/extensions/?demo=media-float&amp;backend=webgl">WebGL2</a>.
-Browser output is clipped sRGB. Windows native labs and <code>just lab-test</code> passed
+Browser output is clipped sRGB. Windows native labs and <code>just labs test</code> passed
 in owner testing on 2026-11-04; Linux native QA remains separately tracked.</p>
 <h2 id="large-raster-canvases">Large raster canvases</h2>
 <p>Phase 4 adds <code>TileCanvas</code>: a retained preview plus viewport-selected immutable
