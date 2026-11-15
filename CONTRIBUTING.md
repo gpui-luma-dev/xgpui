@@ -9,8 +9,7 @@ you submit: understand it, review it, test it and be ready to address feedback.
 
 Keep pull requests focused. Explain the problem, what your change does and how
 you verified it. Follow the existing style, add meaningful tests where appropriate
-and update documentation when behavior changes. See
-[Local Development](https://xgpui.dev/local-development.html) for build and test instructions.
+and update documentation when behavior changes.
 
 By submitting a contribution, you agree that it is provided under the
 repository’s [Apache License 2.0](LICENSE).

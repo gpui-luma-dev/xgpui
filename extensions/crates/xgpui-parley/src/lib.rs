@@ -1,4 +1,4 @@
-//! Experimental Parley interop: flat LTR lines, resolved-face metrics and
+//! Parley interop: flat LTR lines, resolved-face metrics and
 //! grayscale rasterization, with an opt-in `PlatformTextSystem` backend.
 
 use anyhow::{Result, ensure};

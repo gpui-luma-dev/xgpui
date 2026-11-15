@@ -38,18 +38,24 @@ Without just, use `cargo build --release --locked`.
 for targets, launch commands and why the lab package is unpublished.
 
 `just build` builds the libraries supported by the selected target; it does not
-launch an application. See [Local Development](https://xgpui.dev/local-development.html) for Windows,
-Linux and macOS build/run commands, or [build harness details](https://xgpui.dev/local-development.html#build-harness-and-test-runner).
+launch an application.
 
 ## Crate release preflight
 
-Run `just release-check` (Rust tooling; requires Git and curl) while developing or before asking an
-agent to prepare a release. It detects crate changes, including staged,
+Run the version audit (Rust tooling; requires Git and curl) while developing or before asking an
+agent to prepare a release:
+
+```sh
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-check --epoch release-2026-11-15-04ba149f08ca
+```
+
+`just release-check` is a different step: the tagged no-upload check run during
+publication. The audit detects crate changes, including staged,
 unstaged and non-ignored new files, and checks crates.io for versions that
 would prevent those changes from being published.
 
 The tracking epoch is `release-2026-11-03-712732c7cf07`, configured in
-`scripts/release-check.json`. Override it with `just release-check --epoch TAG`.
+`scripts/release-check.json`. Pass `--epoch TAG` with the latest completed release, as above.
 The epoch is a trusted completed release baseline. For each crate, a later
 non-draft GitHub release advances that baseline only when its notes contain a
 three-column verification row (`Crate | Version | Result` or `Verification`)
@@ -84,9 +90,8 @@ directories need release review. Builds, API compatibility and exact payload
 verification remain separate release steps.
 
 The check reads public GitHub release metadata and crates.io metadata without
-publication credentials. Use `just release-check --report /tmp/xgpui-release-check.json`
-to save the machine-readable report outside the checkout, or `--json` for JSON
-on stdout. Without just, run `cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-check`.
+publication credentials. Add `--report PATH` (outside the checkout) to save the machine-readable report, or `--json` for JSON
+on stdout.
 
 ## Documentation website
 
@@ -98,9 +103,7 @@ just pages-serve
 just pages-check
 ```
 
-See [Edit this website](https://xgpui.dev/local-development.html#edit-this-website) for layout and demos, and [website deployment](https://xgpui.dev/releasing.html#website-deployment) for publishing.
-
-See [documentation instructions](https://xgpui.dev/local-development.html#edit-this-website) for maintenance and checks.
+See [website deployment](https://xgpui.dev/releasing.html#website-deployment) for publishing.
 
 ## Contributing
 

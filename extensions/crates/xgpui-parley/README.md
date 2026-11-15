@@ -1,6 +1,6 @@
 # xgpui-parley
 
-Experimental text extension for **xgpui** using Parley and HarfRust. It provides
+Text extension for **xgpui** using Parley and HarfRust. It provides
 text shaping, resolved-face metrics, grayscale rasterization and opt-in BiDi
 paragraph layout. GPUI retains native input, frame caches and glyph atlas ownership.
 
@@ -147,8 +147,7 @@ font loading. Pin fonts, fallback, variation settings and shaping versions for
 deterministic results; host discovery and raster pixels can still differ.
 Windows/Linux use the same adapter. On 2026-11-04 the owner confirmed all native
 labs, including text, and `just lab-test` passed on Windows. Linux runtime and
-focused IME/assistive-technology acceptance remain separate checks; see the
-[validation scope](https://xgpui.dev/local-development.html#windows-validation).
+focused IME/assistive-technology acceptance remain separate checks.
 
 ## Guides and examples
 

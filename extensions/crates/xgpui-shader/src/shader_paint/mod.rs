@@ -1,4 +1,4 @@
-//! Experimental shader paints: one WGSL function and reflected f32 parameters.
+//! Shader paints: one WGSL function and reflected f32 parameters.
 //! Output is straight-alpha encoded-sRGB SDR, matching the existing paint path.
 //! The source and output contracts remain unchanged by the purpose-based API names.
 use crate::Paint;
@@ -77,7 +77,7 @@ impl std::fmt::Debug for ShaderProgram {
     }
 }
 impl ShaderProgram {
-    /// Validate the experimental shader-paint subset and translate to MSL, HLSL and SPIR-V.
+    /// Validate the shader-paint subset and translate to MSL, HLSL and SPIR-V.
     /// User source declares `Parameters` and `fn paint(input: PaintInput) -> vec4<f32>`.
     /// The extension supplies `parameters`, resource bindings and entry points.
     pub fn new(source: &str) -> Result<Self> {

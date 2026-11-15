@@ -125,8 +125,7 @@ Visual Studio C++ tools and the Windows SDK (`fxc.exe` for release shaders);
 Linux needs native build prerequisites and a Vulkan driver/display session.
 Windows native labs and `just lab-test` passed in user testing on 2026-11-04.
 The current Windows x64 source/test cross-check also passes with the installed
-LLVM resource compiler. These replace the earlier missing-`llvm-rc` build notice;
-see [Windows validation](https://xgpui.dev/local-development.html#windows-validation).
+LLVM resource compiler. These replace the earlier missing-`llvm-rc` build notice.
 Conversion IME and assistive-technology behavior require their dedicated checks.
 
 PowerShell/Linux shell, from the repository root; omit `--offline` on first use:

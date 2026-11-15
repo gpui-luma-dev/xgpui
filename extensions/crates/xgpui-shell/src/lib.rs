@@ -1,4 +1,4 @@
-//! Experimental desktop shell with app-composed title bars and optional Linux client frames.
+//! Desktop shell with app-composed title bars and optional Linux client frames.
 //! macOS retains native traffic lights; apps supply their own title-bar content and look.
 use gpui::{prelude::*, *};
 mod app_titlebar;
@@ -868,7 +868,7 @@ fn builtin_symbol(control: ShellControl, scale: f32, color: u32) -> AnyElement {
 
 /// Optional per-window overrides. `None` follows desktop preferences, then built-in fallbacks.
 ///
-/// Unlike the initial experimental API, these fields are optional: wrap explicit values in
+/// Unlike the initial API, these fields are optional: wrap explicit values in
 /// `Some(...)`. This preserves explicit `false` and `TitlebarAction::None` overrides.
 /// Explicit colors take precedence over the desktop/default high-contrast palette;
 /// the application is responsible for their contrast and active/inactive variants.

@@ -1,4 +1,4 @@
-# xgpui-gpu-interop (experimental)
+# xgpui-gpu-interop
 
 Zero-copy GPU interop for [xgpui](https://xgpui.dev/): show frames from a GPU engine you own in xgpui windows, the way an engine presents to a swapchain. The engine keeps its own device, queue and thread, and renders or runs compute shaders as it likes; xgpui composites the result with no copies.
 
