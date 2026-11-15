@@ -4,12 +4,14 @@ use crate::platform::{self, SlotResources, SyncPoint};
 use crate::ring::{Lease, Ring, Writing};
 use crate::{AcquireError, SurfaceDesc, SurfaceStats, Transport};
 use anyhow::{Result, ensure};
-use gpui::{Bounds, Corners, CustomContent, CustomGeometry, DevicePixels, Pixels, Size, Window};
+use gpui::{
+    App, Bounds, Corners, CustomContent, CustomGeometry, DevicePixels, Pixels, Size, Window,
+};
 use std::any::Any;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, Weak};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, Weak};
+use std::time::{Duration, Instant};
 
 struct Shared {
     desc: SurfaceDesc,
@@ -34,6 +36,24 @@ struct Feedback {
     /// Why a compositor could not use this surface, latched on the first
     /// `Unsupported` preparation failure; the surface then offers no frames.
     unsupported: Mutex<Option<String>>,
+    /// Total presents; a present is resolved once composited or dropped unshown.
+    presented: AtomicU64,
+    /// Signalled whenever a present is resolved, for `wait_composited`.
+    resolved: Condvar,
+    resolved_lock: Mutex<()>,
+    on_composited: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    /// Refresh interval of the last window that painted the surface, ns (0: unknown).
+    refresh_ns: AtomicU64,
+}
+
+impl Feedback {
+    fn signal_resolved(&self) {
+        let _guard = self.resolved_lock.lock().unwrap();
+        self.resolved.notify_all();
+    }
+    fn all_resolved(&self, presents: u64) -> bool {
+        self.composited.load(Ordering::Acquire) + self.unshown.load(Ordering::Acquire) >= presents
+    }
 }
 
 /// A ring of shareable slots presented into xgpui (see the crate docs).
@@ -126,13 +146,14 @@ impl EngineSurface {
             self.0.ring.owns(&slot.writing),
             "slot belongs to another surface"
         );
+        self.0.feedback.presented.fetch_add(1, Ordering::AcqRel);
         let lease = self.0.ring.publish(slot.writing);
         let frame = Arc::new(SurfaceFrame {
             desc: self.0.desc,
             resources: slot.resources,
             sync,
             _lease: lease,
-            presented_at: std::time::Instant::now(),
+            presented_at: Instant::now(),
             composited: AtomicBool::new(false),
             feedback: self.0.feedback.clone(),
         });
@@ -177,7 +198,13 @@ impl EngineSurface {
     /// failed with [`Unsupported`](crate::Unsupported). The surface then
     /// offers no frames, so it costs at most one failed composition.
     pub fn unsupported(&self) -> Option<crate::Unsupported> {
-        self.0.feedback.unsupported.lock().unwrap().clone().map(crate::Unsupported)
+        self.0
+            .feedback
+            .unsupported
+            .lock()
+            .unwrap()
+            .clone()
+            .map(crate::Unsupported)
     }
 
     fn content_for(&self, wide: bool) -> Option<Arc<dyn CustomContent>> {
@@ -197,12 +224,20 @@ impl EngineSurface {
     /// Paint the latest frame into `bounds`, scaled from the slot size.
     /// The host clips the frame to the rounded shape, so it matches rounded
     /// containers (GPUI's `overflow_hidden` clips to a rectangle only).
+    ///
+    /// Also records the window's refresh interval for the engine
+    /// ([`Self::refresh_interval`], used by `Presentation::Auto`).
     pub fn paint(
         &self,
         window: &mut Window,
+        cx: &App,
         bounds: Bounds<Pixels>,
         corner_radii: Corners<Pixels>,
     ) {
+        if let Some(refresh) = window.refresh_interval(cx) {
+            let ns = u64::try_from(refresh.as_nanos()).unwrap_or(u64::MAX);
+            self.0.feedback.refresh_ns.store(ns, Ordering::Relaxed);
+        }
         let wide = window.color_status().effective() == gpui::WindowColorMode::WideGamutSdr;
         if let Some(content) = self.content_for(wide) {
             window.paint_custom(
@@ -220,6 +255,54 @@ impl EngineSurface {
     /// Typically wakes the UI to redraw.
     pub fn on_present(&self, callback: impl Fn() + Send + Sync + 'static) {
         *self.0.on_present.lock().unwrap() = Some(Arc::new(callback));
+    }
+
+    /// Block until every frame presented so far has been composited, or
+    /// dropped unshown because a newer one replaced it, or until `timeout`
+    /// passes. Returns `false` on timeout (for example while the window is
+    /// hidden or minimized) and after [`Self::invalidate`].
+    ///
+    /// The recommended pacing for an animating engine: present, wait here,
+    /// then render the next frame. Each frame is then shown exactly once, at
+    /// the display's rate; an engine on a timer of its own drifts against
+    /// vsync and drops frames, which shows as jumps.
+    pub fn wait_composited(&self, timeout: Duration) -> bool {
+        let feedback = &self.0.feedback;
+        let presents = feedback.presented.load(Ordering::Acquire);
+        let deadline = Instant::now() + timeout;
+        let mut guard = feedback.resolved_lock.lock().unwrap();
+        loop {
+            if feedback.all_resolved(presents) {
+                return true;
+            }
+            let now = Instant::now();
+            if !self.is_valid() || now >= deadline {
+                return false;
+            }
+            guard = feedback
+                .resolved
+                .wait_timeout(guard, deadline - now)
+                .unwrap()
+                .0;
+        }
+    }
+
+    /// Called once per presented frame, the first time a window composites
+    /// it, on the compositing (UI) thread. Keep it short: for example, wake
+    /// an engine that steps once per shown frame.
+    pub fn on_composited(&self, callback: impl Fn() + Send + Sync + 'static) {
+        *self.0.feedback.on_composited.lock().unwrap() = Some(Arc::new(callback));
+    }
+
+    /// Refresh interval of the display showing the window that last painted
+    /// this surface (recorded by [`Self::paint`]); `None` before the first
+    /// paint or when the display doesn't report one. Engines can use it as a
+    /// time step; `Presentation::Auto` uses it to choose a mode.
+    pub fn refresh_interval(&self) -> Option<Duration> {
+        match self.0.feedback.refresh_ns.load(Ordering::Relaxed) {
+            0 => None,
+            ns => Some(Duration::from_nanos(ns)),
+        }
     }
 
     pub fn stats(&self) -> SurfaceStats {
@@ -256,6 +339,7 @@ impl EngineSurface {
         for slot in &self.0.slots {
             slot.release_engine();
         }
+        self.0.feedback.signal_resolved();
     }
 
     /// `false` after `invalidate`.
@@ -301,7 +385,7 @@ struct SurfaceFrame {
     resources: Arc<SlotResources>,
     sync: SyncPoint,
     _lease: Arc<Lease>,
-    presented_at: std::time::Instant,
+    presented_at: Instant,
     composited: AtomicBool,
     feedback: Arc<Feedback>,
 }
@@ -315,6 +399,11 @@ impl SurfaceFrame {
                 self.presented_at.elapsed().as_micros() as u64,
                 Ordering::Relaxed,
             );
+            feedback.signal_resolved();
+            let callback = feedback.on_composited.lock().unwrap().clone();
+            if let Some(callback) = callback {
+                callback();
+            }
         }
     }
 }
@@ -322,6 +411,7 @@ impl Drop for SurfaceFrame {
     fn drop(&mut self) {
         if !self.composited.load(Ordering::Acquire) {
             self.feedback.unshown.fetch_add(1, Ordering::Relaxed);
+            self.feedback.signal_resolved();
         }
     }
 }
