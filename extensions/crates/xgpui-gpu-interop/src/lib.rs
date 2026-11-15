@@ -104,6 +104,14 @@ impl SurfaceFormat {
     /// The color interpretation the host applies when compositing into a
     /// window whose effective color mode is (`wide`) or is not wide-gamut SDR.
     /// Internal: [`EngineSurface::paint`] chooses for the window.
+    // Only the surface calls this; Linux and Windows have none without `wgpu`.
+    #[cfg_attr(
+        not(any(
+            target_os = "macos",
+            all(any(target_os = "linux", target_os = "windows"), feature = "wgpu")
+        )),
+        allow(dead_code)
+    )]
     pub(crate) fn color_mode(self, wide: bool) -> gpui::ImageColorMode {
         match self {
             Self::Bgra8Srgb => gpui::ImageColorMode::EncodedSrgb,

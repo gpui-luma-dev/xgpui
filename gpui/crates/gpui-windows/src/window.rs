@@ -432,6 +432,27 @@ pub(crate) struct Callbacks {
     pub(crate) appearance_changed: Cell<Option<Box<dyn FnMut()>>>,
 }
 
+impl Callbacks {
+    /// Drop every callback. Called when GPUI drops its window: Windows can still
+    /// send activation, visibility or input messages while the handle is torn
+    /// down, and reports spawned before the drop run after it, so nothing may
+    /// call back into a window GPUI has removed (#277).
+    pub(crate) fn clear(&self) {
+        self.request_frame.take();
+        self.input.take();
+        self.active_status_change.take();
+        self.visibility_change.take();
+        self.hovered_status_change.take();
+        self.resize.take();
+        self.moved.take();
+        self.display_changed.take();
+        self.should_close.take();
+        self.close.take();
+        self.hit_test_window_control.take();
+        self.appearance_changed.take();
+    }
+}
+
 struct WindowCreateContext {
     inner: Option<Result<Rc<WindowsWindowInner>>>,
     handle: AnyWindowHandle,
@@ -633,15 +654,13 @@ impl rwh::HasDisplayHandle for WindowsWindow {
 impl Drop for WindowsWindow {
     fn drop(&mut self) {
         self.0.dialog_owner.close();
+        self.0.state.callbacks.clear();
         // Closed through Windows (caption Close, Alt+F4): the handle is already
         // destroyed and drag-drop was revoked in `WM_DESTROY` (#277).
         if self.0.state.destroyed.get() {
             return;
         }
         unsafe { ShowWindowAsync(self.0.hwnd, SW_HIDE).ok().log_err() };
-        // `DestroyWindow` below sends `WM_SHOWWINDOW`; without a callback the
-        // resulting visibility report has nothing to notify.
-        self.0.state.callbacks.visibility_change.take();
         // clone this `Rc` to prevent early release of the pointer
         let this = self.0.clone();
         self.0
