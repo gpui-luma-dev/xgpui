@@ -8,8 +8,8 @@ effects.
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui", version = "2.0.0" }
-xgpui-svg = "0.3.0"
+gpui = { package = "xgpui", version = "4.0.0" }
+xgpui-svg = "0.4.0"
 ```
 
 ## Display a document

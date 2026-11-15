@@ -106,7 +106,7 @@ Run from the repository root using the existing commands:
 
 ```sh
 just test
-just docs-check
+just pages-check
 git diff --check
 ```
 
@@ -120,10 +120,10 @@ just test --only release-sync
 Registry checks are a separate read-only network operation:
 
 ```sh
-just release-check --epoch LAST_COMPLETED_RELEASE_TAG
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-check --epoch LAST_COMPLETED_RELEASE_TAG --report "$XGPUI_RELEASE_ARTIFACTS/release-check.json"
 ```
 
-`just release-check` checks changed packages, versions and dependency pins against
+`release-check` checks changed packages, versions and dependency pins against
 release history and crates.io; it is read-only but requires registry access.
 Pass the completed baseline explicitly: the history parser currently recognizes only the verification table format below and can miss releases recorded only with prose or old/new version tables. A missed baseline can falsely flag unchanged crates. Confirm the actual tag and packaged diff before proposing bumps.
 
@@ -141,7 +141,7 @@ Record browser, iOS and optional-feature checks where the release affects them.
 CI results supplement this evidence; preparation workflows do not establish that
 all native or graphical validation passed.
 
-`just docs-check` checks the static website in `pages/`; update its pages by
+`just pages-check` checks the static website in `pages/`; update its pages by
 hand, including the upstream baseline on the overview after a sync. Toolchain and host prerequisites
 are documented in [Setup](SETUP.md) and [Building](BUILDING.md).
 
