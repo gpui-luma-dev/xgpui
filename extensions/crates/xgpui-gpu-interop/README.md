@@ -71,8 +71,8 @@ Measured with 4 × 4K engines at a GPU-saturating load on an Intel Iris Xe: the 
 
 ## Known limits
 
-- **Tested hardware:** Apple M-series; Intel Iris Xe (Fedora 44 and Windows 11); Intel Arc 140T (Windows 11). AMD and NVIDIA GPUs are untested.
-- **One GPU at a time.** The engine must run on the compositor's GPU, and nothing yet helps an app find it; on a machine with two GPUs an engine on the other one is refused with `Unsupported` ([#253](https://github.com/gpui-luma-dev/xgpui/issues/253)).
+- **Tested hardware:** Apple M-series; Intel Iris Xe (Fedora 44 and Windows 11); Intel Arc 140T (Windows 11); AMD Radeon 780M (Linux). NVIDIA GPUs are untested.
+- **One GPU at a time.** The engine must run on the compositor's GPU; on a machine with two GPUs an engine on the other one is refused with `Unsupported`. Helping engines pick the compositor's GPU is not planned; contributions are welcome ([#253](https://github.com/gpui-luma-dev/xgpui/issues/253)).
 - **Colour:** Linux shows wide content as the sRGB preview until [#146](https://github.com/gpui-luma-dev/xgpui/issues/146).
 - **Engines:** wgpu on all three platforms and raw Metal on macOS; raw Vulkan and D3D12 engines have no adapter yet.
 

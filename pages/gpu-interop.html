@@ -150,10 +150,11 @@ Low-power mode still applies.</p>
 <h2 id="known-limits">Known limits</h2>
 <ul>
 <li><strong>Tested hardware:</strong> Apple M-series; Intel Iris Xe (Fedora 44 and
-Windows 11); Intel Arc 140T (Windows 11). AMD and NVIDIA GPUs are untested.</li>
-<li><strong>One GPU at a time.</strong> The engine must run on the compositor's GPU, and
-nothing yet helps an app find it. On a machine with an integrated and a discrete
-GPU, an engine on the other one is refused with <code>Unsupported</code>
+Windows 11); Intel Arc 140T (Windows 11); AMD Radeon 780M (Linux). NVIDIA GPUs are untested.</li>
+<li><strong>One GPU at a time.</strong> The engine must run on the compositor's GPU. On a
+machine with an integrated and a discrete GPU, an engine on the other one is refused
+with <code>Unsupported</code>. Helping engines pick the compositor's GPU is not planned;
+contributions are welcome
 (<a href="https://github.com/gpui-luma-dev/xgpui/issues/253">#253</a>).</li>
 <li><strong>Engines:</strong> wgpu on all three platforms, and raw Metal on macOS. Raw
 Vulkan and D3D12 engines have no adapter yet.</li>
