@@ -539,7 +539,7 @@ and <strong>forced WebGL2</strong>, including controls, animated exposure/zoom, 
 corners, reset and mode switching. Preparations remained at one.</li>
 <li>Strict media/lab Clippy, formatting and documentation checks pass. Windows
 cross-compilation passed at this phase checkpoint. Windows native labs and
-<code>just lab-test</code> subsequently passed in owner testing on 2026-11-04; Linux and
+<code>just labs test</code> subsequently passed in owner testing on 2026-11-04; Linux and
 dedicated library-suite results retain their own scope.</li>
 </ul>
 <p>These are functional and pixel checks, not GPU timestamps or a new sustained
@@ -562,9 +562,9 @@ and very large virtual preview bounds at 64× zoom.</p>
 Fit/1:1, pan/drag/wheel zoom, replacement, cancellation/restart and low-memory
 mode. The 2 MiB policy coarsens the selected mip while the preview stays usable.
 Strict lint/build/documentation checks and Windows cross-compilation pass.
-Windows native labs and <code>just lab-test</code> passed in owner testing on 2026-11-04.
+Windows native labs and <code>just labs test</code> passed in owner testing on 2026-11-04.
 Remaining Linux and dedicated import/ownership checks stay under #23.</p>
-<p><strong>Status:</strong> Phases 1–5 were merged in PR #43. Windows native labs and <code>just lab-test</code> passed in owner testing on 2026-11-04. Remaining Linux and dedicated import/ownership coverage is tracked in #23; deferred video APIs are tracked in #134. System playback remains #40.</p>
+<p><strong>Status:</strong> Phases 1–5 were merged in PR #43. Windows native labs and <code>just labs test</code> passed in owner testing on 2026-11-04. Remaining Linux and dedicated import/ownership coverage is tracked in #23; deferred video APIs are tracked in #134. System playback remains #40.</p>
 <h3 id="phase-5-verification-2026-10-26">Phase 5 verification (2026-10-26)</h3>
 <p>50 release media tests pass with wgpu enabled. New native surface tests compare
 BGRA and full/video-range BT.601/709 NV12 adjustments to CPU references in both
@@ -579,7 +579,7 @@ video pause/resume, format switching, opacity, corners and reset were exercised.
 Testing caught the existing 1,024-device-pixel capture limit; bounded previews and
 explicit API checks prevent an oversized blur from blanking the renderer.
 These are functional/reference checks, not a new sustained 60 Hz benchmark.
-Windows native labs and <code>just lab-test</code> passed in owner testing on 2026-11-04. Remaining
+Windows native labs and <code>just labs test</code> passed in owner testing on 2026-11-04. Remaining
 Linux and dedicated import/ownership checks stay under #23.</p>
 </article>
 </main>

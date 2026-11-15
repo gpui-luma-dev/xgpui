@@ -217,8 +217,8 @@ color-contract change, not a correction established by these results.</p>
 </tbody></table>
 <h2 id="run-the-contract-tests">Run the contract tests</h2>
 <pre><code class="language-sh"># Native/portable geometry, alpha, clipping, replay and legacy-producer recovery. {#nativeportable-geometry-alpha-clipping-replay-and-legacy-producer-recovery}
-just --justfile apps/xgpui-ext-lab/paint-lab/justfile metal-test
-just --justfile apps/xgpui-ext-lab/paint-lab/justfile portable-test
+just paint metal-test
+just paint portable-test
 
 # Request validation, old signature forwarding and fractional-scale geometry. {#request-validation-old-signature-forwarding-and-fractional-scale-geometry}
 cargo test --offline --config .cargo/validation.toml \

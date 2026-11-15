@@ -19,8 +19,8 @@
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
 <main id="content" tabindex="-1">
-<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><h2>Instanced shaders · native app first</h2><p>Typed fragment instances, ordered batching, configurable gradient shadows, soft animated borders and direct main-pass rendering. SDR subset.</p><pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/shader-examples/justfile ui
-just --justfile apps/xgpui-ext-lab/shader-examples/justfile composition</code></pre><p><a href="instanced-wgsl-v2.html">API, examples and implementation status →</a> · <a href="examples/shaders/">WASM companion →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/shader-examples">Demo source</a></p><article class="extension-document"><h1 id="instanced-shaders-experimental">Instanced shaders</h1>
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Paint and shader extension.</strong> Opt in through <code>xgpui-shader</code>; ordinary output is sRGB, with explicit native wide-SDR programs.</p><h2>Instanced shaders · native app first</h2><p>Typed fragment instances, ordered batching, configurable gradient shadows, soft animated borders and direct main-pass rendering. SDR subset.</p><pre><code class="language-sh">just shader
+just shader composition</code></pre><p><a href="instanced-wgsl-v2.html">API, examples and implementation status →</a> · <a href="examples/shaders/">WASM companion →</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/shader-examples">Demo source</a></p><article class="extension-document"><h1 id="instanced-shaders-experimental">Instanced shaders</h1>
 <p>See <a href="shader-models.html">choosing a shader rendering model and migrating old names</a>.</p>
 <p>Issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/21">#21</a>. Enable
 <code>xgpui-shader/portable-shaders</code>. <code>instanced</code> is an API alongside shader paints; existing texture producers keep their existing behavior.</p>
@@ -98,7 +98,7 @@ composed scratch image using the existing color path.</p>
 <p>The opt-in <code>instanced::ShadowPainter</code> adds rounded-box shadows with one to four
 color stops, a gradient angle, configurable falloff, blur, spread, offset and
 inset/outset mode. Native <code>BoxShadow</code> retains its existing behavior. Start with:</p>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/shader-examples/justfile shadows
+<pre><code class="language-sh">just shader shadows
 </code></pre>
 <pre><code class="language-rust">use xgpui_shader::{painted, instanced::{ShadowPainter, ShadowStyle, ShadowStop}};
 
@@ -177,7 +177,7 @@ Native hover corner refinements are not supported; rebuild the style explicitly.
 requests animation frames only while active; keep phase constant and stop frame
 requests for pause/reduced motion. A spring or pointer simulation can supply the
 same phase parameter. No GPUI API changes are required.</p>
-<p>The separate local Borders demo (<code>just --justfile apps/xgpui-ext-lab/shader-examples/justfile borders</code>)
+<p>The separate local Borders demo (<code>just shader borders</code>)
 includes an interactive Generate pill on a light panel and Pause/Resume;
 the companion uses the same Rust view and WGSL on WebGPU and WebGL2.</p>
 <h2 id="limits-and-transport">Limits and transport</h2>
@@ -201,9 +201,9 @@ implement analytic shape coverage in the shader.</li>
 </ul>
 <h2 id="examples-and-validation">Examples and validation</h2>
 <p>Start with the local native app. From the repository root:</p>
-<pre><code class="language-sh">just --justfile apps/xgpui-ext-lab/shader-examples/justfile ui
-just --justfile apps/xgpui-ext-lab/shader-examples/justfile composition
-just --justfile apps/xgpui-ext-lab/shader-examples/justfile --set profile release particles
+<pre><code class="language-sh">just shader
+just shader composition
+just shader particles
 </code></pre>
 <p>Inside <code>apps/xgpui-ext-lab/shader-examples</code>, use <code>just ui</code>; bare <code>just</code> lists recipes. The
 in-window selector opens all six examples:</p>

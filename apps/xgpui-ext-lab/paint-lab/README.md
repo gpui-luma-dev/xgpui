@@ -8,7 +8,7 @@ and multi-stop linear, radial, conic and diamond
 producers. Animation changes immutable snapshots in application state; the
 renderer has no animation clock.
 
-Run here with `just ui`. Select a gradient type in the first row (radial is the
+Run from the repository root with `just paint`. Select a gradient type in the first row (radial is the
 default). Controls animate/pause the shared producer, switch to native
 white coverage, set inherited opacity to 50%, and clip each example without
 resizing its paint field. The default window is 1500x940 logical pixels and the
@@ -41,22 +41,21 @@ continue to use deterministic presets and validate rendering independently of
 interactive editor state.
 
 ```sh
-just                       # List recipes
-just args                  # App options
-just ui                    # Open radial paint examples
-just linear                # Multi-stop linear gradient
-just conic                 # Conic gradient
-just diamond               # Diamond gradient
-just mesh                  # Hermite mesh gradient
-just check                 # Format check, tests, Clippy
-just metal-test            # Metal API validation
-just capture               # /tmp/paint-lab.png
-just headless --effect conic --frames 120 # Checks plus CPU wall/readback timing
-just --set profile release headless --frames 120
+just labs paint                                      # List tasks
+just paint -- --help                                 # App options
+just paint                                           # Open radial paint examples
+just paint linear                                    # Multi-stop linear gradient
+just paint conic                                     # Conic gradient
+just paint diamond                                   # Diamond gradient
+just paint mesh                                      # Hermite mesh gradient
+just paint test                                      # Tests (Clippy: just clippy ours)
+just paint metal-test                                # Metal API validation
+just paint capture                                   # /tmp/paint-lab.png
+just paint headless --effect conic --frames 120      # Checks plus CPU wall/readback timing
+just labs --profile dev paint headless --frames 120  # Debug build
 ```
 
-Paths resolve from the repository root. From there:
-`just --justfile apps/xgpui-ext-lab/paint-lab/justfile ui`.
+Every command runs from the repository root, so paths resolve from there.
 
 Editor model tests cover sorted stop edits, selection, stop limits and freezing
 animation without a geometry jump. The headless checks also verify all analytic gradient geometries at known sample

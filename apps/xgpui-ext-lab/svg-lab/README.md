@@ -9,9 +9,9 @@ paths, and includes a multi-element gallery for shared scheduling experiments.
 From the repository root:
 
 ```sh
-just --justfile apps/xgpui-ext-lab/svg-lab/justfile ui
-just --justfile apps/xgpui-ext-lab/svg-lab/justfile test
-just --justfile apps/xgpui-ext-lab/svg-lab/justfile lint
+just svg
+just svg test
+just clippy ours
 ```
 
 Equivalent Cargo invocation:
@@ -56,7 +56,7 @@ metal and dragon artworks with creator/source/license notices, plus an original
 artwork retains its own license; it is not blanket-relicensed as Apache-2.0.
 
 ```sh
-just --justfile apps/xgpui-ext-lab/svg-lab/justfile gallery
+just svg gallery
 ```
 
 This uses only the committed sample subset, repeated across 24 independent

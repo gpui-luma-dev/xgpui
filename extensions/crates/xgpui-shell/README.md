@@ -85,11 +85,11 @@ Core `App::desktop_preferences()` reads the snapshot, and `App::observe_desktop_
 ## Try the lab
 
 ```sh
-just profile=dev lab-shell
+just labs --profile dev shell
 # Linux: request a client frame
-just profile=dev lab-shell --client-decorations
+just labs --profile dev shell --client-decorations
 # Check capabilities on a fixed-size window
-just profile=dev lab-shell --client-decorations --fixed-size
+just labs --profile dev shell --client-decorations --fixed-size
 ```
 
 The lab shows detected and resolved preferences, per-window overrides and window state. Its client-frame preview is a simulation: preview controls never move, resize or close the host window.

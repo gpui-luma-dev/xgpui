@@ -7,9 +7,7 @@ name: Epic validation (#284)
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, 'issue-284/epic']
-  push:
-    branches: ['issue-284/epic']
+    branches: [main]
 
 permissions:
   contents: read

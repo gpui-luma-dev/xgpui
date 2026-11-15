@@ -16,26 +16,26 @@ Changes in this adaptation are explicit: no domain/controller/SDK dependencies; 
 
 ## Commands
 
-From `apps/xgpui-ext-lab/color-field-bench/`:
+From the repository root:
 
 ```sh
-just                         # List commands; no window
-just args                    # CLI help; no window
-just build                   # Optimized build only
-just ui --method layered --animate
-just ui --method sampled --animate --exit-delay-secs 10
-just mtl --method sampled     # macOS: animated field with Metal FPS/GPU HUD
-just headless --method layered --animate --frames 300 --warmup 30 --json apps/xgpui-ext-lab/color-field-bench/results/layered.json --png apps/xgpui-ext-lab/color-field-bench/results/layered.png
-just cpu --method sampled --frames 300 --warmup 30
-just benchmark release-1.25.2-candidate-1
-just check
+just labs color-field-bench                  # List tasks; no window
+just color-field-bench -- --help             # CLI help; no window
+just labs build                              # Optimized build of every lab
+just color-field-bench --method layered --animate
+just color-field-bench --method sampled --animate --exit-delay-secs 10
+just color-field-bench mtl --method sampled  # macOS: animated field with Metal FPS/GPU HUD
+just color-field-bench headless --method layered --animate --frames 300 --warmup 30 --json apps/xgpui-ext-lab/color-field-bench/results/layered.json --png apps/xgpui-ext-lab/color-field-bench/results/layered.png
+just color-field-bench cpu --method sampled --frames 300 --warmup 30
+just color-field-bench benchmark release-1.25.2-candidate-1
+just color-field-bench test                  # Tests (Clippy: just clippy ours)
 ```
 
-From the repository root, use `just --justfile apps/xgpui-ext-lab/color-field-bench/justfile <recipe>`. Recipes run Cargo from that root to use the local crate and compatibility patches. **All relative output paths are relative to the repository root.** The headless, CPU and Metal recipes create `apps/xgpui-ext-lab/color-field-bench/results/`; other parent directories must already exist. Quote paths containing spaces. Extra flags go to the app, not Cargo. The last repeated flag wins.
+Commands run Cargo from the repository root to use the local crate and compatibility patches. **All relative output paths are relative to the repository root.** The headless, CPU and Metal tasks create `apps/xgpui-ext-lab/color-field-bench/results/`; other parent directories must already exist. Quote paths containing spaces. Extra flags go to the app, not Cargo. The last repeated flag wins.
 
 `ui` and `mtl` open windows. Bounded UI runs print/save the report, then quit; `--exit-delay-secs 10` retains the final frame for ten seconds after saving. They activate the window at startup and disable GPUI's inactive-window throttle. A 60-second watchdog exits unsuccessfully if no report has been saved; it does not count the post-save delay. Report errors also exit unsuccessfully.
 
-For continuous visual inspection, use `just ui --continuous --animate`. To include the Metal HUD, use `MTL_HUD_ENABLED=1 just ui --continuous --animate`. Continuous mode has no final report or automatic exit; it conflicts with JSON output. The `mtl` recipe supplies JSON output and animation, so use the `ui` recipe for continuous or fixed-hue HUD inspection. HUD metrics are separate from JSON timing data. See [Apple's Metal HUD documentation](https://developer.apple.com/videos/play/tech-talks/110339/).
+For continuous visual inspection, use `just color-field-bench --continuous --animate`. To include the Metal HUD, use `MTL_HUD_ENABLED=1 just color-field-bench --continuous --animate`. Continuous mode has no final report or automatic exit; it conflicts with JSON output. The `mtl` recipe supplies JSON output and animation, so use the `ui` recipe for continuous or fixed-hue HUD inspection. HUD metrics are separate from JSON timing data. See [Apple's Metal HUD documentation](https://developer.apple.com/videos/play/tech-talks/110339/).
 
 ## Arguments
 
@@ -69,10 +69,10 @@ The sampled algorithm preserves the source's minimum 0.25 sampling scale. At 512
 
 Headless mode uses scale 1 and validates nine interior pixels per frame against an analytical HSV SV field. Tolerance allows quantization, dithering and the sampled path's bounded cell approximation. These are targeted correctness checks, not an exhaustive color-accuracy or gamut test. Image checking and PNG/JSON writes are outside measured intervals. UI rendering uses native scale and pixel snapping, so a 2× window is a different physical workload. Keep dimensions, scale, sampling, animation, compiler and shader mode fixed for comparisons; keep a window visible and its size unchanged.
 
-The current offscreen factory supports Metal on macOS, D3D11 WARP on Windows and wgpu on Linux where available. The owner confirmed all native labs and `just lab-test` passed on Windows on 2026-11-04. Linux interactive acceptance remains separately tracked. This app is a native executable, not a WASM demo. On macOS, add `--features runtime-shaders` to direct Cargo commands to select runtime Metal shader compilation; default recipes use build-time shaders.
+The current offscreen factory supports Metal on macOS, D3D11 WARP on Windows and wgpu on Linux where available. The owner confirmed all native labs and `just labs test` passed on Windows on 2026-11-04. Linux interactive acceptance remains separately tracked. This app is a native executable, not a WASM demo. On macOS, add `--features runtime-shaders` to direct Cargo commands to select runtime Metal shader compilation; default recipes use build-time shaders.
 
 ## Repeated release comparisons
 
-`just benchmark <new-run-name>` builds once and runs five interleaved trials of each method: 512 × 384, samples 128, starting hue 210, animation enabled, 30 warmup and 300 measured frames. It saves every report, log and exit status, plus source/binary hashes, compiler/revision data and macOS machine/display/power metadata. An existing run directory is rejected instead of overwritten. The recipe requires Bash, Perl and shasum; each executable inherits a 60-second process alarm, including headless runs.
+`just color-field-bench benchmark <new-run-name>` builds once and runs five interleaved trials of each method: 512 × 384, samples 128, starting hue 210, animation enabled, 30 warmup and 300 measured frames. It saves every report, log and exit status, plus source/binary hashes, compiler/revision data and macOS machine/display/power metadata. An existing run directory is rejected instead of overwritten. The recipe requires Bash, Perl and shasum; each executable inherits a 60-second process alarm, including headless runs.
 
 Output lives in `apps/xgpui-ext-lab/color-field-bench/results/<new-run-name>/`, ignored by Git. It is local evidence and is not backed up by a push. For a release comparison, run old and new GPUI revisions with the same app code and environment. Compare the range of per-run medians and p95 values; do not silently discard timeouts or stalls. Do not compare against quad-bench as if it were the same workload. Approved baselines should be explicitly reviewed and copied into version-controlled `performance/baselines/<machine>/color-field-bench/<release>/`; no baseline is promoted automatically.
