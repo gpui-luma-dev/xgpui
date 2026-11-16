@@ -7902,6 +7902,7 @@ dependencies = [
  "taffy",
  "thiserror 2.0.21",
  "ttf-parser",
+ "unicode-bidi",
  "unicode-segmentation",
  "url",
  "usvg",

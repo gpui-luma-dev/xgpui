@@ -1365,6 +1365,38 @@ mod tests {
             .map(|glyph| f32::from(glyph.position.y) as i32)
             .collect();
         assert!(rows.len() >= 2, "wrapped into {} line(s)", rows.len());
+        // Auto direction: Hebrew comes first, so every line is flush right and
+        // the paragraph's logical start is at the right edge.
+        let all_text = ParagraphPosition {
+            byte_index: text.len(),
+            affinity: TextAffinity::Upstream,
+        };
+        let line_rects = layout
+            .selection_bounds(
+                ParagraphPosition {
+                    byte_index: 0,
+                    affinity: TextAffinity::Downstream,
+                },
+                all_text,
+            )
+            .unwrap();
+        let mut rights: Vec<_> = line_rects.iter().map(|rect| rect.right()).collect();
+        rights.sort_by(|a, b| f32::from(*a).total_cmp(&f32::from(*b)));
+        assert!(
+            (*rights.last().unwrap() - width).abs() < px(0.5),
+            "the widest line reaches the right edge: {rights:?} of {width:?}"
+        );
+        let start = layout
+            .caret_bounds(ParagraphPosition {
+                byte_index: 0,
+                affinity: TextAffinity::Downstream,
+            })
+            .unwrap();
+        assert!(
+            start.left() > width / 2.0,
+            "the logical start is on the right: {:?} of {width:?}",
+            start.left()
+        );
 
         // Clicking each caret returns it, and a whole-text selection stays inside.
         for byte_index in (0..=text.len()).filter(|&i| text.is_char_boundary(i)) {

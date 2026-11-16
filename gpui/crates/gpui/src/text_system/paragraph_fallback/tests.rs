@@ -196,7 +196,7 @@ fn native_backends_report_and_serve_left_to_right_paragraphs() {
     let auto = window
         .layout_paragraph("aaa bbb ccc".into(), SIZE, &[], px(45.0))
         .unwrap();
-    // Direction is ignored at this level: forced RTL keeps left-to-right geometry.
+    // Forced right to left keeps the wrapping and sets each line flush right.
     let rtl = window
         .layout_paragraph_with_options(
             "aaa bbb ccc".into(),
@@ -207,9 +207,12 @@ fn native_backends_report_and_serve_left_to_right_paragraphs() {
         )
         .unwrap();
     assert_eq!(auto.size(), rtl.size());
+    assert_eq!(auto.caret_bounds(down(0)).unwrap().origin.x, px(0.0));
+    // "aaa bbb" is 42px of the 45px line; "ccc" is 18px.
+    assert_eq!(rtl.caret_bounds(down(0)).unwrap().origin.x, px(3.0));
     assert_eq!(
-        auto.caret_bounds(down(0)).unwrap(),
-        rtl.caret_bounds(down(0)).unwrap()
+        rtl.caret_bounds(down(8)).unwrap().origin,
+        point(px(27.0), px(LINE))
     );
     assert_eq!(
         window
@@ -304,4 +307,75 @@ fn reordered_runs_stay_inside_their_lines() {
             size(px(2.0 * CHAR), px(LINE))
         )]
     );
+}
+
+fn shape_with(text: &str, direction: TextDirection) -> Arc<dyn PlatformParagraphShape> {
+    let options = ParagraphShapeOptions::default().with_direction(direction);
+    NoopTextSystem::new()
+        .shape_paragraph(ParagraphRequest::new(text, SIZE, &[], &options))
+        .unwrap()
+}
+
+/// Where each line's visible text starts and ends, top to bottom.
+fn line_extents(layout: &dyn PlatformParagraphLayout, text: &str) -> Vec<(Pixels, Pixels)> {
+    let mut lines: Vec<(Pixels, Pixels, Pixels)> = Vec::new();
+    for glyph in layout.runs().iter().flat_map(|run| run.glyphs.iter()) {
+        if text.as_bytes()[glyph.index] == b' ' {
+            continue;
+        }
+        let (top, left, right) = (
+            glyph.position.y,
+            glyph.position.x,
+            glyph.position.x + px(CHAR),
+        );
+        match lines.iter_mut().find(|line| line.0 == top) {
+            Some(line) => {
+                line.1 = line.1.min(left);
+                line.2 = line.2.max(right);
+            }
+            None => lines.push((top, left, right)),
+        }
+    }
+    lines
+        .into_iter()
+        .map(|(_, left, right)| (left, right))
+        .collect()
+}
+
+#[test]
+fn the_base_direction_sets_each_lines_start_edge() {
+    // Auto: a first strong Hebrew letter makes the base right to left. Noop
+    // shaping keeps byte order, which is enough to check the alignment.
+    let hebrew = "אבג דהו זחט";
+    let layout = shape_with(hebrew, TextDirection::Auto)
+        .layout(px(45.0))
+        .unwrap();
+    for (left, right) in line_extents(&*layout, hebrew) {
+        assert_eq!(right, px(45.0), "flush right ({left:?}..{right:?})");
+    }
+    // Digits and Latin are left to right under Auto; an explicit direction wins.
+    for (text, direction, right_aligned) in [
+        ("123 456 789", TextDirection::Auto, false),
+        ("aaa bbb ccc", TextDirection::Auto, false),
+        ("123 456 789", TextDirection::RightToLeft, true),
+        (hebrew, TextDirection::LeftToRight, false),
+    ] {
+        let layout = shape_with(text, direction).layout(px(45.0)).unwrap();
+        for (left, right) in line_extents(&*layout, text) {
+            if right_aligned {
+                assert_eq!(right, px(45.0), "{text:?} {direction:?}: flush right");
+            } else {
+                assert_eq!(left, px(0.0), "{text:?} {direction:?}: flush left");
+            }
+        }
+    }
+    // An empty right-to-left paragraph puts its caret at the right edge.
+    let empty = shape_with("", TextDirection::RightToLeft)
+        .layout(px(45.0))
+        .unwrap();
+    assert_eq!(empty.caret_bounds(down(0)).unwrap().origin.x, px(44.0));
+    let empty = shape_with("", TextDirection::Auto)
+        .layout(px(45.0))
+        .unwrap();
+    assert_eq!(empty.caret_bounds(down(0)).unwrap().origin.x, px(0.0));
 }

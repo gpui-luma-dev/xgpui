@@ -10,11 +10,15 @@ pub enum ParagraphSupport {
     /// `layout_paragraph` returns an error.
     #[default]
     Unsupported,
-    /// Wrapping, hit testing, carets, visual movement and selection, in
-    /// left-to-right visual order only. Runs keep the backend's line shaping.
+    /// Wrapping, hit testing, carets, visual movement and selection. Lines wrap
+    /// in logical order and sit flush with the base direction's start edge (right
+    /// for right to left; `Auto` uses the first strong character). Within a line,
+    /// glyphs keep the backend's line shaping, so mixed-direction ordering is only
+    /// as good as that shaping. The name reflects the missing paragraph-level
+    /// bidirectional layout, not left alignment.
     LeftToRight,
-    /// Everything in `LeftToRight`, plus bidirectional reordering and automatic
-    /// base direction.
+    /// Everything in `LeftToRight`, plus full bidirectional paragraph layout:
+    /// reordering per the Unicode Bidirectional Algorithm on every line.
     Full,
 }
 
@@ -136,7 +140,8 @@ pub fn paint_paragraph(
 ///
 /// An explicit direction sets the Unicode Bidirectional Algorithm's paragraph
 /// level; mixed-direction runs inside the paragraph are still reordered.
-/// Backends that report [`ParagraphSupport::Full`] honor it.
+/// Backends that report [`ParagraphSupport::Full`] honor it fully; at
+/// [`ParagraphSupport::LeftToRight`] it sets each line's start edge.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum TextDirection {
     /// Use the first strong directional character, or left-to-right if there is none.

@@ -6,8 +6,10 @@
 //! line-break opportunities, trailing spaces hang at the line end, and a word
 //! wider than the line breaks at a cluster boundary.
 //!
-//! Lines follow logical order and start at the left edge; base direction and
-//! language are ignored. Within a line, glyphs keep the backend's visual order:
+//! Lines follow logical order. The paragraph's base direction (explicit, or its
+//! first strong character for `Auto`) sets each line's start edge: right for a
+//! right-to-left base. Language is ignored, and there is no reordering beyond
+//! the backend's own line shaping. Within a line, glyphs keep its visual order:
 //! native shapers (CoreText, DirectWrite) already reorder right-to-left runs, so
 //! every measurement uses where glyphs are, never byte order. A cluster is in a
 //! right-to-left run when byte indices fall from left to right around it; its
@@ -16,7 +18,7 @@ use super::LineWrapper;
 use crate::{
     Bounds, FontRun, LineLayout, ParagraphPosition, ParagraphRequest, Pixels,
     PlatformParagraphLayout, PlatformParagraphShape, Point, Result, ShapedGlyph, ShapedRun, Size,
-    TextAffinity, VisualDirection, point, px, size,
+    TextAffinity, TextDirection, VisualDirection, point, px, size,
 };
 use anyhow::{bail, ensure};
 use std::{ops::Range, sync::Arc};
@@ -32,6 +34,7 @@ pub(crate) fn shape_paragraph(
         text,
         font_size,
         runs,
+        options,
         ..
     } = request;
     ensure!(
@@ -54,9 +57,16 @@ pub(crate) fn shape_paragraph(
         ));
         start = end + HARD_BREAK.len_utf8();
     }
+    let rtl = match options.direction {
+        TextDirection::LeftToRight => false,
+        TextDirection::RightToLeft => true,
+        // The first strong character; none (digits, empty text) is left to right.
+        _ => unicode_bidi::get_base_direction(text) == unicode_bidi::Direction::Rtl,
+    };
     Ok(Arc::new(FallbackShape {
         source: text.into(),
         font_size,
+        rtl,
         segments: segments.into(),
     }))
 }
@@ -327,6 +337,8 @@ fn runs_font_at(runs: &[FontRun], index: usize) -> Vec<FontRun> {
 struct FallbackShape {
     source: Arc<str>,
     font_size: Pixels,
+    /// Right-to-left base direction: lines start at the right edge.
+    rtl: bool,
     segments: Arc<[Segment]>,
 }
 
@@ -344,14 +356,17 @@ impl PlatformParagraphShape for FallbackShape {
             let count = ends.len();
             for (ix, end) in ends.into_iter().enumerate() {
                 let height = segment.ascent + segment.descent;
-                // Lines start at the left edge of their visible text; trailing
-                // spaces hang past the line's end (its left side in a
-                // right-to-left run).
+                // A line's visible text is flush with the start edge; trailing
+                // spaces hang past its end.
                 let content = segment.content_end(&self.source, start, end);
-                let x0 = segment
+                let x0 = match segment
                     .extent(start, content)
                     .or_else(|| segment.extent(start, end))
-                    .map_or(px(0.0), |(left, _)| left);
+                {
+                    Some((_, right)) if self.rtl => right - width,
+                    Some((left, _)) => left,
+                    None => px(0.0),
+                };
                 lines.push(Line {
                     segment: segment_ix,
                     range: start..end,
@@ -390,6 +405,7 @@ impl PlatformParagraphShape for FallbackShape {
         Ok(Arc::new(FallbackLayout {
             source: self.source.clone(),
             font_size: self.font_size,
+            rtl: self.rtl,
             segments: self.segments.clone(),
             size: size(width, top),
             lines,
@@ -428,6 +444,7 @@ struct Line {
 struct FallbackLayout {
     source: Arc<str>,
     font_size: Pixels,
+    rtl: bool,
     segments: Arc<[Segment]>,
     size: Size<Pixels>,
     lines: Vec<Line>,
@@ -484,10 +501,13 @@ impl FallbackLayout {
     }
 
     /// Line-local caret x (never left of the line) for a boundary on `line`.
+    /// An empty line's caret sits at its start edge.
     fn caret_x(&self, line: &Line, offset: usize) -> Pixels {
-        self.segments[line.segment]
-            .caret_x(offset, &line.range)
-            .map_or(px(0.0), |x| (x - line.x0).max(px(0.0)))
+        match self.segments[line.segment].caret_x(offset, &line.range) {
+            Some(x) => (x - line.x0).max(px(0.0)),
+            None if self.rtl => (self.size.width - px(1.0)).max(px(0.0)),
+            None => px(0.0),
+        }
     }
 
     /// The position for `offset` shown on `line`.

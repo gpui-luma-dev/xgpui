@@ -122,6 +122,7 @@ sum_tree = { package = "sum-tree-gpui-unofficial", version = "=1.28.1" }
 taffy = { version = "=0.15.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "grid", "block_layout", "float_layout", "content_size"] }
 thiserror = { version = "2.0.12" }
 unicode-segmentation = { version = "1.10" }
+unicode-bidi = { version = "0.3.18" }
 gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.28.1" }
 hdrhistogram = { version = "7", default-features = false, optional = true }
 waker-fn = "1.2.0"
