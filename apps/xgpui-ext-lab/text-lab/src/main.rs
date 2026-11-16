@@ -6,6 +6,9 @@ mod bidi;
 mod editing_tests;
 #[cfg(test)]
 mod layout_cost;
+mod l10n;
+#[cfg(test)]
+mod l10n_tests;
 mod paragraph;
 #[cfg(test)]
 mod rtl_checks;
@@ -35,6 +38,8 @@ enum Workload {
     Paragraph,
     /// Right-to-left labels, styled runs and GPUI paragraphs; same code on both backends.
     Bidi,
+    /// Localization QA: one screen in several locales, checked after layout (#355).
+    L10n,
 }
 #[derive(Parser)]
 struct Options {
@@ -71,11 +76,15 @@ struct Lab {
     scroll: Option<Entity<workload::ScrollLab>>,
     paragraph: Option<Entity<paragraph::ParagraphLab>>,
     bidi: Option<Entity<bidi::BidiLab>>,
+    l10n: Option<Entity<l10n::L10nLab>>,
 }
 impl Render for Lab {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         if let Some(bidi) = &self.bidi {
             return div().id("bidi-lab-root").size_full().child(bidi.clone());
+        }
+        if let Some(l10n) = &self.l10n {
+            return div().id("l10n-lab-root").size_full().child(l10n.clone());
         }
         if let Some(paragraph) = &self.paragraph {
             return div()
@@ -205,7 +214,10 @@ fn main() -> Result<()> {
                     .collection
                     .register_fonts(parley::fontique::Blob::new(Arc::new(emoji)), None);
             }
-            if matches!(options.workload, Workload::Paragraph | Workload::Bidi) {
+            if matches!(
+                options.workload,
+                Workload::Paragraph | Workload::Bidi | Workload::L10n
+            ) {
                 for data in paragraph::FONTS {
                     fonts
                         .collection
@@ -225,7 +237,7 @@ fn main() -> Result<()> {
             Cow::Borrowed(samples::PLEX),
             Cow::Borrowed(samples::FLEX),
         ])?;
-        if options.workload == Workload::Bidi {
+        if matches!(options.workload, Workload::Bidi | Workload::L10n) {
             app.text_system().add_fonts(
                 paragraph::FONTS
                     .iter()
@@ -356,7 +368,10 @@ fn main() -> Result<()> {
             .or_else(|| cx.displays().into_iter().next())
             .expect("no display available")
             .bounds();
-        let width = (display.size.width / 2.0 - px(24.0)).min(px(640.0));
+        // The localization grid fits two panels side by side.
+        let wide = options.workload == Workload::L10n;
+        let width =
+            (display.size.width / 2.0 - px(24.0)).min(if wide { px(660.0) } else { px(640.0) });
         let height = px(1200.0);
         let x = display.origin.x
             + px(16.0)
@@ -394,6 +409,9 @@ fn main() -> Result<()> {
                 if let Some(bidi) = &bidi {
                     window.focus(&bidi.focus_handle(cx), cx);
                 }
+                let l10n = (options.workload == Workload::L10n).then(|| {
+                    cx.new(|cx| l10n::L10nLab::new(name.clone(), parley_backend.clone(), cx))
+                });
                 let scroll = if options.workload == Workload::Scroll {
                     Some(cx.new(|_| {
                         workload::ScrollLab::new(
@@ -405,7 +423,7 @@ fn main() -> Result<()> {
                         )
                     }))
                 } else {
-                    if paragraph.is_none() && bidi.is_none() {
+                    if paragraph.is_none() && bidi.is_none() && l10n.is_none() {
                         window.focus(&input.focus_handle(cx), cx);
                     }
                     None
@@ -417,6 +435,7 @@ fn main() -> Result<()> {
                     scroll,
                     paragraph,
                     bidi,
+                    l10n,
                     name,
                     samples,
                     timings,
@@ -455,6 +474,7 @@ fn launch_pair(options: &Options) -> Result<()> {
                 Workload::Scroll => "scroll",
                 Workload::Paragraph => "paragraph",
                 Workload::Bidi => "bidi",
+                Workload::L10n => "l10n",
             },
             "--lines",
             &options.lines.to_string(),
