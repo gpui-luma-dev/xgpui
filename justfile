@@ -44,7 +44,7 @@ paint *args:
 gamut *args:
     @XGPUI_LAB_DIRECT=1 {{ lab }} gamut "$@"
 
-# Color swatches and CIE chromaticity.
+# Color swatches, CIE chromaticity, Italy (P3) and Flowers (ProPhoto RGB) photos.
 color *args:
     @XGPUI_LAB_DIRECT=1 {{ lab }} color "$@"
 
@@ -99,6 +99,14 @@ extensions-web *args:
 # Numerical, ICC, CIE dataset and color workspace checks (`just color test`).
 lab-color-test *args:
     @{{ lab }} color test "$@"
+
+# WebKit Flowers ProPhoto RGB comparison (`just color flowers`).
+lab-flowers *args:
+    @XGPUI_LAB_DIRECT=1 {{ lab }} color flowers "$@"
+
+# Flowers ProPhoto checks, including Metal composition (`just color flowers-test`).
+lab-flowers-test *args:
+    @{{ lab }} color flowers-test "$@"
 
 # Build every native lab without launching a window.
 lab-build *args:

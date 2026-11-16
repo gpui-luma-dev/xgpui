@@ -11,7 +11,8 @@ just color --mode chromaticity --uv
 just color --native-fill
 just color --icc-sampled
 just color --photo                 # WebKit Italy native-wide/sRGB comparison.
-just color --flowers               # WebKit Flowers ProPhoto RGB comparison.
+just color flowers                 # WebKit Flowers ProPhoto RGB comparison (also --flowers).
+just color flowers-test            # Flowers assets, profile, gamut and Metal checks.
 just color --help
 just color test             # Numerical, fixtures and native tests.
 ```
@@ -42,7 +43,7 @@ their existing platform capability checks and report effective output/fallback.
 
 ## Flowers (ProPhoto RGB)
 
-`--flowers`, or the button on the chromaticity page, opens WebKit’s Flowers
+`just color flowers` (alias `just lab-flowers`, or `--flowers`), or the button on the chromaticity page, opens WebKit’s Flowers
 comparison. The ProPhoto and sRGB JPEGs are decoded raw (no color management)
 and the ProPhoto channels go through xgpui’s named ProPhoto pipeline into
 bounded P3 or Rec.2020 storage with Clip or ReduceChroma. Controls: storage,
