@@ -20,6 +20,55 @@
 </aside>
 <main id="content" tabindex="-1">
 <p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="whats-new">What's new</h1>
+<h2 id="xgpui-4-1-0">XGPUI 4.1.0 — paragraph text, ProPhoto RGB and GPU interop pacing</h2>
+<p>Paragraph text through GPUI on every backend, right-to-left text in plain GPUI labels, ProPhoto RGB, and frame pacing for GPU interop engines. 19 crates are published: <code>xgpui</code> 4.1.0, breaking minor versions of five extensions, and patch versions of the rest. Release issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/338">#338</a>; release notes on <a href="https://github.com/gpui-luma-dev/xgpui/releases">GitHub releases</a>.</p>
+<h3>Highlights</h3>
+<ul>
+<li><strong>Paragraph text through GPUI</strong> (<a href="https://github.com/gpui-luma-dev/xgpui/issues/325">#325</a>): text controls get one paragraph engine through <code>window.text_system()</code>. <code>paragraph_support()</code> reports <code>Unsupported</code>, <code>LeftToRight</code> or <code>Full</code>; <code>layout_paragraph_with_options</code> takes a base direction (<code>TextDirection</code>) and a language; <code>paragraph_content_widths</code> gives min-content and max-content widths; layouts provide hit testing, carets, visual movement and selection. Parley gives full bidirectional layout. Native backends get a built-in fallback: lines wrap in order and align to the base direction's start edge, so Hebrew sits on the right, and glyph order within a line comes from the platform shaper. See <a href="parley-text.html#paragraphs-and-input">Paragraphs and input</a>.</li>
+<li><strong>Right-to-left in plain GPUI text:</strong> on Parley, single-line Hebrew, Arabic and mixed labels render (<a href="https://github.com/gpui-luma-dev/xgpui/pull/330">#330</a>). On every backend, per-run colors, backgrounds and underlines paint correctly for right-to-left text (<a href="https://github.com/gpui-luma-dev/xgpui/pull/333">#333</a>). Wrapping and carets in plain text stay left-to-right (<a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>); use <code>typeset()</code> for those.</li>
+<li><strong>ProPhoto RGB</strong> (ROMM RGB, D50) in <code>xgpui-color</code> (CPU and WGSL) and as a source interpretation in <code>xgpui-media</code> (<a href="https://github.com/gpui-luma-dev/xgpui/issues/107">#107</a>). See <a href="color-math.html">color math</a>.</li>
+<li><strong>GPU interop pacing</strong> (<a href="https://github.com/gpui-luma-dev/xgpui/issues/262">#262</a>): <code>wait_composited</code>, <code>on_composited</code>, <code>refresh_interval</code>, and <code>Presentation::{GpuWait, ObserveOnly, Auto}</code>. The API review (<a href="https://github.com/gpui-luma-dev/xgpui/issues/261">#261</a>) adds <code>request_device</code> on every platform and a typed <code>Unsupported</code>. See <a href="gpu-interop.html">GPU interop</a>.</li>
+<li><strong>Labs:</strong> <code>just text bidi</code> shows GPUI paragraphs and right-to-left labels side by side on native and Parley.</li>
+</ul>
+<h3>Bug fixes</h3>
+<ul>
+<li><strong>Windows:</strong> closing a window no longer logs "Invalid window handle" errors (<a href="https://github.com/gpui-luma-dev/xgpui/issues/277">#277</a>).</li>
+<li><strong>Native paragraphs:</strong> right-to-left text from CoreText wraps inside its box instead of running off the left edge (<a href="https://github.com/gpui-luma-dev/xgpui/pull/336">#336</a>).</li>
+<li><strong>Builds:</strong> warning-free builds, macro tests and a Clippy policy (<a href="https://github.com/gpui-luma-dev/xgpui/issues/280">#280</a>).</li>
+</ul>
+<h3>Migration</h3>
+<ul>
+<li><strong><code>xgpui</code> 4.1:</strong> build a <code>ParagraphRequest</code> with <code>ParagraphRequest::new</code>, not a struct literal; only text backends that construct requests are affected. <code>layout_paragraph</code> now succeeds on native backends and the test platform; check <code>paragraph_support()</code> instead of the error. See <a href="gpui-public-api.html#paragraph-text-core-41-325">GPUI public API changes</a>.</li>
+<li><strong><code>xgpui-color</code> 0.4:</strong> add a wildcard arm to matches on <code>RgbSpace</code> and <code>GamutMapping</code>.</li>
+<li><strong><code>xgpui-media</code> 0.7:</strong> add a wildcard arm to matches on <code>ImagePrimaries</code> and <code>TransferFunction</code>.</li>
+<li><strong><code>xgpui-gamut</code> 0.5:</strong> follows <code>xgpui-color</code> 0.4 through its <code>color</code> re-export.</li>
+<li><strong><code>xgpui-gpu-interop</code> 0.3:</strong> add a wildcard arm to matches on <code>Transport</code>, <code>AcquireError</code>, <code>SurfaceFormat</code>, <code>SurfaceStats</code> and <code>HeavyStatus</code>; <code>EngineSurface::unsupported()</code> returns <code>Option&lt;Unsupported&gt;</code> (use <code>.reason()</code>); <code>EngineSurface::paint</code> takes <code>cx</code>; <code>SurfaceFormat::color_mode</code> is no longer public.</li>
+<li><strong><code>xgpui-parley</code> 0.7:</strong> <code>TextDirection</code> is <code>gpui::TextDirection</code>, re-exported with the same variants; the <code>From</code> conversion to Parley's <code>BaseDirection</code> is gone.</li>
+</ul>
+<h3>Validation</h3>
+<p>Every change passed PR CI. macOS runners were unavailable for the final merge, so the macOS warnings job ran locally on the same commit, with no warnings. Windows and Linux were checked by hand on <code>main</code>. The paragraph work is covered by core tests, CoreText tests with a Hebrew font, Parley tests, and xgpui-luma's lab tests on Parley and on the native text system.</p>
+<h3>Versions</h3>
+<table><thead><tr><th>Crate</th><th>Previous release</th><th>Released</th></tr></thead><tbody>
+<tr><td><code>xgpui</code></td><td>4.0.0</td><td><strong>4.1.0</strong></td></tr>
+<tr><td><code>xgpui-apple</code></td><td>5.0.0</td><td><strong>5.0.1</strong></td></tr>
+<tr><td><code>xgpui-canvas</code></td><td>0.4.0</td><td><strong>0.4.1</strong></td></tr>
+<tr><td><code>xgpui-color</code></td><td>0.3.2</td><td><strong>0.4.0</strong></td></tr>
+<tr><td><code>xgpui-gamut</code></td><td>0.4.0</td><td><strong>0.5.0</strong></td></tr>
+<tr><td><code>xgpui-gpu-interop</code></td><td>0.2.0</td><td><strong>0.3.0</strong></td></tr>
+<tr><td><code>xgpui-ios</code></td><td>2.0.0</td><td><strong>2.0.1</strong></td></tr>
+<tr><td><code>xgpui-linux</code></td><td>3.0.0</td><td><strong>3.0.1</strong></td></tr>
+<tr><td><code>xgpui-macos</code></td><td>5.0.0</td><td><strong>5.0.1</strong></td></tr>
+<tr><td><code>xgpui-macros</code></td><td>1.0.3</td><td><strong>1.0.4</strong></td></tr>
+<tr><td><code>xgpui-media</code></td><td>0.6.0</td><td><strong>0.7.0</strong></td></tr>
+<tr><td><code>xgpui-parley</code></td><td>0.6.0</td><td><strong>0.7.0</strong></td></tr>
+<tr><td><code>xgpui-platform</code></td><td>3.0.0</td><td><strong>3.0.1</strong></td></tr>
+<tr><td><code>xgpui-shader</code></td><td>0.5.0</td><td><strong>0.5.1</strong></td></tr>
+<tr><td><code>xgpui-shell</code></td><td>0.3.0</td><td><strong>0.3.1</strong></td></tr>
+<tr><td><code>xgpui-svg</code></td><td>0.4.0</td><td><strong>0.4.1</strong></td></tr>
+<tr><td><code>xgpui-web</code></td><td>3.0.0</td><td><strong>3.0.1</strong></td></tr>
+<tr><td><code>xgpui-wgpu</code></td><td>3.0.0</td><td><strong>3.0.1</strong></td></tr>
+<tr><td><code>xgpui-windows</code></td><td>3.0.0</td><td><strong>3.0.1</strong></td></tr>
+</tbody></table>
 <h2 id="gpui-1-28-1">November 15, 2026 — GPUI 1.28.1 upstream sync</h2>
 <p>The GPUI sources now follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/releases/tag/v1.28.1">1.28.1</a> (Zed <code>v1.28.1</code>). Where an upstream change conflicted with XGPUI behavior, XGPUI’s behavior was kept. The release is available on crates.io: 17 new crate versions, from tag <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-15-04ba149f08ca"><code>release-2026-11-15-04ba149f08ca</code></a>; <code>xgpui-color</code> and <code>xgpui-macros</code> are unchanged. Tracking issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/284">#284</a>. Every change, migration step and version reason: <a href="gpui-1.28-migration.html">GPUI 1.28.1 sync: changes and migration</a>. Full <a href="https://github.com/gpui-luma-dev/xgpui/releases/tag/release-2026-11-15-04ba149f08ca">release notes on GitHub</a>.</p>
 <h3>Highlights</h3>

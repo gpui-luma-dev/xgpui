@@ -8,8 +8,8 @@ Add both crates:
 
 ```toml
 [dependencies]
-xgpui = "4.0.0"
-xgpui-shell = "0.3.0"
+xgpui = "4.1.0"
+xgpui-shell = "0.3.1"
 ```
 
 

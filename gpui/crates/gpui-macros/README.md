@@ -12,8 +12,8 @@ For application setup, use the matching framework packages:
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui", version = "2.0.0" }
-gpui_platform = { package = "xgpui-platform", version = "2.0.0" }
+gpui = { package = "xgpui", version = "4.1.0" }
+gpui_platform = { package = "xgpui-platform", version = "3.0.1" }
 ```
 
 The registry package is `xgpui-macros`; its Rust library name is
