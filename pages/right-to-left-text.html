@@ -30,7 +30,8 @@
 </tbody></table>
 <h2 id="example">Example</h2>
 <p>A complete app: Parley as the text system, plain GPUI text whose direction comes from the text, and <code>typeset(…).rtl()</code> for a Latin-first string in a right-to-left UI.</p>
-<pre><code class="language-toml">[dependencies]
+<p><span class="code-legend">Highlighted lines</span> are what XGPUI adds to a standard GPUI app; everything else is ordinary GPUI. The <code>gpui</code> and <code>gpui-platform</code> dependencies are XGPUI's packages of them (<code>xgpui</code>, <code>xgpui-platform</code>).</p>
+<pre data-highlight="5-6"><code class="language-toml">[dependencies]
 # Until the next release: the repository (packages xgpui, xgpui-platform, xgpui-parley).
 gpui = { package = "xgpui", git = "https://github.com/gpui-luma-dev/xgpui" }
 gpui-platform = { package = "xgpui-platform", git = "https://github.com/gpui-luma-dev/xgpui" }
@@ -38,7 +39,7 @@ xgpui-parley = { git = "https://github.com/gpui-luma-dev/xgpui" }
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
 anyhow = "1"
 </code></pre>
-<pre><code class="language-rust">use anyhow::Context as _;
+<pre data-highlight="6,8,20-34,36-37,39-40,79-80,82"><code class="language-rust">use anyhow::Context as _;
 use gpui::{
     App, Application, Bounds, Context, SharedString, Window, WindowBounds, WindowOptions, div,
     prelude::*, px, rgb, size,

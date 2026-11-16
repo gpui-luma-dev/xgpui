@@ -30,3 +30,4 @@ pre .token.attribute,pre .token.annotation{color:var(--syntax-type)}
 
 .extension-document img{display:block;max-width:100%;height:auto;margin:24px 0 6px}
 .extension-document blockquote{margin:20px 0;padding:4px 20px;border-left:3px solid #919191;background:#ececec;border-radius:0 5px 5px 0}.extension-document blockquote pre{background:#ffffff}
+.code-highlight{display:block;line-height:calc(15px * 1.65);min-width:calc(100% + 11px);margin-left:-11px;padding-left:8px;background:#fdf2c4;border-left:3px solid #c99a1e}.code-legend{display:inline-block;background:#fdf2c4;border-left:3px solid #c99a1e;padding:0 6px;font-size:13px}
