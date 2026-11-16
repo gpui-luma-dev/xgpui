@@ -1,6 +1,7 @@
 //! Native and Parley comparison through the same GPUI application/rendering path.
 use xgpui_ext_lab::{LabApp, LabWindowTitle};
 mod axes;
+mod bidi;
 #[cfg(test)]
 mod editing_tests;
 mod paragraph;
@@ -28,6 +29,8 @@ enum Workload {
     Compare,
     Scroll,
     Paragraph,
+    /// Right-to-left labels, styled runs and GPUI paragraphs; same code on both backends.
+    Bidi,
 }
 #[derive(Parser)]
 struct Options {
@@ -63,9 +66,13 @@ struct Lab {
     input: Entity<input::TextInput>,
     scroll: Option<Entity<workload::ScrollLab>>,
     paragraph: Option<Entity<paragraph::ParagraphLab>>,
+    bidi: Option<Entity<bidi::BidiLab>>,
 }
 impl Render for Lab {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        if let Some(bidi) = &self.bidi {
+            return div().id("bidi-lab-root").size_full().child(bidi.clone());
+        }
         if let Some(paragraph) = &self.paragraph {
             return div()
                 .id("paragraph-lab-root")
@@ -142,7 +149,7 @@ fn main() -> Result<()> {
     if options.workload == Workload::Paragraph {
         ensure!(
             options.backend != Backend::Native,
-            "native backends do not implement the optional paragraph hook; use --backend parley"
+            "this view drives Parley's extension APIs (typeset, explicit options); use --backend parley, or --workload bidi for GPUI paragraphs on native"
         );
         options.backend = Backend::Parley; // Both defaults to the available paragraph provider.
     }
@@ -194,7 +201,7 @@ fn main() -> Result<()> {
                     .collection
                     .register_fonts(parley::fontique::Blob::new(Arc::new(emoji)), None);
             }
-            if options.workload == Workload::Paragraph {
+            if matches!(options.workload, Workload::Paragraph | Workload::Bidi) {
                 for data in paragraph::FONTS {
                     fonts
                         .collection
@@ -214,6 +221,14 @@ fn main() -> Result<()> {
             Cow::Borrowed(samples::PLEX),
             Cow::Borrowed(samples::FLEX),
         ])?;
+        if options.workload == Workload::Bidi {
+            app.text_system().add_fonts(
+                paragraph::FONTS
+                    .iter()
+                    .map(|data| Cow::Borrowed(*data))
+                    .collect(),
+            )?;
+        }
     }
     let setup_ms = start.elapsed().as_secs_f64() * 1000.0;
     let paragraph_timings = if options.workload == Workload::Paragraph {
@@ -369,6 +384,11 @@ fn main() -> Result<()> {
                 if let Some(paragraph) = &paragraph {
                     window.focus(&paragraph.focus_handle(cx), cx);
                 }
+                let bidi = (options.workload == Workload::Bidi)
+                    .then(|| cx.new(|cx| bidi::BidiLab::new(name.clone(), cx)));
+                if let Some(bidi) = &bidi {
+                    window.focus(&bidi.focus_handle(cx), cx);
+                }
                 let scroll = if options.workload == Workload::Scroll {
                     Some(cx.new(|_| {
                         workload::ScrollLab::new(
@@ -380,7 +400,7 @@ fn main() -> Result<()> {
                         )
                     }))
                 } else {
-                    if paragraph.is_none() {
+                    if paragraph.is_none() && bidi.is_none() {
                         window.focus(&input.focus_handle(cx), cx);
                     }
                     None
@@ -391,6 +411,7 @@ fn main() -> Result<()> {
                     input,
                     scroll,
                     paragraph,
+                    bidi,
                     name,
                     samples,
                     timings,
@@ -428,6 +449,7 @@ fn launch_pair(options: &Options) -> Result<()> {
                 Workload::Compare => "compare",
                 Workload::Scroll => "scroll",
                 Workload::Paragraph => "paragraph",
+                Workload::Bidi => "bidi",
             },
             "--lines",
             &options.lines.to_string(),

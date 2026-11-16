@@ -7,6 +7,7 @@ mod line;
 mod line_layout;
 mod line_wrapper;
 mod paragraph;
+mod paragraph_fallback;
 
 pub use font_fallbacks::*;
 pub use font_features::*;
@@ -16,6 +17,7 @@ pub use line::*;
 pub use line_layout::*;
 pub use line_wrapper::*;
 pub use paragraph::*;
+pub(crate) use paragraph_fallback::shape_paragraph as shape_fallback_paragraph;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -342,6 +344,11 @@ impl TextSystem {
     pub fn font_capabilities(&self) -> FontCapabilities {
         self.platform_text_system.font_capabilities()
     }
+    /// Reports what paragraph layout supports on this backend.
+    pub fn paragraph_support(&self) -> ParagraphSupport {
+        self.platform_text_system.paragraph_support()
+    }
+
     /// Queries available axis ranges for a resolved face.
     pub fn font_axes(&self, font_id: FontId) -> Result<FontQuery<Vec<VariationAxisInfo>>> {
         self.platform_text_system.font_axes(font_id)
@@ -928,7 +935,7 @@ impl WindowTextSystem {
 
     /// Layout one paragraph through an optional backend capability. Uses the
     /// existing frame cache lifecycle; colors/decorations are paint-only inputs.
-    /// This initial API takes resolved FontRuns and automatic direction/start alignment.
+    /// Takes resolved FontRuns, automatic direction and start alignment.
     pub fn layout_paragraph(
         &self,
         text: SharedString,
@@ -936,8 +943,46 @@ impl WindowTextSystem {
         runs: &[FontRun],
         width: Pixels,
     ) -> Result<Arc<dyn PlatformParagraphLayout>> {
+        self.layout_paragraph_with_options(text, font_size, runs, &Default::default(), width)
+    }
+
+    /// Like [`Self::layout_paragraph`], with an explicit base direction and
+    /// content language. Each distinct set of options is shaped and cached separately.
+    pub fn layout_paragraph_with_options(
+        &self,
+        text: SharedString,
+        font_size: Pixels,
+        runs: &[FontRun],
+        options: &ParagraphShapeOptions,
+        width: Pixels,
+    ) -> Result<Arc<dyn PlatformParagraphLayout>> {
         self.line_layout_cache
-            .layout_paragraph(text, font_size, runs, width)
+            .layout_paragraph(text, font_size, runs, options, width)
+    }
+
+    /// Min-content and max-content widths `(min, max)` of one paragraph, from
+    /// the same cached shape `layout_paragraph` reflows. Useful for sizing a
+    /// single-line field without laying it out at trial widths.
+    pub fn paragraph_content_widths(
+        &self,
+        text: SharedString,
+        font_size: Pixels,
+        runs: &[FontRun],
+    ) -> Result<(Pixels, Pixels)> {
+        self.paragraph_content_widths_with_options(text, font_size, runs, &Default::default())
+    }
+
+    /// Like [`Self::paragraph_content_widths`], with the shaping options used by
+    /// [`Self::layout_paragraph_with_options`].
+    pub fn paragraph_content_widths_with_options(
+        &self,
+        text: SharedString,
+        font_size: Pixels,
+        runs: &[FontRun],
+        options: &ParagraphShapeOptions,
+    ) -> Result<(Pixels, Pixels)> {
+        self.line_layout_cache
+            .paragraph_content_widths(text, font_size, runs, options)
     }
 
     /// Returns the shaped layout width of for the given character, in the given font and size.

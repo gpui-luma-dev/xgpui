@@ -1,4 +1,5 @@
-//! Paragraph-wide shaping options owned by this extension; GPUI core is unchanged.
+//! Paragraph-wide shaping options. Direction is GPUI's; language and line height
+//! are this extension's.
 use anyhow::{Context, Result};
 
 /// Paragraph-wide options that affect shaping and line breaking.
@@ -15,28 +16,14 @@ pub struct ParagraphOptions {
     pub line_height: Option<gpui::Pixels>,
 }
 
-/// Base direction of a paragraph: the order of its lines' runs and its start edge.
-///
-/// An explicit direction sets the Unicode Bidirectional Algorithm's paragraph
-/// level; mixed-direction runs inside the paragraph are still reordered.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum TextDirection {
-    /// Use the first strong directional character, or left-to-right if there is none.
-    #[default]
-    Auto,
-    /// Left-to-right base direction.
-    LeftToRight,
-    /// Right-to-left base direction.
-    RightToLeft,
-}
+/// Base direction of a paragraph; GPUI's type, re-exported here.
+pub use gpui::TextDirection;
 
-impl From<TextDirection> for parley::BaseDirection {
-    fn from(direction: TextDirection) -> Self {
-        match direction {
-            TextDirection::Auto => Self::Auto,
-            TextDirection::LeftToRight => Self::Ltr,
-            TextDirection::RightToLeft => Self::Rtl,
-        }
+pub(crate) fn base_direction(direction: TextDirection) -> parley::BaseDirection {
+    match direction {
+        TextDirection::Auto => parley::BaseDirection::Auto,
+        TextDirection::LeftToRight => parley::BaseDirection::Ltr,
+        TextDirection::RightToLeft => parley::BaseDirection::Rtl,
     }
 }
 

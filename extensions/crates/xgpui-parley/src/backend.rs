@@ -188,8 +188,9 @@ impl ParleyTextSystem {
     }
 
     /// Fallible equivalent of the infallible GPUI layout hook. Validate unsupported
-    /// input here before using the backend through GPUI (RTL, synthetic styles,
-    /// paragraph breaks and invalid style ranges return errors).
+    /// input here before using the backend through GPUI (synthetic styles,
+    /// paragraph breaks and invalid style ranges return errors). Right-to-left
+    /// text is laid out in visual order with logical cluster indices.
     pub fn try_layout_line(
         &self,
         text: &str,
@@ -387,7 +388,7 @@ impl State {
             self.shape_calls += 1;
         }
         let mut builder = self.layout.ranged_builder(&mut self.fonts, text, 1.0, true);
-        builder.set_base_direction(options.direction.into());
+        builder.set_base_direction(crate::options::base_direction(options.direction));
         if let Some(language) = options.language {
             builder.push_default(StyleProperty::Locale(Some(language.parley())));
         }
@@ -670,15 +671,29 @@ impl PlatformTextSystem for ParleyTextSystem {
             }
         }
     }
+    fn paragraph_support(&self) -> gpui::ParagraphSupport {
+        gpui::ParagraphSupport::Full
+    }
     fn shape_paragraph(
         &self,
         request: gpui::ParagraphRequest<'_>,
     ) -> Result<Arc<dyn gpui::PlatformParagraphShape>> {
-        // GPUI's request carries no options; explicit options use the extension API.
-        Ok(Arc::new(self.prepare_paragraph(
+        // Line height has no GPUI equivalent; it stays on the extension API.
+        let options = crate::ParagraphOptions {
+            direction: request.options.direction,
+            language: request
+                .options
+                .language
+                .as_deref()
+                .map(crate::TextLanguage::parse)
+                .transpose()?,
+            line_height: None,
+        };
+        Ok(Arc::new(self.prepare_paragraph_with_options(
             request.text,
             request.font_size,
             request.runs,
+            options,
         )?))
     }
     fn recommended_rendering_mode(&self, _: FontId, _: Pixels) -> TextRenderingMode {
@@ -688,6 +703,10 @@ impl PlatformTextSystem for ParleyTextSystem {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "backend/rtl_tests.rs"]
+mod rtl_tests;
 
 #[cfg(test)]
 #[path = "paragraph/tests.rs"]

@@ -1,0 +1,218 @@
+use super::*;
+use crate::{
+    NoopTextSystem, ParagraphShapeOptions, ParagraphSupport, PlatformTextSystem, TextDirection,
+    TextSystem, WindowTextSystem,
+};
+
+// Noop shaping at font size 10: every character advances 6px, ascent is 10.25px
+// and a line is 13px tall.
+const SIZE: Pixels = px(10.0);
+const CHAR: f32 = 6.0;
+const LINE: f32 = 13.0;
+
+fn shape(text: &str) -> Arc<dyn PlatformParagraphShape> {
+    let noop = NoopTextSystem::new();
+    let options = ParagraphShapeOptions::default();
+    noop.shape_paragraph(ParagraphRequest::new(text, SIZE, &[], &options))
+        .unwrap()
+}
+
+fn layout(text: &str, width: f32) -> Arc<dyn PlatformParagraphLayout> {
+    shape(text).layout(px(width)).unwrap()
+}
+
+fn down(byte_index: usize) -> ParagraphPosition {
+    ParagraphPosition {
+        byte_index,
+        affinity: TextAffinity::Downstream,
+    }
+}
+
+fn up(byte_index: usize) -> ParagraphPosition {
+    ParagraphPosition {
+        byte_index,
+        affinity: TextAffinity::Upstream,
+    }
+}
+
+fn line_starts(layout: &dyn PlatformParagraphLayout) -> Vec<usize> {
+    let mut starts: Vec<usize> = layout
+        .runs()
+        .iter()
+        .flat_map(|run| run.glyphs.iter())
+        .filter(|glyph| glyph.position.x == px(0.0))
+        .map(|glyph| glyph.index)
+        .collect();
+    starts.dedup();
+    starts
+}
+
+#[test]
+fn wraps_at_spaces_with_trailing_space_hanging() {
+    // "aaa bbb ccc" is 66px; at 45px "aaa bbb " fits (42px without its space).
+    let layout = layout("aaa bbb ccc", 45.0);
+    assert_eq!(layout.size(), size(px(45.0), px(2.0 * LINE)));
+    assert_eq!(line_starts(&*layout), vec![0, 8]);
+    let c = layout
+        .runs()
+        .iter()
+        .flat_map(|run| run.glyphs.iter())
+        .find(|glyph| glyph.index == 9)
+        .unwrap();
+    assert_eq!(c.position, point(px(CHAR), px(LINE + 10.25)));
+}
+
+#[test]
+fn soft_wrap_boundary_is_shared_and_affinity_picks_the_line() {
+    let layout = layout("aaa bbb ccc", 45.0);
+    let end_of_first = layout.caret_bounds(up(8)).unwrap();
+    assert_eq!(end_of_first.origin, point(px(8.0 * CHAR), px(0.0)));
+    assert_eq!(end_of_first.size, size(px(1.0), px(LINE)));
+    let start_of_second = layout.caret_bounds(down(8)).unwrap();
+    assert_eq!(start_of_second.origin, point(px(0.0), px(LINE)));
+    // Clicking past the end of the first line lands there, upstream.
+    assert_eq!(layout.hit_test(point(px(100.0), px(5.0))).unwrap(), up(8));
+    assert_eq!(layout.hit_test(point(px(0.0), px(20.0))).unwrap(), down(8));
+    assert_eq!(layout.hit_test(point(px(13.0), px(-4.0))).unwrap(), down(2));
+    assert_eq!(
+        layout.hit_test(point(px(1000.0), px(1000.0))).unwrap(),
+        down(11)
+    );
+}
+
+#[test]
+fn visual_movement_is_logical_and_clamps_at_the_ends() {
+    let layout = layout("aaa bbb ccc", 45.0);
+    let right = |p| layout.move_visual(p, VisualDirection::Right).unwrap();
+    let left = |p| layout.move_visual(p, VisualDirection::Left).unwrap();
+    assert_eq!(right(down(7)), down(8));
+    assert_eq!(right(up(8)), down(9));
+    assert_eq!(left(down(8)), down(7));
+    assert_eq!(left(down(0)), down(0));
+    assert_eq!(right(down(11)), down(11));
+}
+
+#[test]
+fn selection_spans_wrapped_lines() {
+    let layout = layout("aaa bbb ccc", 45.0);
+    let rects = layout.selection_bounds(down(2), down(10)).unwrap();
+    assert_eq!(
+        rects,
+        vec![
+            Bounds::new(
+                point(px(2.0 * CHAR), px(0.0)),
+                size(px(6.0 * CHAR), px(LINE))
+            ),
+            Bounds::new(point(px(0.0), px(LINE)), size(px(2.0 * CHAR), px(LINE))),
+        ]
+    );
+    // Order does not matter, and an empty selection has no rectangles.
+    assert_eq!(layout.selection_bounds(down(10), down(2)).unwrap(), rects);
+    assert!(
+        layout
+            .selection_bounds(down(4), down(4))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn long_words_break_at_clusters_and_zero_width_still_progresses() {
+    let narrow = layout("abcdefghij", 25.0);
+    assert_eq!(line_starts(&*narrow), vec![0, 4, 8]);
+    assert_eq!(narrow.size().height, px(3.0 * LINE));
+    let zero = layout("abcdefghij", 0.0);
+    assert_eq!(zero.size().height, px(10.0 * LINE));
+}
+
+#[test]
+fn content_widths_are_longest_word_and_whole_line() {
+    assert_eq!(
+        shape("aaa bbbbb cc").content_widths().unwrap(),
+        (px(5.0 * CHAR), px(12.0 * CHAR))
+    );
+    let wide = layout("aaa bbbbb cc", 12.0 * CHAR);
+    assert_eq!(wide.size().height, px(LINE));
+}
+
+#[test]
+fn hard_breaks_split_lines_and_empty_lines_have_height() {
+    // "ab" 0..2, break 2..5, "" 5..5, break 5..8, "cd" 8..10.
+    let text = "ab\u{2028}\u{2028}cd";
+    let layout = layout(text, 100.0);
+    assert_eq!(layout.size().height, px(3.0 * LINE));
+    assert_eq!(
+        layout.caret_bounds(down(5)).unwrap().origin,
+        point(px(0.0), px(LINE))
+    );
+    assert_eq!(
+        layout.caret_bounds(down(8)).unwrap().origin,
+        point(px(0.0), px(2.0 * LINE))
+    );
+    assert!(layout.caret_bounds(down(3)).is_err());
+    let right = |p| layout.move_visual(p, VisualDirection::Right).unwrap();
+    assert_eq!(right(down(2)), down(5));
+    assert_eq!(right(down(5)), down(8));
+    assert_eq!(
+        layout.hit_test(point(px(50.0), px(LINE + 1.0))).unwrap(),
+        down(5)
+    );
+
+    let empty = self::layout("", 100.0);
+    assert_eq!(empty.size(), size(px(100.0), px(LINE)));
+    assert_eq!(
+        empty.caret_bounds(down(0)).unwrap().size,
+        size(px(1.0), px(LINE))
+    );
+}
+
+#[test]
+fn invalid_input_and_positions_are_errors() {
+    let noop = NoopTextSystem::new();
+    let options = ParagraphShapeOptions::default();
+    for text in ["a\nb", "a\rb", "a\u{2029}b"] {
+        assert!(
+            noop.shape_paragraph(ParagraphRequest::new(text, SIZE, &[], &options))
+                .is_err()
+        );
+    }
+    assert!(shape("ab").layout(px(f32::NAN)).is_err());
+    let layout = layout("é", 100.0);
+    assert!(layout.caret_bounds(down(1)).is_err());
+    assert!(layout.caret_bounds(down(3)).is_err());
+    assert!(layout.caret_bounds(down(2)).is_ok());
+}
+
+#[test]
+fn native_backends_report_and_serve_left_to_right_paragraphs() {
+    let text_system = Arc::new(TextSystem::new(Arc::new(NoopTextSystem::new())));
+    assert_eq!(
+        text_system.paragraph_support(),
+        ParagraphSupport::LeftToRight
+    );
+    let window = WindowTextSystem::new(text_system);
+    let auto = window
+        .layout_paragraph("aaa bbb ccc".into(), SIZE, &[], px(45.0))
+        .unwrap();
+    // Direction is ignored at this level: forced RTL keeps left-to-right geometry.
+    let rtl = window
+        .layout_paragraph_with_options(
+            "aaa bbb ccc".into(),
+            SIZE,
+            &[],
+            &ParagraphShapeOptions::default().with_direction(TextDirection::RightToLeft),
+            px(45.0),
+        )
+        .unwrap();
+    assert_eq!(auto.size(), rtl.size());
+    assert_eq!(
+        auto.caret_bounds(down(0)).unwrap(),
+        rtl.caret_bounds(down(0)).unwrap()
+    );
+    assert_eq!(
+        window
+            .paragraph_content_widths("aaa bbb ccc".into(), SIZE, &[])
+            .unwrap(),
+        (px(3.0 * CHAR), px(11.0 * CHAR))
+    );
+}

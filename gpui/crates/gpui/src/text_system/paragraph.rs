@@ -1,6 +1,34 @@
 //! Optional paragraph interop. Layout providers retain their own interaction data.
-use crate::{Bounds, FontRun, Hsla, Pixels, Point, Result, ShapedRun, Size, Window};
+use crate::{Bounds, FontRun, Hsla, Pixels, Point, Result, ShapedRun, SharedString, Size, Window};
 use std::sync::Arc;
+
+/// What a text backend's paragraph layout supports, so callers need not infer
+/// support from `layout_paragraph` errors.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum ParagraphSupport {
+    /// `layout_paragraph` returns an error.
+    #[default]
+    Unsupported,
+    /// Wrapping, hit testing, carets, visual movement and selection, in
+    /// left-to-right visual order only. Runs keep the backend's line shaping.
+    LeftToRight,
+    /// Everything in `LeftToRight`, plus bidirectional reordering and automatic
+    /// base direction.
+    Full,
+}
+
+impl ParagraphSupport {
+    /// `layout_paragraph` can succeed on this backend.
+    pub fn supports_layout(self) -> bool {
+        self >= Self::LeftToRight
+    }
+
+    /// Mixed-direction and right-to-left paragraphs are laid out in visual order.
+    pub fn supports_bidi(self) -> bool {
+        self >= Self::Full
+    }
+}
 
 /// Side of a logical boundary at a wrap or bidirectional transition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,6 +61,14 @@ pub enum VisualDirection {
 pub trait PlatformParagraphShape: Send + Sync {
     /// Break at a positive finite logical width, with automatic direction/start alignment.
     fn layout(&self, width: Pixels) -> Result<Arc<dyn PlatformParagraphLayout>>;
+
+    /// `(min, max)` content widths: the narrowest width with every soft break
+    /// taken, and the widest line with only hard breaks. These are the
+    /// min-content and max-content sizes flex layout uses. Backends that report
+    /// paragraph support must override this; the default returns an error.
+    fn content_widths(&self) -> Result<(Pixels, Pixels)> {
+        anyhow::bail!("paragraph content widths are unsupported by this text backend")
+    }
 }
 
 /// Immutable paragraph paint and interaction data, all in paragraph-local pixels.
@@ -96,9 +132,53 @@ pub fn paint_paragraph(
     Ok(())
 }
 
+/// Base direction of a paragraph: the order of its lines' runs and its start edge.
+///
+/// An explicit direction sets the Unicode Bidirectional Algorithm's paragraph
+/// level; mixed-direction runs inside the paragraph are still reordered.
+/// Backends that report [`ParagraphSupport::Full`] honor it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum TextDirection {
+    /// Use the first strong directional character, or left-to-right if there is none.
+    #[default]
+    Auto,
+    /// Left-to-right base direction.
+    LeftToRight,
+    /// Right-to-left base direction.
+    RightToLeft,
+}
+
+/// Paragraph-wide options that affect shaping and line breaking. The defaults
+/// reproduce [`crate::WindowTextSystem::layout_paragraph`]: automatic direction and
+/// no language. Every option is part of the paragraph cache key.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct ParagraphShapeOptions {
+    /// Base direction; [`TextDirection::Auto`] infers it from the text.
+    pub direction: TextDirection,
+    /// BCP 47 content language for the whole paragraph, such as `"ar"` or
+    /// `"sr-Cyrl"`, for language-specific shaping and line breaking. Backends may
+    /// ignore it, and may reject a tag they cannot parse.
+    pub language: Option<SharedString>,
+}
+
+impl ParagraphShapeOptions {
+    /// Set the base direction.
+    pub fn with_direction(mut self, direction: TextDirection) -> Self {
+        self.direction = direction;
+        self
+    }
+
+    /// Set the content language from a BCP 47 tag.
+    pub fn with_language(mut self, language: impl Into<SharedString>) -> Self {
+        self.language = Some(language.into());
+        self
+    }
+}
+
 // FontRun is intentionally the same descriptor identity boundary as flat lines.
-/// Borrowed shaping request for one logical paragraph. Direction is inferred and
-/// alignment is start; future shaping options must also be added to cache keys.
+/// Borrowed shaping request for one logical paragraph. Alignment is start.
+#[non_exhaustive]
 pub struct ParagraphRequest<'a> {
     /// Original paragraph UTF-8 source.
     pub text: &'a str,
@@ -106,4 +186,47 @@ pub struct ParagraphRequest<'a> {
     pub font_size: Pixels,
     /// Ordered runs covering source bytes, or empty for the backend default.
     pub runs: &'a [FontRun],
+    /// Direction, language and any later paragraph-wide options.
+    pub options: &'a ParagraphShapeOptions,
+}
+
+impl<'a> ParagraphRequest<'a> {
+    /// A request with the given shaping options.
+    pub fn new(
+        text: &'a str,
+        font_size: Pixels,
+        runs: &'a [FontRun],
+        options: &'a ParagraphShapeOptions,
+    ) -> Self {
+        Self {
+            text,
+            font_size,
+            runs,
+            options,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ParagraphSupport;
+    use crate::{NoopTextSystem, TextSystem};
+    use std::sync::Arc;
+
+    #[test]
+    fn paragraph_support_levels_and_backend_default() {
+        assert!(!ParagraphSupport::Unsupported.supports_layout());
+        assert!(ParagraphSupport::LeftToRight.supports_layout());
+        assert!(!ParagraphSupport::LeftToRight.supports_bidi());
+        assert!(ParagraphSupport::Full.supports_layout());
+        assert!(ParagraphSupport::Full.supports_bidi());
+        assert_eq!(ParagraphSupport::default(), ParagraphSupport::Unsupported);
+
+        // Backends without their own engine get the left-to-right fallback.
+        let text_system = TextSystem::new(Arc::new(NoopTextSystem::new()));
+        assert_eq!(
+            text_system.paragraph_support(),
+            ParagraphSupport::LeftToRight
+        );
+    }
 }
