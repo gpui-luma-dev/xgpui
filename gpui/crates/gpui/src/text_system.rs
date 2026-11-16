@@ -8,6 +8,7 @@ mod line_layout;
 mod line_wrapper;
 mod paragraph;
 mod paragraph_fallback;
+mod text_layout_provider;
 
 pub use font_fallbacks::*;
 pub use font_features::*;
@@ -20,6 +21,7 @@ pub use paragraph::*;
 pub(crate) use paragraph_fallback::shape_paragraph as shape_fallback_paragraph;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+pub use text_layout_provider::*;
 
 use crate::{
     Bounds, DevicePixels, Hsla, Pixels, PlatformTextSystem, Point, Result, SharedString, Size,
