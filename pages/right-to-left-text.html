@@ -179,10 +179,11 @@ div().child(typeset(text).with_highlights(highlights))
 <p>See <a href="gpui-public-api.html#text-layout-provider-332">GPUI public API changes</a> for the compatibility notes.</p>
 <h2 id="try-it">Try it</h2>
 <pre><code class="language-sh">just rtl-example        # the example above
+just text inbox         # a multilingual inbox in plain GPUI text, native and Parley
 just text bidi          # right-to-left page, native and Parley side by side
 just text layout-cost   # frame cost, flat lines versus Parley
 </code></pre>
-<p>The <a href="examples/extensions/?demo=bidi">right-to-left browser demo</a> runs the same page in Wasm. Its section 5 switches plain text between Parley and GPUI's flat lines.</p>
+<p>The <a href="examples/extensions/?demo=inbox">multilingual inbox</a> shows the payoff in a realistic app: a mail view in Hebrew, Arabic and English built only from plain GPUI text, with a UI-language toggle that mirrors the layout and a switch back to GPUI's flat lines. The <a href="examples/extensions/?demo=bidi">right-to-left browser demo</a> runs the lab's test page in Wasm; its section 5 makes the same switch.</p>
 </article>
 </main>
 <footer>Source evidence and review hypotheses are kept distinct. · Created by codex</footer>

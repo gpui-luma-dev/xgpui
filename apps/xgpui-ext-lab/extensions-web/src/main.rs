@@ -13,6 +13,9 @@ mod axes;
 // The desktop text lab's right-to-left view, unchanged (#341).
 #[path = "../../text-lab/src/bidi.rs"]
 mod bidi;
+// The desktop text lab's multilingual inbox, unchanged (#355).
+#[path = "../../text-lab/src/inbox.rs"]
+mod inbox;
 mod brushes;
 mod canvas;
 mod color;
@@ -71,6 +74,7 @@ pub fn demo_behavior(demo: &str) -> String {
         "font-controls" => "Variable fonts: weight, width, slant, optical size • Parley shaping and rasterization in Wasm",
         "parley" => "Parley: editable paragraphs • selection and BiDi",
         "bidi" => "Right to left: GPUI labels, styled runs and paragraphs • Parley in Wasm",
+        "inbox" => "Multilingual inbox: plain GPUI text on Parley • right-to-left UI • Parley in Wasm",
         "brushes" => "Brushes: universal fills, noise, glyphs and paths",
         "hermite" => "Hermite: live 2×2 / 3×3 mesh editor • points and tangent vectors",
         "layers" => "Layers: subtree filters, blending and blur",
@@ -118,6 +122,7 @@ fn launch() -> anyhow::Result<()> {
     let font_controls = parameters.contains(&"demo=font-controls");
     let parley = parameters.contains(&"demo=parley");
     let bidi = parameters.contains(&"demo=bidi");
+    let inbox = parameters.contains(&"demo=inbox");
     let svg = parameters.contains(&"demo=svg");
     let color = parameters.contains(&"demo=color");
     let chromaticity = parameters.contains(&"demo=chromaticity");
@@ -143,7 +148,7 @@ fn launch() -> anyhow::Result<()> {
     let mut font_demo = None;
     // The paragraph demo calls the Parley extension directly, so keep its typed handle.
     let mut parley_text = None;
-    let app = if parley || font_controls || bidi {
+    let app = if parley || font_controls || bidi || inbox {
         let mut fonts = parley::FontContext::new();
         for data in std::iter::once(PLEX).chain(paragraph::FONTS) {
             fonts
@@ -226,6 +231,12 @@ fn launch() -> anyhow::Result<()> {
                 view
             })
             .expect("open right-to-left demo");
+        } else if inbox {
+            cx.open_window(options, |_, cx| {
+                let parley = parley_text.take();
+                cx.new(|cx| inbox::InboxLab::new("Parley / Wasm".into(), parley, cx))
+            })
+            .expect("open inbox demo");
         } else if tiled {
             cx.open_window(options, |_, cx| cx.new(|_| tiled_demo::TiledDemo::new()))
                 .expect("open tiled canvas");

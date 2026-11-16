@@ -276,6 +276,7 @@ views = [
   { name = "parley", title = "Parley text only", args = ["--backend", "parley"] },
   { name = "paragraph", title = "Paragraph comparison", args = ["--workload", "paragraph"] },
   { name = "bidi", title = "Right-to-left and GPUI paragraphs, native and Parley", args = ["--workload", "bidi"] },
+  { name = "inbox", title = "Multilingual inbox: why you'd want Parley, native and Parley", args = ["--workload", "inbox"] },
   { name = "scroll", title = "Text scrolling", args = ["--workload", "scroll"] },
   { name = "timings", title = "Text CPU timings", args = ["--timings-only"] },
 ]

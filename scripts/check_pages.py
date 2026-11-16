@@ -200,7 +200,7 @@ for example in SHADER_EXAMPLES:
         check(f'href="../shaders/?example={example}{suffix}"' in demo_index,
               f"examples/extensions: missing shader link {example}{suffix}")
 launches = re.findall(r'<a href="([^"]+)">Open demo ↗</a>', demo_index)
-check(len(launches) == len(set(launches)) == 26, "examples/extensions: expected 26 distinct demo launches")
+check(len(launches) == len(set(launches)) == 27, "examples/extensions: expected 27 distinct demo launches")
 for path in re.findall(r'href="https://github\.com/gpui-luma-dev/xgpui/blob/main/([^"#]+)', demo_index):
     check((ROOT / path).exists(), f"examples/extensions: source link target missing: {path}")
 for html in (demo_index, shader_index):

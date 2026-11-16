@@ -4,6 +4,9 @@ mod axes;
 mod bidi;
 #[cfg(test)]
 mod editing_tests;
+mod inbox;
+#[cfg(test)]
+mod inbox_tests;
 #[cfg(test)]
 mod layout_cost;
 mod paragraph;
@@ -35,6 +38,8 @@ enum Workload {
     Paragraph,
     /// Right-to-left labels, styled runs and GPUI paragraphs; same code on both backends.
     Bidi,
+    /// A multilingual inbox built from plain GPUI text (#355).
+    Inbox,
 }
 #[derive(Parser)]
 struct Options {
@@ -71,11 +76,15 @@ struct Lab {
     scroll: Option<Entity<workload::ScrollLab>>,
     paragraph: Option<Entity<paragraph::ParagraphLab>>,
     bidi: Option<Entity<bidi::BidiLab>>,
+    inbox: Option<Entity<inbox::InboxLab>>,
 }
 impl Render for Lab {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         if let Some(bidi) = &self.bidi {
             return div().id("bidi-lab-root").size_full().child(bidi.clone());
+        }
+        if let Some(inbox) = &self.inbox {
+            return div().id("inbox-lab-root").size_full().child(inbox.clone());
         }
         if let Some(paragraph) = &self.paragraph {
             return div()
@@ -205,7 +214,10 @@ fn main() -> Result<()> {
                     .collection
                     .register_fonts(parley::fontique::Blob::new(Arc::new(emoji)), None);
             }
-            if matches!(options.workload, Workload::Paragraph | Workload::Bidi) {
+            if matches!(
+                options.workload,
+                Workload::Paragraph | Workload::Bidi | Workload::Inbox
+            ) {
                 for data in paragraph::FONTS {
                     fonts
                         .collection
@@ -225,7 +237,7 @@ fn main() -> Result<()> {
             Cow::Borrowed(samples::PLEX),
             Cow::Borrowed(samples::FLEX),
         ])?;
-        if options.workload == Workload::Bidi {
+        if matches!(options.workload, Workload::Bidi | Workload::Inbox) {
             app.text_system().add_fonts(
                 paragraph::FONTS
                     .iter()
@@ -245,7 +257,10 @@ fn main() -> Result<()> {
         let parley = parley_backend
             .clone()
             .ok_or_else(|| anyhow::anyhow!("paragraph mode requires the Parley backend"))?;
-        Some((paragraph::measure(app.text_system(), options.iterations)?, parley))
+        Some((
+            paragraph::measure(app.text_system(), options.iterations)?,
+            parley,
+        ))
     } else {
         None
     };
@@ -356,8 +371,11 @@ fn main() -> Result<()> {
             .or_else(|| cx.displays().into_iter().next())
             .expect("no display available")
             .bounds();
-        let width = (display.size.width / 2.0 - px(24.0)).min(px(640.0));
-        let height = px(1200.0);
+        // The inbox needs room for its list and message side by side.
+        let wide = options.workload == Workload::Inbox;
+        let width =
+            (display.size.width / 2.0 - px(24.0)).min(if wide { px(980.0) } else { px(640.0) });
+        let height = if wide { px(760.0) } else { px(1200.0) };
         let x = display.origin.x
             + px(16.0)
             + if options.backend == Backend::Parley {
@@ -381,10 +399,9 @@ fn main() -> Result<()> {
             |window, cx| {
                 window.set_lab_title(&format!("Text Lab - {name}"));
                 let input = cx.new(|cx| input::TextInput::new("office café e\u{301} Ångström", cx));
-                let paragraph = paragraph_timings
-                    .map(|(timings, parley)| {
-                        cx.new(|cx| paragraph::ParagraphLab::new(timings, parley, cx))
-                    });
+                let paragraph = paragraph_timings.map(|(timings, parley)| {
+                    cx.new(|cx| paragraph::ParagraphLab::new(timings, parley, cx))
+                });
                 if let Some(paragraph) = &paragraph {
                     window.focus(&paragraph.focus_handle(cx), cx);
                 }
@@ -394,6 +411,9 @@ fn main() -> Result<()> {
                 if let Some(bidi) = &bidi {
                     window.focus(&bidi.focus_handle(cx), cx);
                 }
+                let inbox = (options.workload == Workload::Inbox).then(|| {
+                    cx.new(|cx| inbox::InboxLab::new(name.clone(), parley_backend.clone(), cx))
+                });
                 let scroll = if options.workload == Workload::Scroll {
                     Some(cx.new(|_| {
                         workload::ScrollLab::new(
@@ -405,7 +425,7 @@ fn main() -> Result<()> {
                         )
                     }))
                 } else {
-                    if paragraph.is_none() && bidi.is_none() {
+                    if paragraph.is_none() && bidi.is_none() && inbox.is_none() {
                         window.focus(&input.focus_handle(cx), cx);
                     }
                     None
@@ -417,6 +437,7 @@ fn main() -> Result<()> {
                     scroll,
                     paragraph,
                     bidi,
+                    inbox,
                     name,
                     samples,
                     timings,
@@ -455,6 +476,7 @@ fn launch_pair(options: &Options) -> Result<()> {
                 Workload::Scroll => "scroll",
                 Workload::Paragraph => "paragraph",
                 Workload::Bidi => "bidi",
+                Workload::Inbox => "inbox",
             },
             "--lines",
             &options.lines.to_string(),
