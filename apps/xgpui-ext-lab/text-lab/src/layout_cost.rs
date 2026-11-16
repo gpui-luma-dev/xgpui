@@ -8,6 +8,10 @@
 //! - cold: every frame uses new strings, so nothing is cached;
 //! - warm: the same page again, as when a window redraws unchanged;
 //! - reflow: the same strings at alternating widths, as when resizing.
+//!
+//! For profiling, `XGPUI_LAYOUT_COST_ONLY=<scenario>-<flat|parley>` (for
+//! example `warm-parley`) runs one case, and `XGPUI_LAYOUT_COST_FRAMES` sets
+//! the frame count.
 use super::{paragraph, samples};
 use gpui::{
     AvailableSpace, Pixels, TestAppContext, TestDispatcher, VisualTestContext, div, point,
@@ -22,7 +26,7 @@ use xgpui_parley::ParleyTextSystem;
 const LABELS: usize = 100;
 const PARAGRAPHS: usize = 40;
 const CELLS: usize = 40;
-const FRAMES: usize = 60;
+const DEFAULT_FRAMES: usize = 60;
 const WARMUP: usize = 5;
 
 const LATIN: &str = "Plain GPUI text wraps across lines when it is longer than the width of the box that holds it, like this sentence";
@@ -81,8 +85,17 @@ enum Scenario {
     Reflow,
 }
 
+fn frames() -> usize {
+    std::env::var("XGPUI_LAYOUT_COST_FRAMES")
+        .ok()
+        .and_then(|frames| frames.parse().ok())
+        .unwrap_or(DEFAULT_FRAMES)
+        .max(10)
+}
+
 /// Median and 90th percentile frame time in milliseconds.
 fn measure(provider: bool, scenario: Scenario) -> (f64, f64) {
+    let frame_count = frames();
     let parley = parley();
     let mut cx =
         TestAppContext::build_with_text_system(TestDispatcher::new(0), None, parley.clone());
@@ -104,13 +117,13 @@ fn measure(provider: bool, scenario: Scenario) -> (f64, f64) {
         ),
     };
     for ix in 0..WARMUP {
-        frame(visual, FRAMES + ix);
+        frame(visual, frame_count + ix);
     }
-    let mut times: Vec<f64> = (0..FRAMES)
+    let mut times: Vec<f64> = (0..frame_count)
         .map(|ix| frame(visual, ix).as_secs_f64() * 1000.)
         .collect();
     times.sort_by(f64::total_cmp);
-    (times[FRAMES / 2], times[FRAMES * 9 / 10])
+    (times[frame_count / 2], times[frame_count * 9 / 10])
 }
 
 #[test]
@@ -121,18 +134,26 @@ fn plain_text_layout_cost() {
         LABELS,
         PARAGRAPHS,
         CELLS,
-        FRAMES,
+        frames(),
         !cfg!(debug_assertions)
     );
     println!(
         "{:<8} {:>17} {:>17} {:>9}",
         "scenario", "GPUI lines (ms)", "Parley (ms)", "median ×"
     );
+    let only = std::env::var("XGPUI_LAYOUT_COST_ONLY").ok();
     for (name, scenario) in [
         ("cold", Scenario::Cold),
         ("warm", Scenario::Warm),
         ("reflow", Scenario::Reflow),
     ] {
+        if let Some(only) = &only {
+            if let Some(case) = only.strip_prefix(&format!("{name}-")) {
+                let times = measure(case == "parley", scenario);
+                println!("{only}: median {:.2} ms, p90 {:.2} ms", times.0, times.1);
+            }
+            continue;
+        }
         let flat = measure(false, scenario);
         let parley = measure(true, scenario);
         println!(
