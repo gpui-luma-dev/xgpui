@@ -1,6 +1,10 @@
 //! Right-to-left text and paragraphs through GPUI's own APIs (#325). The native
 //! and Parley windows, and the Wasm gallery (`?demo=bidi`), run this same code;
 //! only the installed text backend differs.
+//!
+//! Section 5 shows the conditions behind gpui-luma-dev/xgpui#332: wrapped
+//! right-to-left text in plain GPUI elements next to `typeset()`. The
+//! `rtl_checks` tests pin the same behavior, so a change shows up as a failure.
 use gpui::{
     Bounds, Context, FocusHandle, Focusable, Font, FontFallbacks, FontRun, HighlightStyle,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, ParagraphPosition,
@@ -9,6 +13,7 @@ use gpui::{
     VisualDirection, Window, canvas, div, fill, hsla, paint_paragraph, prelude::*, px, rgb,
 };
 use std::sync::Arc;
+use xgpui_parley::{ParleyTextSystem, typeset};
 
 const LABELS: [(&str, &str); 5] = [
     ("Latin", "Plain GPUI text label"),
@@ -40,6 +45,11 @@ const PARAGRAPHS: [(&str, &str); 3] = [
         "Mixed text: שלום עולם sits inside a Latin sentence, then مرحبا بالعالم, then the numbers 2026 and 42.",
     ),
 ];
+
+/// Wrapped right-to-left text for section 5 (#332).
+pub(crate) const WRAPPED: &str =
+    "שורה ראשונה של טקסט עברי ארוך שחייב לעבור לשורה הבאה כדי להיכנס לתיבה";
+pub(crate) const WRAP_WIDTH: Pixels = px(220.0);
 
 const DIRECTIONS: [(&str, TextDirection); 3] = [
     ("Auto", TextDirection::Auto),
@@ -79,6 +89,7 @@ fn start() -> ParagraphPosition {
 
 pub struct BidiLab {
     name: String,
+    typeset: bool,
     sample: usize,
     direction: usize,
     width: Width,
@@ -97,9 +108,21 @@ struct Laid {
 }
 
 impl BidiLab {
-    pub fn new(name: String, cx: &mut Context<Self>) -> Self {
+    /// `parley` is the installed Parley backend, if any; it backs the
+    /// `typeset()` column in section 5. Without it, that column renders as
+    /// plain GPUI text.
+    pub fn new(
+        name: String,
+        parley: Option<Arc<ParleyTextSystem>>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let typeset = parley.is_some();
+        if let Some(parley) = parley {
+            xgpui_parley::typeset::install(parley, cx);
+        }
         Self {
             name,
+            typeset,
             sample: 0,
             direction: 0,
             width: Width::Fit,
@@ -220,6 +243,53 @@ impl Focusable for BidiLab {
     }
 }
 
+/// Tooltip content for section 5: the same wrapped text, plain or `typeset()`.
+struct Tip {
+    typeset: bool,
+}
+
+impl Render for Tip {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let body = div()
+            .w(WRAP_WIDTH)
+            .p_2()
+            .rounded_md()
+            .bg(rgb(0x0b1220))
+            .text_color(rgb(0xeff4fc))
+            .text_size(px(15.0));
+        if self.typeset {
+            body.child(typeset(WRAPPED))
+        } else {
+            body.child(WRAPPED)
+        }
+    }
+}
+
+/// One row of section 5: a label, then plain GPUI text beside `typeset()`.
+fn compare(label: &str, id: &'static str, frame: impl Fn() -> gpui::Div) -> gpui::Div {
+    div()
+        .flex()
+        .flex_wrap()
+        .gap_3()
+        .items_start()
+        .child(
+            div()
+                .w(px(150.0))
+                .text_color(rgb(0x9ca3af))
+                .child(label.to_owned()),
+        )
+        .child(
+            frame()
+                .debug_selector(move || format!("rtl-{id}-plain"))
+                .child(WRAPPED),
+        )
+        .child(
+            frame()
+                .debug_selector(move || format!("rtl-{id}-typeset"))
+                .child(typeset(WRAPPED)),
+        )
+}
+
 fn section(title: &str, expect: &str) -> gpui::Div {
     div()
         .p_3()
@@ -319,6 +389,52 @@ impl Render for BidiLab {
                 .truncate()
                 .child(*text)
         }));
+
+        let frame = || {
+            div()
+                .w(WRAP_WIDTH)
+                .flex_none()
+                .p_1()
+                .bg(rgb(0x111827))
+                .text_size(px(15.0))
+        };
+        let tip = |id: &'static str, typeset: bool| {
+            div()
+                .id(id)
+                .w(WRAP_WIDTH)
+                .flex_none()
+                .p_1()
+                .rounded_md()
+                .bg(rgb(0x374151))
+                .cursor_pointer()
+                .child(if typeset {
+                    "Hover: typeset() tooltip"
+                } else {
+                    "Hover: plain tooltip"
+                })
+                .tooltip(move |_, cx| cx.new(|_| Tip { typeset }).into())
+        };
+        let wrapped = section(
+            "5. Wrapped right-to-left text in plain GPUI elements (#332)",
+            if self.typeset {
+                "left column, plain GPUI text: lines wrap in painting order, so the sentence's first words (שורה ראשונה) land on the last line. Right column, typeset(): lines wrap in logical order, so the first words are at the top right. The clamp and the tooltip show the same difference."
+            } else {
+                "no Parley engine is installed, so typeset() renders as plain GPUI text and both columns match. Both wrap in painting order: the sentence's first words (שורה ראשונה) land on the last line. Run with --backend parley to compare."
+            },
+        )
+        .child(compare("Wrapped", "wrap", frame))
+        .child(compare("Two-line clamp", "clamp", || {
+            frame().line_clamp(2).text_ellipsis()
+        }))
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap_3()
+                .child(div().w(px(150.0)).text_color(rgb(0x9ca3af)).child("Tooltip"))
+                .child(tip("rtl-tooltip-plain", false))
+                .child(tip("rtl-tooltip-typeset", true)),
+        );
 
         let mut paragraph = section(
             "4. GPUI paragraph: window.text_system().layout_paragraph_with_options (#325 A)",
@@ -471,5 +587,6 @@ impl Render for BidiLab {
             .child(styled)
             .child(truncation)
             .child(paragraph)
+            .child(wrapped)
     }
 }
