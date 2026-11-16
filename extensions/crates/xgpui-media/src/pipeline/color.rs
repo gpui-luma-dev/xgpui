@@ -1,14 +1,20 @@
 use anyhow::{Result, ensure};
 use xgpui_color::{EncodedRgb, GamutMapping, LinearRgb, RgbSpace};
 
-/// D65 SDR primaries. Storage format is specified independently.
+/// SDR primaries. Storage format is specified independently. All are D65
+/// except ProPhoto RGB, whose D50 white is Bradford-adapted to D65 exactly once
+/// by `xgpui-color`. New primaries may be added; match with a wildcard arm.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ImagePrimaries {
     Srgb,
     DisplayP3,
     AdobeRgb1998,
     /// Rec.2020 D65 primaries for bounded linear SDR; no HDR transfer implied.
     Rec2020,
+    /// ProPhoto RGB / ROMM RGB (D50). A source interpretation only: storage
+    /// remains bounded P3 or Rec.2020, so colors outside them are mapped.
+    ProPhotoRgb,
 }
 impl ImagePrimaries {
     fn space(self) -> RgbSpace {
@@ -17,16 +23,22 @@ impl ImagePrimaries {
             Self::DisplayP3 => RgbSpace::DisplayP3,
             Self::AdobeRgb1998 => RgbSpace::AdobeRgb1998,
             Self::Rec2020 => RgbSpace::Rec2020,
+            Self::ProPhotoRgb => RgbSpace::ProPhotoRgb,
         }
     }
 }
+/// Transfer curve, independent of primaries. New curves may be added; match
+/// with a wildcard arm.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum TransferFunction {
     Linear,
     /// Shared by encoded sRGB and encoded Display P3.
     Srgb,
     /// Adobe RGB (1998): decode with exponent 563/256, encode with 256/563.
     AdobeRgb1998,
+    /// ProPhoto RGB: gamma 1.8 with a slope-16 segment below linear 1/512.
+    ProPhotoRgb,
 }
 impl TransferFunction {
     // Transfer curves are independent of primaries. Re-tag the numeric channels
@@ -36,6 +48,7 @@ impl TransferFunction {
             Self::Linear => return Ok(rgb),
             Self::Srgb => RgbSpace::Srgb,
             Self::AdobeRgb1998 => RgbSpace::AdobeRgb1998,
+            Self::ProPhotoRgb => RgbSpace::ProPhotoRgb,
         };
         Ok(EncodedRgb::new(space, rgb)?.decode()?.components())
     }
@@ -44,6 +57,7 @@ impl TransferFunction {
             Self::Linear => return Ok(rgb),
             Self::Srgb => RgbSpace::Srgb,
             Self::AdobeRgb1998 => RgbSpace::AdobeRgb1998,
+            Self::ProPhotoRgb => RgbSpace::ProPhotoRgb,
         };
         Ok(LinearRgb::new(space, rgb)?.encode()?.components())
     }
@@ -71,6 +85,13 @@ impl ImageColor {
     pub const ADOBE_RGB_1998: Self = Self {
         primaries: ImagePrimaries::AdobeRgb1998,
         transfer: TransferFunction::AdobeRgb1998,
+        alpha: AlphaMode::Straight,
+    };
+    /// Explicit encoded ProPhoto RGB / ROMM RGB supplied pixels; no ICC
+    /// inference. Storage maps it into bounded P3 or Rec.2020.
+    pub const PROPHOTO_RGB: Self = Self {
+        primaries: ImagePrimaries::ProPhotoRgb,
+        transfer: TransferFunction::ProPhotoRgb,
         alpha: AlphaMode::Straight,
     };
     pub const LINEAR_P3: Self = Self {

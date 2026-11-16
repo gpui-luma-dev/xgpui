@@ -77,8 +77,11 @@ struct Options {
     #[arg(long)]
     native_fill: bool,
     /// Start the chromaticity workspace with the WebKit Italy photo comparison.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "flowers")]
     photo: bool,
+    /// Start the chromaticity workspace with the WebKit Flowers ProPhoto RGB comparison.
+    #[arg(long)]
+    flowers: bool,
     /// Select the synthetic ICC parametric fixture.
     #[arg(long, conflicts_with = "icc_sampled")]
     icc_parametric: bool,
@@ -94,6 +97,7 @@ impl Options {
         let chromaticity_options = self.uv
             || self.native_fill
             || self.photo
+            || self.flowers
             || self.icc_parametric
             || self.icc_sampled
             || self.effects;
@@ -241,6 +245,7 @@ mod cli_tests {
             "--uv",
             "--native-fill",
             "--photo",
+            "--flowers",
             "--icc-parametric",
             "--icc-sampled",
         ] {

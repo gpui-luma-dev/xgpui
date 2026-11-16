@@ -11,6 +11,7 @@ just color --mode chromaticity --uv
 just color --native-fill
 just color --icc-sampled
 just color --photo                 # WebKit Italy native-wide/sRGB comparison.
+just color --flowers               # WebKit Flowers ProPhoto RGB comparison.
 just color --help
 just color test             # Numerical, fixtures and native tests.
 ```
@@ -38,6 +39,27 @@ their existing platform capability checks and report effective output/fallback.
   display measurement. Native-wide captures/readback remain platform limited.
 - Change a chromaticity setting, switch to Swatches, then return: the setting
   should be retained. The chart and previews should load without errors.
+
+## Flowers (ProPhoto RGB)
+
+`--flowers`, or the button on the chromaticity page, opens WebKit’s Flowers
+comparison. The ProPhoto and sRGB JPEGs are decoded raw (no color management)
+and the ProPhoto channels go through xgpui’s named ProPhoto pipeline into
+bounded P3 or Rec.2020 storage with Clip or ReduceChroma. Controls: storage,
+mapping, native/sRGB-preview output, a wipe against WebKit’s sRGB JPEG, our
+pre-mapping overlay (cyan: outside sRGB; magenta: outside storage), WebKit’s
+out-of-sRGB visualization, zoom, click-to-inspect (codes, linear, XYZ/D65,
+before-mapping and stored values) and a Metal FP16 readback of the selected
+pixel. Synthetic companion patches cover the near-black knee, primaries and
+fractional alpha; their blur toggle uses the sRGB preview path only.
+
+The embedded profile is Kodak’s v2 “ProPhoto RGB”: ROMM colorants with a pure
+gamma of 461/256 and no linear toe. The named ROMM decode therefore differs from
+the profile by at most 4.2e-4 (linear) at 8-bit codes 0–7 and 1.6e-4 above;
+the view reports both. The strict ICC adapter rejects that profile’s Apple
+`mmod` tag by design. Before mapping, 48.02% of pixels leave sRGB, 20.55% leave
+P3 and 0.89% leave Rec.2020. Storage is bounded, so this is not full ProPhoto
+output, and readbacks are composition values rather than monitor measurements.
 
 The CIE dataset and WebKit photos reuse the exact existing files and attribution
 under `../extensions-web/assets/colorimetry` and `../extensions-web/assets/italy`.
