@@ -61,6 +61,14 @@ pub enum VisualDirection {
 pub trait PlatformParagraphShape: Send + Sync {
     /// Break at a positive finite logical width, with automatic direction/start alignment.
     fn layout(&self, width: Pixels) -> Result<Arc<dyn PlatformParagraphLayout>>;
+
+    /// `(min, max)` content widths: the narrowest width with every soft break
+    /// taken, and the widest line with only hard breaks. These are the
+    /// min-content and max-content sizes flex layout uses. Backends that report
+    /// paragraph support must override this; the default returns an error.
+    fn content_widths(&self) -> Result<(Pixels, Pixels)> {
+        anyhow::bail!("paragraph content widths are unsupported by this text backend")
+    }
 }
 
 /// Immutable paragraph paint and interaction data, all in paragraph-local pixels.

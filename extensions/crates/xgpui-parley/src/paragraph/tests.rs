@@ -194,6 +194,28 @@ fn reports_full_paragraph_support_through_gpui() -> Result<()> {
 }
 
 #[test]
+fn gpui_content_widths_match_parley_and_share_the_layout_shape() -> Result<()> {
+    use gpui::{TextSystem, WindowTextSystem};
+    let backend = Arc::new(backend()?);
+    let cache = WindowTextSystem::new(Arc::new(TextSystem::new(backend.clone())));
+    let text = "abc אבג مرحبا words wrap";
+    let runs = runs(&backend, text)?;
+    let (min, max) = cache.paragraph_content_widths(text.into(), px(24.0), &runs)?;
+    let direct = backend
+        .prepare_paragraph(text, px(24.0), &runs)?
+        .content_widths();
+    assert_eq!((min, max), direct);
+    assert!(min > px(0.0) && min < max);
+    let shaped = backend.state.lock().unwrap().shape_calls;
+    // Laying out at max-content keeps one line, without shaping again.
+    let layout = cache.layout_paragraph(text.into(), px(24.0), &runs, max)?;
+    assert_eq!(backend.state.lock().unwrap().shape_calls, shaped);
+    let one_line = cache.layout_paragraph(text.into(), px(24.0), &runs, px(10_000.0))?;
+    assert_eq!(layout.size().height, one_line.size().height);
+    Ok(())
+}
+
+#[test]
 fn gpui_paragraph_cache_reuses_shapes_reflows_and_invalidates() -> Result<()> {
     use gpui::{PlatformParagraphLayout, TextSystem, WindowTextSystem};
     let backend = Arc::new(backend()?);
