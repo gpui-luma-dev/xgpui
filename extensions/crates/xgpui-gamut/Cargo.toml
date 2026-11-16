@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-gamut"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -19,7 +19,7 @@ instanced = ["dep:xgpui-shader", "dep:bytemuck"]
 [dependencies]
 xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"], optional = true , package = "xgpui-shader", version = "0.5.0" }
 bytemuck = { version = "1", features = ["derive"], optional = true }
-xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "0.3.1" }
+xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "0.4.0" }
 anyhow = "1"
 gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "4.0.0" }
 

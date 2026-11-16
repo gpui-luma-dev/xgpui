@@ -9,7 +9,7 @@ GPU or shader compiler is required.
 
 ```toml
 [dependencies]
-xgpui-color = "0.2.1"
+xgpui-color = "0.4.0"
 ```
 
 Rust imports use `xgpui_color`.

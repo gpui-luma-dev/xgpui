@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-media"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 publish = ["crates-io"]
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -20,7 +20,7 @@ wgpu = ["dep:gpui-wgpu", "gpui-wgpu/dma-buf"]
 anyhow = "1"
 half = "2.7"
 xgpui-shader = { path = "../xgpui-shader", features = ["portable-shaders"] , package = "xgpui-shader", version = "0.5.0" }
-xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "0.3.1" }
+xgpui-color = { path = "../xgpui-color" , package = "xgpui-color", version = "0.4.0" }
 refineable = { package = "refineable-gpui-unofficial", version = "=1.28.1" }
 gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "4.0.0" }
 gpui-wgpu = { path = "../../../gpui/crates/gpui-wgpu", optional = true , package = "xgpui-wgpu", version = "3.0.0" }
