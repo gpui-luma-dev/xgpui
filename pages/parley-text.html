@@ -26,9 +26,13 @@ GPUI retains platform input,
 frame caches and glyph atlas ownership.</p>
 <h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
 <p>This crate adds <code>Application::with_platform_and_text_system</code> to select the
-backend before GPUI caches are built, optional <code>PlatformTextSystem::shape_paragraph</code>,
-paragraph layout/cache geometry, and <code>paint_paragraph</code>. The optional trait method
-defaults to Unsupported, so existing text backends need no required override.
+backend before GPUI caches are built, <code>PlatformTextSystem::shape_paragraph</code>,
+paragraph layout/cache geometry, and <code>paint_paragraph</code>. Since core 4.1 the
+paragraph API is reachable for every backend through <code>window.text_system()</code>:
+<code>paragraph_support()</code>, an explicit base direction and language
+(<code>layout_paragraph_with_options</code>) and min-/max-content widths. Parley reports
+<code>ParagraphSupport::Full</code>. Backends without their own paragraph engine get a
+built-in fallback (<code>LeftToRight</code>), so existing text backends need no override.
 Existing application construction and native initialization retain their behavior.
 Additive method names can still collide with downstream extension methods.</p>
 <p>Parley uses GPUI's existing glyph atlas; it does not require custom-draw scene
@@ -38,8 +42,8 @@ changes to existing GPUI callers.</p>
 <p><strong><a href="gpui-public-api.html#added-text-backend-and-paragraph-seams">GPUI public API changes: additions and compatibility</a>.</strong></p>
 <h2 id="construction">Construction</h2>
 <pre><code class="language-toml">[dependencies]
-gpui = { package = "xgpui", version = "=3.0.0" }
-xgpui-parley = { version = "=0.5.0", features = ["system-fonts"] }
+gpui = { package = "xgpui", version = "4.1.0" }
+xgpui-parley = { version = "0.7.0", features = ["system-fonts"] }
 </code></pre>
 <pre><code class="language-rust">use gpui::{Application, PlatformTextSystem};
 use std::sync::Arc;
@@ -129,27 +133,28 @@ It never recycles font IDs or evicts atlas resources. See the
 <a href="font-controls.html#interactive-preview-policy">preview policy</a> and live lab.</p>
 <h2 id="paragraphs-and-input">Paragraphs and input</h2>
 <pre><code class="language-rust">// FontRuns contain descriptor IDs resolved by this application's TextSystem.
-let paragraph = window.text_system().layout_paragraph(
-    text, gpui::px(24.0), &amp;font_runs, width,
-)?;
+let system = window.text_system();
+assert!(system.paragraph_support().supports_layout()); // Full on Parley
+let paragraph = system.layout_paragraph(text.clone(), gpui::px(24.0), &amp;font_runs, width)?;
 let hit = paragraph.hit_test(mouse_position - bounds.origin)?;
 let caret = paragraph.caret_bounds(hit)?;
 let fragments = paragraph.selection_bounds(anchor, hit)?;
 
-// Explicit base direction and language use the extension API directly.
-// `parley` is the Arc&lt;ParleyTextSystem&gt; installed as the app's text backend.
-let options = xgpui_parley::ParagraphOptions {
-    direction: xgpui_parley::TextDirection::RightToLeft,
-    language: Some(xgpui_parley::TextLanguage::parse("ur")?),
-};
-let urdu = parley
-    .prepare_paragraph_with_options(&amp;text, gpui::px(24.0), &amp;font_runs, options)?
-    .layout(width)?; // Cache shapes/reflows yourself; GPUI's cache has no options.
+// Explicit base direction and language, through GPUI's cache (core 4.1).
+let options = gpui::ParagraphShapeOptions::default()
+    .with_direction(gpui::TextDirection::RightToLeft)
+    .with_language("ur");
+let urdu = system.layout_paragraph_with_options(text.clone(), gpui::px(24.0), &amp;font_runs, &amp;options, width)?;
+// One-line width without trial layouts: (min-content, max-content).
+let (_, line_width) = system.paragraph_content_widths_with_options(text, gpui::px(24.0), &amp;font_runs, &amp;options)?;
 
 // During element paint:
 window.handle_input(&amp;focus, gpui::ElementInputHandler::new(bounds, entity), cx);
 gpui::paint_paragraph(paragraph.as_ref(), bounds.origin, color_at, window)?;
 </code></pre>
+<p>A fixed line height is still extension-only:
+<code>ParleyTextSystem::prepare_paragraph_with_options</code> with
+<code>xgpui_parley::ParagraphOptions { line_height, .. }</code>, cached by the caller.</p>
 <p>The input entity implements <code>EntityInputHandler</code>. It translates UTF-16 edits to
 source UTF-8 and uses the painted paragraph for IME geometry. Candidate anchors
 use the requested caret/fragment; marked text uses selection fragments. Edits
@@ -171,28 +176,36 @@ on <code>StyledText</code>, including per-run fonts, colors, backgrounds, underl
 strikethroughs; styles follow truncated text. Wrapping text reports min-content and max-content widths, as in
 taffy's Parley example. Truncation is logical and verified by reshaping. Shapes,
 reflows and fits are cached in the engine. Without <code>install</code> it renders as GPUI
-text. Under this backend, plain GPUI text uses the left-to-right-only flat-line
-path, so right-to-left text needs <code>typeset()</code>. The text lab's Paragraph panel
+text. Under this backend, plain GPUI text renders single-line right-to-left and
+mixed labels, and per-run colors, backgrounds and underlines follow the text.
+Wrapping, carets and start/end alignment in plain text stay left-to-right
+(<a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>), so wrapped or
+aligned right-to-left text needs <code>typeset()</code>. The text lab's Paragraph panel
 draws every label with <code>typeset()</code>: truncated cells, a tooltip and a clamp, plus
 a UI-language toggle (en/he/ar/fa/ur) that mirrors the panel for right-to-left
 languages.</p>
 <h2 id="gpui-versus-extension-apis">GPUI versus extension APIs</h2>
 <table><thead><tr><th>Added to GPUI</th><th>Purpose</th></tr></thead><tbody>
 <tr><td><code>Application::with_platform_and_text_system(Rc&lt;dyn Platform&gt;, Arc&lt;dyn PlatformTextSystem&gt;)</code></td><td>Select the backend before cache construction</td></tr>
-<tr><td><code>PlatformTextSystem::shape_paragraph(ParagraphRequest)</code></td><td>Optional provider hook; default returns Unsupported</td></tr>
+<tr><td><code>PlatformTextSystem::shape_paragraph(ParagraphRequest)</code></td><td>Provider hook; the default is the left-to-right fallback built on <code>layout_line</code></td></tr>
+<tr><td><code>PlatformTextSystem::paragraph_support()</code>, <code>TextSystem::paragraph_support()</code>, <code>ParagraphSupport</code></td><td>What a backend's paragraphs support: <code>Unsupported</code>, <code>LeftToRight</code> or <code>Full</code> (core 4.1)</td></tr>
 <tr><td><code>PlatformParagraphShape::layout(width)</code></td><td>Immutable width-dependent reflow</td></tr>
+<tr><td><code>PlatformParagraphShape::content_widths()</code></td><td>Min-content and max-content widths (core 4.1)</td></tr>
 <tr><td><code>PlatformParagraphLayout</code></td><td>Source, size, visual glyph runs, hit testing, caret, movement and selection geometry</td></tr>
 <tr><td><code>ParagraphRequest</code>, <code>ParagraphPosition</code>, <code>TextAffinity</code>, <code>VisualDirection</code></td><td>Backend-neutral request and interaction types</td></tr>
+<tr><td><code>TextDirection</code>, <code>ParagraphShapeOptions</code></td><td>Base direction and content language for a paragraph; part of the cache key (core 4.1)</td></tr>
 <tr><td><code>WindowTextSystem::layout_paragraph(text, size, runs, width)</code></td><td>GPUI-owned shaping/reflow cache entry point</td></tr>
+<tr><td><code>WindowTextSystem::layout_paragraph_with_options</code>, <code>paragraph_content_widths(_with_options)</code></td><td>The same cache with direction and language, and content widths from the cached shape (core 4.1)</td></tr>
 <tr><td><code>paint_paragraph(layout, origin, color_at, window)</code></td><td>Visual glyph painting through the existing atlas</td></tr>
 </tbody></table>
 <p><code>ParleyTextSystem</code>, <code>FaceRegistry</code>, <code>RegisteredFace</code>, <code>GlyphRasterizer</code>,
 <code>ParagraphShape</code>, <code>ParagraphLayout</code>, <code>VariationPreview</code>, <code>ParagraphOptions</code>,
-<code>TextDirection</code>, <code>TextLanguage</code>, <code>Typeset</code> and <code>typeset::install</code> belong to <strong>xgpui-parley</strong>, not GPUI.
-Explicit paragraph direction and language add no GPUI API.
+<code>TextLanguage</code>, <code>Typeset</code> and <code>typeset::install</code> belong to <strong>xgpui-parley</strong>, not GPUI.
+<code>xgpui_parley::TextDirection</code> re-exports <code>gpui::TextDirection</code> (since 0.7).
 Parley/HarfRust/Skrifa types do not enter the core signatures.</p>
-<p>The paragraph additions change no existing public struct fields or required trait
-methods. Core 3.0 font controls separately add descriptor/style fields; see the
+<p>The paragraph additions add no required trait methods. Core 4.1 made
+<code>ParagraphRequest</code> <code>#[non_exhaustive]</code> with an <code>options</code> field; backends
+that build one use <code>ParagraphRequest::new</code>. Core 3.0 font controls separately add descriptor/style fields; see the
 <a href="gpui-public-api.html#font-axes-and-inspection-core-30">migration table</a>. Existing backend implementations need no paragraph override;
 <code>Application::with_platform</code> and <code>PlatformTextSystem::layout_line</code> retain their
 contracts. <code>EntityInputHandler</code>, <code>ElementInputHandler</code> and glyph/emoji paint
@@ -203,12 +216,12 @@ font selection behavior without adding public API.</p>
 <table><thead><tr><th>Boundary</th><th>Contract</th></tr></thead><tbody>
 <tr><td>Font identity</td><td>Requested descriptors distinguish features/fallbacks/variations; shaped IDs retain actual blob, face index and normalized variation location</td></tr>
 <tr><td>Lifetime</td><td>IDs are not recycled; old layouts remain rasterizable after font registration</td></tr>
-<tr><td>Shape cache</td><td>GPUI key: source, ordered FontRuns, size</td></tr>
+<tr><td>Shape cache</td><td>GPUI key: source, ordered FontRuns, size, direction and language</td></tr>
 <tr><td>Reflow cache</td><td>Same key plus width; immutable layout Arcs; width changes reuse shaping</td></tr>
 <tr><td>Invalidation</td><td>Both cache levels follow frame retention/reuse and font generation; backend calls run outside cache locks</td></tr>
 <tr><td>Geometry</td><td>Logical UTF-8 plus affinity; visual glyph order; paragraph-local positions include baseline/glyph offsets</td></tr>
 <tr><td>Paint</td><td>Existing bounds cache and sprite atlas; colors resolve by logical index; decorations/backgrounds remain caller-owned</td></tr>
-<tr><td>Native providers</td><td>Optional paragraph hook defaults to Unsupported</td></tr>
+<tr><td>Native providers</td><td>The default hook is a left-to-right fallback (<code>ParagraphSupport::LeftToRight</code>): lines wrap in order and align to the base direction's start edge, and glyph order within a line is the platform shaper's</td></tr>
 </tbody></table>
 <p>Parley owns shaping, BiDi, breaking and interaction geometry. Reflow clones and
 rebreaks retained Parley layout. Skrifa metrics/rasterization use the same
@@ -217,11 +230,14 @@ avoids repeating extraction between matching bounds and raster calls. Shaping
 and rasterization use separate locks. No extension layout or
 bitmap cache is added. <a href="gpui-public-api.html">Core API additions</a>.</p>
 <h2 id="supported-subset">Supported subset</h2>
-<p>Flat-line compatibility requires LTR, one size, scale 1 and start alignment.
+<p>Flat-line compatibility requires one size, scale 1 and start alignment.
+Right-to-left and mixed lines are laid out in visual order with logical cluster
+indices, as native backends report them (0.7).
 <code>try_layout_line</code> returns errors; the infallible hook substitutes <code>.notdef</code> with
 original indices and reports rejection outside the backend lock.</p>
 <p>Paragraphs support mixed LTR/RTL, automatic direction (explicit direction and a
-paragraph language through <code>prepare_paragraph_with_options</code>), start alignment, one size,
+paragraph language through GPUI's <code>layout_paragraph_with_options</code> or
+<code>prepare_paragraph_with_options</code>), start alignment, one size,
 multiple font runs and U+2028 hard breaks. Callers split document paragraphs;
 the lab normalizes pasted line endings to U+2028.</p>
 <p>Color emoji (COLR v0/v1, sbix and CBDT) are supported in plain GPUI text and
@@ -239,6 +255,7 @@ web text backend, whose explicit-axis requests remain unsupported.</p>
 <pre><code class="language-sh">just text --backend both
 just text --workload paragraph
 just text --workload paragraph --timings-only
+just text bidi   # GPUI paragraphs and right-to-left labels, native and Parley
 just text --workload scroll --scroll-frames 640 --exit-after-scroll
 just labs test
 </code></pre>
