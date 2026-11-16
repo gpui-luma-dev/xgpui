@@ -61,9 +61,25 @@ for styling, fallback, backend support and migration.
 
 | Path | Supported behavior |
 | --- | --- |
-| Flat line | One size, unwrapped, start-aligned, automatic base direction; UTF-8 indices and baseline-relative positions. Plain GPUI text uses this path. Right-to-left and mixed-direction lines paint in visual order with logical cluster indices, as native backends report them; GPUI's own wrapping, alignment, carets and per-run styling still assume left-to-right, so use `typeset()` or the paragraph path for those. |
+| Flat line | One size, unwrapped, start-aligned, automatic base direction; UTF-8 indices and baseline-relative positions. Plain GPUI text uses this path. Right-to-left and mixed-direction lines paint in visual order with logical cluster indices, as native backends report them. See [Plain GPUI text and right-to-left](#plain-gpui-text-and-right-to-left). |
 | `typeset()` | Element over the paragraph path: inherited GPUI text style, direction/language, wrapping, truncation and line clamps. |
 | Paragraph | Explicit base direction and paragraph language through GPUI (`layout_paragraph_with_options`) or `prepare_paragraph_with_options`; line height through the extension only; multiple descriptor runs, reflow, content widths, hit testing, carets and selection geometry. |
+
+### Plain GPUI text and right-to-left
+
+Plain GPUI text (`div().child("…")`, `StyledText`) stays on the flat-line
+path; it does not switch to paragraphs when Parley is installed.
+
+| Works in plain GPUI text | Use `typeset()` or the paragraph API instead |
+| --- | --- |
+| Single-line right-to-left and mixed labels | Wrapped right-to-left or mixed text (lines wrap in visual order) |
+| Per-run colors, backgrounds, underlines and strikethrough | Carets, hit testing and selection inside right-to-left runs |
+| End truncation (keeps the logical start; the ellipsis follows the direction) | Start/end alignment and an explicit base direction |
+
+The same holds on native backends, whose flat lines use the same visual-order
+glyph records. Moving GPUI's text elements onto paragraphs is deferred; known
+limits and reopen conditions are tracked in
+[#332](https://github.com/gpui-luma-dev/xgpui/issues/332).
 
 Use `window.text_system().layout_paragraph(...)` and `gpui::paint_paragraph`
 for paragraph integration. Colors, backgrounds, decorations and editing behavior
