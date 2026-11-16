@@ -77,7 +77,9 @@ path; it does not switch to paragraphs when Parley is installed.
 | End truncation (keeps the logical start; the ellipsis follows the direction) | Start/end alignment and an explicit base direction |
 
 The same holds on native backends, whose flat lines use the same visual-order
-glyph records.
+glyph records. Moving GPUI's text elements onto paragraphs is deferred; known
+limits and reopen conditions are tracked in
+[#332](https://github.com/gpui-luma-dev/xgpui/issues/332).
 
 Use `window.text_system().layout_paragraph(...)` and `gpui::paint_paragraph`
 for paragraph integration. Colors, backgrounds, decorations and editing behavior
