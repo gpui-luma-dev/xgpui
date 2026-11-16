@@ -220,7 +220,8 @@ fn launch() -> anyhow::Result<()> {
             .expect("open Parley demo");
         } else if bidi {
             cx.open_window(options, |window, cx| {
-                let view = cx.new(|cx| bidi::BidiLab::new("Parley / Wasm".into(), cx));
+                let parley = parley_text.take();
+                let view = cx.new(|cx| bidi::BidiLab::new("Parley / Wasm".into(), parley, cx));
                 window.focus(&view.focus_handle(cx), cx);
                 view
             })
