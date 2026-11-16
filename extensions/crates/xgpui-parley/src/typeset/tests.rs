@@ -126,7 +126,7 @@ fn unwrapped_text_keeps_one_line_per_hard_break() {
     let fixture = Fixture::new();
     // Two runs: run lengths follow the normalized text.
     let style = gpui::TextStyle::default();
-    let (text, runs) = hard_breaks(
+    let (text, runs, _) = hard_breaks(
         &"one\ntwo\r\nthree".into(),
         vec![
             style.to_run("one\n".len()),
@@ -775,13 +775,13 @@ fn a_crlf_split_by_a_style_boundary_is_one_hard_break() {
             .enumerate()
             .map(|(i, len)| if i % 2 == 0 { &style } else { &bold }.to_run(*len))
             .collect();
-        let (text, runs) = hard_breaks(&"one\r\ntwo".into(), runs);
+        let (text, runs, _) = hard_breaks(&"one\r\ntwo".into(), runs);
         assert_eq!(text.as_ref(), "one\u{2028}two", "{lens:?}");
         assert_eq!(runs.iter().map(|run| run.len).sum::<usize>(), text.len());
         assert!(runs.iter().all(|run| run.len > 0), "{lens:?}");
     }
     // The break takes the style of the run holding `\r`.
-    let (_, runs) = hard_breaks(
+    let (_, runs, _) = hard_breaks(
         &"one\r\ntwo".into(),
         vec![style.to_run(3), bold.to_run(1), style.to_run(4)],
     );
@@ -796,7 +796,7 @@ fn a_crlf_split_by_a_style_boundary_is_one_hard_break() {
         .with_highlights([(3..4, HighlightStyle::default())])
         .source_runs(&style);
     for runs in [plain, highlighted] {
-        let (text, _) = hard_breaks(&"one\r\ntwo".into(), runs);
+        let (text, _, _) = hard_breaks(&"one\r\ntwo".into(), runs);
         let fitted = fixture.fit(
             &nowrap(fixture.spec(&text), None),
             AvailableSpace::MaxContent,
@@ -1048,4 +1048,180 @@ fn element_shapes_and_paints_highlighted_runs() {
     draw_styled(visual);
     let fallback = visual.debug_bounds("bold").unwrap().size;
     assert!(fallback.width > visual.debug_bounds("plain").unwrap().size.width);
+}
+
+// ---- install_text_layout: plain GPUI text laid out by this engine ----
+
+const WRAPPED_HEBREW: &str = "אחת שתיים שלוש ארבע חמש שש שבע שמונה";
+
+/// A test app with this backend and `install_text_layout`, plus a drawing
+/// helper returning each plain text element's `TextLayout`.
+fn provider_app() -> (TestAppContext, Arc<ParleyTextSystem>) {
+    let parley = backend();
+    let cx = TestAppContext::build_with_text_system(TestDispatcher::new(0), None, parley.clone());
+    cx.update(|cx| install_text_layout(parley.clone(), cx));
+    (cx, parley)
+}
+
+/// Draws `text` as plain GPUI text in a `width`-wide box styled by `style`,
+/// at (10, 20), and returns its layout.
+fn draw_plain(
+    visual: &mut VisualTestContext,
+    text: &'static str,
+    width: Pixels,
+    style: impl FnOnce(gpui::Div) -> gpui::Div,
+) -> gpui::TextLayout {
+    let element = gpui::StyledText::new(text);
+    let layout = element.layout().clone();
+    visual.draw(
+        point(px(10.0), px(20.0)),
+        size(
+            AvailableSpace::Definite(px(600.0)),
+            AvailableSpace::MinContent,
+        ),
+        |_, _| {
+            div().flex().items_start().child(
+                style(
+                    div()
+                        .w(width)
+                        .font(font())
+                        .text_size(px(16.0))
+                        .line_height(LINE_HEIGHT),
+                )
+                .child(element),
+            )
+        },
+    );
+    layout
+}
+
+#[test]
+fn plain_text_wraps_right_to_left_in_logical_order() {
+    let (mut cx, _) = provider_app();
+    let visual = cx.add_empty_window();
+    let layout = draw_plain(visual, WRAPPED_HEBREW, px(120.0), |div| div);
+    let bounds = layout.bounds();
+    assert!(bounds.size.height >= LINE_HEIGHT * 3.0, "wraps");
+    assert!(layout.line_layouts().is_empty(), "no flat lines");
+
+    // The first word starts the first line, at the right edge.
+    let first = layout.position_for_index(0).unwrap();
+    assert_eq!(first.y, bounds.top());
+    assert!(first.x > bounds.center().x, "{first:?} in {bounds:?}");
+    // Word starts go down the lines in logical order.
+    let tops: Vec<_> = std::iter::once(0)
+        .chain(WRAPPED_HEBREW.match_indices(' ').map(|(ix, _)| ix + 1))
+        .map(|ix| layout.position_for_index(ix).unwrap().y)
+        .collect();
+    assert!(tops.windows(2).all(|pair| pair[0] <= pair[1]), "{tops:?}");
+    assert!(tops.last().unwrap() > &bounds.top());
+
+    // A hit just inside the top-right corner is the first character.
+    let hit = layout.index_for_position(point(bounds.right() - px(2.0), bounds.top() + px(5.0)));
+    assert_eq!(hit, Ok(0));
+    assert_eq!(
+        layout.index_for_position(point(bounds.right() + px(50.0), bounds.top())),
+        Err(0),
+        "outside the element"
+    );
+
+    let wrapped = layout.wrapped_text();
+    assert!(wrapped.starts_with("אחת"), "{wrapped:?}");
+    assert_eq!(
+        wrapped.lines().count(),
+        tops.iter().collect::<std::collections::BTreeSet<_>>().len()
+    );
+    assert_eq!(
+        wrapped
+            .replace('\n', " ")
+            .split_whitespace()
+            .collect::<Vec<_>>(),
+        WRAPPED_HEBREW.split_whitespace().collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn plain_text_matches_typeset_sizes() {
+    let (mut cx, _) = provider_app();
+    let visual = cx.add_empty_window();
+    visual.draw(
+        point(px(0.0), px(0.0)),
+        size(
+            AvailableSpace::Definite(px(900.0)),
+            AvailableSpace::MinContent,
+        ),
+        |_, _| {
+            let cell = |selector: &'static str, width: Pixels| {
+                div()
+                    .debug_selector(move || selector.into())
+                    .w(width)
+                    .font(font())
+                    .text_size(px(16.0))
+                    .line_height(LINE_HEIGHT)
+            };
+            let pair = |name: &'static str, style: fn(gpui::Div) -> gpui::Div| {
+                [
+                    style(cell(name, px(140.0))).child(WRAPPED_HEBREW),
+                    style(cell(name.strip_prefix("plain-").unwrap_or(name), px(140.0)))
+                        .child(typeset(WRAPPED_HEBREW)),
+                ]
+            };
+            div()
+                .flex()
+                .items_start()
+                .children(pair("plain-wrap", |div| div))
+                .children(pair("plain-clamp", |div| div.line_clamp(2).text_ellipsis()))
+                .children(pair("plain-truncate", |div| div.truncate()))
+        },
+    );
+    for name in ["wrap", "clamp", "truncate"] {
+        let plain = format!("plain-{name}").leak();
+        assert_eq!(
+            visual.debug_bounds(plain).unwrap().size,
+            visual.debug_bounds(name).unwrap().size,
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn hard_breaks_map_back_to_source_indices() {
+    let (mut cx, _) = provider_app();
+    let visual = cx.add_empty_window();
+    for (text, second_line) in [("ab\ncd", 3), ("ab\r\ncd", 4)] {
+        let layout = draw_plain(visual, text, px(300.0), |div| div);
+        let bounds = layout.bounds();
+        assert_eq!(bounds.size.height, LINE_HEIGHT * 2.0, "{text:?}");
+        let start = layout.position_for_index(second_line).unwrap();
+        assert_eq!(start.y, bounds.top() + LINE_HEIGHT, "{text:?}");
+        assert_eq!(
+            layout.index_for_position(start + point(px(1.0), px(5.0))),
+            Ok(second_line),
+            "{text:?}"
+        );
+        assert_eq!(layout.wrapped_text(), "ab\ncd");
+    }
+}
+
+#[test]
+fn truncated_plain_text_maps_hits_to_the_full_text() {
+    let (mut cx, _) = provider_app();
+    let visual = cx.add_empty_window();
+    let layout = draw_plain(visual, FOX, px(140.0), |div| div.truncate());
+    let bounds = layout.bounds();
+    assert_eq!(bounds.size.height, LINE_HEIGHT);
+    assert_eq!(layout.text(), FOX, "full text");
+    assert_eq!(
+        layout.index_for_position(point(bounds.left() + px(1.0), bounds.top() + px(5.0))),
+        Ok(0)
+    );
+    assert!(
+        layout.position_for_index(FOX.len() - 1).is_none(),
+        "hidden by truncation"
+    );
+    assert!(
+        layout.wrapped_text().ends_with('…'),
+        "{:?}",
+        layout.wrapped_text()
+    );
 }

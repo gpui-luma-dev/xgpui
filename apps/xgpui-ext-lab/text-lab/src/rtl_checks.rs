@@ -1,15 +1,17 @@
-//! Local checks for the conditions behind gpui-luma-dev/xgpui#332: plain GPUI
-//! text stays on flat lines, and apps use `typeset()` or the paragraph API for
-//! wrapped right-to-left text.
+//! Local checks for gpui-luma-dev/xgpui#332. GPUI's own flat lines wrap
+//! right-to-left text in painting order; with Parley and
+//! `xgpui_parley::install_text_layout`, plain GPUI text wraps in logical order.
 //!
-//! A failure here means that decision needs another look, not necessarily that
+//! A failure here means the right-to-left story changed, not necessarily that
 //! something broke:
-//! - `plain_text_wraps_rtl_in_painting_order_*`: plain GPUI text (or upstream)
-//!   changed how right-to-left lines wrap.
+//! - `plain_text_wraps_rtl_in_painting_order_*`: GPUI's flat lines (or
+//!   upstream) changed how right-to-left lines wrap.
+//! - `install_text_layout_wraps_plain_rtl_in_logical_order`: plain text on the
+//!   Parley engine no longer wraps in logical order.
 //! - `typeset_covers_styled_text_api`: `StyledText`, `TextStyle` or
 //!   `HighlightStyle` changed, so `typeset()` may have fallen behind.
-//! - `bidi_page_wrapped_section_*`: the bidi lab's section 5 no longer shows the
-//!   difference it documents.
+//! - `bidi_page_wrapped_section_*`: the bidi lab's section 5 no longer shows
+//!   what it documents.
 use super::{bidi, paragraph, samples};
 use gpui::{
     FontRun, ParagraphPosition, PlatformTextSystem, StyledText, TestAppContext, TestDispatcher,
@@ -132,6 +134,49 @@ fn plain_text_wraps_rtl_in_painting_order_parley() {
 #[test]
 fn plain_text_wraps_rtl_in_painting_order_native() {
     wrap_order_checks(native());
+}
+
+/// Draws `text` as plain GPUI text in the section 5 width and returns its layout.
+fn plain_layout(visual: &mut VisualTestContext, text: &'static str) -> gpui::TextLayout {
+    let element = StyledText::new(text);
+    let layout = element.layout().clone();
+    let element = Mutex::new(Some(element));
+    visual.draw(point(px(0.), px(0.)), size(px(600.), px(600.)), |_, _| {
+        div().flex().items_start().child(
+            div()
+                .w(bidi::WRAP_WIDTH)
+                .font_family(FAMILY)
+                .text_size(px(15.))
+                .child(element.lock().unwrap().take().unwrap()),
+        )
+    });
+    layout
+}
+
+/// With the Parley engine laying out plain text, the first words start the
+/// first line at the right edge and lines follow logical order.
+#[test]
+fn install_text_layout_wraps_plain_rtl_in_logical_order() {
+    let text = bidi::WRAPPED;
+    let parley = parley();
+    let mut cx =
+        TestAppContext::build_with_text_system(TestDispatcher::new(0), None, parley.clone());
+    cx.update(|cx| xgpui_parley::install_text_layout(parley, cx));
+    let visual = cx.add_empty_window();
+    let layout = plain_layout(visual, text);
+    let bounds = layout.bounds();
+    assert!(layout.line_layouts().is_empty(), "laid out by the provider");
+    let first = layout.position_for_index(0).unwrap();
+    assert_eq!(first.y, bounds.top(), "first words on the first line");
+    assert!(first.x > bounds.center().x, "at the right edge: {first:?}");
+    let tops: Vec<_> = std::iter::once(0)
+        .chain(text.match_indices(' ').map(|(ix, _)| ix + 1))
+        .map(|ix| layout.position_for_index(ix).unwrap().y)
+        .collect();
+    assert!(tops.windows(2).all(|pair| pair[0] <= pair[1]), "{tops:?}");
+    assert!(tops.last().unwrap() > &bounds.top(), "wraps");
+    let first_word = text.split(' ').next().unwrap();
+    assert!(layout.wrapped_text().starts_with(first_word));
 }
 
 /// How `typeset()` covers one public `StyledText` method or text style field.
@@ -287,14 +332,20 @@ fn typeset_covers_styled_text_api() {
     );
 }
 
-/// Draws the bidi lab and returns section 5's frame sizes.
+type SectionSizes = Box<dyn Fn(&str) -> gpui::Size<gpui::Pixels>>;
+
+/// Draws the bidi lab, after `adjust`, and returns section 5's frame sizes and
+/// the window for further drawing.
 fn wrapped_section(
     backend: Arc<dyn PlatformTextSystem>,
     parley: Option<Arc<ParleyTextSystem>>,
-) -> impl Fn(&str) -> gpui::Size<gpui::Pixels> {
+    adjust: impl FnOnce(&mut bidi::BidiLab),
+) -> (SectionSizes, VisualTestContext) {
     let mut cx = TestAppContext::build_with_text_system(TestDispatcher::new(0), None, backend);
     let window = cx.open_window(size(px(900.), px(2400.)), |_, cx| {
-        bidi::BidiLab::new("test".into(), parley, cx)
+        let mut lab = bidi::BidiLab::new("test".into(), parley, cx);
+        adjust(&mut lab);
+        lab
     });
     let lab = window.root(&mut cx).unwrap();
     let mut visual = VisualTestContext::from_window(window.into(), &cx);
@@ -311,29 +362,44 @@ fn wrapped_section(
             (selector, bounds.size)
         })
         .collect();
-    move |selector| sizes.iter().find(|(name, _)| name == selector).unwrap().1
+    let size = move |selector: &str| sizes.iter().find(|(name, _)| name == selector).unwrap().1;
+    (Box::new(size), visual)
 }
 
 #[test]
 fn bidi_page_wrapped_section_parley() {
+    // Default: plain text on the Parley engine, so both columns match.
     let parley = parley();
-    let size = wrapped_section(parley.clone(), Some(parley));
+    let (size, _) = wrapped_section(parley.clone(), Some(parley.clone()), |_| {});
+    for id in ["wrap", "clamp"] {
+        assert_eq!(
+            size(&format!("rtl-{id}-plain")),
+            size(&format!("rtl-{id}-typeset")),
+            "{id}"
+        );
+        assert_eq!(size(&format!("rtl-{id}-plain")).width, bidi::WRAP_WIDTH);
+    }
+    assert!(size("rtl-wrap-typeset").height > size("rtl-clamp-typeset").height);
+
+    // Switched to GPUI lines: plain text is back on flat lines.
+    let (size, mut visual) = wrapped_section(parley.clone(), Some(parley), |lab| {
+        lab.set_plain_on_parley(false)
+    });
     for kind in ["plain", "typeset"] {
         let wrap = size(&format!("rtl-wrap-{kind}"));
         let clamp = size(&format!("rtl-clamp-{kind}"));
         assert_eq!(wrap.width, bidi::WRAP_WIDTH, "{kind}");
         assert!(clamp.height < wrap.height, "{kind}: clamp is shorter");
     }
-    // Both wrap the same words into the same number of lines here; only the
-    // line order differs, which the wrap-order test checks.
-    assert!(size("rtl-wrap-typeset").height > size("rtl-clamp-typeset").height);
+    let layout = plain_layout(&mut visual, bidi::WRAPPED);
+    assert!(!layout.line_layouts().is_empty(), "flat lines");
 }
 
 #[cfg(target_os = "macos")]
 #[test]
 fn bidi_page_wrapped_section_native() {
     // Without a Parley engine, typeset() renders as plain GPUI text.
-    let size = wrapped_section(native(), None);
+    let (size, _) = wrapped_section(native(), None, |_| {});
     for id in ["wrap", "clamp"] {
         assert_eq!(
             size(&format!("rtl-{id}-plain")),
