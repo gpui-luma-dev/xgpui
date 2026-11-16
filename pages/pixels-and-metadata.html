@@ -65,6 +65,7 @@ does not establish that the image has reached the GPU.</p>
 <table><thead><tr><th>Source you want to retain</th><th>Storage choice</th><th>Why</th></tr></thead><tbody>
 <tr><td>Entire P3 gamut</td><td>P3</td><td>P3 red is slightly outside bounded Rec.2020</td></tr>
 <tr><td>Adobe RGB (1998) gamut</td><td>Rec.2020</td><td>Adobe RGB fits, while some Adobe colors lie outside P3</td></tr>
+<tr><td>As much ProPhoto RGB as possible</td><td>Rec.2020 plus an explicit mapping policy</td><td>Neither storage holds ProPhoto; Rec.2020 keeps more of it. In WebKit’s Flowers photo 20.55% of pixels leave P3 and 0.89% leave Rec.2020</td></tr>
 <tr><td>A deliberately reduced preview</td><td>P3 or Rec.2020 plus an explicit mapping policy</td><td>Out-of-storage colors are mapped at ingestion</td></tr>
 </tbody></table>
 <p>Neither storage space universally replaces the other. P3 red has a Rec.2020

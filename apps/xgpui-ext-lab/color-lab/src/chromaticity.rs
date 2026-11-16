@@ -1,5 +1,6 @@
 //! Shared color-pipeline workspace for the full app and standalone lab.
 mod fill;
+mod flowers;
 mod gpu;
 mod metadata;
 mod photo;
@@ -76,6 +77,9 @@ fn primaries(space: RgbSpace) -> ImagePrimaries {
         RgbSpace::DisplayP3 => ImagePrimaries::DisplayP3,
         RgbSpace::AdobeRgb1998 => ImagePrimaries::AdobeRgb1998,
         RgbSpace::Rec2020 => ImagePrimaries::Rec2020,
+        RgbSpace::ProPhotoRgb => ImagePrimaries::ProPhotoRgb,
+        // xgpui-color may add spaces; this lab offers only those in SPACES.
+        other => unreachable!("lab does not offer {other:?}"),
     }
 }
 #[derive(Clone)]
@@ -92,6 +96,8 @@ pub(crate) struct Lab {
     photo_open: bool,
     photo_selection: usize,
     photo: Option<photo::Photo>,
+    flowers_open: bool,
+    flowers: Option<flowers::Flowers>,
     reveal_open: bool,
     standalone_navigation: bool,
     reveal_selection: usize,
@@ -128,6 +134,8 @@ impl Lab {
             photo_open: false,
             photo_selection: 1,
             photo: None,
+            flowers_open: false,
+            flowers: None,
             reveal_open: false,
             standalone_navigation: true,
             reveal_selection: 1,
@@ -185,7 +193,9 @@ impl Lab {
                 s.uv = true;
                 s.reload_fill();
             }
-            if options.photo {
+            if options.flowers {
+                s.set_flowers();
+            } else if options.photo {
                 s.set_photo();
             }
             s.effects = cfg!(target_os = "macos") && options.effects;
@@ -305,6 +315,7 @@ impl Lab {
     }
     pub(crate) fn set_example(&mut self, reveal: bool) {
         self.photo_open = false;
+        self.flowers_open = false;
         self.reveal_open = reveal;
         if reveal && self.reveal.is_none() {
             match reveal::Reveal::new() {
@@ -313,29 +324,43 @@ impl Lab {
             }
         }
     }
+    pub(crate) fn set_flowers(&mut self) {
+        self.photo_open = false;
+        self.reveal_open = false;
+        self.flowers_open = true;
+        if self.flowers.is_none() {
+            self.flowers = Some(flowers::Flowers::new());
+        }
+    }
     pub(crate) fn set_photo(&mut self) {
+        self.flowers_open = false;
         self.photo_open = true;
         self.reveal_open = false;
         if self.photo.is_none() {
             self.photo = Some(photo::Photo::new());
         }
     }
+    /// Window output choice: requests sRGB or extended (wide-gamut SDR)
+    /// composition for this window. It is a setting, not a display report.
     fn window_mode_controls(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let wide = window.color_status().effective() == WindowColorMode::WideGamutSdr;
+        let supported = window.color_status().supports_wide_gamut_sdr();
         div()
             .flex()
             .flex_wrap()
+            .items_center()
             .gap_2()
+            .child(div().pr_1().child("Window output:"))
             .child(self.button(
-                format!("{} Standard (sRGB)", if wide { "○" } else { "●" }),
+                format!("{} sRGB", if wide { "○" } else { "●" }),
                 22,
                 cx,
             ))
-            .when(window.color_status().supports_wide_gamut_sdr(), |row| row.child(self.button(
-                format!("{} Wide gamut", if wide { "●" } else { "○" }), 23, cx,
+            .when(supported, |row| row.child(self.button(
+                format!("{} Extended (for wide-gamut displays)", if wide { "●" } else { "○" }), 23, cx,
             )))
-            .when(!window.color_status().supports_wide_gamut_sdr(), |row| row.child(
-                div().px_3().py_2().child("Current setup: standard SDR")
+            .when(!supported, |row| row.child(
+                div().px_3().py_2().child("Extended output isn’t available with this graphics setup")
             ))
             .into_any_element()
     }
@@ -457,7 +482,8 @@ impl Lab {
                     18 => s.set_example(!s.reveal_open),
                     19..=21 => s.reveal_selection = action - 19,
                     24..=26 => s.photo_selection = action - 24,
-                    27 => s.set_example(false),
+                    27 | 29 => s.set_example(false),
+                    30 => s.set_flowers(),
                     28 => {
                         if let Some(photo) = &mut s.photo {
                             photo.check(window);
@@ -691,6 +717,9 @@ impl Lab {
 impl Render for Lab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.wide = window.color_status().effective() == WindowColorMode::WideGamutSdr;
+        if self.flowers_open {
+            return self.render_flowers(window, cx).into_any_element();
+        }
         if self.photo_open {
             return self.render_photo(window, cx).into_any_element();
         }
@@ -776,7 +805,7 @@ impl Render for Lab {
             "No valid pixel".into()
         };
         div().id("chromaticity-scroll").overflow_y_scroll().size_full().bg(rgb(0x101823)).text_color(rgb(0xe2eaf3)).p_6().flex().flex_col().gap_3()
-            .when(self.standalone_navigation, |body| body.child(self.button("Try the hidden wide-gamut symbol →".into(),18,cx)))
+            .when(self.standalone_navigation, |body| body.child(div().flex().gap_2().child(self.button("Try the hidden wide-gamut symbol →".into(),18,cx)).child(self.button("WebKit Flowers (ProPhoto RGB) →".into(),30,cx))))
             .child(div().text_2xl().child("Chromaticity & Color Gamut Lab"))
             .child("Source → transfer decode → explicit storage mapping → FP16 → extended composition → output")
             .child(div().flex().flex_wrap().gap_2().child(self.button(format!("Source: {}",if self.metadata==metadata::Mode::Named {NAMES[self.source]} else {"ICC colorants"}),0,cx)).child(self.button(format!("Patch: {}",if self.rgb==PRESETS[self.preset].1 {PRESETS[self.preset].0} else {"Custom"}),1,cx)).child(self.button(if self.metadata==metadata::Mode::Named {format!("Transfer: {:?}",self.color().transfer)} else {"Transfer: ICC curves".into()},2,cx)).child(self.button(format!("Storage: {}",if self.rec {"Rec.2020"} else {"P3"}),3,cx)).child(self.button(format!("Map: {}",if self.reduce {"reduce chroma"} else {"clip"}),4,cx)).child(self.button(format!("Alpha: {}",self.alpha),5,cx)).child(self.button(if self.uv {"CIE u′v′"} else {"CIE xy"}.into(),6,cx)).child(self.button(format!("Nested captures + blur: {}",self.effects),7,cx)).child(self.window_mode_controls(window,cx)))

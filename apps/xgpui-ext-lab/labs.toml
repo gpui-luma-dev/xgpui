@@ -253,12 +253,18 @@ views = [
   { name = "chromaticity", title = "CIE chromaticity", args = ["--chromaticity"] },
   { name = "uv", title = "CIE u-prime/v-prime", args = ["--uv"] },
   { name = "photo", title = "Italy photo comparison", args = ["--photo"] },
+  { name = "flowers", title = "Flowers ProPhoto RGB comparison", args = ["--flowers"] },
 ]
 
 [[lab.task]]
 name = "test"
 about = "Numerical, ICC, CIE dataset and color workspace checks"
 cargo = ["test", "--bin", "color-lab"]
+
+[[lab.task]]
+name = "flowers-test"
+about = "Flowers ProPhoto assets, profile, gamut analysis, storage and Metal composition checks"
+cargo = ["test", "--bin", "color-lab", "chromaticity::flowers", "--", "--nocapture"]
 
 [[lab]]
 name = "text"

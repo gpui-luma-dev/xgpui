@@ -18,6 +18,9 @@ impl ImageAdjustments {
             ImagePrimaries::AdobeRgb1998 => anyhow::bail!(
                 "GPU image adjustments require linear sRGB or Display P3 working primaries; convert Adobe RGB input first"
             ),
+            ImagePrimaries::ProPhotoRgb => anyhow::bail!(
+                "GPU image adjustments require linear sRGB or Display P3 working primaries; convert ProPhoto RGB input first"
+            ),
         };
         let rows = matrix.rows().map(|row| row.map(|v| v as f32));
         let vignette = vignette

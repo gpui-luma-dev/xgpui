@@ -127,7 +127,7 @@ impl Photo {
         let result = (|| -> anyhow::Result<String> {
             anyhow::ensure!(
                 window.color_status().effective() == WindowColorMode::WideGamutSdr,
-                "Select Wide gamut for Metal FP16 readback"
+                "Select Window output: Extended for Metal FP16 readback"
             );
             anyhow::ensure!(
                 self.images
@@ -213,7 +213,7 @@ impl Lab {
             .child(self.window_mode_controls(window,cx))
             .when(!self.wide, |body| body.child(div().p_3().bg(rgb(0x422006)).text_color(rgb(0xfde68a))
                 .child("Standard SDR output is active. The P3 photograph is shown as an sRGB preview, not native P3 output. Highlighted areas describe the source image, not your display.")))
-            .child("Compare the orange/red umbrellas in sRGB and Display P3. Select Wide gamut to preserve the P3 version’s wider colors; Standard limits output to sRGB. The third image is WebKit’s supplied highlighted version, with the photograph visible around the marked areas. The highlight colors are diagnostic markings baked into WebKit’s third image, so they remain visible in both modes. These are the same three source images used by their web demo.")
+            .child("Compare the orange/red umbrellas in sRGB and Display P3. Select Window output: Extended to preserve the P3 version’s wider colors on a wide-gamut display; sRGB output limits colors to sRGB. The third image is WebKit’s supplied highlighted version, with the photograph visible around the marked areas. The highlight colors are diagnostic markings baked into WebKit’s third image, so they remain visible in both modes. These are the same three source images used by their web demo.")
             .child(format!("Currently showing: {} • effective {:?} • display wide gamut {:?}",labels[self.photo_selection],window.color_status().effective(),window.color_status().display_wide_gamut()));
         if let Some(photo) = &self.photo {
             body = body

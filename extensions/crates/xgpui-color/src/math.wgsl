@@ -1,11 +1,14 @@
-// D65 matrices, column-major WGSL constructors. Source: CSS Color 4.
-// Space IDs: 0=sRGB, 1=Display P3, 2=Rec.2020, 3=Adobe RGB (1998). Inputs must be finite.
+// D65 matrices, column-major WGSL constructors. Source: CSS Color 4. ProPhoto's
+// native D50 colorants are Bradford-adapted to D65 once, matching the CPU API.
+// Space IDs: 0=sRGB, 1=Display P3, 2=Rec.2020, 3=Adobe RGB (1998),
+// 4=ProPhoto RGB (ROMM RGB). Inputs must be finite.
 fn gamut_to_xyz(v: vec3<f32>, space: u32) -> vec3<f32> {
  switch space {
  case 0u: { return mat3x3<f32>(vec3<f32>(0.412390799266, 0.212639005872, 0.019330818716), vec3<f32>(0.357584339384, 0.715168678768, 0.119194779795), vec3<f32>(0.180480788402, 0.072192315361, 0.950532152250)) * v; }
  case 1u: { return mat3x3<f32>(vec3<f32>(0.486570948648, 0.228974564070, 0.000000000000), vec3<f32>(0.265667693169, 0.691738521837, 0.045113381859), vec3<f32>(0.198217285234, 0.079286914094, 1.043944368901)) * v; }
  case 2u: { return mat3x3<f32>(vec3<f32>(0.636958048301, 0.262700212011, 0.000000000000), vec3<f32>(0.144616903586, 0.677998071519, 0.028072693049), vec3<f32>(0.168880975164, 0.059301716470, 1.060985057711)) * v; }
  case 3u: { return mat3x3<f32>(vec3<f32>(0.576669042910, 0.297344975251, 0.027031361386), vec3<f32>(0.185558237907, 0.627363566255, 0.070688852536), vec3<f32>(0.188228646235, 0.075291458494, 0.991337536838)) * v; }
+ case 4u: { return mat3x3<f32>(vec3<f32>(0.755590742297, 0.268321843579, 0.003915972762), vec3<f32>(0.112719842659, 0.715115256662, -0.012933442837), vec3<f32>(0.082145342095, 0.016562899760, 1.098075220834)) * v; }
  default: { return v; }
  }
 }
@@ -15,6 +18,7 @@ fn gamut_from_xyz(v: vec3<f32>, space: u32) -> vec3<f32> {
  case 1u: { return mat3x3<f32>(vec3<f32>(2.493496911941, -0.829488969562, 0.035845830244), vec3<f32>(-0.931383617919, 1.762664060318, -0.076172389268), vec3<f32>(-0.402710784451, 0.023624685842, 0.956884524008)) * v; }
  case 2u: { return mat3x3<f32>(vec3<f32>(1.716651187971, -0.666684351832, 0.017639857445), vec3<f32>(-0.355670783776, 1.616481236635, -0.042770613258), vec3<f32>(-0.253366281374, 0.015768545814, 0.942103121235)) * v; }
  case 3u: { return mat3x3<f32>(vec3<f32>(2.041587903811, -0.969243636281, 0.013444280632), vec3<f32>(-0.565006974279, 1.875967501508, -0.118362392231), vec3<f32>(-0.344731350778, 0.041555057407, 1.015174994391)) * v; }
+ case 4u: { return mat3x3<f32>(vec3<f32>(1.403190463377, -0.526238402163, -0.011202265286), vec3<f32>(-0.223015144791, 1.481631962923, 0.018246403480), vec3<f32>(-0.101606685074, 0.017018790273, 0.911247227492)) * v; }
  default: { return v; }
  }
 }
@@ -25,6 +29,11 @@ fn gamut_convert(v: vec3<f32>, source: u32, destination: u32) -> vec3<f32> {
 fn gamut_decode_channel(v: f32, space: u32) -> f32 {
     let x = abs(v);
     if space == 3u { return sign(v) * pow(x, 563.0 / 256.0); }
+    // ProPhoto: slope-16 segment up to encoded 16/512, then gamma 1.8.
+    if space == 4u {
+        if x <= 0.03125 { return v / 16.0; }
+        return sign(v) * pow(x, 1.8);
+    }
     if space == 2u {
         if x < 0.0812428582986315 { return v / 4.5; }
         return sign(v) * pow((x + 0.09929682680944) / 1.09929682680944, 1.0 / 0.45);
@@ -35,6 +44,10 @@ fn gamut_decode_channel(v: f32, space: u32) -> f32 {
 fn gamut_encode_channel(v: f32, space: u32) -> f32 {
     let x = abs(v);
     if space == 3u { return sign(v) * pow(x, 256.0 / 563.0); }
+    if space == 4u {
+        if x < 0.001953125 { return v * 16.0; }
+        return sign(v) * pow(x, 1.0 / 1.8);
+    }
     if space == 2u {
         if x < 0.018053968510807 { return v * 4.5; }
         return sign(v) * (1.09929682680944 * pow(x, 0.45) - 0.09929682680944);
@@ -120,8 +133,11 @@ fn gamut_interpolate(a: vec4<f32>, b: vec4<f32>, position: f32, space: u32, mode
     if model != 0u { x = gamut_to_oklab(x, space); y = gamut_to_oklab(y, space); }
     if model == 2u {
         x = gamut_to_oklch(x); y = gamut_to_oklch(y);
-        let powerless_a = x.y <= 0.0000001 || a.a == 0.0;
-        let powerless_b = y.y <= 0.0000001 || b.a == 0.0;
+        // f32 matrices leave neutrals with OkLab chroma up to ~2.4e-7 (the CPU
+        // f64 path uses 1e-7). 1e-5 is ~40x that noise and far below a visible
+        // chroma difference, so neutrals never contribute a spurious hue.
+        let powerless_a = x.y <= 0.00001 || a.a == 0.0;
+        let powerless_b = y.y <= 0.00001 || b.a == 0.0;
         if powerless_a && powerless_b { x.z = 0.0; y.z = 0.0; }
         else {
             if powerless_a { x.z = y.z; }

@@ -1,5 +1,7 @@
-//! CPU-only, unclipped color conversions. Named RGB spaces and XyzD65 use D65.
-//! Custom D50 colorants can be explicitly adapted to D65.
+//! CPU-only, unclipped color conversions. XyzD65 and the conversion API use D65.
+//! Named spaces are D65 natively except ProPhoto RGB (D50), whose matrices
+//! include one Bradford D50-to-D65 adaptation. Custom D50 colorants can be
+//! explicitly adapted to D65.
 //! Matrices are row-major and multiply column vectors. Alpha is not involved.
 #![doc = include_str!("../README.md")]
 
@@ -34,13 +36,19 @@ fn finite(v: [f64; 3]) -> Result<[f64; 3]> {
 }
 
 /// SDR RGB primaries and transfer function. Display P3 uses the sRGB transfer.
+/// New spaces may be added; match with a wildcard arm.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RgbSpace {
     Srgb,
     DisplayP3,
     Rec2020,
     /// Adobe RGB (1998), D65, with the 563/256 decoding exponent.
     AdobeRgb1998,
+    /// ProPhoto RGB / ROMM RGB (ISO 22028-2), native D50 white. Not Adobe RGB.
+    /// Matrices are relative to D65 through one Bradford adaptation. Transfer is
+    /// gamma 1.8 with a slope-16 linear segment below linear 1/512.
+    ProPhotoRgb,
 }
 impl RgbSpace {
     /// Linear RGB to relative XYZ/D65 (Y = 1 at reference white).
@@ -75,6 +83,7 @@ impl RgbSpace {
                 ],
                 [0., 19567812. / 697040785., 295819943. / 278816314.],
             ],
+            Self::ProPhotoRgb => *PROPHOTO_TO_XYZ_D65,
         }
     }
     /// Relative XYZ/D65 to linear RGB, without clipping or adaptation.
@@ -95,6 +104,22 @@ impl RgbSpace {
         let y = match (self, decode) {
             (Self::AdobeRgb1998, true) => x.powf(563. / 256.),
             (Self::AdobeRgb1998, false) => x.powf(256. / 563.),
+            // CSS Color 4 lin_ProPhoto/gam_ProPhoto, sign-preserving. Both
+            // branches meet exactly: 16 / 512 == (1 / 512)^(1 / 1.8).
+            (Self::ProPhotoRgb, true) => {
+                if x <= 16. / 512. {
+                    x / 16.
+                } else {
+                    x.powf(1.8)
+                }
+            }
+            (Self::ProPhotoRgb, false) => {
+                if x < 1. / 512. {
+                    16. * x
+                } else {
+                    x.powf(1. / 1.8)
+                }
+            }
             (Self::Rec2020, true) => {
                 let a = 1.09929682680944;
                 if x < 0.018053968510807 * 4.5 {
@@ -128,6 +153,20 @@ impl RgbSpace {
         y.copysign(value)
     }
 }
+/// CSS Color 4 `lin_ProPhoto_to_XYZ` (D50, 64-bit accurate; no rational form),
+/// solved from xy (0.734699, 0.265301), (0.159597, 0.840403), (0.036598, 0.000105)
+/// and D50 xy (0.3457, 0.3585).
+const PROPHOTO_TO_XYZ_D50: [[f64; 3]; 3] = [
+    [0.7977666449006423, 0.13518129740053308, 0.0313477341283922],
+    [0.2880748288194013, 0.711835234241873, 0.00008993693872564],
+    [0., 0., 0.8251046025104602],
+];
+/// Native D50 colorants adapted to relative XYZ/D65 exactly once.
+static PROPHOTO_TO_XYZ_D65: std::sync::LazyLock<[[f64; 3]; 3]> = std::sync::LazyLock::new(|| {
+    BradfordAdaptation::new(WhitePoint::D50, WhitePoint::D65)
+        .apply_colorants(PROPHOTO_TO_XYZ_D50)
+        .expect("finite constant colorants")
+});
 fn mul(m: [[f64; 3]; 3], v: [f64; 3]) -> [f64; 3] {
     m.map(|r| r[0] * v[0] + r[1] * v[1] + r[2] * v[2])
 }

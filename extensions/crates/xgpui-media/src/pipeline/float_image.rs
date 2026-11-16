@@ -715,3 +715,185 @@ mod d50_metadata_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod prophoto_tests {
+    use super::*;
+    use crate::pipeline::{ColorMatrix, ImageAdjustments, PixelColor};
+    include!("prophoto_fp16_reference.rs");
+
+    fn half(data: &ImageTextureData, level: usize, channel: usize) -> u16 {
+        u16::from_le_bytes([
+            data.levels()[level][2 * channel],
+            data.levels()[level][2 * channel + 1],
+        ])
+    }
+    fn store(rgba: Vec<[f32; 4]>, rec2020: bool, mapping: GamutMapping) -> ImageTextureData {
+        let width = rgba.len() as u32;
+        if rec2020 {
+            rec2020_rgba16f_data(width, 1, rgba, ImageColor::PROPHOTO_RGB, mapping).unwrap()
+        } else {
+            rgba16f_data_with_mapping(width, 1, rgba, ImageColor::PROPHOTO_RGB, mapping).unwrap()
+        }
+    }
+
+    #[test]
+    fn prophoto_storage_and_alpha_match_independent_fp16_oracles() {
+        for &(rec2020, rgba, expected) in PROPHOTO_FP16_REFERENCES {
+            let data = store(vec![rgba], rec2020, GamutMapping::Clip);
+            assert_eq!(
+                data.format(),
+                if rec2020 {
+                    gpui::ImageTextureFormat::LinearRec2020Rgba16Float
+                } else {
+                    gpui::ImageTextureFormat::LinearP3Rgba16Float
+                }
+            );
+            for (i, e) in expected.into_iter().enumerate() {
+                let actual = half(&data, 0, i);
+                // At most one binary16 step covers f64 -> f32 -> f16 double rounding.
+                assert!(
+                    actual.abs_diff(e) <= 1,
+                    "rec2020={rec2020} {rgba:?}, channel={i}: {actual:x} != {e:x}"
+                );
+                if e == 0 {
+                    assert_eq!(actual, 0, "{rgba:?} channel {i}");
+                }
+            }
+            assert_eq!(f16::from_bits(half(&data, 0, 3)).to_f32(), rgba[3]);
+        }
+    }
+
+    #[test]
+    fn prophoto_primaries_are_outside_both_storage_gamuts_until_mapped() {
+        // Each ProPhoto primary leaves both bounded storage gamuts, so neither
+        // storage choice retains it: the mapping boundary is where information
+        // is lost, and Clip and ReduceChroma lose it differently.
+        for primary in [[1., 0., 0., 1.], [0., 1., 0., 1.], [0., 0., 1., 1.]] {
+            for storage in [ImagePrimaries::DisplayP3, ImagePrimaries::Rec2020] {
+                let extended = ImageColor::PROPHOTO_RGB
+                    .decode(primary, storage)
+                    .unwrap()
+                    .rgba();
+                assert!(
+                    extended[..3].iter().any(|v| !(0. ..=1.).contains(v)),
+                    "{primary:?} fits {storage:?}: {extended:?}"
+                );
+            }
+            for rec2020 in [false, true] {
+                let input = vec![primary.map(|v| v as f32)];
+                let clip = store(input.clone(), rec2020, GamutMapping::Clip);
+                let reduce = store(input, rec2020, GamutMapping::ReduceChroma);
+                let values = |d: &ImageTextureData| {
+                    [0, 1, 2].map(|i| f16::from_bits(half(d, 0, i)).to_f32())
+                };
+                for v in values(&clip).into_iter().chain(values(&reduce)) {
+                    assert!((0. ..=1.).contains(&v), "{primary:?}: {v}");
+                }
+                assert_ne!(
+                    values(&clip),
+                    values(&reduce),
+                    "{primary:?} rec2020={rec2020}"
+                );
+            }
+        }
+        // Rec.2020 storage keeps more of a saturated ProPhoto green than P3.
+        let green = ImageColor::PROPHOTO_RGB
+            .decode([0.2, 0.8, 0.2, 1.], ImagePrimaries::Rec2020)
+            .unwrap()
+            .rgba();
+        assert!(
+            green[..3].iter().all(|v| (0. ..=1.).contains(v)),
+            "{green:?}"
+        );
+        let in_p3 = ImageColor::PROPHOTO_RGB
+            .decode([0.2, 0.8, 0.2, 1.], ImagePrimaries::DisplayP3)
+            .unwrap()
+            .rgba();
+        assert!(in_p3[..3].iter().any(|v| *v < 0.), "{in_p3:?}");
+    }
+
+    #[test]
+    fn prophoto_mips_average_associated_light_from_oracles() {
+        let rgba = vec![
+            [0., 0.5, 0.18, 0.5],
+            [1., 1., 0., 1.],
+            [0.001, 0.03, 0.5, 0.25],
+        ];
+        for rec2020 in [false, true] {
+            let data = store(rgba.clone(), rec2020, GamutMapping::Clip);
+            let mut sum = [0.; 4];
+            for p in &rgba {
+                let &(_, _, bits) = PROPHOTO_FP16_REFERENCES
+                    .iter()
+                    .find(|(r, q, _)| *r == rec2020 && q == p)
+                    .expect("missing reference");
+                for i in 0..3 {
+                    sum[i] += f16::from_bits(bits[i]).to_f64() / 3.;
+                }
+                sum[3] += f64::from(p[3]) / 3.;
+            }
+            for (i, value) in sum.into_iter().enumerate() {
+                assert!(half(&data, 1, i).abs_diff(f16::from_f64(value).to_bits()) <= 1);
+            }
+        }
+    }
+
+    #[test]
+    fn premultiplied_prophoto_unassociates_in_the_encoded_domain() {
+        let straight = [0.5, 0.18, 0.03, 0.5];
+        let premultiplied = ImageColor {
+            alpha: AlphaMode::Premultiplied,
+            ..ImageColor::PROPHOTO_RGB
+        };
+        let a = ImageColor::PROPHOTO_RGB
+            .decode(straight, ImagePrimaries::DisplayP3)
+            .unwrap()
+            .rgba();
+        let b = premultiplied
+            .decode(
+                [straight[0] * 0.5, straight[1] * 0.5, straight[2] * 0.5, 0.5],
+                ImagePrimaries::DisplayP3,
+            )
+            .unwrap()
+            .rgba();
+        for (a, b) in a.into_iter().zip(b) {
+            assert!((a - b).abs() < 1e-15, "{a} != {b}");
+        }
+    }
+
+    #[test]
+    fn extended_linear_prophoto_and_adjustment_working_space() {
+        let color = PixelColor::ExtendedLinear {
+            primaries: ImagePrimaries::ProPhotoRgb,
+            alpha: AlphaMode::Straight,
+        };
+        let data = pixels_rgba16f_data(
+            1,
+            1,
+            vec![[0.18, 0.18, 0.18, 1.]],
+            color,
+            ImagePrimaries::DisplayP3,
+            GamutMapping::Clip,
+        )
+        .unwrap();
+        // Adapted neutrals stay neutral in storage.
+        let gray = [0, 1, 2].map(|i| half(&data, 0, i));
+        assert!(gray.iter().all(|v| v.abs_diff(gray[0]) <= 1), "{gray:x?}");
+        // ProPhoto is a source interpretation, not a storage or GPU working space.
+        assert!(
+            pixels_rgba16f_data(
+                1,
+                1,
+                vec![[0.; 4]],
+                ImageColor::PROPHOTO_RGB.into(),
+                ImagePrimaries::ProPhotoRgb,
+                GamutMapping::Clip,
+            )
+            .is_err()
+        );
+        let error = ImageAdjustments::new(ColorMatrix::identity(ImagePrimaries::ProPhotoRgb), None)
+            .unwrap_err();
+        assert!(error.to_string().contains("ProPhoto"), "{error}");
+    }
+}
