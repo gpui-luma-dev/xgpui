@@ -7,6 +7,7 @@ mod line;
 mod line_layout;
 mod line_wrapper;
 mod paragraph;
+mod paragraph_fallback;
 
 pub use font_fallbacks::*;
 pub use font_features::*;
@@ -16,6 +17,7 @@ pub use line::*;
 pub use line_layout::*;
 pub use line_wrapper::*;
 pub use paragraph::*;
+pub(crate) use paragraph_fallback::shape_paragraph as shape_fallback_paragraph;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

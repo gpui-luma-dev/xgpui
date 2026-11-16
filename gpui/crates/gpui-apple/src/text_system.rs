@@ -1242,6 +1242,69 @@ mod tests {
     }
 
     #[test]
+    fn fallback_paragraphs_wrap_measure_and_hit_test_with_core_text() {
+        use gpui::{
+            ParagraphPosition, ParagraphRequest, ParagraphShapeOptions, ParagraphSupport,
+            TextAffinity,
+        };
+        let fonts = flex_backend();
+        assert_eq!(fonts.paragraph_support(), ParagraphSupport::LeftToRight);
+        let font_id = fonts.font_id(&font("Roboto Flex")).unwrap();
+        let text = "The quick brown fox jumps over the lazy dog";
+        let runs = [FontRun {
+            len: text.len(),
+            font_id,
+        }];
+        let size = px(16.0);
+        let options = ParagraphShapeOptions::default();
+        let shape = fonts
+            .shape_paragraph(ParagraphRequest::new(text, size, &runs, &options))
+            .unwrap();
+        let (min, max) = shape.content_widths().unwrap();
+        let line = fonts.layout_line(text, size, &runs);
+        assert_eq!(max, line.width);
+        assert!(min > px(0.0) && min < max);
+
+        let wrapped = shape.layout(min).unwrap();
+        let glyphs: Vec<_> = wrapped
+            .runs()
+            .iter()
+            .flat_map(|run| run.glyphs.iter())
+            .collect();
+        // Lines start at x = 0 only at word starts: no word is split at min-content.
+        for glyph in glyphs.iter().filter(|glyph| glyph.position.x == px(0.0)) {
+            assert!(
+                glyph.index == 0 || text.as_bytes()[glyph.index - 1] == b' ',
+                "line starts mid-word at {}",
+                glyph.index
+            );
+        }
+        let line_count = glyphs
+            .iter()
+            .filter(|glyph| glyph.position.x == px(0.0))
+            .count();
+        assert!(line_count > 1);
+        // Every visible glyph appears once and starts inside the min-content width.
+        let non_space: Vec<_> = glyphs
+            .iter()
+            .filter(|glyph| text.as_bytes()[glyph.index] != b' ')
+            .collect();
+        assert_eq!(non_space.len(), text.replace(' ', "").len());
+        assert!(non_space.iter().all(|glyph| glyph.position.x < min));
+
+        // Clicking each caret's centre returns that caret.
+        for byte_index in (0..=text.len()).filter(|&i| text.is_char_boundary(i)) {
+            let position = ParagraphPosition {
+                byte_index,
+                affinity: TextAffinity::Downstream,
+            };
+            let caret = wrapped.caret_bounds(position).unwrap();
+            let hit = wrapped.hit_test(caret.center()).unwrap();
+            assert_eq!(hit.byte_index, byte_index, "caret {byte_index}");
+        }
+    }
+
+    #[test]
     fn static_axes_preserve_native_instances_and_layout_raster_identity() {
         let fonts = flex_backend();
         let mut descriptor = font("Roboto Flex");

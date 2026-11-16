@@ -222,10 +222,11 @@ mod tests {
         assert!(ParagraphSupport::Full.supports_bidi());
         assert_eq!(ParagraphSupport::default(), ParagraphSupport::Unsupported);
 
+        // Backends without their own engine get the left-to-right fallback.
         let text_system = TextSystem::new(Arc::new(NoopTextSystem::new()));
         assert_eq!(
             text_system.paragraph_support(),
-            ParagraphSupport::Unsupported
+            ParagraphSupport::LeftToRight
         );
     }
 }
