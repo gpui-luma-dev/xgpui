@@ -10,6 +10,9 @@ use std::{borrow::Cow, cell::RefCell, rc::Rc, sync::Arc};
 // Share the native lab's editor, including its UTF-16/IME bridge and BiDi geometry.
 #[path = "../../text-lab/src/axes.rs"]
 mod axes;
+// The desktop text lab's right-to-left view, unchanged (#341).
+#[path = "../../text-lab/src/bidi.rs"]
+mod bidi;
 mod brushes;
 mod canvas;
 mod color;
@@ -67,6 +70,7 @@ pub fn demo_behavior(demo: &str) -> String {
         "svg" => "SVG: independent views • sharp / texture zoom • no worker",
         "font-controls" => "Variable fonts: weight, width, slant, optical size • Parley shaping and rasterization in Wasm",
         "parley" => "Parley: editable paragraphs • selection and BiDi",
+        "bidi" => "Right to left: GPUI labels, styled runs and paragraphs • Parley in Wasm",
         "brushes" => "Brushes: universal fills, noise, glyphs and paths",
         "hermite" => "Hermite: live 2×2 / 3×3 mesh editor • points and tangent vectors",
         "layers" => "Layers: subtree filters, blending and blur",
@@ -113,6 +117,7 @@ fn launch() -> anyhow::Result<()> {
     let typography = parameters.contains(&"demo=typography");
     let font_controls = parameters.contains(&"demo=font-controls");
     let parley = parameters.contains(&"demo=parley");
+    let bidi = parameters.contains(&"demo=bidi");
     let svg = parameters.contains(&"demo=svg");
     let color = parameters.contains(&"demo=color");
     let chromaticity = parameters.contains(&"demo=chromaticity");
@@ -138,12 +143,24 @@ fn launch() -> anyhow::Result<()> {
     let mut font_demo = None;
     // The paragraph demo calls the Parley extension directly, so keep its typed handle.
     let mut parley_text = None;
-    let app = if parley || font_controls {
+    let app = if parley || font_controls || bidi {
         let mut fonts = parley::FontContext::new();
         for data in std::iter::once(PLEX).chain(paragraph::FONTS) {
             fonts
                 .collection
                 .register_fonts(parley::fontique::Blob::new(Arc::new(data.to_vec())), None);
+        }
+        // Wasm has no system fallback lists, so text without explicit fallbacks
+        // (plain GPUI labels) would show missing glyphs for these scripts.
+        for (script, family) in [(*b"Hebr", "Noto Sans Hebrew"), (*b"Arab", "Noto Sans Arabic")] {
+            let id = fonts
+                .collection
+                .family_id(family)
+                .ok_or_else(|| anyhow::anyhow!("bundled {family} is not registered"))?;
+            fonts.collection.append_fallbacks(
+                parley::fontique::Script::from_bytes(script),
+                std::iter::once(id),
+            );
         }
         if font_controls {
             for data in [samples::FLEX, samples::INTER] {
@@ -201,6 +218,13 @@ fn launch() -> anyhow::Result<()> {
                 view
             })
             .expect("open Parley demo");
+        } else if bidi {
+            cx.open_window(options, |window, cx| {
+                let view = cx.new(|cx| bidi::BidiLab::new("Parley / Wasm".into(), cx));
+                window.focus(&view.focus_handle(cx), cx);
+                view
+            })
+            .expect("open right-to-left demo");
         } else if tiled {
             cx.open_window(options, |_, cx| cx.new(|_| tiled_demo::TiledDemo::new()))
                 .expect("open tiled canvas");

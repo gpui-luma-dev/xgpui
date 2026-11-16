@@ -1,5 +1,6 @@
 //! Right-to-left text and paragraphs through GPUI's own APIs (#325). The native
-//! and Parley windows run this same code; only the installed text backend differs.
+//! and Parley windows, and the Wasm gallery (`?demo=bidi`), run this same code;
+//! only the installed text backend differs.
 use gpui::{
     Bounds, Context, FocusHandle, Focusable, Font, FontFallbacks, FontRun, HighlightStyle,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, ParagraphPosition,
@@ -132,7 +133,8 @@ impl BidiLab {
             &runs,
             &options,
         )?;
-        let fit = (window.viewport_size().width - px(64.0)).max(px(80.0));
+        // Page (p_4), section (p_3) and paragraph (p_3) padding on both sides.
+        let fit = (window.viewport_size().width - px(80.0)).max(px(80.0));
         let width = match self.width {
             Width::Fit => fit,
             Width::MinContent => content.0,
@@ -249,7 +251,7 @@ impl Render for BidiLab {
 
         let labels = section(
             "1. Plain GPUI text, single line (#325 B)",
-            "Hebrew and Arabic read right to left. In \"abc עברית 123\" the number follows the Hebrew run, so it sits to the Hebrew word's left (Unicode bidi). \"שלום, world!\" starts with Hebrew, so the line reads right to left and the \"!\" ends up at the far left. Both windows should match.",
+            "Hebrew and Arabic read right to left. In \"abc עברית 123\" the number follows the Hebrew run, so it sits to the Hebrew word's left (Unicode bidi). \"שלום, world!\" starts with Hebrew, so the line reads right to left and the \"!\" ends up at the far left. Native and Parley text should match.",
         )
         .children(LABELS.iter().map(|(name, text)| {
             div()
@@ -320,7 +322,7 @@ impl Render for BidiLab {
 
         let mut paragraph = section(
             "4. GPUI paragraph: window.text_system().layout_paragraph_with_options (#325 A)",
-            "click places a caret, drag selects, Left/Right move visually and Shift extends. Hebrew (Auto) and Right to left start at the right edge in both windows. Min-content and max-content resize the paragraph to its reported content widths.",
+            "click places a caret, drag selects, Left/Right move visually and Shift extends. Hebrew (Auto) and Right to left start at the right edge with every backend. Min-content and max-content resize the paragraph to its reported content widths.",
         )
         .child(self.buttons(
             "bidi-sample",
