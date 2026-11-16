@@ -1071,23 +1071,43 @@ impl TextLayout {
         let mut accumulator = String::new();
 
         for wrapped in self.0.borrow().as_ref().unwrap().lines.iter() {
-            let mut seen = 0;
-            for boundary in wrapped.layout.wrap_boundaries.iter() {
-                let index = wrapped.layout.unwrapped_layout.runs[boundary.run_ix].glyphs
-                    [boundary.glyph_ix]
-                    .index;
-
-                accumulator.push_str(&wrapped.text[seen..index]);
-                accumulator.push('\n');
-                seen = index;
-            }
-            accumulator.push_str(&wrapped.text[seen..]);
+            let boundaries = wrapped.layout.wrap_boundaries.iter().map(|boundary| {
+                wrapped.layout.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix]
+                    .index
+            });
+            push_wrapped_line(&mut accumulator, &wrapped.text, boundaries);
             accumulator.push('\n');
         }
         // Remove trailing newline
         accumulator.pop();
         accumulator
     }
+}
+
+/// Append `text` with a newline at each soft-wrap boundary byte index.
+///
+/// Boundaries follow the painted glyph order, which runs backwards through
+/// right-to-left text, so they are taken in text order here. Each piece is then
+/// a logical span of the text; for mixed-direction lines a painted line may not
+/// be one contiguous span. Indices that aren't character boundaries inside the
+/// text are skipped.
+fn push_wrapped_line(
+    accumulator: &mut String,
+    text: &str,
+    boundaries: impl Iterator<Item = usize>,
+) {
+    let mut boundaries: SmallVec<[usize; 8]> = boundaries
+        .filter(|index| *index > 0 && *index < text.len() && text.is_char_boundary(*index))
+        .collect();
+    boundaries.sort_unstable();
+    boundaries.dedup();
+    let mut seen = 0;
+    for index in boundaries {
+        accumulator.push_str(&text[seen..index]);
+        accumulator.push('\n');
+        seen = index;
+    }
+    accumulator.push_str(&text[seen..]);
 }
 
 /// A text element that can be interacted with.
@@ -1425,6 +1445,26 @@ mod tests {
             make_text_unstable_id(false).id,
             make_text_unstable_id(true).id
         );
+    }
+
+    #[test]
+    fn wrapped_line_takes_boundaries_in_text_order() {
+        let wrapped = |text: &str, boundaries: &[usize]| {
+            let mut out = String::new();
+            super::push_wrapped_line(&mut out, text, boundaries.iter().copied());
+            out
+        };
+        // Left to right: boundaries already in text order.
+        assert_eq!(wrapped("aaa bbb ccc", &[4, 8]), "aaa \nbbb \nccc");
+        // Right to left: painted order runs backwards through the text.
+        let hebrew = "אחת שתיים שלוש";
+        let (second, third) = (hebrew.find("שתיים").unwrap(), hebrew.find("שלוש").unwrap());
+        assert_eq!(wrapped(hebrew, &[third, second]), "אחת \nשתיים \nשלוש");
+        // Out-of-range, duplicate, edge and mid-character indices are ignored.
+        assert_eq!(wrapped("ab", &[0, 2, 9]), "ab");
+        assert_eq!(wrapped("aaa bbb", &[4, 4]), "aaa \nbbb");
+        assert_eq!(wrapped("éa", &[1]), "éa");
+        assert_eq!(wrapped("", &[]), "");
     }
 
     mod provider {

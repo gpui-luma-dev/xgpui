@@ -69,7 +69,6 @@ fn wrap_order_checks(backend: Arc<dyn PlatformTextSystem>) {
     });
 
     // Plain text: byte offsets of the soft-wrap boundaries, in line order.
-    // (`TextLayout::wrapped_text` slices with these and panics on them.)
     let lines = layout.line_layouts();
     assert_eq!(lines.len(), 1, "one hard line");
     let line = &lines[0];
@@ -87,6 +86,12 @@ fn wrap_order_checks(backend: Arc<dyn PlatformTextSystem>) {
         "plain GPUI text now wraps right-to-left text in another order \
          (boundaries {boundaries:?}); revisit gpui-luma-dev/xgpui#332"
     );
+    // `wrapped_text` takes those boundaries in text order instead of
+    // panicking on them: one logical span per line, covering the whole text.
+    let wrapped = layout.wrapped_text();
+    assert_eq!(wrapped.lines().count(), boundaries.len() + 1, "{wrapped:?}");
+    assert_eq!(wrapped.replace('\n', ""), text);
+    assert!(wrapped.starts_with(text.split(' ').next().unwrap()));
 
     // Paragraph API: logical order, first character at the top right.
     window.update(|window, _| {
