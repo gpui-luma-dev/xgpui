@@ -670,6 +670,9 @@ impl PlatformTextSystem for ParleyTextSystem {
             }
         }
     }
+    fn paragraph_support(&self) -> gpui::ParagraphSupport {
+        gpui::ParagraphSupport::Full
+    }
     fn shape_paragraph(
         &self,
         request: gpui::ParagraphRequest<'_>,
