@@ -1305,6 +1305,111 @@ mod tests {
     }
 
     #[test]
+    fn fallback_paragraphs_keep_core_text_right_to_left_runs_inside_their_lines() {
+        use gpui::{
+            ParagraphPosition, ParagraphRequest, ParagraphShapeOptions, TextAffinity,
+            VisualDirection,
+        };
+        let fonts = AppleTextSystem::new();
+        fonts
+            .add_fonts(vec![std::borrow::Cow::Borrowed(include_bytes!(
+                "../../../../extensions/crates/xgpui-parley/tests/fonts/NotoSansHebrew.ttf"
+            ))])
+            .unwrap();
+        let font_id = fonts.font_id(&font("Noto Sans Hebrew")).unwrap();
+        // CoreText reorders this into visual order: byte 0 is the rightmost glyph.
+        let text = "פסקה בעברית שעוברת שבירת שורות ובחירה";
+        let runs = [FontRun {
+            len: text.len(),
+            font_id,
+        }];
+        let options = ParagraphShapeOptions::default();
+        let shape = fonts
+            .shape_paragraph(ParagraphRequest::new(text, px(22.0), &runs, &options))
+            .unwrap();
+        let (min, max) = shape.content_widths().unwrap();
+        assert!(min > px(0.0) && min < max, "widths {min:?}..{max:?}");
+        let full = fonts.layout_line(text, px(22.0), &runs);
+        assert!(
+            (max - full.width).abs() < px(0.5),
+            "max-content is the line width"
+        );
+
+        let width = max / 2.0;
+        let layout = shape.layout(width).unwrap();
+        let glyphs: Vec<_> = layout
+            .runs()
+            .iter()
+            .flat_map(|run| run.glyphs.iter())
+            .collect();
+        assert_eq!(
+            glyphs.len(),
+            text.replace(' ', "").chars().count() + text.matches(' ').count()
+        );
+        // Every visible glyph sits inside the paragraph, and the text wraps. A
+        // line's trailing space hangs past its end: the left side of a
+        // right-to-left line.
+        for glyph in glyphs
+            .iter()
+            .filter(|glyph| text.as_bytes()[glyph.index] != b' ')
+        {
+            assert!(
+                glyph.position.x >= px(-0.5) && glyph.position.x < width,
+                "glyph {} at {:?} outside 0..{width:?}",
+                glyph.index,
+                glyph.position.x
+            );
+        }
+        let rows: std::collections::BTreeSet<_> = glyphs
+            .iter()
+            .map(|glyph| f32::from(glyph.position.y) as i32)
+            .collect();
+        assert!(rows.len() >= 2, "wrapped into {} line(s)", rows.len());
+
+        // Clicking each caret returns it, and a whole-text selection stays inside.
+        for byte_index in (0..=text.len()).filter(|&i| text.is_char_boundary(i)) {
+            let position = ParagraphPosition {
+                byte_index,
+                affinity: TextAffinity::Downstream,
+            };
+            let caret = layout.caret_bounds(position).unwrap();
+            assert!(caret.left() >= px(-0.5) && caret.left() <= width + px(0.5));
+            assert_eq!(
+                layout.hit_test(caret.center()).unwrap().byte_index,
+                byte_index,
+                "caret {byte_index}"
+            );
+        }
+        let all = layout
+            .selection_bounds(
+                ParagraphPosition {
+                    byte_index: 0,
+                    affinity: TextAffinity::Downstream,
+                },
+                ParagraphPosition {
+                    byte_index: text.len(),
+                    affinity: TextAffinity::Upstream,
+                },
+            )
+            .unwrap();
+        assert!(
+            all.iter()
+                .all(|rect| rect.left() >= px(-0.5) && rect.right() <= width + px(0.5))
+        );
+        // Right moves visually right: within a Hebrew line, toward the logical start.
+        let start = ParagraphPosition {
+            byte_index: 0,
+            affinity: TextAffinity::Downstream,
+        };
+        let x0 = layout.caret_bounds(start).unwrap().left();
+        let left = layout.move_visual(start, VisualDirection::Left).unwrap();
+        assert!(
+            layout.caret_bounds(left).unwrap().left() < x0,
+            "Left moves left"
+        );
+    }
+
+    #[test]
     fn static_axes_preserve_native_instances_and_layout_raster_identity() {
         let fonts = flex_backend();
         let mut descriptor = font("Roboto Flex");

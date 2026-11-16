@@ -81,11 +81,13 @@ fn soft_wrap_boundary_is_shared_and_affinity_picks_the_line() {
 }
 
 #[test]
-fn visual_movement_is_logical_and_clamps_at_the_ends() {
+fn visual_movement_follows_carets_and_clamps_at_the_ends() {
     let layout = layout("aaa bbb ccc", 45.0);
     let right = |p| layout.move_visual(p, VisualDirection::Right).unwrap();
     let left = |p| layout.move_visual(p, VisualDirection::Left).unwrap();
-    assert_eq!(right(down(7)), down(8));
+    // Right onto a soft wrap stops at the first line's end; the next Right
+    // continues past the shared byte on the following line.
+    assert_eq!(right(down(7)), up(8));
     assert_eq!(right(up(8)), down(9));
     assert_eq!(left(down(8)), down(7));
     assert_eq!(left(down(0)), down(0));
@@ -214,5 +216,92 @@ fn native_backends_report_and_serve_left_to_right_paragraphs() {
             .paragraph_content_widths("aaa bbb ccc".into(), SIZE, &[])
             .unwrap(),
         (px(3.0 * CHAR), px(11.0 * CHAR))
+    );
+}
+
+/// Noop shaping with each line's glyphs mirrored, as a native shaper reports a
+/// right-to-left run: byte 0 is the rightmost glyph.
+fn shape_reversed(text: &str) -> Arc<dyn PlatformParagraphShape> {
+    let options = ParagraphShapeOptions::default();
+    shape_paragraph(
+        ParagraphRequest::new(text, SIZE, &[], &options),
+        |text, size, runs| {
+            let mut line = NoopTextSystem::new().layout_line(text, size, runs);
+            let width = line.width;
+            for run in &mut line.runs {
+                for glyph in &mut run.glyphs {
+                    glyph.position.x = width - glyph.position.x - px(CHAR);
+                }
+                run.glyphs.reverse();
+            }
+            line
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn reordered_runs_stay_inside_their_lines() {
+    // Ten 6px clusters, no break opportunities: at 25px, lines of 4, 4 and 2.
+    let shape = shape_reversed("abcdefghij");
+    assert_eq!(shape.content_widths().unwrap(), (px(60.0), px(60.0)));
+    let layout = shape.layout(px(25.0)).unwrap();
+    assert_eq!(layout.size().height, px(3.0 * LINE));
+    let glyphs: Vec<_> = layout
+        .runs()
+        .iter()
+        .flat_map(|run| run.glyphs.iter())
+        .collect();
+    for glyph in &glyphs {
+        assert!(
+            glyph.position.x >= px(0.0) && glyph.position.x < px(25.0),
+            "{} at {:?}",
+            glyph.index,
+            glyph.position.x
+        );
+    }
+    // Within the first line, byte order runs right to left.
+    let first: Vec<_> = glyphs
+        .iter()
+        .filter(|glyph| glyph.index < 4)
+        .map(|glyph| (glyph.index, glyph.position.x))
+        .collect();
+    assert!(
+        first
+            .iter()
+            .all(|(index, x)| *x == px((3 - *index) as f32 * CHAR)),
+        "{first:?}"
+    );
+
+    // The logical start is the cluster's right edge, the line's end its left edge.
+    assert_eq!(
+        layout.caret_bounds(down(0)).unwrap().origin.x,
+        px(4.0 * CHAR)
+    );
+    assert_eq!(layout.caret_bounds(up(4)).unwrap().origin.x, px(0.0));
+    for byte_index in 0..=10 {
+        let caret = layout.caret_bounds(down(byte_index)).unwrap();
+        assert_eq!(
+            layout.hit_test(caret.center()).unwrap().byte_index,
+            byte_index,
+            "caret {byte_index}"
+        );
+    }
+    // Moving left reads forward through the run.
+    assert_eq!(
+        layout.move_visual(down(0), VisualDirection::Left).unwrap(),
+        down(1)
+    );
+    assert_eq!(
+        layout.move_visual(down(1), VisualDirection::Right).unwrap(),
+        down(0)
+    );
+    // A selection inside the run is one rectangle at its visual place.
+    assert_eq!(
+        layout.selection_bounds(down(1), down(3)).unwrap(),
+        vec![Bounds::new(
+            point(px(CHAR), px(0.0)),
+            size(px(2.0 * CHAR), px(LINE))
+        )]
     );
 }
