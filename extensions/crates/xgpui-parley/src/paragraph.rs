@@ -272,6 +272,9 @@ impl gpui::PlatformParagraphShape for ParagraphShape {
     fn layout(&self, width: Pixels) -> Result<Arc<dyn gpui::PlatformParagraphLayout>> {
         Ok(Arc::new(self.layout(width)?))
     }
+    fn content_widths(&self) -> Result<(Pixels, Pixels)> {
+        Ok(self.content_widths())
+    }
 }
 impl gpui::PlatformParagraphLayout for ParagraphLayout {
     fn source(&self) -> &str {

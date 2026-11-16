@@ -56,36 +56,12 @@ impl LineLayoutCache {
         runs: &[FontRun],
         width: Pixels,
     ) -> anyhow::Result<Arc<dyn PlatformParagraphLayout>> {
-        anyhow::ensure!(
-            f32::from(font_size).is_finite() && font_size > px(0.0),
-            "invalid font size"
-        );
+        validate_paragraph_request(&text, font_size, runs)?;
         anyhow::ensure!(
             f32::from(width).is_finite() && width >= px(0.0),
             "invalid paragraph width"
         );
-        let mut end = 0usize;
-        for run in runs {
-            end = end
-                .checked_add(run.len)
-                .ok_or_else(|| anyhow::anyhow!("font run overflow"))?;
-            anyhow::ensure!(
-                text.is_char_boundary(end),
-                "invalid paragraph font run range"
-            );
-        }
-        anyhow::ensure!(
-            runs.is_empty() || end == text.len(),
-            "font runs must cover paragraph"
-        );
         // These are the complete supported parameters: auto direction/start alignment.
-        let shape_ref = &CacheKeyRef {
-            text: text.as_ref(),
-            font_size,
-            runs,
-            wrap_width: None,
-            force_width: None,
-        } as &dyn AsCacheKeyRef;
         let layout_ref = &CacheKeyRef {
             text: text.as_ref(),
             font_size,
@@ -97,60 +73,25 @@ impl LineLayoutCache {
             let generation = self.clear_if_font_generation_changed();
             // Keep previous-frame entries until normal frame eviction. A failed
             // backend/reflow request must not consume reusable cached results.
-            let (shape, layout) = {
+            let layout = {
                 let state = self.state.borrow();
-                let current = &state.current_frame;
-                let previous = &state.previous_frame;
-                let shape = current
-                    .paragraphs
-                    .shapes
-                    .get_key_value(shape_ref)
-                    .map(|(key, value)| (key.clone(), value.clone()))
-                    .or_else(|| {
-                        previous
-                            .paragraphs
-                            .shapes
-                            .get_key_value(shape_ref)
-                            .map(|(key, value)| (key.clone(), value.clone()))
-                    });
-                let layout = current
+                state
+                    .current_frame
                     .paragraphs
                     .layouts
                     .get_key_value(layout_ref)
-                    .map(|(key, value)| (key.clone(), value.clone()))
                     .or_else(|| {
-                        previous
+                        state
+                            .previous_frame
                             .paragraphs
                             .layouts
                             .get_key_value(layout_ref)
-                            .map(|(key, value)| (key.clone(), value.clone()))
-                    });
-                (shape, layout)
+                    })
+                    .map(|(key, value)| (key.clone(), value.clone()))
             };
             // Neither backend shaping nor reflow executes under a GPUI cache lock.
             // Owned cache keys are created only on misses, not repeated requests.
-            let (shape_key, shape) = match shape {
-                Some(entry) => entry,
-                None => {
-                    let shape = self
-                        .platform_text_system
-                        .shape_paragraph(ParagraphRequest {
-                            text: text.as_ref(),
-                            font_size,
-                            runs,
-                        })?;
-                    (
-                        Arc::new(CacheKey {
-                            text: text.clone(),
-                            font_size,
-                            runs: SmallVec::from(runs),
-                            wrap_width: None,
-                            force_width: None,
-                        }),
-                        shape,
-                    )
-                }
-            };
+            let (shape_key, shape) = self.paragraph_shape(&text, font_size, runs)?;
             let (layout_key, layout) = match layout {
                 Some(entry) => entry,
                 None => {
@@ -168,18 +109,12 @@ impl LineLayoutCache {
                 }
             };
             let mut state = self.state.borrow_mut();
-            let current = &mut state.current_frame;
             // Do not publish a result built across a concurrent font registration.
-            if self.font_generation.load(Ordering::Acquire) != generation
-                || self.cached_font_generation.load(Ordering::Acquire) != generation
-            {
+            if !self.generation_is_current(generation) {
                 continue;
             }
-            current
-                .paragraphs
-                .shapes
-                .entry(shape_key.clone())
-                .or_insert(shape);
+            let current = &mut state.current_frame;
+            Self::publish_paragraph_shape(current, shape_key, shape);
             let layout = current
                 .paragraphs
                 .layouts
@@ -187,11 +122,131 @@ impl LineLayoutCache {
                 .or_insert(layout)
                 .clone();
             // Record hits too, so retained-element reuse ranges retain both levels.
-            current.paragraphs.used_shapes.push(shape_key.clone());
-            current.paragraphs.used_layouts.push(layout_key.clone());
+            current.paragraphs.used_layouts.push(layout_key);
             return Ok(layout);
         }
     }
+
+    /// Min-content and max-content widths of one paragraph, from the same
+    /// cached shape `layout_paragraph` reflows.
+    pub fn paragraph_content_widths(
+        &self,
+        text: SharedString,
+        font_size: Pixels,
+        runs: &[FontRun],
+    ) -> anyhow::Result<(Pixels, Pixels)> {
+        validate_paragraph_request(&text, font_size, runs)?;
+        loop {
+            let generation = self.clear_if_font_generation_changed();
+            let (shape_key, shape) = self.paragraph_shape(&text, font_size, runs)?;
+            let widths = shape.content_widths()?;
+            let mut state = self.state.borrow_mut();
+            if !self.generation_is_current(generation) {
+                continue;
+            }
+            Self::publish_paragraph_shape(&mut state.current_frame, shape_key, shape);
+            return Ok(widths);
+        }
+    }
+
+    /// Cached shape for this request (current, then previous frame), or a new
+    /// backend shape. Not yet published; the caller checks the font generation.
+    fn paragraph_shape(
+        &self,
+        text: &SharedString,
+        font_size: Pixels,
+        runs: &[FontRun],
+    ) -> anyhow::Result<(Arc<CacheKey>, Arc<dyn PlatformParagraphShape>)> {
+        let shape_ref = &CacheKeyRef {
+            text: text.as_ref(),
+            font_size,
+            runs,
+            wrap_width: None,
+            force_width: None,
+        } as &dyn AsCacheKeyRef;
+        let cached = {
+            let state = self.state.borrow();
+            state
+                .current_frame
+                .paragraphs
+                .shapes
+                .get_key_value(shape_ref)
+                .or_else(|| {
+                    state
+                        .previous_frame
+                        .paragraphs
+                        .shapes
+                        .get_key_value(shape_ref)
+                })
+                .map(|(key, value)| (key.clone(), value.clone()))
+        };
+        if let Some(entry) = cached {
+            return Ok(entry);
+        }
+        let shape = self
+            .platform_text_system
+            .shape_paragraph(ParagraphRequest {
+                text: text.as_ref(),
+                font_size,
+                runs,
+            })?;
+        Ok((
+            Arc::new(CacheKey {
+                text: text.clone(),
+                font_size,
+                runs: SmallVec::from(runs),
+                wrap_width: None,
+                force_width: None,
+            }),
+            shape,
+        ))
+    }
+
+    fn generation_is_current(&self, generation: usize) -> bool {
+        self.font_generation.load(Ordering::Acquire) == generation
+            && self.cached_font_generation.load(Ordering::Acquire) == generation
+    }
+
+    /// Publish a shape to the current frame. Records hits too, so retained-element
+    /// reuse ranges keep it.
+    fn publish_paragraph_shape(
+        current: &mut FrameCache,
+        key: Arc<CacheKey>,
+        shape: Arc<dyn PlatformParagraphShape>,
+    ) {
+        current
+            .paragraphs
+            .shapes
+            .entry(key.clone())
+            .or_insert(shape);
+        current.paragraphs.used_shapes.push(key);
+    }
+}
+
+fn validate_paragraph_request(
+    text: &str,
+    font_size: Pixels,
+    runs: &[FontRun],
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        f32::from(font_size).is_finite() && font_size > px(0.0),
+        "invalid font size"
+    );
+    let mut end = 0usize;
+    for run in runs {
+        end = end
+            .checked_add(run.len)
+            .ok_or_else(|| anyhow::anyhow!("font run overflow"))?;
+        anyhow::ensure!(
+            text.is_char_boundary(end),
+            "invalid paragraph font run range"
+        );
+    }
+    anyhow::ensure!(
+        runs.is_empty() || end == text.len(),
+        "font runs must cover paragraph"
+    );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -330,6 +385,64 @@ mod tests {
                 .is_err()
         );
     }
+    #[test]
+    fn content_widths_reuse_the_cached_shape_and_default_to_an_error() {
+        struct Measured;
+        impl PlatformParagraphShape for Measured {
+            fn layout(&self, _: Pixels) -> anyhow::Result<Arc<dyn PlatformParagraphLayout>> {
+                Ok(Arc::new(Probe))
+            }
+            fn content_widths(&self) -> anyhow::Result<(Pixels, Pixels)> {
+                Ok((px(30.0), px(90.0)))
+            }
+        }
+        let cache = LineLayoutCache::new(Arc::new(NoopTextSystem), Arc::new(AtomicUsize::new(0)));
+        let key = |text: &'static str| {
+            Arc::new(CacheKey {
+                text: text.into(),
+                font_size: px(16.0),
+                runs: SmallVec::new(),
+                wrap_width: None,
+                force_width: None,
+            })
+        };
+        {
+            let mut state = cache.state.borrow_mut();
+            let shapes = &mut state.current_frame.paragraphs.shapes;
+            shapes.insert(key("measured"), Arc::new(Measured));
+            shapes.insert(key("probe"), Arc::new(Probe));
+        }
+        cache.finish_frame();
+        // Noop cannot shape: success means the previous frame's shape was reused.
+        assert_eq!(
+            cache
+                .paragraph_content_widths("measured".into(), px(16.0), &[])
+                .unwrap(),
+            (px(30.0), px(90.0))
+        );
+        {
+            let state = cache.state.borrow();
+            let current = &state.current_frame.paragraphs;
+            assert_eq!(current.shapes.len(), 1);
+            assert_eq!(current.used_shapes.len(), 1);
+        }
+        assert!(
+            cache
+                .paragraph_content_widths("probe".into(), px(16.0), &[])
+                .is_err()
+        );
+        assert!(
+            cache
+                .paragraph_content_widths("unshaped".into(), px(16.0), &[])
+                .is_err()
+        );
+        assert!(
+            cache
+                .paragraph_content_widths("measured".into(), px(0.0), &[])
+                .is_err()
+        );
+    }
+
     #[test]
     fn failed_reflow_preserves_previous_frame_shaping() {
         let cache = LineLayoutCache::new(Arc::new(NoopTextSystem), Arc::new(AtomicUsize::new(0)));

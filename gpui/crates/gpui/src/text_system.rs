@@ -940,6 +940,19 @@ impl WindowTextSystem {
             .layout_paragraph(text, font_size, runs, width)
     }
 
+    /// Min-content and max-content widths `(min, max)` of one paragraph, from
+    /// the same cached shape `layout_paragraph` reflows. Useful for sizing a
+    /// single-line field without laying it out at trial widths.
+    pub fn paragraph_content_widths(
+        &self,
+        text: SharedString,
+        font_size: Pixels,
+        runs: &[FontRun],
+    ) -> Result<(Pixels, Pixels)> {
+        self.line_layout_cache
+            .paragraph_content_widths(text, font_size, runs)
+    }
+
     /// Returns the shaped layout width of for the given character, in the given font and size.
     pub fn layout_width(&self, font_id: FontId, font_size: Pixels, ch: char) -> Pixels {
         let mut buffer = [0; 4];
