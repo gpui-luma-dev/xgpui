@@ -44,7 +44,9 @@ by hand: publishing the crates and deploying the website.</p>
 </table>
 <p>The issue's checklist tracks these steps; the agent ticks items as their PRs
 merge. <a href="https://github.com/gpui-luma-dev/xgpui/issues/338">#338</a> (XGPUI 4.1.0)
-is the first release made this way and a model for the issue.</p>
+is the first release made this way. Use it as the reference for the next one: its
+description shows the expected layout, and its <strong>Lessons learned</strong> section is
+folded into the rules below.</p>
 <h2 id="1-release-issue--agent">1. Release issue — agent</h2>
 <p>When the owner asks for a release, open an issue titled
 <code>Release: &lt;headline versions&gt; — &lt;main changes&gt;</code>. Change nothing in the
@@ -61,12 +63,27 @@ changes; only packaged content needs a version.</li>
 an input, then give every crate a next version and a reason under the
 <a href="#versioning-policy">versioning policy</a>. Show breaking changes and the
 re-exports that carry them into dependents.</li>
+<li><strong>Re-exports and pins, by hand:</strong> <code>release-check</code> doesn't see a crate whose own
+code is unchanged but whose pinned dependency takes a breaking bump. On #338 it
+reported <code>xgpui-gamut</code> unchanged, yet gamut re-exports <code>xgpui-color</code>, so color's
+breaking release forced gamut 0.5.0. List every internal requirement the new
+versions no longer satisfy, and every <code>pub use</code> of another XGPUI crate.</li>
 <li><strong>Dependency pins:</strong> list each internal requirement that must rise, and why.</li>
+<li><strong>Packaged READMEs:</strong> compare every crate README's install snippet with the new
+versions. READMEs ship in the package and drift; #338 found four snippets naming
+versions from earlier releases.</li>
+<li><strong>Downstream check (recommended):</strong> build xgpui-luma against the candidate with
+a local, uncommitted <code>.cargo/config.toml</code> that patches every XGPUI crate to this
+checkout, then run its lab tests. Record what breaks and what had to change. On
+#338 this found two native paragraph bugs (fixed in #336) and eight API breaks
+before anything was published.</li>
 <li><strong>Release notes (draft):</strong> highlights, migration notes per breaking crate, the
 core public API changes with the PRs that approved them, and verification so far.</li>
 <li><strong>Publish order:</strong> every crate to publish, in dependency order with its new version,
 computed from Cargo metadata.</li>
-<li><strong>Checklist:</strong> the remaining steps in this guide, plus any release-specific PRs.</li>
+<li><strong>Checklist:</strong> the remaining steps in this guide, plus any release-specific PRs.
+The issue ends with a <strong>Lessons learned</strong> section, filled in after the release
+(see <a href="#7-deploy-the-website--owner">step 7</a>).</li>
 </ul>
 <p>Questions the policy can't settle (for example, whether a technically breaking
 change in a core crate takes a major or a minor version) go in a **Decision
@@ -75,7 +92,9 @@ needed** section with the options and a recommendation.</p>
 <p>Answer the issue's open decisions. The agent records each answer in the issue
 and ticks it off.</p>
 <h2 id="3-release-prs--agent-owner-merges">3. Release PRs — agent, owner merges</h2>
-<p>Work under <code>issue-&lt;N&gt;/epic</code>, one PR per concern, each into the epic:</p>
+<p>Work under <code>issue-&lt;N&gt;/epic</code>, one PR per concern, each into the epic. GitHub
+deletes the epic branch when it merges, so a follow-up after that recreates
+<code>issue-&lt;N&gt;/epic</code> from <code>main</code>.</p>
 <ul>
 <li><strong>Versions and pins:</strong> crate manifests, dependency requirements (including the
 labs' manifests for breaking versions), <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/scripts/release-packages.json"><code>scripts/release-packages.json</code></a>,
@@ -83,14 +102,24 @@ packaged README install snippets and <code>Cargo.lock</code>. Before opening it,
 <code>build-manifests --check</code> must pass and <code>release-check</code> must report every
 changed crate <code>ready-for-new-version</code> with no pin problems.</li>
 <li><strong>Website docs:</strong> <code>pages/</code> updated for the coming versions: What's new, crate
-pages, guides for new APIs. Merged, <strong>not deployed</strong>.</li>
+pages, guides for new APIs, and the homepage's Start here subtitles. Leave the
+changes uncommitted until the owner has hosted them locally (<code>just pages-serve</code>)
+and approved them. What's new can't name the release tag, which is created on
+the commit that contains it; link the release issue and the
+<a href="https://github.com/gpui-luma-dev/xgpui/releases">GitHub releases</a> list instead.
+Merged, <strong>not deployed</strong>.</li>
 <li><strong>Records:</strong> a review file in <code>docs/release-reviews/</code> when the release needs
 more evidence than the issue holds, and any guide changes.</li>
 </ul>
-<p>Then open the epic's PR into <code>main</code>. CI must pass. A macOS job that never gets a
-runner may be replaced by running its steps locally on the same commit; say so in
-the PR. The owner tests Windows and Linux by hand only once changes are on
-<code>main</code>. The owner merges into <code>main</code>.</p>
+<p>Then open the epic's PR into <code>main</code>. CI must pass, with one exception. A macOS job
+cancelled after its queue timeout, with no runner and no steps, is an
+infrastructure failure rather than a test result; it happened on #334, #337 and
+#343. Re-queue it, run its steps locally on the same commit, or let the owner waive
+it, and say which in the PR. The owner tests Windows and Linux by hand only once
+changes are on <code>main</code>.</p>
+<p>The owner merges into <code>main</code>. The repository doesn't allow auto-merge, and the
+agent isn't woken when CI succeeds, so the owner tells the agent to merge once CI
+is green. The agent re-checks every result before merging.</p>
 <h2 id="4-tag-and-draft-record--agent">4. Tag and draft record — agent</h2>
 <p>On the merged commit, <strong>before any upload</strong>:</p>
 <ul>
@@ -132,10 +161,21 @@ draft and recheck the tag SHA.</li>
 <li>Tick the issue's checklist.</li>
 </ul>
 <h2 id="7-deploy-the-website--owner">7. Deploy the website — owner</h2>
-<p>Run the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/pages.yml">Publish documentation workflow</a> manually
-on <code>main</code>. The agent can then check the live site (the documented versions,
-galleries and both Wasm bundles) and add the deployment link to the release
-record and the issue. Close the issue.</p>
+<p>Run the <strong>Publish documentation</strong> workflow
+(<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/pages.yml"><code>pages.yml</code></a>) manually on <code>main</code>, then tell the
+agent. On #338 "deployed" was reported before any run existed, so before closing
+the issue the agent confirms all of these:</p>
+<ul>
+<li>a Publish documentation run on the release commit succeeded;</li>
+<li>the latest <code>github-pages</code> deployment is that commit;</li>
+<li>the live pages carry the new content (What's new, the homepage and the changed
+guides);</li>
+<li>both gallery Wasm bundles are served.</li>
+</ul>
+<p>Then the agent adds the deployment link to the release record and the issue, and
+writes the issue's <strong>Lessons learned</strong> section: what worked, what caused friction,
+and suggested changes for the owner to decide. Anything durable goes back into
+this guide in a docs PR. Close the issue.</p>
 <h2 id="versioning-policy">Versioning policy</h2>
 <ul>
 <li><strong>Patch:</strong> compatible fixes, internal backend changes, packaged documentation and compatible dependency updates.</li>
@@ -216,6 +256,18 @@ recipe supplies from the tag, and <code>CARGO_REGISTRY_TOKEN</code>.</li>
 manifests. Generated lockfiles, VCS metadata and publication permissions are
 excluded from that comparison; source, resources, README, features and dependency
 requirements remain significant.</p>
+<h3 id="known-gaps">Known gaps</h3>
+<p>These are known holes in the tooling. Cover them by hand until they're fixed:</p>
+<ul>
+<li><code>release-check</code> doesn't flag a crate whose pinned dependency takes a breaking
+bump, or one that re-exports such a dependency.</li>
+<li>No check compares packaged README install snippets with
+<code>scripts/release-packages.json</code>.</li>
+<li><code>just pages-check</code> doesn't check relative links in <code>docs/*.md</code>.</li>
+<li><code>scripts/fixtures/native-package-consumer</code> pins old exact versions. Step 6's
+fresh consumer replaces it for now.</li>
+</ul>
+<h3 id="workflows">Workflows</h3>
 <p>The <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/prepare-daily-release.yml">Prepare daily release PR</a> and
 <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/prepare-registry-release.yml">Prepare registry release</a>
 workflows remain available but aren't part of this flow. The registry workflow's
