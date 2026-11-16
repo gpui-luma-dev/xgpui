@@ -39,7 +39,7 @@ xgpui-parley = { git = "https://github.com/gpui-luma-dev/xgpui" }
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
 anyhow = "1"
 </code></pre>
-<pre data-highlight="6,8,20-34,36-37,39-40,79-80,82"><code class="language-rust">use anyhow::Context as _;
+<pre data-highlight="6,8,20-34,36-42,44-45,84-85,87"><code class="language-rust">use anyhow::Context as _;
 use gpui::{
     App, Application, Bounds, Context, SharedString, Window, WindowBounds, WindowOptions, div,
     prelude::*, px, rgb, size,
@@ -74,6 +74,11 @@ fn main() -&gt; anyhow::Result&lt;()&gt; {
         .append_fallbacks(Script::from_bytes(*b"Hebr"), std::iter::once(hebrew));
     let parley = Arc::new(ParleyTextSystem::new(fonts, "IBM Plex Sans")?);
 
+    // Why not `gpui_platform::application()`? It is
+    // `Application::with_platform(current_platform(false))`, which uses the
+    // platform's own text system (CoreText, DirectWrite, …). To use Parley,
+    // take the same platform (`false`: windowed, not headless) and give GPUI
+    // the text system too, before it builds its text caches.
     let platform = gpui_platform::current_platform(false);
     Application::with_platform_and_text_system(platform, parley.clone()).run(
         move |cx: &amp;mut App| {

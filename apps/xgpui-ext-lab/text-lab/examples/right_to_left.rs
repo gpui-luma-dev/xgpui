@@ -40,6 +40,11 @@ fn main() -> anyhow::Result<()> {
         .append_fallbacks(Script::from_bytes(*b"Hebr"), std::iter::once(hebrew));
     let parley = Arc::new(ParleyTextSystem::new(fonts, "IBM Plex Sans")?);
 
+    // Why not `gpui_platform::application()`? It is
+    // `Application::with_platform(current_platform(false))`, which uses the
+    // platform's own text system (CoreText, DirectWrite, …). To use Parley,
+    // take the same platform (`false`: windowed, not headless) and give GPUI
+    // the text system too, before it builds its text caches.
     let platform = gpui_platform::current_platform(false);
     Application::with_platform_and_text_system(platform, parley.clone()).run(
         move |cx: &mut App| {
