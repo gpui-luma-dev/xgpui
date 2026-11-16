@@ -35,8 +35,11 @@ mod test_support;
 /// rasterization. Returning the originally requested family ID is insufficient
 /// when shaping selected a fallback face.
 ///
-/// This initial bridge rejects paragraphs, inline boxes, RTL and mixed sizes.
-/// It adds no layout or raster cache: those remain owned by GPUI's `TextSystem`.
+/// Right-to-left and mixed-direction lines are supported: glyphs come out in
+/// visual (paint) order, each carrying the logical byte index of its cluster,
+/// as native GPUI backends report them. Paragraphs, inline boxes and mixed
+/// sizes are rejected. It adds no layout or raster cache: those remain owned
+/// by GPUI's `TextSystem`.
 pub fn line_layout(
     layout: &Layout<()>,
     font_size: Pixels,
@@ -84,7 +87,6 @@ pub fn line_layout(
     }
     // Validate before allowing the caller to register any faces.
     for run in line.runs() {
-        ensure!(!run.is_rtl(), "RTL interaction is not supported yet");
         ensure!(
             run.font_size() == f32::from(font_size),
             "mixed font sizes are unsupported"

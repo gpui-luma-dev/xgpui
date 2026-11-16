@@ -188,8 +188,9 @@ impl ParleyTextSystem {
     }
 
     /// Fallible equivalent of the infallible GPUI layout hook. Validate unsupported
-    /// input here before using the backend through GPUI (RTL, synthetic styles,
-    /// paragraph breaks and invalid style ranges return errors).
+    /// input here before using the backend through GPUI (synthetic styles,
+    /// paragraph breaks and invalid style ranges return errors). Right-to-left
+    /// text is laid out in visual order with logical cluster indices.
     pub fn try_layout_line(
         &self,
         text: &str,
@@ -702,6 +703,10 @@ impl PlatformTextSystem for ParleyTextSystem {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "backend/rtl_tests.rs"]
+mod rtl_tests;
 
 #[cfg(test)]
 #[path = "paragraph/tests.rs"]

@@ -61,9 +61,9 @@ for styling, fallback, backend support and migration.
 
 | Path | Supported behavior |
 | --- | --- |
-| Flat line | One size, LTR, unwrapped, start-aligned; UTF-8 indices and baseline-relative positions. Plain GPUI text uses this path, so right-to-left text is rejected. |
+| Flat line | One size, unwrapped, start-aligned, automatic base direction; UTF-8 indices and baseline-relative positions. Plain GPUI text uses this path. Right-to-left and mixed-direction lines paint in visual order with logical cluster indices, as native backends report them; GPUI's own wrapping, alignment, carets and per-run styling still assume left-to-right, so use `typeset()` or the paragraph path for those. |
 | `typeset()` | Element over the paragraph path: inherited GPUI text style, direction/language, wrapping, truncation and line clamps. |
-| Paragraph | Automatic direction through GPUI; explicit base direction and paragraph language through `prepare_paragraph_with_options`; multiple descriptor runs, reflow, hit testing, carets and selection geometry. |
+| Paragraph | Explicit base direction and paragraph language through GPUI (`layout_paragraph_with_options`) or `prepare_paragraph_with_options`; line height through the extension only; multiple descriptor runs, reflow, content widths, hit testing, carets and selection geometry. |
 
 Use `window.text_system().layout_paragraph(...)` and `gpui::paint_paragraph`
 for paragraph integration. Colors, backgrounds, decorations and editing behavior
