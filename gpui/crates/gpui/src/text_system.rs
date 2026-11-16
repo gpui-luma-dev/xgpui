@@ -342,6 +342,11 @@ impl TextSystem {
     pub fn font_capabilities(&self) -> FontCapabilities {
         self.platform_text_system.font_capabilities()
     }
+    /// Reports what paragraph layout supports on this backend.
+    pub fn paragraph_support(&self) -> ParagraphSupport {
+        self.platform_text_system.paragraph_support()
+    }
+
     /// Queries available axis ranges for a resolved face.
     pub fn font_axes(&self, font_id: FontId) -> Result<FontQuery<Vec<VariationAxisInfo>>> {
         self.platform_text_system.font_axes(font_id)
