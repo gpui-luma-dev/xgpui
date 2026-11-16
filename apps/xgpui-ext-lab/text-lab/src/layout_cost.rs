@@ -41,14 +41,14 @@ fn parley() -> Arc<ParleyTextSystem> {
 /// One page of plain text elements; `salt` makes every string distinct.
 fn page(salt: usize, width: Pixels) -> gpui::Div {
     let label = |ix: usize| {
-        if ix % 2 == 0 {
+        if ix.is_multiple_of(2) {
             format!("Settings item {ix} · {salt}")
         } else {
             format!("פריט הגדרות {ix} · {salt}")
         }
     };
     let paragraph = |ix: usize| {
-        let base = if ix % 2 == 0 { LATIN } else { HEBREW };
+        let base = if ix.is_multiple_of(2) { LATIN } else { HEBREW };
         format!("{base} {ix}.{salt}")
     };
     div()
@@ -93,7 +93,15 @@ fn measure(provider: bool, scenario: Scenario) -> (f64, f64) {
     let frame = |visual: &mut VisualTestContext, ix: usize| match scenario {
         Scenario::Cold => draw(visual, ix + 1, px(220.)),
         Scenario::Warm => draw(visual, 0, px(220.)),
-        Scenario::Reflow => draw(visual, 0, if ix % 2 == 0 { px(220.) } else { px(260.) }),
+        Scenario::Reflow => draw(
+            visual,
+            0,
+            if ix.is_multiple_of(2) {
+                px(220.)
+            } else {
+                px(260.)
+            },
+        ),
     };
     for ix in 0..WARMUP {
         frame(visual, FRAMES + ix);
