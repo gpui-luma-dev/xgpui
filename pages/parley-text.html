@@ -14,7 +14,7 @@
 <body><a class="skip" href="#content">Skip to content</a>
 <aside>
 <a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
-<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="right-to-left-text.html">Right-to-left text</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
 <div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" aria-current="page" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
@@ -164,6 +164,8 @@ invalidate geometry until repaint. Apply origin/scrolling once at the UI edge.</
 public GPUI APIs (<code>Window::request_measured_layout</code>, a GPUI global and
 <code>paint_paragraph</code>). Install it with the backend, then use it like text:</p>
 <pre><code class="language-rust">xgpui_parley::typeset::install(backend.clone(), cx); // the installed Arc&lt;ParleyTextSystem&gt;
+// Or, to lay out plain GPUI text with Parley too (next release):
+// xgpui_parley::install_text_layout(backend.clone(), cx);
 
 div().w(px(150.0)).truncate().child(
     xgpui_parley::typeset("تقرير الإيرادات").rtl().language("ar".parse()?),
@@ -176,11 +178,13 @@ on <code>StyledText</code>, including per-run fonts, colors, backgrounds, underl
 strikethroughs; styles follow truncated text. Wrapping text reports min-content and max-content widths, as in
 taffy's Parley example. Truncation is logical and verified by reshaping. Shapes,
 reflows and fits are cached in the engine. Without <code>install</code> it renders as GPUI
-text. Under this backend, plain GPUI text renders single-line right-to-left and
-mixed labels, and per-run colors, backgrounds and underlines follow the text.
-Wrapping, carets and start/end alignment in plain text stay left-to-right
-(<a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>), so wrapped or
-aligned right-to-left text needs <code>typeset()</code>. The text lab's Paragraph panel
+text. With <code>install_text_layout</code> (next release,
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>), plain GPUI text
+uses the same engine, so <code>typeset()</code> is only needed for an explicit direction
+or language; see <a href="right-to-left-text.html">Right-to-left text</a>. Without it,
+plain GPUI text under this backend renders single-line right-to-left and mixed
+labels, and per-run colors, backgrounds and underlines follow the text, but
+wrapping, carets and start/end alignment stay left-to-right. The text lab's Paragraph panel
 draws every label with <code>typeset()</code>: truncated cells, a tooltip and a clamp, plus
 a UI-language toggle (en/he/ar/fa/ur) that mirrors the panel for right-to-left
 languages.</p>
@@ -197,10 +201,11 @@ languages.</p>
 <tr><td><code>WindowTextSystem::layout_paragraph(text, size, runs, width)</code></td><td>GPUI-owned shaping/reflow cache entry point</td></tr>
 <tr><td><code>WindowTextSystem::layout_paragraph_with_options</code>, <code>paragraph_content_widths(_with_options)</code></td><td>The same cache with direction and language, and content widths from the cached shape (core 4.1)</td></tr>
 <tr><td><code>paint_paragraph(layout, origin, color_at, window)</code></td><td>Visual glyph painting through the existing atlas</td></tr>
+<tr><td><code>TextLayoutProvider</code>, <code>ProvidedTextLayout</code>, <code>TextLayoutRequest</code>, <code>App::set_text_layout_provider</code>, <code>App::clear_text_layout_provider</code></td><td>Let a text engine lay out GPUI's plain text elements (next release, <a href="gpui-public-api.html#text-layout-provider-332">#332</a>)</td></tr>
 </tbody></table>
 <p><code>ParleyTextSystem</code>, <code>FaceRegistry</code>, <code>RegisteredFace</code>, <code>GlyphRasterizer</code>,
 <code>ParagraphShape</code>, <code>ParagraphLayout</code>, <code>VariationPreview</code>, <code>ParagraphOptions</code>,
-<code>TextLanguage</code>, <code>Typeset</code> and <code>typeset::install</code> belong to <strong>xgpui-parley</strong>, not GPUI.
+<code>TextLanguage</code>, <code>Typeset</code>, <code>typeset::install</code> and <code>install_text_layout</code> belong to <strong>xgpui-parley</strong>, not GPUI.
 <code>xgpui_parley::TextDirection</code> re-exports <code>gpui::TextDirection</code> (since 0.7).
 Parley/HarfRust/Skrifa types do not enter the core signatures.</p>
 <p>The paragraph additions add no required trait methods. Core 4.1 made

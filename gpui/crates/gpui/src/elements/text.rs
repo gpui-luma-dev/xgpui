@@ -1,9 +1,9 @@
 use crate::{
     ActiveTooltip, AnyView, App, Bounds, DispatchPhase, Element, ElementId, GlobalElementId,
     HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Size, TextOverflow,
-    TextRun, TextStyle, TooltipId, TruncateFrom, WhiteSpace, Window, WrappedLine,
-    WrappedLineLayout, register_tooltip_mouse_handlers, set_tooltip_on_window,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ProvidedTextLayout, SharedString,
+    Size, TextLayoutRequest, TextOverflow, TextRun, TextStyle, TooltipId, TruncateFrom, WhiteSpace,
+    Window, WrappedLine, WrappedLineLayout, register_tooltip_mouse_handlers, set_tooltip_on_window,
 };
 use anyhow::Context as _;
 use gpui_util::ResultExt;
@@ -281,10 +281,10 @@ impl Element for &'static str {
         _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         text_layout: &mut Self::RequestLayoutState,
-        _window: &mut Window,
-        _cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) {
-        text_layout.prepaint(bounds, self)
+        text_layout.prepaint(bounds, self, window, cx)
     }
 
     fn paint(
@@ -355,10 +355,10 @@ impl Element for SharedString {
         _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         text_layout: &mut Self::RequestLayoutState,
-        _window: &mut Window,
-        _cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) {
-        text_layout.prepaint(bounds, self.as_ref())
+        text_layout.prepaint(bounds, self.as_ref(), window, cx)
     }
 
     fn paint(
@@ -581,10 +581,10 @@ impl Element for StyledText {
         _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
-        _window: &mut Window,
-        _cx: &mut App,
+        window: &mut Window,
+        cx: &mut App,
     ) {
-        self.layout.prepaint(bounds, &self.text)
+        self.layout.prepaint(bounds, &self.text, window, cx)
     }
 
     fn paint(
@@ -623,11 +623,20 @@ enum TextPaintPass {
 struct TextLayoutInner {
     len: usize,
     lines: SmallVec<[WrappedLine; 1]>,
+    /// Set when a registered [`crate::TextLayoutProvider`] laid out the text;
+    /// `lines` is then empty.
+    provided: Option<Provided>,
     line_height: Pixels,
     wrap_width: Option<Pixels>,
     truncate_width: Option<Pixels>,
     size: Option<Size<Pixels>>,
     bounds: Option<Bounds<Pixels>>,
+}
+
+/// A provider's layout and the text it laid out.
+struct Provided {
+    text: SharedString,
+    layout: Box<dyn ProvidedTextLayout>,
 }
 
 impl TextLayout {
@@ -636,7 +645,7 @@ impl TextLayout {
         text: SharedString,
         runs: Option<Vec<TextRun>>,
         window: &mut Window,
-        _: &mut App,
+        cx: &mut App,
     ) -> LayoutId {
         let text_style = window.text_style();
         let font_size = text_style.font_size.to_pixels(window.rem_size());
@@ -651,10 +660,44 @@ impl TextLayout {
         } else {
             vec![text_style.to_run(text.len())]
         };
+        let provided = cx.text_layout_provider().map(|provider| {
+            let request = TextLayoutRequest {
+                text: text.clone(),
+                runs: runs.as_slice().into(),
+                font_size,
+                line_height,
+                white_space: text_style.white_space,
+                text_overflow: text_style.text_overflow.clone(),
+                line_clamp: text_style.line_clamp,
+                text_align: text_style.text_align,
+            };
+            (provider, request)
+        });
         window.request_measured_layout(Default::default(), {
             let element_state = self.clone();
 
             move |known_dimensions, available_space, window, cx| {
+                if let Some((provider, request)) = &provided
+                    && let Some(layout) =
+                        provider.measure(request, known_dimensions, available_space, window, cx)
+                {
+                    let size = layout.size();
+                    element_state.0.borrow_mut().replace(TextLayoutInner {
+                        len: request.text.len(),
+                        lines: Default::default(),
+                        provided: Some(Provided {
+                            text: request.text.clone(),
+                            layout,
+                        }),
+                        line_height,
+                        wrap_width: None,
+                        truncate_width: None,
+                        size: Some(size),
+                        bounds: None,
+                    });
+                    return size;
+                }
+
                 let wrap_width = if text_style.white_space == WhiteSpace::Normal {
                     known_dimensions.width.or(match available_space.width {
                         crate::AvailableSpace::Definite(x) => Some(x),
@@ -692,6 +735,7 @@ impl TextLayout {
                 //    unconstrained probe with the truncated size, which poisons intrinsic
                 //    sizing with whatever width some earlier measure pass happened to use)
                 if let Some(text_layout) = element_state.0.borrow().as_ref()
+                    && text_layout.provided.is_none()
                     && let Some(size) = text_layout.size
                     && (wrap_width.is_none() || wrap_width == text_layout.wrap_width)
                     && truncate_width.is_none()
@@ -755,6 +799,7 @@ impl TextLayout {
                 else {
                     element_state.0.borrow_mut().replace(TextLayoutInner {
                         lines: Default::default(),
+                        provided: None,
                         len: 0,
                         line_height,
                         wrap_width,
@@ -774,6 +819,7 @@ impl TextLayout {
 
                 element_state.0.borrow_mut().replace(TextLayoutInner {
                     lines,
+                    provided: None,
                     len,
                     line_height,
                     wrap_width,
@@ -787,13 +833,16 @@ impl TextLayout {
         })
     }
 
-    fn prepaint(&self, bounds: Bounds<Pixels>, text: &str) {
+    fn prepaint(&self, bounds: Bounds<Pixels>, text: &str, window: &mut Window, cx: &mut App) {
         let mut element_state = self.0.borrow_mut();
         let element_state = element_state
             .as_mut()
             .with_context(|| format!("measurement has not been performed on {text}"))
             .unwrap();
         element_state.bounds = Some(bounds);
+        if let Some(provided) = &mut element_state.provided {
+            provided.layout.prepaint(bounds, window, cx);
+        }
     }
 
     fn paint(&self, text: &str, window: &mut Window, cx: &mut App) {
@@ -827,6 +876,22 @@ impl TextLayout {
         let bounds = element_state
             .bounds
             .context("prepaint has not been performed")?;
+
+        if let Some(provided) = &element_state.provided {
+            if matches!(pass, TextPaintPass::All | TextPaintPass::Background) {
+                provided
+                    .layout
+                    .paint_background(bounds.origin, window, cx)
+                    .log_err();
+            }
+            if matches!(pass, TextPaintPass::All | TextPaintPass::Foreground) {
+                provided
+                    .layout
+                    .paint_foreground(bounds.origin, window, cx)
+                    .log_err();
+            }
+            return Ok(());
+        }
 
         let line_height = element_state.line_height;
         let mut line_origin = bounds.origin;
@@ -869,6 +934,10 @@ impl TextLayout {
             .bounds
             .expect("prepaint has not been performed");
 
+        if let Some(provided) = &element_state.provided {
+            return provided.layout.index_for_position(position - bounds.origin);
+        }
+
         if position.y < bounds.top() {
             return Err(0);
         }
@@ -902,6 +971,9 @@ impl TextLayout {
         let bounds = element_state
             .bounds
             .expect("prepaint has not been performed");
+        if let Some(provided) = &element_state.provided {
+            return Some(bounds.origin + provided.layout.position_for_index(index)?);
+        }
         let line_height = element_state.line_height;
 
         let mut line_origin = bounds.origin;
@@ -925,6 +997,9 @@ impl TextLayout {
     }
 
     /// Retrieve the layout for the line containing the given byte index.
+    ///
+    /// Returns `None` when a [`crate::TextLayoutProvider`] laid out the text,
+    /// since it has no flat lines; use [`Self::position_for_index`] instead.
     pub fn line_layout_for_index(&self, index: usize) -> Option<Arc<WrappedLineLayout>> {
         let element_state = self.0.borrow();
         let element_state = element_state
@@ -948,6 +1023,9 @@ impl TextLayout {
     }
 
     /// Retrieve all line layouts in source order.
+    ///
+    /// Empty when a [`crate::TextLayoutProvider`] laid out the text, since it
+    /// has no flat lines.
     pub fn line_layouts(&self) -> SmallVec<[Arc<WrappedLineLayout>; 1]> {
         self.0
             .borrow()
@@ -974,40 +1052,62 @@ impl TextLayout {
         self.0.borrow().as_ref().unwrap().len
     }
 
-    /// The text for this layout.
+    /// The text for this layout. With a [`crate::TextLayoutProvider`], this is
+    /// the element's full text, including any part hidden by truncation.
     pub fn text(&self) -> String {
-        self.0
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .lines
-            .iter()
-            .map(|s| &s.text)
-            .join("\n")
+        let element_state = self.0.borrow();
+        let element_state = element_state.as_ref().unwrap();
+        if let Some(provided) = &element_state.provided {
+            return provided.text.to_string();
+        }
+        element_state.lines.iter().map(|s| &s.text).join("\n")
     }
 
     /// The text for this layout (with soft-wraps as newlines)
     pub fn wrapped_text(&self) -> String {
+        if let Some(provided) = &self.0.borrow().as_ref().unwrap().provided {
+            return provided.layout.wrapped_text();
+        }
         let mut accumulator = String::new();
 
         for wrapped in self.0.borrow().as_ref().unwrap().lines.iter() {
-            let mut seen = 0;
-            for boundary in wrapped.layout.wrap_boundaries.iter() {
-                let index = wrapped.layout.unwrapped_layout.runs[boundary.run_ix].glyphs
-                    [boundary.glyph_ix]
-                    .index;
-
-                accumulator.push_str(&wrapped.text[seen..index]);
-                accumulator.push('\n');
-                seen = index;
-            }
-            accumulator.push_str(&wrapped.text[seen..]);
+            let boundaries = wrapped.layout.wrap_boundaries.iter().map(|boundary| {
+                wrapped.layout.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix]
+                    .index
+            });
+            push_wrapped_line(&mut accumulator, &wrapped.text, boundaries);
             accumulator.push('\n');
         }
         // Remove trailing newline
         accumulator.pop();
         accumulator
     }
+}
+
+/// Append `text` with a newline at each soft-wrap boundary byte index.
+///
+/// Boundaries follow the painted glyph order, which runs backwards through
+/// right-to-left text, so they are taken in text order here. Each piece is then
+/// a logical span of the text; for mixed-direction lines a painted line may not
+/// be one contiguous span. Indices that aren't character boundaries inside the
+/// text are skipped.
+fn push_wrapped_line(
+    accumulator: &mut String,
+    text: &str,
+    boundaries: impl Iterator<Item = usize>,
+) {
+    let mut boundaries: SmallVec<[usize; 8]> = boundaries
+        .filter(|index| *index > 0 && *index < text.len() && text.is_char_boundary(*index))
+        .collect();
+    boundaries.sort_unstable();
+    boundaries.dedup();
+    let mut seen = 0;
+    for index in boundaries {
+        accumulator.push_str(&text[seen..index]);
+        accumulator.push('\n');
+        seen = index;
+    }
+    accumulator.push_str(&text[seen..]);
 }
 
 /// A text element that can be interacted with.
@@ -1345,5 +1445,182 @@ mod tests {
             make_text_unstable_id(false).id,
             make_text_unstable_id(true).id
         );
+    }
+
+    #[test]
+    fn wrapped_line_takes_boundaries_in_text_order() {
+        let wrapped = |text: &str, boundaries: &[usize]| {
+            let mut out = String::new();
+            super::push_wrapped_line(&mut out, text, boundaries.iter().copied());
+            out
+        };
+        // Left to right: boundaries already in text order.
+        assert_eq!(wrapped("aaa bbb ccc", &[4, 8]), "aaa \nbbb \nccc");
+        // Right to left: painted order runs backwards through the text.
+        let hebrew = "אחת שתיים שלוש";
+        let (second, third) = (hebrew.find("שתיים").unwrap(), hebrew.find("שלוש").unwrap());
+        assert_eq!(wrapped(hebrew, &[third, second]), "אחת \nשתיים \nשלוש");
+        // Out-of-range, duplicate, edge and mid-character indices are ignored.
+        assert_eq!(wrapped("ab", &[0, 2, 9]), "ab");
+        assert_eq!(wrapped("aaa bbb", &[4, 4]), "aaa \nbbb");
+        assert_eq!(wrapped("éa", &[1]), "éa");
+        assert_eq!(wrapped("", &[]), "");
+    }
+
+    mod provider {
+        use crate::{
+            self as gpui, App, AvailableSpace, Bounds, ParentElement as _, Pixels, Point,
+            ProvidedTextLayout, Size, Styled as _, StyledText, TestAppContext, TextLayoutProvider,
+            TextLayoutRequest, TextOverflow, Window, div, point, px, size,
+        };
+        use std::{
+            cell::{Cell, RefCell},
+            rc::Rc,
+        };
+
+        const ADVANCE: f32 = 10.;
+        const HEIGHT: f32 = 20.;
+
+        /// Lays every character out 10px wide on one 20px line, except text
+        /// "flat", which it leaves to GPUI's flat lines.
+        #[derive(Default)]
+        struct Fake {
+            request: RefCell<Option<TextLayoutRequest>>,
+            prepaints: Rc<RefCell<Vec<Bounds<Pixels>>>>,
+            painted: Rc<Cell<(bool, bool)>>,
+        }
+
+        struct FakeLayout {
+            len: usize,
+            prepaints: Rc<RefCell<Vec<Bounds<Pixels>>>>,
+            painted: Rc<Cell<(bool, bool)>>,
+        }
+
+        impl TextLayoutProvider for Fake {
+            fn measure(
+                &self,
+                request: &TextLayoutRequest,
+                _: Size<Option<Pixels>>,
+                _: Size<AvailableSpace>,
+                _: &mut Window,
+                _: &mut App,
+            ) -> Option<Box<dyn ProvidedTextLayout>> {
+                self.request.replace(Some(request.clone()));
+                (request.text.as_ref() != "flat").then(|| {
+                    Box::new(FakeLayout {
+                        len: request.text.len(),
+                        prepaints: self.prepaints.clone(),
+                        painted: self.painted.clone(),
+                    }) as Box<dyn ProvidedTextLayout>
+                })
+            }
+        }
+
+        impl ProvidedTextLayout for FakeLayout {
+            fn size(&self) -> Size<Pixels> {
+                size(px(self.len as f32 * ADVANCE), px(HEIGHT))
+            }
+            fn prepaint(&mut self, bounds: Bounds<Pixels>, _: &mut Window, _: &mut App) {
+                self.prepaints.borrow_mut().push(bounds);
+            }
+            fn paint_background(
+                &self,
+                _: Point<Pixels>,
+                _: &mut Window,
+                _: &mut App,
+            ) -> anyhow::Result<()> {
+                self.painted.set((true, self.painted.get().1));
+                Ok(())
+            }
+            fn paint_foreground(
+                &self,
+                _: Point<Pixels>,
+                _: &mut Window,
+                _: &mut App,
+            ) -> anyhow::Result<()> {
+                self.painted.set((self.painted.get().0, true));
+                Ok(())
+            }
+            fn index_for_position(&self, position: Point<Pixels>) -> Result<usize, usize> {
+                let index = (f32::from(position.x) / ADVANCE).floor().max(0.) as usize;
+                if index < self.len && position.y >= px(0.) && position.y < px(HEIGHT) {
+                    Ok(index)
+                } else {
+                    Err(index.min(self.len))
+                }
+            }
+            fn position_for_index(&self, index: usize) -> Option<Point<Pixels>> {
+                (index <= self.len).then(|| point(px(index as f32 * ADVANCE), px(0.)))
+            }
+            fn wrapped_text(&self) -> String {
+                "provided".into()
+            }
+        }
+
+        /// Draws `text` in a styled parent at (5, 7) and returns its layout.
+        fn draw(cx: &mut TestAppContext, text: &'static str) -> super::TextLayout {
+            let cx = cx.add_empty_window();
+            let element = StyledText::new(text);
+            let layout = element.layout().clone();
+            cx.draw(point(px(5.), px(7.)), size(px(300.), px(100.)), |_, _| {
+                div()
+                    .flex()
+                    .items_start()
+                    .text_size(px(16.))
+                    .line_clamp(2)
+                    .text_ellipsis()
+                    .child(element)
+            });
+            layout
+        }
+
+        #[gpui::test]
+        fn provider_lays_out_measures_paints_and_answers_geometry(cx: &mut TestAppContext) {
+            let fake = Rc::new(Fake::default());
+            cx.update(|cx| cx.set_text_layout_provider(fake.clone()));
+            let layout = draw(cx, "hello");
+
+            let bounds = layout.bounds();
+            assert_eq!(bounds.origin, point(px(5.), px(7.)));
+            assert_eq!(bounds.size, size(px(50.), px(20.)));
+            assert_eq!(fake.prepaints.borrow().last(), Some(&bounds));
+            assert_eq!(fake.painted.get(), (true, true));
+
+            let request = fake.request.borrow().clone().unwrap();
+            assert_eq!(request.text.as_ref(), "hello");
+            assert_eq!(request.runs.iter().map(|run| run.len).sum::<usize>(), 5);
+            assert_eq!(request.font_size, px(16.));
+            assert_eq!(request.line_clamp, Some(2));
+            assert!(matches!(
+                request.text_overflow,
+                Some(TextOverflow::Truncate(_))
+            ));
+
+            assert_eq!(layout.position_for_index(3), Some(point(px(35.), px(7.))));
+            assert_eq!(layout.index_for_position(point(px(30.), px(10.))), Ok(2));
+            assert_eq!(layout.index_for_position(point(px(500.), px(10.))), Err(5));
+            assert!(layout.line_layouts().is_empty());
+            assert!(layout.line_layout_for_index(0).is_none());
+            assert_eq!(layout.wrapped_text(), "provided");
+            assert_eq!(layout.text(), "hello");
+            assert_eq!(layout.len(), 5);
+        }
+
+        #[gpui::test]
+        fn declined_or_cleared_provider_keeps_flat_lines(cx: &mut TestAppContext) {
+            let fake = Rc::new(Fake::default());
+            cx.update(|cx| cx.set_text_layout_provider(fake.clone()));
+            let layout = draw(cx, "flat");
+            assert!(fake.request.borrow().is_some(), "provider was asked");
+            assert_eq!(layout.line_layouts().len(), 1);
+            assert_eq!(layout.wrapped_text(), "flat");
+
+            cx.update(|cx| cx.clear_text_layout_provider());
+            fake.request.replace(None);
+            let layout = draw(cx, "hello");
+            assert!(fake.request.borrow().is_none(), "provider no longer asked");
+            assert_eq!(layout.line_layouts().len(), 1);
+            assert_eq!(layout.text(), "hello");
+        }
     }
 }
