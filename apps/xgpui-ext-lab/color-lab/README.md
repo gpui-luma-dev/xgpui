@@ -43,7 +43,7 @@ their existing platform capability checks and report effective output/fallback.
 
 ## Flowers (ProPhoto RGB)
 
-`just color flowers` (alias `just lab-flowers`, or `--flowers`), or the button on the chromaticity page, opens WebKit’s Flowers
+`just color flowers` (or pick it from `just labs`, or pass `--flowers`), or the button on the chromaticity page, opens WebKit’s Flowers
 comparison. The ProPhoto and sRGB JPEGs are decoded raw (no color management)
 and the ProPhoto channels go through xgpui’s named ProPhoto pipeline into
 bounded P3 or Rec.2020 storage with Clip or ReduceChroma. Controls: storage,
@@ -53,6 +53,16 @@ out-of-sRGB visualization, zoom, click-to-inspect (codes, linear, XYZ/D65,
 before-mapping and stored values) and a Metal FP16 readback of the selected
 pixel. Synthetic companion patches cover the near-black knee, primaries and
 fractional alpha; their blur toggle uses the sRGB preview path only.
+
+The view never assumes a wide-gamut display. It reports the OS display
+evidence as metadata (`WindowColorStatus::display_wide_gamut`) and warns unless
+the OS reports wide primaries and extended output is active. Windows reports
+wide primaries only while Wide gamut output is selected and never asserts a
+narrow panel, so an ordinary SDR monitor there shows “no wide-gamut evidence,
+treat it as sRGB”. A display self-test paints the same stored ProPhoto red as an
+sRGB preview and in extended composition: on an sRGB monitor the two halves look
+the same, which is expected rather than a pipeline failure. The composition
+readback is macOS (Metal) only and says so on other hosts.
 
 The embedded profile is Kodak’s v2 “ProPhoto RGB”: ROMM colorants with a pure
 gamma of 461/256 and no linear toe. The named ROMM decode therefore differs from

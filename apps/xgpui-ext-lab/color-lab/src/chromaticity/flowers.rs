@@ -443,7 +443,7 @@ impl Flowers {
             selected: DEFAULT_SELECTION,
             inspection: None,
             viewport: Arc::new(Mutex::new(None)),
-            report: "Native readback: not checked.".into(),
+            report: "Composition readback: not checked.".into(),
         }
     }
     fn storage(&self) -> ImagePrimaries {
@@ -648,13 +648,38 @@ impl Flowers {
         )
         .size_full()
     }
+    /// ProPhoto red after storage and mapping, painted as an sRGB preview or
+    /// in extended composition. Crops the red-primary cell of the patch image.
+    fn swatch(&self, extended: bool) -> impl IntoElement {
+        let image = self.images[PATCHES_SLOT + variant(self.storage, self.mapping)].clone();
+        canvas(
+            |_, _, _| (),
+            move |bounds, _, window, _| {
+                let Some(image) = &image else { return };
+                let (w, h) = (bounds.size.width, bounds.size.height);
+                // Cell (column 0, row 1) of the 13 × 2 grid, inset to skip edge filtering.
+                let placed = Bounds::new(
+                    point(bounds.origin.x - w * 0.25, bounds.origin.y - h * 1.75),
+                    size(w * 1.5 * 13., h * 1.5 * 2.),
+                );
+                window.with_content_mask(Some(ContentMask { bounds }), |window| {
+                    Flowers::paint_image(image, placed, extended, window)
+                });
+            },
+        )
+        .size_full()
+    }
     /// Compare the displayed native composition at the selected pixel with the
     /// CPU stored value converted to linear P3.
     fn check(&mut self, window: &mut Window) {
         let result = (|| -> anyhow::Result<String> {
             anyhow::ensure!(
+                cfg!(target_os = "macos"),
+                "available on macOS (Metal) only; this host cannot read back the extended frame"
+            );
+            anyhow::ensure!(
                 window.color_status().effective() == WindowColorMode::WideGamutSdr && !self.preview,
-                "Select Wide gamut and native output for Metal FP16 readback"
+                "Select Wide gamut and extended output for the Metal FP16 readback"
             );
             anyhow::ensure!(self.view == View::Wipe, "Use the wipe view");
             anyhow::ensure!(
@@ -711,7 +736,71 @@ impl Flowers {
                 }
             ))
         })();
-        self.report = result.unwrap_or_else(|error| format!("Native readback: {error:#}"));
+        self.report = result.unwrap_or_else(|error| format!("Composition readback: {error:#}"));
+    }
+}
+/// What the OS reports about the display. Never stronger than the evidence:
+/// Windows reports wide primaries only while wide output is active and never
+/// asserts a narrow panel, so most SDR monitors there are `Unknown`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum DisplayEvidence {
+    Wide,
+    Standard,
+    Unknown,
+}
+pub(super) struct Presentation {
+    pub(super) evidence: DisplayEvidence,
+    /// What the window hands the OS.
+    pub(super) composition: &'static str,
+    /// What the OS says about the display; metadata, not a measurement.
+    pub(super) display: &'static str,
+    /// Shown unless the OS reports a wide display and extended output is active.
+    pub(super) warning: Option<&'static str>,
+}
+pub(super) fn presentation(status: WindowColorStatus, preview: bool) -> Presentation {
+    let extended = status.effective() == WindowColorMode::WideGamutSdr && !preview;
+    let evidence = match status.display_wide_gamut() {
+        Some(true) => DisplayEvidence::Wide,
+        Some(false) => DisplayEvidence::Standard,
+        None => DisplayEvidence::Unknown,
+    };
+    let composition = if status.effective() != WindowColorMode::WideGamutSdr {
+        "sRGB output (standard window mode): stored colors are mapped to sRGB before display"
+    } else if preview {
+        "explicit sRGB preview: stored colors are mapped to sRGB before display"
+    } else if cfg!(target_os = "macos") {
+        "extended composition: extended linear P3 handed to macOS color management"
+    } else if cfg!(target_os = "windows") {
+        "extended composition: FP16 scRGB handed to Windows, which maps it to the display"
+    } else {
+        "extended composition handed to the OS"
+    };
+    let display = match evidence {
+        DisplayEvidence::Wide => {
+            "the OS reports wide-gamut primaries for this display (OS metadata, not a measurement)"
+        }
+        DisplayEvidence::Standard => "the OS reports a standard-gamut (sRGB-class) display",
+        DisplayEvidence::Unknown if status.effective() == WindowColorMode::WideGamutSdr => {
+            "no wide-gamut evidence from the OS for this display; treat it as sRGB"
+        }
+        DisplayEvidence::Unknown => {
+            "not reported; some systems report display primaries only while Wide gamut output is selected"
+        }
+    };
+    let warning = match (evidence, extended) {
+        (DisplayEvidence::Wide, true) => None,
+        (DisplayEvidence::Wide, false) => Some(
+            "The OS reports a wide-gamut display, but output here is sRGB. Select Wide gamut and extended output to show colors beyond sRGB.",
+        ),
+        _ => Some(
+            "This display is not known to be wide gamut, so treat it as sRGB. Colors outside sRGB (about half of this photograph) reach the screen mapped to sRGB, and the two halves of the wipe can look the same. Storage and mapping are still verified numerically below; the self-test shows whether this display can show the difference.",
+        ),
+    };
+    Presentation {
+        evidence,
+        composition,
+        display,
+        warning,
     }
 }
 fn fmt3(v: [f64; 3]) -> String {
@@ -773,24 +862,22 @@ impl Lab {
         let Some(f) = &self.flowers else { return body };
         let storage = ["bounded linear Display P3", "bounded linear Rec.2020"][f.storage];
         let mapping = ["Clip", "ReduceChroma"][f.mapping];
-        let output = if f.preview || !wide {
-            "explicit sRGB preview"
-        } else {
-            "native wide (extended linear P3 composition)"
-        };
+        let status = window.color_status();
+        let shown = presentation(status, f.preview);
+        let extended = wide && !f.preview;
         body = body
-            .when(!wide, |body| body.child(div().p_3().bg(rgb(0x422006)).text_color(rgb(0xfde68a))
-                .child("Standard SDR output is active: the ProPhoto photograph is shown as an sRGB preview of its mapped storage.")))
+            .children(shown.warning.map(|warning| div().p_3().bg(rgb(0x422006)).text_color(rgb(0xfde68a)).child(warning)))
+            .child(format!("Display: {} • Output: {}", shown.display, shown.composition))
             .child(div().flex().flex_wrap().gap_2()
                 .child(self.flowers_button(format!("Storage: {}", ["P3", "Rec.2020"][f.storage]), "flowers-storage", cx, |f, _| { f.storage ^= 1; f.reinspect(); }))
                 .child(self.flowers_button(format!("Mapping: {mapping}"), "flowers-mapping", cx, |f, _| { f.mapping ^= 1; f.reinspect(); }))
-                .child(self.flowers_button(format!("Output: {}", if f.preview { "sRGB preview" } else { "native" }), "flowers-output", cx, |f, _| f.preview = !f.preview))
+                .child(self.flowers_button(format!("Output: {}", if f.preview { "sRGB preview" } else { "extended" }), "flowers-output", cx, |f, _| f.preview = !f.preview))
                 .child(self.flowers_button(format!("View: {}", match f.view { View::Wipe => "sRGB | ProPhoto wipe", View::Overlay => "our pre-mapping overlay", View::WebKit => "WebKit out-of-sRGB" }), "flowers-view", cx, |f, _| f.view = match f.view { View::Wipe => View::Overlay, View::Overlay => View::WebKit, View::WebKit => View::Wipe }))
                 .child(self.flowers_button(format!("Zoom: {}×", ZOOM[f.zoom]), "flowers-zoom", cx, |f, _| f.zoom = (f.zoom + 1) % ZOOM.len()))
                 .child(self.flowers_button(format!("Wipe: {:.0}%", f.wipe * 100.), "flowers-wipe", cx, |f, _| f.wipe = if f.wipe >= 1. { 0. } else { f.wipe + 0.25 }))
                 .child(self.flowers_button(format!("Patch blur (sRGB preview): {}", if f.blur { "2 px" } else { "off" }), "flowers-blur", cx, |f, _| f.blur = !f.blur))
-                .child(self.flowers_button("Check native readback (Metal FP16)".into(), "flowers-check", cx, |f, window| f.check(window))))
-            .child(format!("Source: ProPhoto RGB / ROMM RGB, named xgpui interpretation of raw 8-bit JPEG channels • Storage: {storage} • Mapping: {mapping} • Output: {output} • Effective window mode {:?}", window.color_status().effective()))
+                .child(self.flowers_button(if cfg!(target_os = "macos") { "Check composition readback (Metal FP16)" } else { "Composition readback (macOS only)" }.into(), "flowers-check", cx, |f, window| f.check(window))))
+            .child(format!("Source: ProPhoto RGB / ROMM RGB, named xgpui interpretation of raw 8-bit JPEG channels • Storage: {storage} • Mapping: {mapping} • Window mode: requested {:?}, effective {:?}, OS display evidence {:?}", status.requested(), status.effective(), status.display_wide_gamut()))
             .child(f.status.clone());
         if let Some(a) = &f.analysis {
             let pct = |n: usize| 100. * n as f64 / a.pixels as f64;
@@ -813,7 +900,7 @@ impl Lab {
             .child(div().flex().flex_wrap().gap_4().children([SRGB, mapped_slot, OVERLAY + f.storage, OOG].into_iter().zip(labels).map(|(slot, label)| {
                 let aspect = if slot == OOG { f.oog_aspect } else { WIDTH as f32 / HEIGHT as f32 };
                 div().flex().flex_col().gap_1()
-                    .child(div().w(px(180.)).h(px(180. / aspect)).child(f.thumbnail(slot, wide && !f.preview && slot == mapped_slot)))
+                    .child(div().w(px(180.)).h(px(180. / aspect)).child(f.thumbnail(slot, extended && slot == mapped_slot)))
                     .child(div().text_sm().child(label))
             })))
             .child(div().text_sm().child("Click the photograph to select a pixel. Wipe: WebKit’s sRGB JPEG on the left, the ProPhoto JPEG through xgpui on the right. Overlay: cyan leaves sRGB but fits storage; magenta leaves storage and is mapped."))
@@ -829,7 +916,7 @@ impl Lab {
                         if let Some(flowers) = &mut s.flowers
                             && flowers.select_at(event.position)
                         {
-                            flowers.report = "Native readback: selection changed; check again.".into();
+                            flowers.report = "Composition readback: selection changed; check again.".into();
                             cx.notify();
                         }
                     }))
@@ -850,7 +937,23 @@ impl Lab {
             Some(Err(error)) => div().child(format!("Pixel ({x}, {y}): {error:#}")).into_any_element(),
             None => div().child("Pixel inspection is available once decoding finishes.").into_any_element(),
         });
+        let self_test = match (extended, shown.evidence) {
+            (false, _) => {
+                "Extended output is not active, so both halves are sRGB and must look the same."
+            }
+            (true, DisplayEvidence::Wide) => {
+                "On a wide-gamut display the right half should look more saturated. If they look the same, the display or its OS settings are not showing colors beyond sRGB."
+            }
+            (true, _) => {
+                "If the two halves look the same, this display is not showing colors beyond sRGB; that is expected on an sRGB monitor and is not a pipeline failure."
+            }
+        };
         body.child(div().text_sm().child(f.report.clone()))
+            .child(div().text_lg().child("Display self-test: can this screen show colors beyond sRGB?"))
+            .child(div().flex().gap_2()
+                .child(div().flex().flex_col().gap_1().child(div().w(px(160.)).h(px(80.)).child(f.swatch(false))).child(div().text_sm().child("sRGB preview")))
+                .child(div().flex().flex_col().gap_1().child(div().w(px(160.)).h(px(80.)).child(f.swatch(extended))).child(div().text_sm().child(if extended { "extended composition" } else { "sRGB (extended inactive)" }))))
+            .child(div().text_sm().child(format!("Both halves are ProPhoto red after {storage} storage and {mapping}. {self_test} This is a visual check; OS display evidence is metadata, and neither is a measurement.")))
             .child(div().text_lg().child("Synthetic ProPhoto companions"))
             .child(div().text_sm().child("Row 1: neutral ramp with near-black codes on both sides of the 16/512 knee; last patch 50% alpha. Row 2: ProPhoto primaries and secondaries, a color inside P3, a green outside P3 but inside Rec.2020, a deep purple, then red at 75/50/25/0% alpha over white. Same storage and mapping as the photograph. Blur applies to the sRGB preview only."))
             .child(div().w(px(360.)).h(px(360. * 2. / 13.)).bg(rgb(0xffffff)).child(f.patches(wide)))
@@ -858,7 +961,7 @@ impl Lab {
             .child(div().id("webkit-flowers-credit").cursor_pointer().text_color(rgb(0x82caff))
                 .child("Flowers images courtesy of WebKit’s Wide Gamut demo · original examples and source ↗")
                 .on_click(|_, _, cx| cx.open_url(SOURCE)))
-            .child("Original WebKit JPEGs retained unchanged. The lab decodes raw channels and applies xgpui’s ProPhoto math; storage is bounded P3 or Rec.2020, so this is not full ProPhoto output. Visible differences depend on window mode and display; readbacks are composition values, not monitor measurements.")
+            .child("Original WebKit JPEGs retained unchanged. The lab decodes raw channels and applies xgpui’s ProPhoto math; storage is bounded P3 or Rec.2020, so this is not full ProPhoto output. Nothing here establishes that your display is wide gamut: visible differences depend on the display and OS, and readbacks are composition values, not monitor measurements.")
     }
 }
 
@@ -872,6 +975,46 @@ mod tests {
 
     fn source() -> Decoded {
         decode(PROPHOTO_JPEG).unwrap()
+    }
+
+    #[test]
+    fn presentation_never_claims_a_wide_display_without_os_evidence() {
+        use WindowColorMode::{Default, WideGamutSdr};
+        for evidence in [Some(true), Some(false), None] {
+            for effective in [Default, WideGamutSdr] {
+                for preview in [false, true] {
+                    let status = WindowColorStatus::new(effective, effective, true, evidence, None);
+                    let shown = presentation(status, preview);
+                    let extended = effective == WideGamutSdr && !preview;
+                    let claim = shown.display.contains("reports wide-gamut primaries");
+                    assert_eq!(
+                        claim,
+                        evidence == Some(true),
+                        "{evidence:?} {effective:?} {preview}"
+                    );
+                    assert_eq!(
+                        shown.warning.is_none(),
+                        evidence == Some(true) && extended,
+                        "{evidence:?} {effective:?} {preview}"
+                    );
+                    assert_eq!(shown.composition.starts_with("extended"), extended);
+                    for text in [shown.display, shown.composition] {
+                        assert!(!text.contains("native wide"), "{text}");
+                    }
+                }
+            }
+        }
+        // Windows SDR monitor in wide mode: no evidence, so it is treated as sRGB.
+        let windows_sdr = WindowColorStatus::new(WideGamutSdr, WideGamutSdr, true, None, None);
+        let shown = presentation(windows_sdr, false);
+        assert_eq!(shown.evidence, DisplayEvidence::Unknown);
+        assert!(shown.display.contains("treat it as sRGB"));
+        assert!(
+            shown
+                .warning
+                .unwrap()
+                .contains("not known to be wide gamut")
+        );
     }
 
     #[test]
