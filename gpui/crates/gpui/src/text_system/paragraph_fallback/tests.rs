@@ -81,11 +81,13 @@ fn soft_wrap_boundary_is_shared_and_affinity_picks_the_line() {
 }
 
 #[test]
-fn visual_movement_is_logical_and_clamps_at_the_ends() {
+fn visual_movement_follows_carets_and_clamps_at_the_ends() {
     let layout = layout("aaa bbb ccc", 45.0);
     let right = |p| layout.move_visual(p, VisualDirection::Right).unwrap();
     let left = |p| layout.move_visual(p, VisualDirection::Left).unwrap();
-    assert_eq!(right(down(7)), down(8));
+    // Right onto a soft wrap stops at the first line's end; the next Right
+    // continues past the shared byte on the following line.
+    assert_eq!(right(down(7)), up(8));
     assert_eq!(right(up(8)), down(9));
     assert_eq!(left(down(8)), down(7));
     assert_eq!(left(down(0)), down(0));
@@ -194,7 +196,7 @@ fn native_backends_report_and_serve_left_to_right_paragraphs() {
     let auto = window
         .layout_paragraph("aaa bbb ccc".into(), SIZE, &[], px(45.0))
         .unwrap();
-    // Direction is ignored at this level: forced RTL keeps left-to-right geometry.
+    // Forced right to left keeps the wrapping and sets each line flush right.
     let rtl = window
         .layout_paragraph_with_options(
             "aaa bbb ccc".into(),
@@ -205,9 +207,12 @@ fn native_backends_report_and_serve_left_to_right_paragraphs() {
         )
         .unwrap();
     assert_eq!(auto.size(), rtl.size());
+    assert_eq!(auto.caret_bounds(down(0)).unwrap().origin.x, px(0.0));
+    // "aaa bbb" is 42px of the 45px line; "ccc" is 18px.
+    assert_eq!(rtl.caret_bounds(down(0)).unwrap().origin.x, px(3.0));
     assert_eq!(
-        auto.caret_bounds(down(0)).unwrap(),
-        rtl.caret_bounds(down(0)).unwrap()
+        rtl.caret_bounds(down(8)).unwrap().origin,
+        point(px(27.0), px(LINE))
     );
     assert_eq!(
         window
@@ -215,4 +220,162 @@ fn native_backends_report_and_serve_left_to_right_paragraphs() {
             .unwrap(),
         (px(3.0 * CHAR), px(11.0 * CHAR))
     );
+}
+
+/// Noop shaping with each line's glyphs mirrored, as a native shaper reports a
+/// right-to-left run: byte 0 is the rightmost glyph.
+fn shape_reversed(text: &str) -> Arc<dyn PlatformParagraphShape> {
+    let options = ParagraphShapeOptions::default();
+    shape_paragraph(
+        ParagraphRequest::new(text, SIZE, &[], &options),
+        |text, size, runs| {
+            let mut line = NoopTextSystem::new().layout_line(text, size, runs);
+            let width = line.width;
+            for run in &mut line.runs {
+                for glyph in &mut run.glyphs {
+                    glyph.position.x = width - glyph.position.x - px(CHAR);
+                }
+                run.glyphs.reverse();
+            }
+            line
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn reordered_runs_stay_inside_their_lines() {
+    // Ten 6px clusters, no break opportunities: at 25px, lines of 4, 4 and 2.
+    let shape = shape_reversed("abcdefghij");
+    assert_eq!(shape.content_widths().unwrap(), (px(60.0), px(60.0)));
+    let layout = shape.layout(px(25.0)).unwrap();
+    assert_eq!(layout.size().height, px(3.0 * LINE));
+    let glyphs: Vec<_> = layout
+        .runs()
+        .iter()
+        .flat_map(|run| run.glyphs.iter())
+        .collect();
+    for glyph in &glyphs {
+        assert!(
+            glyph.position.x >= px(0.0) && glyph.position.x < px(25.0),
+            "{} at {:?}",
+            glyph.index,
+            glyph.position.x
+        );
+    }
+    // Within the first line, byte order runs right to left.
+    let first: Vec<_> = glyphs
+        .iter()
+        .filter(|glyph| glyph.index < 4)
+        .map(|glyph| (glyph.index, glyph.position.x))
+        .collect();
+    assert!(
+        first
+            .iter()
+            .all(|(index, x)| *x == px((3 - *index) as f32 * CHAR)),
+        "{first:?}"
+    );
+
+    // The logical start is the cluster's right edge, the line's end its left edge.
+    assert_eq!(
+        layout.caret_bounds(down(0)).unwrap().origin.x,
+        px(4.0 * CHAR)
+    );
+    assert_eq!(layout.caret_bounds(up(4)).unwrap().origin.x, px(0.0));
+    for byte_index in 0..=10 {
+        let caret = layout.caret_bounds(down(byte_index)).unwrap();
+        assert_eq!(
+            layout.hit_test(caret.center()).unwrap().byte_index,
+            byte_index,
+            "caret {byte_index}"
+        );
+    }
+    // Moving left reads forward through the run.
+    assert_eq!(
+        layout.move_visual(down(0), VisualDirection::Left).unwrap(),
+        down(1)
+    );
+    assert_eq!(
+        layout.move_visual(down(1), VisualDirection::Right).unwrap(),
+        down(0)
+    );
+    // A selection inside the run is one rectangle at its visual place.
+    assert_eq!(
+        layout.selection_bounds(down(1), down(3)).unwrap(),
+        vec![Bounds::new(
+            point(px(CHAR), px(0.0)),
+            size(px(2.0 * CHAR), px(LINE))
+        )]
+    );
+}
+
+fn shape_with(text: &str, direction: TextDirection) -> Arc<dyn PlatformParagraphShape> {
+    let options = ParagraphShapeOptions::default().with_direction(direction);
+    NoopTextSystem::new()
+        .shape_paragraph(ParagraphRequest::new(text, SIZE, &[], &options))
+        .unwrap()
+}
+
+/// Where each line's visible text starts and ends, top to bottom.
+fn line_extents(layout: &dyn PlatformParagraphLayout, text: &str) -> Vec<(Pixels, Pixels)> {
+    let mut lines: Vec<(Pixels, Pixels, Pixels)> = Vec::new();
+    for glyph in layout.runs().iter().flat_map(|run| run.glyphs.iter()) {
+        if text.as_bytes()[glyph.index] == b' ' {
+            continue;
+        }
+        let (top, left, right) = (
+            glyph.position.y,
+            glyph.position.x,
+            glyph.position.x + px(CHAR),
+        );
+        match lines.iter_mut().find(|line| line.0 == top) {
+            Some(line) => {
+                line.1 = line.1.min(left);
+                line.2 = line.2.max(right);
+            }
+            None => lines.push((top, left, right)),
+        }
+    }
+    lines
+        .into_iter()
+        .map(|(_, left, right)| (left, right))
+        .collect()
+}
+
+#[test]
+fn the_base_direction_sets_each_lines_start_edge() {
+    // Auto: a first strong Hebrew letter makes the base right to left. Noop
+    // shaping keeps byte order, which is enough to check the alignment.
+    let hebrew = "אבג דהו זחט";
+    let layout = shape_with(hebrew, TextDirection::Auto)
+        .layout(px(45.0))
+        .unwrap();
+    for (left, right) in line_extents(&*layout, hebrew) {
+        assert_eq!(right, px(45.0), "flush right ({left:?}..{right:?})");
+    }
+    // Digits and Latin are left to right under Auto; an explicit direction wins.
+    for (text, direction, right_aligned) in [
+        ("123 456 789", TextDirection::Auto, false),
+        ("aaa bbb ccc", TextDirection::Auto, false),
+        ("123 456 789", TextDirection::RightToLeft, true),
+        (hebrew, TextDirection::LeftToRight, false),
+    ] {
+        let layout = shape_with(text, direction).layout(px(45.0)).unwrap();
+        for (left, right) in line_extents(&*layout, text) {
+            if right_aligned {
+                assert_eq!(right, px(45.0), "{text:?} {direction:?}: flush right");
+            } else {
+                assert_eq!(left, px(0.0), "{text:?} {direction:?}: flush left");
+            }
+        }
+    }
+    // An empty right-to-left paragraph puts its caret at the right edge.
+    let empty = shape_with("", TextDirection::RightToLeft)
+        .layout(px(45.0))
+        .unwrap();
+    assert_eq!(empty.caret_bounds(down(0)).unwrap().origin.x, px(44.0));
+    let empty = shape_with("", TextDirection::Auto)
+        .layout(px(45.0))
+        .unwrap();
+    assert_eq!(empty.caret_bounds(down(0)).unwrap().origin.x, px(0.0));
 }

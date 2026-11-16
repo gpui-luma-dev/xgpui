@@ -242,7 +242,7 @@ impl Render for BidiLab {
                 "Full: bidirectional paragraphs; direction and language are honored."
             }
             ParagraphSupport::LeftToRight => {
-                "LeftToRight: built-in fallback paragraphs; direction is ignored and lines wrap left to right."
+                "LeftToRight: built-in fallback paragraphs; lines align to the base direction's start edge, but mixed text keeps the native line order."
             }
             _ => "Unsupported: paragraph layout returns an error.",
         };
@@ -320,7 +320,7 @@ impl Render for BidiLab {
 
         let mut paragraph = section(
             "4. GPUI paragraph: window.text_system().layout_paragraph_with_options (#325 A)",
-            "click places a caret, drag selects, Left/Right move visually and Shift extends. Min-content and max-content resize the paragraph to its reported content widths.",
+            "click places a caret, drag selects, Left/Right move visually and Shift extends. Hebrew (Auto) and Right to left start at the right edge in both windows. Min-content and max-content resize the paragraph to its reported content widths.",
         )
         .child(self.buttons(
             "bidi-sample",

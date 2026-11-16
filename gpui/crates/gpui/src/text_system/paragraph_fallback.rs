@@ -4,13 +4,21 @@
 //! Each hard line (split at U+2028) is shaped once with the backend's
 //! `layout_line`. Reflow only rewraps those shaped lines: greedy breaks at
 //! line-break opportunities, trailing spaces hang at the line end, and a word
-//! wider than the line breaks at a cluster boundary. Visual order is logical
-//! order; base direction and language are ignored.
+//! wider than the line breaks at a cluster boundary.
+//!
+//! Lines follow logical order. The paragraph's base direction (explicit, or its
+//! first strong character for `Auto`) sets each line's start edge: right for a
+//! right-to-left base. Language is ignored, and there is no reordering beyond
+//! the backend's own line shaping. Within a line, glyphs keep its visual order:
+//! native shapers (CoreText, DirectWrite) already reorder right-to-left runs, so
+//! every measurement uses where glyphs are, never byte order. A cluster is in a
+//! right-to-left run when byte indices fall from left to right around it; its
+//! logical start is then its right edge.
 use super::LineWrapper;
 use crate::{
     Bounds, FontRun, LineLayout, ParagraphPosition, ParagraphRequest, Pixels,
     PlatformParagraphLayout, PlatformParagraphShape, Point, Result, ShapedGlyph, ShapedRun, Size,
-    TextAffinity, VisualDirection, point, px, size,
+    TextAffinity, TextDirection, VisualDirection, point, px, size,
 };
 use anyhow::{bail, ensure};
 use std::{ops::Range, sync::Arc};
@@ -26,6 +34,7 @@ pub(crate) fn shape_paragraph(
         text,
         font_size,
         runs,
+        options,
         ..
     } = request;
     ensure!(
@@ -48,9 +57,16 @@ pub(crate) fn shape_paragraph(
         ));
         start = end + HARD_BREAK.len_utf8();
     }
+    let rtl = match options.direction {
+        TextDirection::LeftToRight => false,
+        TextDirection::RightToLeft => true,
+        // The first strong character; none (digits, empty text) is left to right.
+        _ => unicode_bidi::get_base_direction(text) == unicode_bidi::Direction::Rtl,
+    };
     Ok(Arc::new(FallbackShape {
         source: text.into(),
         font_size,
+        rtl,
         segments: segments.into(),
     }))
 }
@@ -61,10 +77,23 @@ struct Segment {
     layout: LineLayout,
     ascent: Pixels,
     descent: Pixels,
-    /// Cluster boundaries and their x positions, ascending, including `0` and the length.
-    stops: Vec<(usize, Pixels)>,
+    /// Cluster starts ascending, plus the segment length.
+    boundaries: Vec<usize>,
+    /// Each cluster's horizontal extent in the unwrapped line, by start ascending.
+    clusters: Vec<Cluster>,
+    /// The same clusters in visual (left-to-right) order, as indices into `clusters`.
+    visual: Vec<usize>,
     /// Soft break opportunities strictly inside the segment, on cluster boundaries.
     breaks: Vec<usize>,
+}
+
+#[derive(Clone, Copy)]
+struct Cluster {
+    start: usize,
+    left: Pixels,
+    right: Pixels,
+    /// In a right-to-left run: its logical start is its right edge.
+    rtl: bool,
 }
 
 impl Segment {
@@ -89,30 +118,73 @@ impl Segment {
         };
         // Backends disagree on the sign of descent; it always extends below the baseline.
         let descent = descent.abs();
-        let mut stops: Vec<(usize, Pixels)> = layout
+
+        // Glyph boxes in visual order: each extends to the next glyph to its right.
+        let mut glyphs: Vec<(Pixels, usize)> = layout
             .runs
             .iter()
             .flat_map(|run| run.glyphs.iter())
             .filter(|glyph| glyph.index < source.len() && source.is_char_boundary(glyph.index))
-            .map(|glyph| (glyph.index, glyph.position.x))
+            .map(|glyph| (glyph.position.x, glyph.index))
             .collect();
-        stops.sort_by_key(|(index, _)| *index);
-        stops.dedup_by_key(|(index, _)| *index);
-        if stops.first().is_none_or(|(index, _)| *index != 0) {
-            stops.insert(0, (0, px(0.0)));
+        glyphs.sort_by(|a, b| f32::from(a.0).total_cmp(&f32::from(b.0)));
+        let mut sequence: Vec<(usize, Pixels, Pixels)> = Vec::new();
+        for (ix, &(left, start)) in glyphs.iter().enumerate() {
+            let right = glyphs[ix + 1..]
+                .iter()
+                .map(|(x, _)| *x)
+                .find(|&x| x > left)
+                .unwrap_or(layout.width)
+                .max(left);
+            match sequence.last_mut() {
+                Some(last) if last.0 == start => last.2 = last.2.max(right),
+                _ => sequence.push((start, left, right)),
+            }
         }
-        stops.push((source.len(), layout.width));
-        stops.dedup_by_key(|(index, _)| *index);
+        let mut clusters: Vec<Cluster> = Vec::new();
+        for &(start, left, right) in &sequence {
+            match clusters.iter_mut().find(|cluster| cluster.start == start) {
+                Some(cluster) => {
+                    cluster.left = cluster.left.min(left);
+                    cluster.right = cluster.right.max(right);
+                }
+                None => clusters.push(Cluster {
+                    start,
+                    left,
+                    right,
+                    rtl: false,
+                }),
+            }
+        }
+        // Byte indices falling left to right mark a right-to-left run.
+        for (ix, &(start, ..)) in sequence.iter().enumerate() {
+            let falls_after = sequence.get(ix + 1).is_some_and(|next| next.0 < start);
+            let falls_before = ix > 0 && sequence[ix - 1].0 > start;
+            if (falls_after || falls_before)
+                && let Some(cluster) = clusters.iter_mut().find(|cluster| cluster.start == start)
+            {
+                cluster.rtl = true;
+            }
+        }
+        clusters.sort_by_key(|cluster| cluster.start);
+        let mut visual: Vec<usize> = (0..clusters.len()).collect();
+        visual
+            .sort_by(|&a, &b| f32::from(clusters[a].left).total_cmp(&f32::from(clusters[b].left)));
+        let mut boundaries: Vec<usize> = clusters.iter().map(|cluster| cluster.start).collect();
+        boundaries.push(source.len());
+        boundaries.dedup();
         let breaks = LineWrapper::break_indices(source)
             .filter(|&index| index > 0 && index < source.len())
-            .filter(|index| stops.binary_search_by_key(index, |(i, _)| *i).is_ok())
+            .filter(|index| boundaries.binary_search(index).is_ok())
             .collect();
         Self {
             range,
             layout,
             ascent,
             descent,
-            stops,
+            boundaries,
+            clusters,
+            visual,
             breaks,
         }
     }
@@ -121,11 +193,34 @@ impl Segment {
         self.range.len()
     }
 
-    fn x(&self, offset: usize) -> Option<Pixels> {
-        self.stops
-            .binary_search_by_key(&offset, |(index, _)| *index)
-            .ok()
-            .map(|ix| self.stops[ix].1)
+    fn is_boundary(&self, offset: usize) -> bool {
+        self.boundaries.binary_search(&offset).is_ok()
+    }
+
+    /// Clusters starting in `start..end`.
+    fn clusters_in(&self, start: usize, end: usize) -> &[Cluster] {
+        let from = self
+            .clusters
+            .partition_point(|cluster| cluster.start < start);
+        let to = self.clusters.partition_point(|cluster| cluster.start < end);
+        &self.clusters[from..to.max(from)]
+    }
+
+    /// Visual extent of the clusters in `start..end`.
+    fn extent(&self, start: usize, end: usize) -> Option<(Pixels, Pixels)> {
+        self.clusters_in(start, end)
+            .iter()
+            .fold(None, |extent, cluster| {
+                Some(match extent {
+                    None => (cluster.left, cluster.right),
+                    Some((left, right)) => (left.min(cluster.left), right.max(cluster.right)),
+                })
+            })
+    }
+
+    fn width(&self, start: usize, end: usize) -> Pixels {
+        self.extent(start, end)
+            .map_or(px(0.0), |(left, right)| right - left)
     }
 
     /// End of `start..end` without its trailing whitespace, as a cluster boundary.
@@ -133,19 +228,32 @@ impl Segment {
         let piece = &text[self.range.start + start..self.range.start + end];
         let trimmed = start + piece.trim_end().len();
         // Snap up to a cluster boundary so the measured width stays defined.
-        self.stops
+        self.boundaries
             .iter()
-            .map(|(index, _)| *index)
+            .copied()
             .find(|&index| index >= trimmed)
             .unwrap_or(end)
             .min(end)
     }
 
-    fn width_between(&self, start: usize, end: usize) -> Pixels {
-        match (self.x(start), self.x(end)) {
-            (Some(start), Some(end)) => end - start,
-            _ => px(0.0),
+    /// Segment x of the caret at `offset` on a line covering `line`. Inside the
+    /// line it sits at the logical start of the cluster there; at the line's end,
+    /// after its last cluster.
+    fn caret_x(&self, offset: usize, line: &Range<usize>) -> Option<Pixels> {
+        if offset < line.end
+            && let Ok(ix) = self
+                .clusters
+                .binary_search_by_key(&offset, |cluster| cluster.start)
+        {
+            let cluster = self.clusters[ix];
+            return Some(if cluster.rtl {
+                cluster.right
+            } else {
+                cluster.left
+            });
         }
+        let last = self.clusters_in(line.start, offset).last()?;
+        Some(if last.rtl { last.left } else { last.right })
     }
 
     /// Greedy line ends (relative offsets) for `width`; the last is `len()`.
@@ -154,14 +262,14 @@ impl Segment {
         let mut start = 0;
         loop {
             let rest_end = self.content_end(text, start, self.len());
-            if self.width_between(start, rest_end) <= width {
+            if self.width(start, rest_end) <= width {
                 ends.push(self.len());
                 return ends;
             }
             let mut end = None;
             for &candidate in self.breaks.iter().filter(|&&b| b > start) {
                 let content = self.content_end(text, start, candidate);
-                if self.width_between(start, content) <= width {
+                if self.width(start, content) <= width {
                     end = Some(candidate);
                 } else {
                     break;
@@ -171,16 +279,16 @@ impl Segment {
             // always taking at least one cluster so every line makes progress.
             let end = end.unwrap_or_else(|| {
                 let first = self
-                    .stops
+                    .boundaries
                     .iter()
-                    .map(|(index, _)| *index)
+                    .copied()
                     .find(|&index| index > start)
                     .unwrap_or(self.len());
-                self.stops
+                self.boundaries
                     .iter()
-                    .map(|(index, _)| *index)
+                    .copied()
                     .filter(|&index| index > start)
-                    .take_while(|&index| self.width_between(start, index) <= width)
+                    .take_while(|&index| self.width(start, index) <= width)
                     .last()
                     .unwrap_or(first)
             });
@@ -229,6 +337,8 @@ fn runs_font_at(runs: &[FontRun], index: usize) -> Vec<FontRun> {
 struct FallbackShape {
     source: Arc<str>,
     font_size: Pixels,
+    /// Right-to-left base direction: lines start at the right edge.
+    rtl: bool,
     segments: Arc<[Segment]>,
 }
 
@@ -246,10 +356,21 @@ impl PlatformParagraphShape for FallbackShape {
             let count = ends.len();
             for (ix, end) in ends.into_iter().enumerate() {
                 let height = segment.ascent + segment.descent;
+                // A line's visible text is flush with the start edge; trailing
+                // spaces hang past its end.
+                let content = segment.content_end(&self.source, start, end);
+                let x0 = match segment
+                    .extent(start, content)
+                    .or_else(|| segment.extent(start, end))
+                {
+                    Some((_, right)) if self.rtl => right - width,
+                    Some((left, _)) => left,
+                    None => px(0.0),
+                };
                 lines.push(Line {
                     segment: segment_ix,
                     range: start..end,
-                    x0: segment.x(start).unwrap_or_default(),
+                    x0,
                     top,
                     soft_end: ix + 1 < count,
                 });
@@ -284,6 +405,7 @@ impl PlatformParagraphShape for FallbackShape {
         Ok(Arc::new(FallbackLayout {
             source: self.source.clone(),
             font_size: self.font_size,
+            rtl: self.rtl,
             segments: self.segments.clone(),
             size: size(width, top),
             lines,
@@ -296,11 +418,11 @@ impl PlatformParagraphShape for FallbackShape {
         let mut max = px(0.0);
         for segment in self.segments.iter() {
             let end = segment.content_end(&self.source, 0, segment.len());
-            max = max.max(segment.width_between(0, end));
+            max = max.max(segment.width(0, end));
             let mut start = 0;
             for piece_end in segment.breaks.iter().copied().chain([segment.len()]) {
                 let content = segment.content_end(&self.source, start, piece_end);
-                min = min.max(segment.width_between(start, content));
+                min = min.max(segment.width(start, content));
                 start = piece_end;
             }
         }
@@ -322,6 +444,7 @@ struct Line {
 struct FallbackLayout {
     source: Arc<str>,
     font_size: Pixels,
+    rtl: bool,
     segments: Arc<[Segment]>,
     size: Size<Pixels>,
     lines: Vec<Line>,
@@ -351,7 +474,7 @@ impl FallbackLayout {
         let segment = &self.segments[segment_ix];
         let offset = byte - segment.range.start;
         ensure!(
-            segment.x(offset).is_some(),
+            segment.is_boundary(offset),
             "paragraph position {byte} is not a cluster boundary"
         );
         let mut found = None;
@@ -377,14 +500,69 @@ impl FallbackLayout {
         }
     }
 
-    /// Every cluster boundary in the paragraph, ascending, as absolute bytes.
-    fn boundaries(&self) -> impl Iterator<Item = usize> + '_ {
-        self.segments.iter().flat_map(|segment| {
-            segment
-                .stops
-                .iter()
-                .map(move |(index, _)| segment.range.start + index)
-        })
+    /// Line-local caret x (never left of the line) for a boundary on `line`.
+    /// An empty line's caret sits at its start edge.
+    fn caret_x(&self, line: &Line, offset: usize) -> Pixels {
+        match self.segments[line.segment].caret_x(offset, &line.range) {
+            Some(x) => (x - line.x0).max(px(0.0)),
+            None if self.rtl => (self.size.width - px(1.0)).max(px(0.0)),
+            None => px(0.0),
+        }
+    }
+
+    /// The position for `offset` shown on `line`.
+    fn position_on(&self, line: &Line, offset: usize) -> ParagraphPosition {
+        let affinity = if line.soft_end && offset == line.range.end {
+            TextAffinity::Upstream
+        } else {
+            TextAffinity::Downstream
+        };
+        ParagraphPosition {
+            byte_index: self.absolute(line, offset),
+            affinity,
+        }
+    }
+
+    /// Every boundary shown on `line` with its line-local caret x.
+    fn carets(&self, line: &Line) -> Vec<(usize, Pixels)> {
+        let segment = &self.segments[line.segment];
+        segment
+            .boundaries
+            .iter()
+            .copied()
+            .filter(|&offset| line.range.start <= offset && offset <= line.range.end)
+            .map(|offset| (offset, self.caret_x(line, offset)))
+            .collect()
+    }
+
+    /// The nearest caret strictly right (or left) of `x` on line `ix`.
+    fn step(&self, ix: usize, x: Pixels, direction: VisualDirection) -> Option<usize> {
+        let carets = self.carets(&self.lines[ix]);
+        let epsilon = px(0.01);
+        match direction {
+            VisualDirection::Right => carets
+                .into_iter()
+                .filter(|(_, caret)| *caret > x + epsilon)
+                .min_by(|a, b| f32::from(a.1).total_cmp(&f32::from(b.1))),
+            VisualDirection::Left => carets
+                .into_iter()
+                .filter(|(_, caret)| *caret < x - epsilon)
+                .max_by(|a, b| f32::from(a.1).total_cmp(&f32::from(b.1))),
+        }
+        .map(|(offset, _)| offset)
+    }
+
+    /// The leftmost (or rightmost) caret on line `ix`.
+    fn edge(&self, ix: usize, direction: VisualDirection) -> Option<(usize, Pixels)> {
+        let carets = self.carets(&self.lines[ix]).into_iter();
+        match direction {
+            VisualDirection::Right => {
+                carets.min_by(|a, b| f32::from(a.1).total_cmp(&f32::from(b.1)))
+            }
+            VisualDirection::Left => {
+                carets.max_by(|a, b| f32::from(a.1).total_cmp(&f32::from(b.1)))
+            }
+        }
     }
 }
 
@@ -412,34 +590,21 @@ impl PlatformParagraphLayout for FallbackLayout {
             .find(|line| point.y < line.top + self.height(line))
             .or(self.lines.last())
             .ok_or_else(|| anyhow::anyhow!("paragraph has no lines"))?;
-        let segment = &self.segments[line.segment];
-        let x = point.x + line.x0;
-        let (offset, _) = segment
-            .stops
-            .iter()
-            .filter(|(index, _)| line.range.contains(index) || *index == line.range.end)
+        let offset = self
+            .carets(line)
+            .into_iter()
             .min_by(|(_, a), (_, b)| {
-                f32::from((*a - x).abs()).total_cmp(&f32::from((*b - x).abs()))
+                f32::from((*a - point.x).abs()).total_cmp(&f32::from((*b - point.x).abs()))
             })
-            .copied()
-            .unwrap_or((line.range.start, line.x0));
-        let affinity = if line.soft_end && offset == line.range.end {
-            TextAffinity::Upstream
-        } else {
-            TextAffinity::Downstream
-        };
-        Ok(ParagraphPosition {
-            byte_index: self.absolute(line, offset),
-            affinity,
-        })
+            .map_or(line.range.start, |(offset, _)| offset);
+        Ok(self.position_on(line, offset))
     }
 
     fn caret_bounds(&self, position: ParagraphPosition) -> Result<Bounds<Pixels>> {
         let (line_ix, offset) = self.locate(position)?;
         let line = &self.lines[line_ix];
-        let x = self.segments[line.segment].x(offset).unwrap_or_default() - line.x0;
         Ok(Bounds::new(
-            point(x, line.top),
+            point(self.caret_x(line, offset), line.top),
             size(px(1.0), self.height(line)),
         ))
     }
@@ -449,19 +614,34 @@ impl PlatformParagraphLayout for FallbackLayout {
         position: ParagraphPosition,
         direction: VisualDirection,
     ) -> Result<ParagraphPosition> {
-        self.locate(position)?;
-        let byte = position.byte_index;
-        let target = match direction {
-            VisualDirection::Right => self.boundaries().find(|&b| b > byte),
-            VisualDirection::Left => self.boundaries().filter(|&b| b < byte).last(),
-        };
-        Ok(match target {
-            Some(byte_index) => ParagraphPosition {
-                byte_index,
-                affinity: TextAffinity::Downstream,
+        let (line_ix, offset) = self.locate(position)?;
+        let x = self.caret_x(&self.lines[line_ix], offset);
+        if let Some(next) = self.step(line_ix, x, direction) {
+            return Ok(self.position_on(&self.lines[line_ix], next));
+        }
+        // Off the line's edge: continue onto the neighbouring line, from its
+        // near edge. A soft wrap shares one byte between both lines, so a step
+        // that would land on the same byte moves one caret further.
+        let neighbour = match direction {
+            VisualDirection::Right => line_ix + 1,
+            VisualDirection::Left => match line_ix.checked_sub(1) {
+                Some(ix) => ix,
+                None => return Ok(position),
             },
-            None => position,
-        })
+        };
+        let Some((edge, edge_x)) = (neighbour < self.lines.len())
+            .then(|| self.edge(neighbour, direction))
+            .flatten()
+        else {
+            return Ok(position);
+        };
+        let line = &self.lines[neighbour];
+        if self.absolute(line, edge) == position.byte_index
+            && let Some(next) = self.step(neighbour, edge_x, direction)
+        {
+            return Ok(self.position_on(line, next));
+        }
+        Ok(self.position_on(line, edge))
     }
 
     fn selection_bounds(
@@ -483,15 +663,34 @@ impl PlatformParagraphLayout for FallbackLayout {
             if end <= segment.range.start || from >= to {
                 continue;
             }
-            let (Some(left), Some(right)) = (segment.x(from), segment.x(to)) else {
-                continue;
-            };
-            rects.push(Bounds::new(
-                point(left - line.x0, line.top),
-                size(right - left, self.height(line)),
-            ));
+            // Selected clusters, in visual order, merged where they touch.
+            let mut span: Option<(Pixels, Pixels)> = None;
+            for &cluster in &segment.visual {
+                let cluster = segment.clusters[cluster];
+                if !line.range.contains(&cluster.start) {
+                    continue;
+                }
+                if (from..to).contains(&cluster.start) {
+                    span = Some(match span {
+                        Some((left, _)) => (left, cluster.right),
+                        None => (cluster.left, cluster.right),
+                    });
+                } else if let Some((left, right)) = span.take() {
+                    rects.push((line, left, right));
+                }
+            }
+            if let Some((left, right)) = span {
+                rects.push((line, left, right));
+            }
         }
-        Ok(rects)
+        Ok(rects
+            .into_iter()
+            .map(|(line, left, right)| {
+                let left = (left - line.x0).max(px(0.0));
+                let right = (right - line.x0).max(left);
+                Bounds::new(point(left, line.top), size(right - left, self.height(line)))
+            })
+            .collect())
     }
 }
 
