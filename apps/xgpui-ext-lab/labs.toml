@@ -537,6 +537,13 @@ about = "Isolated native font-variation investigation"
 platforms = ["macos"]
 
 [[lab]]
+name = "rtl-example"
+example = "right_to_left"
+group = "Examples"
+title = "Right-to-left text example"
+about = "The smallest app with right-to-left text on Parley (xgpui.dev/right-to-left-text.html)"
+
+[[lab]]
 name = "extensions-web"
 bin = "extensions-web"
 group = "Browser galleries"
