@@ -28,16 +28,19 @@ let perceptual = p3.to_oklab()?.to_oklch()?;
 | Type | Represents |
 | --- | --- |
 | `EncodedRgb`, `LinearRgb` | Encoded or linear RGB with explicit primaries. |
-| `RgbSpace` | sRGB, Display P3, Rec.2020 or Adobe RGB (1998). |
+| `RgbSpace` | sRGB, Display P3, Rec.2020, Adobe RGB (1998) or ProPhoto RGB (ROMM RGB). |
 | `XyzD65`, `Oklab`, `Oklch` | Intermediate and perceptual color spaces. |
 | `LinearRgba` | Linear color with validated straight alpha. |
 
-CPU calculations use `f64`, D65 and finite extended RGB/XYZ values. Conversion
-does not automatically clip or map gamut. Rec.2020 uses its SDR transfer
-function. Adobe RGB (1998) uses the exact 563/256 decoding exponent and
-256/563 encoding exponent, including sign-preserving extended channels; it does
-not use the sRGB transfer curve. PQ, HLG and white-point adaptation are outside
-this API.
+CPU calculations use `f64`, relative XYZ/D65 and finite extended RGB/XYZ
+values. Conversion does not automatically clip or map gamut. Rec.2020 uses its
+SDR transfer function. Adobe RGB (1998) uses the exact 563/256 decoding exponent
+and 256/563 encoding exponent, including sign-preserving extended channels; it
+does not use the sRGB transfer curve. ProPhoto RGB is the only named space with
+a native D50 white; see below. PQ and HLG are outside this API.
+
+`RgbSpace` and `GamutMapping` are `#[non_exhaustive]`: match them with a
+wildcard arm, because further named spaces and policies may be added.
 
 ## Adobe RGB (1998)
 
@@ -55,6 +58,45 @@ Conversion and gradients retain extended values until explicit mapping. Adobe
 RGB and P3 do not fully contain one another. Native image/shader producers still
 use bounded linear P3; this math support does not widen those storage or output
 contracts. See the media supplied-pixel API for explicit mapping into P3.
+
+## ProPhoto RGB (ROMM RGB)
+
+`RgbSpace::ProPhotoRgb` is ProPhoto RGB / ROMM RGB (ISO 22028-2), distinct from
+Adobe RGB (1998). It follows [CSS Color 4](https://www.w3.org/TR/css-color-4/#predefined-prophoto-rgb):
+
+- Primaries xy (0.734699, 0.265301), (0.159597, 0.840403), (0.036598, 0.000105);
+  native white D50 xy (0.3457, 0.3585).
+- The native D50 colorant matrix is CSS Color 4's `lin_ProPhoto_to_XYZ`. Like
+  every `RgbSpace` matrix, `linear_to_xyz_matrix` returns relative XYZ/D65: the
+  D50 colorants are Bradford-adapted to D65 exactly once (the same
+  `BradfordAdaptation` used for custom D50 metadata). Conversions between named
+  spaces therefore keep neutrals neutral.
+- Transfer: decode is `v / 16` up to encoded 16/512 and `v^1.8` above; encode is
+  `16 * x` below linear 1/512 and `x^(1/1.8)` above. The two branches meet
+  exactly. Negative and above-one channels use the same curve with the sign
+  preserved. ROMM's optional flare/black-point correction for profile makers is
+  not applied.
+
+ProPhoto is very large, but RGB-cube membership is not physical
+realizability: its green and blue primaries are imaginary. Containment is also
+not complete in the other direction: after D50/D65 adaptation, Display P3 and
+Rec.2020 red (and their cyan complements) fall slightly outside the ProPhoto
+cube (blue about -0.0013 and -0.0023 respectively). sRGB and Adobe RGB (1998)
+are fully contained.
+
+```rust
+use xgpui_color::{EncodedRgb, GamutMapping, RgbSpace};
+
+let prophoto = EncodedRgb::new(RgbSpace::ProPhotoRgb, [0.2, 0.9, 0.1])?.decode()?;
+// Extended P3 values are retained until an explicit mapping.
+let p3 = prophoto.map_gamut(RgbSpace::DisplayP3, GamutMapping::ReduceChroma)?;
+# Ok::<(), xgpui_color::ColorError>(())
+```
+
+`ReduceChroma` keeps OkLab lightness and hue. Its search assumes the in-gamut
+chroma range at fixed lightness and hue is connected to the neutral axis. Tests
+exercise saturated ProPhoto colors into sRGB, P3 and Rec.2020; very dark,
+imaginary blues can map all the way to the neutral.
 
 ## Gamut mapping and gradients
 
@@ -134,6 +176,22 @@ Reproduce both CPU/GPU and media FP16 oracle fixtures from the repository root:
 
 ```sh
 python3 scripts/generate_adobe_rgb_references.py --check
+```
+
+### ProPhoto RGB numerical regression criteria
+
+`scripts/generate_prophoto_references.py` produces independent 120-digit
+Decimal oracles: native colorants solved from the six-decimal xy primaries and
+D50 white (and checked against CSS Color 4's published matrix to 1e-16),
+adapted with an independent Bradford implementation, plus exact piecewise
+transfer values with the rational exponent 9/5. Tests cover both breakpoints
+and their adjacent floats, all 65,536 unsigned 16-bit codes, overflow
+rejection, matrices to every named space, scaled conversion grids and the
+single D50/D65 adaptation. The binary64 exponents 1.8 and 1/1.8 are not exact,
+so the transfer budget includes `|ln(x)| * EPSILON` in addition to 16 epsilons.
+
+```sh
+python3 scripts/generate_prophoto_references.py --check
 ```
 
 The generator requires Python 3.11+ and rustfmt. Runtime evidence is tracked per

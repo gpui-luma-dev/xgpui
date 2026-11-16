@@ -1,7 +1,9 @@
 use super::*;
 
 /// Explicit policies for producing bounded SDR RGB. Neither is an ICC intent.
+/// New policies may be added; match with a wildcard arm.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum GamutMapping {
     /// Clip destination linear channels independently to [0,1].
     Clip,

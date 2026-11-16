@@ -1,9 +1,10 @@
 use super::*;
-const SPACES: [RgbSpace; 4] = [
+const SPACES: [RgbSpace; 5] = [
     RgbSpace::Srgb,
     RgbSpace::DisplayP3,
     RgbSpace::Rec2020,
     RgbSpace::AdobeRgb1998,
+    RgbSpace::ProPhotoRgb,
 ];
 fn close(a: [f64; 3], b: [f64; 3], eps: f64) {
     for (a, b) in a.into_iter().zip(b) {
@@ -93,6 +94,8 @@ fn transfers_have_reference_values_and_sign_symmetry() {
             0.018053968510807,
             0.04045,
             0.0812428582986315,
+            1. / 512.,
+            16. / 512.,
             0.5,
             1.,
             1.5,
