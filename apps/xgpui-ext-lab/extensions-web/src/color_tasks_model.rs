@@ -114,8 +114,8 @@ fn primaries(space: RgbSpace) -> ImagePrimaries {
         RgbSpace::DisplayP3 => ImagePrimaries::DisplayP3,
         RgbSpace::AdobeRgb1998 => ImagePrimaries::AdobeRgb1998,
         RgbSpace::Rec2020 => ImagePrimaries::Rec2020,
-        // SPACES lists the only spaces this lab offers; ProPhoto arrives with
-        // ImagePrimaries::ProPhotoRgb in the media increment of #107.
+        RgbSpace::ProPhotoRgb => ImagePrimaries::ProPhotoRgb,
+        // xgpui-color may add spaces; this lab offers only those in SPACES.
         other => unreachable!("lab does not offer {other:?}"),
     }
 }

@@ -151,6 +151,18 @@ RGB, use explicit bounded linear Rec.2020 storage. To retain the entire P3 gamut
 keep P3 storage: P3 red converts to Rec.2020 blue <strong>-0.0012103403545183245</strong>, so
 bounded Rec.2020 does not quite contain P3. Both formats use associated linear
 mipmaps and eight bytes per texel. Mapping policies remain explicit at ingestion.</p>
+<h2 id="prophoto-rgb-input">ProPhoto RGB input</h2>
+<p>Use <code>RgbSpace::ProPhotoRgb</code> for <a target="_blank" rel="noopener noreferrer" href="https://en.wikipedia.org/wiki/ProPhoto_RGB_color_space">ProPhoto RGB / ROMM RGB ↗</a>
+(<code>prophoto-rgb</code> in CSS Color 4). It is the only named space with a native
+D50 white; its matrices include one Bradford D50-to-D65 adaptation, so the API
+stays XYZ/D65 and neutrals stay neutral. The transfer is gamma 1.8 with a slope-16
+linear segment below linear 1/512. WGSL appends ID 4.</p>
+<p>ProPhoto is very large but is neither physically realizable (its green and blue
+primaries are imaginary) nor a strict superset: after adaptation, Display P3 and
+Rec.2020 red fall slightly outside it. Media storage stays bounded P3 or Rec.2020,
+so ProPhoto input is always mapped explicitly at ingestion
+(<code>ImageColor::PROPHOTO_RGB</code>). The color lab’s <code>--flowers</code> view compares
+WebKit’s Flowers photograph with its sRGB version and measures the mapping boundary.</p>
 <h3 id="preserve-both-source-gamuts">Preserve both source gamuts</h3>
 <p>Native wide placement accepts both P3 and Rec.2020 textures. Metal converts
 Rec.2020 to <strong>extended linear P3</strong>, then retains negative and above-one channels

@@ -130,6 +130,22 @@ entire P3 gamut: bounded Rec.2020 clips a small P3 boundary region. Tiled FP16 p
 still require P3. ICC inference remains separate work. Transfer functions are independent of primaries. CPU matrices accept Adobe
 RGB; GPU `ImageAdjustments` explicitly require sRGB or P3 working primaries.
 
+## Explicit ProPhoto RGB supplied pixels
+
+`pipeline::ImageColor::PROPHOTO_RGB` describes encoded ProPhoto RGB / ROMM RGB
+input (`ImagePrimaries::ProPhotoRgb`, `TransferFunction::ProPhotoRgb`). Its D50
+white is Bradford-adapted to D65 once by `xgpui-color`. ProPhoto is a source
+interpretation only: storage stays bounded linear P3 or Rec.2020, chosen
+explicitly with a `GamutMapping`, so ProPhoto colors outside the chosen storage
+are mapped and not retained. Every ProPhoto primary lies outside both storage
+gamuts. Rec.2020 storage retains more saturated ProPhoto greens than P3. GPU
+`ImageAdjustments` reject ProPhoto working primaries, as they do Adobe RGB.
+Independent 120-digit FP16 oracles (`scripts/generate_prophoto_references.py`)
+cover both storages, fractional alpha and associated mipmaps.
+
+`ImagePrimaries` and `TransferFunction` are `#[non_exhaustive]`; match them with
+a wildcard arm.
+
 ## Resolved supplied-pixel metadata
 
 `pipeline::PixelColor` accepts a bounded `Named(ImageColor)`, bounded `Custom`
