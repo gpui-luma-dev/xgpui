@@ -275,6 +275,7 @@ about = "Native versus Parley text, paragraphs, scrolling and font axes"
 views = [
   { name = "parley", title = "Parley text only", args = ["--backend", "parley"] },
   { name = "paragraph", title = "Paragraph comparison", args = ["--workload", "paragraph"] },
+  { name = "bidi", title = "Right-to-left and GPUI paragraphs, native and Parley", args = ["--workload", "bidi"] },
   { name = "scroll", title = "Text scrolling", args = ["--workload", "scroll"] },
   { name = "timings", title = "Text CPU timings", args = ["--timings-only"] },
 ]
