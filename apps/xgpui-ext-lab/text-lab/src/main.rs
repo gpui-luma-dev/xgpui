@@ -5,6 +5,8 @@ mod bidi;
 #[cfg(test)]
 mod editing_tests;
 mod paragraph;
+#[cfg(test)]
+mod rtl_checks;
 mod samples;
 mod timings;
 mod workload;
@@ -384,8 +386,9 @@ fn main() -> Result<()> {
                 if let Some(paragraph) = &paragraph {
                     window.focus(&paragraph.focus_handle(cx), cx);
                 }
-                let bidi = (options.workload == Workload::Bidi)
-                    .then(|| cx.new(|cx| bidi::BidiLab::new(name.clone(), cx)));
+                let bidi = (options.workload == Workload::Bidi).then(|| {
+                    cx.new(|cx| bidi::BidiLab::new(name.clone(), parley_backend.clone(), cx))
+                });
                 if let Some(bidi) = &bidi {
                     window.focus(&bidi.focus_handle(cx), cx);
                 }
