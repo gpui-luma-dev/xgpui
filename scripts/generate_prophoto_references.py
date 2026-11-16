@@ -12,6 +12,7 @@ Run with --check to verify the committed fixture without changing it.
 import argparse
 from decimal import Decimal as D, localcontext
 import math
+import struct
 import subprocess
 from pathlib import Path
 
@@ -102,6 +103,19 @@ def generate():
         ]:
             pairs = [f"({number(x)}, {number(function(x))})" for x in values]
             lines.append(f"pub const {name}: &[(f64, f64)] = &[" + ", ".join(pairs) + "];")
+        # Exact f32 inputs, so GPU comparisons do not count input rounding
+        # against the shader. Includes both knees and their f32 neighbours.
+        f32 = lambda x: struct.unpack("f", struct.pack("f", x))[0]
+        up = lambda x: struct.unpack("<f", struct.pack("<I", struct.unpack("<I", struct.pack("<f", x))[0] + 1))[0]
+        down = lambda x: struct.unpack("<f", struct.pack("<I", struct.unpack("<I", struct.pack("<f", x))[0] - 1))[0]
+        gpu_knees = []
+        for k in [1 / 512, 16 / 512]:
+            gpu_knees += [k, up(k), down(k)]
+        gpu = sorted(set(f32(x) for x in base + gpu_knees + [1e-12, 1e-8, 1e-4, 1.25, 2.]
+                         + [1. - 2. ** -24, 1. + 2. ** -23]))
+        bits = lambda x: struct.unpack("<I", struct.pack("<f", x))[0]
+        triples = [f"(f32::from_bits(0x{bits(x):08x}), {number(decode(x))}, {number(encode(x))})" for x in gpu]
+        lines.append("pub const TRANSFER_F32: &[(f32, f64, f64)] = &[" + ", ".join(triples) + "];")
         text = subprocess.run(["rustfmt", "--edition", "2024", "--emit", "stdout"],
                               input="\n".join(lines) + "\n", text=True,
                               capture_output=True, check=True).stdout

@@ -5,15 +5,22 @@ use xgpui_color::*;
 #[path = "reference/adobe_rgb.rs"]
 mod adobe_reference;
 
+#[cfg(target_os = "macos")]
+#[allow(dead_code)]
+#[path = "reference/prophoto_rgb.rs"]
+mod prophoto_reference;
+
 fn vectors() -> Vec<(String, [f64; 4])> {
     let mut cases = Vec::new();
     let rgba = |v: [f64; 3]| [v[0], v[1], v[2], 1.];
     let wg = |v: [f64; 3]| format!("vec3<f32>({:?}, {:?}, {:?})", v[0], v[1], v[2]);
+    // Index == stable WGSL space ID.
     let spaces = [
         RgbSpace::Srgb,
         RgbSpace::DisplayP3,
         RgbSpace::Rec2020,
         RgbSpace::AdobeRgb1998,
+        RgbSpace::ProPhotoRgb,
     ];
     for (i, space) in spaces.into_iter().enumerate() {
         for v in [
@@ -23,6 +30,7 @@ fn vectors() -> Vec<(String, [f64; 4])> {
             [1., 0., 0.],
             [0., 1., 0.],
             [0.04045, 0.0031308, 0.0812428583],
+            [0.001953125, 0.03125, -0.002],
         ] {
             let rgb = LinearRgb::new(space, v).unwrap();
             cases.push((
@@ -235,16 +243,27 @@ fn metal_float32_matches_cpu_reference() {
 #[cfg(target_os = "macos")]
 #[test]
 fn metal_adobe_transfer_matches_decimal_oracle_with_fast_math_on_and_off() {
+    metal_transfer_matches_oracle("Adobe", 3, adobe_reference::TRANSFER_F32);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn metal_prophoto_transfer_matches_decimal_oracle_with_fast_math_on_and_off() {
+    metal_transfer_matches_oracle("ProPhoto", 4, prophoto_reference::TRANSFER_F32);
+}
+
+#[cfg(target_os = "macos")]
+fn metal_transfer_matches_oracle(name: &str, id: u32, oracle: &[(f32, f64, f64)]) {
     let mut cases = Vec::new();
-    for &(input, decode, encode) in adobe_reference::TRANSFER_F32 {
+    for &(input, decode, encode) in oracle {
         for sign in [-1., 1.] {
             let value = input as f64 * sign;
             cases.push((
-                format!("vec4(gamut_decode(vec3<f32>({value:?}),3u),1.0)"),
+                format!("vec4(gamut_decode(vec3<f32>({value:?}),{id}u),1.0)"),
                 [decode * sign, decode * sign, decode * sign, 1.],
             ));
             cases.push((
-                format!("vec4(gamut_encode(vec3<f32>({value:?}),3u),1.0)"),
+                format!("vec4(gamut_encode(vec3<f32>({value:?}),{id}u),1.0)"),
                 [encode * sign, encode * sign, encode * sign, 1.],
             ));
         }
@@ -279,7 +298,7 @@ fn metal_adobe_transfer_matches_decimal_oracle_with_fast_math_on_and_off() {
             }
         }
         eprintln!(
-            "Adobe GPU transfer: fast_math={fast_math}, cases={}, worst relative error={worst_relative:e}",
+            "{name} GPU transfer: fast_math={fast_math}, cases={}, worst relative error={worst_relative:e}",
             cases.len()
         );
     }
