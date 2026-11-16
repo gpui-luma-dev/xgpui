@@ -1,5 +1,120 @@
 use super::*;
-use crate::{ParagraphRequest, PlatformParagraphLayout, PlatformParagraphShape};
+use crate::{
+    ParagraphRequest, ParagraphShapeOptions, PlatformParagraphLayout, PlatformParagraphShape,
+    TextDirection,
+};
+
+/// Paragraph cache key. Separate from the flat-line `CacheKey` so paragraph
+/// options never touch upstream line-layout code. `width` is `None` for shapes.
+#[derive(Clone, Debug, Eq)]
+pub(super) struct ParagraphKey {
+    text: SharedString,
+    font_size: Pixels,
+    runs: SmallVec<[FontRun; 1]>,
+    options: ParagraphShapeOptions,
+    width: Option<Pixels>,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+struct ParagraphKeyRef<'a> {
+    text: &'a str,
+    font_size: Pixels,
+    runs: &'a [FontRun],
+    direction: TextDirection,
+    language: Option<&'a str>,
+    width: Option<Pixels>,
+}
+
+trait AsParagraphKeyRef {
+    fn key_ref(&self) -> ParagraphKeyRef<'_>;
+}
+
+impl ParagraphKey {
+    fn new(
+        text: &SharedString,
+        font_size: Pixels,
+        runs: &[FontRun],
+        options: &ParagraphShapeOptions,
+        width: Option<Pixels>,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            text: text.clone(),
+            font_size,
+            runs: SmallVec::from(runs),
+            options: options.clone(),
+            width,
+        })
+    }
+}
+
+impl<'a> ParagraphKeyRef<'a> {
+    fn new(
+        text: &'a str,
+        font_size: Pixels,
+        runs: &'a [FontRun],
+        options: &'a ParagraphShapeOptions,
+        width: Option<Pixels>,
+    ) -> Self {
+        Self {
+            text,
+            font_size,
+            runs,
+            direction: options.direction,
+            language: options.language.as_deref(),
+            width,
+        }
+    }
+}
+
+impl AsParagraphKeyRef for ParagraphKey {
+    fn key_ref(&self) -> ParagraphKeyRef<'_> {
+        ParagraphKeyRef::new(
+            &self.text,
+            self.font_size,
+            &self.runs,
+            &self.options,
+            self.width,
+        )
+    }
+}
+
+impl AsParagraphKeyRef for ParagraphKeyRef<'_> {
+    fn key_ref(&self) -> ParagraphKeyRef<'_> {
+        *self
+    }
+}
+
+impl PartialEq for dyn AsParagraphKeyRef + '_ {
+    fn eq(&self, other: &dyn AsParagraphKeyRef) -> bool {
+        self.key_ref() == other.key_ref()
+    }
+}
+
+impl Eq for dyn AsParagraphKeyRef + '_ {}
+
+impl Hash for dyn AsParagraphKeyRef + '_ {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.key_ref().hash(state)
+    }
+}
+
+impl PartialEq for ParagraphKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.key_ref() == other.key_ref()
+    }
+}
+
+impl Hash for ParagraphKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.key_ref().hash(state)
+    }
+}
+
+impl<'a> Borrow<dyn AsParagraphKeyRef + 'a> for Arc<ParagraphKey> {
+    fn borrow(&self) -> &(dyn AsParagraphKeyRef + 'a) {
+        self.as_ref() as &dyn AsParagraphKeyRef
+    }
+}
 
 #[derive(Clone, Default)]
 pub(super) struct ParagraphIndex {
@@ -9,10 +124,10 @@ pub(super) struct ParagraphIndex {
 
 #[derive(Default)]
 pub(super) struct ParagraphFrameCache {
-    shapes: FxHashMap<Arc<CacheKey>, Arc<dyn PlatformParagraphShape>>,
-    layouts: FxHashMap<Arc<CacheKey>, Arc<dyn PlatformParagraphLayout>>,
-    used_shapes: Vec<Arc<CacheKey>>,
-    used_layouts: Vec<Arc<CacheKey>>,
+    shapes: FxHashMap<Arc<ParagraphKey>, Arc<dyn PlatformParagraphShape>>,
+    layouts: FxHashMap<Arc<ParagraphKey>, Arc<dyn PlatformParagraphLayout>>,
+    used_shapes: Vec<Arc<ParagraphKey>>,
+    used_layouts: Vec<Arc<ParagraphKey>>,
 }
 
 impl ParagraphFrameCache {
@@ -54,6 +169,7 @@ impl LineLayoutCache {
         text: SharedString,
         font_size: Pixels,
         runs: &[FontRun],
+        options: &ParagraphShapeOptions,
         width: Pixels,
     ) -> anyhow::Result<Arc<dyn PlatformParagraphLayout>> {
         validate_paragraph_request(&text, font_size, runs)?;
@@ -61,14 +177,8 @@ impl LineLayoutCache {
             f32::from(width).is_finite() && width >= px(0.0),
             "invalid paragraph width"
         );
-        // These are the complete supported parameters: auto direction/start alignment.
-        let layout_ref = &CacheKeyRef {
-            text: text.as_ref(),
-            font_size,
-            runs,
-            wrap_width: Some(width),
-            force_width: None,
-        } as &dyn AsCacheKeyRef;
+        let layout_ref = &ParagraphKeyRef::new(&text, font_size, runs, options, Some(width))
+            as &dyn AsParagraphKeyRef;
         loop {
             let generation = self.clear_if_font_generation_changed();
             // Keep previous-frame entries until normal frame eviction. A failed
@@ -91,22 +201,13 @@ impl LineLayoutCache {
             };
             // Neither backend shaping nor reflow executes under a GPUI cache lock.
             // Owned cache keys are created only on misses, not repeated requests.
-            let (shape_key, shape) = self.paragraph_shape(&text, font_size, runs)?;
+            let (shape_key, shape) = self.paragraph_shape(&text, font_size, runs, options)?;
             let (layout_key, layout) = match layout {
                 Some(entry) => entry,
-                None => {
-                    let layout = shape.layout(width)?;
-                    (
-                        Arc::new(CacheKey {
-                            text: text.clone(),
-                            font_size,
-                            runs: SmallVec::from(runs),
-                            wrap_width: Some(width),
-                            force_width: None,
-                        }),
-                        layout,
-                    )
-                }
+                None => (
+                    ParagraphKey::new(&text, font_size, runs, options, Some(width)),
+                    shape.layout(width)?,
+                ),
             };
             let mut state = self.state.borrow_mut();
             // Do not publish a result built across a concurrent font registration.
@@ -134,11 +235,12 @@ impl LineLayoutCache {
         text: SharedString,
         font_size: Pixels,
         runs: &[FontRun],
+        options: &ParagraphShapeOptions,
     ) -> anyhow::Result<(Pixels, Pixels)> {
         validate_paragraph_request(&text, font_size, runs)?;
         loop {
             let generation = self.clear_if_font_generation_changed();
-            let (shape_key, shape) = self.paragraph_shape(&text, font_size, runs)?;
+            let (shape_key, shape) = self.paragraph_shape(&text, font_size, runs, options)?;
             let widths = shape.content_widths()?;
             let mut state = self.state.borrow_mut();
             if !self.generation_is_current(generation) {
@@ -156,14 +258,10 @@ impl LineLayoutCache {
         text: &SharedString,
         font_size: Pixels,
         runs: &[FontRun],
-    ) -> anyhow::Result<(Arc<CacheKey>, Arc<dyn PlatformParagraphShape>)> {
-        let shape_ref = &CacheKeyRef {
-            text: text.as_ref(),
-            font_size,
-            runs,
-            wrap_width: None,
-            force_width: None,
-        } as &dyn AsCacheKeyRef;
+        options: &ParagraphShapeOptions,
+    ) -> anyhow::Result<(Arc<ParagraphKey>, Arc<dyn PlatformParagraphShape>)> {
+        let shape_ref =
+            &ParagraphKeyRef::new(text, font_size, runs, options, None) as &dyn AsParagraphKeyRef;
         let cached = {
             let state = self.state.borrow();
             state
@@ -185,19 +283,9 @@ impl LineLayoutCache {
         }
         let shape = self
             .platform_text_system
-            .shape_paragraph(ParagraphRequest {
-                text: text.as_ref(),
-                font_size,
-                runs,
-            })?;
+            .shape_paragraph(ParagraphRequest::new(text, font_size, runs, options))?;
         Ok((
-            Arc::new(CacheKey {
-                text: text.clone(),
-                font_size,
-                runs: SmallVec::from(runs),
-                wrap_width: None,
-                force_width: None,
-            }),
+            ParagraphKey::new(text, font_size, runs, options, None),
             shape,
         ))
     }
@@ -211,7 +299,7 @@ impl LineLayoutCache {
     /// reuse ranges keep it.
     fn publish_paragraph_shape(
         current: &mut FrameCache,
-        key: Arc<CacheKey>,
+        key: Arc<ParagraphKey>,
         shape: Arc<dyn PlatformParagraphShape>,
     ) {
         current
@@ -301,20 +389,15 @@ mod tests {
         let generation = Arc::new(AtomicUsize::new(0));
         let cache = LineLayoutCache::new(Arc::new(NoopTextSystem), generation.clone());
         let start = cache.layout_index();
-        let shape_key = Arc::new(CacheKey {
-            text: "probe".into(),
-            font_size: px(16.0),
-            runs: SmallVec::new(),
-            wrap_width: None,
-            force_width: None,
-        });
-        let layout_key = Arc::new(CacheKey {
-            text: "probe".into(),
-            font_size: px(16.0),
-            runs: SmallVec::new(),
-            wrap_width: Some(px(100.0)),
-            force_width: None,
-        });
+        let shape_key =
+            ParagraphKey::new(&"probe".into(), px(16.0), &[], &Default::default(), None);
+        let layout_key = ParagraphKey::new(
+            &"probe".into(),
+            px(16.0),
+            &[],
+            &Default::default(),
+            Some(px(100.0)),
+        );
         let layout: Arc<dyn PlatformParagraphLayout> = Arc::new(Probe);
         {
             let mut state = cache.state.borrow_mut();
@@ -360,12 +443,24 @@ mod tests {
         cache.finish_frame();
         cache.reuse_layouts(start.clone()..end.clone());
         let cached = cache
-            .layout_paragraph("probe".into(), px(16.0), &[], px(100.0))
+            .layout_paragraph(
+                "probe".into(),
+                px(16.0),
+                &[],
+                &Default::default(),
+                px(100.0),
+            )
             .unwrap();
         assert!(Arc::ptr_eq(&layout, &cached));
         cache.finish_frame();
         let cached = cache
-            .layout_paragraph("probe".into(), px(16.0), &[], px(100.0))
+            .layout_paragraph(
+                "probe".into(),
+                px(16.0),
+                &[],
+                &Default::default(),
+                px(100.0),
+            )
             .unwrap();
         assert!(Arc::ptr_eq(&layout, &cached));
         generation.fetch_add(1, Ordering::AcqRel);
@@ -381,7 +476,13 @@ mod tests {
         );
         assert!(
             cache
-                .layout_paragraph("probe".into(), px(16.0), &[], px(100.0))
+                .layout_paragraph(
+                    "probe".into(),
+                    px(16.0),
+                    &[],
+                    &Default::default(),
+                    px(100.0)
+                )
                 .is_err()
         );
     }
@@ -398,13 +499,7 @@ mod tests {
         }
         let cache = LineLayoutCache::new(Arc::new(NoopTextSystem), Arc::new(AtomicUsize::new(0)));
         let key = |text: &'static str| {
-            Arc::new(CacheKey {
-                text: text.into(),
-                font_size: px(16.0),
-                runs: SmallVec::new(),
-                wrap_width: None,
-                force_width: None,
-            })
+            ParagraphKey::new(&text.into(), px(16.0), &[], &Default::default(), None)
         };
         {
             let mut state = cache.state.borrow_mut();
@@ -416,7 +511,7 @@ mod tests {
         // Noop cannot shape: success means the previous frame's shape was reused.
         assert_eq!(
             cache
-                .paragraph_content_widths("measured".into(), px(16.0), &[])
+                .paragraph_content_widths("measured".into(), px(16.0), &[], &Default::default())
                 .unwrap(),
             (px(30.0), px(90.0))
         );
@@ -428,31 +523,69 @@ mod tests {
         }
         assert!(
             cache
-                .paragraph_content_widths("probe".into(), px(16.0), &[])
+                .paragraph_content_widths("probe".into(), px(16.0), &[], &Default::default())
                 .is_err()
         );
         assert!(
             cache
-                .paragraph_content_widths("unshaped".into(), px(16.0), &[])
+                .paragraph_content_widths("unshaped".into(), px(16.0), &[], &Default::default())
                 .is_err()
         );
         assert!(
             cache
-                .paragraph_content_widths("measured".into(), px(0.0), &[])
+                .paragraph_content_widths("measured".into(), px(0.0), &[], &Default::default())
                 .is_err()
         );
     }
 
     #[test]
+    fn shape_options_are_part_of_the_cache_key() {
+        let cache = LineLayoutCache::new(Arc::new(NoopTextSystem), Arc::new(AtomicUsize::new(0)));
+        let default = ParagraphShapeOptions::default();
+        cache
+            .state
+            .borrow_mut()
+            .current_frame
+            .paragraphs
+            .shapes
+            .insert(
+                ParagraphKey::new(&"probe".into(), px(16.0), &[], &default, None),
+                Arc::new(Probe),
+            );
+        let layout = |options: &ParagraphShapeOptions| {
+            cache.layout_paragraph("probe".into(), px(16.0), &[], options, px(100.0))
+        };
+        // Noop cannot shape, so only the cached default-options shape succeeds.
+        assert!(layout(&default).is_ok());
+        assert!(
+            layout(&ParagraphShapeOptions::default().with_direction(TextDirection::Auto)).is_ok()
+        );
+        assert!(
+            layout(&ParagraphShapeOptions::default().with_direction(TextDirection::RightToLeft))
+                .is_err()
+        );
+        assert!(layout(&ParagraphShapeOptions::default().with_language("ar")).is_err());
+        let a = ParagraphKey::new(
+            &"x".into(),
+            px(16.0),
+            &[],
+            &ParagraphShapeOptions::default().with_language("ar"),
+            None,
+        );
+        let b = ParagraphKey::new(
+            &"x".into(),
+            px(16.0),
+            &[],
+            &ParagraphShapeOptions::default().with_language("he"),
+            None,
+        );
+        assert_ne!(a, b);
+    }
+
+    #[test]
     fn failed_reflow_preserves_previous_frame_shaping() {
         let cache = LineLayoutCache::new(Arc::new(NoopTextSystem), Arc::new(AtomicUsize::new(0)));
-        let key = Arc::new(CacheKey {
-            text: "probe".into(),
-            font_size: px(16.0),
-            runs: SmallVec::new(),
-            wrap_width: None,
-            force_width: None,
-        });
+        let key = ParagraphKey::new(&"probe".into(), px(16.0), &[], &Default::default(), None);
         cache
             .state
             .borrow_mut()
@@ -463,13 +596,25 @@ mod tests {
         cache.finish_frame();
         assert!(
             cache
-                .layout_paragraph("probe".into(), px(16.0), &[], px(200.0))
+                .layout_paragraph(
+                    "probe".into(),
+                    px(16.0),
+                    &[],
+                    &Default::default(),
+                    px(200.0)
+                )
                 .is_err()
         );
         // Noop cannot rebuild this shape: success requires retaining the cached one.
         assert!(
             cache
-                .layout_paragraph("probe".into(), px(16.0), &[], px(100.0))
+                .layout_paragraph(
+                    "probe".into(),
+                    px(16.0),
+                    &[],
+                    &Default::default(),
+                    px(100.0)
+                )
                 .is_ok()
         );
     }
@@ -497,13 +642,7 @@ mod tests {
             Arc::new(NoopTextSystem),
             generation.clone(),
         ));
-        let key = Arc::new(CacheKey {
-            text: "probe".into(),
-            font_size: px(16.0),
-            runs: SmallVec::new(),
-            wrap_width: None,
-            force_width: None,
-        });
+        let key = ParagraphKey::new(&"probe".into(), px(16.0), &[], &Default::default(), None);
         REFLOW_CACHE.with(|slot| *slot.borrow_mut() = std::rc::Rc::downgrade(&cache));
         cache
             .state
@@ -516,7 +655,13 @@ mod tests {
         // hook. Its obsolete successful result must never enter either frame map.
         assert!(
             cache
-                .layout_paragraph("probe".into(), px(16.0), &[], px(100.0))
+                .layout_paragraph(
+                    "probe".into(),
+                    px(16.0),
+                    &[],
+                    &Default::default(),
+                    px(100.0)
+                )
                 .is_err()
         );
         assert!(

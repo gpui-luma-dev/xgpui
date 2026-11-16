@@ -387,7 +387,7 @@ impl State {
             self.shape_calls += 1;
         }
         let mut builder = self.layout.ranged_builder(&mut self.fonts, text, 1.0, true);
-        builder.set_base_direction(options.direction.into());
+        builder.set_base_direction(crate::options::base_direction(options.direction));
         if let Some(language) = options.language {
             builder.push_default(StyleProperty::Locale(Some(language.parley())));
         }
@@ -677,11 +677,22 @@ impl PlatformTextSystem for ParleyTextSystem {
         &self,
         request: gpui::ParagraphRequest<'_>,
     ) -> Result<Arc<dyn gpui::PlatformParagraphShape>> {
-        // GPUI's request carries no options; explicit options use the extension API.
-        Ok(Arc::new(self.prepare_paragraph(
+        // Line height has no GPUI equivalent; it stays on the extension API.
+        let options = crate::ParagraphOptions {
+            direction: request.options.direction,
+            language: request
+                .options
+                .language
+                .as_deref()
+                .map(crate::TextLanguage::parse)
+                .transpose()?,
+            line_height: None,
+        };
+        Ok(Arc::new(self.prepare_paragraph_with_options(
             request.text,
             request.font_size,
             request.runs,
+            options,
         )?))
     }
     fn recommended_rendering_mode(&self, _: FontId, _: Pixels) -> TextRenderingMode {

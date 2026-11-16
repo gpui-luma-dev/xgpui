@@ -1,5 +1,5 @@
 //! Optional paragraph interop. Layout providers retain their own interaction data.
-use crate::{Bounds, FontRun, Hsla, Pixels, Point, Result, ShapedRun, Size, Window};
+use crate::{Bounds, FontRun, Hsla, Pixels, Point, Result, ShapedRun, SharedString, Size, Window};
 use std::sync::Arc;
 
 /// What a text backend's paragraph layout supports, so callers need not infer
@@ -132,9 +132,53 @@ pub fn paint_paragraph(
     Ok(())
 }
 
+/// Base direction of a paragraph: the order of its lines' runs and its start edge.
+///
+/// An explicit direction sets the Unicode Bidirectional Algorithm's paragraph
+/// level; mixed-direction runs inside the paragraph are still reordered.
+/// Backends that report [`ParagraphSupport::Full`] honor it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum TextDirection {
+    /// Use the first strong directional character, or left-to-right if there is none.
+    #[default]
+    Auto,
+    /// Left-to-right base direction.
+    LeftToRight,
+    /// Right-to-left base direction.
+    RightToLeft,
+}
+
+/// Paragraph-wide options that affect shaping and line breaking. The defaults
+/// reproduce [`crate::WindowTextSystem::layout_paragraph`]: automatic direction and
+/// no language. Every option is part of the paragraph cache key.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct ParagraphShapeOptions {
+    /// Base direction; [`TextDirection::Auto`] infers it from the text.
+    pub direction: TextDirection,
+    /// BCP 47 content language for the whole paragraph, such as `"ar"` or
+    /// `"sr-Cyrl"`, for language-specific shaping and line breaking. Backends may
+    /// ignore it, and may reject a tag they cannot parse.
+    pub language: Option<SharedString>,
+}
+
+impl ParagraphShapeOptions {
+    /// Set the base direction.
+    pub fn with_direction(mut self, direction: TextDirection) -> Self {
+        self.direction = direction;
+        self
+    }
+
+    /// Set the content language from a BCP 47 tag.
+    pub fn with_language(mut self, language: impl Into<SharedString>) -> Self {
+        self.language = Some(language.into());
+        self
+    }
+}
+
 // FontRun is intentionally the same descriptor identity boundary as flat lines.
-/// Borrowed shaping request for one logical paragraph. Direction is inferred and
-/// alignment is start; future shaping options must also be added to cache keys.
+/// Borrowed shaping request for one logical paragraph. Alignment is start.
+#[non_exhaustive]
 pub struct ParagraphRequest<'a> {
     /// Original paragraph UTF-8 source.
     pub text: &'a str,
@@ -142,6 +186,25 @@ pub struct ParagraphRequest<'a> {
     pub font_size: Pixels,
     /// Ordered runs covering source bytes, or empty for the backend default.
     pub runs: &'a [FontRun],
+    /// Direction, language and any later paragraph-wide options.
+    pub options: &'a ParagraphShapeOptions,
+}
+
+impl<'a> ParagraphRequest<'a> {
+    /// A request with the given shaping options.
+    pub fn new(
+        text: &'a str,
+        font_size: Pixels,
+        runs: &'a [FontRun],
+        options: &'a ParagraphShapeOptions,
+    ) -> Self {
+        Self {
+            text,
+            font_size,
+            runs,
+            options,
+        }
+    }
 }
 
 #[cfg(test)]
