@@ -22,7 +22,9 @@ by hand: publishing the crates and deploying the website.
 
 The issue's checklist tracks these steps; the agent ticks items as their PRs
 merge. [#338](https://github.com/gpui-luma-dev/xgpui/issues/338) (XGPUI 4.1.0)
-is the first release made this way and a model for the issue.
+is the first release made this way. Use it as the reference for the next one: its
+description shows the expected layout, and its **Lessons learned** section is
+folded into the rules below.
 
 ## 1. Release issue — agent
 
@@ -41,12 +43,27 @@ repository in this step.
   an input, then give every crate a next version and a reason under the
   [versioning policy](#versioning-policy). Show breaking changes and the
   re-exports that carry them into dependents.
+- **Re-exports and pins, by hand:** `release-check` doesn't see a crate whose own
+  code is unchanged but whose pinned dependency takes a breaking bump. On #338 it
+  reported `xgpui-gamut` unchanged, yet gamut re-exports `xgpui-color`, so color's
+  breaking release forced gamut 0.5.0. List every internal requirement the new
+  versions no longer satisfy, and every `pub use` of another XGPUI crate.
 - **Dependency pins:** list each internal requirement that must rise, and why.
+- **Packaged READMEs:** compare every crate README's install snippet with the new
+  versions. READMEs ship in the package and drift; #338 found four snippets naming
+  versions from earlier releases.
+- **Downstream check (recommended):** build xgpui-luma against the candidate with
+  a local, uncommitted `.cargo/config.toml` that patches every XGPUI crate to this
+  checkout, then run its lab tests. Record what breaks and what had to change. On
+  #338 this found two native paragraph bugs (fixed in #336) and eight API breaks
+  before anything was published.
 - **Release notes (draft):** highlights, migration notes per breaking crate, the
   core public API changes with the PRs that approved them, and verification so far.
 - **Publish order:** every crate to publish, in dependency order with its new version,
   computed from Cargo metadata.
 - **Checklist:** the remaining steps in this guide, plus any release-specific PRs.
+  The issue ends with a **Lessons learned** section, filled in after the release
+  (see [step 7](#7-deploy-the-website--owner)).
 
 Questions the policy can't settle (for example, whether a technically breaking
 change in a core crate takes a major or a minor version) go in a **Decision
@@ -59,7 +76,9 @@ and ticks it off.
 
 ## 3. Release PRs — agent, owner merges
 
-Work under `issue-<N>/epic`, one PR per concern, each into the epic:
+Work under `issue-<N>/epic`, one PR per concern, each into the epic. GitHub
+deletes the epic branch when it merges, so a follow-up after that recreates
+`issue-<N>/epic` from `main`.
 
 - **Versions and pins:** crate manifests, dependency requirements (including the
   labs' manifests for breaking versions), [`scripts/release-packages.json`](../scripts/release-packages.json),
@@ -67,14 +86,25 @@ Work under `issue-<N>/epic`, one PR per concern, each into the epic:
   `build-manifests --check` must pass and `release-check` must report every
   changed crate `ready-for-new-version` with no pin problems.
 - **Website docs:** `pages/` updated for the coming versions: What's new, crate
-  pages, guides for new APIs. Merged, **not deployed**.
+  pages, guides for new APIs, and the homepage's Start here subtitles. Leave the
+  changes uncommitted until the owner has hosted them locally (`just pages-serve`)
+  and approved them. What's new can't name the release tag, which is created on
+  the commit that contains it; link the release issue and the
+  [GitHub releases](https://github.com/gpui-luma-dev/xgpui/releases) list instead.
+  Merged, **not deployed**.
 - **Records:** a review file in `docs/release-reviews/` when the release needs
   more evidence than the issue holds, and any guide changes.
 
-Then open the epic's PR into `main`. CI must pass. A macOS job that never gets a
-runner may be replaced by running its steps locally on the same commit; say so in
-the PR. The owner tests Windows and Linux by hand only once changes are on
-`main`. The owner merges into `main`.
+Then open the epic's PR into `main`. CI must pass, with one exception. A macOS job
+cancelled after its queue timeout, with no runner and no steps, is an
+infrastructure failure rather than a test result; it happened on #334, #337 and
+#343. Re-queue it, run its steps locally on the same commit, or let the owner waive
+it, and say which in the PR. The owner tests Windows and Linux by hand only once
+changes are on `main`.
+
+The owner merges into `main`. The repository doesn't allow auto-merge, and the
+agent isn't woken when CI succeeds, so the owner tells the agent to merge once CI
+is green. The agent re-checks every result before merging.
 
 ## 4. Tag and draft record — agent
 
@@ -126,10 +156,21 @@ After the owner reports the publish:
 
 ## 7. Deploy the website — owner
 
-Run the [Publish documentation workflow](../.github/workflows/pages.yml) manually
-on `main`. The agent can then check the live site (the documented versions,
-galleries and both Wasm bundles) and add the deployment link to the release
-record and the issue. Close the issue.
+Run the **Publish documentation** workflow
+([`pages.yml`](../.github/workflows/pages.yml)) manually on `main`, then tell the
+agent. On #338 "deployed" was reported before any run existed, so before closing
+the issue the agent confirms all of these:
+
+- a Publish documentation run on the release commit succeeded;
+- the latest `github-pages` deployment is that commit;
+- the live pages carry the new content (What's new, the homepage and the changed
+  guides);
+- both gallery Wasm bundles are served.
+
+Then the agent adds the deployment link to the release record and the issue, and
+writes the issue's **Lessons learned** section: what worked, what caused friction,
+and suggested changes for the owner to decide. Anything durable goes back into
+this guide in a docs PR. Close the issue.
 
 ## Versioning policy
 
@@ -227,6 +268,20 @@ Existing versions are skipped only after comparing packaged source and normalize
 manifests. Generated lockfiles, VCS metadata and publication permissions are
 excluded from that comparison; source, resources, README, features and dependency
 requirements remain significant.
+
+### Known gaps
+
+These are known holes in the tooling. Cover them by hand until they're fixed:
+
+- `release-check` doesn't flag a crate whose pinned dependency takes a breaking
+  bump, or one that re-exports such a dependency.
+- No check compares packaged README install snippets with
+  `scripts/release-packages.json`.
+- `just pages-check` doesn't check relative links in `docs/*.md`.
+- `scripts/fixtures/native-package-consumer` pins old exact versions. Step 6's
+  fresh consumer replaces it for now.
+
+### Workflows
 
 The [Prepare daily release PR](../.github/workflows/prepare-daily-release.yml) and
 [Prepare registry release](../.github/workflows/prepare-registry-release.yml)
