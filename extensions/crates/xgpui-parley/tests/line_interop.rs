@@ -92,10 +92,33 @@ fn rejects_wrapping_before_registering_faces() {
 }
 
 #[test]
-fn rejects_rtl_before_registering_faces() {
-    let layout = shape("שלום", None);
-    let result = line_layout(&layout, px(16.0), |_| panic!("must not register a face"));
-    assert!(result.unwrap_err().to_string().contains("RTL"));
+fn rtl_runs_convert_in_visual_order_with_logical_indices() -> Result<()> {
+    let text = "שלום";
+    let layout = shape(text, None);
+    let converted = line_layout(&layout, px(16.0), |_| Ok(FontId(1)))?;
+    let glyphs: Vec<_> = converted.runs.iter().flat_map(|run| &run.glyphs).collect();
+    // Hebrew letters are two bytes each; the last letter is painted first.
+    assert_eq!(
+        glyphs.iter().map(|glyph| glyph.index).collect::<Vec<_>>(),
+        vec![6, 4, 2, 0]
+    );
+    assert!(
+        glyphs
+            .windows(2)
+            .all(|pair| pair[0].position.x < pair[1].position.x)
+    );
+    let line = layout.lines().next().unwrap();
+    let mut expected = Vec::new();
+    for item in line.items() {
+        if let parley::PositionedLayoutItem::GlyphRun(run) = item {
+            expected.extend(run.positioned_glyphs());
+        }
+    }
+    for (actual, expected) in glyphs.iter().zip(expected) {
+        assert_eq!(actual.id.0, expected.id);
+        assert!((f32::from(actual.position.x) - expected.x).abs() < 0.001);
+    }
+    Ok(())
 }
 
 #[test]

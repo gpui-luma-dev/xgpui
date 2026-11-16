@@ -85,7 +85,8 @@ fn descriptor_features_do_not_alias_resolved_face_identity() -> Result<()> {
         backend.font_id(&font(".SystemUIFont"))?
     );
     assert!(backend.font_id(&font("not installed")).is_err());
-    assert!(backend.try_layout_line("שלום", px(16.0), &[]).is_err());
+    // Right-to-left single lines lay out (in visual order) instead of erroring.
+    assert!(backend.try_layout_line("שלום", px(16.0), &[]).is_ok());
     assert!(
         backend
             .try_layout_line(
@@ -189,7 +190,9 @@ fn rejected_layouts_keep_source_indices_and_stable_cached_face() -> Result<()> {
         }],
     )?;
     let window = WindowTextSystem::new(Arc::new(TextSystem::new(backend.clone())));
-    let source = "aשלום";
+    // A line separator is still rejected on the flat-line path; the multi-byte
+    // Hebrew keeps the source-index check meaningful.
+    let source = "a\u{2028}שלום";
     let runs = [TextRun {
         len: source.len(),
         font: descriptor.clone(),
