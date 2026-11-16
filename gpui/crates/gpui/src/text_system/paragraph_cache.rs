@@ -342,6 +342,69 @@ mod tests {
     use super::*;
     use crate::{Bounds, NoopTextSystem, ParagraphPosition, Point, Size, VisualDirection, size};
 
+    /// Noop text, without paragraph shaping: a cache miss is an error, so a
+    /// success proves a cached shape was reused.
+    struct Unshapeable;
+    impl PlatformTextSystem for Unshapeable {
+        fn add_fonts(&self, fonts: Vec<std::borrow::Cow<'static, [u8]>>) -> anyhow::Result<()> {
+            NoopTextSystem.add_fonts(fonts)
+        }
+        fn all_font_names(&self) -> Vec<String> {
+            NoopTextSystem.all_font_names()
+        }
+        fn font_id(&self, descriptor: &crate::Font) -> anyhow::Result<FontId> {
+            NoopTextSystem.font_id(descriptor)
+        }
+        fn font_metrics(&self, font_id: FontId) -> crate::FontMetrics {
+            NoopTextSystem.font_metrics(font_id)
+        }
+        fn typographic_bounds(
+            &self,
+            font_id: FontId,
+            glyph_id: GlyphId,
+        ) -> anyhow::Result<Bounds<f32>> {
+            NoopTextSystem.typographic_bounds(font_id, glyph_id)
+        }
+        fn advance(&self, font_id: FontId, glyph_id: GlyphId) -> anyhow::Result<Size<f32>> {
+            NoopTextSystem.advance(font_id, glyph_id)
+        }
+        fn glyph_for_char(&self, font_id: FontId, ch: char) -> Option<GlyphId> {
+            NoopTextSystem.glyph_for_char(font_id, ch)
+        }
+        fn glyph_raster_bounds(
+            &self,
+            params: &crate::RenderGlyphParams,
+        ) -> anyhow::Result<Bounds<crate::DevicePixels>> {
+            NoopTextSystem.glyph_raster_bounds(params)
+        }
+        fn rasterize_glyph(
+            &self,
+            params: &crate::RenderGlyphParams,
+            raster_bounds: Bounds<crate::DevicePixels>,
+        ) -> anyhow::Result<(Size<crate::DevicePixels>, Vec<u8>)> {
+            NoopTextSystem.rasterize_glyph(params, raster_bounds)
+        }
+        fn layout_line(&self, text: &str, font_size: Pixels, runs: &[FontRun]) -> LineLayout {
+            NoopTextSystem.layout_line(text, font_size, runs)
+        }
+        fn paragraph_support(&self) -> crate::ParagraphSupport {
+            crate::ParagraphSupport::Unsupported
+        }
+        fn shape_paragraph(
+            &self,
+            _: ParagraphRequest<'_>,
+        ) -> anyhow::Result<Arc<dyn PlatformParagraphShape>> {
+            anyhow::bail!("unshapeable test backend")
+        }
+        fn recommended_rendering_mode(
+            &self,
+            font_id: FontId,
+            font_size: Pixels,
+        ) -> crate::TextRenderingMode {
+            NoopTextSystem.recommended_rendering_mode(font_id, font_size)
+        }
+    }
+
     struct Probe;
     impl PlatformParagraphShape for Probe {
         fn layout(&self, width: Pixels) -> anyhow::Result<Arc<dyn PlatformParagraphLayout>> {
@@ -387,7 +450,7 @@ mod tests {
     #[test]
     fn paragraph_frame_ranges_retain_both_levels_and_obey_generation() {
         let generation = Arc::new(AtomicUsize::new(0));
-        let cache = LineLayoutCache::new(Arc::new(NoopTextSystem), generation.clone());
+        let cache = LineLayoutCache::new(Arc::new(Unshapeable), generation.clone());
         let start = cache.layout_index();
         let shape_key =
             ParagraphKey::new(&"probe".into(), px(16.0), &[], &Default::default(), None);
@@ -497,7 +560,7 @@ mod tests {
                 Ok((px(30.0), px(90.0)))
             }
         }
-        let cache = LineLayoutCache::new(Arc::new(NoopTextSystem), Arc::new(AtomicUsize::new(0)));
+        let cache = LineLayoutCache::new(Arc::new(Unshapeable), Arc::new(AtomicUsize::new(0)));
         let key = |text: &'static str| {
             ParagraphKey::new(&text.into(), px(16.0), &[], &Default::default(), None)
         };
@@ -508,7 +571,7 @@ mod tests {
             shapes.insert(key("probe"), Arc::new(Probe));
         }
         cache.finish_frame();
-        // Noop cannot shape: success means the previous frame's shape was reused.
+        // Unshapeable cannot shape: success means the previous frame's shape was reused.
         assert_eq!(
             cache
                 .paragraph_content_widths("measured".into(), px(16.0), &[], &Default::default())
@@ -540,7 +603,7 @@ mod tests {
 
     #[test]
     fn shape_options_are_part_of_the_cache_key() {
-        let cache = LineLayoutCache::new(Arc::new(NoopTextSystem), Arc::new(AtomicUsize::new(0)));
+        let cache = LineLayoutCache::new(Arc::new(Unshapeable), Arc::new(AtomicUsize::new(0)));
         let default = ParagraphShapeOptions::default();
         cache
             .state
@@ -555,7 +618,7 @@ mod tests {
         let layout = |options: &ParagraphShapeOptions| {
             cache.layout_paragraph("probe".into(), px(16.0), &[], options, px(100.0))
         };
-        // Noop cannot shape, so only the cached default-options shape succeeds.
+        // Unshapeable cannot shape, so only the cached default-options shape succeeds.
         assert!(layout(&default).is_ok());
         assert!(
             layout(&ParagraphShapeOptions::default().with_direction(TextDirection::Auto)).is_ok()
@@ -584,7 +647,7 @@ mod tests {
 
     #[test]
     fn failed_reflow_preserves_previous_frame_shaping() {
-        let cache = LineLayoutCache::new(Arc::new(NoopTextSystem), Arc::new(AtomicUsize::new(0)));
+        let cache = LineLayoutCache::new(Arc::new(Unshapeable), Arc::new(AtomicUsize::new(0)));
         let key = ParagraphKey::new(&"probe".into(), px(16.0), &[], &Default::default(), None);
         cache
             .state
@@ -605,7 +668,7 @@ mod tests {
                 )
                 .is_err()
         );
-        // Noop cannot rebuild this shape: success requires retaining the cached one.
+        // Unshapeable cannot rebuild this shape: success requires retaining the cached one.
         assert!(
             cache
                 .layout_paragraph(
@@ -639,7 +702,7 @@ mod tests {
         }
         let generation = Arc::new(AtomicUsize::new(0));
         let cache = std::rc::Rc::new(LineLayoutCache::new(
-            Arc::new(NoopTextSystem),
+            Arc::new(Unshapeable),
             generation.clone(),
         ));
         let key = ParagraphKey::new(&"probe".into(), px(16.0), &[], &Default::default(), None);

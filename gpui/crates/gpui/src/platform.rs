@@ -1704,16 +1704,20 @@ pub trait PlatformTextSystem: Send + Sync {
     ) -> Result<(Size<DevicePixels>, Vec<u8>)>;
     /// Layout a line of text with the given font runs.
     fn layout_line(&self, text: &str, font_size: Pixels, runs: &[FontRun]) -> LineLayout;
-    /// What `shape_paragraph` supports. Backends that implement it must override this.
+    /// What `shape_paragraph` supports. Backends that override `shape_paragraph`
+    /// must override this too.
     fn paragraph_support(&self) -> crate::ParagraphSupport {
-        crate::ParagraphSupport::Unsupported
+        crate::ParagraphSupport::LeftToRight
     }
-    /// Optional paragraph capability; native implementations need not opt in.
+    /// Shape one paragraph. The default builds left-to-right paragraphs from
+    /// `layout_line` and line wrapping; it ignores direction and language.
     fn shape_paragraph(
         &self,
-        _request: crate::ParagraphRequest<'_>,
+        request: crate::ParagraphRequest<'_>,
     ) -> Result<Arc<dyn crate::PlatformParagraphShape>> {
-        anyhow::bail!("paragraph layout is unsupported by this text backend")
+        crate::shape_fallback_paragraph(request, |text, font_size, runs| {
+            self.layout_line(text, font_size, runs)
+        })
     }
     /// Returns the recommended text rendering mode for the given font and size.
     fn recommended_rendering_mode(&self, _font_id: FontId, _font_size: Pixels)
