@@ -57,7 +57,7 @@ fractional alpha; their blur toggle uses the sRGB preview path only.
 The view never assumes a wide-gamut display. It reports the OS display
 evidence as metadata (`WindowColorStatus::display_wide_gamut`) and warns unless
 the OS reports wide primaries and extended output is active. Windows reports
-wide primaries only while Wide gamut output is selected and never asserts a
+wide primaries only while Window output: Extended is selected and never asserts a
 narrow panel, so an ordinary SDR monitor there shows “no wide-gamut evidence,
 treat it as sRGB”. A display self-test paints the same stored ProPhoto red as an
 sRGB preview and in extended composition: on an sRGB monitor the two halves look

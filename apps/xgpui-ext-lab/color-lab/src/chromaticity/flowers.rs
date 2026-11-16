@@ -679,7 +679,7 @@ impl Flowers {
             );
             anyhow::ensure!(
                 window.color_status().effective() == WindowColorMode::WideGamutSdr && !self.preview,
-                "Select Wide gamut and extended output for the Metal FP16 readback"
+                "Select Window output: Extended and ProPhoto image: extended for the Metal FP16 readback"
             );
             anyhow::ensure!(self.view == View::Wipe, "Use the wipe view");
             anyhow::ensure!(
@@ -784,13 +784,13 @@ pub(super) fn presentation(status: WindowColorStatus, preview: bool) -> Presenta
             "no wide-gamut evidence from the OS for this display; treat it as sRGB"
         }
         DisplayEvidence::Unknown => {
-            "not reported; some systems report display primaries only while Wide gamut output is selected"
+            "not reported; some systems report display primaries only while Window output: Extended is selected"
         }
     };
     let warning = match (evidence, extended) {
         (DisplayEvidence::Wide, true) => None,
         (DisplayEvidence::Wide, false) => Some(
-            "The OS reports a wide-gamut display, but output here is sRGB. Select Wide gamut and extended output to show colors beyond sRGB.",
+            "The OS reports a wide-gamut display, but output here is sRGB. Select Window output: Extended and ProPhoto image: extended to show colors beyond sRGB.",
         ),
         _ => Some(
             "This display is not known to be wide gamut, so treat it as sRGB. Colors outside sRGB (about half of this photograph) reach the screen mapped to sRGB, and the two halves of the wipe can look the same. Storage and mapping are still verified numerically below; the self-test shows whether this display can show the difference.",
@@ -871,7 +871,7 @@ impl Lab {
             .child(div().flex().flex_wrap().gap_2()
                 .child(self.flowers_button(format!("Storage: {}", ["P3", "Rec.2020"][f.storage]), "flowers-storage", cx, |f, _| { f.storage ^= 1; f.reinspect(); }))
                 .child(self.flowers_button(format!("Mapping: {mapping}"), "flowers-mapping", cx, |f, _| { f.mapping ^= 1; f.reinspect(); }))
-                .child(self.flowers_button(format!("Output: {}", if f.preview { "sRGB preview" } else { "extended" }), "flowers-output", cx, |f, _| f.preview = !f.preview))
+                .child(self.flowers_button(format!("ProPhoto image: {}", if f.preview { "sRGB preview" } else { "extended" }), "flowers-output", cx, |f, _| f.preview = !f.preview))
                 .child(self.flowers_button(format!("View: {}", match f.view { View::Wipe => "sRGB | ProPhoto wipe", View::Overlay => "our pre-mapping overlay", View::WebKit => "WebKit out-of-sRGB" }), "flowers-view", cx, |f, _| f.view = match f.view { View::Wipe => View::Overlay, View::Overlay => View::WebKit, View::WebKit => View::Wipe }))
                 .child(self.flowers_button(format!("Zoom: {}×", ZOOM[f.zoom]), "flowers-zoom", cx, |f, _| f.zoom = (f.zoom + 1) % ZOOM.len()))
                 .child(self.flowers_button(format!("Wipe: {:.0}%", f.wipe * 100.), "flowers-wipe", cx, |f, _| f.wipe = if f.wipe >= 1. { 0. } else { f.wipe + 0.25 }))

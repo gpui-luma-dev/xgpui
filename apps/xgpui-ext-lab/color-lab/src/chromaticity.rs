@@ -340,22 +340,27 @@ impl Lab {
             self.photo = Some(photo::Photo::new());
         }
     }
+    /// Window output choice: requests sRGB or extended (wide-gamut SDR)
+    /// composition for this window. It is a setting, not a display report.
     fn window_mode_controls(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let wide = window.color_status().effective() == WindowColorMode::WideGamutSdr;
+        let supported = window.color_status().supports_wide_gamut_sdr();
         div()
             .flex()
             .flex_wrap()
+            .items_center()
             .gap_2()
+            .child(div().pr_1().child("Window output:"))
             .child(self.button(
-                format!("{} Standard (sRGB)", if wide { "○" } else { "●" }),
+                format!("{} sRGB", if wide { "○" } else { "●" }),
                 22,
                 cx,
             ))
-            .when(window.color_status().supports_wide_gamut_sdr(), |row| row.child(self.button(
-                format!("{} Wide gamut", if wide { "●" } else { "○" }), 23, cx,
+            .when(supported, |row| row.child(self.button(
+                format!("{} Extended (for wide-gamut displays)", if wide { "●" } else { "○" }), 23, cx,
             )))
-            .when(!window.color_status().supports_wide_gamut_sdr(), |row| row.child(
-                div().px_3().py_2().child("Current setup: standard SDR")
+            .when(!supported, |row| row.child(
+                div().px_3().py_2().child("Extended output isn’t available with this graphics setup")
             ))
             .into_any_element()
     }
