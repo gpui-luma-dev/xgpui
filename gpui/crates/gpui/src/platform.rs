@@ -1709,8 +1709,9 @@ pub trait PlatformTextSystem: Send + Sync {
     fn paragraph_support(&self) -> crate::ParagraphSupport {
         crate::ParagraphSupport::LeftToRight
     }
-    /// Shape one paragraph. The default builds left-to-right paragraphs from
-    /// `layout_line` and line wrapping; it ignores direction and language.
+    /// Shape one paragraph. The default builds paragraphs from `layout_line` and
+    /// line wrapping ([`crate::ParagraphSupport::LeftToRight`]): the base
+    /// direction sets each line's start edge, and language is ignored.
     fn shape_paragraph(
         &self,
         request: crate::ParagraphRequest<'_>,
