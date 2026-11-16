@@ -257,10 +257,7 @@ fn main() -> Result<()> {
         let parley = parley_backend
             .clone()
             .ok_or_else(|| anyhow::anyhow!("paragraph mode requires the Parley backend"))?;
-        Some((
-            paragraph::measure(app.text_system(), options.iterations)?,
-            parley,
-        ))
+        Some((paragraph::measure(app.text_system(), options.iterations)?, parley))
     } else {
         None
     };
@@ -399,9 +396,10 @@ fn main() -> Result<()> {
             |window, cx| {
                 window.set_lab_title(&format!("Text Lab - {name}"));
                 let input = cx.new(|cx| input::TextInput::new("office café e\u{301} Ångström", cx));
-                let paragraph = paragraph_timings.map(|(timings, parley)| {
-                    cx.new(|cx| paragraph::ParagraphLab::new(timings, parley, cx))
-                });
+                let paragraph = paragraph_timings
+                    .map(|(timings, parley)| {
+                        cx.new(|cx| paragraph::ParagraphLab::new(timings, parley, cx))
+                    });
                 if let Some(paragraph) = &paragraph {
                     window.focus(&paragraph.focus_handle(cx), cx);
                 }
