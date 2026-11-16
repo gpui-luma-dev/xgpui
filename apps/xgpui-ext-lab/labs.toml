@@ -286,6 +286,11 @@ about = "Text lab tests"
 cargo = ["test", "--bin", "text-lab"]
 
 [[lab.task]]
+name = "layout-cost"
+about = "Plain text frame cost: GPUI lines versus the Parley engine (#332)"
+cargo = ["test", "--bin", "text-lab", "layout_cost", "--", "--ignored", "--nocapture"]
+
+[[lab.task]]
 name = "axes-test"
 about = "Pointer, keyboard, preset and preview-budget tests on native and Parley"
 cargo = ["test", "--bin", "text-lab", "axes::tests"]

@@ -4,6 +4,8 @@ mod axes;
 mod bidi;
 #[cfg(test)]
 mod editing_tests;
+#[cfg(test)]
+mod layout_cost;
 mod paragraph;
 #[cfg(test)]
 mod rtl_checks;

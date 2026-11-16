@@ -111,29 +111,51 @@ pub trait PlatformParagraphLayout: Send + Sync {
 /// Call during element paint. `color_for_index` resolves color by logical source
 /// index (not a forward-only style iterator). Backgrounds, selection and decoration
 /// geometry are caller-owned. No font resolution or text shaping occurs here.
+///
+/// As GPUI's own lines do, the glyphs share one paint layer (one draw-order
+/// entry for the paragraph box instead of one per glyph), and glyphs that can't
+/// reach the current content mask are skipped.
 pub fn paint_paragraph(
     layout: &dyn PlatformParagraphLayout,
     origin: Point<Pixels>,
     color_for_index: impl Fn(usize) -> Hsla,
     window: &mut Window,
 ) -> Result<()> {
-    for run in layout.runs() {
-        for glyph in &run.glyphs {
-            let position = origin + glyph.position;
-            if glyph.is_emoji {
-                window.paint_emoji(position, run.font_id, glyph.id, layout.font_size())?;
-            } else {
-                window.paint_glyph(
-                    position,
-                    run.font_id,
-                    glyph.id,
-                    layout.font_size(),
-                    color_for_index(glyph.index),
-                )?;
+    let mask = window.content_mask().bounds;
+    let font_size = layout.font_size();
+    window.paint_layer(Bounds::new(origin, layout.size()), |window| {
+        let text_system = window.text_system().clone();
+        for run in layout.runs() {
+            // How far any glyph of this font can reach from its origin.
+            let bounds = text_system.bounding_box(run.font_id, font_size);
+            let reach = [bounds.left(), bounds.right(), bounds.top(), bounds.bottom()]
+                .into_iter()
+                .map(|edge| edge.abs())
+                .fold(Pixels::ZERO, Pixels::max);
+            for glyph in &run.glyphs {
+                let position = origin + glyph.position;
+                let cover = Bounds::new(
+                    position - crate::point(reach, reach),
+                    crate::size(reach * 2., reach * 2.),
+                );
+                if !cover.intersects(&mask) {
+                    continue;
+                }
+                if glyph.is_emoji {
+                    window.paint_emoji(position, run.font_id, glyph.id, font_size)?;
+                } else {
+                    window.paint_glyph(
+                        position,
+                        run.font_id,
+                        glyph.id,
+                        font_size,
+                        color_for_index(glyph.index),
+                    )?;
+                }
             }
         }
-    }
-    Ok(())
+        Ok::<_, anyhow::Error>(())
+    })
 }
 
 /// Base direction of a paragraph: the order of its lines' runs and its start edge.

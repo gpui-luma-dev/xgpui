@@ -2,9 +2,10 @@
 //! and Parley windows, and the Wasm gallery (`?demo=bidi`), run this same code;
 //! only the installed text backend differs.
 //!
-//! Section 5 shows the conditions behind gpui-luma-dev/xgpui#332: wrapped
-//! right-to-left text in plain GPUI elements next to `typeset()`. The
-//! `rtl_checks` tests pin the same behavior, so a change shows up as a failure.
+//! Section 5 shows gpui-luma-dev/xgpui#332: wrapped right-to-left text in plain
+//! GPUI elements next to `typeset()`. With Parley, plain text uses the Parley
+//! engine (`install_text_layout`) by default, and a toggle switches it back to
+//! GPUI's flat lines. The `rtl_checks` tests pin both behaviors.
 use gpui::{
     Bounds, Context, FocusHandle, Focusable, Font, FontFallbacks, FontRun, HighlightStyle,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, ParagraphPosition,
@@ -89,7 +90,13 @@ fn start() -> ParagraphPosition {
 
 pub struct BidiLab {
     name: String,
-    typeset: bool,
+    /// The installed Parley backend, if any.
+    parley: Option<Arc<ParleyTextSystem>>,
+    /// Whether plain GPUI text should use the Parley engine
+    /// (`install_text_layout`) rather than GPUI's flat lines.
+    plain_on_parley: bool,
+    /// What `plain_on_parley` was last applied as.
+    applied: bool,
     sample: usize,
     direction: usize,
     width: Width,
@@ -108,21 +115,25 @@ struct Laid {
 }
 
 impl BidiLab {
-    /// `parley` is the installed Parley backend, if any; it backs the
-    /// `typeset()` column in section 5. Without it, that column renders as
+    /// `parley` is the installed Parley backend, if any. With it, plain GPUI
+    /// text on this page is laid out by the Parley engine
+    /// (`xgpui_parley::install_text_layout`), and section 5 can switch back to
+    /// GPUI's flat lines for comparison. Without it, `typeset()` renders as
     /// plain GPUI text.
     pub fn new(
         name: String,
         parley: Option<Arc<ParleyTextSystem>>,
         cx: &mut Context<Self>,
     ) -> Self {
-        let typeset = parley.is_some();
-        if let Some(parley) = parley {
-            xgpui_parley::typeset::install(parley, cx);
+        let plain_on_parley = parley.is_some();
+        if let Some(parley) = &parley {
+            xgpui_parley::install_text_layout(parley.clone(), cx);
         }
         Self {
             name,
-            typeset,
+            parley,
+            plain_on_parley,
+            applied: plain_on_parley,
             sample: 0,
             direction: 0,
             width: Width::Fit,
@@ -132,6 +143,13 @@ impl BidiLab {
             dragging: false,
             geometry: None,
         }
+    }
+
+    /// Switch plain text between the Parley engine and GPUI's flat lines, as
+    /// section 5's buttons do.
+    #[cfg(test)]
+    pub(crate) fn set_plain_on_parley(&mut self, on: bool) {
+        self.plain_on_parley = on;
     }
 
     fn text(&self) -> &'static str {
@@ -308,6 +326,16 @@ fn section(title: &str, expect: &str) -> gpui::Div {
 
 impl Render for BidiLab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(parley) = &self.parley
+            && self.applied != self.plain_on_parley
+        {
+            if self.plain_on_parley {
+                xgpui_parley::install_text_layout(parley.clone(), cx);
+            } else {
+                cx.clear_text_layout_provider();
+            }
+            self.applied = self.plain_on_parley;
+        }
         let support = window.text_system().paragraph_support();
         let support_note = match support {
             ParagraphSupport::Full => {
@@ -414,27 +442,51 @@ impl Render for BidiLab {
                 })
                 .tooltip(move |_, cx| cx.new(|_| Tip { typeset }).into())
         };
-        let wrapped = section(
+        let mut wrapped = section(
             "5. Wrapped right-to-left text in plain GPUI elements (#332)",
-            if self.typeset {
-                "left column, plain GPUI text: lines wrap in painting order, so the sentence's first words (שורה ראשונה) land on the last line. Right column, typeset(): lines wrap in logical order, so the first words are at the top right. The clamp and the tooltip show the same difference."
-            } else {
-                "no Parley engine is installed, so typeset() renders as plain GPUI text and both columns match. Both wrap in painting order: the sentence's first words (שורה ראשונה) land on the last line. Run with --backend parley to compare."
+            match (&self.parley, self.plain_on_parley) {
+                (Some(_), true) => {
+                    "plain GPUI text uses the Parley engine (install_text_layout), so both columns match: lines wrap in logical order and the sentence's first words (שורה ראשונה) are at the top right. Switch to GPUI lines to compare."
+                }
+                (Some(_), false) => {
+                    "left column, plain GPUI text on GPUI's flat lines: lines wrap in painting order, so the sentence's first words (שורה ראשונה) land on the last line. Right column, typeset(): lines wrap in logical order, so the first words are at the top right. The clamp and the tooltip show the same difference."
+                }
+                (None, _) => {
+                    "no Parley engine is installed, so typeset() renders as plain GPUI text and both columns match. Both wrap in painting order: the sentence's first words (שורה ראשונה) land on the last line. Run with --backend parley to compare."
+                }
             },
-        )
-        .child(compare("Wrapped", "wrap", frame))
-        .child(compare("Two-line clamp", "clamp", || {
-            frame().line_clamp(2).text_ellipsis()
-        }))
-        .child(
-            div()
-                .flex()
-                .flex_wrap()
-                .gap_3()
-                .child(div().w(px(150.0)).text_color(rgb(0x9ca3af)).child("Tooltip"))
-                .child(tip("rtl-tooltip-plain", false))
-                .child(tip("rtl-tooltip-typeset", true)),
         );
+        if self.parley.is_some() {
+            wrapped = wrapped.child(self.buttons(
+                "bidi-plain-engine",
+                &[
+                    ("Plain text: Parley (install_text_layout)", true),
+                    ("Plain text: GPUI lines", false),
+                ],
+                |this, on| this.plain_on_parley == on,
+                |this, on| this.plain_on_parley = on,
+                cx,
+            ));
+        }
+        let wrapped = wrapped
+            .child(compare("Wrapped", "wrap", frame))
+            .child(compare("Two-line clamp", "clamp", || {
+                frame().line_clamp(2).text_ellipsis()
+            }))
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap_3()
+                    .child(
+                        div()
+                            .w(px(150.0))
+                            .text_color(rgb(0x9ca3af))
+                            .child("Tooltip"),
+                    )
+                    .child(tip("rtl-tooltip-plain", false))
+                    .child(tip("rtl-tooltip-typeset", true)),
+            );
 
         let mut paragraph = section(
             "4. GPUI paragraph: window.text_system().layout_paragraph_with_options (#325 A)",

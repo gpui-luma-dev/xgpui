@@ -162,7 +162,7 @@ impl Typeset {
 
 /// Paint attributes of one display run; fonts live in the shaping spec.
 #[derive(Clone, Debug)]
-struct PaintRun {
+pub(crate) struct PaintRun {
     len: usize,
     color: Hsla,
     background: Option<Hsla>,
@@ -226,49 +226,27 @@ impl Element for Typeset {
             };
             return (layout_id, state);
         }
-        let (text, display_runs) = hard_breaks(&self.text, source_runs);
-        let mut fonts: Vec<FontRun> = Vec::with_capacity(display_runs.len());
-        for run in &display_runs {
-            let font_id = window.text_system().resolve_font(&run.font);
-            match fonts.last_mut() {
-                Some(last) if last.font_id == font_id => last.len += run.len,
-                _ => fonts.push(FontRun {
-                    len: run.len,
-                    font_id,
-                }),
-            }
-        }
-        let paint_runs: Arc<[PaintRun]> = display_runs
-            .iter()
-            .map(|run| PaintRun {
-                len: run.len,
-                color: run.color,
-                background: run.background_color,
-                underline: run.underline,
-                strikethrough: run.strikethrough,
-            })
-            .collect();
         let font_size = style.font_size.to_pixels(window.rem_size());
         let line_height = window.pixel_snap(
             style
                 .line_height
                 .to_pixels(font_size.into(), window.rem_size()),
         );
-        let spec = TypesetSpec {
-            text,
-            fonts: fonts.into(),
-            font_size,
-            line_height,
-            options: ParagraphOptions {
-                direction: self.direction,
-                language: self.language,
-                line_height: Some(line_height),
+        let (spec, paint_runs, _) = build_spec(
+            &self.text,
+            source_runs,
+            SpecStyle {
+                font_size,
+                line_height,
+                white_space: style.white_space,
+                text_overflow: style.text_overflow.as_ref(),
+                line_clamp: style.line_clamp,
+                text_align: style.text_align,
             },
-            wrap: style.white_space == WhiteSpace::Normal,
-            overflow: style.text_overflow.as_ref().map(OverflowKey::from),
-            line_clamp: style.line_clamp.filter(|lines| *lines > 0),
-            align: AlignKey::from(style.text_align),
-        };
+            self.direction,
+            self.language,
+            window,
+        );
         let layout_id = window.request_measured_layout(Style::default(), {
             let fitted = fitted.clone();
             move |known, available, _window, cx| {
@@ -312,32 +290,7 @@ impl Element for Typeset {
         }
         let engine = cx.try_global::<TypesetEngine>()?;
         let fitted = state.fitted.borrow();
-        let fitted = fitted.as_ref()?;
-        // Wrapped text reflows at its final width; unbroken lines are placed here.
-        let break_width = fitted.wrap.then_some(bounds.size.width);
-        match engine.layout(&fitted.shaped, break_width, fitted.align) {
-            Ok(layout) => {
-                let offset = if fitted.wrap {
-                    px(0.0)
-                } else {
-                    let free = (bounds.size.width - layout.content_width()).max(px(0.0));
-                    fitted.align.offset(free, fitted.shaped.shape.is_rtl())
-                };
-                let clamp_height = fitted
-                    .line_clamp
-                    .and_then(|clamp| clamp_height(&layout, clamp));
-                Some(Prepared {
-                    layout,
-                    offset,
-                    pieces: fitted.pieces.clone(),
-                    clamp_height,
-                })
-            }
-            Err(error) => {
-                engine.parley.report_layout_error(&error);
-                None
-            }
-        }
+        prepare(engine, fitted.as_ref()?, bounds.size.width)
     }
 
     fn paint(
@@ -354,30 +307,141 @@ impl Element for Typeset {
             fallback.paint(window, cx);
             return;
         }
-        let Some(prepared) = prepaint.as_ref() else {
-            return;
-        };
-        let layout = prepared.layout.as_ref();
-        let origin = bounds.origin + point(prepared.offset, px(0.0));
-        let runs = state.paint_runs.clone();
-        let pieces = prepared.pieces.clone();
-        let paint = |window: &mut Window| {
-            paint_backgrounds(layout, &runs, &pieces, origin, window);
-            let color_at = |index| run_at(&runs, source_index(&pieces, index)).color;
+        if let Some(prepared) = prepaint.as_ref() {
+            paint_prepared(prepared, &state.paint_runs, bounds, Pass::All, window, cx);
+        }
+    }
+}
+
+/// The inherited text style values a spec depends on.
+pub(crate) struct SpecStyle<'a> {
+    pub font_size: Pixels,
+    pub line_height: Pixels,
+    pub white_space: WhiteSpace,
+    pub text_overflow: Option<&'a TextOverflow>,
+    pub line_clamp: Option<usize>,
+    pub text_align: TextAlign,
+}
+
+/// The shaping spec and paint runs for `text` styled by `source_runs`, plus
+/// the map between `text` and the spec's text (hard breaks normalized).
+pub(crate) fn build_spec(
+    text: &SharedString,
+    source_runs: Vec<TextRun>,
+    style: SpecStyle,
+    direction: TextDirection,
+    language: Option<TextLanguage>,
+    window: &Window,
+) -> (TypesetSpec, Arc<[PaintRun]>, Breaks) {
+    let (normalized, display_runs, breaks) = hard_breaks(text, source_runs);
+    let mut fonts: Vec<FontRun> = Vec::with_capacity(display_runs.len());
+    for run in &display_runs {
+        let font_id = window.text_system().resolve_font(&run.font);
+        match fonts.last_mut() {
+            Some(last) if last.font_id == font_id => last.len += run.len,
+            _ => fonts.push(FontRun {
+                len: run.len,
+                font_id,
+            }),
+        }
+    }
+    let paint_runs: Arc<[PaintRun]> = display_runs
+        .iter()
+        .map(|run| PaintRun {
+            len: run.len,
+            color: run.color,
+            background: run.background_color,
+            underline: run.underline,
+            strikethrough: run.strikethrough,
+        })
+        .collect();
+    let spec = TypesetSpec {
+        text: normalized,
+        fonts: fonts.into(),
+        font_size: style.font_size,
+        line_height: style.line_height,
+        options: ParagraphOptions {
+            direction,
+            language,
+            line_height: Some(style.line_height),
+        },
+        wrap: style.white_space == WhiteSpace::Normal,
+        overflow: style.text_overflow.map(OverflowKey::from),
+        line_clamp: style.line_clamp.filter(|lines| *lines > 0),
+        align: AlignKey::from(style.text_align),
+    };
+    (spec, paint_runs, breaks)
+}
+
+/// Reflow fitted text at its final width and place it.
+pub(crate) fn prepare(engine: &TypesetEngine, fitted: &Fitted, width: Pixels) -> Option<Prepared> {
+    // Wrapped text reflows at its final width; unbroken lines are placed here.
+    let break_width = fitted.wrap.then_some(width);
+    match engine.layout(&fitted.shaped, break_width, fitted.align) {
+        Ok(layout) => {
+            let offset = if fitted.wrap {
+                px(0.0)
+            } else {
+                let free = (width - layout.content_width()).max(px(0.0));
+                fitted.align.offset(free, fitted.shaped.shape.is_rtl())
+            };
+            let clamp_height = fitted
+                .line_clamp
+                .and_then(|clamp| clamp_height(&layout, clamp));
+            Some(Prepared {
+                layout,
+                offset,
+                pieces: fitted.pieces.clone(),
+                clamp_height,
+            })
+        }
+        Err(error) => {
+            engine.parley.report_layout_error(&error);
+            None
+        }
+    }
+}
+
+/// Which parts of prepared text to paint.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Pass {
+    Background,
+    Foreground,
+    All,
+}
+
+/// Paint prepared text in `bounds`, masked to a line clamp's visible lines.
+pub(crate) fn paint_prepared(
+    prepared: &Prepared,
+    runs: &[PaintRun],
+    bounds: Bounds<Pixels>,
+    pass: Pass,
+    window: &mut Window,
+    cx: &App,
+) {
+    let layout = prepared.layout.as_ref();
+    let origin = bounds.origin + point(prepared.offset, px(0.0));
+    let pieces = prepared.pieces.as_ref();
+    let paint = |window: &mut Window| {
+        if pass != Pass::Foreground {
+            paint_backgrounds(layout, runs, pieces, origin, window);
+        }
+        if pass != Pass::Background {
+            let color_at = |index| run_at(runs, source_index(pieces, index)).color;
             if let Err(error) = gpui::paint_paragraph(layout, origin, color_at, window)
                 && let Some(engine) = cx.try_global::<TypesetEngine>()
             {
                 engine.parley.report_layout_error(&error);
             }
-            paint_decorations(layout, &runs, &pieces, origin, window);
-        };
-        if let Some(height) = prepared.clamp_height {
-            let mut visible = bounds;
-            visible.size.height = visible.size.height.min(height);
-            window.with_content_mask(Some(ContentMask { bounds: visible }), paint);
-        } else {
-            paint(window);
+            paint_decorations(layout, runs, pieces, origin, window);
         }
+    };
+    if let Some(height) = prepared.clamp_height {
+        let mut visible = bounds;
+        visible.size.height = visible.size.height.min(height);
+        window.with_content_mask(Some(ContentMask { bounds: visible }), paint);
+    } else {
+        paint(window);
     }
 }
 
@@ -531,9 +595,9 @@ const LINE_SEPARATOR: char = '\u{2028}';
 /// text is normalized at once, so a CRLF is one break even when a run boundary
 /// falls between `\r` and `\n`; the break takes the style of the run holding
 /// `\r`. Run lengths follow the normalized text, and runs left empty are dropped.
-fn hard_breaks(text: &SharedString, runs: Vec<TextRun>) -> (SharedString, Vec<TextRun>) {
+fn hard_breaks(text: &SharedString, runs: Vec<TextRun>) -> (SharedString, Vec<TextRun>, Breaks) {
     if !text.contains(['\n', '\r', '\u{2029}']) {
-        return (text.clone(), runs);
+        return (text.clone(), runs, Breaks(None));
     }
     // Normalized offset at each source byte boundary that runs may use.
     let mut offsets = vec![0; text.len() + 1];
@@ -559,7 +623,31 @@ fn hard_breaks(text: &SharedString, runs: Vec<TextRun>) -> (SharedString, Vec<Te
             (run.len > 0).then_some(run)
         })
         .collect();
-    (normalized.into(), runs)
+    (normalized.into(), runs, Breaks(Some(offsets.into())))
+}
+
+/// Maps byte offsets between a text and its hard-break-normalized form: the
+/// normalized offset at each source byte boundary, or `None` when they match.
+#[derive(Clone, Debug)]
+pub(crate) struct Breaks(Option<Arc<[usize]>>);
+
+impl Breaks {
+    pub fn to_normalized(&self, source: usize) -> usize {
+        match &self.0 {
+            Some(offsets) => offsets[source.min(offsets.len() - 1)],
+            None => source,
+        }
+    }
+
+    /// The last source boundary at `normalized`, so a CRLF break maps past both bytes.
+    pub fn to_source(&self, normalized: usize) -> usize {
+        match &self.0 {
+            Some(offsets) => offsets
+                .partition_point(|offset| *offset <= normalized)
+                .saturating_sub(1),
+            None => normalized,
+        }
+    }
 }
 
 /// Everything that determines a typeset element's shaping and fitting.
@@ -1340,6 +1428,10 @@ fn truncated(
     }
     (shown, pieces)
 }
+
+#[path = "typeset/text_layout.rs"]
+mod text_layout;
+pub use text_layout::install_text_layout;
 
 #[cfg(test)]
 #[path = "typeset/tests.rs"]
