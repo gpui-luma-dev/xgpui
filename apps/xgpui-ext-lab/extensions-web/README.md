@@ -17,6 +17,7 @@ fails explicitly if unavailable; check the browser console for adapter details.
 | `xgpui-shader` | `?demo=brushes` | Universal solid/linear/radial fills and borders, 16-point freeform, regular and tangent-controlled Hermite mesh, Simplex/Worley/dither modulation, glyph masks and direct/native paths. |
 | `xgpui-shader` | `?demo=layers` | Subtree opacity, grayscale/saturation/brightness/contrast/inversion, adaptive/full-resolution blur, seven destination blends and backdrop blur. |
 | `xgpui-parley` | `?demo=parley` | Paragraph shaping, bidirectional text and editing. |
+| `xgpui-parley` | `?demo=bidi` | The desktop text lab's right-to-left view: plain GPUI Hebrew/Arabic/mixed labels, styled runs, end truncation and a GPUI paragraph (`layout_paragraph_with_options`) with direction and width controls. |
 | `xgpui-parley` | `?demo=font-controls` | Shared native-lab weight/width/slant/optical-size sliders, presets, real layout advances and axis/feature inspection in Wasm. |
 | `xgpui-svg` | `?demo=svg` | Progressive SVG rendering and viewport rasterization. |
 
@@ -67,6 +68,11 @@ clipboard access. The supplied server also sends cross-origin isolation headers.
   and resize. Verify Arabic shaping and Hebrew/Latin visual order. Click/drag,
   use arrows and Shift, type, delete grapheme clusters, copy/paste, and try IME
   composition/commit/cancel with the candidate window near the caret.
+- Right to left: run both forced backends with `?demo=bidi`. Check the
+  expectation under each section. In the paragraph, cycle sample, direction
+  and width; click for a caret, drag to select, and use Left/Right with and
+  without Shift. Hebrew (Auto) and Right to left start at the right edge. The
+  view is `text-lab/src/bidi.rs`, shared unchanged with `just text bidi`.
 - The Parley view and input handler are shared directly with `apps/xgpui-ext-lab/text-lab`.
   Timings use a browser clock; reported seed timings measure CPU layout only.
   Bundled IBM Plex Sans and Noto fonts need no system-font access or download.
