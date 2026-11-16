@@ -200,6 +200,11 @@ name = "native_variations"
 path = "text-lab/examples/native_variations.rs"
 required-features = ["native"]
 
+[[example]]
+name = "right_to_left"
+path = "text-lab/examples/right_to_left.rs"
+required-features = ["native"]
+
 [[test]]
 name = "color-tasks"
 path = "extensions-web/src/color_tasks_model.rs"

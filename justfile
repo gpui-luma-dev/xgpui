@@ -92,6 +92,10 @@ window-probes *args:
 font-variations *args:
     @XGPUI_LAB_DIRECT=1 {{ lab }} font-variations "$@"
 
+# The right-to-left text example from xgpui.dev/right-to-left-text.html.
+rtl-example *args:
+    @XGPUI_LAB_DIRECT=1 {{ lab }} rtl-example "$@"
+
 # Browser extension gallery (`just extensions-web build`).
 extensions-web *args:
     @XGPUI_LAB_DIRECT=1 {{ lab }} extensions-web "$@"

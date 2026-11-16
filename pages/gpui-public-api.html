@@ -54,6 +54,18 @@ links the original GPUI commits and pull requests.</p>
 <li><strong>Behavior:</strong> per-run text colors, backgrounds and underlines follow logical runs for right-to-left glyphs on every backend.</li>
 <li><strong>Dependency:</strong> <code>unicode-bidi</code> 0.3 (already in the dependency tree through <code>usvg</code>).</li>
 </ul>
+<h2 id="text-layout-provider-332">Text layout provider for plain text elements (#332)</h2>
+<p>Approved in <a href="https://github.com/gpui-luma-dev/xgpui/pull/350">#350</a>; tracking issue
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>. Not released yet. How-to:
+<a href="right-to-left-text.html">Right-to-left text</a>.</p>
+<ul>
+<li><strong>Added:</strong> <code>TextLayoutProvider</code> (<code>measure</code>), <code>ProvidedTextLayout</code> (<code>size</code>, <code>prepaint</code>, <code>paint_background</code>, <code>paint_foreground</code>, <code>index_for_position</code>, <code>position_for_index</code>, <code>wrapped_text</code>) and <code>TextLayoutRequest</code> (<code>#[non_exhaustive]</code>: text, runs, font size, line height, <code>white_space</code>, <code>text_overflow</code>, <code>line_clamp</code>, <code>text_align</code>). A text engine implements them to lay out GPUI's plain text elements (<code>&amp;'static str</code>, <code>String</code>, <code>SharedString</code>, <code>Text</code>, <code>StyledText</code>, <code>InteractiveText</code>). xgpui-parley's <code>install_text_layout</code> is the implementation.</li>
+<li><strong>Added:</strong> <code>App::set_text_layout_provider</code> and <code>App::clear_text_layout_provider</code>. With no provider, or when the provider returns <code>None</code>, the existing flat-line layout runs unchanged.</li>
+<li><strong>Behavior, only while a provider is registered:</strong> <code>TextLayout::line_layouts</code> is empty and <code>line_layout_for_index</code> returns <code>None</code>, since there are no flat lines. Use <code>position_for_index</code> and <code>index_for_position</code>, which the provider answers.</li>
+<li><strong>Behavior:</strong> <code>TextLayout::wrapped_text</code> no longer panics on wrapped right-to-left text in flat lines; it takes soft-wrap boundaries in text order (<a href="https://github.com/gpui-luma-dev/xgpui/pull/352">#352</a>).</li>
+<li><strong>Behavior:</strong> <code>paint_paragraph</code> paints a paragraph's glyphs in one paint layer and skips glyphs that can't reach the content mask, as GPUI's own lines do (<a href="https://github.com/gpui-luma-dev/xgpui/pull/351">#351</a>). Output is unchanged.</li>
+</ul>
+<p>Source compatibility: additive. No migration is needed. These can't live in an extension: the plain text elements are in core and have no other extension point.</p>
 <h2 id="gpui-1281-sync-284">GPUI 1.28.1 sync: core 4.0 (#284)</h2>
 <p>Upstream API changes carried in from gpui-unofficial 1.28.1, approved individually in the
 <a href="https://github.com/gpui-luma-dev/xgpui/issues/284">#284</a> API review (2026-11-14).

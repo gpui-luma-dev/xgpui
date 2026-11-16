@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Right-to-left and mixed text in GPUI apps with xgpui-parley: plain GPUI text through install_text_layout, and typeset() for an explicit direction or language.">
+<title>Right-to-left text · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/right-to-left-text.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" aria-current="page" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="parley-text.html">← xgpui-parley</a></p><p class="guide-intro"><strong>How-to.</strong> Hebrew, Arabic and mixed text in a GPUI app: plain GPUI text by default, <code>typeset()</code> when you need an explicit direction.</p><article class="extension-document"><h1 id="right-to-left-text">Right-to-left text</h1>
+<p>With Parley as the text system and one call to <code>install_text_layout</code>, ordinary GPUI text handles right-to-left and mixed text: <code>div().child("…")</code>, <code>StyledText</code>, tooltips, list rows and third-party widgets. Each paragraph's direction comes from its first strong character. Reach for <code>typeset()</code> only when the text can't decide for itself, for example a string that starts with Latin in a right-to-left UI.</p>
+<p><strong>Not released yet.</strong> This needs the release after XGPUI 4.1.0 (xgpui-parley after 0.7.0), tracked in <a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>. Until then, depend on the repository.</p>
+<h2 id="what-you-get">What you get</h2>
+<table><thead><tr><th>Setup</th><th>Plain GPUI text</th><th><code>typeset()</code></th></tr></thead><tbody>
+<tr><td>Native text system (CoreText, DirectWrite, …)</td><td>Single-line right-to-left and mixed labels. Wrapped right-to-left text puts its lines in painting order, so the first words land on the last line.</td><td>Renders as plain GPUI text</td></tr>
+<tr><td>Parley text system, without <code>install_text_layout</code></td><td>Same as native</td><td>Full right-to-left: wrapping, clamps, truncation, start/end alignment, explicit direction and language</td></tr>
+<tr><td>Parley text system, with <code>install_text_layout</code></td><td>Full right-to-left, with each paragraph's direction from its text</td><td>The same, plus an explicit direction and language</td></tr>
+</tbody></table>
+<h2 id="example">Example</h2>
+<p>A complete app: Parley as the text system, plain GPUI text whose direction comes from the text, and <code>typeset(…).rtl()</code> for a Latin-first string in a right-to-left UI.</p>
+<pre><code class="language-toml">[dependencies]
+# Until the next release: the repository (packages xgpui, xgpui-platform, xgpui-parley).
+gpui = { package = "xgpui", git = "https://github.com/gpui-luma-dev/xgpui" }
+gpui-platform = { package = "xgpui-platform", git = "https://github.com/gpui-luma-dev/xgpui" }
+xgpui-parley = { git = "https://github.com/gpui-luma-dev/xgpui" }
+parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
+anyhow = "1"
+</code></pre>
+<pre><code class="language-rust">use anyhow::Context as _;
+use gpui::{
+    App, Application, Bounds, Context, SharedString, Window, WindowBounds, WindowOptions, div,
+    prelude::*, px, rgb, size,
+};
+use parley::fontique::{Blob, Script};
+use std::sync::Arc;
+use xgpui_parley::{ParleyTextSystem, install_text_layout, typeset};
+
+// The app's fonts: a Latin UI font and a font that covers Hebrew.
+const FONTS: [&amp;[u8]; 2] = [
+    include_bytes!("../fonts/IBMPlexSans-Regular.ttf"),
+    include_bytes!("../fonts/NotoSansHebrew.ttf"),
+];
+
+const HEBREW: &amp;str = "טקסט עברי ארוך עובר לשורה הבאה, והמילים הראשונות נשארות בשורה העליונה מימין.";
+const MIXED: &amp;str = "Release notes: גרסה 4.2 זמינה עכשיו";
+
+fn main() -&gt; anyhow::Result&lt;()&gt; {
+    // 1. Parley as the text system, with a fallback font for Hebrew.
+    let mut fonts = parley::FontContext::new();
+    for data in FONTS {
+        fonts
+            .collection
+            .register_fonts(Blob::new(Arc::new(data.to_vec())), None);
+    }
+    let hebrew = fonts
+        .collection
+        .family_id("Noto Sans Hebrew")
+        .context("Noto Sans Hebrew is not registered")?;
+    fonts
+        .collection
+        .append_fallbacks(Script::from_bytes(*b"Hebr"), std::iter::once(hebrew));
+    let parley = Arc::new(ParleyTextSystem::new(fonts, "IBM Plex Sans")?);
+
+    let platform = gpui_platform::current_platform(false);
+    Application::with_platform_and_text_system(platform, parley.clone()).run(
+        move |cx: &amp;mut App| {
+            // 2. Lay out plain GPUI text with Parley (also installs `typeset()`).
+            install_text_layout(parley.clone(), cx);
+
+            let bounds = Bounds::centered(None, size(px(620.), px(460.)), cx);
+            cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    ..Default::default()
+                },
+                |_, cx| cx.new(|_| RightToLeft),
+            )
+            .expect("open window");
+            cx.activate(true);
+        },
+    );
+    Ok(())
+}
+
+struct RightToLeft;
+
+impl Render for RightToLeft {
+    fn render(&amp;mut self, _: &amp;mut Window, _: &amp;mut Context&lt;Self&gt;) -&gt; impl IntoElement {
+        let heading = |text: &amp;'static str| div().text_sm().text_color(rgb(0x6b7280)).child(text);
+        let boxed = || div().w(px(260.)).p_2().bg(rgb(0xf3f4f6));
+        div()
+            .size_full()
+            .p_6()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .bg(rgb(0xffffff))
+            .text_color(rgb(0x111827))
+            .font_family("IBM Plex Sans")
+            .text_size(px(16.))
+            // 3. Default: plain GPUI text. Each paragraph's direction comes
+            //    from its first strong character.
+            .child(heading("Default: plain GPUI text"))
+            .child(boxed().child(HEBREW))
+            .child(boxed().child(MIXED))
+            .child(boxed().line_clamp(2).text_ellipsis().child(HEBREW))
+            // 4. Right to left: `typeset()` sets the direction explicitly, for
+            //    text that starts with Latin in a right-to-left UI.
+            .child(heading("Right to left: typeset(…).rtl()"))
+            .child(boxed().child(typeset(SharedString::from(MIXED)).rtl()))
+    }
+}
+</code></pre>
+<p>Bundle your own font files: the example uses IBM Plex Sans for the UI and Noto Sans Hebrew for Hebrew. The repository copy of this example is <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/apps/xgpui-ext-lab/text-lab/examples/right_to_left.rs"><code>text-lab/examples/right_to_left.rs</code></a>; run it with <code>just rtl-example</code>.</p>
+<ol>
+<li><strong>Text system.</strong> <code>ParleyTextSystem</code> (<strong>xgpui-parley</strong>) is built from a Parley <code>FontContext</code> and passed to <code>Application::with_platform_and_text_system</code> (<strong>xgpui</strong>). <code>append_fallbacks</code> tells Parley which font covers Hebrew when the UI font doesn't.</li>
+<li><strong>Plain text.</strong> <code>install_text_layout</code> (<strong>xgpui-parley</strong>) registers a <code>TextLayoutProvider</code> (<strong>xgpui</strong>) with the app, so GPUI's text elements are laid out by Parley. It also installs the engine behind <code>typeset()</code>.</li>
+<li><strong>Default.</strong> The Hebrew paragraph wraps in reading order with its first words at the top right. The mixed string starts with Latin, so it reads left to right. The clamp keeps two lines and ends with an ellipsis.</li>
+<li><strong>Right to left.</strong> <code>typeset(MIXED).rtl()</code> (<strong>xgpui-parley</strong>) lays out the same mixed string as a right-to-left paragraph, as a Hebrew UI would show it.</li>
+</ol>
+<h2 id="default-direction-from-the-text">Default: direction from the text</h2>
+<p>With <code>install_text_layout</code>, every plain GPUI text element is laid out by the same engine as <code>typeset()</code>:</p>
+<ul>
+<li><strong>Direction:</strong> each paragraph uses its first strong character. Text with none, such as numbers alone, is left to right.</li>
+<li><strong>Wrapping:</strong> lines follow reading order, and mixed-direction runs are reordered on every line (the Unicode Bidirectional Algorithm).</li>
+<li><strong>Clamps and truncation:</strong> <code>line_clamp</code> and all three <code>text_overflow</code> modes keep the logical start, end or both, and the ellipsis follows the direction.</li>
+<li><strong>Alignment:</strong> <code>text_align</code> left and right act as start and end, so they mirror for right-to-left text.</li>
+<li><strong>Hit testing:</strong> <code>TextLayout::index_for_position</code> and <code>position_for_index</code> (<strong>xgpui</strong>) answer from the paragraph layout, so <code>InteractiveText</code> clicks and hovers land on the right characters.</li>
+<li><strong>Styles:</strong> highlights, runs, colors, backgrounds, underlines and strikethroughs work as before.</li>
+</ul>
+<h2 id="explicit-direction-typeset">Explicit direction: typeset()</h2>
+<p>Use <code>typeset()</code> (<strong>xgpui-parley</strong>) where the text alone gives the wrong direction or language:</p>
+<pre><code class="language-rust">use xgpui_parley::typeset;
+
+// A Latin-first label in a right-to-left UI.
+div().child(typeset("Release notes: גרסה 4.2").rtl())
+// Language-specific shaping and line breaking.
+div().child(typeset("تقرير الإيرادات").rtl().language("ar".parse()?))
+// Styled ranges, as on StyledText.
+div().child(typeset(text).with_highlights(highlights))
+</code></pre>
+<p><code>.rtl()</code>, <code>.ltr()</code> and <code>.direction(TextDirection::…)</code> set the base direction; <code>.language(…)</code> sets the content language. It inherits the same text style as plain text. Without a Parley engine installed, it renders as plain GPUI text, so components can use it unconditionally.</p>
+<h2 id="without-install-text-layout">Without install_text_layout</h2>
+<p>On native text systems, or on Parley without <code>install_text_layout</code>, plain GPUI text stays on GPUI's flat lines. Single-line right-to-left and mixed labels, per-run styles and end truncation work. Wrapped right-to-left text puts its lines in painting order, and carets and selection inside right-to-left runs follow left-to-right rules. Use <code>typeset()</code> or the <a href="parley-text.html#paragraphs-and-input">paragraph API</a> for those cases. To switch back at runtime, call <code>App::clear_text_layout_provider</code> (<strong>xgpui</strong>).</p>
+<h2 id="cost">Cost</h2>
+<p>Measured with <code>just text layout-cost</code>: a release build on the Parley backend, macOS (Apple silicon), 180 plain text elements per frame (labels, wrapped paragraphs and truncated cells).</p>
+<table><thead><tr><th>Frame</th><th>GPUI's flat lines</th><th>With <code>install_text_layout</code></th></tr></thead><tbody>
+<tr><td>Cold (all new text)</td><td>3.2 ms</td><td>3.8 ms (about 1.15×)</td></tr>
+<tr><td>Warm (same frame again)</td><td>0.50 ms</td><td>0.57 ms (about 1.12×)</td></tr>
+<tr><td>Reflow (width changes)</td><td>0.59 ms</td><td>0.56 ms (0.95×)</td></tr>
+</tbody></table>
+<h2 id="api">API</h2>
+<table><thead><tr><th>Item</th><th>Crate</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>install_text_layout(parley, cx)</code></td><td>xgpui-parley</td><td>Lay out plain GPUI text with Parley; also installs <code>typeset()</code></td></tr>
+<tr><td><code>typeset(text)</code>, <code>Typeset::{rtl, ltr, direction, language, with_highlights, with_runs}</code></td><td>xgpui-parley</td><td>A text element with an explicit direction and language</td></tr>
+<tr><td><code>typeset::install(parley, cx)</code></td><td>xgpui-parley</td><td>Install only <code>typeset()</code>; plain text keeps flat lines</td></tr>
+<tr><td><code>TextLayoutProvider</code>, <code>ProvidedTextLayout</code>, <code>TextLayoutRequest</code></td><td>xgpui</td><td>The hook a text engine implements to lay out plain text elements</td></tr>
+<tr><td><code>App::set_text_layout_provider</code>, <code>App::clear_text_layout_provider</code></td><td>xgpui</td><td>Register or remove that engine</td></tr>
+<tr><td><code>TextLayout::line_layouts</code>, <code>line_layout_for_index</code></td><td>xgpui</td><td>Empty / <code>None</code> while a provider lays out the text; use <code>position_for_index</code> and <code>index_for_position</code></td></tr>
+</tbody></table>
+<p>See <a href="gpui-public-api.html#text-layout-provider-332">GPUI public API changes</a> for the compatibility notes.</p>
+<h2 id="try-it">Try it</h2>
+<pre><code class="language-sh">just rtl-example        # the example above
+just text bidi          # right-to-left page, native and Parley side by side
+just text layout-cost   # frame cost, flat lines versus Parley
+</code></pre>
+<p>The <a href="examples/extensions/?demo=bidi">right-to-left browser demo</a> runs the same page in Wasm. Its section 5 switches plain text between Parley and GPUI's flat lines.</p>
+</article>
+</main>
+<footer>Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>
