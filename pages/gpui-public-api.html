@@ -38,6 +38,22 @@ existing APIs. That integration is awaiting final public API approval. Its
 links the original GPUI commits and pull requests.</p>
 <p>The maintained XGPUI feature changes below are compared with pre-feature main
 <code>9b64657</code>.</p>
+<h2 id="paragraph-text-core-41-325">Paragraph text across backends: core 4.1 (#325)</h2>
+<p>Each change was approved individually in its PR
+(<a href="https://github.com/gpui-luma-dev/xgpui/pull/326">#326</a>–<a href="https://github.com/gpui-luma-dev/xgpui/pull/329">#329</a>,
+<a href="https://github.com/gpui-luma-dev/xgpui/pull/333">#333</a>,
+<a href="https://github.com/gpui-luma-dev/xgpui/pull/336">#336</a>). Tracking issue
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/325">#325</a>; release
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/338">#338</a>.</p>
+<ul>
+<li><strong>Added:</strong> <code>ParagraphSupport</code> (<code>Unsupported</code>, <code>LeftToRight</code>, <code>Full</code>), <code>TextSystem::paragraph_support()</code> and a defaulted <code>PlatformTextSystem::paragraph_support()</code>, so callers no longer infer support from errors.</li>
+<li><strong>Added:</strong> <code>TextDirection</code> (<code>Auto</code>, <code>LeftToRight</code>, <code>RightToLeft</code>), <code>ParagraphShapeOptions</code> (direction and language, <code>#[non_exhaustive]</code>, built with <code>with_direction</code>/<code>with_language</code>), and <code>WindowTextSystem::layout_paragraph_with_options</code>. The options are part of the paragraph cache key; the existing methods pass the defaults.</li>
+<li><strong>Added:</strong> <code>PlatformParagraphShape::content_widths()</code> (defaulted) and <code>WindowTextSystem::paragraph_content_widths(_with_options)</code>: min-content and max-content widths from the cached shape.</li>
+<li><strong>Breaking for struct literals:</strong> <code>ParagraphRequest</code> is <code>#[non_exhaustive]</code> with an <code>options</code> field; build it with <code>ParagraphRequest::new</code>. GPUI builds requests for backends, and no known code constructs one; the owner chose 4.1.0 over 5.0.0 on #338.</li>
+<li><strong>Behavior:</strong> the <code>PlatformTextSystem::shape_paragraph</code> default is now a left-to-right fallback built on <code>layout_line</code> (<code>ParagraphSupport::LeftToRight</code>): native backends and the test platform lay out paragraphs instead of returning an error. Lines wrap in order and align to the base direction's start edge (right for right-to-left; <code>Auto</code> uses the first strong character), and glyph order within a line is the platform shaper's. Check <code>paragraph_support()</code> rather than the error.</li>
+<li><strong>Behavior:</strong> per-run text colors, backgrounds and underlines follow logical runs for right-to-left glyphs on every backend.</li>
+<li><strong>Dependency:</strong> <code>unicode-bidi</code> 0.3 (already in the dependency tree through <code>usvg</code>).</li>
+</ul>
 <h2 id="gpui-1281-sync-284">GPUI 1.28.1 sync: core 4.0 (#284)</h2>
 <p>Upstream API changes carried in from gpui-unofficial 1.28.1, approved individually in the
 <a href="https://github.com/gpui-luma-dev/xgpui/issues/284">#284</a> API review (2026-11-14).
@@ -123,7 +139,7 @@ shader for instanced drawing; shader does not depend on gamut or color.</p>
 <li><code>Application::with_platform_and_text_system(platform, text_system)</code> selects
 an <code>Arc&lt;dyn PlatformTextSystem&gt;</code> before constructing GPUI caches; skips
 <code>Platform::text_system()</code>. Existing construction/native initialization is unchanged.</li>
-<li><code>PlatformTextSystem::shape_paragraph</code> is optional and defaults to Unsupported.</li>
+<li><code>PlatformTextSystem::shape_paragraph</code> is optional; since core 4.1 its default is the left-to-right fallback (<a href="#paragraph-text-core-41-325">above</a>).</li>
 <li><code>WindowTextSystem::layout_paragraph</code> caches immutable
 <code>PlatformParagraphShape</code>/<code>PlatformParagraphLayout</code> results.</li>
 <li><code>paint_paragraph</code> paints visual glyph runs through the existing atlas.
