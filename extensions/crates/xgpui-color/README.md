@@ -130,8 +130,15 @@ local MINDE. Invalid or nonfinite values return `ColorError`.
 `WGSL_COLOR_MATH` contains resource-free WGSL helpers with the `gamut_` prefix.
 Prepend it once to your shader source; it declares no entry point or bindings.
 The GPU contract uses finite `f32` inputs and validated space/policy IDs.
-Space IDs are stable: 0 = sRGB, 1 = Display P3, 2 = Rec.2020, 3 = Adobe RGB (1998).
+Space IDs are stable: 0 = sRGB, 1 = Display P3, 2 = Rec.2020, 3 = Adobe RGB (1998),
+4 = ProPhoto RGB (ROMM RGB). ID 4 uses the same D65-adapted matrices and
+piecewise transfer as the CPU API.
 Mapping IDs are 0 = clip and 1 = fixed-lightness/hue chroma reduction.
+
+OkLCh interpolation treats a stop as hueless when its chroma is at most 1e-7
+on the CPU (f64) and 1e-5 in WGSL. f32 matrices leave neutral grays with chroma
+up to about 2.4e-7, so the GPU threshold is wider to stop neutrals contributing
+a spurious hue; both thresholds are far below a visible chroma difference.
 
 These functions do not change a renderer's output color space. Use the explicit
 linear-P3 contract when integrating wide output with `xgpui-shader` or
@@ -189,6 +196,9 @@ and their adjacent floats, all 65,536 unsigned 16-bit codes, overflow
 rejection, matrices to every named space, scaled conversion grids and the
 single D50/D65 adaptation. The binary64 exponents 1.8 and 1/1.8 are not exact,
 so the transfer budget includes `|ln(x)| * EPSILON` in addition to 16 epsilons.
+Native Metal checks the WGSL ID 4 transfer against 1,076 exact-f32 oracle cases
+(both knees and their f32 neighbours) with the same 8/64-epsilon acceptance as
+Adobe RGB, plus CPU/GPU parity for conversion, mapping, OkLab and gradients.
 
 ```sh
 python3 scripts/generate_prophoto_references.py --check
