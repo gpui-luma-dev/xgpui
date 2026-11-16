@@ -578,6 +578,71 @@ fn explicit_direction_overrides_first_strong_and_sets_the_start_edge() -> Result
 }
 
 #[test]
+fn gpui_options_reach_parley_and_key_the_paragraph_cache() -> Result<()> {
+    use gpui::{ParagraphShapeOptions, TextSystem, WindowTextSystem};
+    let backend = Arc::new(backend()?);
+    let cache = WindowTextSystem::new(Arc::new(TextSystem::new(backend.clone())));
+    let text = "123 456";
+    let runs = runs(&backend, text)?;
+    let width = px(500.0);
+    let rtl = ParagraphShapeOptions::default().with_direction(TextDirection::RightToLeft);
+    let auto = cache.layout_paragraph(text.into(), px(24.0), &runs, width)?;
+    let explicit_auto = cache.layout_paragraph_with_options(
+        text.into(),
+        px(24.0),
+        &runs,
+        &ParagraphShapeOptions::default(),
+        width,
+    )?;
+    // Default options are today's request: same cache entry.
+    assert!(Arc::ptr_eq(&auto, &explicit_auto));
+    let forced = cache.layout_paragraph_with_options(text.into(), px(24.0), &runs, &rtl, width)?;
+    assert!(!Arc::ptr_eq(&auto, &forced));
+    // Neutral text hugs the left edge by default and the right edge when forced RTL.
+    let extent = |layout: &dyn gpui::PlatformParagraphLayout| -> Result<(Pixels, Pixels)> {
+        let rects = layout.selection_bounds(
+            at(0, Affinity::Downstream),
+            at(text.len(), Affinity::Upstream),
+        )?;
+        let left = rects
+            .iter()
+            .map(|r| r.origin.x)
+            .fold(px(f32::MAX), Pixels::min);
+        let right = rects
+            .iter()
+            .map(|r| r.origin.x + r.size.width)
+            .fold(px(f32::MIN), Pixels::max);
+        Ok((left, right))
+    };
+    assert!(extent(&*auto)?.0 < px(0.5));
+    assert!((extent(&*forced)?.1 - width).abs() < px(0.5));
+    // Matches the extension API with the same options.
+    let direct = backend
+        .prepare_paragraph_with_options(
+            text,
+            px(24.0),
+            &runs,
+            options(TextDirection::RightToLeft, None),
+        )?
+        .layout(width)?;
+    assert_eq!(extent(&*forced)?, selection_extent(&direct, text)?);
+
+    let shaped = backend.state.lock().unwrap().shape_calls;
+    let arabic = rtl.clone().with_language("ar");
+    cache.layout_paragraph_with_options(text.into(), px(24.0), &runs, &arabic, width)?;
+    cache.paragraph_content_widths_with_options(text.into(), px(24.0), &runs, &arabic)?;
+    // A language is a new shape; content widths reuse it.
+    assert_eq!(backend.state.lock().unwrap().shape_calls, shaped + 1);
+    let invalid = ParagraphShapeOptions::default().with_language("english");
+    assert!(
+        cache
+            .layout_paragraph_with_options(text.into(), px(24.0), &runs, &invalid, width)
+            .is_err()
+    );
+    Ok(())
+}
+
+#[test]
 fn forced_rtl_keeps_logical_edges_affinity_and_visual_movement() -> Result<()> {
     let backend = backend()?;
     let text = "abc אבג";

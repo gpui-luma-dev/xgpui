@@ -933,7 +933,7 @@ impl WindowTextSystem {
 
     /// Layout one paragraph through an optional backend capability. Uses the
     /// existing frame cache lifecycle; colors/decorations are paint-only inputs.
-    /// This initial API takes resolved FontRuns and automatic direction/start alignment.
+    /// Takes resolved FontRuns, automatic direction and start alignment.
     pub fn layout_paragraph(
         &self,
         text: SharedString,
@@ -941,8 +941,21 @@ impl WindowTextSystem {
         runs: &[FontRun],
         width: Pixels,
     ) -> Result<Arc<dyn PlatformParagraphLayout>> {
+        self.layout_paragraph_with_options(text, font_size, runs, &Default::default(), width)
+    }
+
+    /// Like [`Self::layout_paragraph`], with an explicit base direction and
+    /// content language. Each distinct set of options is shaped and cached separately.
+    pub fn layout_paragraph_with_options(
+        &self,
+        text: SharedString,
+        font_size: Pixels,
+        runs: &[FontRun],
+        options: &ParagraphShapeOptions,
+        width: Pixels,
+    ) -> Result<Arc<dyn PlatformParagraphLayout>> {
         self.line_layout_cache
-            .layout_paragraph(text, font_size, runs, width)
+            .layout_paragraph(text, font_size, runs, options, width)
     }
 
     /// Min-content and max-content widths `(min, max)` of one paragraph, from
@@ -954,8 +967,20 @@ impl WindowTextSystem {
         font_size: Pixels,
         runs: &[FontRun],
     ) -> Result<(Pixels, Pixels)> {
+        self.paragraph_content_widths_with_options(text, font_size, runs, &Default::default())
+    }
+
+    /// Like [`Self::paragraph_content_widths`], with the shaping options used by
+    /// [`Self::layout_paragraph_with_options`].
+    pub fn paragraph_content_widths_with_options(
+        &self,
+        text: SharedString,
+        font_size: Pixels,
+        runs: &[FontRun],
+        options: &ParagraphShapeOptions,
+    ) -> Result<(Pixels, Pixels)> {
         self.line_layout_cache
-            .paragraph_content_widths(text, font_size, runs)
+            .paragraph_content_widths(text, font_size, runs, options)
     }
 
     /// Returns the shaped layout width of for the given character, in the given font and size.
