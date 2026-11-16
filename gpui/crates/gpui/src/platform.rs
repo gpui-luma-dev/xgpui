@@ -1704,6 +1704,10 @@ pub trait PlatformTextSystem: Send + Sync {
     ) -> Result<(Size<DevicePixels>, Vec<u8>)>;
     /// Layout a line of text with the given font runs.
     fn layout_line(&self, text: &str, font_size: Pixels, runs: &[FontRun]) -> LineLayout;
+    /// What `shape_paragraph` supports. Backends that implement it must override this.
+    fn paragraph_support(&self) -> crate::ParagraphSupport {
+        crate::ParagraphSupport::Unsupported
+    }
     /// Optional paragraph capability; native implementations need not opt in.
     fn shape_paragraph(
         &self,

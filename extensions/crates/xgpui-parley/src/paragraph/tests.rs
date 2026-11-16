@@ -184,6 +184,16 @@ fn paragraph_boundaries_empty_layout_and_invalid_geometry_are_explicit() -> Resu
 }
 
 #[test]
+fn reports_full_paragraph_support_through_gpui() -> Result<()> {
+    let text_system = gpui::TextSystem::new(Arc::new(backend()?));
+    assert_eq!(
+        text_system.paragraph_support(),
+        gpui::ParagraphSupport::Full
+    );
+    Ok(())
+}
+
+#[test]
 fn gpui_paragraph_cache_reuses_shapes_reflows_and_invalidates() -> Result<()> {
     use gpui::{PlatformParagraphLayout, TextSystem, WindowTextSystem};
     let backend = Arc::new(backend()?);

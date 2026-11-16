@@ -2,6 +2,34 @@
 use crate::{Bounds, FontRun, Hsla, Pixels, Point, Result, ShapedRun, Size, Window};
 use std::sync::Arc;
 
+/// What a text backend's paragraph layout supports, so callers need not infer
+/// support from `layout_paragraph` errors.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum ParagraphSupport {
+    /// `layout_paragraph` returns an error.
+    #[default]
+    Unsupported,
+    /// Wrapping, hit testing, carets, visual movement and selection, in
+    /// left-to-right visual order only. Runs keep the backend's line shaping.
+    LeftToRight,
+    /// Everything in `LeftToRight`, plus bidirectional reordering and automatic
+    /// base direction.
+    Full,
+}
+
+impl ParagraphSupport {
+    /// `layout_paragraph` can succeed on this backend.
+    pub fn supports_layout(self) -> bool {
+        self >= Self::LeftToRight
+    }
+
+    /// Mixed-direction and right-to-left paragraphs are laid out in visual order.
+    pub fn supports_bidi(self) -> bool {
+        self >= Self::Full
+    }
+}
+
 /// Side of a logical boundary at a wrap or bidirectional transition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextAffinity {
@@ -106,4 +134,27 @@ pub struct ParagraphRequest<'a> {
     pub font_size: Pixels,
     /// Ordered runs covering source bytes, or empty for the backend default.
     pub runs: &'a [FontRun],
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ParagraphSupport;
+    use crate::{NoopTextSystem, TextSystem};
+    use std::sync::Arc;
+
+    #[test]
+    fn paragraph_support_levels_and_backend_default() {
+        assert!(!ParagraphSupport::Unsupported.supports_layout());
+        assert!(ParagraphSupport::LeftToRight.supports_layout());
+        assert!(!ParagraphSupport::LeftToRight.supports_bidi());
+        assert!(ParagraphSupport::Full.supports_layout());
+        assert!(ParagraphSupport::Full.supports_bidi());
+        assert_eq!(ParagraphSupport::default(), ParagraphSupport::Unsupported);
+
+        let text_system = TextSystem::new(Arc::new(NoopTextSystem::new()));
+        assert_eq!(
+            text_system.paragraph_support(),
+            ParagraphSupport::Unsupported
+        );
+    }
 }
