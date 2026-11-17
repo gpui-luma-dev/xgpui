@@ -1,11 +1,18 @@
 //! The WGSL and MSL spine helpers agree with the f64 CPU projection.
 #![cfg(feature = "spine")]
 
+use xgpui_curve::spine::CURVE_SPINE_WGSL;
+// The GPU comparison runs on Metal, so its cases and checks are macOS-only;
+// WGSL translation is checked everywhere.
+#[cfg(target_os = "macos")]
 use xgpui_curve::kurbo::{ParamCurve, Point};
+#[cfg(target_os = "macos")]
 use xgpui_curve::measure::quad_arclen;
-use xgpui_curve::spine::{CURVE_SPINE_MSL, CURVE_SPINE_WGSL, CurveSpine};
+#[cfg(target_os = "macos")]
+use xgpui_curve::spine::{CURVE_SPINE_MSL, CurveSpine};
 
 /// (point, t_min, t_max, spine) cases, packed three `vec4`s per case.
+#[cfg(target_os = "macos")]
 fn cases() -> Vec<(Point, f32, f32, CurveSpine)> {
     let spines = [
         CurveSpine::new(Point::new(0., 0.), Point::new(0.5, 0.8), Point::new(1., 0.)).unwrap(),
@@ -36,6 +43,7 @@ fn cases() -> Vec<(Point, f32, f32, CurveSpine)> {
     out
 }
 
+#[cfg(target_os = "macos")]
 fn packed(cases: &[(Point, f32, f32, CurveSpine)]) -> Vec<[f32; 4]> {
     cases
         .iter()
@@ -90,6 +98,7 @@ fn wgsl_translates_to_all_native_shader_languages() {
 
 /// Check one GPU result against the CPU, allowing for f32 precision and for
 /// ties between equidistant spine points (t is checked through its distance).
+#[cfg(target_os = "macos")]
 fn check(case: &(Point, f32, f32, CurveSpine), gpu: [f32; 4], label: &str) {
     let (p, lo, hi, spine) = case;
     let cpu = spine.project_range(*p, *lo as f64, *hi as f64);
