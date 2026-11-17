@@ -1,6 +1,7 @@
 //! Spine inspector: a quadratic field spine with its projection field drawn
 //! on the GPU by `CURVE_SPINE_WGSL` (or on the CPU in f64), the inner-bend
-//! seam rule, trimming, the T/N frame and the arrowhead.
+//! seam rule, trimming, the T/N frame and the arrowhead. The difference view
+//! checks the GPU projection against the CPU f64 one, tile by tile.
 use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
 use std::sync::Arc;
@@ -15,6 +16,7 @@ pub struct SpineInstance {
     a: [f32; 4],
     b: [f32; 4],
     style: [f32; 4],
+    reference: [f32; 4],
 }
 
 impl ShaderInstance for SpineInstance {
@@ -32,6 +34,11 @@ impl ShaderInstance for SpineInstance {
         InstanceField {
             name: "style",
             offset: std::mem::offset_of!(Self, style),
+            components: 4,
+        },
+        InstanceField {
+            name: "reference",
+            offset: std::mem::offset_of!(Self, reference),
             components: 4,
         },
     ];
@@ -56,12 +63,16 @@ impl Mode {
 
 const TRIMS: [(f64, f64); 4] = [(0., 1.), (0.2, 0.8), (0., 0.5), (0.35, 1.)];
 const RADIUS: f64 = 70.;
+/// Difference view: tile size and the agreement tolerance, in screen pixels.
+const DIFF_TILE: f64 = 8.;
+const DIFF_TOLERANCE: f64 = 0.5;
 
 pub struct SpinePanel {
     /// Control points in 0..1 of the canvas.
     points: [KPoint; 3],
     mode: Mode,
     gpu: bool,
+    diff: bool,
     limit: bool,
     trim: usize,
     frame_t: f64,
@@ -94,6 +105,7 @@ impl SpinePanel {
             ],
             mode: Mode::Bands,
             gpu: true,
+            diff: false,
             limit: false,
             trim: 0,
             frame_t: 0.35,
@@ -230,15 +242,16 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
     let spine = panel.spine(bounds);
     let (lo, hi) = TRIMS[panel.trim];
     let program = panel.program();
-    let cpu = if panel.gpu {
+    let cpu = if panel.gpu || panel.diff {
         None
     } else {
         panel.cpu_image(bounds)
     };
     let view = panel.view;
+    let diff = panel.diff;
     let (mode, gpu, limit, frame_t, points) = (
         panel.mode,
-        panel.gpu,
+        panel.gpu || diff,
         panel.limit,
         panel.frame_t,
         panel.points,
@@ -270,6 +283,12 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
         .child(
             button(renderer, gpu).on_click(cx.listener(|this, _, _, cx| {
                 this.spine.gpu = !this.spine.gpu;
+                cx.notify();
+            })),
+        )
+        .child(
+            button("CPU vs GPU difference", diff).on_click(cx.listener(|this, _, _, cx| {
+                this.spine.diff = !this.spine.diff;
                 cx.notify();
             })),
         )
@@ -311,6 +330,10 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
             "∞".into()
         },
         match hover {
+            _ if diff => format!(
+                "difference: grey = GPU f32 vs CPU f64 distance error (log, white at \
+                 {DIFF_TOLERANCE}px) · magenta > {DIFF_TOLERANCE}px · amber = seam tie"
+            ),
             Some(h) => format!(
                 "pointer: t {:.3}, s {:.3}, perp {:+.1}px",
                 h.t, h.s, h.distance
@@ -379,13 +402,20 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
                 let local = Affine::translate(-kp(bounds.origin).to_vec2()) * t;
                 let q = spine.quad();
                 let [p0, c, p1] = [q.p0, q.p1, q.p2].map(|p| local * p);
-                let instance = SpineInstance {
-                    a: [p0.x as f32, p0.y as f32, c.x as f32, c.y as f32],
-                    b: [p1.x as f32, p1.y as f32, lo as f32, hi as f32],
-                    style: [mode.index(), RADIUS as f32, zoom as f32, 0.],
-                };
-                if let Err(e) = window.paint_custom_shader(bounds, program, instance) {
-                    log::error!("spine field: {e:#}");
+                let a = [p0.x as f32, p0.y as f32, c.x as f32, c.y as f32];
+                let b = [p1.x as f32, p1.y as f32, lo as f32, hi as f32];
+                if diff {
+                    paint_difference(window, bounds, program, a, b);
+                } else {
+                    let instance = SpineInstance {
+                        a,
+                        b,
+                        style: [mode.index(), RADIUS as f32, zoom as f32, 0.],
+                        reference: [0.; 4],
+                    };
+                    if let Err(e) = window.paint_custom_shader(bounds, program, instance) {
+                        log::error!("spine field: {e:#}");
+                    }
                 }
             }
             let q = spine.quad();
@@ -447,11 +477,77 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
         .into_any_element()
 }
 
+/// One shader instance per tile. The CPU projects the tile centre in f64 onto
+/// the spine exactly as the GPU receives it (f32 inputs), and the shader
+/// projects the same point and shades the disagreement.
+fn paint_difference(
+    window: &mut Window,
+    bounds: Bounds<Pixels>,
+    program: &ShaderProgram<SpineInstance>,
+    a: [f32; 4],
+    b: [f32; 4],
+) {
+    let f = |x: f32, y: f32| KPoint::new(x as f64, y as f64);
+    let Ok(spine) = CurveSpine::new(f(a[0], a[1]), f(a[2], a[3]), f(b[0], b[1])) else {
+        return;
+    };
+    let (w, h) = (
+        f64::from(f32::from(bounds.size.width)),
+        f64::from(f32::from(bounds.size.height)),
+    );
+    let (cols, rows) = (
+        (w / DIFF_TILE).ceil() as usize,
+        (h / DIFF_TILE).ceil() as usize,
+    );
+    for row in 0..rows {
+        for col in 0..cols {
+            let (x, y) = (col as f64 * DIFF_TILE, row as f64 * DIFF_TILE);
+            let centre = [(x + DIFF_TILE / 2.) as f32, (y + DIFF_TILE / 2.) as f32];
+            let hit = spine.project_range(f(centre[0], centre[1]), b[2] as f64, b[3] as f64);
+            let tile = Bounds::new(
+                bounds.origin + point(px(x as f32), px(y as f32)),
+                size(
+                    px(DIFF_TILE.min(w - x) as f32),
+                    px(DIFF_TILE.min(h - y) as f32),
+                ),
+            );
+            let instance = SpineInstance {
+                a,
+                b,
+                style: [3., RADIUS as f32, 1., DIFF_TOLERANCE as f32],
+                reference: [centre[0], centre[1], hit.distance as f32, hit.s as f32],
+            };
+            if let Err(e) = window.paint_custom_shader(tile, program, instance) {
+                log::error!("spine difference: {e:#}");
+                return;
+            }
+        }
+    }
+}
+
 /// The next frame position: steps of 0.15 that stop at t = 1 before wrapping to 0.
 fn next_frame_t(t: f64) -> f64 {
     if t >= 1. {
         0.
     } else {
         (((t + 0.15) * 100.).round() / 100.).min(1.)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SpinePanel, next_frame_t};
+
+    #[test]
+    fn spine_field_shader_compiles_with_difference_mode() {
+        SpinePanel::new()
+            .program()
+            .expect("spine_field.wgsl with CURVE_SPINE_WGSL");
+    }
+
+    #[test]
+    fn frame_steps_stop_at_one_then_wrap() {
+        assert_eq!(next_frame_t(0.95), 1.);
+        assert_eq!(next_frame_t(1.), 0.);
     }
 }

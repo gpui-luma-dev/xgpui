@@ -192,3 +192,118 @@ fn clipped_series_stays_in_the_viewport() {
         assert!(p.x >= 0.5 - 1e-6 && p.x <= 4.5 + 1e-6 && p.y >= 1.5 - 1e-6 && p.y <= 4. + 1e-6);
     }
 }
+
+fn radar() -> Vec<Point> {
+    pts(&[(0., -4.), (3., -1.), (2., 3.), (-1., 2.5), (-3., -1.)])
+}
+
+/// The tangent leaving the start of the path and the one arriving at its end
+/// (the closing segment's end, which is the start point).
+fn seam_tangents(path: &BezPath) -> (geom::Vec2, geom::Vec2) {
+    let segs: Vec<PathSeg> = path.segments().collect();
+    let (first, last) = (segs[0], segs[segs.len() - 1]);
+    (geom::deriv1(first, 0.), geom::deriv1(last, 1.))
+}
+
+#[test]
+fn closed_curves_close_and_interpolate() {
+    for curve in [
+        ClosedCurve::Linear,
+        ClosedCurve::Cardinal { tension: 0.3 },
+        ClosedCurve::CatmullRom { alpha: 0. },
+        ClosedCurve::CatmullRom { alpha: 0.5 },
+        ClosedCurve::CatmullRom { alpha: 1. },
+    ] {
+        let path = series_path_closed(&radar(), curve);
+        assert_eq!(
+            path.elements().last(),
+            Some(&PathEl::ClosePath),
+            "{curve:?}"
+        );
+        let mut expected = radar();
+        // Linear closes with ClosePath; curves draw the closing span.
+        if curve != ClosedCurve::Linear {
+            expected.push(radar()[0]);
+        }
+        assert_eq!(ends(&path), expected, "{curve:?}");
+    }
+}
+
+#[test]
+fn closed_smooth_curves_have_no_corner_at_the_seam() {
+    for curve in [
+        ClosedCurve::Basis,
+        ClosedCurve::Cardinal { tension: 0. },
+        ClosedCurve::CatmullRom { alpha: 0.5 },
+    ] {
+        let path = series_path_closed(&radar(), curve);
+        let (out, back) = seam_tangents(&path);
+        let cross = out.cross(back) / (out.hypot() * back.hypot());
+        assert!(cross.abs() < 1e-9 && out.dot(back) > 0., "{curve:?}");
+        assert_eq!(ends(&path).first(), ends(&path).last(), "{curve:?}");
+    }
+}
+
+#[test]
+fn closed_basis_matches_the_open_spline_on_wrapped_samples() {
+    // Away from the ends, the open basis over the samples repeated three times
+    // traces the closed curve; its middle copy must match span for span.
+    let p = radar();
+    let n = p.len();
+    let tripled: Vec<Point> = p.iter().cycle().take(3 * n).copied().collect();
+    let open: Vec<PathSeg> = series_path(&tripled, SeriesCurve::Basis)
+        .segments()
+        .collect();
+    let closed: Vec<PathSeg> = series_path_closed(&p, ClosedCurve::Basis)
+        .segments()
+        .collect();
+    // Open: line, then span i ends at knot(p[i-1], p[i], p[i+1]) for i in 1..; the
+    // closed path's span j ends at knot(p[j], p[j+1], p[j+2]).
+    for (j, seg) in closed.iter().enumerate().take(n) {
+        let PathSeg::Cubic(c) = open[1 + n + j] else {
+            panic!("cubic expected");
+        };
+        let PathSeg::Cubic(d) = *seg else {
+            panic!("cubic expected");
+        };
+        for t in [0., 0.5, 1.] {
+            assert!((c.eval(t) - d.eval(t)).hypot() < 1e-12, "span {j}");
+        }
+    }
+}
+
+#[test]
+fn closed_tension_one_is_the_polygon() {
+    let path = series_path_closed(&radar(), ClosedCurve::Cardinal { tension: 1. });
+    for seg in path.segments() {
+        let PathSeg::Cubic(c) = seg else { continue };
+        let chord = c.p3 - c.p0;
+        assert!(chord.cross(c.p1 - c.p0).abs() < 1e-12);
+        assert!(chord.cross(c.p2 - c.p0).abs() < 1e-12);
+    }
+}
+
+#[test]
+fn closed_series_edge_cases() {
+    assert!(series_path_closed(&[], ClosedCurve::Basis).is_empty());
+    let single = series_path_closed(&pts(&[(1., 2.)]), ClosedCurve::Basis);
+    assert_eq!(ends(&single), pts(&[(1., 2.)]));
+    let pair = series_path_closed(&pts(&[(0., 0.), (1., 0.)]), ClosedCurve::Basis);
+    assert_eq!(pair.elements().len(), 3);
+    // A repeated first sample and a missing one are both tolerated.
+    let mut p = radar();
+    let clean = series_path_closed(&p, ClosedCurve::CatmullRom { alpha: 0.5 });
+    p.push(p[0]);
+    p.insert(2, Point::new(f64::NAN, 0.));
+    let messy = series_path_closed(&p, ClosedCurve::CatmullRom { alpha: 0.5 });
+    assert_eq!(clean, messy);
+    // Closed area is the shape's, regardless of where the loop starts.
+    let mut rotated = radar();
+    rotated.rotate_left(2);
+    use geom::Shape;
+    for curve in [ClosedCurve::Basis, ClosedCurve::CatmullRom { alpha: 0.5 }] {
+        let a = series_path_closed(&radar(), curve).area();
+        let b = series_path_closed(&rotated, curve).area();
+        assert!((a - b).abs() < 1e-9, "{curve:?}: {a} vs {b}");
+    }
+}

@@ -78,6 +78,7 @@ struct Contour {
 
 /// Where an arc-length position falls on a [`MeasuredPath`].
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct Location {
     /// Contour (subpath) index.
     pub contour: usize,

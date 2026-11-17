@@ -80,6 +80,14 @@ assert!((Easing::EASE.eval(0.5) - 0.8024).abs() < 1e-4);
 # Ok::<(), xgpui_curve::CurveError>(())
 ```
 
+## Compatibility
+
+Enums that may gain variants (curve kinds, caps, joins, easings, node modes,
+errors) and the structs that report results (`Location`, `NearestPoint`,
+`Intersection`, `PathHit`, `EdgeHit`, `SpinePoint`) are `#[non_exhaustive]`,
+so new variants and fields can be added in minor releases. Match them with a
+wildcard arm.
+
 ## GPUI public API changes: additions and compatibility
 
 None. The optional `gpui` feature uses the existing `PathBuilder` and

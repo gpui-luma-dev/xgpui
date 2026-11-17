@@ -61,6 +61,11 @@ let samples = [Point::new(0., 3.), Point::new(1., 5.), Point::new(f64::NAN, 0.),
 let line = series_path_clipped(&amp;samples, SeriesCurve::CatmullRom { alpha: 0.5 }, Rect::new(0., 0., 4., 5.5));
 let area = series_area(&amp;samples, SeriesCurve::Natural, Baseline::Constant(0.));
 </code></pre>
+<p><code>series_path_closed</code> draws one closed outline, such as a radar chart, with d3's closed curves (<code>ClosedCurve::Linear</code>, <code>Basis</code>, <code>Cardinal</code> and <code>CatmullRom</code>). The curve wraps from the last sample to the first with no corner at the seam. Here a non-finite sample is skipped rather than breaking the outline.</p>
+<pre><code class="language-rust">use xgpui_curve::series::{ClosedCurve, series_path_closed};
+
+let outline = series_path_closed(&amp;spokes, ClosedCurve::CatmullRom { alpha: 0.5 });
+</code></pre>
 <h2 id="mesh-lattices">Mesh-gradient lattices</h2>
 <p>A <code>MeshLattice</code> is an R × C grid of points with a tangent per node and axis: <code>Tangent::Auto</code> (central difference, one-sided at the border) or <code>Tangent::Explicit</code>. Both are clamped to 0.7 × the distance to the nearer neighbour, which keeps patches from folding. Its edges are the exact cubic boundaries of the mesh-gradient patches, so a wireframe drawn from the lattice lies on the rendered edges.</p>
 <pre><code class="language-rust">use xgpui_curve::kurbo::{Point, Vec2};
@@ -90,7 +95,7 @@ let arrow = spine.arrowhead(0.03, 0.45); // wings along the terminal tangent
 let params = spine.shader_params(0.0, 1.0); // [p0, control, p1, t_min, t_max] as f32
 </code></pre>
 <p><strong>The seam.</strong> Beyond the centre of curvature on the inside of a bend, the nearest point can jump between the arms. <code>reach()</code> is that distance (1 / maximum curvature); <code>limit_bend(radius)</code> straightens the spine until the reach is at least the radius your kernel samples.</p>
-<p><strong>Shaders.</strong> <code>CURVE_SPINE_WGSL</code> and <code>CURVE_SPINE_MSL</code> (include it after <code>#include &lt;metal_stdlib&gt;</code>) define <code>curve_spine_project(p, p0, c, p1, t_min, t_max)</code>, returning <code>(signed distance, t, s, length)</code>. Straight spines, coincident points and edge-of-domain inputs stay finite. Tests run both versions on Metal and compare them with the f64 CPU result.</p>
+<p><strong>Shaders.</strong> <code>CURVE_SPINE_WGSL</code> and <code>CURVE_SPINE_MSL</code> (include it after <code>#include &lt;metal_stdlib&gt;</code>) define <code>curve_spine_project(p, p0, c, p1, t_min, t_max)</code>, returning <code>(signed distance, t, s, length)</code>. Straight spines, coincident points and edge-of-domain inputs stay finite. Tests run both versions on Metal and compare them with the f64 CPU result. The curve lab's spine inspector has a CPU-vs-GPU difference view that does the same comparison live, tile by tile, and highlights any tile off by more than half a pixel.</p>
 <pre><code class="language-rust">let source = format!(&quot;{}\n{}&quot;, xgpui_curve::spine::CURVE_SPINE_WGSL, include_str!(&quot;my_field.wgsl&quot;));
 // In my_field.wgsl:
 //   let r = curve_spine_project(input.position, p.a.xy, p.a.zw, p.b.xy, p.b.z, p.b.w);

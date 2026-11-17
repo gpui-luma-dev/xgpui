@@ -7,6 +7,7 @@ use crate::geom::{BezPath, Point, Rect, clip_to_rect};
 
 /// How a series connects its samples.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub enum SeriesCurve {
     /// Straight segments.
     #[default]
@@ -60,8 +61,110 @@ pub fn series_path_clipped(points: &[Point], curve: SeriesCurve, viewport: Rect)
     clip_to_rect(&series_path(points, curve), viewport)
 }
 
+/// How a closed series (a radar or polar outline) connects its samples. These
+/// are d3-shape's closed curves; the curve wraps from the last sample back to
+/// the first with the same smoothness as everywhere else.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[non_exhaustive]
+pub enum ClosedCurve {
+    /// Straight segments (a polygon).
+    #[default]
+    Linear,
+    /// Uniform cubic B-spline over the cyclic samples; smooth (C²) everywhere
+    /// but passes through no sample.
+    Basis,
+    /// Cardinal spline through every sample; tension 0 is Catmull-Rom with
+    /// uniform parameterization, 1 gives straight lines.
+    Cardinal {
+        /// Tension in `0..=1`.
+        tension: f64,
+    },
+    /// Catmull-Rom through every sample; alpha 0.5 is centripetal, 0 uniform,
+    /// 1 chordal.
+    CatmullRom {
+        /// Alpha in `0..=1`.
+        alpha: f64,
+    },
+}
+
+/// Build one closed subpath through `points` in order, wrapping from the last
+/// sample to the first. Non-finite samples are skipped (the outline joins the
+/// samples on either side) rather than breaking it, and a last sample equal to
+/// the first is ignored, so a polygon may be given either way. Fewer than
+/// three samples are joined with straight segments; no samples give an empty
+/// path.
+pub fn series_path_closed(points: &[Point], curve: ClosedCurve) -> BezPath {
+    let mut p: Vec<Point> = points.iter().copied().filter(|q| finite(*q)).collect();
+    if p.len() > 1 && p[0] == p[p.len() - 1] {
+        p.pop();
+    }
+    let mut path = BezPath::new();
+    let n = p.len();
+    if n == 0 {
+        return path;
+    }
+    let at = |i: usize| p[i % n];
+    if n < 3 {
+        path.move_to(p[0]);
+        p[1..].iter().for_each(|q| path.line_to(*q));
+        path.close_path();
+        return path;
+    }
+    match curve {
+        ClosedCurve::Linear => {
+            path.move_to(p[0]);
+            p[1..].iter().for_each(|q| path.line_to(*q));
+        }
+        ClosedCurve::Basis => {
+            let third = |a: Point, b: Point| a.lerp(b, 1. / 3.);
+            let knot = |a: Point, b: Point, c: Point| {
+                Point::new((a.x + 4. * b.x + c.x) / 6., (a.y + 4. * b.y + c.y) / 6.)
+            };
+            path.move_to(knot(at(n - 1), p[0], p[1]));
+            for i in 0..n {
+                let (a, b) = (at(i), at(i + 1));
+                path.curve_to(third(a, b), third(b, a), knot(a, b, at(i + 2)));
+            }
+        }
+        ClosedCurve::Cardinal { tension } => {
+            cardinal_closed(&mut path, &p, (1. - tension.clamp(0., 1.)) / 6.)
+        }
+        ClosedCurve::CatmullRom { alpha } => {
+            let alpha = alpha.clamp(0., 1.);
+            if alpha == 0. {
+                cardinal_closed(&mut path, &p, 1. / 6.);
+            } else {
+                path.move_to(p[0]);
+                for i in 0..n {
+                    let (c1, c2) = catmull_rom_controls(
+                        Some(at(i + n - 1)),
+                        at(i),
+                        at(i + 1),
+                        Some(at(i + 2)),
+                        alpha,
+                    );
+                    path.curve_to(c1, c2, at(i + 1));
+                }
+            }
+        }
+    }
+    path.close_path();
+    path
+}
+
+fn cardinal_closed(path: &mut BezPath, p: &[Point], k: f64) {
+    let n = p.len();
+    let at = |i: usize| p[i % n];
+    path.move_to(p[0]);
+    for i in 0..n {
+        let (prev, a, b, next) = (at(i + n - 1), at(i), at(i + 1), at(i + 2));
+        path.curve_to(a + k * (b - prev), b + k * (a - next), b);
+    }
+}
+
 /// The lower edge of an area fill.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Baseline<'a> {
     /// A horizontal line at this y.
     Constant(f64),
@@ -228,42 +331,54 @@ fn catmull_rom(path: &mut BezPath, p: &[Point], alpha: f64) {
         path.line_to(p[1]);
         return;
     }
+    for i in 0..n - 1 {
+        let prev = (i > 0).then(|| p[i - 1]);
+        let next = (i + 2 < n).then(|| p[i + 2]);
+        let (c1, c2) = catmull_rom_controls(prev, p[i], p[i + 1], next, alpha);
+        path.curve_to(c1, c2, p[i + 1]);
+    }
+}
+
+/// Bézier controls for the Catmull-Rom span `p1..p2`; a missing or coincident
+/// neighbour leaves that control on its endpoint, as d3 does.
+fn catmull_rom_controls(
+    p0: Option<Point>,
+    p1: Point,
+    p2: Point,
+    p3: Option<Point>,
+    alpha: f64,
+) -> (Point, Point) {
     let pow = |a: Point, b: Point| (a - b).hypot2().powf(alpha);
     const EPS: f64 = 1e-12;
-    for i in 0..n - 1 {
-        let (p1, p2) = (p[i], p[i + 1]);
-        let l12_2a = pow(p1, p2);
-        let l12_a = l12_2a.sqrt();
-        let mut c1 = p1;
-        let mut c2 = p2;
-        if i > 0 {
-            let p0 = p[i - 1];
-            let l01_2a = pow(p0, p1);
-            let l01_a = l01_2a.sqrt();
-            if l01_a > EPS {
-                let a = 2. * l01_2a + 3. * l01_a * l12_a + l12_2a;
-                let m = 3. * l01_a * (l01_a + l12_a);
-                c1 = Point::new(
-                    (p1.x * a - p0.x * l12_2a + p2.x * l01_2a) / m,
-                    (p1.y * a - p0.y * l12_2a + p2.y * l01_2a) / m,
-                );
-            }
+    let l12_2a = pow(p1, p2);
+    let l12_a = l12_2a.sqrt();
+    let mut c1 = p1;
+    let mut c2 = p2;
+    if let Some(p0) = p0 {
+        let l01_2a = pow(p0, p1);
+        let l01_a = l01_2a.sqrt();
+        if l01_a > EPS {
+            let a = 2. * l01_2a + 3. * l01_a * l12_a + l12_2a;
+            let m = 3. * l01_a * (l01_a + l12_a);
+            c1 = Point::new(
+                (p1.x * a - p0.x * l12_2a + p2.x * l01_2a) / m,
+                (p1.y * a - p0.y * l12_2a + p2.y * l01_2a) / m,
+            );
         }
-        if i + 2 < n {
-            let p3 = p[i + 2];
-            let l23_2a = pow(p2, p3);
-            let l23_a = l23_2a.sqrt();
-            if l23_a > EPS {
-                let b = 2. * l23_2a + 3. * l23_a * l12_a + l12_2a;
-                let m = 3. * l23_a * (l23_a + l12_a);
-                c2 = Point::new(
-                    (p2.x * b + p1.x * l23_2a - p3.x * l12_2a) / m,
-                    (p2.y * b + p1.y * l23_2a - p3.y * l12_2a) / m,
-                );
-            }
-        }
-        path.curve_to(c1, c2, p2);
     }
+    if let Some(p3) = p3 {
+        let l23_2a = pow(p2, p3);
+        let l23_a = l23_2a.sqrt();
+        if l23_a > EPS {
+            let b = 2. * l23_2a + 3. * l23_a * l12_a + l12_2a;
+            let m = 3. * l23_a * (l23_a + l12_a);
+            c2 = Point::new(
+                (p2.x * b + p1.x * l23_2a - p3.x * l12_2a) / m,
+                (p2.y * b + p1.y * l23_2a - p3.y * l12_2a) / m,
+            );
+        }
+    }
+    (c1, c2)
 }
 
 /// d3's natural-spline control points for one coordinate.

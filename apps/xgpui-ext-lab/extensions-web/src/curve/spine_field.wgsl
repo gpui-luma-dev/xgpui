@@ -5,11 +5,36 @@ struct Parameters {
     a: vec4<f32>,
     // p1.xy in pixels, t_min, t_max.
     b: vec4<f32>,
-    // mode (0 bands, 1 texture, 2 bent field), kernel radius, view zoom, unused.
+    // mode (0 bands, 1 texture, 2 bent field, 3 difference), kernel radius,
+    // view zoom, difference tolerance in pixels.
     style: vec4<f32>,
+    // Difference mode: sample point xy and the CPU f64 projection there
+    // (signed distance, s), all in the same pixels as `a` and `b`.
+    reference: vec4<f32>,
+}
+
+// Difference mode: project the CPU's sample point here in f32 and compare.
+// Grey brightness is the distance error on a log scale (black 1e-6px, white
+// at the tolerance); magenta exceeds the tolerance; amber means the distances
+// agree but the nearest point differs (an equidistant tie at the seam).
+fn difference(p: Parameters) -> vec4<f32> {
+    let r = curve_spine_project(p.reference.xy, p.a.xy, p.a.zw, p.b.xy, p.b.z, p.b.w);
+    let tolerance = max(p.style.w, 1e-6);
+    let error = abs(r.x - p.reference.z);
+    if (error > tolerance) {
+        return vec4<f32>(1.0, 0.1, 0.8, 1.0);
+    }
+    if (abs(r.z - p.reference.w) * r.w > tolerance) {
+        return vec4<f32>(1.0, 0.7, 0.1, 1.0);
+    }
+    let level = clamp((log2(error + 1e-9) - log2(1e-6)) / (log2(tolerance) - log2(1e-6)), 0.0, 1.0);
+    return vec4<f32>(vec3<f32>(0.08 + 0.6 * level), 1.0);
 }
 
 fn shade(input: ShaderInput, p: Parameters) -> vec4<f32> {
+    if (p.style.x > 2.5) {
+        return difference(p);
+    }
     let r = curve_spine_project(input.position, p.a.xy, p.a.zw, p.b.xy, p.b.z, p.b.w);
     // Back to unzoomed pixels so the pattern zooms with the view.
     let d = r.x / max(p.style.z, 1e-6);

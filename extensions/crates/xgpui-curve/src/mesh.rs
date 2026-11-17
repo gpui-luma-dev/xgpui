@@ -16,6 +16,7 @@ pub const DEFAULT_TANGENT_LIMIT: f64 = 0.7;
 
 /// A node tangent along one axis.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub enum Tangent {
     /// Central difference of the neighbors (one-sided at the border).
     #[default]
@@ -61,6 +62,7 @@ pub struct MeshControl {
 
 /// The nearest wire to a point.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct EdgeHit {
     /// Start row of the edge.
     pub row: usize,
