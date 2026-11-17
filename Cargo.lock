@@ -8295,6 +8295,7 @@ dependencies = [
  "anyhow",
  "web-time",
  "xgpui",
+ "xgpui-curve",
 ]
 
 [[package]]

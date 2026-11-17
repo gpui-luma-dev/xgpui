@@ -51,8 +51,8 @@ results are prevented from replacing newer settings.
 
 `path_effects::{Contour, MeasuredPath, PathEffect}` provides trim and phased dash
 operations on retained line, quadratic and cubic contours before stroke
-tessellation. Arc lengths are approximate. This API does not convert imported
-SVG documents into native path geometry.
+tessellation. Measuring, trimming and dashing use `xgpui-curve`. This API does
+not convert imported SVG documents into native path geometry.
 
 See the [SVG guide](https://xgpui.dev/svg-rendering.html)
 for construction, viewport defaults, scheduling, path effects and supported limits.

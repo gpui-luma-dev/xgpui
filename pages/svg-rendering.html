@@ -197,8 +197,10 @@ let effect = PathEffect::new()
     .dash(&amp;[px(16.), px(8.)], px(5.))?;
 window.paint_path(measured.stroke(&amp;effect, px(4.))?, gpui::rgb(0x9ee3bd));
 </code></pre>
-<p>Contours retain line, quadratic and cubic verbs. Arc-length lookup uses cached
-adaptive subdivisions, including collinear curves with nonlinear parameter speed.
+<p>Contours retain line, quadratic and cubic verbs. Measuring, trimming and dashing
+come from <a href="curve.html#measure-and-svg">xgpui-curve</a>: lines and quadratics
+are measured in closed form and cubics by Gauss–Legendre quadrature, including
+collinear curves with nonlinear parameter speed.
 Trim endpoints use de Casteljau slicing; the resulting segments remain curves
 until the existing GPUI stroke tessellator runs. <code>MeasuredPath::apply</code> returns
 contours when callers need geometry rather than a native stroke.</p>
@@ -209,17 +211,16 @@ applied before dashing, and dash phase restarts at each retained contour's start
 Positive phase advances into the pattern, negative phase wraps. Odd dash arrays
 repeat; an empty array is solid. Visible pieces spanning a full closed contour's
 seam are joined to avoid introducing caps there.</p>
-<p>Lengths, stroke widths, tolerance and dash phase use logical pixels. The table's
-0.001..16 px tolerance bounds each adaptive leaf's control-point deviation from a
-uniformly parameterized chord; it is not a global arc-length error guarantee. Use
+<p>Lengths, stroke widths, tolerance and dash phase use logical pixels. The
+0.001..16 px tolerance is the absolute arc-length accuracy of each measured
+interval. Use
 smaller tolerances for more precise animation and retain the measurement cache.
 Native stroke joins/caps use GPUI defaults. Fill effects, SVG arc verbs, automatic
 SVG extraction and Lottie playback are not included.</p>
 <p>Inputs are checked before tessellation: finite coordinates within ±1,000,000 px,
-at most 8,192 contours/segments (including implicit closing edges), 65,536 total
-lookup samples, 64 input dash entries and 16,384 emitted curve pieces. Dash lengths
+at most 8,192 contours/segments (including implicit closing edges), 64 input dash entries and 16,384 emitted curve pieces. Dash lengths
 must be finite and strictly positive; zero entries are rejected. Stroke widths are
-positive and at most 4,096 px. Excessive subdivision, fragmentation or numerically
+positive and at most 4,096 px. Excessive fragmentation or numerically
 unresolvable dash lengths return errors rather than allowing unbounded work.</p>
 <h3 id="native-visual-test">Native visual test</h3>
 <pre><code class="language-sh">just media paths
