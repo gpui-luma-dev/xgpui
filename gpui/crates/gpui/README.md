@@ -8,7 +8,7 @@ layout, input, text and scene primitives.
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui", version = "4.1.0" }
+gpui = { package = "xgpui", version = "4.2.0" }
 gpui_platform = { package = "xgpui-platform", version = "3.0.1" }
 ```
 
