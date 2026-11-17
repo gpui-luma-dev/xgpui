@@ -9,7 +9,12 @@ use xgpui_curve::spine::{CURVE_SPINE_MSL, CURVE_SPINE_WGSL, CurveSpine};
 fn cases() -> Vec<(Point, f32, f32, CurveSpine)> {
     let spines = [
         CurveSpine::new(Point::new(0., 0.), Point::new(0.5, 0.8), Point::new(1., 0.)).unwrap(),
-        CurveSpine::new(Point::new(0.2, 0.3), Point::new(0.9, 0.1), Point::new(0.4, 0.9)).unwrap(),
+        CurveSpine::new(
+            Point::new(0.2, 0.3),
+            Point::new(0.9, 0.1),
+            Point::new(0.4, 0.9),
+        )
+        .unwrap(),
         CurveSpine::with_bend(Point::new(0.1, 0.1), Point::new(0.9, 0.6), 0.2),
         // Degenerate: straight (the default "no bend" state), collinear back-tracking, a point.
         CurveSpine::straight(Point::new(0., 0.5), Point::new(1., 0.5)),
@@ -36,7 +41,11 @@ fn packed(cases: &[(Point, f32, f32, CurveSpine)]) -> Vec<[f32; 4]> {
         .iter()
         .flat_map(|(p, lo, hi, s)| {
             let k = s.shader_params(*lo, *hi);
-            [[p.x as f32, p.y as f32, *lo, *hi], [k[0], k[1], k[2], k[3]], [k[4], k[5], 0., 0.]]
+            [
+                [p.x as f32, p.y as f32, *lo, *hi],
+                [k[0], k[1], k[2], k[3]],
+                [k[4], k[5], 0., 0.],
+            ]
         })
         .collect()
 }
@@ -56,17 +65,22 @@ fn wgsl() -> String {
 }
 
 fn validated(source: &str) -> (naga::Module, naga::valid::ModuleInfo) {
-    let module = naga::front::wgsl::parse_str(source).unwrap_or_else(|e| panic!("{}", e.emit_to_string(source)));
-    let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::empty())
-        .validate(&module)
-        .unwrap();
+    let module = naga::front::wgsl::parse_str(source)
+        .unwrap_or_else(|e| panic!("{}", e.emit_to_string(source)));
+    let info = naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::empty(),
+    )
+    .validate(&module)
+    .unwrap();
     (module, info)
 }
 
 #[test]
 fn wgsl_translates_to_all_native_shader_languages() {
     let (module, info) = validated(&wgsl());
-    naga::back::msl::write_string(&module, &info, &Default::default(), &Default::default()).unwrap();
+    naga::back::msl::write_string(&module, &info, &Default::default(), &Default::default())
+        .unwrap();
     let mut hlsl = String::new();
     naga::back::hlsl::Writer::new(&mut hlsl, &Default::default(), &Default::default())
         .write(&module, &info, None)
@@ -80,34 +94,71 @@ fn check(case: &(Point, f32, f32, CurveSpine), gpu: [f32; 4], label: &str) {
     let (p, lo, hi, spine) = case;
     let cpu = spine.project_range(*p, *lo as f64, *hi as f64);
     let [distance, t, s, total] = gpu.map(f64::from);
-    assert!(gpu.iter().all(|v| v.is_finite()), "{label}: non-finite {gpu:?} for {case:?}");
-    assert!((distance.abs() - cpu.distance.abs()).abs() <= 2e-4, "{label}: distance {gpu:?} vs {cpu:?} for {case:?}");
-    assert!(t >= *lo as f64 - 1e-6 && t <= *hi as f64 + 1e-6, "{label}: t out of range {gpu:?}");
+    assert!(
+        gpu.iter().all(|v| v.is_finite()),
+        "{label}: non-finite {gpu:?} for {case:?}"
+    );
+    assert!(
+        (distance.abs() - cpu.distance.abs()).abs() <= 2e-4,
+        "{label}: distance {gpu:?} vs {cpu:?} for {case:?}"
+    );
+    assert!(
+        t >= *lo as f64 - 1e-6 && t <= *hi as f64 + 1e-6,
+        "{label}: t out of range {gpu:?}"
+    );
     let at_t = spine.quad().eval(t).distance(*p);
-    assert!((at_t - cpu.distance.abs()).abs() <= 3e-4, "{label}: t {gpu:?} is not nearest; cpu {cpu:?} for {case:?}");
+    assert!(
+        (at_t - cpu.distance.abs()).abs() <= 3e-4,
+        "{label}: t {gpu:?} is not nearest; cpu {cpu:?} for {case:?}"
+    );
     if cpu.distance.abs() > 1e-3 && (t - cpu.t).abs() < 1e-2 {
-        assert_eq!(distance.signum(), cpu.distance.signum(), "{label}: side {gpu:?} vs {cpu:?} for {case:?}");
+        assert_eq!(
+            distance.signum(),
+            cpu.distance.signum(),
+            "{label}: side {gpu:?} vs {cpu:?} for {case:?}"
+        );
     }
     let length = spine.length();
-    assert!((total - length).abs() <= 1e-5 * (1. + length), "{label}: length {total} vs {length}");
-    let expected_s = if length > 0. { quad_arclen(spine.quad(), 0., t) / length } else { 0. };
-    assert!((s - expected_s).abs() <= 3e-4, "{label}: s {s} vs {expected_s} for {case:?}");
+    assert!(
+        (total - length).abs() <= 1e-5 * (1. + length),
+        "{label}: length {total} vs {length}"
+    );
+    let expected_s = if length > 0. {
+        quad_arclen(spine.quad(), 0., t) / length
+    } else {
+        0.
+    };
+    assert!(
+        (s - expected_s).abs() <= 3e-4,
+        "{label}: s {s} vs {expected_s} for {case:?}"
+    );
 }
 
 #[cfg(target_os = "macos")]
-fn run_metal(msl: &str, entry: &str, input: &[[f32; 4]], count: usize, fast_math: bool) -> Vec<[f32; 4]> {
+fn run_metal(
+    msl: &str,
+    entry: &str,
+    input: &[[f32; 4]],
+    count: usize,
+    fast_math: bool,
+) -> Vec<[f32; 4]> {
     use objc2_foundation::NSString;
     use objc2_metal::*;
     use std::ptr::NonNull;
-    let device = MTLCreateSystemDefaultDevice().expect("Metal device required for native validation");
+    let device =
+        MTLCreateSystemDefaultDevice().expect("Metal device required for native validation");
     let options = MTLCompileOptions::new();
     #[allow(deprecated)]
     options.setFastMathEnabled(fast_math);
     let library = device
         .newLibraryWithSource_options_error(&NSString::from_str(msl), Some(&options))
         .unwrap_or_else(|e| panic!("{e:?}\n{msl}"));
-    let function = library.newFunctionWithName(&NSString::from_str(entry)).expect("Metal function missing");
-    let pipeline = device.newComputePipelineStateWithFunction_error(&function).unwrap();
+    let function = library
+        .newFunctionWithName(&NSString::from_str(entry))
+        .expect("Metal function missing");
+    let pipeline = device
+        .newComputePipelineStateWithFunction_error(&function)
+        .unwrap();
     let output = device
         .newBufferWithLength_options(count * 16, MTLResourceOptions::StorageModeShared)
         .expect("Metal buffer allocation failed");
@@ -120,24 +171,39 @@ fn run_metal(msl: &str, entry: &str, input: &[[f32; 4]], count: usize, fast_math
         )
     }
     .expect("Metal buffer allocation failed");
-    let queue = device.newCommandQueue().expect("Metal queue allocation failed");
-    let command = queue.commandBuffer().expect("Metal command buffer allocation failed");
-    let encoder = command.computeCommandEncoder().expect("Metal compute encoder allocation failed");
+    let queue = device
+        .newCommandQueue()
+        .expect("Metal queue allocation failed");
+    let command = queue
+        .commandBuffer()
+        .expect("Metal command buffer allocation failed");
+    let encoder = command
+        .computeCommandEncoder()
+        .expect("Metal compute encoder allocation failed");
     encoder.setComputePipelineState(&pipeline);
     unsafe {
         encoder.setBuffer_offset_atIndex(Some(&output), 0, 0);
         encoder.setBuffer_offset_atIndex(Some(&input_buffer), 0, 1);
     }
     encoder.dispatchThreads_threadsPerThreadgroup(
-        MTLSize { width: count, height: 1, depth: 1 },
-        MTLSize { width: 1, height: 1, depth: 1 },
+        MTLSize {
+            width: count,
+            height: 1,
+            depth: 1,
+        },
+        MTLSize {
+            width: 1,
+            height: 1,
+            depth: 1,
+        },
     );
     encoder.endEncoding();
     command.commit();
     command.waitUntilCompleted();
     assert_eq!(command.status(), MTLCommandBufferStatus::Completed);
     // SAFETY: the shared buffer holds exactly `count` float4 values after completion.
-    unsafe { std::slice::from_raw_parts(output.contents().as_ptr() as *const [f32; 4], count) }.to_vec()
+    unsafe { std::slice::from_raw_parts(output.contents().as_ptr() as *const [f32; 4], count) }
+        .to_vec()
 }
 
 #[cfg(target_os = "macos")]
@@ -152,11 +218,15 @@ fn metal_matches_cpu_from_wgsl_and_hand_written_msl() {
     for (binding, buffer) in [(0, 0), (1, 1)] {
         resources.resources.insert(
             naga::ResourceBinding { group: 0, binding },
-            naga::back::msl::BindTarget { buffer: Some(buffer), ..Default::default() },
+            naga::back::msl::BindTarget {
+                buffer: Some(buffer),
+                ..Default::default()
+            },
         );
     }
     options.per_entry_point_map.insert("main".into(), resources);
-    let (from_wgsl, reflection) = naga::back::msl::write_string(&module, &info, &options, &Default::default()).unwrap();
+    let (from_wgsl, reflection) =
+        naga::back::msl::write_string(&module, &info, &options, &Default::default()).unwrap();
     let entry = reflection.entry_point_names[0].as_ref().unwrap().clone();
 
     let hand = format!(
@@ -171,7 +241,10 @@ kernel void spine_main(device float4* output [[buffer(0)]], device const float4*
     );
 
     for fast_math in [false, true] {
-        for (label, source, name) in [("wgsl", from_wgsl.as_str(), entry.as_str()), ("msl", hand.as_str(), "spine_main")] {
+        for (label, source, name) in [
+            ("wgsl", from_wgsl.as_str(), entry.as_str()),
+            ("msl", hand.as_str(), "spine_main"),
+        ] {
             let results = run_metal(source, name, &input, cases.len(), fast_math);
             for (case, gpu) in cases.iter().zip(results) {
                 check(case, gpu, &format!("{label} fast_math={fast_math}"));

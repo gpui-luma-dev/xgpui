@@ -6,7 +6,9 @@
 use std::ops::Range;
 
 use crate::error::{CurveError, finite};
-use crate::geom::{self, BezPath, ParamCurve, ParamCurveArclen, PathEl, PathSeg, Point, QuadBez, Vec2};
+use crate::geom::{
+    self, BezPath, ParamCurve, ParamCurveArclen, PathEl, PathSeg, Point, QuadBez, Vec2,
+};
 
 /// Most segments (including implicit closing lines) a [`MeasuredPath`] accepts.
 pub const MAX_SEGMENTS: usize = 8192;
@@ -114,7 +116,11 @@ impl MeasuredPath {
             if count > MAX_SEGMENTS {
                 return Err(CurveError::WorkLimit("path exceeds 8192 segments"));
             }
-            let contour = open.get_or_insert_with(|| Contour { segs: Vec::new(), length: 0., closed: false });
+            let contour = open.get_or_insert_with(|| Contour {
+                segs: Vec::new(),
+                length: 0.,
+                closed: false,
+            });
             let measured = measure_seg(seg, contour.length, accuracy);
             contour.length += measured.length;
             contour.segs.push(measured);
@@ -127,7 +133,11 @@ impl MeasuredPath {
                     if let Some(c) = open.take() {
                         contours.push(c);
                     }
-                    open = Some(Contour { segs: Vec::new(), length: 0., closed: false });
+                    open = Some(Contour {
+                        segs: Vec::new(),
+                        length: 0.,
+                        closed: false,
+                    });
                     start = p;
                     pen = p;
                 }
@@ -143,7 +153,10 @@ impl MeasuredPath {
                 }
                 PathEl::CurveTo(c1, c2, p) => {
                     finite(&[c1.x, c1.y, c2.x, c2.y, p.x, p.y])?;
-                    push(&mut open, PathSeg::Cubic(geom::CubicBez::new(pen, c1, c2, p)))?;
+                    push(
+                        &mut open,
+                        PathSeg::Cubic(geom::CubicBez::new(pen, c1, c2, p)),
+                    )?;
                     pen = p;
                 }
                 PathEl::ClosePath => {
@@ -163,7 +176,11 @@ impl MeasuredPath {
         }
         contours.retain(|c| !c.segs.is_empty());
         let length = contours.iter().map(|c| c.length).sum();
-        Ok(Self { contours, length, accuracy })
+        Ok(Self {
+            contours,
+            length,
+            accuracy,
+        })
     }
 
     /// Total length of all contours.
@@ -231,10 +248,17 @@ impl MeasuredPath {
         if s >= m.length {
             return 1.;
         }
-        let i = m.table.partition_point(|(_, l)| *l < s).clamp(1, m.table.len() - 1);
+        let i = m
+            .table
+            .partition_point(|(_, l)| *l < s)
+            .clamp(1, m.table.len() - 1);
         let (mut lo, s_lo) = m.table[i - 1];
         let (mut hi, s_hi) = m.table[i];
-        let mut t = if s_hi > s_lo { lo + (hi - lo) * (s - s_lo) / (s_hi - s_lo) } else { hi };
+        let mut t = if s_hi > s_lo {
+            lo + (hi - lo) * (s - s_lo) / (s_hi - s_lo)
+        } else {
+            hi
+        };
         let base = m.table[i - 1];
         for _ in 0..32 {
             let at = base.1 + arclen(m.seg, base.0, t, self.accuracy * 1e-3);
@@ -248,8 +272,16 @@ impl MeasuredPath {
                 lo = t;
             }
             let speed = geom::deriv1(m.seg, t).hypot();
-            let next = if speed > 0. { t - error / speed } else { f64::NAN };
-            t = if next.is_finite() && next > lo && next < hi { next } else { 0.5 * (lo + hi) };
+            let next = if speed > 0. {
+                t - error / speed
+            } else {
+                f64::NAN
+            };
+            t = if next.is_finite() && next > lo && next < hi {
+                next
+            } else {
+                0.5 * (lo + hi)
+            };
         }
         t
     }
@@ -266,8 +298,16 @@ impl MeasuredPath {
         let mut pieces = 0usize;
         let mut base = 0.;
         for contour in &self.contours {
-            let from = if effect.trim.start == 0. { 0. } else { (begin - base).max(0.) };
-            let to = if effect.trim.end == 1. { contour.length } else { (end - base).min(contour.length) };
+            let from = if effect.trim.start == 0. {
+                0.
+            } else {
+                (begin - base).max(0.)
+            };
+            let to = if effect.trim.end == 1. {
+                contour.length
+            } else {
+                (end - base).min(contour.length)
+            };
             base += contour.length;
             if from >= to {
                 continue;
@@ -295,7 +335,9 @@ impl MeasuredPath {
                 }
                 let next = (at + remaining).min(to);
                 if next <= at {
-                    return Err(CurveError::WorkLimit("dash length is below numeric resolution"));
+                    return Err(CurveError::WorkLimit(
+                        "dash length is below numeric resolution",
+                    ));
                 }
                 if i % 2 == 0 {
                     visible.push((at, next));
@@ -349,11 +391,11 @@ impl MeasuredPath {
     fn append(&self, contour: &Contour, from: f64, to: f64, out: &mut BezPath) {
         let (i0, t0) = self.locate_in(contour, from);
         let (i1, t1) = self.locate_in(contour, to);
-        for i in i0..=i1 {
+        for (i, m) in contour.segs.iter().enumerate().take(i1 + 1).skip(i0) {
             let a = if i == i0 { t0 } else { 0. };
             let b = if i == i1 { t1 } else { 1. };
             if b > a {
-                geom::push_seg(out, contour.segs[i].seg.subsegment(a..b));
+                geom::push_seg(out, m.seg.subsegment(a..b));
             }
         }
     }
@@ -364,11 +406,19 @@ fn measure_seg(seg: PathSeg, start: f64, accuracy: f64) -> MeasuredSeg {
     table.push((0., 0.));
     let mut s = 0.;
     for k in 1..=TABLE_STEPS {
-        let (a, b) = ((k - 1) as f64 / TABLE_STEPS as f64, k as f64 / TABLE_STEPS as f64);
+        let (a, b) = (
+            (k - 1) as f64 / TABLE_STEPS as f64,
+            k as f64 / TABLE_STEPS as f64,
+        );
         s += arclen(seg, a, b, accuracy / TABLE_STEPS as f64);
         table.push((b, s));
     }
-    MeasuredSeg { seg, table, length: s, start }
+    MeasuredSeg {
+        seg,
+        table,
+        length: s,
+        start,
+    }
 }
 
 /// A trim range plus an optional dash pattern.
@@ -381,7 +431,11 @@ pub struct PathEffect {
 
 impl Default for PathEffect {
     fn default() -> Self {
-        Self { trim: 0. ..1., dash: Vec::new(), phase: 0. }
+        Self {
+            trim: 0. ..1.,
+            dash: Vec::new(),
+            phase: 0.,
+        }
     }
 }
 
@@ -393,8 +447,15 @@ impl PathEffect {
 
     /// Keep the fraction `range` (within `0..=1`) of the total length.
     pub fn trim(mut self, range: Range<f64>) -> Result<Self, CurveError> {
-        if !(range.start.is_finite() && range.end.is_finite() && range.start >= 0. && range.end <= 1. && range.start <= range.end) {
-            return Err(CurveError::OutOfRange("trim must be an ordered range within 0..1"));
+        if !(range.start.is_finite()
+            && range.end.is_finite()
+            && range.start >= 0.
+            && range.end <= 1.
+            && range.start <= range.end)
+        {
+            return Err(CurveError::OutOfRange(
+                "trim must be an ordered range within 0..1",
+            ));
         }
         self.trim = range;
         Ok(self)

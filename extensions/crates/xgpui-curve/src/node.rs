@@ -61,12 +61,22 @@ pub struct Node {
 impl Node {
     /// A corner node with no handles.
     pub fn corner(anchor: Point) -> Self {
-        Self { anchor, handle_in: None, handle_out: None, mode: NodeMode::Corner }
+        Self {
+            anchor,
+            handle_in: None,
+            handle_out: None,
+            mode: NodeMode::Corner,
+        }
     }
 
     /// An automatic node.
     pub fn auto(anchor: Point, smooth: AutoSmooth) -> Self {
-        Self { anchor, handle_in: None, handle_out: None, mode: NodeMode::Auto(smooth) }
+        Self {
+            anchor,
+            handle_in: None,
+            handle_out: None,
+            mode: NodeMode::Auto(smooth),
+        }
     }
 
     fn handle(&self, side: Side) -> Option<Point> {
@@ -134,7 +144,12 @@ impl NodePath {
         let (a, b) = (self.nodes[i], self.nodes[self.next(i)]);
         match (a.handle_out, b.handle_in) {
             (None, None) => PathSeg::Line(geom::Line::new(a.anchor, b.anchor)),
-            (h1, h2) => PathSeg::Cubic(CubicBez::new(a.anchor, h1.unwrap_or(a.anchor), h2.unwrap_or(b.anchor), b.anchor)),
+            (h1, h2) => PathSeg::Cubic(CubicBez::new(
+                a.anchor,
+                h1.unwrap_or(a.anchor),
+                h2.unwrap_or(b.anchor),
+                b.anchor,
+            )),
         }
     }
 
@@ -164,7 +179,8 @@ impl NodePath {
             for k in 0..=n {
                 let t = k as f64 / n as f64;
                 let p = seg.eval(t);
-                let tip = geom::normal(seg, t).map_or(p, |nrm| p + nrm * (geom::curvature(seg, t) * scale));
+                let tip = geom::normal(seg, t)
+                    .map_or(p, |nrm| p + nrm * (geom::curvature(seg, t) * scale));
                 out.push((p, tip));
             }
         }
@@ -202,7 +218,11 @@ impl NodePath {
     pub fn set_mode(&mut self, i: usize, mode: NodeMode) {
         let node = &mut self.nodes[i];
         node.mode = mode;
-        let lead = if node.handle_out.is_some() { Side::Out } else { Side::In };
+        let lead = if node.handle_out.is_some() {
+            Side::Out
+        } else {
+            Side::In
+        };
         constrain(node, lead);
         self.update_auto();
     }
@@ -254,7 +274,12 @@ impl NodePath {
             let (left, right) = (c.subsegment(0. ..t), c.subsegment(t..1.));
             self.nodes[i].handle_out = Some(left.p1);
             self.nodes[j].handle_in = Some(right.p2);
-            Node { anchor: left.p3, handle_in: Some(left.p2), handle_out: Some(right.p1), mode: NodeMode::Smooth }
+            Node {
+                anchor: left.p3,
+                handle_in: Some(left.p2),
+                handle_out: Some(right.p1),
+                mode: NodeMode::Smooth,
+            }
         };
         let at = i + 1;
         self.nodes.insert(at, new);
@@ -280,7 +305,9 @@ impl NodePath {
         for run in self.auto_runs() {
             if run.indices.contains(&i) || run.indices.contains(&j) {
                 match run.kind {
-                    AutoSmooth::CatmullRom { .. } => out.extend([i, j].into_iter().filter(|k| run.indices.contains(k))),
+                    AutoSmooth::CatmullRom { .. } => {
+                        out.extend([i, j].into_iter().filter(|k| run.indices.contains(k)))
+                    }
                     _ => out.extend(run.indices.iter().copied()),
                 }
             }
@@ -299,20 +326,33 @@ impl NodePath {
     /// (Catmull-Rom nodes each form their own run; they are local).
     fn auto_runs(&self) -> Vec<Run> {
         let n = self.nodes.len();
-        let same = |a: Option<AutoSmooth>, b: Option<AutoSmooth>| match (a, b) {
-            (Some(AutoSmooth::Natural), Some(AutoSmooth::Natural)) | (Some(AutoSmooth::Hobby), Some(AutoSmooth::Hobby)) => true,
-            _ => false,
+        let same = |a: Option<AutoSmooth>, b: Option<AutoSmooth>| {
+            matches!(
+                (a, b),
+                (Some(AutoSmooth::Natural), Some(AutoSmooth::Natural))
+                    | (Some(AutoSmooth::Hobby), Some(AutoSmooth::Hobby))
+            )
         };
         let mut runs = Vec::new();
         if n == 0 {
             return runs;
         }
         if self.closed && (0..n).all(|i| same(self.auto_kind(i), self.auto_kind(0))) {
-            runs.push(Run { kind: self.auto_kind(0).unwrap(), indices: (0..n).collect(), cyclic: true });
+            runs.push(Run {
+                kind: self.auto_kind(0).unwrap(),
+                indices: (0..n).collect(),
+                cyclic: true,
+            });
             return runs;
         }
         // Start after a boundary so wrapping runs stay whole on closed paths.
-        let start = if self.closed { (0..n).find(|&i| !same(self.auto_kind(i), self.auto_kind((i + n - 1) % n))).unwrap_or(0) } else { 0 };
+        let start = if self.closed {
+            (0..n)
+                .find(|&i| !same(self.auto_kind(i), self.auto_kind((i + n - 1) % n)))
+                .unwrap_or(0)
+        } else {
+            0
+        };
         let mut k = 0;
         while k < n {
             let i = (start + k) % n;
@@ -322,11 +362,18 @@ impl NodePath {
             };
             let mut indices = vec![i];
             k += 1;
-            while k < n && same(Some(kind), self.auto_kind((start + k) % n)) && !self.wraps_open(indices[indices.len() - 1]) {
+            while k < n
+                && same(Some(kind), self.auto_kind((start + k) % n))
+                && !self.wraps_open(indices[indices.len() - 1])
+            {
                 indices.push((start + k) % n);
                 k += 1;
             }
-            runs.push(Run { kind, indices, cyclic: false });
+            runs.push(Run {
+                kind,
+                indices,
+                cyclic: false,
+            });
         }
         runs
     }
@@ -356,7 +403,13 @@ impl NodePath {
     fn neighbor(&self, i: usize, forward: bool) -> Option<usize> {
         let n = self.nodes.len();
         if forward {
-            if i + 1 < n { Some(i + 1) } else if self.closed { Some(0) } else { None }
+            if i + 1 < n {
+                Some(i + 1)
+            } else if self.closed {
+                Some(0)
+            } else {
+                None
+            }
         } else if i > 0 {
             Some(i - 1)
         } else if self.closed {
@@ -426,7 +479,13 @@ impl NodePath {
             let segs = controls.len();
             let node = &mut self.nodes[k];
             node.handle_out = (pos < segs).then(|| controls[pos].0);
-            node.handle_in = if pos > 0 { Some(controls[pos - 1].1) } else if run.cyclic { Some(controls[segs - 1].1) } else { None };
+            node.handle_in = if pos > 0 {
+                Some(controls[pos - 1].1)
+            } else if run.cyclic {
+                Some(controls[segs - 1].1)
+            } else {
+                None
+            };
         }
     }
 }
@@ -474,8 +533,20 @@ fn natural(p: &[Point], cyclic: bool) -> Vec<(Point, Point)> {
     for _ in 0..200 {
         let mut change: f64 = 0.;
         for i in 0..n {
-            let next = if cyclic { d[(i + 1) % n] } else if i + 1 < n { d[i + 1] } else { Vec2::ZERO };
-            let prev = if cyclic { d[(i + n - 1) % n] } else if i > 0 { d[i - 1] } else { Vec2::ZERO };
+            let next = if cyclic {
+                d[(i + 1) % n]
+            } else if i + 1 < n {
+                d[i + 1]
+            } else {
+                Vec2::ZERO
+            };
+            let prev = if cyclic {
+                d[(i + n - 1) % n]
+            } else if i > 0 {
+                d[i - 1]
+            } else {
+                Vec2::ZERO
+            };
             let value = if cyclic {
                 (3. * (p[(i + 1) % n] - p[(i + n - 1) % n]) - prev - next) / 4.
             } else if n == 2 {
@@ -495,7 +566,9 @@ fn natural(p: &[Point], cyclic: bool) -> Vec<(Point, Point)> {
         }
     }
     let segs = if cyclic { n } else { n - 1 };
-    (0..segs).map(|i| (p[i] + d[i] / 3., p[(i + 1) % n] - d[(i + 1) % n] / 3.)).collect()
+    (0..segs)
+        .map(|i| (p[i] + d[i] / 3., p[(i + 1) % n] - d[(i + 1) % n] / 3.))
+        .collect()
 }
 
 /// Hobby's algorithm with unit tension and unit curl ends: choose the angles
@@ -563,14 +636,23 @@ fn hobby(p: &[Point], cyclic: bool) -> Vec<(Point, Point)> {
     let phi = |k: usize| -> f64 {
         // φ at the end of segment k.
         let end = (k + 1) % n;
-        if !cyclic && k + 1 == segs { phi_end } else { -psi(end) - theta[end % segs] }
+        if !cyclic && k + 1 == segs {
+            phi_end
+        } else {
+            -psi(end) - theta[end % segs]
+        }
     };
     (0..segs)
         .map(|k| {
             let (th, ph) = (theta[k], phi(k));
             let u = chord(k) / d[k];
-            let rot = |v: Vec2, a: f64| Vec2::new(v.x * a.cos() - v.y * a.sin(), v.x * a.sin() + v.y * a.cos());
-            (p[k] + rot(u, th) * (d[k] * velocity(th, ph)), p[(k + 1) % n] - rot(u, -ph) * (d[k] * velocity(ph, th)))
+            let rot = |v: Vec2, a: f64| {
+                Vec2::new(v.x * a.cos() - v.y * a.sin(), v.x * a.sin() + v.y * a.cos())
+            };
+            (
+                p[k] + rot(u, th) * (d[k] * velocity(th, ph)),
+                p[(k + 1) % n] - rot(u, -ph) * (d[k] * velocity(ph, th)),
+            )
         })
         .collect()
 }
@@ -610,7 +692,10 @@ fn solve_cyclic_tridiagonal(a: &[f64], b: &[f64], c: &[f64], r: &[f64]) -> Vec<f
         // [b0, a0 + c0; a1 + c1, b1].
         let (m00, m01, m10, m11) = (b[0], a[0] + c[0], a[1] + c[1], b[1]);
         let det = m00 * m11 - m01 * m10;
-        return vec![(r[0] * m11 - m01 * r[1]) / det, (m00 * r[1] - m10 * r[0]) / det];
+        return vec![
+            (r[0] * m11 - m01 * r[1]) / det,
+            (m00 * r[1] - m10 * r[0]) / det,
+        ];
     }
     let (alpha, beta) = (c[n - 1], a[0]);
     let gamma = -b[0];

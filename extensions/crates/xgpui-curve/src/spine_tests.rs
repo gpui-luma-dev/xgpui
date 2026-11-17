@@ -3,7 +3,12 @@ use super::*;
 fn spines() -> Vec<CurveSpine> {
     vec![
         CurveSpine::new(Point::new(0., 0.), Point::new(0.5, 0.8), Point::new(1., 0.)).unwrap(),
-        CurveSpine::new(Point::new(0.2, 0.3), Point::new(0.9, 0.1), Point::new(0.4, 0.9)).unwrap(),
+        CurveSpine::new(
+            Point::new(0.2, 0.3),
+            Point::new(0.9, 0.1),
+            Point::new(0.4, 0.9),
+        )
+        .unwrap(),
         CurveSpine::with_bend(Point::new(0., 0.), Point::new(1., 0.5), 0.15),
         // Collinear, non-uniform, back-tracking.
         CurveSpine::new(Point::new(0., 0.), Point::new(2., 0.), Point::new(1., 0.)).unwrap(),
@@ -26,7 +31,11 @@ fn brute(spine: &CurveSpine, p: Point, lo: f64, hi: f64) -> f64 {
     for _ in 0..200 {
         let m1 = a + (b - a) * 0.381966;
         let m2 = a + (b - a) * 0.618034;
-        if q.eval(m1).distance(p) < q.eval(m2).distance(p) { b = m2 } else { a = m1 }
+        if q.eval(m1).distance(p) < q.eval(m2).distance(p) {
+            b = m2
+        } else {
+            a = m1
+        }
     }
     q.eval(0.5 * (a + b)).distance(p).min(best.1)
 }
@@ -38,7 +47,10 @@ fn projection_matches_brute_force() {
             for j in 0..7 {
                 let p = Point::new(-0.3 + i as f64 * 0.27, -0.4 + j as f64 * 0.25);
                 let hit = spine.project(p);
-                assert!((hit.distance.abs() - brute(&spine, p, 0., 1.)).abs() <= 1e-6, "{spine:?} {p:?}");
+                assert!(
+                    (hit.distance.abs() - brute(&spine, p, 0., 1.)).abs() <= 1e-6,
+                    "{spine:?} {p:?}"
+                );
                 let trimmed = spine.project_range(p, 0.25, 0.7);
                 assert!((0.25..=0.7).contains(&trimmed.t));
                 assert!((trimmed.distance.abs() - brute(&spine, p, 0.25, 0.7)).abs() <= 1e-6);
@@ -70,7 +82,8 @@ fn degenerate_spines_stay_finite() {
 #[test]
 fn signed_distance_and_arc_position() {
     // y-up math frame: the arch's normal (tangent turned +90°) points up at the apex.
-    let arch = CurveSpine::new(Point::new(0., 0.), Point::new(0.5, 1.), Point::new(1., 0.)).unwrap();
+    let arch =
+        CurveSpine::new(Point::new(0., 0.), Point::new(0.5, 1.), Point::new(1., 0.)).unwrap();
     assert!(arch.project(Point::new(0.5, 0.8)).distance > 0.);
     assert!(arch.project(Point::new(0.5, 0.2)).distance < 0.);
     let apex = arch.project(Point::new(0.5, 2.));
@@ -81,7 +94,8 @@ fn signed_distance_and_arc_position() {
 
 #[test]
 fn arrowhead_follows_the_terminal_tangent() {
-    let spine = CurveSpine::new(Point::new(0., 0.), Point::new(1., 1.), Point::new(2., 1.)).unwrap();
+    let spine =
+        CurveSpine::new(Point::new(0., 0.), Point::new(1., 1.), Point::new(2., 1.)).unwrap();
     let tangent = spine.terminal_tangent().unwrap();
     assert!((tangent - Vec2::new(1., 0.)).hypot() < 1e-12);
     let [left, tip, right] = spine.arrowhead(0.2, 0.5).unwrap();
@@ -94,11 +108,20 @@ fn arrowhead_follows_the_terminal_tangent() {
 /// Largest jump in t between neighbours of an n × n grid over the spine's
 /// surroundings, counting only points closer than `limit` to the spine.
 fn max_jump(spine: &CurveSpine, limit: f64, n: usize) -> f64 {
-    let at = |i: usize, j: usize| Point::new(-0.5 + 2. * i as f64 / n as f64, -1. + 2. * j as f64 / n as f64);
+    let at = |i: usize, j: usize| {
+        Point::new(
+            -0.5 + 2. * i as f64 / n as f64,
+            -1. + 2. * j as f64 / n as f64,
+        )
+    };
     let mut worst: f64 = 0.;
     for i in 0..n {
         for j in 0..n {
-            let (a, b, c) = (spine.project(at(i, j)), spine.project(at(i + 1, j)), spine.project(at(i, j + 1)));
+            let (a, b, c) = (
+                spine.project(at(i, j)),
+                spine.project(at(i + 1, j)),
+                spine.project(at(i, j + 1)),
+            );
             if a.distance.abs() < limit && b.distance.abs() < limit && c.distance.abs() < limit {
                 worst = worst.max((a.t - b.t).abs()).max((a.t - c.t).abs());
             }
@@ -118,16 +141,21 @@ fn the_seam_rule_keeps_projection_continuous() {
     assert!(coarse > 0.2 && fine > 0.2, "seam expected: {coarse} {fine}");
     assert!(spine.limit_bend(radius));
     assert!(spine.reach() >= radius && spine.reach() < radius * 1.001);
-    let (coarse, fine) = (max_jump(&spine, 0.7 * radius, 50), max_jump(&spine, 0.7 * radius, 200));
+    let (coarse, fine) = (
+        max_jump(&spine, 0.7 * radius, 50),
+        max_jump(&spine, 0.7 * radius, 200),
+    );
     assert!(fine < coarse / 3., "continuous expected: {coarse} {fine}");
     assert!(!spine.limit_bend(radius));
 }
 
 #[test]
 fn shader_params_pack_in_order() {
-    let spine = CurveSpine::new(Point::new(1., 2.), Point::new(3., 4.), Point::new(5., 6.)).unwrap();
-    assert_eq!(spine.shader_params(0.1, 0.9), [1., 2., 3., 4., 5., 6., 0.1, 0.9]);
+    let spine =
+        CurveSpine::new(Point::new(1., 2.), Point::new(3., 4.), Point::new(5., 6.)).unwrap();
+    assert_eq!(
+        spine.shader_params(0.1, 0.9),
+        [1., 2., 3., 4., 5., 6., 0.1, 0.9]
+    );
     assert!(CurveSpine::new(Point::new(f64::NAN, 0.), Point::ZERO, Point::ZERO).is_err());
 }
-
-

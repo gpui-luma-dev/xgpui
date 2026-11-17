@@ -108,7 +108,7 @@ wasm="wasm_target || exit $prereq_status;"
 # Every package and feature tested on this host, compiled together so Cargo
 # unifies features once. Changing this list changes the feature set for every
 # shared suite; keep it a superset of what each suite needs.
-packages=(xgpui xgpui-platform xgpui-color xgpui-gamut xgpui-canvas xgpui-media xgpui-svg xgpui-shader xgpui-shell xgpui-ext-lab)
+packages=(xgpui xgpui-platform xgpui-color xgpui-curve xgpui-gamut xgpui-canvas xgpui-media xgpui-svg xgpui-shader xgpui-shell xgpui-ext-lab)
 features=(
   xgpui/test-support xgpui/bench-support
   xgpui-platform/test-support xgpui-platform/bench-support xgpui-platform/runtime_shaders
@@ -266,6 +266,9 @@ suite gpui-bench-build all "built xgpui-platform bench:atlas_upload,bench:focus_
 suite media-minimal linux "cargo_capture check --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-media/Cargo.toml --no-default-features --lib {cargo}"
 # Doctests are not part of `--no-run`; xgpui-color has a small graph of its own.
 suite color all "run_tests xgpui-color all && $ct --manifest-path extensions/crates/xgpui-color/Cargo.toml --features icc --doc {cargo}"
+# Curve tests, shader agreement (Metal on macOS) and doctests; plus the math-only build without GPUI.
+suite curve all "run_tests xgpui-curve all && $ct --manifest-path extensions/crates/xgpui-curve/Cargo.toml --doc {cargo}"
+suite curve-math-only all "cargo_capture check --locked --config .cargo/validation.toml --manifest-path extensions/crates/xgpui-curve/Cargo.toml --no-default-features --features measure,series,func,mesh,spine,node,shape,stroke,fit,svg-path --lib {cargo}"
 # Isolated: gamut with default features (the shared build enables instanced).
 suite gamut all "$ct --manifest-path extensions/crates/xgpui-gamut/Cargo.toml {cargo}"
 suite gamut-instanced all "run_tests xgpui-gamut all"

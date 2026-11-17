@@ -60,7 +60,14 @@ fn pchip_is_exact_on_lines_and_never_overshoots() {
         assert!((line.eval(x) - (1. + 2. * x)).abs() < 1e-12);
     }
     // Step data: values stay within each interval's endpoints.
-    let knots = pts(&[(0., 0.), (1., 0.), (1.5, 1.), (3., 1.), (3.2, 0.2), (5., 0.)]);
+    let knots = pts(&[
+        (0., 0.),
+        (1., 0.),
+        (1.5, 1.),
+        (3., 1.),
+        (3.2, 0.2),
+        (5., 0.),
+    ]);
     let step = FunctionalCurve::monotone(&knots).unwrap();
     for w in knots.windows(2) {
         let (lo, hi) = (w[0].y.min(w[1].y), w[0].y.max(w[1].y));
@@ -129,9 +136,21 @@ fn luts_are_finite_and_unit_range() {
 
 #[test]
 fn knot_validation() {
-    assert_eq!(FunctionalCurve::linear(&pts(&[(0., 0.)])).unwrap_err(), CurveError::TooFewPoints { required: 2, actual: 1 });
-    assert_eq!(FunctionalCurve::monotone(&pts(&[(0., 0.), (0., 1.)])).unwrap_err(), CurveError::NotIncreasing);
-    assert_eq!(FunctionalCurve::monotone(&pts(&[(0., 0.), (f64::NAN, 1.)])).unwrap_err(), CurveError::NonFinite);
+    assert_eq!(
+        FunctionalCurve::linear(&pts(&[(0., 0.)])).unwrap_err(),
+        CurveError::TooFewPoints {
+            required: 2,
+            actual: 1
+        }
+    );
+    assert_eq!(
+        FunctionalCurve::monotone(&pts(&[(0., 0.), (0., 1.)])).unwrap_err(),
+        CurveError::NotIncreasing
+    );
+    assert_eq!(
+        FunctionalCurve::monotone(&pts(&[(0., 0.), (f64::NAN, 1.)])).unwrap_err(),
+        CurveError::NonFinite
+    );
 }
 
 #[test]
@@ -142,7 +161,9 @@ fn css_cubic_bezier_matches_spec_shapes() {
     assert!((Easing::EASE.eval(0.5) - 0.802_403_387_584_857).abs() < 1e-9);
     // ease-in-out is point-symmetric about (0.5, 0.5).
     for x in [0.1, 0.25, 0.4] {
-        assert!((Easing::EASE_IN_OUT.eval(x) + Easing::EASE_IN_OUT.eval(1. - x) - 1.).abs() < 1e-12);
+        assert!(
+            (Easing::EASE_IN_OUT.eval(x) + Easing::EASE_IN_OUT.eval(1. - x) - 1.).abs() < 1e-12
+        );
     }
     // Linear control points give the identity.
     let linear = Easing::cubic_bezier(0.25, 0.25, 0.75, 0.75).unwrap();
@@ -158,13 +179,25 @@ fn css_cubic_bezier_matches_spec_shapes() {
 #[test]
 fn css_steps_match_spec_examples() {
     let end = Easing::steps(4, StepPosition::JumpEnd).unwrap();
-    assert_eq!([0., 0.24, 0.25, 0.99, 1.].map(|x| end.eval(x)), [0., 0., 0.25, 0.75, 1.]);
+    assert_eq!(
+        [0., 0.24, 0.25, 0.99, 1.].map(|x| end.eval(x)),
+        [0., 0., 0.25, 0.75, 1.]
+    );
     let start = Easing::steps(4, StepPosition::JumpStart).unwrap();
-    assert_eq!([0., 0.24, 0.25, 0.99, 1.].map(|x| start.eval(x)), [0.25, 0.25, 0.5, 1., 1.]);
+    assert_eq!(
+        [0., 0.24, 0.25, 0.99, 1.].map(|x| start.eval(x)),
+        [0.25, 0.25, 0.5, 1., 1.]
+    );
     let none = Easing::steps(5, StepPosition::JumpNone).unwrap();
-    assert_eq!([0., 0.19, 0.2, 0.99, 1.].map(|x| none.eval(x)), [0., 0., 0.25, 1., 1.]);
+    assert_eq!(
+        [0., 0.19, 0.2, 0.99, 1.].map(|x| none.eval(x)),
+        [0., 0., 0.25, 1., 1.]
+    );
     let both = Easing::steps(3, StepPosition::JumpBoth).unwrap();
-    assert_eq!([0., 0.33, 0.34, 1.].map(|x| both.eval(x)), [0.25, 0.25, 0.5, 1.]);
+    assert_eq!(
+        [0., 0.33, 0.34, 1.].map(|x| both.eval(x)),
+        [0.25, 0.25, 0.5, 1.]
+    );
     assert!(Easing::steps(1, StepPosition::JumpNone).is_err());
     assert_eq!(Easing::STEP_START.eval(0.), 1.);
     assert_eq!(Easing::STEP_END.eval(0.99), 0.);
@@ -178,7 +211,8 @@ fn css_linear_resolves_inputs_like_the_spec() {
     assert_eq!(e, Easing::Piecewise(vec![(0., 0.), (0.5, 0.25), (1., 1.)]));
     assert!((e.eval(0.75) - 0.625).abs() < 1e-12);
     // Inputs never decrease: linear(0, 0.5 60%, 1 40%) clamps 40% up to 60%.
-    let e = Easing::linear_stops(&[stop(0., None), stop(0.5, Some(0.6)), stop(1., Some(0.4))]).unwrap();
+    let e =
+        Easing::linear_stops(&[stop(0., None), stop(0.5, Some(0.6)), stop(1., Some(0.4))]).unwrap();
     assert_eq!(e, Easing::Piecewise(vec![(0., 0.), (0.6, 0.5), (0.6, 1.)]));
     assert_eq!(e.eval(0.6), 1.);
     assert_eq!(e.eval(0.7), 1.);
@@ -187,4 +221,3 @@ fn css_linear_resolves_inputs_like_the_spec() {
     assert_eq!(e.eval(1.5), 1.5);
     assert_eq!(e.eval(-0.5), -0.5);
 }
-

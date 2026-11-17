@@ -44,6 +44,16 @@ impl fmt::Display for CurveError {
 
 impl std::error::Error for CurveError {}
 
+#[cfg(any(
+    feature = "measure",
+    feature = "func",
+    feature = "mesh",
+    feature = "spine",
+    feature = "node",
+    feature = "shape",
+    feature = "stroke",
+    feature = "fit"
+))]
 pub(crate) fn finite(values: &[f64]) -> Result<(), CurveError> {
     if values.iter().all(|v| v.is_finite()) {
         Ok(())

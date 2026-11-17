@@ -6,7 +6,19 @@ fn p(x: f64, y: f64) -> Point {
 
 fn zigzag(kind: NodeMode) -> NodePath {
     let anchors = [p(0., 0.), p(1., 1.), p(2., 0.2), p(3., 1.4), p(4., 0.)];
-    NodePath::new(anchors.iter().map(|&a| Node { anchor: a, handle_in: None, handle_out: None, mode: kind }).collect(), false).unwrap()
+    NodePath::new(
+        anchors
+            .iter()
+            .map(|&a| Node {
+                anchor: a,
+                handle_in: None,
+                handle_out: None,
+                mode: kind,
+            })
+            .collect(),
+        false,
+    )
+    .unwrap()
 }
 
 fn samples(path: &NodePath) -> Vec<Point> {
@@ -21,12 +33,20 @@ fn samples(path: &NodePath) -> Vec<Point> {
 }
 
 fn on_path(path: &NodePath, q: Point) -> f64 {
-    geom::nearest_on_path(&path.to_bezpath(), q).unwrap().distance
+    geom::nearest_on_path(&path.to_bezpath(), q)
+        .unwrap()
+        .distance
 }
 
 fn assert_g1(node: &Node) {
-    let (a, b) = (node.handle_in.unwrap() - node.anchor, node.handle_out.unwrap() - node.anchor);
-    assert!(a.cross(b).abs() <= 1e-9 * (1. + a.hypot() * b.hypot()), "{node:?}");
+    let (a, b) = (
+        node.handle_in.unwrap() - node.anchor,
+        node.handle_out.unwrap() - node.anchor,
+    );
+    assert!(
+        a.cross(b).abs() <= 1e-9 * (1. + a.hypot() * b.hypot()),
+        "{node:?}"
+    );
     assert!(a.dot(b) < 0., "{node:?}");
 }
 
@@ -38,7 +58,10 @@ fn corner_paths_are_polylines() {
     let mut closed = path.clone();
     closed.set_closed(true);
     assert_eq!(closed.segment_count(), 5);
-    assert!(matches!(closed.to_bezpath().elements().last(), Some(geom::PathEl::ClosePath)));
+    assert!(matches!(
+        closed.to_bezpath().elements().last(),
+        Some(geom::PathEl::ClosePath)
+    ));
 }
 
 #[test]
@@ -52,7 +75,10 @@ fn smooth_and_symmetric_constraints_hold_through_edits() {
         assert_g1(&path.nodes()[2]);
         if mode == NodeMode::Symmetric {
             let n = path.nodes()[2];
-            let (a, b) = ((n.handle_in.unwrap() - n.anchor).hypot(), (n.handle_out.unwrap() - n.anchor).hypot());
+            let (a, b) = (
+                (n.handle_in.unwrap() - n.anchor).hypot(),
+                (n.handle_out.unwrap() - n.anchor).hypot(),
+            );
             assert!((a - b).abs() < 1e-12);
         }
     }
@@ -66,7 +92,11 @@ fn smooth_and_symmetric_constraints_hold_through_edits() {
 
 #[test]
 fn segment_drag_follows_the_cursor() {
-    for mode in [NodeMode::Corner, NodeMode::Smooth, NodeMode::Auto(AutoSmooth::Hobby)] {
+    for mode in [
+        NodeMode::Corner,
+        NodeMode::Smooth,
+        NodeMode::Auto(AutoSmooth::Hobby),
+    ] {
         let mut path = zigzag(mode);
         if mode == NodeMode::Smooth {
             path = zigzag(NodeMode::Auto(AutoSmooth::Natural));
@@ -78,7 +108,10 @@ fn segment_drag_follows_the_cursor() {
             let before = path.segment(1).eval(t);
             let delta = Vec2::new(-0.05, 0.12);
             path.drag_segment(1, t, delta).unwrap();
-            assert!((path.segment(1).eval(t) - (before + delta)).hypot() < 1e-12, "{mode:?} {t}");
+            assert!(
+                (path.segment(1).eval(t) - (before + delta)).hypot() < 1e-12,
+                "{mode:?} {t}"
+            );
         }
     }
 }
@@ -101,11 +134,16 @@ fn insert_at_leaves_the_curve_unchanged() {
                 assert!(on_path(&path, *q) < 1e-9, "{mode:?} closed={closed}");
             }
             for q in samples(&path) {
-                assert!(on_path(&{
-                    let mut original = zigzag(mode);
-                    original.set_closed(closed);
-                    original
-                }, q) < 1e-9);
+                assert!(
+                    on_path(
+                        &{
+                            let mut original = zigzag(mode);
+                            original.set_closed(closed);
+                            original
+                        },
+                        q
+                    ) < 1e-9
+                );
             }
             // A later automatic update does not move anything either.
             let frozen = samples(&path);
@@ -120,12 +158,19 @@ fn natural_runs_are_c2() {
     for closed in [false, true] {
         let mut path = zigzag(NodeMode::Auto(AutoSmooth::Natural));
         path.set_closed(closed);
-        let interior: Vec<usize> = if closed { (0..5).collect() } else { (1..4).collect() };
+        let interior: Vec<usize> = if closed {
+            (0..5).collect()
+        } else {
+            (1..4).collect()
+        };
         for i in interior {
             let prev = if i == 0 { 4 } else { i - 1 };
             let (a, b) = (path.segment(prev), path.segment(i));
             assert!((geom::deriv1(a, 1.) - geom::deriv1(b, 0.)).hypot() < 1e-9);
-            assert!((geom::deriv2(a, 1.) - geom::deriv2(b, 0.)).hypot() < 1e-9, "closed={closed} node {i}");
+            assert!(
+                (geom::deriv2(a, 1.) - geom::deriv2(b, 0.)).hypot() < 1e-9,
+                "closed={closed} node {i}"
+            );
         }
     }
 }
@@ -137,7 +182,14 @@ fn hobby_is_smooth_and_rounds_a_square_into_a_circle() {
         assert_g1(&open.nodes()[i]);
     }
     let square = [p(1., 0.), p(0., 1.), p(-1., 0.), p(0., -1.)];
-    let circle = NodePath::new(square.iter().map(|&a| Node::auto(a, AutoSmooth::Hobby)).collect(), true).unwrap();
+    let circle = NodePath::new(
+        square
+            .iter()
+            .map(|&a| Node::auto(a, AutoSmooth::Hobby))
+            .collect(),
+        true,
+    )
+    .unwrap();
     for q in samples(&circle) {
         assert!((q.to_vec2().hypot() - 1.).abs() < 3e-3, "{q:?}");
     }

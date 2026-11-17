@@ -76,7 +76,12 @@ pub fn series_area(points: &[Point], curve: SeriesCurve, baseline: Baseline<'_>)
     let bottom: Vec<Point> = match baseline {
         Baseline::Constant(y) => points.iter().map(|p| Point::new(p.x, y)).collect(),
         Baseline::Series(series) => (0..points.len())
-            .map(|i| series.get(i).copied().unwrap_or(Point::new(f64::NAN, f64::NAN)))
+            .map(|i| {
+                series
+                    .get(i)
+                    .copied()
+                    .unwrap_or(Point::new(f64::NAN, f64::NAN))
+            })
             .collect(),
     };
     let mut start = 0;
@@ -128,7 +133,11 @@ fn draw(path: &mut BezPath, p: &[Point], curve: SeriesCurve, start: bool) {
         SeriesCurve::Cardinal { tension } => cardinal(path, p, tension.clamp(0., 1.)),
         SeriesCurve::CatmullRom { alpha } => {
             let alpha = alpha.clamp(0., 1.);
-            if alpha == 0. { cardinal(path, p, 0.) } else { catmull_rom(path, p, alpha) }
+            if alpha == 0. {
+                cardinal(path, p, 0.)
+            } else {
+                catmull_rom(path, p, alpha)
+            }
         }
         SeriesCurve::Natural => natural(path, p),
         SeriesCurve::MonotoneX => monotone(path, p, false),
@@ -142,7 +151,10 @@ fn draw(path: &mut BezPath, p: &[Point], curve: SeriesCurve, start: bool) {
                 .map(|(i, q)| {
                     let t = i as f64 / (n - 1) as f64;
                     let chord = first.lerp(last, t);
-                    Point::new(beta * q.x + (1. - beta) * chord.x, beta * q.y + (1. - beta) * chord.y)
+                    Point::new(
+                        beta * q.x + (1. - beta) * chord.x,
+                        beta * q.y + (1. - beta) * chord.y,
+                    )
                 })
                 .collect();
             basis(path, &straightened);
@@ -173,7 +185,12 @@ fn basis(path: &mut BezPath, p: &[Point]) {
         path.line_to(p[1]);
         return;
     }
-    let lerp = |a: Point, b: Point, wa: f64, wb: f64| Point::new((wa * a.x + wb * b.x) / (wa + wb), (wa * a.y + wb * b.y) / (wa + wb));
+    let lerp = |a: Point, b: Point, wa: f64, wb: f64| {
+        Point::new(
+            (wa * a.x + wb * b.x) / (wa + wb),
+            (wa * a.y + wb * b.y) / (wa + wb),
+        )
+    };
     path.line_to(lerp(p[0], p[1], 5., 1.));
     // Each sample after the second emits the B-spline span for (x0, x1, x).
     let mut span = |x0: Point, x1: Point, x: Point| {
@@ -226,7 +243,10 @@ fn catmull_rom(path: &mut BezPath, p: &[Point], alpha: f64) {
             if l01_a > EPS {
                 let a = 2. * l01_2a + 3. * l01_a * l12_a + l12_2a;
                 let m = 3. * l01_a * (l01_a + l12_a);
-                c1 = Point::new((p1.x * a - p0.x * l12_2a + p2.x * l01_2a) / m, (p1.y * a - p0.y * l12_2a + p2.y * l01_2a) / m);
+                c1 = Point::new(
+                    (p1.x * a - p0.x * l12_2a + p2.x * l01_2a) / m,
+                    (p1.y * a - p0.y * l12_2a + p2.y * l01_2a) / m,
+                );
             }
         }
         if i + 2 < n {
@@ -236,7 +256,10 @@ fn catmull_rom(path: &mut BezPath, p: &[Point], alpha: f64) {
             if l23_a > EPS {
                 let b = 2. * l23_2a + 3. * l23_a * l12_a + l12_2a;
                 let m = 3. * l23_a * (l23_a + l12_a);
-                c2 = Point::new((p2.x * b + p1.x * l23_2a - p3.x * l12_2a) / m, (p2.y * b + p1.y * l23_2a - p3.y * l12_2a) / m);
+                c2 = Point::new(
+                    (p2.x * b + p1.x * l23_2a - p3.x * l12_2a) / m,
+                    (p2.y * b + p1.y * l23_2a - p3.y * l12_2a) / m,
+                );
             }
         }
         path.curve_to(c1, c2, p2);
@@ -295,7 +318,9 @@ fn monotone(path: &mut BezPath, p: &[Point], swap: bool) {
     let q: Vec<Point> = p.iter().map(|v| flip(*v)).collect();
     let xs: Vec<f64> = q.iter().map(|v| v.x).collect();
     let ys: Vec<f64> = q.iter().map(|v| v.y).collect();
-    let slopes = (q.len() >= 3).then(|| pchip_slopes(&xs, &ys).ok()).flatten();
+    let slopes = (q.len() >= 3)
+        .then(|| pchip_slopes(&xs, &ys).ok())
+        .flatten();
     let Some(d) = slopes else {
         p[1..].iter().for_each(|v| path.line_to(*v));
         return;

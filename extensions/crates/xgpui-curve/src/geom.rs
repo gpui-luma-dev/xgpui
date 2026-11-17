@@ -20,7 +20,12 @@ pub const NEAREST_ACCURACY: f64 = 1e-12;
 /// The exact cubic form of a segment, with the same parameterization.
 pub fn to_cubic(seg: PathSeg) -> CubicBez {
     match seg {
-        PathSeg::Line(l) => CubicBez::new(l.p0, l.p0.lerp(l.p1, 1. / 3.), l.p0.lerp(l.p1, 2. / 3.), l.p1),
+        PathSeg::Line(l) => CubicBez::new(
+            l.p0,
+            l.p0.lerp(l.p1, 1. / 3.),
+            l.p0.lerp(l.p1, 2. / 3.),
+            l.p1,
+        ),
         PathSeg::Quad(q) => q.raise(),
         PathSeg::Cubic(c) => c,
     }
@@ -57,7 +62,11 @@ pub fn tangent(seg: PathSeg, t: f64) -> Option<Vec2> {
     let d2 = deriv2(seg, t);
     if d2.hypot() > EPS {
         // Near t = 1 the curve arrives along −B″(1).
-        return Some(if t >= 1. { -d2.normalize() } else { d2.normalize() });
+        return Some(if t >= 1. {
+            -d2.normalize()
+        } else {
+            d2.normalize()
+        });
     }
     let chord = seg.end() - seg.start();
     (chord.hypot() > EPS).then(|| chord.normalize())
@@ -94,12 +103,22 @@ pub struct Hermite {
 impl Hermite {
     /// Bézier controls c₁ = p₀ + m₀/3 and c₂ = p₁ − m₁/3.
     pub fn to_cubic(self) -> CubicBez {
-        CubicBez::new(self.p0, self.p0 + self.m0 / 3., self.p1 - self.m1 / 3., self.p1)
+        CubicBez::new(
+            self.p0,
+            self.p0 + self.m0 / 3.,
+            self.p1 - self.m1 / 3.,
+            self.p1,
+        )
     }
 
     /// m₀ = 3(c₁ − p₀), m₁ = 3(p₁ − c₂).
     pub fn from_cubic(c: CubicBez) -> Self {
-        Self { p0: c.p0, m0: 3. * (c.p1 - c.p0), p1: c.p3, m1: 3. * (c.p3 - c.p2) }
+        Self {
+            p0: c.p0,
+            m0: 3. * (c.p1 - c.p0),
+            p1: c.p3,
+            m1: 3. * (c.p3 - c.p2),
+        }
     }
 }
 
@@ -172,7 +191,11 @@ pub struct Intersection {
 pub fn intersect_line(seg: PathSeg, line: Line) -> Vec<Intersection> {
     seg.intersect_line(line)
         .into_iter()
-        .map(|hit| Intersection { t_a: hit.segment_t, t_b: hit.line_t, point: line.eval(hit.line_t) })
+        .map(|hit| Intersection {
+            t_a: hit.segment_t,
+            t_b: hit.line_t,
+            point: line.eval(hit.line_t),
+        })
         .collect()
 }
 
@@ -191,7 +214,11 @@ pub fn intersect_segments(a: PathSeg, b: PathSeg, tolerance: f64) -> Vec<Interse
     if let PathSeg::Line(line) = a {
         return intersect_line(b, line)
             .into_iter()
-            .map(|hit| Intersection { t_a: hit.t_b, t_b: hit.t_a, point: hit.point })
+            .map(|hit| Intersection {
+                t_a: hit.t_b,
+                t_b: hit.t_a,
+                point: hit.point,
+            })
             .collect();
     }
     let mut raw = Vec::new();
@@ -202,7 +229,10 @@ pub fn intersect_segments(a: PathSeg, b: PathSeg, tolerance: f64) -> Vec<Interse
         if steps > MAX_INTERSECTION_STEPS {
             break;
         }
-        let ra = a.subsegment(a0..a1).bounding_box().inflate(tolerance, tolerance);
+        let ra = a
+            .subsegment(a0..a1)
+            .bounding_box()
+            .inflate(tolerance, tolerance);
         let rb = b.subsegment(b0..b1).bounding_box();
         if !overlaps(ra, rb) {
             continue;
@@ -230,8 +260,15 @@ pub fn intersect_segments(a: PathSeg, b: PathSeg, tolerance: f64) -> Vec<Interse
         if point.distance(b.eval(tb)) > 4. * tolerance {
             continue;
         }
-        if hits.iter().all(|h| h.point.distance(point) > 4. * tolerance) {
-            hits.push(Intersection { t_a: ta, t_b: tb, point });
+        if hits
+            .iter()
+            .all(|h| h.point.distance(point) > 4. * tolerance)
+        {
+            hits.push(Intersection {
+                t_a: ta,
+                t_b: tb,
+                point,
+            });
         }
     }
     hits.sort_by(|x, y| x.t_a.total_cmp(&y.t_a));
@@ -279,7 +316,10 @@ pub fn clip_to_rect(path: &BezPath, rect: Rect) -> BezPath {
     ];
     let slack = 1e-9 * (1. + rect.width().abs().max(rect.height().abs()));
     let inside = |p: Point| {
-        p.x >= rect.x0 - slack && p.x <= rect.x1 + slack && p.y >= rect.y0 - slack && p.y <= rect.y1 + slack
+        p.x >= rect.x0 - slack
+            && p.x <= rect.x1 + slack
+            && p.y >= rect.y0 - slack
+            && p.y <= rect.y1 + slack
     };
     let mut out = BezPath::new();
     let mut pen: Option<Point> = None;
@@ -378,7 +418,12 @@ pub fn nearest_on_path(path: &BezPath, p: Point) -> Option<PathHit> {
         .enumerate()
         .map(|(segment, seg)| {
             let hit = nearest(seg, p);
-            PathHit { segment, t: hit.t, point: hit.point, distance: hit.distance }
+            PathHit {
+                segment,
+                t: hit.t,
+                point: hit.point,
+                distance: hit.distance,
+            }
         })
         .min_by(|a, b| a.distance.total_cmp(&b.distance))
 }

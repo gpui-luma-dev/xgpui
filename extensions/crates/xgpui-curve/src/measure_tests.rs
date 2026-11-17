@@ -24,8 +24,13 @@ fn quadratic_closed_form_matches_quadrature() {
         QuadBez::new((1., 1.), (1.5, 9.), (2., 1.)),
     ] {
         for (t0, t1) in [(0f64, 1f64), (0.2, 0.7), (0.9, 0.1)] {
-            let reference = PathSeg::Cubic(q.raise()).subsegment(t0.min(t1)..t0.max(t1)).arclen(1e-14);
-            assert!(rel(quad_arclen(q, t0, t1), reference) <= 1e-9, "{q:?} {t0} {t1}");
+            let reference = PathSeg::Cubic(q.raise())
+                .subsegment(t0.min(t1)..t0.max(t1))
+                .arclen(1e-14);
+            assert!(
+                rel(quad_arclen(q, t0, t1), reference) <= 1e-9,
+                "{q:?} {t0} {t1}"
+            );
         }
     }
 }
@@ -63,7 +68,9 @@ fn measured_path_locates_and_trims() {
     let at = m.locate(2.5).unwrap();
     assert_eq!((at.segment, at.contour), (2, 0));
     assert!((at.point - Point::new(0.5, 1.)).hypot() < 1e-12);
-    let trimmed = m.apply(&PathEffect::new().trim(0.25..0.75).unwrap()).unwrap();
+    let trimmed = m
+        .apply(&PathEffect::new().trim(0.25..0.75).unwrap())
+        .unwrap();
     let segs: Vec<_> = trimmed.segments().collect();
     assert!((segs[0].start() - Point::new(1., 0.)).hypot() < 1e-12);
     assert!((segs.last().unwrap().end() - Point::new(0., 1.)).hypot() < 1e-12);
@@ -75,14 +82,35 @@ fn measured_path_locates_and_trims() {
 #[test]
 fn dashes_restart_and_join_across_the_closed_seam() {
     let m = MeasuredPath::new(&square(), 1e-9).unwrap();
-    let dashed = m.apply(&PathEffect::new().dash(&[1., 1.], 0.).unwrap()).unwrap();
-    assert_eq!(dashed.elements().iter().filter(|e| matches!(e, PathEl::MoveTo(_))).count(), 2);
-    let shifted = m.apply(&PathEffect::new().dash(&[1., 1.], 0.5).unwrap()).unwrap();
+    let dashed = m
+        .apply(&PathEffect::new().dash(&[1., 1.], 0.).unwrap())
+        .unwrap();
+    assert_eq!(
+        dashed
+            .elements()
+            .iter()
+            .filter(|e| matches!(e, PathEl::MoveTo(_)))
+            .count(),
+        2
+    );
+    let shifted = m
+        .apply(&PathEffect::new().dash(&[1., 1.], 0.5).unwrap())
+        .unwrap();
     // [3.5, 4] and [0, 0.5] join into one piece through the corner at the start.
-    assert_eq!(shifted.elements().iter().filter(|e| matches!(e, PathEl::MoveTo(_))).count(), 2);
+    assert_eq!(
+        shifted
+            .elements()
+            .iter()
+            .filter(|e| matches!(e, PathEl::MoveTo(_)))
+            .count(),
+        2
+    );
     assert!(PathEffect::new().dash(&[1., 0.], 0.).is_err());
     assert!(PathEffect::new().trim(0.5..0.2).is_err());
-    assert!(m.apply(&PathEffect::new().dash(&[1e-9], 0.).unwrap()).is_err());
+    assert!(
+        m.apply(&PathEffect::new().dash(&[1e-9], 0.).unwrap())
+            .is_err()
+    );
 }
 
 #[test]
@@ -115,7 +143,10 @@ fn invalid_input_is_rejected() {
     let mut path = BezPath::new();
     path.move_to((0., 0.));
     path.line_to((f64::NAN, 0.));
-    assert_eq!(MeasuredPath::new(&path, 1e-9).unwrap_err(), CurveError::NonFinite);
+    assert_eq!(
+        MeasuredPath::new(&path, 1e-9).unwrap_err(),
+        CurveError::NonFinite
+    );
     assert!(MeasuredPath::new(&square(), 0.).is_err());
     let empty = MeasuredPath::new(&BezPath::new(), 1e-9).unwrap();
     assert_eq!(empty.length(), 0.);

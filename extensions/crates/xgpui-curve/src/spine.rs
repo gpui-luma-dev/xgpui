@@ -56,7 +56,11 @@ impl CurveSpine {
 
     /// A straight spine (the control at the chord midpoint).
     pub fn straight(p0: Point, p1: Point) -> Self {
-        Self { p0, control: p0.midpoint(p1), p1 }
+        Self {
+            p0,
+            control: p0.midpoint(p1),
+            p1,
+        }
     }
 
     /// A spine whose control sits `bend` chord lengths off the chord midpoint,
@@ -64,7 +68,11 @@ impl CurveSpine {
     pub fn with_bend(p0: Point, p1: Point, bend: f64) -> Self {
         let chord = p1 - p0;
         let normal = Vec2::new(-chord.y, chord.x);
-        Self { p0, control: p0.midpoint(p1) + normal * bend, p1 }
+        Self {
+            p0,
+            control: p0.midpoint(p1) + normal * bend,
+            p1,
+        }
     }
 
     /// The spine as a kurbo quadratic.
@@ -87,8 +95,14 @@ impl CurveSpine {
     /// terminal tangent.
     pub fn arrowhead(&self, length: f64, half_angle: f64) -> Option<[Point; 3]> {
         let back = -self.terminal_tangent()?;
-        let rotate = |v: Vec2, a: f64| Vec2::new(v.x * a.cos() - v.y * a.sin(), v.x * a.sin() + v.y * a.cos());
-        Some([self.p1 + rotate(back, half_angle) * length, self.p1, self.p1 + rotate(back, -half_angle) * length])
+        let rotate = |v: Vec2, a: f64| {
+            Vec2::new(v.x * a.cos() - v.y * a.sin(), v.x * a.sin() + v.y * a.cos())
+        };
+        Some([
+            self.p1 + rotate(back, half_angle) * length,
+            self.p1,
+            self.p1 + rotate(back, -half_angle) * length,
+        ])
     }
 
     /// Project `p` onto the whole spine.
@@ -100,7 +114,11 @@ impl CurveSpine {
     /// (swapped if reversed). Both range ends are candidates, not just the
     /// clamped roots.
     pub fn project_range(&self, p: Point, t_min: f64, t_max: f64) -> SpinePoint {
-        let (lo, hi) = if t_min <= t_max { (t_min, t_max) } else { (t_max, t_min) };
+        let (lo, hi) = if t_min <= t_max {
+            (t_min, t_max)
+        } else {
+            (t_max, t_min)
+        };
         let (lo, hi) = (lo.clamp(0., 1.), hi.clamp(0., 1.));
         let q = self.quad();
         let a = self.control - self.p0;
@@ -167,11 +185,18 @@ impl CurveSpine {
         }
         let mid = self.p0.midpoint(self.p1);
         let offset = self.control - mid;
-        let at = |s: f64| Self { control: mid + offset * s, ..*self };
+        let at = |s: f64| Self {
+            control: mid + offset * s,
+            ..*self
+        };
         let (mut lo, mut hi) = (0., 1.);
         for _ in 0..60 {
             let m = 0.5 * (lo + hi);
-            if at(m).reach() >= radius { lo = m } else { hi = m }
+            if at(m).reach() >= radius {
+                lo = m
+            } else {
+                hi = m
+            }
         }
         *self = at(lo);
         true
@@ -236,7 +261,9 @@ fn cubic_roots(k3: f64, k2: f64, k1: f64, k0: f64) -> Vec<f64> {
     let r = (-p / 3.).sqrt();
     let cos = (1.5 * q / p * (-3. / p).sqrt()).clamp(-1., 1.);
     let phi = cos.acos() / 3.;
-    (0..3).map(|k| 2. * r * (phi - 2. * std::f64::consts::PI * k as f64 / 3.).cos() + shift).collect()
+    (0..3)
+        .map(|k| 2. * r * (phi - 2. * std::f64::consts::PI * k as f64 / 3.).cos() + shift)
+        .collect()
 }
 
 fn quadratic_roots(a: f64, b: f64, c: f64) -> Vec<f64> {

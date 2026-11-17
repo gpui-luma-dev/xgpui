@@ -83,7 +83,10 @@ fn brute_nearest(seg: PathSeg, p: Point) -> f64 {
         }
     }
     // Golden-section refinement around the sampled minimum.
-    let (mut lo, mut hi) = ((best.0 - 1. / n as f64).max(0.), (best.0 + 1. / n as f64).min(1.));
+    let (mut lo, mut hi) = (
+        (best.0 - 1. / n as f64).max(0.),
+        (best.0 + 1. / n as f64).min(1.),
+    );
     for _ in 0..200 {
         let m1 = lo + (hi - lo) * 0.381966;
         let m2 = lo + (hi - lo) * 0.618034;
@@ -99,9 +102,17 @@ fn brute_nearest(seg: PathSeg, p: Point) -> f64 {
 #[test]
 fn nearest_is_within_a_micro_unit() {
     for seg in segs() {
-        for p in [Point::new(1., 1.), Point::new(-2., 3.), Point::new(5., -4.), Point::new(2., 2.5)] {
+        for p in [
+            Point::new(1., 1.),
+            Point::new(-2., 3.),
+            Point::new(5., -4.),
+            Point::new(2., 2.5),
+        ] {
             let hit = nearest(seg, p);
-            assert!((hit.distance - brute_nearest(seg, p)).abs() <= 1e-6, "{seg:?} {p:?}");
+            assert!(
+                (hit.distance - brute_nearest(seg, p)).abs() <= 1e-6,
+                "{seg:?} {p:?}"
+            );
             assert_eq!(hit.signed_distance.abs(), hit.distance);
         }
     }
@@ -139,7 +150,9 @@ fn curve_curve_intersections_lie_on_both_curves() {
     for hit in intersect_segments(a, line, 1e-9) {
         assert!((a.eval(hit.t_a).y - 0.5).abs() < 1e-9);
     }
-    assert!(intersect_segments(a, PathSeg::Line(Line::new((10., 10.), (11., 11.))), 1e-9).is_empty());
+    assert!(
+        intersect_segments(a, PathSeg::Line(Line::new((10., 10.), (11., 11.))), 1e-9).is_empty()
+    );
 }
 
 #[test]
@@ -178,7 +191,11 @@ fn fill_rules_and_stroke_hits() {
     let hole = Point::new(2., 2.);
     assert!(fill_contains(&path, hole, FillRule::NonZero));
     assert!(!fill_contains(&path, hole, FillRule::EvenOdd));
-    assert!(fill_contains(&path, Point::new(0.5, 0.5), FillRule::EvenOdd));
+    assert!(fill_contains(
+        &path,
+        Point::new(0.5, 0.5),
+        FillRule::EvenOdd
+    ));
     assert!(stroke_contains(&path, Point::new(2., 0.2), 0.5));
     assert!(!stroke_contains(&path, Point::new(2., 0.4), 0.5));
     let hit = nearest_on_path(&path, Point::new(4.5, 2.)).unwrap();

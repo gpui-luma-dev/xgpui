@@ -96,7 +96,14 @@ impl MeshLattice {
             finite(&[p.x, p.y])?;
         }
         let n = points.len();
-        Ok(Self { rows, cols, points, u: vec![Tangent::Auto; n], v: vec![Tangent::Auto; n], tangent_limit: DEFAULT_TANGENT_LIMIT })
+        Ok(Self {
+            rows,
+            cols,
+            points,
+            u: vec![Tangent::Auto; n],
+            v: vec![Tangent::Auto; n],
+            tangent_limit: DEFAULT_TANGENT_LIMIT,
+        })
     }
 
     /// Row count.
@@ -110,7 +117,10 @@ impl MeshLattice {
     }
 
     fn index(&self, row: usize, col: usize) -> usize {
-        assert!(row < self.rows && col < self.cols, "mesh node ({row}, {col}) out of range");
+        assert!(
+            row < self.rows && col < self.cols,
+            "mesh node ({row}, {col}) out of range"
+        );
         row * self.cols + col
     }
 
@@ -137,7 +147,13 @@ impl MeshLattice {
     }
 
     /// Store a tangent.
-    pub fn set_tangent(&mut self, row: usize, col: usize, axis: Axis, tangent: Tangent) -> Result<(), CurveError> {
+    pub fn set_tangent(
+        &mut self,
+        row: usize,
+        col: usize,
+        axis: Axis,
+        tangent: Tangent,
+    ) -> Result<(), CurveError> {
         if let Tangent::Explicit(m) = tangent {
             finite(&[m.x, m.y])?;
         }
@@ -169,7 +185,12 @@ impl MeshLattice {
         Ok(())
     }
 
-    fn neighbors(&self, row: usize, col: usize, axis: Axis) -> (Option<Point>, Point, Option<Point>) {
+    fn neighbors(
+        &self,
+        row: usize,
+        col: usize,
+        axis: Axis,
+    ) -> (Option<Point>, Point, Option<Point>) {
         let p = self.point(row, col);
         match axis {
             Axis::U => (
@@ -271,7 +292,10 @@ impl MeshLattice {
         let lc = b.top.eval(u).to_vec2() * (1. - v) + b.bottom.eval(u).to_vec2() * v;
         let dc = b.left.eval(v).to_vec2() * (1. - u) + b.right.eval(v).to_vec2() * u;
         let (p00, p10, p01, p11) = (b.top.p0, b.top.p3, b.bottom.p0, b.bottom.p3);
-        let bl = p00.to_vec2() * ((1. - u) * (1. - v)) + p10.to_vec2() * (u * (1. - v)) + p01.to_vec2() * ((1. - u) * v) + p11.to_vec2() * (u * v);
+        let bl = p00.to_vec2() * ((1. - u) * (1. - v))
+            + p10.to_vec2() * (u * (1. - v))
+            + p01.to_vec2() * ((1. - u) * v)
+            + p11.to_vec2() * (u * v);
         (lc + dc - bl).to_point()
     }
 
@@ -283,11 +307,26 @@ impl MeshLattice {
         let (p00, p10, p01, p11) = (b.top.p0, b.top.p3, b.bottom.p0, b.bottom.p3);
         let (near, far, side0, side1) = match axis {
             // Blend top/bottom by s; the linear part comes from left/right at v = s.
-            Axis::U => (b.top, b.bottom, b.left.eval(s) - p00.lerp(p01, s), b.right.eval(s) - p10.lerp(p11, s)),
-            Axis::V => (b.left, b.right, b.top.eval(s) - p00.lerp(p10, s), b.bottom.eval(s) - p01.lerp(p11, s)),
+            Axis::U => (
+                b.top,
+                b.bottom,
+                b.left.eval(s) - p00.lerp(p01, s),
+                b.right.eval(s) - p10.lerp(p11, s),
+            ),
+            Axis::V => (
+                b.left,
+                b.right,
+                b.top.eval(s) - p00.lerp(p10, s),
+                b.bottom.eval(s) - p01.lerp(p11, s),
+            ),
         };
         let mix = |a: Point, c: Point| a.lerp(c, s);
-        let linear = [side0, side0 + (side1 - side0) / 3., side0 + (side1 - side0) * (2. / 3.), side1];
+        let linear = [
+            side0,
+            side0 + (side1 - side0) / 3.,
+            side0 + (side1 - side0) * (2. / 3.),
+            side1,
+        ];
         CubicBez::new(
             mix(near.p0, far.p0) + linear[0],
             mix(near.p1, far.p1) + linear[1],
@@ -319,7 +358,14 @@ impl MeshLattice {
     /// nodes; a node's tangent is shared by its two edges on that axis, so the
     /// neighboring edge bends too. The fold clamp still applies, so a drag
     /// past the limit stops short. Endpoints (t ≈ 0 or 1) move no controls.
-    pub fn drag_edge(&mut self, row: usize, col: usize, axis: Axis, t: f64, delta: Vec2) -> Result<(), CurveError> {
+    pub fn drag_edge(
+        &mut self,
+        row: usize,
+        col: usize,
+        axis: Axis,
+        t: f64,
+        delta: Vec2,
+    ) -> Result<(), CurveError> {
         finite(&[t, delta.x, delta.y])?;
         let t = t.clamp(0., 1.);
         let w1 = 3. * t * (1. - t) * (1. - t);
@@ -344,7 +390,13 @@ impl MeshLattice {
         let mut consider = |row, col, axis, edge: CubicBez| {
             let hit = geom::nearest(PathSeg::Cubic(edge), p);
             if hit.distance <= max_distance && best.is_none_or(|b| hit.distance < b.distance) {
-                best = Some(EdgeHit { row, col, axis, t: hit.t, distance: hit.distance });
+                best = Some(EdgeHit {
+                    row,
+                    col,
+                    axis,
+                    t: hit.t,
+                    distance: hit.distance,
+                });
             }
         };
         for row in 0..self.rows {
@@ -363,13 +415,20 @@ impl MeshLattice {
 
 fn clamp_length(v: Vec2, max: f64) -> Vec2 {
     let length = v.hypot();
-    if length <= f64::EPSILON || length <= max { v } else { v * (max / length) }
+    if length <= f64::EPSILON || length <= max {
+        v
+    } else {
+        v * (max / length)
+    }
 }
 
 /// The lab's color-channel tangent: zero at a local extremum or flat side,
 /// otherwise the mean of the adjacent differences clamped to the smaller one.
 pub fn monotone_channel_tangent(prev_delta: f64, next_delta: f64) -> f64 {
-    if prev_delta.abs() <= f64::EPSILON || next_delta.abs() <= f64::EPSILON || prev_delta.signum() != next_delta.signum() {
+    if prev_delta.abs() <= f64::EPSILON
+        || next_delta.abs() <= f64::EPSILON
+        || prev_delta.signum() != next_delta.signum()
+    {
         0.
     } else {
         let limit = prev_delta.abs().min(next_delta.abs());

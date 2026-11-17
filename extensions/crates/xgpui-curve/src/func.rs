@@ -55,7 +55,10 @@ fn check_knots(x: &[f64], y: &[f64]) -> Result<(), CurveError> {
         return Err(CurveError::Dimensions);
     }
     if x.len() < 2 {
-        return Err(CurveError::TooFewPoints { required: 2, actual: x.len() });
+        return Err(CurveError::TooFewPoints {
+            required: 2,
+            actual: x.len(),
+        });
     }
     finite(x)?;
     finite(y)?;
@@ -67,10 +70,23 @@ fn check_knots(x: &[f64], y: &[f64]) -> Result<(), CurveError> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Segment {
-    Linear { y0: f64, y1: f64 },
-    Hermite { y0: f64, y1: f64, d0: f64, d1: f64 },
+    Linear {
+        y0: f64,
+        y1: f64,
+    },
+    Hermite {
+        y0: f64,
+        y1: f64,
+        d0: f64,
+        d1: f64,
+    },
     /// x-monotone cubic Bézier.
-    Bezier { p0: Point, c1: Point, c2: Point, p3: Point },
+    Bezier {
+        p0: Point,
+        c1: Point,
+        c2: Point,
+        p3: Point,
+    },
 }
 
 /// y = f(x) over strictly increasing knots. Outside the knot range the
@@ -86,7 +102,10 @@ impl FunctionalCurve {
     pub fn linear(points: &[Point]) -> Result<Self, CurveError> {
         let (xs, ys) = split_points(points);
         check_knots(&xs, &ys)?;
-        let segments = ys.windows(2).map(|w| Segment::Linear { y0: w[0], y1: w[1] }).collect();
+        let segments = ys
+            .windows(2)
+            .map(|w| Segment::Linear { y0: w[0], y1: w[1] })
+            .collect();
         Ok(Self { xs, segments })
     }
 
@@ -96,7 +115,12 @@ impl FunctionalCurve {
         let (xs, ys) = split_points(points);
         let d = pchip_slopes(&xs, &ys)?;
         let segments = (0..xs.len() - 1)
-            .map(|i| Segment::Hermite { y0: ys[i], y1: ys[i + 1], d0: d[i], d1: d[i + 1] })
+            .map(|i| Segment::Hermite {
+                y0: ys[i],
+                y1: ys[i + 1],
+                d0: d[i],
+                d1: d[i + 1],
+            })
             .collect();
         Ok(Self { xs, segments })
     }
@@ -132,7 +156,11 @@ impl FunctionalCurve {
     fn locate(&self, x: f64) -> (usize, f64) {
         let (lo, hi) = self.domain();
         let x = if x.is_nan() { lo } else { x.clamp(lo, hi) };
-        let i = self.xs.partition_point(|k| *k <= x).saturating_sub(1).min(self.segments.len() - 1);
+        let i = self
+            .xs
+            .partition_point(|k| *k <= x)
+            .saturating_sub(1)
+            .min(self.segments.len() - 1);
         (i, x)
     }
 
@@ -146,7 +174,10 @@ impl FunctionalCurve {
             Segment::Linear { y0, y1 } => y0 + (y1 - y0) * s,
             Segment::Hermite { y0, y1, d0, d1 } => {
                 let (s2, s3) = (s * s, s * s * s);
-                (2. * s3 - 3. * s2 + 1.) * y0 + (s3 - 2. * s2 + s) * h * d0 + (-2. * s3 + 3. * s2) * y1 + (s3 - s2) * h * d1
+                (2. * s3 - 3. * s2 + 1.) * y0
+                    + (s3 - 2. * s2 + s) * h * d0
+                    + (-2. * s3 + 3. * s2) * y1
+                    + (s3 - s2) * h * d1
             }
             Segment::Bezier { p0, c1, c2, p3 } => {
                 let t = solve_monotone_cubic(p0.x, c1.x, c2.x, p3.x, x);
@@ -165,7 +196,11 @@ impl FunctionalCurve {
             Segment::Linear { y0, y1 } => (y1 - y0) / h,
             Segment::Hermite { y0, y1, d0, d1 } => {
                 let s2 = s * s;
-                ((6. * s2 - 6. * s) * y0 + (3. * s2 - 4. * s + 1.) * h * d0 + (-6. * s2 + 6. * s) * y1 + (3. * s2 - 2. * s) * h * d1) / h
+                ((6. * s2 - 6. * s) * y0
+                    + (3. * s2 - 4. * s + 1.) * h * d0
+                    + (-6. * s2 + 6. * s) * y1
+                    + (3. * s2 - 2. * s) * h * d1)
+                    / h
             }
             Segment::Bezier { p0, c1, c2, p3 } => {
                 let t = solve_monotone_cubic(p0.x, c1.x, c2.x, p3.x, x);
@@ -189,15 +224,26 @@ impl FunctionalCurve {
         let (lo, hi) = self.domain();
         let n = lut.len();
         for (i, slot) in lut.iter_mut().enumerate() {
-            let x = if n <= 1 { lo } else { lo + (hi - lo) * i as f64 / (n - 1) as f64 };
+            let x = if n <= 1 {
+                lo
+            } else {
+                lo + (hi - lo) * i as f64 / (n - 1) as f64
+            };
             let y = self.eval(x);
-            *slot = if y.is_finite() { y.clamp(0., 1.) as f32 } else { 0. };
+            *slot = if y.is_finite() {
+                y.clamp(0., 1.) as f32
+            } else {
+                0.
+            };
         }
     }
 }
 
 fn split_points(points: &[Point]) -> (Vec<f64>, Vec<f64>) {
-    (points.iter().map(|p| p.x).collect(), points.iter().map(|p| p.y).collect())
+    (
+        points.iter().map(|p| p.x).collect(),
+        points.iter().map(|p| p.y).collect(),
+    )
 }
 
 fn cubic(a: f64, b: f64, c: f64, d: f64, t: f64) -> f64 {
@@ -233,7 +279,11 @@ fn solve_monotone_cubic(a: f64, b: f64, c: f64, d: f64, x: f64) -> f64 {
         }
         let df = cubic_deriv(a, b, c, d, t);
         let next = t - f / df;
-        t = if df > 0. && next > lo && next < hi { next } else { 0.5 * (lo + hi) };
+        t = if df > 0. && next > lo && next < hi {
+            next
+        } else {
+            0.5 * (lo + hi)
+        };
         if hi - lo <= 1e-16 {
             break;
         }
@@ -293,30 +343,62 @@ pub enum Easing {
 
 impl Easing {
     /// `ease`.
-    pub const EASE: Easing = Easing::CubicBezier { x1: 0.25, y1: 0.1, x2: 0.25, y2: 1. };
+    pub const EASE: Easing = Easing::CubicBezier {
+        x1: 0.25,
+        y1: 0.1,
+        x2: 0.25,
+        y2: 1.,
+    };
     /// `ease-in`.
-    pub const EASE_IN: Easing = Easing::CubicBezier { x1: 0.42, y1: 0., x2: 1., y2: 1. };
+    pub const EASE_IN: Easing = Easing::CubicBezier {
+        x1: 0.42,
+        y1: 0.,
+        x2: 1.,
+        y2: 1.,
+    };
     /// `ease-out`.
-    pub const EASE_OUT: Easing = Easing::CubicBezier { x1: 0., y1: 0., x2: 0.58, y2: 1. };
+    pub const EASE_OUT: Easing = Easing::CubicBezier {
+        x1: 0.,
+        y1: 0.,
+        x2: 0.58,
+        y2: 1.,
+    };
     /// `ease-in-out`.
-    pub const EASE_IN_OUT: Easing = Easing::CubicBezier { x1: 0.42, y1: 0., x2: 0.58, y2: 1. };
+    pub const EASE_IN_OUT: Easing = Easing::CubicBezier {
+        x1: 0.42,
+        y1: 0.,
+        x2: 0.58,
+        y2: 1.,
+    };
     /// `step-start`.
-    pub const STEP_START: Easing = Easing::Steps { count: 1, position: StepPosition::JumpStart };
+    pub const STEP_START: Easing = Easing::Steps {
+        count: 1,
+        position: StepPosition::JumpStart,
+    };
     /// `step-end`.
-    pub const STEP_END: Easing = Easing::Steps { count: 1, position: StepPosition::JumpEnd };
+    pub const STEP_END: Easing = Easing::Steps {
+        count: 1,
+        position: StepPosition::JumpEnd,
+    };
 
     /// Validated `cubic-bezier()`.
     pub fn cubic_bezier(x1: f64, y1: f64, x2: f64, y2: f64) -> Result<Self, CurveError> {
         finite(&[x1, y1, x2, y2])?;
         if !(0. ..=1.).contains(&x1) || !(0. ..=1.).contains(&x2) {
-            return Err(CurveError::OutOfRange("cubic-bezier x1 and x2 must be within 0..=1"));
+            return Err(CurveError::OutOfRange(
+                "cubic-bezier x1 and x2 must be within 0..=1",
+            ));
         }
         Ok(Self::CubicBezier { x1, y1, x2, y2 })
     }
 
     /// Validated `steps()`: at least 1 step, or 2 for `jump-none`.
     pub fn steps(count: u32, position: StepPosition) -> Result<Self, CurveError> {
-        let min = if position == StepPosition::JumpNone { 2 } else { 1 };
+        let min = if position == StepPosition::JumpNone {
+            2
+        } else {
+            1
+        };
         if count < min {
             return Err(CurveError::OutOfRange("steps count"));
         }
@@ -327,7 +409,10 @@ impl Easing {
     /// does: first 0, last 1, inputs never decrease, gaps spaced evenly.
     pub fn linear_stops(stops: &[LinearStop]) -> Result<Self, CurveError> {
         if stops.len() < 2 {
-            return Err(CurveError::TooFewPoints { required: 2, actual: stops.len() });
+            return Err(CurveError::TooFewPoints {
+                required: 2,
+                actual: stops.len(),
+            });
         }
         let mut inputs: Vec<Option<f64>> = stops.iter().map(|s| s.input).collect();
         for s in stops {
@@ -361,7 +446,13 @@ impl Easing {
             }
             i = end;
         }
-        Ok(Self::Piecewise(inputs.into_iter().zip(stops).map(|(i, s)| (i.unwrap(), s.output)).collect()))
+        Ok(Self::Piecewise(
+            inputs
+                .into_iter()
+                .zip(stops)
+                .map(|(i, s)| (i.unwrap(), s.output))
+                .collect(),
+        ))
     }
 
     /// Output progress for input progress `x` (any real; extrapolates as CSS does).
@@ -412,7 +503,11 @@ impl Easing {
                 step / jumps
             }
             Self::Piecewise(ref points) => {
-                let a = points.iter().rposition(|(i, _)| *i <= x).unwrap_or(0).min(points.len() - 2);
+                let a = points
+                    .iter()
+                    .rposition(|(i, _)| *i <= x)
+                    .unwrap_or(0)
+                    .min(points.len() - 2);
                 let (pa, pb) = (points[a], points[a + 1]);
                 if pb.0 == pa.0 {
                     return pb.1;
