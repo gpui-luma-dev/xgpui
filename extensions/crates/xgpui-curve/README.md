@@ -55,8 +55,10 @@ use xgpui_curve::kurbo::Point;
 use xgpui_curve::spine::CurveSpine;
 
 let mut spine = CurveSpine::with_bend(Point::new(0.2, 0.5), Point::new(0.8, 0.5), 0.3);
-// Keep the projection continuous within the kernel's reach.
-spine.limit_bend(0.15);
+// Straighten until the projection is continuous out to 0.6 (this bend's reach
+// is 0.5).
+spine.limit_bend(0.6);
+assert!(spine.reach() >= 0.6 - 1e-9);
 let local = spine.project(Point::new(0.5, 0.4));
 assert!((0. ..=1.).contains(&local.s));
 ```

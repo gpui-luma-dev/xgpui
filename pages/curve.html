@@ -29,7 +29,7 @@ xgpui-curve = &quot;0.1.0&quot;
 <p>Every module except <code>geom</code> has a feature of the same name (<code>svg-path</code> for <code>svg_path</code>), and all are on by default. Turn off default features and pick modules to use the math without GPUI:</p>
 <pre><code class="language-toml">xgpui-curve = { version = &quot;0.1.0&quot;, default-features = false, features = [&quot;series&quot;, &quot;func&quot;] }
 </code></pre>
-<div class="table-wrap"><table><thead><tr><th>Module</th><th>What it gives you</th></tr></thead><tbody><tr><td><code>geom</code> (always)</td><td>Evaluation, derivatives, curvature, Hermite ↔ Bézier, tight bounds, nearest point, split, intersection, rectangle clipping, flattening, fill and stroke hit testing</td></tr><tr><td><code>measure</code></td><td>Closed-form quadratic arc length, <code>MeasuredPath</code> arc-length lookup, trim and dash</td></tr><tr><td><code>series</code></td><td>Plot curves: linear, step, basis, cardinal, Catmull-Rom, natural, monotone (PCHIP), bundle; area fills</td></tr><tr><td><code>func</code></td><td><code>FunctionalCurve</code> (PCHIP, linear, x-clamped Bézier), CSS easing, LUT baking</td></tr><tr><td><code>mesh</code></td><td><code>MeshLattice</code>: Hermite/Coons lattices with automatic or explicit tangents and cursor-exact edge dragging</td></tr><tr><td><code>spine</code></td><td><code>CurveSpine</code>: quadratic field spines, (s, perpendicular distance) projection, the seam rule, WGSL and MSL</td></tr><tr><td><code>node</code></td><td><code>NodePath</code>: Corner, Smooth, Symmetric and automatic (Catmull-Rom, natural, Hobby) nodes</td></tr><tr><td><code>shape</code></td><td><code>Squircle</code> (continuous-curvature corners), <code>ArcShape</code> (annular sectors)</td></tr><tr><td><code>stroke</code></td><td><code>StrokeProfile</code>: variable-width and tapered outlines with caps and joins</td></tr><tr><td><code>fit</code></td><td>Ramer–Douglas–Peucker simplification and Schneider cubic fitting for pointer and pen input</td></tr><tr><td><code>svg_path</code></td><td>SVG <code>d</code> parsing and serialization</td></tr><tr><td><code>gpui_paint</code></td><td><code>gpui::Path&lt;Pixels&gt;</code> builders, <code>bounds_transform</code>, <code>paint_contrasting_path</code></td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>Module</th><th>What it gives you</th></tr></thead><tbody><tr><td><code>geom</code> (always)</td><td>Evaluation, derivatives, curvature, Hermite ↔ Bézier, tight bounds, nearest point, split, intersection, rectangle clipping, flattening, fill and stroke hit testing</td></tr><tr><td><code>measure</code></td><td>Closed-form quadratic arc length, <code>MeasuredPath</code> arc-length lookup, trim and dash</td></tr><tr><td><code>series</code></td><td>Plot curves: linear, step, basis, cardinal, Catmull-Rom, natural, monotone (PCHIP), bundle; area fills; closed curves for radar outlines</td></tr><tr><td><code>func</code></td><td><code>FunctionalCurve</code> (PCHIP, linear, x-clamped Bézier), CSS easing, LUT baking</td></tr><tr><td><code>mesh</code></td><td><code>MeshLattice</code>: Hermite/Coons lattices with automatic or explicit tangents and cursor-exact edge dragging</td></tr><tr><td><code>spine</code></td><td><code>CurveSpine</code>: quadratic field spines, (s, perpendicular distance) projection, the seam rule, WGSL and MSL</td></tr><tr><td><code>node</code></td><td><code>NodePath</code>: Corner, Smooth, Symmetric and automatic (Catmull-Rom, natural, Hobby) nodes</td></tr><tr><td><code>shape</code></td><td><code>Squircle</code> (continuous-curvature corners), <code>ArcShape</code> (annular sectors)</td></tr><tr><td><code>stroke</code></td><td><code>StrokeProfile</code>: variable-width and tapered outlines with caps and joins</td></tr><tr><td><code>fit</code></td><td>Ramer–Douglas–Peucker simplification and Schneider cubic fitting for pointer and pen input</td></tr><tr><td><code>svg_path</code></td><td>SVG <code>d</code> parsing and serialization</td></tr><tr><td><code>gpui_paint</code></td><td><code>gpui::Path&lt;Pixels&gt;</code> builders, <code>bounds_transform</code>, <code>paint_contrasting_path</code></td></tr></tbody></table></div>
 <h2 id="paint-in-gpui">Paint a curve in GPUI</h2>
 <p>Build any path in model space, map it into an element's bounds and paint it from a <code>canvas</code>. <code>paint_contrasting_path</code> draws a dark halo under a light line, so wireframes and gizmos stay readable on any background.</p>
 <pre><code class="language-rust">use gpui::{canvas, hsla};
@@ -62,20 +62,27 @@ let line = series_path_clipped(&amp;samples, SeriesCurve::CatmullRom { alpha: 0.
 let area = series_area(&amp;samples, SeriesCurve::Natural, Baseline::Constant(0.));
 </code></pre>
 <p><code>series_path_closed</code> draws one closed outline, such as a radar chart, with d3's closed curves (<code>ClosedCurve::Linear</code>, <code>Basis</code>, <code>Cardinal</code> and <code>CatmullRom</code>). The curve wraps from the last sample to the first with no corner at the seam. Here a non-finite sample is skipped rather than breaking the outline.</p>
-<pre><code class="language-rust">use xgpui_curve::series::{ClosedCurve, series_path_closed};
+<pre><code class="language-rust">use xgpui_curve::kurbo::Point;
+use xgpui_curve::series::{ClosedCurve, series_path_closed};
 
+// One value per radar spoke, as points around the centre.
+let values = [0.9, 0.55, 0.75, 0.3, 0.85];
+let spokes: Vec&lt;Point&gt; = values.iter().enumerate().map(|(i, v)| {
+    let angle = i as f64 * std::f64::consts::TAU / values.len() as f64;
+    Point::new(v * angle.cos(), v * angle.sin())
+}).collect();
 let outline = series_path_closed(&amp;spokes, ClosedCurve::CatmullRom { alpha: 0.5 });
 </code></pre>
 <h2 id="mesh-lattices">Mesh-gradient lattices</h2>
 <p>A <code>MeshLattice</code> is an R × C grid of points with a tangent per node and axis: <code>Tangent::Auto</code> (central difference, one-sided at the border) or <code>Tangent::Explicit</code>. Both are clamped to 0.7 × the distance to the nearer neighbour, which keeps patches from folding. Its edges are the exact cubic boundaries of the mesh-gradient patches, so a wireframe drawn from the lattice lies on the rendered edges.</p>
 <pre><code class="language-rust">use xgpui_curve::kurbo::{Point, Vec2};
-use xgpui_curve::mesh::{Axis, MeshLattice};
+use xgpui_curve::mesh::MeshLattice;
 
 let points = (0..3).flat_map(|r| (0..4).map(move |c| Point::new(c as f64 / 3., r as f64 / 2.))).collect();
 let mut lattice = MeshLattice::new(3, 4, points)?;
 
-// Drag the point a third of the way along a wire: it follows the cursor exactly.
-if let Some(hit) = lattice.hit_edge(Point::new(0.5, 0.52), 0.02) {
+// Grab a wire about a third of the way along and drag: the point follows the cursor exactly.
+if let Some(hit) = lattice.hit_edge(Point::new(0.44, 0.51), 0.02) {
     lattice.drag_edge(hit.row, hit.col, hit.axis, hit.t, Vec2::new(0., 0.05))?;
 }
 let wires = lattice.wireframe();
@@ -88,8 +95,9 @@ let gpu_points = lattice.controls(); // positions and resolved tangents for xgpu
 use xgpui_curve::spine::CurveSpine;
 
 let mut spine = CurveSpine::with_bend(Point::new(0.2, 0.5), Point::new(0.8, 0.5), 0.3);
-// The seam rule: keep the projection continuous within the kernel&#x27;s reach.
-spine.limit_bend(0.15);
+// The seam rule: straighten until the projection is continuous out to 0.6
+// (this bend&#x27;s reach is 0.5).
+spine.limit_bend(0.6);
 let local = spine.project(Point::new(0.5, 0.4));
 let arrow = spine.arrowhead(0.03, 0.45); // wings along the terminal tangent
 let params = spine.shader_params(0.0, 1.0); // [p0, control, p1, t_min, t_max] as f32
@@ -109,7 +117,7 @@ let anchors = [(110., 330.), (270., 180.), (450., 300.), (630., 170.)];
 let mut path = NodePath::new(anchors.iter().map(|&amp;(x, y)| Node::auto(Point::new(x, y), AutoSmooth::Hobby)).collect(), false)?;
 path.drag_segment(1, 0.4, Vec2::new(0., -20.))?; // the point at t = 0.4 follows the cursor
 let inserted = path.insert_at(2, 0.5)?;          // the drawn curve is unchanged
-path.set_mode(inserted, NodeMode::Symmetric);
+path.set_mode(inserted, NodeMode::Symmetric)?;
 let comb = path.curvature_comb(24, 4000.);       // (point, tip) pairs to draw
 </code></pre>
 <div class="table-wrap"><table><thead><tr><th>Mode</th><th>Behaviour</th></tr></thead><tbody><tr><td><code>Corner</code></td><td>C⁰: handles move independently</td></tr><tr><td><code>Smooth</code></td><td>G¹: handles stay collinear and opposite, lengths independent</td></tr><tr><td><code>Symmetric</code></td><td>Collinear, opposite and equal in length</td></tr><tr><td><code>Auto(CatmullRom { alpha })</code></td><td>From the two neighbouring anchors; <code>alpha</code> 0.5 is centripetal</td></tr><tr><td><code>Auto(Natural)</code></td><td>C² natural spline over each run of natural nodes</td></tr><tr><td><code>Auto(Hobby)</code></td><td>Hobby's algorithm (unit tension, unit curl ends) over each run</td></tr></tbody></table></div>
