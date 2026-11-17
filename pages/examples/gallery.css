@@ -5,6 +5,7 @@
 /* Illustrations for the spatial lab companions; launch links run real GPUI Wasm. */
 .preview-canvas { background: linear-gradient(90deg,#72c7ff15 1px,transparent 1px),linear-gradient(#72c7ff15 1px,transparent 1px),#101824; background-size: 20px 20px; position:relative; }
 .preview-canvas::before { content:""; position:absolute; inset:24% 18%; border:1px solid #72c7ff; background:#24354b; box-shadow:28px 18px 0 -1px #355578,-28px -18px 0 -1px #46688a; }
+.preview-curve { background:radial-gradient(ellipse 60% 40% at 50% 92%,transparent 58%,#ffffffd9 59% 61%,transparent 62%),linear-gradient(90deg,#f06a6a40,#ffcf5c40 45%,#4fb8e640),#101824; }
 .preview-mandelbrot { background:radial-gradient(ellipse at 62% 50%,#050810 0 21%,transparent 22%),radial-gradient(circle at 34% 50%,#050810 0 13%,transparent 14%),repeating-radial-gradient(ellipse at 55% 50%,#80c6cf 0 4px,#d4b586 7px,#40568f 13px,#25425d 21px); }
 
 /* Distinct media previews, with a shared translucent sample surface. */

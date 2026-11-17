@@ -15,7 +15,7 @@
 <aside>
 <a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
 <nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="right-to-left-text.html">Right-to-left text</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
-<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-curve.html">xgpui-curve</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
 <main id="content" tabindex="-1">
@@ -36,6 +36,7 @@ under <code>extensions/crates/</code> and do not depend on this package.</p>
 <tr><td>Native and Parley text comparisons</td><td><code>text-lab</code></td><td><code>just text</code></td></tr>
 <tr><td>SVG rendering, scaling and scheduling</td><td><code>svg-lab</code></td><td><code>just svg</code></td></tr>
 <tr><td>Spatial cards and native Mandelbrot explorer</td><td><code>canvas-lab</code></td><td><code>just canvas</code></td></tr>
+<tr><td>Curves: mesh wires, field spines, nodes, series, easing and strokes</td><td><code>curve-lab</code></td><td><code>just curve</code></td></tr>
 <tr><td>Dense Metal producer regression (macOS)</td><td><code>metal-producer-regression</code></td><td><code>just metal-producer</code></td></tr>
 <tr><td>wgpu engine on its own device (GPU interop)</td><td><code>gpu-interop-lab</code></td><td><code>just gpu-interop</code></td></tr>
 <tr><td>wgpu boids as an independent engine (GPU interop)</td><td><code>interop-boids</code></td><td><code>just interop-boids</code></td></tr>
@@ -88,6 +89,13 @@ just canvas --mandelbrot
 <p>The native Mandelbrot explorer retains complete frames during navigation, with
 Metal compute for shallow views on supported macOS wide-SDR hosts and CPU
 refinement for deep views. See the <a href="canvas.html">canvas guide</a>.</p>
+<h3 id="curve-lab">Curve lab</h3>
+<p>Open the six <a href="curve.html">xgpui-curve</a> panels: mesh lattice, spine inspector, node editor,
+series curves, functions and easing, and shapes and strokes. Wheel or pinch zooms; two-finger
+scroll or a drag on empty space pans:</p>
+<pre><code class="language-sh">just curve
+just curve spine
+</code></pre>
 <h3 id="metal-producer-regression-macos">Metal producer regression (macOS)</h3>
 <p>Run the supervised control and dense 512-producer workload, including replay,
 scene replacement and pixel checks:</p>

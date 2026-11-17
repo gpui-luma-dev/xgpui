@@ -15,14 +15,42 @@
 <aside>
 <a class="brand" href="../index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
 <nav aria-label="Documentation"><a href="../index.html">Overview</a><a href="../whats-new.html">What's new</a><a href="../releasing.html">Releasing XGPUI</a><a href="../color-workflows.html">Color &amp; wide gamut</a><a href="../shell.html">Desktop shell</a><a href="../font-controls.html">Fonts &amp; OpenType</a><a href="../right-to-left-text.html">Right-to-left text</a><a href="../extension-lab.html">Labs &amp; benchmarks</a><a href="../performance-study.html">Performance study</a><a href="../gpui-public-api.html">GPUI API changes</a><a href="../gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="../shader-options.html">Shader options</a><a class="rail-demo" href="../examples/extensions/">Live demos ↗</a></nav>
-<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="../crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="../crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="../crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="../crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="../crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="../crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="../crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="../crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" aria-current="page" href="../crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="../crates/gpui.html">gpui</a><a class="crate-link" href="../crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="../crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="../crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="../crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="../crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="../crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="../crates/gpui-web.html">gpui-web</a><a class="crate-link" href="../crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="../crates/gpui-windows.html">gpui-windows</a></div>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="../crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="../crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="../crates/xgpui-curve.html">xgpui-curve</a><a class="crate-link" href="../crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="../crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="../crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="../crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="../crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="../crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" aria-current="page" href="../crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="../crates/gpui.html">gpui</a><a class="crate-link" href="../crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="../crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="../crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="../crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="../crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="../crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="../crates/gpui-web.html">gpui-web</a><a class="crate-link" href="../crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="../crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
 <main id="content" tabindex="-1">
-<div class="eyebrow">Extensions</div><h1>xgpui-svg</h1><p class="lead">Full-color progressive SVG elements with optional shared raster scheduling and aggregate image accounting.</p><nav class="tabs" aria-label="Crate sections"><a href="#crate-use">Use</a><a href="#crate-sources">Role &amp; sources</a><a href="#crate-api">API documentation</a><a href="#crate-dependencies">Dependencies</a><a href="#crate-review">Trim review</a></nav>
+<div class="eyebrow">Extensions</div><h1>xgpui-svg</h1><p class="lead">Full-color progressive SVG elements with optional shared raster scheduling and aggregate image accounting.</p><nav class="tabs" aria-label="Crate sections"><a href="#crate-use">Use</a><a href="#crate-why">Why SVG</a><a href="#crate-sources">Role &amp; sources</a><a href="#crate-api">API documentation</a><a href="#crate-dependencies">Dependencies</a><a href="#crate-review">Trim review</a></nav>
 <section id="crate-use">
 <p class="demo-actions"><a class="demo-open" href="../examples/extensions/?demo=svg">Open Progressive SVG ↗</a><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web">Demo source</a></p><p class="crate-guide"><a href="../svg-rendering.html">Read the xgpui-svg guide →</a></p>
 </section>
+<section id="crate-why"><h2>Why SVG</h2><p>Stock GPUI's <code>svg()</code> element is built for icons: it draws the SVG as a single-colour mask, tinted with the text colour. That is ideal for a toolbar, but it cannot show an illustration, a diagram, a logo with its own colours, or a map you want to zoom into, and it rasterizes the whole image during paint, on the UI thread.</p><p><code>xgpui-svg</code> renders full-colour documents, with gradients, filters and text, as an element you size, zoom and pan. Work is progressive: a coarse preview appears first and settles into sharp detail, rendered off the UI thread on desktop, and a shared scheduler keeps the image memory of many SVG views within a budget.</p><h3>Example: a zoomable illustration</h3><p>Parse once, keep the document in your view, and build the element during render. With stock GPUI this artwork would be one flat colour:</p><pre><code class="language-rust">use gpui::{App, Context, Window, prelude::*, px};
+use xgpui_svg::{SvgDocument, SvgScheduler, svg_image};
+
+struct Artwork {
+    document: SvgDocument,   // parsed once, kept in the view
+    scheduler: SvgScheduler, // shared by every SVG view, with a memory budget
+    zoom: f32,
+}
+
+impl Artwork {
+    fn load(bytes: &amp;[u8], cx: &amp;App) -&gt; anyhow::Result&lt;Self&gt; {
+        let document = SvgDocument::parse(&amp;cx.svg_renderer(), bytes)?;
+        Ok(Self { document, scheduler: SvgScheduler::default(), zoom: 1. })
+    }
+}
+
+impl Render for Artwork {
+    fn render(&amp;mut self, _: &amp;mut Window, _: &amp;mut Context&lt;Self&gt;) -&gt; impl IntoElement {
+        // Full colour, gradients and filters: a coarse preview first,
+        // then sharp detail at the current zoom.
+        svg_image(&quot;artwork&quot;, self.document.clone())
+            .scheduler(self.scheduler.clone())
+            .w(px(640.))
+            .h(px(480.))
+            .zoom(self.zoom)
+    }
+}
+</code></pre><p>Keep using stock <code>svg()</code> for monochrome icons. See the <a href="../svg-rendering.html">SVG guide</a> for scheduling, viewports and limits.</p></section>
 <section id="crate-sources"><h2>Public surface at a glance</h2><p>SvgDocument, SvgImage/svg_image, RasterPolicy and SvgScheduler. Stable IDs retain progressive jobs; shared pools cap admitted jobs and accounted image costs. path_effects provides retained Bézier contours, cached arc lengths, normalized trim and phased dashes before native stroke tessellation.</p><p><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-svg/src/lib.rs">Open library entrypoint ↗</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/extensions/crates/xgpui-svg">Browse the crate source ↗</a></p></section>
 <section id="crate-api"><h2>API documentation</h2><p>Rustdoc for the published crate is on <a href="https://docs.rs/xgpui-svg">docs.rs ↗</a>. It documents the latest release, which can lag the repository.</p></section>
 <section id="crate-dependencies"><h2>Dependencies</h2><p>Dependencies, optional features and target conditions are declared in <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-svg/Cargo.toml">Cargo.toml ↗</a>.</p></section>
