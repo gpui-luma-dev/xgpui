@@ -47,12 +47,14 @@ Budgets account for image costs, not filter intermediates or total process
 memory. Already-running synchronous raster work cannot be interrupted; stale
 results are prevented from replacing newer settings.
 
-## Path effects
+## Path effects (deprecated)
 
-`path_effects::{Contour, MeasuredPath, PathEffect}` provides trim and phased dash
-operations on retained line, quadratic and cubic contours before stroke
-tessellation. Measuring, trimming and dashing use `xgpui-curve`. This API does
-not convert imported SVG documents into native path geometry.
+`path_effects::{Contour, Segment, MeasuredPath, PathEffect}` is deprecated and
+will be removed after one release. It now delegates to `xgpui-curve`, so it
+behaves as before. Use `xgpui_curve::measure::{MeasuredPath, PathEffect}` on a
+`kurbo::BezPath` instead, and stroke the result with
+`xgpui_curve::gpui_paint::append` into a `PathBuilder::stroke`. See the
+[curves guide](https://xgpui.dev/curve.html#measure-and-svg).
 
 See the [SVG guide](https://xgpui.dev/svg-rendering.html)
 for construction, viewport defaults, scheduling, path effects and supported limits.

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use super::*;
 fn p(x: f32, y: f32) -> Point<Pixels> {
     point(px(x), px(y))

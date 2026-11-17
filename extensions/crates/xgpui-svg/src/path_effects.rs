@@ -1,9 +1,13 @@
 //! Bounded contour effects before native stroke tessellation.
 //! Coordinates, dash lengths, phase and tolerance are logical pixels.
 //!
-//! The measuring, trimming and dashing are done by
-//! [`xgpui_curve::measure`]; this module keeps the GPUI-pixel contour API and
-//! stroke tessellation.
+//! Deprecated: use [`xgpui_curve::measure`] directly. Build a
+//! `kurbo::BezPath` (re-exported as `xgpui_curve::kurbo`), measure it with
+//! `xgpui_curve::measure::MeasuredPath`, apply an
+//! `xgpui_curve::measure::PathEffect`, and stroke the result with
+//! `xgpui_curve::gpui_paint::append` into a `PathBuilder::stroke`. This module
+//! now delegates to it and remains for one release so callers can migrate.
+#![allow(deprecated)]
 use anyhow::{Result, ensure};
 use gpui::{Path, PathBuilder, Pixels, Point, point, px};
 use std::ops::Range;
@@ -13,6 +17,7 @@ use xgpui_curve::measure;
 const MAX_SEGMENTS: usize = 8192;
 
 /// Retained vector segment; the start point is the preceding endpoint.
+#[deprecated(note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a kurbo::BezPath, and xgpui_curve::gpui_paint to stroke the result")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Segment {
     Line(Point<Pixels>),
@@ -35,6 +40,7 @@ impl Segment {
     }
 }
 /// One open or closed contour. Input is validated when measuring.
+#[deprecated(note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a kurbo::BezPath, and xgpui_curve::gpui_paint to stroke the result")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Contour {
     start: Point<Pixels>,
@@ -87,6 +93,7 @@ impl Contour {
 /// Trim the total concatenated path length, then dash each retained contour.
 /// Dash phase restarts at each retained contour; positive offset advances pattern.
 /// Trim is a nonwrapping normalized range, including empty ranges.
+#[deprecated(note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a kurbo::BezPath, and xgpui_curve::gpui_paint to stroke the result")]
 #[derive(Clone, Debug, Default)]
 pub struct PathEffect(measure::PathEffect);
 impl PathEffect {
@@ -113,6 +120,7 @@ impl PathEffect {
 }
 /// Reusable arc-length tables. Curve slicing retains Bézier verbs using de
 /// Casteljau subdivision. Reuse while animating.
+#[deprecated(note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a kurbo::BezPath, and xgpui_curve::gpui_paint to stroke the result")]
 #[derive(Clone, Debug)]
 pub struct MeasuredPath(measure::MeasuredPath);
 impl MeasuredPath {

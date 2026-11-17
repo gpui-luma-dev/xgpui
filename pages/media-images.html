@@ -158,18 +158,17 @@ imports have ownership and synchronization requirements; see the adapter details
 below before integrating a producer. System playback adapters are tracked in
 <a href="https://github.com/gpui-luma-dev/xgpui/issues/40">issue #40</a>.</p>
 <h2 id="related-drawing-a-route-or-progress-stroke">Related: drawing a route or progress stroke</h2>
-<p>Trim and dash effects live in <code>xgpui-svg</code>, alongside the media work. A map route
+<p>Trim and dash effects live in <a href="curve.html#measure-and-svg">xgpui-curve</a>. A map route
 can use dashes; a progress indicator can reveal a fraction of a curve:</p>
-<pre><code class="language-rust,ignore">use gpui::px;
-use xgpui_svg::path_effects::PathEffect;
+<pre><code class="language-rust,ignore">use gpui::{PathBuilder, px};
+use xgpui_curve::{gpui_paint, kurbo::Affine, measure::PathEffect};
 
-let effect = PathEffect::new()
-    .trim(0.0..0.65)?
-    .dash(&amp;[px(12.), px(6.)], px(0.))?;
-let stroke = measured_path.stroke(&amp;effect, px(3.))?;
-// Paint the resulting GPUI path in a canvas: window.paint_path(stroke, color).
+let effect = PathEffect::new().trim(0.0..0.65)?.dash(&amp;[12., 6.], 0.)?;
+let mut stroke = PathBuilder::stroke(px(3.));
+gpui_paint::append(&amp;mut stroke, &amp;measured_path.apply(&amp;effect)?, Affine::IDENTITY);
+// Paint the resulting GPUI path in a canvas: window.paint_path(stroke.build()?, color).
 </code></pre>
-<p>Here <code>measured_path</code> is a retained <code>MeasuredPath</code> built from your contours. Measure
+<p>Here <code>measured_path</code> is a retained <code>xgpui_curve::measure::MeasuredPath</code> built from a <code>kurbo::BezPath</code>. Measure
 once, then change the effect as progress updates. See the
 <a href="svg-rendering.html">contour effects guide</a> for constructing and painting a path.</p>
 <h2 id="try-the-examples">Try the examples</h2>
@@ -720,7 +719,7 @@ same generated RGBA fixture, geometry, opacity and clipping.</li>
 <li><a href="examples/extensions/?demo=path-effects">Trim / dash</a>: compare original,
 trimmed and trimmed/dashed open curves, a closed heart and multiple contours.
 Cycle zero/full trim, solid/even/odd dash arrays, phase and stroke width;
-animate trim and dash phase. This uses <code>xgpui-svg::path_effects</code> before GPUI
+animate trim and dash phase. This uses <code>xgpui-curve</code> before GPUI
 stroke tessellation. Animation respects the browser's reduced-motion preference.</li>
 </ul>
 <p>Each link supports <code>&amp;backend=webgpu</code> or <code>&amp;backend=webgl</code> for forced backend checks.
