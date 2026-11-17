@@ -35,6 +35,7 @@ under <code>extensions/crates/</code> and do not depend on this package.</p>
 <tr><td>Color conversions and gradient comparisons</td><td><code>color-lab</code></td><td><code>just color</code></td></tr>
 <tr><td>Native and Parley text comparisons</td><td><code>text-lab</code></td><td><code>just text</code></td></tr>
 <tr><td>SVG rendering, scaling and scheduling</td><td><code>svg-lab</code></td><td><code>just svg</code></td></tr>
+<tr><td>Desktop preferences and per-window shell overrides</td><td><code>shell-lab</code></td><td><code>just shell</code></td></tr>
 <tr><td>Spatial cards and native Mandelbrot explorer</td><td><code>canvas-lab</code></td><td><code>just canvas</code></td></tr>
 <tr><td>Curves: mesh wires, field spines, nodes, series, easing and strokes</td><td><code>curve-lab</code></td><td><code>just curve</code></td></tr>
 <tr><td>Dense Metal producer regression (macOS)</td><td><code>metal-producer-regression</code></td><td><code>just metal-producer</code></td></tr>
@@ -72,8 +73,11 @@ just labs test
 opening a window. <code>just labs test</code> runs unit and compatibility tests. Tests that create
 real platform windows stay opt-in; run them with <code>just window-probes &lt;probe&gt;</code>
 (<code>just labs window-probes</code> lists the probes for this OS).</p>
-<p>Choose one workload with its root recipe, or select its binary directly:</p>
-<pre><code class="language-sh">cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --bin paint-lab --target-dir target
+<p>Choose one workload with its root recipe, or select its binary directly. The
+recipes enable the shader and wgpu features listed in <code>apps/xgpui-ext-lab/labs.toml</code>;
+pass the same features when running a binary directly, or some checks and paths are
+compiled out:</p>
+<pre><code class="language-sh">cargo run --release --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features runtime-shaders,portable-shaders,wgpu --bin paint-lab --target-dir target
 </code></pre>
 <p>For a bounded benchmark without a window:</p>
 <pre><code class="language-sh">just quad-bench --headless --cpu-only
@@ -136,6 +140,12 @@ just labs test live_axis -- --nocapture
 Tests run with backtraces. The same sliders also run in the <a href="examples/extensions/?demo=font-controls">Wasm font inspector</a>
 with Parley on WebGPU/WebGL2. See <a href="font-controls.html">font controls</a> for support,
 preview admission limits and core 3.0 migration.</p>
+<h3 id="desktop-shell-lab">Desktop shell lab</h3>
+<p>Inspect the desktop preferences XGPUI reads, and try per-window shell overrides
+and window state controls:</p>
+<pre><code class="language-sh">just shell
+</code></pre>
+<p>See the <a href="shell-lab.html">shell lab guide</a> for decoration and sizing options.</p>
 <h3 id="desktop-svg-lab">Desktop SVG lab</h3>
 <p>Open the native SVG rendering, zoom and scheduling comparisons:</p>
 <pre><code class="language-sh">just svg
@@ -157,12 +167,15 @@ and <code>pages/examples/shaders/</code>, which <code>just pages-serve</code> se
 by the package consolidation. The gallery also lists native-only workloads and
 how to launch them locally.</p>
 <h2 id="how-is-this-different-from-xgpui-lab">How is this different from xgpui-lab?</h2>
-<p><a href="https://github.com/gpui-luma-dev/xgpui-lab"><code>xgpui-lab</code></a> is the separate desktop
-application used to exercise XGPUI together with the Luma SDK. It has its own
-repository and application shell.</p>
+<p><a href="https://github.com/gpui-luma-dev/xgpui-luma/tree/main/apps/xgpui-lab"><code>xgpui-lab</code></a> is the separate desktop
+application used to exercise XGPUI together with the Luma SDK. It lives in the
+xgpui-luma repository, under <code>apps/xgpui-lab/</code>, with its own application shell.</p>
 <p><code>xgpui-ext-lab</code> is the development package inside this repository: focused native
 labs, repeatable benchmarks and the source for this website's WASM demos. The two
 names refer to different applications and development roles.</p>
+<p>The <code>just labs</code> command runner in <code>tools/lab/</code> has the package name
+<code>xgpui-lab</code> too. It is only the launcher for this package's labs and tasks, and is
+unrelated to the Luma application.</p>
 <p><a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab">Browse the package source</a>.</p>
 <h2 id="color-tasks-and-the-native-color-lab">Color tasks and the native color lab</h2>
 <p>The browser gallery includes <a href="examples/extensions/?demo=chromaticity">chromaticity</a> and <a href="examples/extensions/?demo=pixel-metadata">pixels + metadata</a> demos. Both are sRGB previews of Rust/Wasm calculations. The native chromaticity workspace now lives in this package's <code>color-lab</code>, alongside the original swatches. Use <code>just color --chromaticity</code> or switch tabs in <code>just color</code>; see <a href="color-labs.html">color labs</a> for commands, controls and the limits of CPU values, GPU readback and display capability reports.</p>
