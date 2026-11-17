@@ -18,7 +18,8 @@
     "xgpui-canvas": "xgpui-canvas",
     "gpui-ios": "xgpui-ios",
     "xgpui-shell": "xgpui-shell",
-    "xgpui-gpu-interop": "xgpui-gpu-interop"
+    "xgpui-gpu-interop": "xgpui-gpu-interop",
+    "xgpui-curve": "xgpui-curve"
   },
   "version": "1.0.0",
   "versions": {
@@ -40,6 +41,7 @@
     "xgpui-ios": "2.0.1",
     "xgpui-macros": "1.0.4",
     "xgpui-shell": "0.3.1",
-    "xgpui-gpu-interop": "0.3.0"
+    "xgpui-gpu-interop": "0.3.0",
+    "xgpui-curve": "0.1.0"
   }
 }
