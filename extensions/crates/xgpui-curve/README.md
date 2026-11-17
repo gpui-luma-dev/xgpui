@@ -80,6 +80,12 @@ assert!((Easing::EASE.eval(0.5) - 0.8024).abs() < 1e-4);
 # Ok::<(), xgpui_curve::CurveError>(())
 ```
 
+## GPUI public API changes: additions and compatibility
+
+None. The optional `gpui` feature uses the existing `PathBuilder` and
+`Window::paint_path`; everything else is plain Rust on kurbo types. See
+[curve integration compatibility](https://xgpui.dev/gpui-public-api.html#curve-reuses-existing-gpui-apis).
+
 ## License
 
 Apache-2.0.
