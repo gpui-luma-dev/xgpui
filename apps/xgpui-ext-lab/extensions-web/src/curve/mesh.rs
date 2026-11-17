@@ -135,9 +135,11 @@ fn crop(
     Some((rect, Some(grid)))
 }
 
+type CroppedGradient = (xgpui_shader::MeshGrid, Arc<xgpui_shader::MeshGradient>);
+
 /// The last cropped gradient, so repaints at the same view reuse its texture.
 #[derive(Clone, Default)]
-struct CropCache(Rc<RefCell<Option<(xgpui_shader::MeshGrid, Arc<xgpui_shader::MeshGradient>)>>>);
+struct CropCache(Rc<RefCell<Option<CroppedGradient>>>);
 
 impl CropCache {
     fn paint(
