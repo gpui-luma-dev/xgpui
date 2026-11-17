@@ -276,6 +276,7 @@ views = [
   { name = "parley", title = "Parley text only", args = ["--backend", "parley"] },
   { name = "paragraph", title = "Paragraph comparison", args = ["--workload", "paragraph"] },
   { name = "bidi", title = "Right-to-left and GPUI paragraphs, native and Parley", args = ["--workload", "bidi"] },
+  { name = "l10n", title = "Localization QA: one screen in 8 locales, checked, native and Parley", args = ["--workload", "l10n"] },
   { name = "scroll", title = "Text scrolling", args = ["--workload", "scroll"] },
   { name = "timings", title = "Text CPU timings", args = ["--timings-only"] },
 ]
@@ -284,6 +285,11 @@ views = [
 name = "test"
 about = "Text lab tests"
 cargo = ["test", "--bin", "text-lab"]
+
+[[lab.task]]
+name = "l10n-report"
+about = "Localization QA report: problems per locale on GPUI lines and Parley (#355)"
+cargo = ["test", "--bin", "text-lab", "l10n_report", "--", "--ignored", "--nocapture"]
 
 [[lab.task]]
 name = "layout-cost"
