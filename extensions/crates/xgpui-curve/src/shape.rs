@@ -235,12 +235,18 @@ impl ArcShape {
         (lo, lo + (hi - lo).min(TAU))
     }
 
+    /// (inner, outer) radii, swapped if given the other way round (as d3
+    /// does), with a negative inner radius treated as 0.
+    fn radii(&self) -> (f64, f64) {
+        let (a, b) = (self.inner_radius.max(0.), self.outer_radius.max(0.));
+        if a <= b { (a, b) } else { (b, a) }
+    }
+
     /// The padded angle ranges (outer, inner) in screen angles, or `None` when empty.
     fn ranges(&self) -> Option<((f64, f64), (f64, f64))> {
         let (s, e) = self.span();
         let da = e - s;
-        let r0 = self.inner_radius.max(0.);
-        let r1 = self.outer_radius.max(0.);
+        let (r0, r1) = self.radii();
         if r1 < 1e-12 || da < 1e-12 {
             return None;
         }
@@ -272,7 +278,7 @@ impl ArcShape {
         let Some(((o0, o1), (i0, i1))) = self.ranges() else {
             return path;
         };
-        let (r0, r1) = (self.inner_radius.max(0.), self.outer_radius);
+        let (r0, r1) = self.radii();
         let c = self.center;
         let tolerance = tolerance.max(1e-9);
         path.move_to(c + Vec2::from_angle(o0) * r1);
@@ -292,7 +298,8 @@ impl ArcShape {
     /// The point midway in angle and radius.
     pub fn centroid(&self) -> Point {
         let a = 0.5 * (Self::screen(self.start_angle) + Self::screen(self.end_angle));
-        let r = 0.5 * (self.inner_radius + self.outer_radius);
+        let (r0, r1) = self.radii();
+        let r = 0.5 * (r0 + r1);
         self.center + Vec2::from_angle(a) * r
     }
 
@@ -301,19 +308,16 @@ impl ArcShape {
         let Some(((o0, o1), (i0, i1))) = self.ranges() else {
             return false;
         };
+        let (r0, r1) = self.radii();
         let v = p - self.center;
         let r = v.hypot();
-        if r > self.outer_radius + 1e-12 || r < self.inner_radius.max(0.) - 1e-12 {
+        if r > r1 + 1e-12 || r < r0 - 1e-12 {
             return false;
         }
-        // The padded range narrows linearly from the inner to the outer edge.
-        let f = if self.outer_radius > self.inner_radius {
-            ((r - self.inner_radius.max(0.)) / (self.outer_radius - self.inner_radius.max(0.)))
-                .clamp(0., 1.)
-        } else {
-            1.
-        };
-        let (lo, hi) = (i0 + (o0 - i0) * f, i1 + (o1 - i1) * f);
+        // The ends are the straight edges `to_path` draws, from the inner to
+        // the outer arc: test against where they cross the circle of radius r.
+        let lo = edge_angle(i0, r0, o0, r1, r);
+        let hi = edge_angle(i1, r0, o1, r1, r);
         let angle = v.atan2();
         let rel = (angle - lo).rem_euclid(TAU);
         rel <= hi - lo + 1e-12
@@ -341,6 +345,32 @@ impl ArcShape {
     pub fn path_transformed(&self, affine: Affine, tolerance: f64) -> BezPath {
         affine * self.to_path(tolerance)
     }
+}
+
+/// The screen angle at which the straight end edge from (`inner_angle`, `r0`)
+/// to (`outer_angle`, `r1`) crosses the circle of radius `r`, unwrapped to lie
+/// near `inner_angle`.
+fn edge_angle(inner_angle: f64, r0: f64, outer_angle: f64, r1: f64, r: f64) -> f64 {
+    let p0 = Vec2::from_angle(inner_angle) * r0;
+    let d = Vec2::from_angle(outer_angle) * r1 - p0;
+    let a = d.dot(d);
+    let s = if r0 <= 1e-12 || a <= 1e-300 {
+        // A pie slice's edge is radial: one angle at every radius.
+        return if r0 <= 1e-12 {
+            outer_angle
+        } else {
+            inner_angle
+        };
+    } else {
+        // |p0 + s·d| = r, taking the root along the edge (radius grows with s).
+        let b = 2. * p0.dot(d);
+        let c = p0.dot(p0) - r * r;
+        let disc = (b * b - 4. * a * c).max(0.);
+        ((-b + disc.sqrt()) / (2. * a)).clamp(0., 1.)
+    };
+    let angle = (p0 + d * s).atan2();
+    inner_angle + (angle - inner_angle + std::f64::consts::PI).rem_euclid(TAU)
+        - std::f64::consts::PI
 }
 
 #[cfg(test)]

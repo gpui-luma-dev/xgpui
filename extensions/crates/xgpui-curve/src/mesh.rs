@@ -1,6 +1,8 @@
-//! Hermite/Coons mesh lattices: an R × C grid of points with per-node,
-//! per-axis tangents, whose edges are the cubic boundary curves of the mesh
-//! gradient patches.
+//! Hermite mesh lattices: an R × C grid of points with per-node, per-axis
+//! tangents, whose edges are the cubic boundary curves of the mesh gradient
+//! patches. Each cell is the zero-twist bicubic Hermite (Ferguson) patch that
+//! xgpui-shader's mesh shaders render, so edges, interior points and
+//! iso-curves all lie on the drawn gradient.
 //!
 //! Automatic tangents and their fold clamp reproduce the xgpui-luma gradient
 //! builder (`paint/mesh.rs`) and the tangents it hands to
@@ -216,6 +218,18 @@ impl MeshLattice {
         }
     }
 
+    /// The longest tangent the fold clamp allows at a node.
+    fn max_tangent(&self, row: usize, col: usize, axis: Axis) -> f64 {
+        let (prev, p, next) = self.neighbors(row, col, axis);
+        let nearer = match (prev, next) {
+            (None, Some(n)) => p.distance(n),
+            (Some(b), None) => p.distance(b),
+            (Some(b), Some(n)) => p.distance(b).min(p.distance(n)),
+            (None, None) => 0.,
+        };
+        nearer * self.tangent_limit
+    }
+
     /// The tangent actually used: automatic or explicit, then clamped to
     /// [`Self::tangent_limit`] × the distance to the nearer neighbor along the
     /// axis, which keeps patches from folding.
@@ -230,13 +244,7 @@ impl MeshLattice {
                 (None, None) => Vec2::ZERO,
             },
         };
-        let limit = match (prev, next) {
-            (None, Some(n)) => p.distance(n),
-            (Some(b), None) => p.distance(b),
-            (Some(b), Some(n)) => p.distance(b).min(p.distance(n)),
-            (None, None) => 0.,
-        } * self.tangent_limit;
-        clamp_length(raw, limit)
+        clamp_length(raw, self.max_tangent(row, col, axis))
     }
 
     /// The edge from node (row, col) one step along `axis`.
@@ -299,53 +307,43 @@ impl MeshLattice {
         path
     }
 
-    /// The bilinearly blended Coons patch position in cell (row, col) at local (u, v).
-    pub fn coons_point(&self, row: usize, col: usize, u: f64, v: f64) -> Point {
-        let b = self.cell_boundary(row, col);
-        let lc = b.top.eval(u).to_vec2() * (1. - v) + b.bottom.eval(u).to_vec2() * v;
-        let dc = b.left.eval(v).to_vec2() * (1. - u) + b.right.eval(v).to_vec2() * u;
-        let (p00, p10, p01, p11) = (b.top.p0, b.top.p3, b.bottom.p0, b.bottom.p3);
-        let bl = p00.to_vec2() * ((1. - u) * (1. - v))
-            + p10.to_vec2() * (u * (1. - v))
-            + p01.to_vec2() * ((1. - u) * v)
-            + p11.to_vec2() * (u * v);
-        (lc + dc - bl).to_point()
+    /// The position in cell (row, col) at local (u, v): the zero-twist
+    /// bicubic Hermite patch the mesh shaders render, from the four corner
+    /// positions and their resolved u and v tangents.
+    pub fn patch_point(&self, row: usize, col: usize, u: f64, v: f64) -> Point {
+        self.iso_curve(row, col, Axis::U, v).eval(u)
     }
 
     /// The interior iso-curve of cell (row, col) at constant `s` on the other
     /// axis: `Axis::U` runs along u at v = s, `Axis::V` along v at u = s. A
-    /// Coons iso-curve is exactly a cubic, so this is exact.
+    /// zero-twist Hermite patch's iso-curve is exactly a cubic: it runs between
+    /// the two side edges at `s`, with the end tangents blended by the Hermite
+    /// position weights. `s = 0` and `s = 1` give the cell's edges.
     pub fn iso_curve(&self, row: usize, col: usize, axis: Axis, s: f64) -> CubicBez {
         let b = self.cell_boundary(row, col);
-        let (p00, p10, p01, p11) = (b.top.p0, b.top.p3, b.bottom.p0, b.bottom.p3);
-        let (near, far, side0, side1) = match axis {
-            // Blend top/bottom by s; the linear part comes from left/right at v = s.
+        // Corners in (u, v) order, and the tangents along the curve's axis.
+        let (r1, c1) = (row + 1, col + 1);
+        let (side0, side1, ends) = match axis {
             Axis::U => (
-                b.top,
-                b.bottom,
-                b.left.eval(s) - p00.lerp(p01, s),
-                b.right.eval(s) - p10.lerp(p11, s),
-            ),
-            Axis::V => (
                 b.left,
                 b.right,
-                b.top.eval(s) - p00.lerp(p10, s),
-                b.bottom.eval(s) - p01.lerp(p11, s),
+                [(row, col), (r1, col), (row, c1), (r1, c1)],
+            ),
+            Axis::V => (
+                b.top,
+                b.bottom,
+                [(row, col), (row, c1), (r1, col), (r1, c1)],
             ),
         };
-        let mix = |a: Point, c: Point| a.lerp(c, s);
-        let linear = [
-            side0,
-            side0 + (side1 - side0) / 3.,
-            side0 + (side1 - side0) * (2. / 3.),
-            side1,
-        ];
-        CubicBez::new(
-            mix(near.p0, far.p0) + linear[0],
-            mix(near.p1, far.p1) + linear[1],
-            mix(near.p2, far.p2) + linear[2],
-            mix(near.p3, far.p3) + linear[3],
-        )
+        let m = |(r, c): (usize, usize)| self.resolved_tangent(r, c, axis);
+        let (h0, h1) = (1. - s * s * (3. - 2. * s), s * s * (3. - 2. * s));
+        Hermite {
+            p0: side0.eval(s),
+            m0: m(ends[0]) * h0 + m(ends[1]) * h1,
+            p1: side1.eval(s),
+            m1: m(ends[2]) * h0 + m(ends[3]) * h1,
+        }
+        .to_cubic()
     }
 
     /// Row-major positions and resolved tangents for building a GPU mesh.
@@ -369,8 +367,10 @@ impl MeshLattice {
     /// Δc₁ = w₁/(w₁² + w₂²)·Δ, Δc₂ = w₂/(w₁² + w₂²)·Δ with w₁ = 3t(1 − t)²,
     /// w₂ = 3t²(1 − t). The result is stored as explicit tangents at both
     /// nodes; a node's tangent is shared by its two edges on that axis, so the
-    /// neighboring edge bends too. The fold clamp still applies, so a drag
-    /// past the limit stops short. Endpoints (t ≈ 0 or 1) move no controls.
+    /// neighboring edge bends too. When the fold clamp shortens one tangent,
+    /// the other control takes the rest of the move; only when both are at
+    /// the clamp does the drag stop short. Endpoints (t ≈ 0 or 1) move no
+    /// controls.
     pub fn drag_edge(
         &mut self,
         row: usize,
@@ -379,11 +379,12 @@ impl MeshLattice {
         t: f64,
         delta: Vec2,
     ) -> Result<(), CurveError> {
+        // The start node is checked first, so `+ 1` cannot overflow.
+        self.checked(row, col)?;
         let (r1, c1) = match axis {
             Axis::U => (row, col + 1),
             Axis::V => (row + 1, col),
         };
-        self.checked(row, col)?;
         self.checked(r1, c1)?;
         finite(&[t, delta.x, delta.y])?;
         let t = t.clamp(0., 1.);
@@ -393,8 +394,28 @@ impl MeshLattice {
         if norm <= 1e-12 {
             return Ok(());
         }
-        let m0 = self.resolved_tangent(row, col, axis) + delta * (3. * w1 / norm);
-        let m1 = self.resolved_tangent(r1, c1, axis) - delta * (3. * w2 / norm);
+        // c₁ = p₀ + m₀/3 and c₂ = p₁ − m₁/3, and B(t) moves by w₁Δc₁ + w₂Δc₂.
+        let (base0, base1) = (
+            self.resolved_tangent(row, col, axis),
+            self.resolved_tangent(r1, c1, axis),
+        );
+        let (max0, max1) = (
+            self.max_tangent(row, col, axis),
+            self.max_tangent(r1, c1, axis),
+        );
+        let want0 = base0 + delta * (3. * w1 / norm);
+        let want1 = base1 - delta * (3. * w2 / norm);
+        let mut m0 = clamp_length(want0, max0);
+        let mut m1 = clamp_length(want1, max1);
+        // If the clamp shortened one tangent, give the displacement it could
+        // not take to the other control (if both are clamped, stop short).
+        let missing = delta - (m0 - base0) * (w1 / 3.) - (base1 - m1) * (w2 / 3.);
+        let (clamped0, clamped1) = (m0 != want0, m1 != want1);
+        if clamped0 && !clamped1 && w2 > 1e-12 {
+            m1 = clamp_length(m1 - missing * (3. / w2), max1);
+        } else if clamped1 && !clamped0 && w1 > 1e-12 {
+            m0 = clamp_length(m0 + missing * (3. / w1), max0);
+        }
         self.set_tangent(row, col, axis, Tangent::Explicit(m0))?;
         self.set_tangent(r1, c1, axis, Tangent::Explicit(m1))
     }

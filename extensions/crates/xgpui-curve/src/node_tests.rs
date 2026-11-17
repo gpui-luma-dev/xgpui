@@ -313,3 +313,45 @@ fn smooth_corners_get_handles() {
     assert_g1(&path.nodes()[1]);
     assert!(path.nodes()[1].handle_in.is_some());
 }
+
+#[test]
+fn a_closed_auto_run_around_one_fixed_node_reaches_back_to_it() {
+    let p = Point::new;
+    for kinds in [[AutoSmooth::Hobby; 3], [AutoSmooth::Natural; 3]] {
+        let path = NodePath::new(
+            vec![
+                Node::corner(p(0., 0.)),
+                Node::auto(p(10., 0.), kinds[0]),
+                Node::auto(p(12., 10.), kinds[1]),
+                Node::auto(p(0., 12.), kinds[2]),
+            ],
+            true,
+        )
+        .unwrap();
+        let last = path.nodes()[3];
+        let (Some(h_in), Some(h_out)) = (last.handle_in, last.handle_out) else {
+            panic!("{kinds:?}: node 3 lost a handle: {last:?}");
+        };
+        // Smooth through the last auto node, and the wrap segment is curved.
+        let (a, b) = (last.anchor - h_in, h_out - last.anchor);
+        assert!(a.cross(b).abs() < 1e-9 * a.hypot() * b.hypot() && a.dot(b) > 0.);
+        assert!(matches!(path.segment(3), PathSeg::Cubic(_)));
+    }
+}
+
+#[test]
+#[should_panic(expected = "out of range")]
+fn segment_past_the_end_of_an_open_path_panics() {
+    let p = Point::new;
+    let path = NodePath::new(
+        vec![
+            Node::corner(p(0., 0.)),
+            Node::corner(p(10., 0.)),
+            Node::corner(p(10., 10.)),
+        ],
+        false,
+    )
+    .unwrap();
+    assert_eq!(path.segment_count(), 2);
+    let _ = path.segment(2);
+}

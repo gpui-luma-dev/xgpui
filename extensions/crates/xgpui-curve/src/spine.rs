@@ -113,8 +113,11 @@ impl CurveSpine {
 
     /// Project `p` onto the part of the spine with `t_min ≤ t ≤ t_max`
     /// (swapped if reversed). Both range ends are candidates, not just the
-    /// clamped roots.
+    /// clamped roots. A NaN bound means the start (`t_min`) or end (`t_max`)
+    /// of the spine.
     pub fn project_range(&self, p: Point, t_min: f64, t_max: f64) -> SpinePoint {
+        let t_min = if t_min.is_nan() { 0. } else { t_min };
+        let t_max = if t_max.is_nan() { 1. } else { t_max };
         let (lo, hi) = if t_min <= t_max {
             (t_min, t_max)
         } else {
@@ -165,14 +168,20 @@ impl CurveSpine {
         if bb <= 1e-300 {
             return 0.;
         }
-        let t = (-a.dot(b) / bb).clamp(0., 1.);
-        // A control point collinear with the ends but outside the chord folds
-        // the spine back on itself: the speed vanishes at the vertex (a cusp,
-        // unbounded curvature) while the cross product is zero everywhere.
-        if (a + b * t).hypot() <= 1e-12 * bb.sqrt() {
-            return f64::INFINITY;
+        let vertex = -a.dot(b) / bb;
+        // B′ × B″ is a constant multiple of a × b, so a zero cross product
+        // means the spine lies on a line. It folds back on itself in a cusp
+        // (unbounded curvature) only if the speed vanishes strictly inside the
+        // spine; otherwise it is a straight segment, however the parameter
+        // speed varies (a control on an endpoint, for instance).
+        if a.cross(b).abs() <= 1e-12 * a.hypot() * bb.sqrt() {
+            return if vertex > 0. && vertex < 1. {
+                f64::INFINITY
+            } else {
+                0.
+            };
         }
-        geom::curvature(PathSeg::Quad(self.quad()), t).abs()
+        geom::curvature(PathSeg::Quad(self.quad()), vertex.clamp(0., 1.)).abs()
     }
 
     /// The seam distance: 1 / max curvature (infinite when straight, zero at a cusp).

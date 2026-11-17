@@ -116,19 +116,44 @@ pub fn fit_cubic_path(points: &[Point], options: FitOptions) -> Result<BezPath, 
     Ok(path)
 }
 
+/// Fit `p` with as many cubics as needed. Splitting is driven by an explicit
+/// work stack rather than recursion, so a long stroke whose worst error keeps
+/// landing near one end (depth about the point count) cannot overflow the
+/// thread's stack. The left piece is always fitted first, keeping path order.
 fn fit_piece(p: &[Point], t1: Vec2, t2: Vec2, tolerance: f64, out: &mut BezPath) {
+    let mut work = vec![(0, p.len() - 1, t1, t2)];
+    while let Some((first, last, t1, t2)) = work.pop() {
+        let piece = &p[first..=last];
+        if let Some((split, center)) = fit_once(piece, t1, t2, tolerance, out) {
+            let split = first + split;
+            // Pushed right first so the left piece is fitted next.
+            work.push((split, last, -center, t2));
+            work.push((first, split, t1, center));
+        }
+    }
+}
+
+/// Fit one piece with a single cubic, appending it when within tolerance.
+/// Otherwise returns the split index (into `p`) and the tangent there.
+fn fit_once(
+    p: &[Point],
+    t1: Vec2,
+    t2: Vec2,
+    tolerance: f64,
+    out: &mut BezPath,
+) -> Option<(usize, Vec2)> {
     let n = p.len();
     if n == 2 {
         let dist = (p[1] - p[0]).hypot() / 3.;
         out.curve_to(p[0] + t1 * dist, p[1] + t2 * dist, p[1]);
-        return;
+        return None;
     }
     let mut u = chord_params(p);
     let mut bez = generate(p, &u, t1, t2);
     let (mut error, mut split) = max_error(p, &bez, &u);
     if error <= tolerance {
         out.curve_to(bez.p1, bez.p2, bez.p3);
-        return;
+        return None;
     }
     if error <= tolerance * 4. {
         for _ in 0..MAX_ITERATIONS {
@@ -137,7 +162,7 @@ fn fit_piece(p: &[Point], t1: Vec2, t2: Vec2, tolerance: f64, out: &mut BezPath)
             (error, split) = max_error(p, &bez, &u);
             if error <= tolerance {
                 out.curve_to(bez.p1, bez.p2, bez.p3);
-                return;
+                return None;
             }
         }
     }
@@ -146,9 +171,7 @@ fn fit_piece(p: &[Point], t1: Vec2, t2: Vec2, tolerance: f64, out: &mut BezPath)
     if center.hypot() <= 1e-300 {
         center = Vec2::new(-(p[split] - p[split - 1]).y, (p[split] - p[split - 1]).x);
     }
-    let center = center.normalize();
-    fit_piece(&p[..=split], t1, center, tolerance, out);
-    fit_piece(&p[split..], -center, t2, tolerance, out);
+    Some((split, center.normalize()))
 }
 
 fn chord_params(p: &[Point]) -> Vec<f64> {

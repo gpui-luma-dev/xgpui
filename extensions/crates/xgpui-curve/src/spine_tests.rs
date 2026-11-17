@@ -175,3 +175,31 @@ fn a_spine_folded_into_a_cusp_has_zero_reach_and_unbends() {
         CurveSpine::new(Point::new(0., 0.), Point::new(0.6, 0.), Point::new(1., 0.)).unwrap();
     assert_eq!(straight.reach(), f64::INFINITY);
 }
+
+#[test]
+fn a_straight_spine_with_its_control_on_an_end_is_not_a_cusp() {
+    // B(t) = p0 + t²(p1 − p0): straight, with zero speed only at t = 0 (or 1).
+    for (p0, c, p1) in [
+        ((0., 0.), (0., 0.), (1., 1.)),
+        ((0., 0.), (1., 1.), (1., 1.)),
+        // Control inside the chord: straight, never stops.
+        ((0., 0.), (0.25, 0.25), (1., 1.)),
+    ] {
+        let pt = |(x, y): (f64, f64)| Point::new(x, y);
+        let mut spine = CurveSpine::new(pt(p0), pt(c), pt(p1)).unwrap();
+        assert_eq!(spine.max_curvature(), 0., "{c:?}");
+        assert_eq!(spine.reach(), f64::INFINITY, "{c:?}");
+        assert!(!spine.limit_bend(0.5), "{c:?}");
+        assert_eq!(spine.quad().p1, pt(c));
+    }
+}
+
+#[test]
+fn nan_range_bounds_mean_the_whole_spine() {
+    let spine = CurveSpine::with_bend(Point::new(0., 0.), Point::new(1., 0.), 0.3);
+    let p = Point::new(0.5, 0.5);
+    let whole = spine.project(p);
+    assert_eq!(spine.project_range(p, f64::NAN, 1.), whole);
+    assert_eq!(spine.project_range(p, 0., f64::NAN), whole);
+    assert_eq!(spine.project_range(p, f64::NAN, f64::NAN), whole);
+}

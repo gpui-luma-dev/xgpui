@@ -162,3 +162,58 @@ fn arc_padding_order_and_full_turns() {
     assert!((ring.to_path(0.001).area().abs() - annulus).abs() < 0.01 * annulus);
     assert!(ring.contains(at(3., 30.)));
 }
+
+/// `contains` agrees with the filled `to_path` everywhere except within
+/// `margin` of the outline.
+fn assert_contains_matches_path(arc: &ArcShape, margin: f64) {
+    let path = arc.to_path(1e-6);
+    let r = arc.inner_radius.max(arc.outer_radius) + 5.;
+    let mut checked = 0;
+    for i in 0..90 {
+        for j in 0..90 {
+            let q =
+                arc.center + Vec2::new(-r + i as f64 * 2. * r / 89., -r + j as f64 * 2. * r / 89.);
+            let near =
+                crate::geom::nearest_on_path(&path, q).is_some_and(|h| h.distance.abs() < margin);
+            if near {
+                continue;
+            }
+            checked += 1;
+            let filled = crate::geom::fill_contains(&path, q, crate::geom::FillRule::NonZero);
+            assert_eq!(arc.contains(q), filled, "{arc:?} at {q:?}");
+        }
+    }
+    assert!(checked > 1000);
+}
+
+#[test]
+fn contains_follows_the_straight_pad_edges() {
+    let mut arc = ArcShape::new(Point::new(0., 0.), 10., 100., 0.5, 2.0);
+    arc.pad_angle = 0.1;
+    assert_contains_matches_path(&arc, 0.05);
+    let q = Point::ZERO + Vec2::from_angle(0.7) * 55.;
+    assert_eq!(
+        arc.contains(q),
+        crate::geom::fill_contains(&arc.to_path(1e-6), q, crate::geom::FillRule::NonZero)
+    );
+    // Large pads, a sweep past half a turn, and a pie slice.
+    for (r0, r1, a0, a1, pad) in [
+        (40., 100., 0., 4.5, 0.3),
+        (5., 100., 1., 2.2, 0.4),
+        (0., 100., 0.3, 2.9, 0.2),
+    ] {
+        let mut arc = ArcShape::new(Point::new(3., -2.), r0, r1, a0, a1);
+        arc.pad_angle = pad;
+        assert_contains_matches_path(&arc, 0.05);
+    }
+}
+
+#[test]
+fn swapped_radii_draw_and_hit_the_same_ring() {
+    let swapped = ArcShape::new(Point::ZERO, 100., 50., 0., 1.);
+    let ordered = ArcShape::new(Point::ZERO, 50., 100., 0., 1.);
+    let q = Point::ZERO + Vec2::from_angle(0.5 - std::f64::consts::FRAC_PI_2) * 75.;
+    assert!(swapped.contains(q));
+    assert_eq!(swapped.to_path(1e-6), ordered.to_path(1e-6));
+    assert_contains_matches_path(&swapped, 0.05);
+}

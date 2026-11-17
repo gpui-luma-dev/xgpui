@@ -119,3 +119,113 @@ fn profiles_are_validated() {
     let kurbo_outline = kurbo_stroke(&wave(), &kurbo::Stroke::new(4.), 0.01);
     assert!(!kurbo_outline.elements().is_empty());
 }
+
+/// With round joins and caps a stroke is exactly the points within half the
+/// width of the centerline. Checks a grid of points well inside and well
+/// outside that boundary (by `margin`).
+fn assert_covers_exactly(path: &BezPath, width: f64, margin: f64) {
+    let out = StrokeProfile::constant(width)
+        .unwrap()
+        .caps(Cap::Round)
+        .with_join(Join::Round)
+        .outline(path, 1e-3)
+        .unwrap();
+    let half = width / 2.;
+    let bb = path.bounding_box().inflate(half + 1., half + 1.);
+    for i in 0..60 {
+        for j in 0..60 {
+            let q = Point::new(
+                bb.x0 + (i as f64 + 0.5) * bb.width() / 60.,
+                bb.y0 + (j as f64 + 0.5) * bb.height() / 60.,
+            );
+            let d = geom::nearest_on_path(path, q).unwrap().distance.abs();
+            let filled = geom::fill_contains(&out, q, geom::FillRule::NonZero);
+            if d < half - margin {
+                assert!(filled, "hole at {q:?}, {d:.3} from the centerline");
+            }
+            if d > half + margin {
+                assert!(!filled, "fill at {q:?}, {d:.3} from the centerline");
+            }
+        }
+    }
+}
+
+fn svg(d: &str) -> BezPath {
+    crate::svg_path::parse(d).unwrap()
+}
+
+#[test]
+fn cusps_and_tight_bends_leave_no_holes() {
+    // A cusp at (5, 7.5), and a bend tighter than the half width (radius 4.49).
+    assert_covers_exactly(&svg("M0,0 C10,10 0,10 10,0"), 4., 0.05);
+    assert_covers_exactly(&svg("M0,0 C50,-40 100,40 100,0"), 30., 0.05);
+    // The curvature peaks inside the clamped stretch; its evolute cusp must
+    // not make the inner side overshoot.
+    assert_covers_exactly(
+        &svg("M30.55,75.72 C76.03,27.31 40.11,50.72 58.9,67.75 Z"),
+        22.7,
+        0.05,
+    );
+    // Starts inside a bend tighter than the half width.
+    assert_covers_exactly(
+        &svg("M4.62,42.81 C14.21,57.79 73.22,73.61 43.79,16.89"),
+        30.3,
+        0.05,
+    );
+}
+
+#[test]
+fn reversals_and_single_segment_seams_get_their_joins() {
+    // An exact 180° turn gets a round end.
+    assert_covers_exactly(&svg("M0,0 L10,0 L0,0"), 2., 0.05);
+    // A closed subpath of one curve gets a join at its seam.
+    let one = svg("M0,0 C100,100 100,-100 0,0 Z");
+    let miter = StrokeProfile::constant(10.)
+        .unwrap()
+        .with_join(Join::Miter(4.))
+        .outline(&one, 1e-3)
+        .unwrap();
+    assert!(geom::fill_contains(
+        &miter,
+        Point::new(-6., 0.),
+        geom::FillRule::NonZero
+    ));
+    assert_covers_exactly(&one, 10., 0.05);
+}
+
+#[test]
+fn random_round_strokes_cover_exactly() {
+    let mut seed = 0x5eed_u64;
+    let mut rnd = || {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        (seed >> 11) as f64 / (1u64 << 53) as f64
+    };
+    for _ in 0..24 {
+        let mut path = BezPath::new();
+        let mut pt = || Point::new(rnd() * 100., rnd() * 100.);
+        path.move_to(pt());
+        for _ in 0..2 {
+            path.curve_to(pt(), pt(), pt());
+        }
+        let width = 2. + rnd() * 28.;
+        assert_covers_exactly(&path, width, 0.05);
+    }
+}
+
+#[test]
+fn an_empty_subpath_does_not_shift_later_tapers() {
+    let profile = StrokeProfile::tapered(10., 0.5, 0.5).unwrap();
+    let alone = profile.outline(&svg("M0,10 L100,10"), 1e-3).unwrap();
+    let after_empty = profile
+        .outline(&svg("M0,0 L0,0 M0,10 L100,10"), 1e-3)
+        .unwrap();
+    let q = Point::new(50., 14.);
+    assert!(geom::fill_contains(&alone, q, geom::FillRule::NonZero));
+    assert!(geom::fill_contains(
+        &after_empty,
+        q,
+        geom::FillRule::NonZero
+    ));
+}

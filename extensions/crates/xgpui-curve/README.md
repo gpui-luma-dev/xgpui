@@ -28,7 +28,7 @@ Every module except `geom` has a feature of the same name (`svg-path` for
 | `measure` | Closed-form quadratic arc length, `MeasuredPath` (arc-length lookup), trim and dash |
 | `series` | d3-style plot curves: linear, step, basis, cardinal, Catmull-Rom, natural, monotone (PCHIP), bundle; area fills |
 | `func` | `FunctionalCurve` (PCHIP, linear, x-clamped Bézier), CSS easing (`cubic-bezier`, `steps`, `linear()`), LUT baking |
-| `mesh` | `MeshLattice`: Hermite/Coons lattices with automatic or explicit tangents, fold clamping, cursor-exact edge dragging |
+| `mesh` | `MeshLattice`: Hermite lattices with automatic or explicit tangents, fold clamping, cursor-exact edge dragging |
 | `spine` | `CurveSpine`: quadratic field spines, (s, d⊥) projection, arrowheads, the inner-bend seam rule, `CURVE_SPINE_WGSL` / `CURVE_SPINE_MSL` |
 | `node` | `NodePath`: Corner, Smooth, Symmetric and automatic (Catmull-Rom, natural, Hobby) nodes with constraint-preserving edits |
 | `shape` | `Squircle` (continuous-curvature corners), `ArcShape` (annular sectors) |
