@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use super::*;
 fn p(x: f32, y: f32) -> Point<Pixels> {
     point(px(x), px(y))
@@ -109,30 +110,58 @@ fn pathological_work_is_bounded() {
     assert!(MeasuredPath::new(&contours, px(0.1)).is_err());
 }
 #[test]
-fn de_casteljau_slices_share_endpoints_and_match_original() {
-    let curve = Curve {
-        points: vec![[0., 0.], [20., 80.], [80., -20.], [100., 50.]],
+fn trimmed_pieces_share_endpoints_and_lie_on_the_original_curve() {
+    let original = Contour::new(p(0., 0.)).cubic_to(p(20., 80.), p(80., -20.), p(100., 50.));
+    let path = measured(original);
+    let first = path
+        .apply(&PathEffect::new().trim(0. ..0.3).unwrap())
+        .unwrap();
+    let rest = path
+        .apply(&PathEffect::new().trim(0.3..1.).unwrap())
+        .unwrap();
+    assert_eq!(first[0].segments()[0].to(), rest[0].start());
+    // Points of the middle piece lie on the original cubic.
+    let middle = path
+        .apply(&PathEffect::new().trim(0.2..0.8).unwrap())
+        .unwrap();
+    let Segment::Cubic {
+        control_a,
+        control_b,
+        to,
+    } = middle[0].segments()[0]
+    else {
+        panic!("cubic expected");
     };
-    let a = curve.slice(0., 0.3);
-    let b = curve.slice(0.3, 1.);
-    assert!(distance(*a.points.last().unwrap(), b.points[0]) < 1e-10);
-    let sliced = curve.slice(0.2, 0.8);
+    let f = |q: Point<Pixels>| [f32::from(q.x) as f64, f32::from(q.y) as f64];
+    let piece = [f(middle[0].start()), f(control_a), f(control_b), f(to)];
+    let eval = |c: [[f64; 2]; 4], t: f64| {
+        let u = 1. - t;
+        let w = [u * u * u, 3. * u * u * t, 3. * u * t * t, t * t * t];
+        [0, 1].map(|k| (0..4).map(|i| w[i] * c[i][k]).sum::<f64>())
+    };
+    let source = [[0., 0.], [20., 80.], [80., -20.], [100., 50.]];
     for t in [0., 0.25, 0.5, 0.75, 1.] {
-        let original = curve.split(0.2 + 0.6 * t).0.points.last().copied().unwrap();
-        let actual = sliced.split(t).0.points.last().copied().unwrap();
-        assert!(distance(original, actual) < 1e-10);
+        let q = eval(piece, t);
+        let nearest = (0..=20_000)
+            .map(|i| eval(source, i as f64 / 20_000.))
+            .map(|s| (s[0] - q[0]).hypot(s[1] - q[1]))
+            .fold(f64::MAX, f64::min);
+        assert!(nearest < 0.02, "{t}: {nearest}");
     }
 }
 
 #[test]
-fn lookup_budget_rejects_excessive_curvature_work() {
+fn extreme_curvature_is_measured_within_bounded_work() {
+    // The previous adaptive table rejected this at 65536 samples; quadrature
+    // measures it directly, still bounded per segment.
     let c = Contour::new(p(0., 0.)).cubic_to(
         p(1_000_000., 1_000_000.),
         p(-1_000_000., -1_000_000.),
         p(100., 0.),
     );
-    let error = MeasuredPath::new(&vec![c; 64], px(0.001)).unwrap_err();
-    assert!(error.to_string().contains("65536 samples"), "{error}");
+    let path = MeasuredPath::new(&vec![c; 64], px(0.001)).unwrap();
+    let length = f32::from(path.length());
+    assert!(length.is_finite() && length > 1_000_000.);
 }
 
 #[test]

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Curve and contour math for xgpui: geometry, plot series, tone curves and easing, mesh lattices, GPU field spines, node editing, squircles, strokes and fitting.">
+<title>Curves · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/curve.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="right-to-left-text.html">Right-to-left text</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-curve.html">xgpui-curve</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="extensions.html">← Extensions to GPUI</a></p><p class="guide-intro"><strong>Curve and contour math.</strong> Geometry, plot curves, easing, mesh lattices, GPU field spines and node editing, with GPUI paths when you want them.</p><article class="extension-document"><h1 id="curves">Curves</h1>
+<p><code>xgpui-curve</code> is the curve and contour math for xgpui, also usable on its own. It covers segment geometry, arc length and path effects, plot series curves, tone curves and CSS easing, mesh-gradient lattices, curved field spines with matching WGSL and Metal shader code, an editable node path, squircles, variable-width strokes, freehand fitting and SVG path data. A <code>gpui</code> feature turns any of it into native GPUI paths.</p>
+<p>All math is <code>f64</code> and built on <a href="https://docs.rs/kurbo/0.13.1">kurbo 0.13</a>, re-exported as <code>xgpui_curve::kurbo</code>. kurbo types such as <code>Point</code>, <code>Vec2</code>, <code>BezPath</code> and <code>CubicBez</code> appear in this crate's API, so a kurbo major version change is a breaking change here too.</p>
+<h2 id="use-it">Use it</h2>
+<pre><code class="language-toml">[dependencies]
+xgpui-curve = &quot;0.1.0&quot;
+</code></pre>
+<p>Every module except <code>geom</code> has a feature of the same name (<code>svg-path</code> for <code>svg_path</code>), and all are on by default. Turn off default features and pick modules to use the math without GPUI:</p>
+<pre><code class="language-toml">xgpui-curve = { version = &quot;0.1.0&quot;, default-features = false, features = [&quot;series&quot;, &quot;func&quot;] }
+</code></pre>
+<div class="table-wrap"><table><thead><tr><th>Module</th><th>What it gives you</th></tr></thead><tbody><tr><td><code>geom</code> (always)</td><td>Evaluation, derivatives, curvature, Hermite ↔ Bézier, tight bounds, nearest point, split, intersection, rectangle clipping, flattening, fill and stroke hit testing</td></tr><tr><td><code>measure</code></td><td>Closed-form quadratic arc length, <code>MeasuredPath</code> arc-length lookup, trim and dash</td></tr><tr><td><code>series</code></td><td>Plot curves: linear, step, basis, cardinal, Catmull-Rom, natural, monotone (PCHIP), bundle; area fills; closed curves for radar outlines</td></tr><tr><td><code>func</code></td><td><code>FunctionalCurve</code> (PCHIP, linear, x-clamped Bézier), CSS easing, LUT baking</td></tr><tr><td><code>mesh</code></td><td><code>MeshLattice</code>: Hermite lattices with automatic or explicit tangents and cursor-exact edge dragging</td></tr><tr><td><code>spine</code></td><td><code>CurveSpine</code>: quadratic field spines, (s, perpendicular distance) projection, the seam rule, WGSL and MSL</td></tr><tr><td><code>node</code></td><td><code>NodePath</code>: Corner, Smooth, Symmetric and automatic (Catmull-Rom, natural, Hobby) nodes</td></tr><tr><td><code>shape</code></td><td><code>Squircle</code> (continuous-curvature corners), <code>ArcShape</code> (annular sectors)</td></tr><tr><td><code>stroke</code></td><td><code>StrokeProfile</code>: variable-width and tapered outlines with caps and joins</td></tr><tr><td><code>fit</code></td><td>Ramer–Douglas–Peucker simplification and Schneider cubic fitting for pointer and pen input</td></tr><tr><td><code>svg_path</code></td><td>SVG <code>d</code> parsing and serialization</td></tr><tr><td><code>gpui_paint</code></td><td><code>gpui::Path&lt;Pixels&gt;</code> builders, <code>bounds_transform</code>, <code>paint_contrasting_path</code></td></tr></tbody></table></div>
+<h2 id="paint-in-gpui">Paint a curve in GPUI</h2>
+<p>Build any path in model space, map it into an element's bounds and paint it from a <code>canvas</code>. <code>paint_contrasting_path</code> draws a dark halo under a light line, so wireframes and gizmos stay readable on any background.</p>
+<pre><code class="language-rust">use gpui::{canvas, hsla};
+use xgpui_curve::gpui_paint::{bounds_transform, paint_contrasting_path};
+use xgpui_curve::kurbo::Point;
+use xgpui_curve::series::{SeriesCurve, series_path};
+
+// Samples in 0..1 of the element.
+let samples = [Point::new(0.0, 0.8), Point::new(0.3, 0.2), Point::new(0.6, 0.6), Point::new(1.0, 0.1)];
+let path = series_path(&amp;samples, SeriesCurve::MonotoneX);
+
+canvas(|_, _, _| (), move |bounds, _, window, _| {
+    paint_contrasting_path(
+        window,
+        &amp;path,
+        bounds_transform(bounds),
+        (4.0, hsla(0.0, 0.0, 0.0, 0.6)),
+        (2.0, hsla(0.0, 0.0, 1.0, 0.9)),
+    );
+})
+</code></pre>
+<p><code>fill_path</code> and <code>stroke_path</code> return the <code>gpui::Path&lt;Pixels&gt;</code> without painting it, for callers that want their own colours or layering.</p>
+<h2 id="plot-series">Plot series and area fills</h2>
+<p><code>series_path</code> connects samples in input order. A non-finite sample breaks the line and each finite run is drawn on its own. The curve family follows d3-shape; monotone curves use the same PCHIP slopes as scipy and the luma plot crate, so they never overshoot.</p>
+<pre><code class="language-rust">use xgpui_curve::kurbo::{Point, Rect};
+use xgpui_curve::series::{Baseline, SeriesCurve, series_area, series_path_clipped};
+
+let samples = [Point::new(0., 3.), Point::new(1., 5.), Point::new(f64::NAN, 0.), Point::new(3., 4.), Point::new(4., 6.)];
+let line = series_path_clipped(&amp;samples, SeriesCurve::CatmullRom { alpha: 0.5 }, Rect::new(0., 0., 4., 5.5));
+let area = series_area(&amp;samples, SeriesCurve::Natural, Baseline::Constant(0.));
+</code></pre>
+<p><code>series_path_closed</code> draws one closed outline, such as a radar chart, with d3's closed curves (<code>ClosedCurve::Linear</code>, <code>Basis</code>, <code>Cardinal</code> and <code>CatmullRom</code>). The curve wraps from the last sample to the first with no corner at the seam. Here a non-finite sample is skipped rather than breaking the outline.</p>
+<pre><code class="language-rust">use xgpui_curve::kurbo::Point;
+use xgpui_curve::series::{ClosedCurve, series_path_closed};
+
+// One value per radar spoke, as points around the centre.
+let values = [0.9, 0.55, 0.75, 0.3, 0.85];
+let spokes: Vec&lt;Point&gt; = values.iter().enumerate().map(|(i, v)| {
+    let angle = i as f64 * std::f64::consts::TAU / values.len() as f64;
+    Point::new(v * angle.cos(), v * angle.sin())
+}).collect();
+let outline = series_path_closed(&amp;spokes, ClosedCurve::CatmullRom { alpha: 0.5 });
+</code></pre>
+<h2 id="mesh-lattices">Mesh-gradient lattices</h2>
+<p>A <code>MeshLattice</code> is an R × C grid of points with a tangent per node and axis: <code>Tangent::Auto</code> (central difference, one-sided at the border) or <code>Tangent::Explicit</code>. Both are clamped to 0.7 × the distance to the nearer neighbour, which keeps patches from folding. Its edges are the exact cubic boundaries of the mesh-gradient patches, so a wireframe drawn from the lattice lies on the rendered edges.</p>
+<pre><code class="language-rust">use xgpui_curve::kurbo::{Point, Vec2};
+use xgpui_curve::mesh::MeshLattice;
+
+let points = (0..3).flat_map(|r| (0..4).map(move |c| Point::new(c as f64 / 3., r as f64 / 2.))).collect();
+let mut lattice = MeshLattice::new(3, 4, points)?;
+
+// Grab a wire about a third of the way along and drag: the point follows the cursor exactly.
+if let Some(hit) = lattice.hit_edge(Point::new(0.44, 0.51), 0.02) {
+    lattice.drag_edge(hit.row, hit.col, hit.axis, hit.t, Vec2::new(0., 0.05))?;
+}
+let wires = lattice.wireframe();
+let gpu_points = lattice.controls(); // positions and resolved tangents for xgpui_shader::MeshGrid
+</code></pre>
+<p>Dragging solves for the smallest change to the two inner controls that keeps the grabbed point under the cursor, then stores the result as explicit tangents at both nodes. A tangent is shared by the two edges on its axis, so the neighbouring edge bends too, and the fold clamp can stop a drag short. <code>patch_point</code> and <code>iso_curve</code> evaluate a cell's interior as the zero-twist Hermite patch the mesh shaders render, so iso-curves lie on the drawn gradient (they are exact cubics); <code>reset_tangents</code> returns every node to automatic.</p>
+<h2 id="field-spines">Curved field spines</h2>
+<p>A <code>CurveSpine</code> is a quadratic Bézier a colour field can bend along. <code>project</code> returns, for any point, the nearest spine parameter <code>t</code>, the signed perpendicular distance and the normalized arc position <code>s</code>. Quadratics keep that projection in closed form (a cubic equation), so the GPU evaluates it per pixel.</p>
+<pre><code class="language-rust">use xgpui_curve::kurbo::Point;
+use xgpui_curve::spine::CurveSpine;
+
+let mut spine = CurveSpine::with_bend(Point::new(0.2, 0.5), Point::new(0.8, 0.5), 0.3);
+// The seam rule: straighten until the projection is continuous out to 0.6
+// (this bend&#x27;s reach is 0.5).
+spine.limit_bend(0.6);
+let local = spine.project(Point::new(0.5, 0.4));
+let arrow = spine.arrowhead(0.03, 0.45); // wings along the terminal tangent
+let params = spine.shader_params(0.0, 1.0); // [p0, control, p1, t_min, t_max] as f32
+</code></pre>
+<p><strong>The seam.</strong> Beyond the centre of curvature on the inside of a bend, the nearest point can jump between the arms. <code>reach()</code> is that distance (1 / maximum curvature); <code>limit_bend(radius)</code> straightens the spine until the reach is at least the radius your kernel samples.</p>
+<p><strong>Shaders.</strong> <code>CURVE_SPINE_WGSL</code> and <code>CURVE_SPINE_MSL</code> (include it after <code>#include &lt;metal_stdlib&gt;</code>) define <code>curve_spine_project(p, p0, c, p1, t_min, t_max)</code>, returning <code>(signed distance, t, s, length)</code>. Straight spines, coincident points and edge-of-domain inputs stay finite. Tests run both versions on Metal and compare them with the f64 CPU result. The curve lab's spine inspector has a CPU-vs-GPU difference view that does the same comparison live, tile by tile, and highlights any tile off by more than half a pixel.</p>
+<pre><code class="language-rust">let source = format!(&quot;{}\n{}&quot;, xgpui_curve::spine::CURVE_SPINE_WGSL, include_str!(&quot;my_field.wgsl&quot;));
+// In my_field.wgsl:
+//   let r = curve_spine_project(input.position, p.a.xy, p.a.zw, p.b.xy, p.b.z, p.b.w);
+</code></pre>
+<h2 id="node-editing">Editable node paths</h2>
+<p><code>NodePath</code> holds anchors with optional handles and a mode per node. Edits keep each mode's constraint: <code>Smooth</code> handles stay collinear, <code>Symmetric</code> ones also stay equal in length, and automatic nodes recompute their handles from the anchors.</p>
+<pre><code class="language-rust">use xgpui_curve::kurbo::{Point, Vec2};
+use xgpui_curve::node::{AutoSmooth, Node, NodeMode, NodePath};
+
+let anchors = [(110., 330.), (270., 180.), (450., 300.), (630., 170.)];
+let mut path = NodePath::new(anchors.iter().map(|&amp;(x, y)| Node::auto(Point::new(x, y), AutoSmooth::Hobby)).collect(), false)?;
+path.drag_segment(1, 0.4, Vec2::new(0., -20.))?; // the point at t = 0.4 follows the cursor
+let inserted = path.insert_at(2, 0.5)?;          // the drawn curve is unchanged
+path.set_mode(inserted, NodeMode::Symmetric)?;
+let comb = path.curvature_comb(24, 4000.);       // (point, tip) pairs to draw
+</code></pre>
+<div class="table-wrap"><table><thead><tr><th>Mode</th><th>Behaviour</th></tr></thead><tbody><tr><td><code>Corner</code></td><td>C⁰: handles move independently</td></tr><tr><td><code>Smooth</code></td><td>G¹: handles stay collinear and opposite, lengths independent</td></tr><tr><td><code>Symmetric</code></td><td>Collinear, opposite and equal in length</td></tr><tr><td><code>Auto(CatmullRom { alpha })</code></td><td>From the two neighbouring anchors; <code>alpha</code> 0.5 is centripetal</td></tr><tr><td><code>Auto(Natural)</code></td><td>C² natural spline over each run of natural nodes</td></tr><tr><td><code>Auto(Hobby)</code></td><td>Hobby's algorithm (unit tension, unit curl ends) over each run</td></tr></tbody></table></div>
+<p>Moving a handle of an automatic node turns it into a <code>Smooth</code> node. <code>insert_at</code> freezes the automatic nodes that depend on the split segment so the curve does not move.</p>
+<h2 id="functional-curves">Tone curves and easing</h2>
+<pre><code class="language-rust">use xgpui_curve::func::{Easing, FunctionalCurve, StepPosition};
+use xgpui_curve::kurbo::Point;
+
+let tone = FunctionalCurve::monotone(&amp;[Point::new(0., 0.), Point::new(0.5, 0.65), Point::new(1., 1.)])?;
+let lut = tone.to_lut_f32::&lt;256&gt;(); // finite, clamped to 0..=1, for a GPU lookup
+let y = Easing::EASE.eval(0.5);
+let steps = Easing::steps(4, StepPosition::JumpEnd)?;
+let overshoot = Easing::cubic_bezier(0.5, -0.5, 0.5, 1.5)?;
+</code></pre>
+<p><code>FunctionalCurve</code> holds y = f(x) over strictly increasing knots, as PCHIP (no overshoot), linear, or Bézier segments whose handle x is clamped so every x has one y. <code>Easing</code> follows CSS Easing Level 2, including extrapolation outside 0..1 and <code>linear()</code> stops with missing inputs.</p>
+<h2 id="shapes-strokes-fitting">Shapes, strokes and freehand fitting</h2>
+<pre><code class="language-rust">use xgpui_curve::fit::{FitOptions, fit_cubic_path};
+use xgpui_curve::kurbo::{Point, Rect};
+use xgpui_curve::shape::Squircle;
+use xgpui_curve::stroke::{Cap, StrokeProfile};
+
+let card = Squircle::new(Rect::new(0., 0., 240., 160.), 32., 0.6)?.to_path(0.05);
+let pointer: Vec&lt;Point&gt; = (0..60).map(|i| Point::new(i as f64 * 5., (i as f64 * 0.2).sin() * 40.)).collect();
+let fitted = fit_cubic_path(&amp;pointer, FitOptions { tolerance: 2., ..Default::default() })?;
+let ink = StrokeProfile::tapered(14., 0.25, 0.3)?.caps(Cap::Round).outline(&amp;fitted, 0.25)?;
+</code></pre>
+<p><code>Squircle</code> uses Figma's corner construction but splits the transition handles so curvature is continuous where the corner meets the circular arc: measured curvature steps stay below 1e-4 × 1/R. Short sides reduce the smoothing first, then the radius. <code>ArcShape</code> draws d3-style annular sectors with padding and analytic <code>contains</code>. <code>StrokeProfile</code> offsets each side by half the width at that arc length; constant-width strokes can use <code>kurbo_stroke</code>.</p>
+<h2 id="measure-and-svg">Arc length, trim, dash and SVG</h2>
+<pre><code class="language-rust">use xgpui_curve::measure::{MeasuredPath, PathEffect};
+use xgpui_curve::svg_path;
+
+let path = svg_path::parse(&quot;M10 10 C40 80 90 -20 120 40 S200 60 220 10&quot;)?;
+let measured = MeasuredPath::new(&amp;path, 1e-6)?;
+let halfway = measured.locate(measured.length() / 2.).map(|at| at.point);
+let dashed = measured.apply(&amp;PathEffect::new().trim(0.1..0.9)?.dash(&amp;[8., 4.], 0.)?)?;
+let d = svg_path::to_svg(&amp;dashed);
+</code></pre>
+<p>Trim and dash keep the original curve segments; dashes restart on each subpath and join across the start of a closed one. Work is bounded (8192 segments, 16384 output pieces, 64 dash entries).</p>
+<h2 id="geometry">Geometry queries</h2>
+<div class="table-wrap"><table><thead><tr><th>Function</th><th>Result</th></tr></thead><tbody><tr><td><code>eval</code>, <code>deriv1</code>, <code>deriv2</code>, <code>tangent</code>, <code>normal</code>, <code>curvature</code></td><td>Point, derivatives, unit frame and signed curvature at <code>t</code>; tangents use one-sided limits where the derivative vanishes</td></tr><tr><td><code>Hermite::to_cubic</code>, <code>Hermite::from_cubic</code></td><td>Exact conversion between (p₀, m₀, p₁, m₁) and Bézier controls</td></tr><tr><td><code>tight_bounds</code></td><td>Bounds from the exact x(t) and y(t) extrema</td></tr><tr><td><code>nearest</code>, <code>nearest_on_path</code></td><td>Nearest point with signed distance, on a segment or a whole path</td></tr><tr><td><code>split</code>, <code>subrange</code></td><td>De Casteljau split; halves share the split point exactly</td></tr><tr><td><code>intersect_line</code>, <code>intersect_segments</code></td><td>Crossings: analytic for lines, subdivision plus Newton refinement for curves</td></tr><tr><td><code>clip_to_rect</code></td><td>Keep the parts of a stroke inside a rectangle, with their curve segments</td></tr><tr><td><code>winding</code>, <code>fill_contains</code>, <code>stroke_contains</code></td><td>Exact winding number (split into y-monotonic pieces), hit testing with non-zero or even-odd fill rules, or a stroke width</td></tr></tbody></table></div>
+<h2 id="precision">Precision and tests</h2>
+<ul><li>Nearest point within 1e-6 of a brute-force search; quadratic arc length within 1e-12 of the analytic parabola and 1e-9 of quadrature; arc-length lookup within 1e-9.</li><li>Bounds checked against 100,000 samples; splits preserve geometry and derivatives.</li><li>Mesh and node segment drags keep the grabbed point under the cursor; <code>insert_at</code> leaves every sampled point in place for every node mode.</li><li>Automatic mesh tangents match the xgpui-luma gradient builder; PCHIP matches the luma plot implementation.</li><li>The spine WGSL and hand-written MSL run on Metal, with fast math off and on, and agree with the CPU.</li></ul>
+<h2 id="try-it">Try it</h2>
+<p>The curve lab has six panels: mesh lattice, spine inspector, node editor, series curves, functions and easing, and shapes and strokes. Wheel or pinch zooms, two-finger scroll or a drag on empty space pans.</p>
+<pre><code class="language-sh">just curve
+just curve spine
+</code></pre>
+<p>The same panels run in the browser: <a href="examples/extensions/?demo=curve">open the curve demo ↗</a> (add <code>&amp;panel=spine</code>, <code>nodes</code>, <code>series</code>, <code>functions</code> or <code>shapes</code>). Source: <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/apps/xgpui-ext-lab/extensions-web/src/curve">extensions-web/src/curve</a>.</p>
+<h2 id="known-limits">Known limits</h2>
+<ul><li>No path boolean operations (union, intersection, difference).</li><li>Spines are quadratic so the GPU projection has a closed form; cubic spines would need an iterative solve per pixel.</li><li>Hobby with unit curl overshoots on sharp zig-zags, as the algorithm does.</li><li>Intersections of overlapping (coincident) curves return a bounded sample of shared points.</li></ul>
+<h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
+<p>None. The crate uses existing <code>PathBuilder</code>, <code>Window::paint_path</code> and element APIs behind its optional <code>gpui</code> feature; everything else is plain Rust. See <a href="gpui-public-api.html#curve-reuses-existing-gpui-apis">curve integration compatibility</a>.</p>
+</article>
+</main>
+<footer>Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

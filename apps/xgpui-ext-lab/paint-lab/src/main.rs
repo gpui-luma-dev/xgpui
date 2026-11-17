@@ -235,6 +235,11 @@ struct Lab {
     freeform_step: u8,
     #[cfg(feature = "portable-shaders")]
     hermite: hermite_editor::HermiteEditor,
+    /// The Hermite direct-brush preview's bounds, for mapping wire drags.
+    #[cfg(feature = "portable-shaders")]
+    hermite_preview: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
+    #[cfg(feature = "portable-shaders")]
+    hermite_legacy_preview: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
     playing: bool,
     time: f32,
     updated: Instant,
@@ -976,6 +981,10 @@ fn main() -> Result<()> {
                     freeform_step: 2,
                     #[cfg(feature = "portable-shaders")]
                     hermite: hermite_editor::HermiteEditor::new(1),
+                    #[cfg(feature = "portable-shaders")]
+                    hermite_preview: Default::default(),
+                    #[cfg(feature = "portable-shaders")]
+                    hermite_legacy_preview: Default::default(),
                     playing: false,
                     time: 0.,
                     updated: Instant::now(),

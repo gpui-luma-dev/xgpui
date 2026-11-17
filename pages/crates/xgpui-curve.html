@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Curve and contour math for xgpui: geometry, plot series, easing, mesh lattices, GPU field spines, node editing, strokes and fitting.">
+<title>xgpui-curve · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/crates/xgpui-curve.html">
+<link rel="icon" type="image/svg+xml" href="../favicon.svg"><link rel="icon" sizes="32x32" href="../favicon.ico">
+<link rel="stylesheet" href="../style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="../vendor/prism/prism-core.min.js" data-manual></script><script defer src="../vendor/prism/prism-rust.min.js"></script><script defer src="../code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="../index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="../index.html">Overview</a><a href="../whats-new.html">What's new</a><a href="../releasing.html">Releasing XGPUI</a><a href="../color-workflows.html">Color &amp; wide gamut</a><a href="../shell.html">Desktop shell</a><a href="../font-controls.html">Fonts &amp; OpenType</a><a href="../right-to-left-text.html">Right-to-left text</a><a href="../extension-lab.html">Labs &amp; benchmarks</a><a href="../performance-study.html">Performance study</a><a href="../gpui-public-api.html">GPUI API changes</a><a href="../gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="../shader-options.html">Shader options</a><a class="rail-demo" href="../examples/extensions/">Live demos ↗</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="../crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="../crates/xgpui-color.html">xgpui-color</a><a class="crate-link" aria-current="page" href="../crates/xgpui-curve.html">xgpui-curve</a><a class="crate-link" href="../crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="../crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="../crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="../crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="../crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="../crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="../crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="../crates/gpui.html">gpui</a><a class="crate-link" href="../crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="../crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="../crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="../crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="../crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="../crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="../crates/gpui-web.html">gpui-web</a><a class="crate-link" href="../crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="../crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<div class="eyebrow">Extensions</div><h1>xgpui-curve</h1><p class="lead">Curve and contour math: geometry, plot curves, easing, mesh lattices, GPU field spines and node editing.</p><nav class="tabs" aria-label="Crate sections"><a href="#crate-use">Use</a><a href="#crate-why">Why curves</a><a href="#crate-sources">Role &amp; sources</a><a href="#crate-api">API documentation</a><a href="#crate-dependencies">Dependencies</a><a href="#crate-contact">Contact &amp; keywords</a><a href="#crate-review">Trim review</a></nav>
+<section id="crate-use">
+<p>Version 0.1.0, not yet published to crates.io.</p><pre><code class="language-sh">cargo add xgpui-curve
+</code></pre><p class="crate-guide"><a href="../curve.html">Read the curves guide →</a></p>
+</section>
+<section id="crate-why"><h2>Why curves</h2><p>GPUI can <em>draw</em> a curve: give <code>PathBuilder</code> the control points and it tessellates the path. Everything before and after that is up to you. There are no splines that pass through your data points, no way to ask where a curve is (its nearest point, its length, whether the pointer is on it), no variable-width strokes, and nothing to keep handles smooth while someone edits them.</p><p>That gap shows up in ordinary features: a chart line you can hover, a mesh gradient whose wires you can drag, a pen tool, a path that draws itself in along its length, a colour field that follows a curve. Each app ends up hand-writing its own Bézier math. <code>xgpui-curve</code> is that math, written once and tested, with a <code>gpui</code> feature that hands the result back to <code>PathBuilder</code>.</p><h3>Example: a hoverable chart line</h3><p>In plain GPUI you would compute every segment's control points yourself and still have no way to tell whether the pointer is on the line. Here the line passes through every sample without overshooting, and one call finds the point under the pointer:</p><pre><code class="language-rust">use xgpui_curve::geom::nearest_on_path;
+use xgpui_curve::kurbo::Point;
+use xgpui_curve::series::{SeriesCurve, series_path};
+
+// A smooth line through every sample that never overshoots the data.
+let samples = [Point::new(0.0, 0.9), Point::new(0.25, 0.85), Point::new(0.5, 0.2), Point::new(0.75, 0.25), Point::new(1.0, 0.6)];
+let line = series_path(&amp;samples, SeriesCurve::MonotoneX);
+
+// Where is the line under the pointer, and is the pointer on it?
+let pointer = Point::new(0.42, 0.5);
+if let Some(hit) = nearest_on_path(&amp;line, pointer) {
+    let snap_to = hit.point; // put the crosshair or tooltip here
+    let hovering = hit.distance &lt; 0.02;
+}
+</code></pre><p>Paint <code>line</code> with <code>gpui_paint::stroke_path</code>. The same <code>nearest_on_path</code> works for any path: mesh wires, node outlines, SVG data.</p></section>
+<section id="crate-sources"><h2>Public surface at a glance</h2><p>Modules <code>geom</code>, <code>measure</code>, <code>series</code>, <code>func</code>, <code>mesh</code>, <code>spine</code>, <code>node</code>, <code>shape</code>, <code>stroke</code>, <code>fit</code>, <code>svg_path</code> and <code>gpui_paint</code>; types MeshLattice, CurveSpine, NodePath, FunctionalCurve, Easing, MeasuredPath, PathEffect, Squircle, ArcShape and StrokeProfile; the CURVE_SPINE_WGSL and CURVE_SPINE_MSL shader sources; kurbo re-exported as <code>xgpui_curve::kurbo</code>.</p><p><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-curve/src/lib.rs">Open library entrypoint ↗</a> · <a href="https://github.com/gpui-luma-dev/xgpui/tree/main/extensions/crates/xgpui-curve">Browse the crate source ↗</a></p></section>
+<section id="crate-api"><h2>API documentation</h2><p>Rustdoc will be on <a href="https://docs.rs/xgpui-curve">docs.rs ↗</a> once published; the <a href="../curve.html">guide</a> matches this checkout.</p></section>
+<section id="crate-dependencies"><h2>Dependencies</h2><p>Dependencies and features are declared in <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-curve/Cargo.toml">Cargo.toml ↗</a>.</p><p>It always depends on <code>kurbo</code> 0.13, whose types are part of its public API. The default <code>gpui</code> feature adds <code>xgpui</code> for the path adapters; every other feature is plain Rust and builds for <code>wasm32-unknown-unknown</code>.</p></section>
+<section id="crate-contact"><h2>Contact and discovery</h2><p>Questions and bug reports: <a href="https://github.com/gpui-luma-dev/xgpui/issues">open a GitHub issue ↗</a>. No separate maintainer email is listed in the crate metadata.</p><p><strong>Keywords:</strong> <code>xgpui</code>, <code>bezier</code>, <code>curve</code>, <code>spline</code>, <code>geometry</code>. <strong>Categories:</strong> <code>graphics</code>, <code>mathematics</code>.</p><p><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/extensions/crates/xgpui-curve/README.md">Read the crate README ↗</a></p></section>
+<section id="crate-review"><h2>Boundary to investigate</h2><div class="notice">Review hypothesis. No visibility changes or removal decisions have been made.</div><p><code>xgpui-svg::path_effects</code> now delegates to <code>measure</code> and is deprecated. The other planned consumers have not migrated yet: paint-lab's Hermite editor, and the xgpui-luma gradient builder, plot and arc helpers still carry their own copies. Tracked in <a href="https://github.com/gpui-luma-dev/xgpui/issues/55">issue #55</a>.</p></section>
+</main>
+<footer>Source evidence and review hypotheses are kept distinct. · Created by codex</footer>
+</body>
+</html>

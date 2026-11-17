@@ -10,11 +10,12 @@ use std::{
     },
 };
 use web_time::Instant;
+use xgpui_curve::kurbo::{Affine, BezPath};
+use xgpui_curve::measure::{MeasuredPath, PathEffect};
 use xgpui_media::{
     ImageFilter,
     pipeline::{ColorMatrix, ImageAdjustments, ImagePrimaries, Vignette},
 };
-use xgpui_svg::path_effects::{Contour, MeasuredPath, PathEffect};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
@@ -145,32 +146,27 @@ impl MediaDemo {
         for p in bgra.pixels_mut() {
             p.0.swap(0, 2);
         }
-        let p = |x, y| point(px(x), px(y));
-        let contours = [
-            vec![
-                Contour::new(p(20., 100.))
-                    .cubic_to(p(60., -30.), p(140., 210.), p(190., 85.))
-                    .quadratic_to(p(250., -20.), p(300., 100.)),
-            ],
-            vec![
-                Contour::new(p(160., 150.))
-                    .cubic_to(p(120., 115.), p(20., 60.), p(70., 30.))
-                    .cubic_to(p(105., 5.), p(145., 20.), p(160., 50.))
-                    .cubic_to(p(175., 20.), p(215., 5.), p(250., 30.))
-                    .cubic_to(p(300., 60.), p(200., 115.), p(160., 150.))
-                    .close(),
-            ],
-            vec![
-                Contour::new(p(20., 45.))
-                    .line_to(p(110., 45.))
-                    .line_to(p(110., 120.))
-                    .line_to(p(20., 120.))
-                    .close(),
-                Contour::new(p(170., 120.))
-                    .quadratic_to(p(170., 5.), p(230., 45.))
-                    .cubic_to(p(300., -5.), p(320., 120.), p(250., 135.)),
-            ],
-        ];
+        let mut open = BezPath::new();
+        open.move_to((20., 100.));
+        open.curve_to((60., -30.), (140., 210.), (190., 85.));
+        open.quad_to((250., -20.), (300., 100.));
+        let mut heart = BezPath::new();
+        heart.move_to((160., 150.));
+        heart.curve_to((120., 115.), (20., 60.), (70., 30.));
+        heart.curve_to((105., 5.), (145., 20.), (160., 50.));
+        heart.curve_to((175., 20.), (215., 5.), (250., 30.));
+        heart.curve_to((300., 60.), (200., 115.), (160., 150.));
+        heart.close_path();
+        let mut multiple = BezPath::new();
+        multiple.move_to((20., 45.));
+        multiple.line_to((110., 45.));
+        multiple.line_to((110., 120.));
+        multiple.line_to((20., 120.));
+        multiple.close_path();
+        multiple.move_to((170., 120.));
+        multiple.quad_to((170., 5.), (230., 45.));
+        multiple.curve_to((300., -5.), (320., 120.), (250., 135.));
+        let contours = [open, heart, multiple];
         Ok(Self {
             mode,
             source: Arc::new(Source {
@@ -193,8 +189,8 @@ impl MediaDemo {
             width: 0,
             paths: contours
                 .iter()
-                .map(|v| MeasuredPath::new(v, px(0.05)))
-                .collect::<anyhow::Result<_>>()?,
+                .map(|v| MeasuredPath::new(v, 0.05))
+                .collect::<Result<_, _>>()?,
         })
     }
     fn filter(&self) -> ImageFilter {
@@ -292,9 +288,10 @@ impl MediaDemo {
             )
     }
     fn path_panel(&self, measured: &MeasuredPath, effect: PathEffect, color: u32) -> Div {
-        let built = measured
-            .stroke(&effect, px([4., 8., 14.][self.width]))
-            .expect("bounded fixture effects");
+        let mut builder = PathBuilder::stroke(px([4., 8., 14.][self.width]));
+        let pieces = measured.apply(&effect).expect("bounded fixture effects");
+        xgpui_curve::gpui_paint::append(&mut builder, &pieces, Affine::IDENTITY);
+        let built = builder.build().expect("bounded fixture effects");
         div()
             .flex_1()
             .min_w_0()
@@ -354,15 +351,13 @@ impl Render for MediaDemo {
                 [1., 0.75, 0.5, 0.25, 0.][self.trim]
             };
             let phase = self.phase + if animated { time * 24. } else { 0. };
-            let effect = PathEffect::new().trim(0. ..trim).unwrap();
+            let effect = PathEffect::new().trim(0. ..trim as f64).unwrap();
+            let phase = phase as f64;
             let dashed = match self.dash {
                 0 => effect.clone(),
-                1 => effect.clone().dash(&[px(16.), px(8.)], px(phase)).unwrap(),
-                2 => effect.clone().dash(&[px(4.), px(7.)], px(phase)).unwrap(),
-                _ => effect
-                    .clone()
-                    .dash(&[px(18.), px(5.), px(3.)], px(phase))
-                    .unwrap(),
+                1 => effect.clone().dash(&[16., 8.], phase).unwrap(),
+                2 => effect.clone().dash(&[4., 7.], phase).unwrap(),
+                _ => effect.clone().dash(&[18., 5., 3.], phase).unwrap(),
             };
             root=root.child("Original / trimmed / trimmed + dashed. Open curves, closed heart, multiple contours.")
                 .child(div().flex().flex_wrap().gap_2()
@@ -371,7 +366,7 @@ impl Render for MediaDemo {
                     .child(button("phase",format!("Phase {:.0}",self.phase)).on_click(cx.listener(|s,_,_,cx|{s.phase=(s.phase+5.).rem_euclid(60.);cx.notify();})))
                     .child(button("width",format!("Stroke {}",[4,8,14][self.width])).on_click(cx.listener(|s,_,_,cx|{s.width=(s.width+1)%3;cx.notify();}))))
                 .children(self.paths.iter().map(|p|div().flex().gap_3().child(self.path_panel(p,PathEffect::new(),0x708096)).child(self.path_panel(p,effect.clone(),0x9ee3bd)).child(self.path_panel(p,dashed.clone(),0xffae81))))
-                .child("Shared xgpui-svg contour effects before native stroke tessellation; odd dash arrays repeat. Trim uses total length; phase restarts per retained contour.");
+                .child("Shared xgpui-curve contour effects before native stroke tessellation; odd dash arrays repeat. Trim uses total length; phase restarts per retained contour.");
         } else {
             let zoom = [0.9, 0.5, 0.25, 0.125][self.zoom]
                 * if animated {
