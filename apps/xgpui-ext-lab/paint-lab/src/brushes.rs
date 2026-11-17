@@ -820,6 +820,78 @@ fn expanded_demo_points(count: usize) -> Vec<BrushPoint> {
         .collect()
 }
 
+/// A Hermite preview with its exact curved patch edges (xgpui-curve) drawn
+/// on top. Dragging an edge bends both of its end tangents.
+fn wired(
+    id: &'static str,
+    preview: impl IntoElement,
+    wires: xgpui_curve::kurbo::BezPath,
+    area: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
+    cx: &mut Context<super::Lab>,
+) -> Stateful<Div> {
+    let to_mesh = |b: Bounds<Pixels>, at: Point<Pixels>| {
+        let (w, h) = (
+            f32::from(b.size.width).max(1.),
+            f32::from(b.size.height).max(1.),
+        );
+        xgpui_curve::kurbo::Point::new(
+            (f32::from(at.x - b.origin.x) / w) as f64,
+            (f32::from(at.y - b.origin.y) / h) as f64,
+        )
+    };
+    let (down_area, move_area, paint_area) = (area.clone(), area.clone(), area);
+    div()
+        .id(id)
+        .relative()
+        .cursor_pointer()
+        .bg(rgb(0x45454f))
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |lab, e: &MouseDownEvent, _, cx| {
+                let b = down_area.get();
+                let tolerance = 10. / f32::from(b.size.width.min(b.size.height)).max(1.) as f64;
+                if lab.hermite.begin_wire(to_mesh(b, e.position), tolerance) {
+                    lab.freeze();
+                    cx.notify();
+                }
+            }),
+        )
+        .on_mouse_move(cx.listener(move |lab, e: &MouseMoveEvent, _, cx| {
+            if lab.hermite.wire.is_some() {
+                if e.pressed_button == Some(MouseButton::Left) {
+                    lab.hermite.drag_wire(to_mesh(move_area.get(), e.position));
+                    lab.publish_hermite_edit();
+                    cx.notify();
+                } else {
+                    lab.hermite.end_wire();
+                }
+            }
+        }))
+        .on_mouse_up(
+            MouseButton::Left,
+            cx.listener(|lab, _, _, _| lab.hermite.end_wire()),
+        )
+        .child(preview)
+        .child(
+            canvas(
+                move |bounds, _, _| paint_area.set(bounds),
+                move |bounds, _, window, _| {
+                    xgpui_curve::gpui_paint::paint_contrasting_path(
+                        window,
+                        &wires,
+                        xgpui_curve::gpui_paint::bounds_transform(bounds),
+                        (3.5, hsla(0., 0., 0., 0.55)),
+                        (1.5, hsla(0., 0., 1., 0.85)),
+                    );
+                },
+            )
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full(),
+        )
+}
+
 fn hermite_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoElement {
     use super::Control;
     let editor = &lab.hermite;
@@ -867,9 +939,14 @@ fn hermite_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoElem
         controls = controls.child(column);
     }
     let direct = match &editor.brush {
-        Ok(brush) => div()
-            .bg(rgb(0x45454f))
-            .child(painted().w(px(288.)).h(px(176.)).bg_brush(brush.clone())),
+        Ok(brush) => wired(
+            "hermite-direct-preview",
+            painted().w(px(288.)).h(px(176.)).bg_brush(brush.clone()),
+            editor.wireframe(),
+            lab.hermite_preview.clone(),
+            cx,
+        )
+        .into_any_element(),
         Err(_) => div()
             .w(px(288.))
             .h(px(176.))
@@ -879,7 +956,8 @@ fn hermite_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoElem
             .items_center()
             .justify_center()
             .text_color(white())
-            .child("Direct brush unavailable for this edit. Adjust controls or reset."),
+            .child("Direct brush unavailable for this edit. Adjust controls or reset.")
+            .into_any_element(),
     };
     let mut demo = div().flex().flex_col().gap_2()
         .child("Hermite mesh · live 2×2 / 3×3 editor")
@@ -928,22 +1006,24 @@ fn hermite_demo(lab: &super::Lab, cx: &mut Context<super::Lab>) -> impl IntoElem
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child("Existing mesh · offscreen tessellation")
-                    .child(
-                        div().bg(rgb(0x45454f)).child(
-                            painted()
-                                .w(px(288.))
-                                .h(px(176.))
-                                .bg_paint(editor.legacy.clone()),
-                        ),
-                    ),
+                    .child("Existing mesh · drag a curve to bend it")
+                    .child(wired(
+                        "hermite-legacy-preview",
+                        painted()
+                            .w(px(288.))
+                            .h(px(176.))
+                            .bg_paint(editor.legacy.clone()),
+                        editor.wireframe(),
+                        lab.hermite_legacy_preview.clone(),
+                        cx,
+                    )),
             )
             .child(
                 div()
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child("Direct brush · current edit")
+                    .child("Direct brush · drag a curve to bend it")
                     .child(direct),
             ),
     );
