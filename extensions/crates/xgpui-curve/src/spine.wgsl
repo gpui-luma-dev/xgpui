@@ -48,7 +48,7 @@ fn curve_spine_polish(k: vec4<f32>, t: f32) -> f32 {
     for (var i = 0; i < 2; i++) {
         let f = ((k.x * x + k.y) * x + k.z) * x + k.w;
         let df = (3.0 * k.x * x + 2.0 * k.y) * x + k.z;
-        if (df != 0.0) {
+        if (abs(df) > 1e-20) {
             let next = x - f / df;
             let f_next = ((k.x * next + k.y) * next + k.z) * next + k.w;
             if (abs(f_next) <= abs(f)) {

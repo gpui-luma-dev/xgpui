@@ -124,6 +124,14 @@ impl MeshLattice {
         row * self.cols + col
     }
 
+    fn checked(&self, row: usize, col: usize) -> Result<usize, CurveError> {
+        if row < self.rows && col < self.cols {
+            Ok(row * self.cols + col)
+        } else {
+            Err(CurveError::OutOfRange("mesh node"))
+        }
+    }
+
     /// Node position.
     pub fn point(&self, row: usize, col: usize) -> Point {
         self.points[self.index(row, col)]
@@ -131,8 +139,8 @@ impl MeshLattice {
 
     /// Move a node.
     pub fn set_point(&mut self, row: usize, col: usize, p: Point) -> Result<(), CurveError> {
+        let i = self.checked(row, col)?;
         finite(&[p.x, p.y])?;
-        let i = self.index(row, col);
         self.points[i] = p;
         Ok(())
     }
@@ -154,10 +162,10 @@ impl MeshLattice {
         axis: Axis,
         tangent: Tangent,
     ) -> Result<(), CurveError> {
+        let i = self.checked(row, col)?;
         if let Tangent::Explicit(m) = tangent {
             finite(&[m.x, m.y])?;
         }
-        let i = self.index(row, col);
         match axis {
             Axis::U => self.u[i] = tangent,
             Axis::V => self.v[i] = tangent,
@@ -230,6 +238,9 @@ impl MeshLattice {
     }
 
     /// The edge from node (row, col) one step along `axis`.
+    ///
+    /// Panics if either end node is outside the lattice (`col + 1 == cols`
+    /// for [`Axis::U`], `row + 1 == rows` for [`Axis::V`]).
     pub fn edge(&self, row: usize, col: usize, axis: Axis) -> CubicBez {
         let (r1, c1) = match axis {
             Axis::U => (row, col + 1),
@@ -366,6 +377,12 @@ impl MeshLattice {
         t: f64,
         delta: Vec2,
     ) -> Result<(), CurveError> {
+        let (r1, c1) = match axis {
+            Axis::U => (row, col + 1),
+            Axis::V => (row + 1, col),
+        };
+        self.checked(row, col)?;
+        self.checked(r1, c1)?;
         finite(&[t, delta.x, delta.y])?;
         let t = t.clamp(0., 1.);
         let w1 = 3. * t * (1. - t) * (1. - t);
@@ -374,10 +391,6 @@ impl MeshLattice {
         if norm <= 1e-12 {
             return Ok(());
         }
-        let (r1, c1) = match axis {
-            Axis::U => (row, col + 1),
-            Axis::V => (row + 1, col),
-        };
         let m0 = self.resolved_tangent(row, col, axis) + delta * (3. * w1 / norm);
         let m1 = self.resolved_tangent(r1, c1, axis) - delta * (3. * w2 / norm);
         self.set_tangent(row, col, axis, Tangent::Explicit(m0))?;

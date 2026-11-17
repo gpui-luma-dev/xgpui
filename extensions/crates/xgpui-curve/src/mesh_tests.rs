@@ -191,3 +191,20 @@ fn construction_is_validated() {
     assert_eq!(monotone_channel_tangent(0.2, -0.6), 0.);
     assert_eq!(monotone_channel_tangent(-0.5, -0.3), -0.3);
 }
+
+#[test]
+fn out_of_range_edits_are_errors() {
+    let mut mesh = grid();
+    let (rows, cols) = (mesh.rows(), mesh.cols());
+    assert!(mesh.set_point(rows, 0, Point::ZERO).is_err());
+    assert!(mesh.set_tangent(0, cols, Axis::U, Tangent::Auto).is_err());
+    // The last column has no edge to its right; the last row none below.
+    assert!(
+        mesh.drag_edge(0, cols - 1, Axis::U, 0.5, Vec2::new(1., 1.))
+            .is_err()
+    );
+    assert!(
+        mesh.drag_edge(rows - 1, 0, Axis::V, 0.5, Vec2::new(1., 1.))
+            .is_err()
+    );
+}

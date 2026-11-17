@@ -159,3 +159,19 @@ fn shader_params_pack_in_order() {
     );
     assert!(CurveSpine::new(Point::new(f64::NAN, 0.), Point::ZERO, Point::ZERO).is_err());
 }
+
+#[test]
+fn a_spine_folded_into_a_cusp_has_zero_reach_and_unbends() {
+    // Control collinear with the ends but beyond p1: the spine runs out to
+    // x = 4/3 and turns back (a cusp, infinite curvature).
+    let mut spine =
+        CurveSpine::new(Point::new(0., 0.), Point::new(2., 0.), Point::new(1., 0.)).unwrap();
+    assert_eq!(spine.max_curvature(), f64::INFINITY);
+    assert_eq!(spine.reach(), 0.);
+    assert!(spine.limit_bend(5.));
+    assert!(spine.reach() >= 5.);
+    // A control inside the chord is a straight spine.
+    let straight =
+        CurveSpine::new(Point::new(0., 0.), Point::new(0.6, 0.), Point::new(1., 0.)).unwrap();
+    assert_eq!(straight.reach(), f64::INFINITY);
+}

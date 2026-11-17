@@ -99,3 +99,18 @@ fn degenerate_input() {
     .unwrap();
     assert_eq!(two.segments().count(), 1);
 }
+
+#[test]
+fn simplify_that_returns_to_the_start_stays_finite() {
+    // RDP drops the middle point and leaves two equal points.
+    let points = [Point::new(0., 0.), Point::new(0.5, 0.), Point::new(0., 0.)];
+    let options = FitOptions {
+        simplify: Some(1.),
+        corner_angle: None,
+        ..FitOptions::default()
+    };
+    let path = fit_cubic_path(&points, options).unwrap();
+    for el in path.elements() {
+        assert!(!format!("{el:?}").contains("NaN"), "{path:?}");
+    }
+}

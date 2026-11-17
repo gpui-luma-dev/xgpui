@@ -83,7 +83,10 @@ pub fn fit_cubic_path(points: &[Point], options: FitOptions) -> Result<BezPath, 
         }
     }
     if let Some(eps) = options.simplify {
+        // RDP can bring equal points together again (a stroke that returns
+        // to its start), and a zero step has no tangent.
         pts = rdp(&pts, eps.max(0.));
+        pts.dedup();
     }
     let mut path = BezPath::new();
     let Some(&first) = pts.first() else {

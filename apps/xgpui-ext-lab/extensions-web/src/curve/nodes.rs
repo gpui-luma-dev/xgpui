@@ -144,10 +144,10 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
         controls = controls.child(button(label, active).on_click(cx.listener(
             move |this, _, _, cx| {
                 if let Some(i) = this.nodes.selected {
-                    this.nodes.path.set_mode(i, mode);
+                    let _ = this.nodes.path.set_mode(i, mode);
                 } else {
                     for i in 0..this.nodes.path.nodes().len() {
-                        this.nodes.path.set_mode(i, mode);
+                        let _ = this.nodes.path.set_mode(i, mode);
                     }
                 }
                 cx.notify();
@@ -173,7 +173,7 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
                 if let Some(i) = this.nodes.selected
                     && this.nodes.path.nodes().len() > 2
                 {
-                    this.nodes.path.delete_node(i);
+                    let _ = this.nodes.path.delete_node(i);
                     this.nodes.selected = None;
                 }
                 cx.notify();

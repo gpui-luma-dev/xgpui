@@ -1,5 +1,6 @@
 use super::*;
 use crate::geom::{self, ParamCurve, PathSeg};
+use kurbo::Shape;
 
 fn rounded_rect_sdf(rect: Rect, radius: f64, p: Point) -> f64 {
     let c = rect.center();
@@ -132,4 +133,32 @@ fn arc_distance_is_exact() {
     // Off the span: distance to the nearer end point.
     let d = arc.distance_to_arc(Point::new(-10., 0.), 10.);
     assert!((d - Point::new(-10., 0.).distance(Point::new(0., -10.))).abs() < 1e-12);
+}
+
+#[test]
+fn arc_padding_order_and_full_turns() {
+    let c = Point::new(0., 0.);
+    let at = |angle: f64, r: f64| {
+        let a = angle - FRAC_PI_2;
+        Point::new(r * a.cos(), r * a.sin())
+    };
+    // Padding applies to sectors of half a turn or more too.
+    let mut half = ArcShape::new(c, 20., 40., 0., PI);
+    half.pad_angle = 0.2;
+    assert!(!half.contains(at(0.05, 30.)));
+    assert!(half.contains(at(0.2, 30.)));
+    // No padding means none: the start edge is inside.
+    assert!(ArcShape::new(c, 20., 40., 0., PI).contains(at(1e-6, 30.)));
+    // Reversed angles describe the same sector.
+    let forward = ArcShape::new(c, 20., 40., 0., 1.);
+    let reversed = ArcShape::new(c, 20., 40., 1., 0.);
+    assert!(reversed.contains(at(0.5, 30.)));
+    assert!(
+        (reversed.to_path(0.01).area().abs() - forward.to_path(0.01).area().abs()).abs() < 1e-6
+    );
+    // More than a full turn is a full ring, not an overlapping outline.
+    let ring = ArcShape::new(c, 20., 40., 0., 7.);
+    let annulus = PI * (40. * 40. - 20. * 20.);
+    assert!((ring.to_path(0.001).area().abs() - annulus).abs() < 0.01 * annulus);
+    assert!(ring.contains(at(3., 30.)));
 }
