@@ -47,7 +47,7 @@ static inline float curve_spine_polish(float4 k, float t) {
     for (int i = 0; i < 2; i++) {
         float f = ((k.x * x + k.y) * x + k.z) * x + k.w;
         float df = (3.0f * k.x * x + 2.0f * k.y) * x + k.z;
-        if (df != 0.0f) {
+        if (metal::abs(df) > 1e-20f) {
             float next = x - f / df;
             float f_next = ((k.x * next + k.y) * next + k.z) * next + k.w;
             if (metal::abs(f_next) <= metal::abs(f)) {

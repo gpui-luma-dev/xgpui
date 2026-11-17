@@ -139,6 +139,61 @@ impl NodePath {
         (i + 1) % self.nodes.len()
     }
 
+    fn check_node(&self, i: usize) -> Result<(), CurveError> {
+        if i < self.nodes.len() {
+            Ok(())
+        } else {
+            Err(CurveError::OutOfRange("node index"))
+        }
+    }
+
+    fn check_segment(&self, i: usize) -> Result<(), CurveError> {
+        if i < self.segment_count() {
+            Ok(())
+        } else {
+            Err(CurveError::OutOfRange("segment index"))
+        }
+    }
+
+    /// Give a `Smooth` or `Symmetric` node the handles its constraint needs:
+    /// a missing handle on a side that has a segment is created opposite the
+    /// other handle (one third of the way to that neighbor), and a node with
+    /// no handles gets both along the line between its neighbors.
+    fn complete_handles(&mut self, i: usize) {
+        if !matches!(self.nodes[i].mode, NodeMode::Smooth | NodeMode::Symmetric) {
+            return;
+        }
+        if self.nodes.len() < 2 {
+            return;
+        }
+        let prev = self.neighbor(i, false).map(|k| self.nodes[k].anchor);
+        let next = self.neighbor(i, true).map(|k| self.nodes[k].anchor);
+        let node = &mut self.nodes[i];
+        let anchor = node.anchor;
+        let third = |p: Option<Point>| p.map(|p| (p - anchor).hypot() / 3.);
+        let dir = match (node.handle_in, node.handle_out) {
+            (_, Some(h)) if (h - anchor).hypot() > 1e-15 => (h - anchor).normalize(),
+            (Some(h), _) if (h - anchor).hypot() > 1e-15 => (anchor - h).normalize(),
+            _ => {
+                let chord = next.unwrap_or(anchor) - prev.unwrap_or(anchor);
+                if chord.hypot() <= 1e-15 {
+                    return;
+                }
+                chord.normalize()
+            }
+        };
+        if node.handle_out.is_none()
+            && let Some(len) = third(next)
+        {
+            node.handle_out = Some(anchor + dir * len);
+        }
+        if node.handle_in.is_none()
+            && let Some(len) = third(prev)
+        {
+            node.handle_in = Some(anchor - dir * len);
+        }
+    }
+
     /// Segment `i` (node `i` to node `i + 1`, wrapping when closed).
     pub fn segment(&self, i: usize) -> PathSeg {
         let (a, b) = (self.nodes[i], self.nodes[self.next(i)]);
@@ -189,6 +244,7 @@ impl NodePath {
 
     /// Move an anchor, carrying its handles with it.
     pub fn move_anchor(&mut self, i: usize, to: Point) -> Result<(), CurveError> {
+        self.check_node(i)?;
         finite(&[to.x, to.y])?;
         let node = &mut self.nodes[i];
         let delta = to - node.anchor;
@@ -202,22 +258,27 @@ impl NodePath {
     /// Move one handle; the other handle follows the node's constraint.
     /// Moving a handle of an automatic node turns it into a `Smooth` node.
     pub fn move_handle(&mut self, i: usize, side: Side, to: Point) -> Result<(), CurveError> {
+        self.check_node(i)?;
         finite(&[to.x, to.y])?;
         let node = &mut self.nodes[i];
         if matches!(node.mode, NodeMode::Auto(_)) {
             node.mode = NodeMode::Smooth;
         }
         node.set_handle(side, Some(to));
-        constrain(node, side);
+        self.complete_handles(i);
+        constrain(&mut self.nodes[i], side);
         self.update_auto();
         Ok(())
     }
 
     /// Change a node's mode and apply its constraint (the outgoing handle
-    /// leads when both exist).
-    pub fn set_mode(&mut self, i: usize, mode: NodeMode) {
+    /// leads when both exist). A `Smooth` or `Symmetric` node gets any
+    /// handles it is missing on sides that have a segment.
+    pub fn set_mode(&mut self, i: usize, mode: NodeMode) -> Result<(), CurveError> {
+        self.check_node(i)?;
+        self.nodes[i].mode = mode;
+        self.complete_handles(i);
         let node = &mut self.nodes[i];
-        node.mode = mode;
         let lead = if node.handle_out.is_some() {
             Side::Out
         } else {
@@ -225,6 +286,7 @@ impl NodePath {
         };
         constrain(node, lead);
         self.update_auto();
+        Ok(())
     }
 
     /// Drag the point at `t` on segment `i` by `delta`: the segment's inner
@@ -232,6 +294,7 @@ impl NodePath {
     /// exactly. Each end node's constraint then adjusts its other handle, and
     /// automatic end nodes become `Smooth`.
     pub fn drag_segment(&mut self, i: usize, t: f64, delta: Vec2) -> Result<(), CurveError> {
+        self.check_segment(i)?;
         finite(&[t, delta.x, delta.y])?;
         let t = t.clamp(0., 1.);
         let w1 = 3. * t * (1. - t) * (1. - t);
@@ -249,7 +312,8 @@ impl NodePath {
                 node.mode = NodeMode::Smooth;
             }
             node.set_handle(side, Some(p));
-            constrain(node, side);
+            self.complete_handles(k);
+            constrain(&mut self.nodes[k], side);
         }
         self.update_auto();
         Ok(())
@@ -257,9 +321,11 @@ impl NodePath {
 
     /// Split segment `i` at `t` with a new `Smooth` node, leaving the drawn
     /// curve unchanged. Automatic nodes whose handles depend on the split
-    /// segment are frozen as `Smooth` nodes with their current handles.
-    /// Returns the new node's index.
+    /// segment are frozen as `Smooth` nodes with their current handles, and
+    /// `Symmetric` end nodes become `Smooth` (the split shortens one handle).
+    /// A missing end handle stays missing. Returns the new node's index.
     pub fn insert_at(&mut self, i: usize, t: f64) -> Result<usize, CurveError> {
+        self.check_segment(i)?;
         finite(&[t])?;
         let t = t.clamp(0., 1.);
         let j = self.next(i);
@@ -272,8 +338,15 @@ impl NodePath {
         } else {
             let c = geom::to_cubic(seg);
             let (left, right) = (c.subsegment(0. ..t), c.subsegment(t..1.));
-            self.nodes[i].handle_out = Some(left.p1);
-            self.nodes[j].handle_in = Some(right.p2);
+            for (k, side, p) in [(i, Side::Out, left.p1), (j, Side::In, right.p2)] {
+                let node = &mut self.nodes[k];
+                if node.handle(side).is_some() {
+                    node.set_handle(side, Some(p));
+                    if node.mode == NodeMode::Symmetric {
+                        node.mode = NodeMode::Smooth;
+                    }
+                }
+            }
             Node {
                 anchor: left.p3,
                 handle_in: Some(left.p2),
@@ -287,9 +360,11 @@ impl NodePath {
     }
 
     /// Remove a node.
-    pub fn delete_node(&mut self, i: usize) {
+    pub fn delete_node(&mut self, i: usize) -> Result<(), CurveError> {
+        self.check_node(i)?;
         self.nodes.remove(i);
         self.update_auto();
+        Ok(())
     }
 
     /// Open or close the path.

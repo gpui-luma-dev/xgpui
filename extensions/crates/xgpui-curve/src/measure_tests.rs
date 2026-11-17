@@ -152,3 +152,17 @@ fn invalid_input_is_rejected() {
     assert_eq!(empty.length(), 0.);
     assert!(empty.locate(1.).is_none());
 }
+
+#[test]
+fn locate_skips_a_leading_zero_length_contour() {
+    let mut path = BezPath::new();
+    path.move_to((5., 5.));
+    path.line_to((5., 5.));
+    path.move_to((0., 0.));
+    path.line_to((10., 0.));
+    let measured = MeasuredPath::new(&path, 1e-3).unwrap();
+    let start = measured.locate(0.).unwrap();
+    assert_eq!(start.contour, 1);
+    assert_eq!(start.point, Point::new(0., 0.));
+    assert!(start.tangent.is_some());
+}

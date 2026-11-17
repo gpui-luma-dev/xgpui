@@ -209,7 +209,8 @@ impl MeasuredPath {
         let mut s = s.clamp(0., self.length);
         let last = self.contours.len().checked_sub(1)?;
         for (index, contour) in self.contours.iter().enumerate() {
-            if s <= contour.length || index == last {
+            // A zero-length contour is skipped unless nothing follows it.
+            if (s <= contour.length && contour.length > 0.) || index == last {
                 let (segment, t) = self.locate_in(contour, s);
                 let seg = contour.segs[segment].seg;
                 return Some(Location {

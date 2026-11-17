@@ -292,7 +292,7 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
         .child(
             button(format!("Frame at t = {frame_t:.2}"), false).on_click(cx.listener(
                 |this, _, _, cx| {
-                    this.spine.frame_t = ((this.spine.frame_t + 0.15) * 100.).round() / 100. % 1.;
+                    this.spine.frame_t = next_frame_t(this.spine.frame_t);
                     cx.notify();
                 },
             )),
@@ -445,4 +445,13 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
         .child(div().text_color(rgb(0x9fb0cc)).child(readout))
         .child(div().flex_1().min_h_0().child(surface))
         .into_any_element()
+}
+
+/// The next frame position: steps of 0.15 that stop at t = 1 before wrapping to 0.
+fn next_frame_t(t: f64) -> f64 {
+    if t >= 1. {
+        0.
+    } else {
+        (((t + 0.15) * 100.).round() / 100.).min(1.)
+    }
 }

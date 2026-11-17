@@ -226,16 +226,30 @@ impl ArcShape {
         angle - FRAC_PI_2
     }
 
+    /// The swept screen-angle range, ordered, with sweeps of a full turn or
+    /// more reduced to one turn (as d3 does). The sector is the same whichever
+    /// order the angles are given in.
+    fn span(&self) -> (f64, f64) {
+        let (s, e) = (Self::screen(self.start_angle), Self::screen(self.end_angle));
+        let (lo, hi) = if s <= e { (s, e) } else { (e, s) };
+        (lo, lo + (hi - lo).min(TAU))
+    }
+
     /// The padded angle ranges (outer, inner) in screen angles, or `None` when empty.
     fn ranges(&self) -> Option<((f64, f64), (f64, f64))> {
-        let (s, e) = (Self::screen(self.start_angle), Self::screen(self.end_angle));
+        let (s, e) = self.span();
         let da = e - s;
         let r0 = self.inner_radius.max(0.);
         let r1 = self.outer_radius.max(0.);
-        if r1 < 1e-12 || da.abs() < 1e-12 {
+        if r1 < 1e-12 || da < 1e-12 {
             return None;
         }
-        let pad = if da >= PI { 0.0001 } else { self.pad_angle };
+        // A full ring has no ends to pad.
+        let pad = if da >= TAU - 1e-12 {
+            0.
+        } else {
+            self.pad_angle.max(0.)
+        };
         let (outer, inner) = if r0 > 1e-12 && pad > 0. {
             let width = r1 * pad;
             let inner_pad = (width / r0).min(da * 0.8);
@@ -309,8 +323,7 @@ impl ArcShape {
     /// sector's (unpadded) angles: for hit-testing arc strokes such as range
     /// slider tracks.
     pub fn distance_to_arc(&self, p: Point, radius: f64) -> f64 {
-        let (s, e) = (Self::screen(self.start_angle), Self::screen(self.end_angle));
-        let (lo, hi) = if s <= e { (s, e) } else { (e, s) };
+        let (lo, hi) = self.span();
         let v = p - self.center;
         let rel = (v.atan2() - lo).rem_euclid(TAU);
         if rel <= hi - lo && v.hypot() > 0. {

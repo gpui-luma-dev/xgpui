@@ -155,7 +155,8 @@ impl CurveSpine {
         }
     }
 
-    /// Largest curvature on the spine (at the parabola vertex, or the nearer end).
+    /// Largest curvature on the spine (at the parabola vertex, or the nearer
+    /// end); infinite when the spine folds back on itself in a cusp.
     pub fn max_curvature(&self) -> f64 {
         let a = self.control - self.p0;
         let b = self.p0.to_vec2() - 2. * self.control.to_vec2() + self.p1.to_vec2();
@@ -164,10 +165,16 @@ impl CurveSpine {
             return 0.;
         }
         let t = (-a.dot(b) / bb).clamp(0., 1.);
+        // A control point collinear with the ends but outside the chord folds
+        // the spine back on itself: the speed vanishes at the vertex (a cusp,
+        // unbounded curvature) while the cross product is zero everywhere.
+        if (a + b * t).hypot() <= 1e-12 * bb.sqrt() {
+            return f64::INFINITY;
+        }
         geom::curvature(PathSeg::Quad(self.quad()), t).abs()
     }
 
-    /// The seam distance: 1 / max curvature (infinite when straight).
+    /// The seam distance: 1 / max curvature (infinite when straight, zero at a cusp).
     /// Within this distance of the spine every point has a unique, continuous
     /// projection; beyond it, on the inside of the bend, the nearest point can
     /// jump between arms (the inner-bend seam).

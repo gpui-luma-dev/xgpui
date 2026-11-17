@@ -218,3 +218,46 @@ fn flatten_closes_and_stays_within_tolerance() {
         }
     }
 }
+
+#[test]
+fn clip_keeps_subpaths_apart_and_closed_shapes_closed() {
+    let rect = Rect::new(-1., -1., 20., 20.);
+    let mut two = BezPath::new();
+    two.move_to((0., 0.));
+    two.line_to((10., 0.));
+    two.move_to((10., 0.));
+    two.line_to((10., 10.));
+    let moves = |p: &BezPath| {
+        p.elements()
+            .iter()
+            .filter(|e| matches!(e, PathEl::MoveTo(_)))
+            .count()
+    };
+    assert_eq!(moves(&clip_to_rect(&two, rect)), 2);
+
+    let mut square = BezPath::new();
+    square.move_to((0., 0.));
+    square.line_to((10., 0.));
+    square.line_to((10., 10.));
+    square.line_to((0., 10.));
+    square.close_path();
+    let inside = clip_to_rect(&square, rect);
+    assert!(matches!(inside.elements().last(), Some(PathEl::ClosePath)));
+    // Cut by the rectangle, the pieces are open.
+    let cut = clip_to_rect(&square, Rect::new(-1., -1., 5., 20.));
+    assert!(
+        !cut.elements()
+            .iter()
+            .any(|e| matches!(e, PathEl::ClosePath))
+    );
+    assert!(cut.elements().len() > 1);
+}
+
+#[test]
+fn intersection_points_lie_on_the_first_curve() {
+    let seg = PathSeg::Cubic(CubicBez::new((0., 0.), (30., 60.), (70., -60.), (100., 0.)));
+    let line = Line::new((0., 5.), (100., -5.));
+    for hit in intersect_line(seg, line) {
+        assert_eq!(hit.point, seg.eval(hit.t_a));
+    }
+}

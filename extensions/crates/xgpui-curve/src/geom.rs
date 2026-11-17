@@ -194,7 +194,7 @@ pub fn intersect_line(seg: PathSeg, line: Line) -> Vec<Intersection> {
         .map(|hit| Intersection {
             t_a: hit.segment_t,
             t_b: hit.line_t,
-            point: line.eval(hit.line_t),
+            point: seg.eval(hit.segment_t),
         })
         .collect()
 }
@@ -260,10 +260,14 @@ pub fn intersect_segments(a: PathSeg, b: PathSeg, tolerance: f64) -> Vec<Interse
         if point.distance(b.eval(tb)) > 4. * tolerance {
             continue;
         }
-        if hits
-            .iter()
-            .all(|h| h.point.distance(point) > 4. * tolerance)
-        {
+        // One crossing found from several cells refines to the same point and
+        // parameters; a self-intersection of either curve gives the same point
+        // at different parameters, which is a separate crossing.
+        if hits.iter().all(|h| {
+            h.point.distance(point) > 4. * tolerance
+                || (h.t_a - ta).abs() > 1e-3
+                || (h.t_b - tb).abs() > 1e-3
+        }) {
             hits.push(Intersection {
                 t_a: ta,
                 t_b: tb,
@@ -304,8 +308,10 @@ fn refine(a: PathSeg, b: PathSeg, mut s: f64, mut t: f64) -> (f64, f64) {
 }
 
 /// Clip a path's outline to `rect`, keeping the parts inside (boundary
-/// inclusive) as open subpaths with their original curve segments. This clips
-/// strokes and polylines such as plot series, not fill areas.
+/// inclusive) with their original curve segments. Each input subpath gives
+/// its own output subpaths; a closed subpath entirely inside stays closed, and
+/// any other piece is open. This clips strokes and polylines such as plot
+/// series, not fill areas.
 pub fn clip_to_rect(path: &BezPath, rect: Rect) -> BezPath {
     let rect = rect.abs();
     let edges = [
@@ -322,8 +328,11 @@ pub fn clip_to_rect(path: &BezPath, rect: Rect) -> BezPath {
             && p.y <= rect.y1 + slack
     };
     let mut out = BezPath::new();
+    // Pen: where the current output subpath ends. `whole`: the current input
+    // subpath has been kept without a break so far.
     let mut pen: Option<Point> = None;
-    for seg in path.segments() {
+    let mut whole = true;
+    let clip = |seg: PathSeg, out: &mut BezPath, pen: &mut Option<Point>, whole: &mut bool| {
         let mut ts = vec![0., 1.];
         for edge in edges {
             ts.extend(seg.intersect_line(edge).iter().map(|hit| hit.segment_t));
@@ -333,16 +342,48 @@ pub fn clip_to_rect(path: &BezPath, rect: Rect) -> BezPath {
         for pair in ts.windows(2) {
             let (t0, t1) = (pair[0], pair[1]);
             if !inside(seg.eval(0.5 * (t0 + t1))) {
-                pen = None;
+                *pen = None;
+                *whole = false;
                 continue;
             }
             let piece = seg.subsegment(t0..t1);
             if pen.is_none_or(|p| p.distance(piece.start()) > 1e-9) {
                 out.move_to(piece.start());
             }
-            push_seg(&mut out, piece);
-            pen = Some(piece.end());
+            push_seg(out, piece);
+            *pen = Some(piece.end());
         }
+    };
+    let (mut start, mut current) = (Point::ZERO, Point::ZERO);
+    for el in path.elements() {
+        let seg = match *el {
+            PathEl::MoveTo(p) => {
+                // Each input subpath starts its own output subpath.
+                (start, current, pen, whole) = (p, p, None, true);
+                continue;
+            }
+            PathEl::LineTo(p) => PathSeg::Line(Line::new(current, p)),
+            PathEl::QuadTo(c, p) => PathSeg::Quad(kurbo::QuadBez::new(current, c, p)),
+            PathEl::CurveTo(c1, c2, p) => PathSeg::Cubic(CubicBez::new(current, c1, c2, p)),
+            PathEl::ClosePath => {
+                if current != start {
+                    clip(
+                        Line::new(current, start).into(),
+                        &mut out,
+                        &mut pen,
+                        &mut whole,
+                    );
+                }
+                // A closed subpath that is entirely inside stays closed.
+                if whole && pen.is_some() {
+                    out.close_path();
+                }
+                (current, pen, whole) = (start, None, true);
+                continue;
+            }
+        };
+        current = seg.end();
+        clip(seg, &mut out, &mut pen, &mut whole);
     }
     out
 }
