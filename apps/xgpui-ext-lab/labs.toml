@@ -244,6 +244,25 @@ env = { MTL_DEBUG_LAYER = "1" }
 cargo = ["test", "--manifest-path", "gpui/crates/gpui-apple/Cargo.toml", "--features", "test-support", "--lib"]
 
 [[lab]]
+name = "curve"
+bin = "curve-lab"
+group = "Main interactive labs"
+title = "Curves / xgpui-curve"
+about = "Mesh wires, spine inspector, node modes, plot series, easing, squircles and fitted strokes"
+views = [
+  { name = "spine", title = "Spine inspector (GPU field)", args = ["--panel", "spine"] },
+  { name = "nodes", title = "Node editor", args = ["--panel", "nodes"] },
+  { name = "series", title = "Series curve gallery", args = ["--panel", "series"] },
+  { name = "functions", title = "Tone curves and easing", args = ["--panel", "functions"] },
+  { name = "shapes", title = "Squircles, arcs and strokes", args = ["--panel", "shapes"] },
+]
+
+[[lab.task]]
+name = "test"
+about = "Curve lab command-line checks"
+cargo = ["test", "--bin", "curve-lab"]
+
+[[lab]]
 name = "color"
 bin = "color-lab"
 group = "Main interactive labs"
