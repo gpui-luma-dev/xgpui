@@ -1434,9 +1434,11 @@ impl Drop for MacWindow {
             let _: () = msg_send![this.native_window, setDelegate: ptr::null_mut::<AnyObject>()];
         }
         this.input_handler.take();
-        // A delivery task queued by `report_visibility` may still run after the
-        // GPUI window is gone; without a callback it has nothing to notify.
+        // Delivery tasks queued by `report_visibility` and key-status changes
+        // may still run after the GPUI window is gone; without callbacks they
+        // have nothing to notify.
         this.visibility_callback.take();
+        this.activate_callback.take();
         this.foreground_executor
             .spawn(async move {
                 unsafe {
@@ -3387,6 +3389,12 @@ extern "C" fn window_did_change_key_status(this: &AnyObject, selector: Sel, _: *
     executor
         .spawn(async move {
             let mut lock = window_state.as_ref().lock();
+            // Closing a key window makes AppKit resign its key status after
+            // `close_window` has already told GPUI to remove the window; there is
+            // nothing left to notify.
+            if lock.closed.load(Ordering::Acquire) {
+                return;
+            }
             if is_active {
                 lock.move_traffic_light();
             }
