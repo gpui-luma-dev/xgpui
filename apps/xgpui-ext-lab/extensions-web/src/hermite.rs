@@ -1,6 +1,8 @@
 //! Browser UI for paint-lab's shared Hermite editing model.
 use gpui::{prelude::*, *};
-use std::collections::HashMap;
+use std::{cell::Cell, collections::HashMap, rc::Rc};
+use xgpui_curve::gpui_paint::{bounds_transform, paint_contrasting_path};
+use xgpui_curve::kurbo::Point as KPoint;
 use xgpui_shader::painted;
 
 #[path = "../../../web-support/mesh_tangent.rs"]
@@ -60,6 +62,10 @@ pub struct HermiteDemo {
     light: bool,
     dragging: Option<Control>,
     tracks: HashMap<Control, Bounds<Pixels>>,
+    /// The direct-brush preview's bounds, for mapping wire drags.
+    preview: Rc<Cell<Bounds<Pixels>>>,
+    /// The legacy preview's bounds, for the same.
+    legacy_preview: Rc<Cell<Bounds<Pixels>>>,
 }
 fn button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Stateful<Div> {
     div()
@@ -79,7 +85,52 @@ impl HermiteDemo {
             light: false,
             dragging: None,
             tracks: HashMap::new(),
+            preview: Rc::default(),
+            legacy_preview: Rc::default(),
         }
+    }
+    /// A window position in a preview's normalized 0..1 mesh space.
+    fn mesh_point(b: Bounds<Pixels>, at: Point<Pixels>) -> KPoint {
+        let (w, h) = (
+            f32::from(b.size.width).max(1.),
+            f32::from(b.size.height).max(1.),
+        );
+        KPoint::new(
+            (f32::from(at.x - b.origin.x) / w) as f64,
+            (f32::from(at.y - b.origin.y) / h) as f64,
+        )
+    }
+    /// Mouse-down on a preview: grab the nearest wire within 10 px.
+    fn grab(
+        cell: fn(&Self) -> &Rc<Cell<Bounds<Pixels>>>,
+        cx: &mut Context<Self>,
+    ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static {
+        cx.listener(move |s, e: &MouseDownEvent, _, cx| {
+            let b = cell(s).get();
+            let tolerance = 10. / f32::from(b.size.width.min(b.size.height)).max(1.) as f64;
+            if s.mesh
+                .begin_wire(Self::mesh_point(b, e.position), tolerance)
+            {
+                cx.notify();
+            }
+        })
+    }
+    /// Mouse-move on a preview: drag the grabbed wire.
+    fn pull(
+        cell: fn(&Self) -> &Rc<Cell<Bounds<Pixels>>>,
+        cx: &mut Context<Self>,
+    ) -> impl Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static {
+        cx.listener(move |s, e: &MouseMoveEvent, _, cx| {
+            if s.mesh.wire.is_some() {
+                if e.pressed_button == Some(MouseButton::Left) {
+                    let at = Self::mesh_point(cell(s).get(), e.position);
+                    s.mesh.drag_wire(at);
+                    cx.notify();
+                } else {
+                    s.mesh.end_wire();
+                }
+            }
+        })
     }
     fn scrub(&mut self, control: Control, x: Pixels) {
         if let Some(track) = self.tracks.get(&control) {
@@ -217,16 +268,34 @@ impl Render for HermiteDemo {
         };
         let selected = self.mesh.selected;
         let geometry = self.mesh.points.clone();
+        let wires = self.mesh.wireframe();
+        let area = self.preview.clone();
         let preview = div()
+            .id("hermite-preview")
             .relative()
+            .cursor_pointer()
+            .on_mouse_down(MouseButton::Left, Self::grab(|s| &s.preview, cx))
+            .on_mouse_move(Self::pull(|s| &s.preview, cx))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|s, _, _, _| s.mesh.end_wire()),
+            )
             .w(px(320.))
             .h(px(210.))
             .bg(rgb(0x45454f))
             .child(direct)
             .child(
                 canvas(
-                    |_, _, _| (),
+                    move |bounds, _, _| area.set(bounds),
                     move |bounds, _, window, _| {
+                        // The exact curved patch edges (xgpui-curve MeshLattice).
+                        paint_contrasting_path(
+                            window,
+                            &wires,
+                            bounds_transform(bounds),
+                            (3.5, hsla(0., 0., 0., 0.55)),
+                            (1.5, hsla(0., 0., 1., 0.85)),
+                        );
                         for (i, p) in geometry.iter().enumerate() {
                             let center = bounds.origin
                                 + point(
@@ -266,6 +335,42 @@ impl Render for HermiteDemo {
                 .left_0()
                 .size_full(),
             );
+        let legacy_wires = self.mesh.wireframe();
+        let legacy_area = self.legacy_preview.clone();
+        let legacy = div()
+            .id("hermite-legacy-preview")
+            .relative()
+            .cursor_pointer()
+            .on_mouse_down(MouseButton::Left, Self::grab(|s| &s.legacy_preview, cx))
+            .on_mouse_move(Self::pull(|s| &s.legacy_preview, cx))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|s, _, _, _| s.mesh.end_wire()),
+            )
+            .child(
+                painted()
+                    .w(px(320.))
+                    .h(px(210.))
+                    .bg_paint(self.mesh.legacy.clone()),
+            )
+            .child(
+                canvas(
+                    move |bounds, _, _| legacy_area.set(bounds),
+                    move |bounds, _, window, _| {
+                        paint_contrasting_path(
+                            window,
+                            &legacy_wires,
+                            bounds_transform(bounds),
+                            (3.5, hsla(0., 0., 0., 0.55)),
+                            (1.5, hsla(0., 0., 1., 0.85)),
+                        );
+                    },
+                )
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full(),
+            );
         let names = [
             "Regular",
             "Bend U tangents",
@@ -286,10 +391,10 @@ impl Render for HermiteDemo {
                 .child(button("reset-all","Reset all points").on_click(cx.listener(|s,_,_,cx| {s.mesh.load_preset(s.mesh.preset);cx.notify();})))
                 .child(button("background","Swap light / dark").on_click(cx.listener(|s,_,_,cx| {s.light = !s.light;cx.notify();}))))
             .child(points).child(controls)
-            .child("Angles are clockwise from right; lengths use normalized mesh coordinates. White marker = selected point; gold/cyan lines = U/V tangents at ¼ length. Both previews use the same edited points.")
+            .child("Angles are clockwise from right; lengths use normalized mesh coordinates. White marker = selected point; gold/cyan lines = U/V tangents at ¼ length; white curves = the exact patch edges. Drag a curve to bend it: both end tangents change. Both previews use the same edited points.")
             .child(div().flex().flex_wrap().gap_4()
-                .child(div().flex().flex_col().gap_2().child("Legacy mesh · current edit").child(painted().w(px(320.)).h(px(210.)).bg_paint(self.mesh.legacy.clone())))
-                .child(div().flex().flex_col().gap_2().child("Direct brush · point markers").child(preview)));
+                .child(div().flex().flex_col().gap_2().child("Legacy mesh · drag a curve to bend it").child(legacy))
+                .child(div().flex().flex_col().gap_2().child("Direct brush · drag a curve to bend it").child(preview)));
         if let Ok(brush) = &self.mesh.brush {
             root = root
                 .child(
