@@ -197,7 +197,14 @@ impl NodePath {
     }
 
     /// Segment `i` (node `i` to node `i + 1`, wrapping when closed).
+    ///
+    /// Panics if `i >= segment_count()`.
     pub fn segment(&self, i: usize) -> PathSeg {
+        assert!(
+            i < self.segment_count(),
+            "segment {i} out of range ({} segments)",
+            self.segment_count()
+        );
         let (a, b) = (self.nodes[i], self.nodes[self.next(i)]);
         match (a.handle_out, b.handle_in) {
             (None, None) => PathSeg::Line(geom::Line::new(a.anchor, b.anchor)),
@@ -528,9 +535,10 @@ impl NodePath {
                 ids.insert(0, k);
                 lead = true;
             }
-            if let Some(k) = self.neighbor(*ids.last().unwrap(), true)
-                && !(lead && k == ids[0])
-            {
+            // On a closed path where one fixed node bounds the run on both
+            // sides, it is both the leading and the trailing anchor, so the
+            // run also covers the segment back into it.
+            if let Some(k) = self.neighbor(*ids.last().unwrap(), true) {
                 ids.push(k);
                 trail = true;
             }

@@ -114,3 +114,29 @@ fn simplify_that_returns_to_the_start_stays_finite() {
         assert!(!format!("{el:?}").contains("NaN"), "{path:?}");
     }
 }
+
+#[test]
+fn long_strokes_do_not_overflow_the_stack() {
+    // The worst error lands near one end at every split, so a recursive fit
+    // goes about one level per point. Run on a 256 KiB thread, far smaller
+    // than any platform's main thread.
+    let fitted = std::thread::Builder::new()
+        .stack_size(256 << 10)
+        .spawn(|| {
+            let points: Vec<Point> = (0..20_000)
+                .map(|k| Point::new(k as f64, if k % 2 == 1 { 0.01 * k as f64 } else { 0. }))
+                .collect();
+            let options = FitOptions {
+                tolerance: 0.1,
+                corner_angle: None,
+                ..Default::default()
+            };
+            let path = fit_cubic_path(&points, options).unwrap();
+            (path.segments().count(), path.elements()[0], points.len())
+        })
+        .unwrap()
+        .join()
+        .expect("fit overflowed its stack");
+    assert!(fitted.0 > 1000);
+    assert_eq!(fitted.1, geom::PathEl::MoveTo(Point::ZERO));
+}

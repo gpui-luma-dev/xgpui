@@ -101,9 +101,47 @@ fn edges_are_shared_and_continuous() {
     assert_eq!(m.wireframe().segments().count(), 3 * 3 + 4 * 2);
 }
 
+/// The patch position as xgpui-shader's `mesh.wgsl` evaluates it: a
+/// zero-twist bicubic Hermite patch from corner positions and tangents.
+fn shader_patch(m: &MeshLattice, row: usize, col: usize, u: f64, v: f64) -> Point {
+    let h = |t: f64| {
+        [
+            2. * t * t * t - 3. * t * t + 1.,
+            -2. * t * t * t + 3. * t * t,
+            t * t * t - 2. * t * t + t,
+            t * t * t - t * t,
+        ]
+    };
+    let (hu, hv) = (h(u), h(v));
+    let corners = [
+        (row, col, 0, 0),
+        (row, col + 1, 1, 0),
+        (row + 1, col, 0, 1),
+        (row + 1, col + 1, 1, 1),
+    ];
+    let mut sum = Vec2::ZERO;
+    for (r, c, i, j) in corners {
+        sum += m.point(r, c).to_vec2() * (hu[i] * hv[j])
+            + m.resolved_tangent(r, c, Axis::U) * (hu[2 + i] * hv[j])
+            + m.resolved_tangent(r, c, Axis::V) * (hu[i] * hv[2 + j]);
+    }
+    sum.to_point()
+}
+
 #[test]
-fn iso_curves_are_exact_coons_slices() {
-    let m = grid();
+fn patch_and_iso_curves_match_the_mesh_shader() {
+    // Jittered so the tangents differ around the cell, where a Coons patch
+    // and the shader's Hermite patch disagree.
+    let points = (0..3)
+        .flat_map(|r| (0..4).map(move |c| (r, c)))
+        .map(|(r, c)| {
+            let j = ((r * 7 + c * 13) % 5) as f64 * 0.04 - 0.08;
+            Point::new(c as f64 * 0.5 + j, r as f64 * 0.5 - j * 0.7)
+        })
+        .collect();
+    let mut m = MeshLattice::new(3, 4, points).unwrap();
+    m.set_tangent(1, 2, Axis::V, Tangent::Explicit(Vec2::new(0.1, 0.3)))
+        .unwrap();
     for (axis, s) in [
         (Axis::U, 0.3),
         (Axis::V, 0.65),
@@ -113,11 +151,13 @@ fn iso_curves_are_exact_coons_slices() {
         let iso = m.iso_curve(1, 2, axis, s);
         for i in 0..=10 {
             let k = i as f64 / 10.;
-            let expected = match axis {
-                Axis::U => m.coons_point(1, 2, k, s),
-                Axis::V => m.coons_point(1, 2, s, k),
+            let (u, v) = match axis {
+                Axis::U => (k, s),
+                Axis::V => (s, k),
             };
+            let expected = shader_patch(&m, 1, 2, u, v);
             assert!(iso.eval(k).distance(expected) < 1e-12, "{axis:?} {s} {k}");
+            assert!(m.patch_point(1, 2, u, v).distance(expected) < 1e-12);
         }
     }
     // The v = 0 iso-curve is the top edge.
@@ -147,6 +187,42 @@ fn edge_drag_keeps_the_grabbed_point_under_the_cursor() {
         g.set_tangent_limit(10.).unwrap();
         g
     });
+}
+
+#[test]
+fn edge_drag_is_exact_with_the_default_fold_clamp() {
+    // Automatic tangents start at the clamp, so a drag along the wire
+    // lengthens a clamped tangent; the other control must take that share.
+    for (row, col) in [(0, 0), (1, 1), (2, 2)] {
+        for t in [0.3, 0.5, 0.7] {
+            for sign in [1., -1.] {
+                let mut m = grid();
+                let edge = m.edge(row, col, Axis::U);
+                let delta = (edge.p3 - edge.p0).normalize() * (0.01 * sign);
+                let before = edge.eval(t);
+                m.drag_edge(row, col, Axis::U, t, delta).unwrap();
+                let after = m.edge(row, col, Axis::U).eval(t);
+                assert!(
+                    (after - (before + delta)).hypot() < 1e-9,
+                    "({row}, {col}) t {t} sign {sign}: moved {:?}, wanted {delta:?}",
+                    after - before
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn edge_drag_rejects_huge_indices_without_overflow() {
+    let mut m = grid();
+    assert!(
+        m.drag_edge(usize::MAX, 0, Axis::V, 0.5, Vec2::new(0., 0.1))
+            .is_err()
+    );
+    assert!(
+        m.drag_edge(0, usize::MAX, Axis::U, 0.5, Vec2::new(0., 0.1))
+            .is_err()
+    );
 }
 
 #[test]

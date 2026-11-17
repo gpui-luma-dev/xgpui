@@ -261,3 +261,104 @@ fn intersection_points_lie_on_the_first_curve() {
         assert_eq!(hit.point, seg.eval(hit.t_a));
     }
 }
+
+#[test]
+fn winding_is_exact_near_a_cubic_turning_in_y() {
+    // A near-semicircular arc piece (a stroke's round cap). kurbo 0.13's
+    // winding counts (9.21, −1.94) inside; it is outside: the horizontal
+    // through it crosses the arc twice, to its right, in opposite directions.
+    let mut cap = BezPath::new();
+    cap.move_to((11.414213562373094, -1.4142135623730954));
+    cap.curve_to(
+        (10.633164978870553, -2.195262145875635),
+        (9.366835021129445, -2.1952621458756347),
+        (8.585786437626904, -1.4142135623730945),
+    );
+    cap.close_path();
+    assert_eq!(winding(&cap, Point::new(9.21, -1.94)), 0);
+    assert!(!fill_contains(
+        &cap,
+        Point::new(9.21, -1.94),
+        FillRule::NonZero
+    ));
+    assert_ne!(winding(&cap, Point::new(10., -1.9)), 0);
+}
+
+#[test]
+fn winding_matches_a_dense_polygon_on_random_paths() {
+    let mut seed = 99u64;
+    let mut rnd = || {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        (seed >> 11) as f64 / (1u64 << 53) as f64
+    };
+    for _ in 0..40 {
+        let mut path = BezPath::new();
+        let mut pt = || Point::new(rnd() * 10., rnd() * 10.);
+        path.move_to(pt());
+        path.curve_to(pt(), pt(), pt());
+        path.quad_to(pt(), pt());
+        path.line_to(pt());
+        // Left open: a fill closes it.
+        let polygon: Vec<Point> = flatten_polylines(&path, 1e-6).concat();
+        for _ in 0..40 {
+            let q = Point::new(rnd() * 10., rnd() * 10.);
+            let mut expected = 0;
+            for e in polygon.windows(2).chain(std::iter::once(
+                [polygon[polygon.len() - 1], polygon[0]].as_slice(),
+            )) {
+                let (a, b) = (e[0], e[1]);
+                if a.y <= q.y && b.y > q.y && (b - a).cross(q - a) > 0. {
+                    expected += 1;
+                } else if b.y <= q.y && a.y > q.y && (b - a).cross(q - a) < 0. {
+                    expected -= 1;
+                }
+            }
+            // Skip points within flattening error of the boundary.
+            let near = nearest_on_path(&path, q).is_some_and(|h| h.distance.abs() < 1e-4);
+            if !near {
+                assert_eq!(winding(&path, q), expected, "{q:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn shallow_crossings_are_all_found() {
+    // About 1° crossings at t = 0.1127, 0.5 and 0.8873.
+    for scale in [1., 0.1] {
+        let a = CubicBez::new(
+            Point::new(0., -scale),
+            Point::new(100., 3. * scale),
+            Point::new(200., -3. * scale),
+            Point::new(300., 1. * scale),
+        );
+        let b = CubicBez::new(
+            Point::new(0., 0.),
+            Point::new(100., 0.),
+            Point::new(200., 0.),
+            Point::new(300., 0.),
+        );
+        let mut line = intersect_line(
+            PathSeg::Cubic(a),
+            Line::new(Point::ZERO, Point::new(300., 0.)),
+        );
+        line.sort_by(|x, y| x.t_a.total_cmp(&y.t_a));
+        assert_eq!(line.len(), 3);
+        for tolerance in [1e-2, 1e-6] {
+            let hits = intersect_segments(PathSeg::Cubic(a), PathSeg::Cubic(b), tolerance);
+            assert_eq!(
+                hits.len(),
+                line.len(),
+                "scale {scale} tolerance {tolerance}: {hits:?}"
+            );
+            for (h, l) in hits.iter().zip(&line) {
+                assert!(
+                    (h.t_a - l.t_a).abs() < 1e-6 && h.point.y.abs() < 1e-6,
+                    "{h:?} vs {l:?}"
+                );
+            }
+        }
+    }
+}

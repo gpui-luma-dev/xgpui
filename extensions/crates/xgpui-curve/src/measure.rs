@@ -238,6 +238,15 @@ impl MeasuredPath {
             .segs
             .partition_point(|m| m.start + m.length < s)
             .min(contour.segs.len() - 1);
+        // Step past zero-length segments to the one that leaves this point,
+        // which has a tangent (unless nothing follows).
+        let mut index = index;
+        while index + 1 < contour.segs.len()
+            && contour.segs[index].length <= 0.
+            && contour.segs[index + 1].start <= s
+        {
+            index += 1;
+        }
         let m = &contour.segs[index];
         (index, self.t_at(m, s - m.start))
     }

@@ -3,7 +3,7 @@
 //! line and each finite run is drawn independently.
 
 use crate::func::pchip_slopes;
-use crate::geom::{BezPath, Point, Rect, clip_to_rect};
+use crate::geom::{self, BezPath, PathSeg, Point, Rect, clip_to_rect};
 
 /// How a series connects its samples.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -199,8 +199,16 @@ pub fn series_area(points: &[Point], curve: SeriesCurve, baseline: Baseline<'_>)
             end += 1;
         }
         draw(&mut path, &points[start..end], curve, true);
-        let reversed: Vec<Point> = bottom[start..end].iter().rev().copied().collect();
-        draw(&mut path, &reversed, curve, false);
+        // The baseline is drawn forward, like the top, then traversed
+        // backwards. Drawing the reversed samples instead would put steps on
+        // the wrong side and give monotone curves decreasing x.
+        let mut base = BezPath::new();
+        draw(&mut base, &bottom[start..end], curve, true);
+        let segs: Vec<PathSeg> = base.segments().collect();
+        path.line_to(bottom[end - 1]);
+        for seg in segs.iter().rev() {
+            geom::push_seg(&mut path, seg.reverse());
+        }
         path.close_path();
         start = end;
     }

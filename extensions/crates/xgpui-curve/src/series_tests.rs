@@ -307,3 +307,50 @@ fn closed_series_edge_cases() {
         assert!((a - b).abs() < 1e-9, "{curve:?}: {a} vs {b}");
     }
 }
+
+#[test]
+fn step_area_baselines_step_on_the_same_side_as_the_top() {
+    let top = pts(&[(0., 10.), (1., 20.), (2., 30.)]);
+    let bottom = pts(&[(0., 0.), (1., 1.), (2., 2.)]);
+    let inside = |curve, p: (f64, f64)| {
+        let area = series_area(&top, curve, Baseline::Series(&bottom));
+        geom::fill_contains(&area, Point::new(p.0, p.1), geom::FillRule::NonZero)
+    };
+    // StepAfter holds each value until the next x: the baseline is 1 on (1, 2).
+    assert!(inside(SeriesCurve::StepAfter, (1.5, 1.5)));
+    assert!(!inside(SeriesCurve::StepAfter, (1.5, 0.5)));
+    // StepBefore changes first: the baseline is 1 on (0, 1).
+    assert!(!inside(SeriesCurve::StepBefore, (0.5, 0.5)));
+    assert!(inside(SeriesCurve::StepBefore, (0.5, 1.5)));
+}
+
+#[test]
+fn monotone_area_baselines_are_curves_not_lines() {
+    let top = pts(&[(0., 100.), (1., 100.), (2., 100.)]);
+    let bottom = pts(&[(0., 0.), (1., 10.), (2., 0.)]);
+    for curve in [SeriesCurve::MonotoneX, SeriesCurve::Natural] {
+        let area = series_area(&top, curve, Baseline::Series(&bottom));
+        // The baseline matches the same curve drawn forward on its own.
+        let alone = series_path(&bottom, curve);
+        for seg in alone.segments() {
+            let mid = seg.eval(0.5);
+            let below = Point::new(mid.x, mid.y - 0.05);
+            let above = Point::new(mid.x, mid.y + 0.05);
+            assert!(
+                !geom::fill_contains(&area, below, geom::FillRule::NonZero),
+                "{curve:?}"
+            );
+            assert!(
+                geom::fill_contains(&area, above, geom::FillRule::NonZero),
+                "{curve:?}"
+            );
+        }
+    }
+    let area = series_area(&top, SeriesCurve::MonotoneX, Baseline::Series(&bottom));
+    // The PCHIP baseline is 7.5 at x = 0.5, so (0.5, 6) is below it.
+    assert!(!geom::fill_contains(
+        &area,
+        Point::new(0.5, 6.),
+        geom::FillRule::NonZero
+    ));
+}

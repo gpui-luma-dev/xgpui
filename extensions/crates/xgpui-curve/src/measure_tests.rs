@@ -166,3 +166,18 @@ fn locate_skips_a_leading_zero_length_contour() {
     assert_eq!(start.point, Point::new(0., 0.));
     assert!(start.tangent.is_some());
 }
+
+#[test]
+fn locate_at_a_leading_zero_length_segment_has_the_next_tangent() {
+    let path = crate::svg_path::parse("M0,0 L0,0 L10,0").unwrap();
+    let m = MeasuredPath::new(&path, 1e-6).unwrap();
+    let at = m.locate(0.).unwrap();
+    assert_eq!(at.tangent, Some(Vec2::new(1., 0.)));
+    assert_eq!(at.point, Point::ZERO);
+    // Between segments too: M0,0 L5,0 L5,0 L10,0 at s = 5.
+    let path = crate::svg_path::parse("M0,0 L5,0 L5,0 L5,10").unwrap();
+    let m = MeasuredPath::new(&path, 1e-6).unwrap();
+    let at = m.locate(5.).unwrap();
+    assert_eq!(at.point, Point::new(5., 0.));
+    assert!(at.tangent.is_some());
+}

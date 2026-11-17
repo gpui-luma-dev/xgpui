@@ -205,9 +205,13 @@ pub fn intersect_line(seg: PathSeg, line: Line) -> Vec<Intersection> {
 pub const MAX_INTERSECTION_STEPS: usize = 4096;
 
 /// Crossings of two segments within `tolerance`, by bounding-box subdivision
-/// followed by Newton refinement. Lines use the analytic solver. Overlapping
-/// (coincident) curves return a bounded sample of shared points rather than
-/// the full overlap; at most [`MAX_INTERSECTION_STEPS`] subdivisions are done.
+/// followed by Newton refinement. Lines use the analytic solver. Subdivision
+/// stops early once both pieces are flat within `tolerance`, where their
+/// chords give the starting point, so shallow crossings don't exhaust the
+/// budget. Overlapping (coincident) curves return a bounded sample of shared
+/// points rather than the full overlap; at most [`MAX_INTERSECTION_STEPS`]
+/// subdivisions are done, and pieces still pending then are refined rather
+/// than dropped.
 pub fn intersect_segments(a: PathSeg, b: PathSeg, tolerance: f64) -> Vec<Intersection> {
     let tolerance = tolerance.max(1e-12);
     if let PathSeg::Line(line) = b {
@@ -229,6 +233,13 @@ pub fn intersect_segments(a: PathSeg, b: PathSeg, tolerance: f64) -> Vec<Interse
     while let Some((a0, a1, b0, b1)) = stack.pop() {
         steps += 1;
         if steps > MAX_INTERSECTION_STEPS {
+            // Out of budget: refine what is left instead of dropping it.
+            raw.push((0.5 * (a0 + a1), 0.5 * (b0 + b1)));
+            raw.extend(
+                stack
+                    .drain(..)
+                    .map(|(a0, a1, b0, b1)| (0.5 * (a0 + a1), 0.5 * (b0 + b1))),
+            );
             break;
         }
         let ra = a
@@ -244,6 +255,24 @@ pub fn intersect_segments(a: PathSeg, b: PathSeg, tolerance: f64) -> Vec<Interse
         if size_a <= tolerance && size_b <= tolerance {
             raw.push((0.5 * (a0 + a1), 0.5 * (b0 + b1)));
             continue;
+        }
+        let (pa, pb) = (a.subsegment(a0..a1), b.subsegment(b0..b1));
+        if flatness(pa) <= tolerance && flatness(pb) <= tolerance {
+            // Both nearly straight: their chords cross at most once.
+            let (ca, cb) = (
+                Line::new(pa.start(), pa.end()),
+                Line::new(pb.start(), pb.end()),
+            );
+            if let Some((u, v)) = chord_crossing(ca, cb) {
+                let slack = 1e-6;
+                if (-slack..=1. + slack).contains(&u) && (-slack..=1. + slack).contains(&v) {
+                    raw.push((
+                        a0 + (a1 - a0) * u.clamp(0., 1.),
+                        b0 + (b1 - b0) * v.clamp(0., 1.),
+                    ));
+                }
+                continue;
+            }
         }
         if size_a >= size_b {
             let mid = 0.5 * (a0 + a1);
@@ -279,6 +308,36 @@ pub fn intersect_segments(a: PathSeg, b: PathSeg, tolerance: f64) -> Vec<Interse
     }
     hits.sort_by(|x, y| x.t_a.total_cmp(&y.t_a));
     hits
+}
+
+/// The largest distance of a segment's control points from its chord.
+fn flatness(seg: PathSeg) -> f64 {
+    let chord = Line::new(seg.start(), seg.end());
+    let dist = |p: Point| {
+        let d = chord.p1 - chord.p0;
+        let len = d.hypot();
+        if len <= 1e-300 {
+            (p - chord.p0).hypot()
+        } else {
+            (p - chord.p0).cross(d).abs() / len
+        }
+    };
+    match seg {
+        PathSeg::Line(_) => 0.,
+        PathSeg::Quad(q) => dist(q.p1),
+        PathSeg::Cubic(c) => dist(c.p1).max(dist(c.p2)),
+    }
+}
+
+/// Parameters (u on `a`, v on `b`) where two non-parallel chords' lines cross.
+fn chord_crossing(a: Line, b: Line) -> Option<(f64, f64)> {
+    let (da, db) = (a.p1 - a.p0, b.p1 - b.p0);
+    let denom = da.cross(db);
+    if denom.abs() <= 1e-12 * da.hypot() * db.hypot() {
+        return None;
+    }
+    let w = b.p0 - a.p0;
+    Some((w.cross(db) / denom, w.cross(da) / denom))
 }
 
 fn overlaps(a: Rect, b: Rect) -> bool {
@@ -423,6 +482,109 @@ pub fn flatten_polylines(path: &BezPath, tolerance: f64) -> Vec<Vec<Point>> {
     lines
 }
 
+/// The winding number of `path` around `p`, with open subpaths closed by a
+/// straight line as a fill closes them.
+///
+/// Each segment is split where it turns in y and every monotonic piece is
+/// solved for its crossing of the horizontal through `p`, so the count is
+/// exact up to floating point. (kurbo 0.13's `Shape::winding` can miscount
+/// near a cubic's turning point in y.)
+pub fn winding(path: &BezPath, p: Point) -> i32 {
+    let mut total = 0;
+    let (mut start, mut pen) = (None::<Point>, Point::ZERO);
+    let close = |from: Point, to: Point| seg_winding(PathSeg::Line(Line::new(from, to)), p);
+    for el in path.elements() {
+        match *el {
+            PathEl::MoveTo(q) => {
+                if let Some(s) = start {
+                    total += close(pen, s);
+                }
+                start = Some(q);
+                pen = q;
+            }
+            PathEl::ClosePath => {
+                if let Some(s) = start {
+                    total += close(pen, s);
+                    pen = s;
+                }
+            }
+            _ => {
+                let seg = match *el {
+                    PathEl::LineTo(q) => PathSeg::Line(Line::new(pen, q)),
+                    PathEl::QuadTo(c, q) => PathSeg::Quad(QuadBez::new(pen, c, q)),
+                    PathEl::CurveTo(c1, c2, q) => PathSeg::Cubic(CubicBez::new(pen, c1, c2, q)),
+                    _ => unreachable!(),
+                };
+                start.get_or_insert(pen);
+                total += seg_winding(seg, p);
+                pen = seg.end();
+            }
+        }
+    }
+    if let Some(s) = start {
+        total += close(pen, s);
+    }
+    total
+}
+
+/// Signed crossings of one segment with the ray from `p` toward +x: +1 going
+/// up (increasing y), −1 going down, half-open in y so shared endpoints count
+/// once.
+fn seg_winding(seg: PathSeg, p: Point) -> i32 {
+    let c = to_cubic(seg);
+    let (y0, y1, y2, y3) = (c.p0.y, c.p1.y, c.p2.y, c.p3.y);
+    // y'(t)/3 = a t² + b t + d.
+    let (a, b, d) = (
+        y3 - 3. * y2 + 3. * y1 - y0,
+        2. * (y2 - 2. * y1 + y0),
+        y1 - y0,
+    );
+    let mut splits = vec![0.];
+    let mut push = |t: f64| {
+        if t > 0. && t < 1. {
+            splits.push(t);
+        }
+    };
+    if a.abs() > 1e-12 * (b.abs() + d.abs()).max(1e-300) {
+        let disc = b * b - 4. * a * d;
+        if disc >= 0. {
+            let r = disc.sqrt();
+            push((-b - r) / (2. * a));
+            push((-b + r) / (2. * a));
+        }
+    } else if b != 0. {
+        push(-d / b);
+    }
+    splits.sort_by(f64::total_cmp);
+    splits.push(1.);
+    let mut w = 0;
+    for pair in splits.windows(2) {
+        let (ta, tb) = (pair[0], pair[1]);
+        let (ya, yb) = (c.eval(ta).y, c.eval(tb).y);
+        let dir = if ya <= p.y && p.y < yb {
+            1
+        } else if yb <= p.y && p.y < ya {
+            -1
+        } else {
+            continue;
+        };
+        // y is monotonic on [ta, tb]: bisect for y(t) = p.y.
+        let (mut lo, mut hi) = (ta, tb);
+        for _ in 0..64 {
+            let mid = 0.5 * (lo + hi);
+            if (c.eval(mid).y < p.y) == (ya < yb) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        if c.eval(0.5 * (lo + hi)).x > p.x {
+            w += dir;
+        }
+    }
+    w
+}
+
 /// Fill rule for [`fill_contains`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum FillRule {
@@ -435,7 +597,7 @@ pub enum FillRule {
 
 /// Whether `p` is inside the filled path. Open subpaths are treated as closed.
 pub fn fill_contains(path: &BezPath, p: Point, rule: FillRule) -> bool {
-    let winding = path.winding(p);
+    let winding = winding(path, p);
     match rule {
         FillRule::NonZero => winding != 0,
         FillRule::EvenOdd => winding % 2 != 0,
