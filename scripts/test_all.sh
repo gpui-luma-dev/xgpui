@@ -53,8 +53,7 @@ case "$logs" in /* | [A-Za-z]:*) ;; *) logs="$root/$logs" ;; esac
 # reported as PREREQ and counted as a failure, never as a pass.
 prereq_status=77
 
-# Strict Vulkan validation for native Linux GPU suites, matching the
-# native-dma-buf job in linux-extensions.yml. The Khronos layer is appended to
+# Strict Vulkan validation for native Linux GPU suites. The Khronos layer is appended to
 # any VK_INSTANCE_LAYERS already set; a VK_LAYER_ENABLES already set is kept.
 # Checks for the layer first and explains how to install it if it is missing.
 # VULKANINFO overrides the vulkaninfo executable (used by the runner self-test).
@@ -296,8 +295,8 @@ suite media-dma-buf-video linux "$vk run_tests xgpui-ext-lab bin:media-lab video
 suite media-video-capture linux "$vk cargo_capture run --locked --config .cargo/validation.toml $lab --features runtime-shaders,portable-shaders,wgpu --bin media-lab {cargo} -- --headless --video --wgpu --png $logs/media-video.png"
 suite linux-windows-build linux "built xgpui-ext-lab test:linux_windows"
 
-# Paint GPU suites from .github/paints/commands.tsv (CI runs them through
-# run.sh; keep the two lists in step). Steps already covered above are not
+# Paint GPU suites from .github/paints/commands.tsv (run.sh runs the same
+# list; keep the two in step). Steps already covered above are not
 # repeated: paint-lab wgpu checks run in "labs", brush tests in "shader", and
 # gpui-windows coverage/DX11/wide-gamut tests in "windows-backend".
 suite wgpu-coverage-cache linux "WGPU_BACKEND=vulkan run_tests xgpui-wgpu lib coverage_cache"

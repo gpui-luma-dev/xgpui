@@ -267,11 +267,6 @@ bump, or one that re-exports such a dependency.</li>
 <li><code>scripts/fixtures/native-package-consumer</code> pins old exact versions. Step 6's
 fresh consumer replaces it for now.</li>
 </ul>
-<h3 id="workflows">Workflows</h3>
-<p>The <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/prepare-daily-release.yml">Prepare daily release PR</a> and
-<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/prepare-registry-release.yml">Prepare registry release</a>
-workflows remain available but aren't part of this flow. The registry workflow's
-finalizer overwrites a release's title and body; restore them if it runs.</p>
 <h2 id="validation">Validation</h2>
 <p>Before the release PRs merge:</p>
 <pre><code class="language-sh">just test
@@ -288,10 +283,19 @@ prerequisites are in <a href="local-development.html#build-prerequisites">Local 
 <p>gpui-unofficial is xgpui's upstream. <code>main</code> contains xgpui's maintained code.
 Sync prepares an <strong>incoming tree proposal</strong>, not an integrated or buildable update.</p>
 <h3 id="review-a-release">Review a release</h3>
-<p>Run <strong>Actions → Sync GPUI release</strong> on main with a release number and optional
-source SHA. Sync normalizes the release's crate names, compares that tree with
-xgpui's current tree, and opens a <strong>new draft PR on a fresh version-named branch</strong>.
-Existing PRs are never edited, force-pushed or merged.</p>
+<p>Imports run locally on an issue epic, as <a href="https://github.com/gpui-luma-dev/xgpui/issues/284">#284</a> did for 1.28.1.
+Build the tool, then compare a release with xgpui's current tree:</p>
+<pre><code class="language-sh">cargo build --locked --release --manifest-path tools/release-sync/Cargo.toml --target-dir target/release-sync
+tool=target/release-sync/release/xgpui-release
+$tool review prepare --release RELEASE --snapshot target/incoming --report target/review.json \
+  --normalizer "$tool" --map scripts/crate-names.json   # optional: --expected-sha FULL_SHA
+cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- context --report target/review.json \
+  --output target/zed-context.md --json-output target/zed-context.json
+</code></pre>
+<p>On a fresh review branch, apply the differences with <code>$tool review code</code>, <code>review cargo</code> and
+<code>review metadata</code> (each with <code>--snapshot target/incoming --report target/review.json</code>),
+committing after each. <code>$tool review-notes --report target/review.json --context target/zed-context.md --output review.md</code>
+writes the PR description.</p>
 <p>The proposal uses separate commits:</p>
 <ol>
 <li><strong>Code:</strong> changed source, shaders, build scripts, assets and other package
@@ -307,11 +311,9 @@ captures' <code>transform-metadata.json</code> crate inventories, including nest
 It links relevant Zed commits and referenced PRs, with root Cargo dependency
 changes and unrelated range commits labeled separately. Missing provenance,
 incomplete API pagination and non-forward ranges fail context generation rather
-than silently reporting no changes. Markdown/JSON context accompanies the PR and
-workflow artifact; no issue or comment is created in the upstream repository.</p>
-<p>The PR links each commit and lists code differences separately. The detailed JSON
-comparison is uploaded as a workflow artifact. A release with no differences
-creates no PR.</p>
+than silently reporting no changes. The Markdown/JSON context accompanies the PR; no issue or comment is created in the upstream repository.</p>
+<p>The PR links each commit and lists code differences separately. A release with no differences
+needs no PR.</p>
 <p>Sync also compares a clean snapshot of the previously recorded source release.
 This labels whether each proposed file changed upstream and whether xgpui has a
 local modification. It does <strong>not</strong> automatically merge or resolve those overlaps.
@@ -383,13 +385,8 @@ its own local package overrides rather than assuming this checkout's config is
 inherited.</p>
 <p>Review the website in <code>pages/</code> after each release; <code>just pages-check</code> catches broken
 links and a stale upstream baseline, not stale narrative.</p>
-<p>Sync performs no platform validation. Its branch is an unintegrated proposal;
+<p>The review branch is an unintegrated proposal with no platform validation;
 review and test the chosen integration separately.</p>
-<h3 id="github-settings">GitHub settings</h3>
-<p>Keep main as the default branch. Enable <strong>Allow GitHub Actions to create and
-approve pull requests</strong> in repository/organization Actions settings. Sync creates
-only new draft PRs; it never approves or merges them. The old persistent <code>upstream</code>
-and <code>upstream-normalized</code> branches are not used or updated.</p>
 <h3 id="how-imports-and-builds-stay-separate">How imports and builds stay separate</h3>
 <p>The captured manifests each declare their own workspace. The root workspace
 explicitly excludes each of those directories and builds their libraries as
