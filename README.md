@@ -15,8 +15,8 @@ directly as our upstream.
 - Modified framework/backend crates are captured under `gpui/`; supporting
   crates use the matching published `gpui-unofficial` packages. `upstream.json`
   records the release, source commit, local packages and registry dependencies.
-- The manual **Sync GPUI release** workflow imports a selected release onto
-  `upstream`, keeping that branch separate from local development.
+- The local `tools/release-sync` tool imports a selected release onto a review
+  branch, keeping it separate from local development.
 - Release updates are reviewed and integrated into `main`. Documentation,
   tooling and experimental changes live alongside the captured code.
 

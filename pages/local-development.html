@@ -222,7 +222,7 @@ This fallback does not add native wide-gamut presentation to the Linux backend.
 <p>For windowing diagnostics only, <code>env -u WAYLAND_DISPLAY just text</code> selects
 X11/XWayland when <code>DISPLAY</code> is set. Vulkan rendering is independent of that
 window-system selection.</p>
-<p>Run inside your normal Wayland or X11 desktop session. The repository's <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/paints-backend.yml">Linux Vulkan CI workflow</a> lists the native packages used on Ubuntu if a linker reports
+<p>Run inside your normal Wayland or X11 desktop session. The Linux job in <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/epic-284.yml">epic-284.yml</a> lists the native packages used on Ubuntu if a linker reports
 a missing system library.</p>
 <h2 id="macos">macOS</h2>
 <p>Use the native Rust toolchain for your machine. The default renderer is Metal;
@@ -324,11 +324,9 @@ gates before its runtime suites. The extension suites enable ICC, canvas GPUI
 integration and media wgpu coverage; Linux additionally checks media without
 GPU backends and Parley with system fonts. Use <code>just test --only native-libraries</code>
 or <code>just test --only gpui-bench-build</code> to isolate compilation failures.
-Hosted Linux extensions/labs, Windows lab applications, and the three platform
-paint workflows are manual-only (<code>workflow_dispatch</code>). Run them from Actions →
-the selected workflow → Run workflow when hosted verification is needed.
-<code>Validate repository tooling</code> is also manual-only, including its tooling checks,
-macOS/Linux/Windows native-library matrix, iOS compilation and WASM build.
+CI runs only the automatic checks in <code>.github/workflows/</code> on pull requests and
+<code>main</code>; extension and lab suites, paint GPU suites, iOS compilation and the
+native-library matrix run locally through <code>just test</code> on the matching host.
 PR acceptance is verified in the local test environments;
 record the tested commit SHA, command and result in the PR.</p>
 <p>Local results cover the current host; platform-specific tests still require
@@ -393,8 +391,8 @@ cargo clippy --workspace --locked
 cargo fmt --package xgpui-build --check
 </code></pre>
 <p>Root Clippy and formatting checks target the harness; imported libraries are
-dependencies, not root workspace members. Existing platform/library validation
-is still run separately by validate.yml.</p>
+dependencies, not root workspace members. Platform/library validation runs in
+<code>just test</code>.</p>
 <h2 id="compile-the-captured-examples">Compile the captured examples</h2>
 <pre><code class="language-sh">cargo build --config .cargo/validation.toml \
   --manifest-path gpui/crates/gpui/Cargo.toml \
@@ -511,15 +509,12 @@ changes, smoke-test the affected demos with <code>&amp;backend=webgpu</code> and
 <tr><td>Browser demos are absent or stale</td><td>Run <code>just pages-demos</code>; the pages in <code>pages/</code> do not include the Wasm bundles.</td></tr>
 </tbody></table>
 <h2 id="linux-ci-coverage">Linux CI coverage</h2>
-<p>The <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/linux-extensions.yml">Linux extension workflow</a> runs all
-seven extension suites, native lab tests, Vulkan image/path captures and real
-window smoke probes under headless Weston and Xvfb/Openbox. Its path filters
-include all lab and shared app code. Existing paint and native font checks remain
-independent. Hosted Mesa results may use software rendering and do not establish
-physical GPU DMA-BUF or desktop input acceptance.</p>
-<p>A separate opt-in workflow-dispatch job targets a configured <code>xgpui-vulkan</code>
-self-hosted runner and runs strict native DMA-BUF/video checks with synchronization
-validation. See <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/linux/README.md">runner setup and local commands</a>.</p>
+<p>The Linux job in <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/workflows/epic-284.yml">epic-284.yml</a> runs the Linux backend
+tests and real-window smoke probes under headless Weston, Xvfb/Openbox and Mutter on every pull request to
+<code>main</code>. Extension suites, native lab tests, Vulkan captures and strict native DMA-BUF/video checks
+run locally with <code>just test</code> on Linux. Hosted Mesa results may use software rendering and do not establish
+physical GPU DMA-BUF or desktop input acceptance. See the
+<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/.github/linux/README.md">window probe scripts and local commands</a>.</p>
 </article>
 </main>
 <footer>Source evidence and review hypotheses are kept distinct. · Created by codex</footer>

@@ -281,13 +281,6 @@ These are known holes in the tooling. Cover them by hand until they're fixed:
 - `scripts/fixtures/native-package-consumer` pins old exact versions. Step 6's
   fresh consumer replaces it for now.
 
-### Workflows
-
-The [Prepare daily release PR](../.github/workflows/prepare-daily-release.yml) and
-[Prepare registry release](../.github/workflows/prepare-registry-release.yml)
-workflows remain available but aren't part of this flow. The registry workflow's
-finalizer overwrites a release's title and body; restore them if it runs.
-
 ## Validation
 
 Before the release PRs merge:

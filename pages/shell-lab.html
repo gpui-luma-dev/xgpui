@@ -281,10 +281,7 @@ branch. Each host checks formatting, shell and lab headless tests, the core
 preference-observer regression, focused strict Clippy and a native lab build.
 Linux additionally compiles and tests the actual portal/native fallback modules
 with Wayland and X11 enabled. No lab or native GUI is launched.</p>
-<p>The existing opt-in <strong>Windows lab applications</strong> workflow now includes <code>shell-lab</code>,
-runs its headless tests and uploads its release executable for manual acceptance.
-The existing broad Linux extension workflow already includes shell library tests
-and all lab binaries; it remains opt-in and is not made part of this focused job.</p>
+<p><code>just test</code> on each host also runs <code>shell-lab</code>'s headless tests with the other lab binaries.</p>
 <p>These checks do not establish live GNOME/KDE providers, native traffic-light
 placement, Windows hit testing, accessibility or display-scale behavior. The
 summary records those limits on each matrix job. This CI subtask does not change
