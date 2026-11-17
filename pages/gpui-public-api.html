@@ -54,9 +54,9 @@ links the original GPUI commits and pull requests.</p>
 <li><strong>Behavior:</strong> per-run text colors, backgrounds and underlines follow logical runs for right-to-left glyphs on every backend.</li>
 <li><strong>Dependency:</strong> <code>unicode-bidi</code> 0.3 (already in the dependency tree through <code>usvg</code>).</li>
 </ul>
-<h2 id="text-layout-provider-332">Text layout provider for plain text elements (#332)</h2>
+<h2 id="text-layout-provider-332">Text layout provider for plain text elements: core 4.2 (#332)</h2>
 <p>Approved in <a href="https://github.com/gpui-luma-dev/xgpui/pull/350">#350</a>; tracking issue
-<a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>. Not released yet. How-to:
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>. Ships in <code>xgpui</code> 4.2.0. How-to:
 <a href="right-to-left-text.html">Right-to-left text</a>.</p>
 <ul>
 <li><strong>Added:</strong> <code>TextLayoutProvider</code> (<code>measure</code>), <code>ProvidedTextLayout</code> (<code>size</code>, <code>prepaint</code>, <code>paint_background</code>, <code>paint_foreground</code>, <code>index_for_position</code>, <code>position_for_index</code>, <code>wrapped_text</code>) and <code>TextLayoutRequest</code> (<code>#[non_exhaustive]</code>: text, runs, font size, line height, <code>white_space</code>, <code>text_overflow</code>, <code>line_clamp</code>, <code>text_align</code>). A text engine implements them to lay out GPUI's plain text elements (<code>&amp;'static str</code>, <code>String</code>, <code>SharedString</code>, <code>Text</code>, <code>StyledText</code>, <code>InteractiveText</code>). xgpui-parley's <code>install_text_layout</code> is the implementation.</li>

@@ -20,6 +20,34 @@
 </aside>
 <main id="content" tabindex="-1">
 <p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="whats-new">What's new</h1>
+<h2 id="xgpui-4-2-0">XGPUI 4.2.0 — plain GPUI text on Parley paragraphs</h2>
+<p>Standard GPUI text handles wrapped right-to-left and mixed text on Parley. Two crates are published: <code>xgpui</code> 4.2.0 and <code>xgpui-parley</code> 0.8.0. Both are additive: no migration is needed, and the other 17 crates are unchanged. Release issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/359">#359</a>; release notes on <a href="https://github.com/gpui-luma-dev/xgpui/releases">GitHub releases</a>.</p>
+<h3>Highlights</h3>
+<ul>
+<li><strong>Right-to-left in plain GPUI text</strong> (<a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>): call <code>xgpui_parley::install_text_layout(parley, cx)</code> once, and every plain text element (<code>div().child("…")</code>, <code>StyledText</code>, <code>InteractiveText</code>, tooltips, list rows, third-party widgets) is laid out by the engine behind <code>typeset()</code>. Wrapped Hebrew, Arabic and mixed text wraps in logical order; truncation, line clamps and start/end alignment work; hit testing matches what's painted. Each paragraph's direction comes from its first strong character, so <code>typeset()</code> is only needed for an explicit direction or language. See <a href="right-to-left-text.html">Right-to-left text</a>.</li>
+<li><strong>Text layout provider in GPUI core</strong> (<a href="https://github.com/gpui-luma-dev/xgpui/pull/350">#350</a>): <code>TextLayoutProvider</code>, <code>ProvidedTextLayout</code> and <code>App::set_text_layout_provider</code> let a text engine lay out GPUI's plain text elements. Without a provider, GPUI's flat lines run unchanged. See <a href="gpui-public-api.html#text-layout-provider-332">GPUI public API changes</a>.</li>
+<li><strong>Faster paragraph paint</strong> (<a href="https://github.com/gpui-luma-dev/xgpui/pull/351">#351</a>): <code>paint_paragraph</code> uses one paint layer per paragraph and skips glyphs outside the content mask. Plain text on Parley costs about 1.12× GPUI's lines on a warm frame and 0.95× on reflow.</li>
+<li><strong>Docs and labs:</strong> a <a href="right-to-left-text.html">right-to-left how-to</a> with a runnable example (<code>just rtl-example</code>), a right-to-left paragraph demo in the <a href="examples/extensions/?demo=bidi">Wasm gallery</a> (<a href="https://github.com/gpui-luma-dev/xgpui/issues/341">#341</a>), and a localization QA lab in <code>xgpui-ext-lab</code> (<a href="https://github.com/gpui-luma-dev/xgpui/issues/355">#355</a>).</li>
+</ul>
+<h3>Bug fixes</h3>
+<ul>
+<li><strong>Text:</strong> <code>TextLayout::wrapped_text()</code> no longer panics on wrapped right-to-left text, on any backend (<a href="https://github.com/gpui-luma-dev/xgpui/pull/352">#352</a>).</li>
+</ul>
+<h3>Opting in changes layout</h3>
+<p>Only for apps that call <code>install_text_layout</code>. Native backends, and apps that don't call it, get no layout change.</p>
+<ul>
+<li><code>text_align</code> <code>Left</code>/<code>Right</code> act as start/end, so they mirror for right-to-left text.</li>
+<li>Min-content is the longest word instead of the full line, which can change flex shrink results.</li>
+<li>Wrap points follow Parley. Truncation keeps the logical start.</li>
+<li><code>TextLayout::line_layouts()</code> is empty and <code>line_layout_for_index()</code> returns <code>None</code>; use <code>index_for_position</code> and <code>position_for_index</code>.</li>
+</ul>
+<h3>Validation</h3>
+<p>CI passed on the merges into <code>main</code>. Windows and Linux were checked by hand on <code>main</code>. The text-lab checks cover logical wrap order and the right-to-left page on Parley, with native output unchanged. xgpui-luma builds against the release candidate and its tests pass.</p>
+<h3>Versions</h3>
+<table><thead><tr><th>Crate</th><th>Previous release</th><th>Released</th></tr></thead><tbody>
+<tr><td><code>xgpui</code></td><td>4.1.0</td><td><strong>4.2.0</strong></td></tr>
+<tr><td><code>xgpui-parley</code></td><td>0.7.0</td><td><strong>0.8.0</strong></td></tr>
+</tbody></table>
 <h2 id="xgpui-4-1-0">XGPUI 4.1.0 — paragraph text, ProPhoto RGB and GPU interop pacing</h2>
 <p>Paragraph text through GPUI on every backend, right-to-left text in plain GPUI labels, ProPhoto RGB, and frame pacing for GPU interop engines. 19 crates are published: <code>xgpui</code> 4.1.0, breaking minor versions of five extensions, and patch versions of the rest. Release issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/338">#338</a>; release notes on <a href="https://github.com/gpui-luma-dev/xgpui/releases">GitHub releases</a>.</p>
 <h3>Highlights</h3>

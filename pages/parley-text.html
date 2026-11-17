@@ -42,8 +42,8 @@ changes to existing GPUI callers.</p>
 <p><strong><a href="gpui-public-api.html#added-text-backend-and-paragraph-seams">GPUI public API changes: additions and compatibility</a>.</strong></p>
 <h2 id="construction">Construction</h2>
 <pre><code class="language-toml">[dependencies]
-gpui = { package = "xgpui", version = "4.1.0" }
-xgpui-parley = { version = "0.7.0", features = ["system-fonts"] }
+gpui = { package = "xgpui", version = "4.2.0" }
+xgpui-parley = { version = "0.8.0", features = ["system-fonts"] }
 </code></pre>
 <pre><code class="language-rust">use gpui::{Application, PlatformTextSystem};
 use std::sync::Arc;
@@ -164,7 +164,7 @@ invalidate geometry until repaint. Apply origin/scrolling once at the UI edge.</
 public GPUI APIs (<code>Window::request_measured_layout</code>, a GPUI global and
 <code>paint_paragraph</code>). Install it with the backend, then use it like text:</p>
 <pre><code class="language-rust">xgpui_parley::typeset::install(backend.clone(), cx); // the installed Arc&lt;ParleyTextSystem&gt;
-// Or, to lay out plain GPUI text with Parley too (next release):
+// Or, to lay out plain GPUI text with Parley too (xgpui-parley 0.8):
 // xgpui_parley::install_text_layout(backend.clone(), cx);
 
 div().w(px(150.0)).truncate().child(
@@ -178,7 +178,7 @@ on <code>StyledText</code>, including per-run fonts, colors, backgrounds, underl
 strikethroughs; styles follow truncated text. Wrapping text reports min-content and max-content widths, as in
 taffy's Parley example. Truncation is logical and verified by reshaping. Shapes,
 reflows and fits are cached in the engine. Without <code>install</code> it renders as GPUI
-text. With <code>install_text_layout</code> (next release,
+text. With <code>install_text_layout</code> (xgpui-parley 0.8,
 <a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>), plain GPUI text
 uses the same engine, so <code>typeset()</code> is only needed for an explicit direction
 or language; see <a href="right-to-left-text.html">Right-to-left text</a>. Without it,
