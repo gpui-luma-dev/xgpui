@@ -44,6 +44,10 @@ paint *args:
 gamut *args:
     @XGPUI_LAB_DIRECT=1 {{ lab }} gamut "$@"
 
+# xgpui-curve: mesh wires, spines, nodes, series, easing and shapes.
+curve *args:
+    @XGPUI_LAB_DIRECT=1 {{ lab }} curve "$@"
+
 # Color swatches and CIE chromaticity.
 color *args:
     @XGPUI_LAB_DIRECT=1 {{ lab }} color "$@"

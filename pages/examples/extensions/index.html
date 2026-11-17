@@ -87,7 +87,7 @@ if (canonical) {
         const unavailable = webgpuPreflight(window);
         if (unavailable) throw new Error(unavailable);
       }
-      if (!["canvas", "mandelbrot", "shader", "brushes", "layers", "hermite", "parley", "bidi", "font-controls", "svg", "color", "chromaticity", "pixel-metadata", "italy", "typography", "media-filters", "media-float", "media-tiles", "mipmaps", "path-effects"].includes(demo)) throw new Error(`Unknown demo: ${demo}`);
+      if (!["canvas", "mandelbrot", "shader", "brushes", "layers", "hermite", "curve", "parley", "bidi", "font-controls", "svg", "color", "chromaticity", "pixel-metadata", "italy", "typography", "media-filters", "media-float", "media-tiles", "mipmaps", "path-effects"].includes(demo)) throw new Error(`Unknown demo: ${demo}`);
       // build.sh writes build-id.txt next to the bundle; the module reports the same ID.
       const revision = await fetch("build-id.txt", {cache: "no-store"});
       if (!revision.ok) throw new Error("The WebAssembly demos are not built here. Run: just pages-demos");
@@ -135,7 +135,7 @@ if (canonical) {
         await mountItaly(bindings);
       }
       status.hidden = !failed;
-      document.title = `${demo === "italy" ? "Italy photo comparison" : demo === "canvas" ? "Spatial card canvas" : demo === "mandelbrot" ? "Mandelbrot explorer" : demo === "media-tiles" ? "Progressive tiled canvas" : demo === "media-float" ? "RGBA16F / P3" : demo === "media-filters" ? "Image filters" : demo === "mipmaps" ? "Mipmapping" : demo === "path-effects" ? "Trim / dash" : demo === "font-controls" ? "Variable fonts" : demo === "bidi" ? "Right-to-left text" : demo === "typography" ? "Selectable typography" : demo === "hermite" ? "Hermite editor" : demo === "brushes" ? "Universal brushes" : demo === "layers" ? "Layer effects" : demo === "shader" ? "Shader paints" : demo === "svg" ? "Progressive SVG" : demo === "chromaticity" ? "Chromaticity & gamut" : demo === "pixel-metadata" ? "Pixels + metadata" : demo === "color" ? "Color / Gamut" : "Parley paragraphs"} · XGPUI - Extended GPUI`;
+      document.title = `${demo === "italy" ? "Italy photo comparison" : demo === "canvas" ? "Spatial card canvas" : demo === "mandelbrot" ? "Mandelbrot explorer" : demo === "media-tiles" ? "Progressive tiled canvas" : demo === "media-float" ? "RGBA16F / P3" : demo === "media-filters" ? "Image filters" : demo === "mipmaps" ? "Mipmapping" : demo === "path-effects" ? "Trim / dash" : demo === "font-controls" ? "Variable fonts" : demo === "bidi" ? "Right-to-left text" : demo === "typography" ? "Selectable typography" : demo === "hermite" ? "Hermite editor" : demo === "curve" ? "Curve lab" : demo === "brushes" ? "Universal brushes" : demo === "layers" ? "Layer effects" : demo === "shader" ? "Shader paints" : demo === "svg" ? "Progressive SVG" : demo === "chromaticity" ? "Chromaticity & gamut" : demo === "pixel-metadata" ? "Pixels + metadata" : demo === "color" ? "Color / Gamut" : "Parley paragraphs"} · XGPUI - Extended GPUI`;
     } catch (error) { showError(error); }
   }
 }

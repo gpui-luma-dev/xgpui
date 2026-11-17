@@ -19,6 +19,7 @@ mod color;
 mod color_samples;
 mod color_tasks;
 mod color_tasks_model;
+mod curve;
 mod font_controls;
 mod hermite;
 mod italy;
@@ -73,6 +74,7 @@ pub fn demo_behavior(demo: &str) -> String {
         "bidi" => "Right to left: GPUI labels, styled runs and paragraphs • Parley in Wasm",
         "brushes" => "Brushes: universal fills, noise, glyphs and paths",
         "hermite" => "Hermite: live 2×2 / 3×3 mesh editor • points and tangent vectors",
+        "curve" => "Curves: mesh wires, GPU spine field, node modes, series, easing, squircles and fitted strokes",
         "layers" => "Layers: subtree filters, blending and blur",
         "shader" => "Shader: gradients, paths and animation",
         "chromaticity" => "Chromaticity: gamut simulation and mapping • sRGB preview",
@@ -126,6 +128,11 @@ fn launch() -> anyhow::Result<()> {
     let layers = parameters.contains(&"demo=layers");
     let tiled = parameters.contains(&"demo=media-tiles");
     let hermite = parameters.contains(&"demo=hermite");
+    let curve = parameters.contains(&"demo=curve");
+    let curve_panel = parameters
+        .iter()
+        .find_map(|p| p.strip_prefix("panel=").and_then(curve::Panel::from_name))
+        .unwrap_or_default();
     let media_mode = if parameters.contains(&"demo=media-float") {
         Some(media::Mode::FloatImages)
     } else if parameters.contains(&"demo=media-filters") {
@@ -239,6 +246,9 @@ fn launch() -> anyhow::Result<()> {
                 cx.new(|cx| typography::TypographyDemo::new(window, cx))
             })
             .expect("open typography demo");
+        } else if curve {
+            cx.open_window(options, |_, cx| cx.new(|_| curve::CurveLab::new(curve_panel)))
+                .expect("open curve demo");
         } else if hermite {
             cx.open_window(options, |_, cx| cx.new(|_| hermite::HermiteDemo::new()))
                 .expect("open Hermite editor");

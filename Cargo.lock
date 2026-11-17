@@ -8045,6 +8045,7 @@ dependencies = [
  "xgpui-apple",
  "xgpui-canvas",
  "xgpui-color",
+ "xgpui-curve",
  "xgpui-gamut",
  "xgpui-gpu-interop",
  "xgpui-media",
