@@ -235,6 +235,7 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
                     NodeMode::Corner => rgb(0xff9f43),
                     NodeMode::Smooth | NodeMode::Symmetric => rgb(0x9ecbff),
                     NodeMode::Auto(_) => rgb(0x7ee0a1),
+                    _ => rgb(0xffffff),
                 };
                 handle(
                     window,

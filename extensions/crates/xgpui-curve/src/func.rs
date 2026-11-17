@@ -293,6 +293,7 @@ fn solve_monotone_cubic(a: f64, b: f64, c: f64, d: f64, x: f64) -> f64 {
 
 /// Where the jumps of a CSS `steps()` function fall.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StepPosition {
     /// `jump-start` / `start`: the first jump happens at 0.
     JumpStart,
@@ -316,6 +317,7 @@ pub struct LinearStop {
 
 /// CSS easing functions (CSS Easing Functions Level 2).
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Easing {
     /// `linear`: the identity.
     Linear,

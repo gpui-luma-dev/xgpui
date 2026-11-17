@@ -1,9 +1,14 @@
 //! Series gallery: every plot curve on the same samples, with an optional
-//! missing sample, area fills and viewport clipping.
+//! missing sample, area fills and viewport clipping, then the closed curves on
+//! a radar outline.
 use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
+use std::f64::consts::{FRAC_PI_2, TAU};
 use xgpui_curve::kurbo::{Point as KPoint, Rect};
-use xgpui_curve::series::{Baseline, SeriesCurve, series_area, series_path, series_path_clipped};
+use xgpui_curve::series::{
+    Baseline, ClosedCurve, SeriesCurve, series_area, series_path, series_path_clipped,
+    series_path_closed,
+};
 
 const W: f64 = 300.;
 const H: f64 = 150.;
@@ -22,6 +27,37 @@ const CURVES: [(&str, SeriesCurve); 12] = [
     ("Bundle β 0.6", SeriesCurve::Bundle { beta: 0.6 }),
     ("Monotone Y", SeriesCurve::MonotoneY),
 ];
+
+const CLOSED: [(&str, ClosedCurve); 4] = [
+    ("Linear closed", ClosedCurve::Linear),
+    ("Basis closed", ClosedCurve::Basis),
+    (
+        "Cardinal closed 0.5",
+        ClosedCurve::Cardinal { tension: 0.5 },
+    ),
+    (
+        "Catmull-Rom closed α 0.5",
+        ClosedCurve::CatmullRom { alpha: 0.5 },
+    ),
+];
+
+/// A radar outline: one value per spoke around the centre of the card.
+fn radar(gap: bool) -> Vec<KPoint> {
+    let values = [0.9, 0.55, 0.75, 0.3, 0.85, 0.6, 0.95, 0.4];
+    let n = values.len();
+    values
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            if gap && i == 3 {
+                return KPoint::new(f64::NAN, f64::NAN);
+            }
+            let angle = i as f64 * TAU / n as f64 - FRAC_PI_2;
+            let r = v * (H / 2. - 10.);
+            KPoint::new(W / 2. + r * angle.cos(), H / 2. + r * angle.sin())
+        })
+        .collect()
+}
 
 #[derive(Clone, Copy, Default)]
 pub struct SeriesPanel {
@@ -117,6 +153,29 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
             ),
         )
     });
+    let closed_cards = CLOSED.into_iter().map(move |(label, curve)| {
+        let points = radar(gap);
+        card(label).child(
+            div().w(px(300.)).h(px(150.)).child(
+                canvas(
+                    |_, _, _| (),
+                    move |bounds, _, window, _| {
+                        let t = fit(bounds, W, H);
+                        window.paint_quad(fill(bounds, rgb(0x0c1220)));
+                        let path = series_path_closed(&points, curve);
+                        if area {
+                            filled(window, &path, t, hsla(0.58, 0.7, 0.55, 0.25));
+                        }
+                        stroke(window, &path, t, 2., rgb(0x8fd3ff));
+                        for p in points.iter().filter(|p| p.x.is_finite()) {
+                            dot(window, t * *p, 2.5, rgb(0xffffff));
+                        }
+                    },
+                )
+                .size_full(),
+            ),
+        )
+    });
     div()
         .id("series-scroll")
         .size_full()
@@ -126,5 +185,6 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
         .gap_2()
         .child(controls)
         .child(div().flex().flex_wrap().gap_3().children(cards))
+        .child(div().flex().flex_wrap().gap_3().children(closed_cards))
         .into_any_element()
 }

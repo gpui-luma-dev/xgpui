@@ -6,6 +6,7 @@ use crate::geom::{self, BezPath, CubicBez, ParamCurve, PathSeg, Point, Vec2};
 
 /// How automatic nodes compute their handles.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum AutoSmooth {
     /// Catmull-Rom from the two neighboring anchors; `alpha` 0.5 is
     /// centripetal. G¹ (C¹ in its own parameterization). Local: a node depends
@@ -24,6 +25,7 @@ pub enum AutoSmooth {
 
 /// A node's continuity mode.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum NodeMode {
     /// C⁰: handles move independently.
     Corner,

@@ -15,6 +15,7 @@ const MAX_DEPTH: u32 = 12;
 
 /// End cap of an open stroke.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Cap {
     /// Flat at the endpoint.
     #[default]
@@ -27,6 +28,7 @@ pub enum Cap {
 
 /// Join where segments meet at an angle.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Join {
     /// Sharp corner, beveled when longer than `limit` × half the width.
     Miter(f64),

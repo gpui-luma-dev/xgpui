@@ -129,6 +129,7 @@ pub fn tight_bounds(seg: PathSeg) -> Rect {
 
 /// The nearest point on a segment.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct NearestPoint {
     /// Parameter of the nearest point, in 0..=1.
     pub t: f64,
@@ -178,6 +179,7 @@ fn set_start(seg: &mut PathSeg, p: Point) {
 
 /// One crossing of two curves.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct Intersection {
     /// Parameter on the first curve.
     pub t_a: f64,
@@ -442,6 +444,7 @@ pub fn fill_contains(path: &BezPath, p: Point, rule: FillRule) -> bool {
 
 /// The nearest point on a multi-segment path.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct PathHit {
     /// Index into [`BezPath::segments`].
     pub segment: usize,

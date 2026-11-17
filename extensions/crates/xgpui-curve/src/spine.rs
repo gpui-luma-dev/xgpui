@@ -23,6 +23,7 @@ pub const CURVE_SPINE_MSL: &str = include_str!("spine.metal");
 
 /// A pixel's coordinates relative to a spine.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct SpinePoint {
     /// Parameter of the nearest spine point.
     pub t: f64,

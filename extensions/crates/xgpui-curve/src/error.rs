@@ -4,6 +4,7 @@ use std::fmt;
 
 /// Why a curve operation was rejected.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum CurveError {
     /// An input coordinate, parameter or length was NaN or infinite.
     NonFinite,
