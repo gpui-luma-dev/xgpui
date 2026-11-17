@@ -270,18 +270,7 @@ platforms. It requires a desktop session and measures encoding plus readback on
 every iteration. Backend WARP tests remain independent of a visible desktop.
 <code>--sdr</code> and the presentation button compare the native sRGB baseline with P3
 surfaces. Overlay, opacity, backdrop and ordering controls are shared.</p>
-<pre><code class="language-sh"># After pushing the branch: build on GitHub-hosted Windows runners. {#after-pushing-the-branch-build-on-github-hosted-windows-runners}
-gh workflow run windows-apps.yml --ref codex/high-gamut-windows
-gh run list --workflow windows-apps.yml
-gh run download RUN_ID --name gamut-lab-windows-x64
-# On Windows, launch the downloaded artifact: {#on-windows-launch-the-downloaded-artifact}
-# .\gamut-lab.exe {#gamut-labexe}
-</code></pre>
-<p>The <strong>Windows lab applications</strong> workflow also builds <code>paint-lab</code>,
-compiles their tests and uploads separate x64 release executables. It runs on
-relevant pull requests or manual dispatch. Download builds from the Actions run's
-artifacts. It does not launch desktop windows or establish physical gamut fidelity.
-The separate <strong>Portable paint GPU checks</strong> workflow runs the offscreen WARP suite.
+<p>Build and test the labs on Windows with <code>just test</code>; launch them with <code>just gamut</code> and <code>just paint</code>.
 Windows app builds have passed; interactive Windows behavior has also been checked locally by the app developer. Physical color measurement remains separate.</p>
 <pre><code class="language-text">controls    overlays, opacity, light/dark backdrop, reverse surface order
 content     two P3 patches; native labels/buttons/panels
@@ -384,7 +373,7 @@ rustc --edition 2024 --test \
   -o /tmp/xgpui-color-policy-tests
 /tmp/xgpui-color-policy-tests
 </code></pre>
-<p>The manual <strong>Portable paint GPU checks</strong> workflow includes WARP composition,
+<p>The Windows paint suites in <code>just test</code> include WARP composition,
 transaction/policy tests and <code>xgpui-gamut</code> checks. Desktop fixtures remain explicitly
 ignored in unattended runs. HLSL compiles during native execution, not Rust
 cross-compilation. <code>gamut-lab</code> shares its UI and capture path across macOS and Windows; the backend fixtures
