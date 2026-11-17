@@ -526,6 +526,13 @@ platforms = ["macos"]
 profile = "dev"
 cargo = ["test", "--features", "macos-window-tests", "--test", "macos_frames"]
 
+[[lab.task]]
+name = "macos-close"
+about = "Closing a key window through performClose:, close and remove_window() logs no errors (#371)"
+platforms = ["macos"]
+profile = "dev"
+cargo = ["test", "--features", "macos-window-tests", "--test", "macos_close"]
+
 [[lab]]
 name = "metal-producer"
 bin = "metal-producer-regression"
