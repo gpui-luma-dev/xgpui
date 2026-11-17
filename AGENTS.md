@@ -6,8 +6,8 @@
 - When working on an assigned issue (`<ISSUE_ID>`), isolate all related work under `issue-<ISSUE_ID>/epic`.
 - Check if `origin/issue-<ISSUE_ID>/epic` exists. If not, create it from `origin/main` and push it.
 - Branch subtasks from the epic branch using: `issue-<ISSUE_ID>/<short-task-slug>`.
-- For issue work, set the PR base target to `issue-<ISSUE_ID>/epic` (never `main`).
-  Standalone fixes follow *Bug fixes* below.
+- Always set the PR base target to `issue-<ISSUE_ID>/epic`. Never target `main`
+  directly unless the user explicitly says so for that change.
 
 ## Bug fixes
 
@@ -15,10 +15,9 @@
   branch off that work's epic (`issue-<ISSUE_ID>/<fix-slug>`), with the PR
   targeting the epic, and describe it in that PR and/or the original issue.
   Don't open a new issue for it.
-- A standalone bug in code already on `main` doesn't need an issue or an epic:
-  branch from `origin/main` as `fix/<short-slug>` and open the PR straight to
-  `main`. Explain the bug, its cause and how it was verified in the PR. Merging
-  still needs the user's explicit approval.
+- A fix branch is named `fix/<short-slug>` when it isn't a subtask of an
+  epic. Ask the user which epic (or other branch) it targets; it goes straight to
+  `main` only when the user says so.
 - When a bug can be reproduced, add or extend a regression check that fails
   before the fix (a unit test, or a real-window probe in `apps/xgpui-ext-lab/tests`
   registered in `labs.toml`).
