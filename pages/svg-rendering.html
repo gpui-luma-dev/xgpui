@@ -182,23 +182,33 @@ cargo clippy --offline --locked --config .cargo/validation.toml --manifest-path 
 density changes, stale document/policy results, invalid/zero geometry, atlas
 removal, FIFO/cancellation, accounting, rebalancing and complete pool drainage.</p>
 <h2 id="contour-trim-and-dash-effects">Contour trim and dash effects</h2>
-<p><code>xgpui_svg::path_effects</code> adds programmatic retained vector contours alongside the
-static SVG document API. It does not convert imported SVG documents to native
-paths or modify the existing raster pipeline.</p>
-<pre><code class="language-rust,ignore">use gpui::{point, px};
-use xgpui_svg::path_effects::{Contour, MeasuredPath, PathEffect};
-let contour = Contour::new(point(px(20.), px(100.)))
-    .cubic_to(point(px(60.), px(0.)), point(px(140.), px(180.)), point(px(200.), px(80.)))
-    .quadratic_to(point(px(250.), px(0.)), point(px(300.), px(100.)));
+<p>Trim and dash effects on programmatic vector contours now come from
+<a href="curve.html#measure-and-svg">xgpui-curve</a>. They sit alongside the static SVG
+document API; they do not convert imported SVG documents to native paths or modify the
+existing raster pipeline.</p>
+<div class="notice"><code>xgpui_svg::path_effects</code> (<code>Contour</code>, <code>Segment</code>,
+<code>MeasuredPath</code>, <code>PathEffect</code>) is deprecated. It delegates to xgpui-curve,
+behaves as before, and remains for one release while callers move to the API below.</div>
+<pre><code class="language-rust,ignore">use gpui::{PathBuilder, px};
+use xgpui_curve::gpui_paint;
+use xgpui_curve::kurbo::{Affine, BezPath};
+use xgpui_curve::measure::{MeasuredPath, PathEffect};
+
+let mut contour = BezPath::new();
+contour.move_to((20., 100.));
+contour.curve_to((60., 0.), (140., 180.), (200., 80.));
+contour.quad_to((250., 0.), (300., 100.));
 // Retain this table while animating the effect.
-let measured = MeasuredPath::new(&amp;[contour], px(0.05))?;
-let effect = PathEffect::new()
-    .trim(0.0..0.75)?
-    .dash(&amp;[px(16.), px(8.)], px(5.))?;
-window.paint_path(measured.stroke(&amp;effect, px(4.))?, gpui::rgb(0x9ee3bd));
+let measured = MeasuredPath::new(&amp;contour, 0.05)?;
+let effect = PathEffect::new().trim(0.0..0.75)?.dash(&amp;[16., 8.], 5.)?;
+
+let mut stroke = PathBuilder::stroke(px(4.));
+gpui_paint::append(&amp;mut stroke, &amp;measured.apply(&amp;effect)?, Affine::IDENTITY);
+window.paint_path(stroke.build()?, gpui::rgb(0x9ee3bd));
 </code></pre>
-<p>Contours retain line, quadratic and cubic verbs. Arc-length lookup uses cached
-adaptive subdivisions, including collinear curves with nonlinear parameter speed.
+<p>Contours retain line, quadratic and cubic verbs. Lines and quadratics
+are measured in closed form and cubics by Gauss–Legendre quadrature, including
+collinear curves with nonlinear parameter speed.
 Trim endpoints use de Casteljau slicing; the resulting segments remain curves
 until the existing GPUI stroke tessellator runs. <code>MeasuredPath::apply</code> returns
 contours when callers need geometry rather than a native stroke.</p>
@@ -209,17 +219,16 @@ applied before dashing, and dash phase restarts at each retained contour's start
 Positive phase advances into the pattern, negative phase wraps. Odd dash arrays
 repeat; an empty array is solid. Visible pieces spanning a full closed contour's
 seam are joined to avoid introducing caps there.</p>
-<p>Lengths, stroke widths, tolerance and dash phase use logical pixels. The table's
-0.001..16 px tolerance bounds each adaptive leaf's control-point deviation from a
-uniformly parameterized chord; it is not a global arc-length error guarantee. Use
+<p>Lengths, stroke widths, tolerance and dash phase use logical pixels. The
+0.001..16 px tolerance is the absolute arc-length accuracy of each measured
+interval. Use
 smaller tolerances for more precise animation and retain the measurement cache.
 Native stroke joins/caps use GPUI defaults. Fill effects, SVG arc verbs, automatic
 SVG extraction and Lottie playback are not included.</p>
 <p>Inputs are checked before tessellation: finite coordinates within ±1,000,000 px,
-at most 8,192 contours/segments (including implicit closing edges), 65,536 total
-lookup samples, 64 input dash entries and 16,384 emitted curve pieces. Dash lengths
+at most 8,192 contours/segments (including implicit closing edges), 64 input dash entries and 16,384 emitted curve pieces. Dash lengths
 must be finite and strictly positive; zero entries are rejected. Stroke widths are
-positive and at most 4,096 px. Excessive subdivision, fragmentation or numerically
+positive and at most 4,096 px. Excessive fragmentation or numerically
 unresolvable dash lengths return errors rather than allowing unbounded work.</p>
 <h3 id="native-visual-test">Native visual test</h3>
 <pre><code class="language-sh">just media paths

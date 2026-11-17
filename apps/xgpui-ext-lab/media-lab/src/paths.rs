@@ -2,47 +2,51 @@ use crate::{model::Lab, ui::button};
 use anyhow::{Result, ensure};
 use gpui::{prelude::*, *};
 use std::{path::Path as FilePath, time::Instant};
-use xgpui_svg::path_effects::{Contour, MeasuredPath, PathEffect};
+use xgpui_curve::kurbo::{Affine, BezPath};
+use xgpui_curve::measure::{MeasuredPath, PathEffect};
 
 pub fn samples() -> Result<Vec<MeasuredPath>> {
-    let p = |x, y| point(px(x), px(y));
-    [
-        vec![
-            Contour::new(p(20., 100.))
-                .cubic_to(p(60., -30.), p(140., 210.), p(190., 85.))
-                .quadratic_to(p(250., -20.), p(300., 100.)),
-        ],
-        vec![
-            Contour::new(p(160., 150.))
-                .cubic_to(p(120., 115.), p(20., 60.), p(70., 30.))
-                .cubic_to(p(105., 5.), p(145., 20.), p(160., 50.))
-                .cubic_to(p(175., 20.), p(215., 5.), p(250., 30.))
-                .cubic_to(p(300., 60.), p(200., 115.), p(160., 150.))
-                .close(),
-        ],
-        vec![
-            Contour::new(p(20., 45.))
-                .line_to(p(110., 45.))
-                .line_to(p(110., 120.))
-                .line_to(p(20., 120.))
-                .close(),
-            Contour::new(p(170., 120.))
-                .quadratic_to(p(170., 5.), p(230., 45.))
-                .cubic_to(p(300., -5.), p(320., 120.), p(250., 135.)),
-        ],
-    ]
-    .into_iter()
-    .map(|c| MeasuredPath::new(&c, px(0.05)))
-    .collect()
+    let mut open = BezPath::new();
+    open.move_to((20., 100.));
+    open.curve_to((60., -30.), (140., 210.), (190., 85.));
+    open.quad_to((250., -20.), (300., 100.));
+    let mut heart = BezPath::new();
+    heart.move_to((160., 150.));
+    heart.curve_to((120., 115.), (20., 60.), (70., 30.));
+    heart.curve_to((105., 5.), (145., 20.), (160., 50.));
+    heart.curve_to((175., 20.), (215., 5.), (250., 30.));
+    heart.curve_to((300., 60.), (200., 115.), (160., 150.));
+    heart.close_path();
+    let mut multiple = BezPath::new();
+    multiple.move_to((20., 45.));
+    multiple.line_to((110., 45.));
+    multiple.line_to((110., 120.));
+    multiple.line_to((20., 120.));
+    multiple.close_path();
+    multiple.move_to((170., 120.));
+    multiple.quad_to((170., 5.), (230., 45.));
+    multiple.curve_to((300., -5.), (320., 120.), (250., 135.));
+    [open, heart, multiple]
+        .iter()
+        .map(|path| Ok(MeasuredPath::new(path, 0.05)?))
+        .collect()
 }
 fn effect(trim: f32, dash: usize, phase: f32) -> Result<PathEffect> {
-    let e = PathEffect::new().trim(0. ..trim)?;
-    match dash {
-        0 => Ok(e),
-        1 => e.dash(&[px(16.), px(8.)], px(phase)),
-        2 => e.dash(&[px(4.), px(7.)], px(phase)),
-        _ => e.dash(&[px(18.), px(5.), px(3.)], px(phase)),
-    }
+    let e = PathEffect::new().trim(0. ..trim as f64)?;
+    let phase = phase as f64;
+    Ok(match dash {
+        0 => e,
+        1 => e.dash(&[16., 8.], phase)?,
+        2 => e.dash(&[4., 7.], phase)?,
+        _ => e.dash(&[18., 5., 3.], phase)?,
+    })
+}
+/// Stroke the effect's visible pieces with GPUI's tessellator (empty when
+/// nothing is visible).
+fn stroke(path: &MeasuredPath, effect: &PathEffect, width: f32) -> Result<Path<Pixels>> {
+    let mut builder = PathBuilder::stroke(px(width));
+    xgpui_curve::gpui_paint::append(&mut builder, &path.apply(effect)?, Affine::IDENTITY);
+    builder.build()
 }
 fn place(mut path: Path<Pixels>, offset: Point<Pixels>, scale: f32) -> Path<Pixels> {
     for v in &mut path.vertices {
@@ -53,7 +57,7 @@ fn place(mut path: Path<Pixels>, offset: Point<Pixels>, scale: f32) -> Path<Pixe
     path
 }
 fn panel(path: &MeasuredPath, effect: PathEffect, width: f32, color: u32, height: f32) -> Div {
-    let built = path.stroke(&effect, px(width));
+    let built = stroke(path, &effect, width);
     let error = built.as_ref().err().map(ToString::to_string);
     let built = built.ok();
     div()
@@ -211,7 +215,7 @@ pub fn render(lab: &mut Lab, window: &mut Window, cx: &mut Context<Lab>) -> Stat
                         "Closed heart / seam joins",
                         "Multiple contours / global trim"
                     ][i],
-                    f32::from(path.length())
+                    path.length()
                 )))
                 .child(
                     div()
@@ -235,7 +239,7 @@ pub fn render(lab: &mut Lab, window: &mut Window, cx: &mut Context<Lab>) -> Stat
                 ),
         );
     }
-    root.child(div().text_xs().text_color(rgb(0x94a19f)).child(if cx.reduce_motion(){"Reduced motion is enabled; animation is paused."}else{"Trim follows total path length across contours. Dash phase restarts per retained contour. Positive phase advances the pattern; odd arrays repeat. Cached length tolerance: 0.05 logical px per leaf."}))
+    root.child(div().text_xs().text_color(rgb(0x94a19f)).child(if cx.reduce_motion(){"Reduced motion is enabled; animation is paused."}else{"Trim follows total path length across contours. Dash phase restarts per retained contour. Positive phase advances the pattern; odd arrays repeat. Measured by xgpui-curve to 0.05 logical px."}))
 }
 
 pub fn capture(png: &FilePath, wgpu: bool) -> Result<()> {
@@ -273,7 +277,7 @@ pub fn capture(png: &FilePath, wgpu: bool) -> Result<()> {
                 5.,
             )?;
             let native = place(
-                path.stroke(&e, px(6.))?,
+                stroke(path, &e, 6.)?,
                 point(px(col as f32 * 400. + 40.), px(row as f32 * 220. + 30.)),
                 1.,
             );

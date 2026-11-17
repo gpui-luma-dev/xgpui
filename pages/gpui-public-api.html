@@ -467,7 +467,7 @@ adjustments while sharing source texture uploads. Private compositor parameter
 blocks grow from four to seven float4 rows; backend context/output layouts and
 public scene record fields are unchanged.</p>
 <h3 id="contour-path-effects">Contour path effects</h3>
-<p><code>xgpui-svg::path_effects</code> adds <code>Contour</code>, <code>Segment</code>, <code>MeasuredPath</code> and <code>PathEffect</code>.
+<p><strong>Deprecated:</strong> these types now delegate to <a href="curve.html#measure-and-svg">xgpui-curve</a>'s <code>measure</code> module, which replaces them; they remain for one release. <code>xgpui-svg::path_effects</code> adds <code>Contour</code>, <code>Segment</code>, <code>MeasuredPath</code> and <code>PathEffect</code>.
 The measurement cache retains Bézier curves and supports total-length trim plus
 per-contour dash phase before native stroke tessellation. This adds no core GPUI
 API or scene-layout changes; existing <code>PathBuilder</code> and SVG raster APIs retain

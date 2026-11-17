@@ -90,7 +90,7 @@ pub struct Lab {
     pub path_dash: usize,
     pub path_phase: f32,
     pub path_width: usize,
-    pub path_samples: Vec<xgpui_svg::path_effects::MeasuredPath>,
+    pub path_samples: Vec<xgpui_curve::measure::MeasuredPath>,
     pub fixtures: Fixtures,
     pub selected: usize,
     pub loader: MediaLoader,

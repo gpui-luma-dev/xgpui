@@ -346,20 +346,26 @@ impl MeasuredPath {
                 i = (i + 1) % effect.dash.len();
                 remaining = effect.dash[i];
             }
-            // Join the dash that crosses the start of an untrimmed closed contour.
+            // Join the dash that crosses the start of an untrimmed closed
+            // contour: it is emitted last, in path order, as the piece that
+            // runs from the final dash through the start.
             let wraps = contour.closed && from == 0. && to == contour.length;
-            if wraps && visible.len() > 1 && visible[0].0 == 0. && visible.last().unwrap().1 == to {
-                let (first_end, last_start) = (visible[0].1, visible.last().unwrap().0);
-                visible.remove(0);
-                visible.pop();
-                self.slice(contour, last_start, to, false, &mut out, &mut pieces)?;
-                self.append(contour, 0., first_end, &mut out);
-            } else if wraps && visible.len() == 1 && visible[0] == (0., to) {
-                visible.clear();
+            if wraps && visible.len() == 1 && visible[0] == (0., to) {
                 self.slice(contour, 0., to, true, &mut out, &mut pieces)?;
+                continue;
+            }
+            let mut joined = None;
+            if wraps && visible.len() > 1 && visible[0].0 == 0. && visible.last().unwrap().1 == to {
+                let first_end = visible.remove(0).1;
+                let last_start = visible.pop().unwrap().0;
+                joined = Some((last_start, first_end));
             }
             for (a, b) in visible {
                 self.slice(contour, a, b, false, &mut out, &mut pieces)?;
+            }
+            if let Some((last_start, first_end)) = joined {
+                self.slice(contour, last_start, to, false, &mut out, &mut pieces)?;
+                self.append(contour, 0., first_end, &mut out);
             }
         }
         Ok(out)
