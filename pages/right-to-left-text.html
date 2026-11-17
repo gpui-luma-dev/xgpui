@@ -21,7 +21,7 @@
 <main id="content" tabindex="-1">
 <p><a href="parley-text.html">← xgpui-parley</a></p><p class="guide-intro"><strong>How-to.</strong> Hebrew, Arabic and mixed text in a GPUI app: plain GPUI text by default, <code>typeset()</code> when you need an explicit direction.</p><article class="extension-document"><h1 id="right-to-left-text">Right-to-left text</h1>
 <p>With Parley as the text system and one call to <code>install_text_layout</code>, ordinary GPUI text handles right-to-left and mixed text: <code>div().child("…")</code>, <code>StyledText</code>, tooltips, list rows and third-party widgets. Each paragraph's direction comes from its first strong character. Reach for <code>typeset()</code> only when the text can't decide for itself, for example a string that starts with Latin in a right-to-left UI.</p>
-<p><strong>Not released yet.</strong> This needs the release after XGPUI 4.1.0 (xgpui-parley after 0.7.0), tracked in <a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>. Until then, depend on the repository.</p>
+<p>Requires <code>xgpui</code> 4.2.0 and <code>xgpui-parley</code> 0.8.0 (<a href="https://github.com/gpui-luma-dev/xgpui/issues/332">#332</a>).</p>
 <h2 id="what-you-get">What you get</h2>
 <table><thead><tr><th>Setup</th><th>Plain GPUI text</th><th><code>typeset()</code></th></tr></thead><tbody>
 <tr><td>Native text system (CoreText, DirectWrite, …)</td><td>Single-line right-to-left and mixed labels. Wrapped right-to-left text puts its lines in painting order, so the first words land on the last line.</td><td>Renders as plain GPUI text</td></tr>
@@ -31,11 +31,10 @@
 <h2 id="example">Example</h2>
 <p>A complete app: Parley as the text system, plain GPUI text whose direction comes from the text, and <code>typeset(…).rtl()</code> for a Latin-first string in a right-to-left UI.</p>
 <p><span class="code-legend">Highlighted lines</span> are what XGPUI adds to a standard GPUI app; everything else is ordinary GPUI. The <code>gpui</code> and <code>gpui-platform</code> dependencies are XGPUI's packages of them (<code>xgpui</code>, <code>xgpui-platform</code>).</p>
-<pre data-highlight="5-6"><code class="language-toml">[dependencies]
-# Until the next release: the repository (packages xgpui, xgpui-platform, xgpui-parley).
-gpui = { package = "xgpui", git = "https://github.com/gpui-luma-dev/xgpui" }
-gpui-platform = { package = "xgpui-platform", git = "https://github.com/gpui-luma-dev/xgpui" }
-xgpui-parley = { git = "https://github.com/gpui-luma-dev/xgpui" }
+<pre data-highlight="4-5"><code class="language-toml">[dependencies]
+gpui = { package = "xgpui", version = "4.2.0" }
+gpui-platform = { package = "xgpui-platform", version = "3.0.1" }
+xgpui-parley = "0.8.0"
 parley = { version = "=0.12.0", default-features = false, features = ["std", "complex-scripts"] }
 anyhow = "1"
 </code></pre>
