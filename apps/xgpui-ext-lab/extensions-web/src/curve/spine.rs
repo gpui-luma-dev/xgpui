@@ -68,6 +68,7 @@ pub struct SpinePanel {
     drag: Option<usize>,
     hover: Option<KPoint>,
     area: Area,
+    view: Camera,
     program: Option<Result<ShaderProgram<SpineInstance>, String>>,
     cpu: Option<CpuFrame>,
 }
@@ -75,6 +76,7 @@ pub struct SpinePanel {
 /// A cached CPU rendering and the state it was drawn for.
 struct CpuFrame {
     points: Vec<f64>,
+    camera: [f64; 6],
     bounds: Bounds<Pixels>,
     mode: Mode,
     limit: bool,
@@ -98,6 +100,7 @@ impl SpinePanel {
             drag: None,
             hover: None,
             area: area(),
+            view: Camera::default(),
             program: None,
             cpu: None,
         }
@@ -129,6 +132,7 @@ impl SpinePanel {
             && frame.mode == self.mode
             && frame.limit == self.limit
             && frame.trim == self.trim
+            && frame.camera == self.view.around(bounds).as_coeffs()
         {
             return Some(frame.image.clone());
         }
@@ -139,10 +143,14 @@ impl SpinePanel {
         let (iw, ih) = ((w / 2.).ceil() as u32, (h / 2.).ceil() as u32);
         let spine = self.spine(bounds);
         let (lo, hi) = TRIMS[self.trim];
+        // Canvas-local pixel → unzoomed spine space.
+        let o = kp(bounds.origin).to_vec2();
+        let inverse =
+            (Affine::translate(-o) * self.view.around(bounds) * Affine::translate(o)).inverse();
         let mut bytes = Vec::with_capacity((iw * ih * 4) as usize);
         for y in 0..ih {
             for x in 0..iw {
-                let p = KPoint::new(x as f64 * 2. + 1., y as f64 * 2. + 1.);
+                let p = inverse * KPoint::new(x as f64 * 2. + 1., y as f64 * 2. + 1.);
                 let hit = spine.project_range(p, lo, hi);
                 let [r, g, b] = shade(self.mode, hit.distance, hit.s);
                 // BGRA, as GPUI render images expect.
@@ -154,6 +162,7 @@ impl SpinePanel {
         let image = Arc::new(RenderImage::new(vec![image::Frame::new(buffer)]));
         self.cpu = Some(CpuFrame {
             points: key,
+            camera: self.view.around(bounds).as_coeffs(),
             bounds,
             mode: self.mode,
             limit: self.limit,
@@ -226,6 +235,7 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
     } else {
         panel.cpu_image(bounds)
     };
+    let view = panel.view;
     let (mode, gpu, limit, frame_t, points) = (
         panel.mode,
         panel.gpu,
@@ -286,7 +296,10 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
                     cx.notify();
                 },
             )),
-        );
+        )
+        .child(view_button(cx, view, |lab: &mut CurveLab| {
+            &mut lab.spine.view
+        }));
     let reach = spine.reach();
     let readout = format!(
         "Length {:.1}px · max curvature {:.4}/px · reach {} · {}",
@@ -308,9 +321,11 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
     let surface = interactive(
         "spine-surface",
         cx,
+        &lab.spine.area,
+        |lab: &mut CurveLab| &mut lab.spine.view,
         |this: &mut CurveLab, at, _, _| {
             let b = this.spine.area.get();
-            let t = unit(b);
+            let t = this.spine.view.around(b) * unit(b);
             this.spine.drag = (0..3).min_by(|&a, &c| {
                 (t * this.spine.points[a])
                     .distance(kp(at))
@@ -321,10 +336,12 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
             {
                 this.spine.drag = None;
             }
+            this.spine.drag.is_some()
         },
         |this: &mut CurveLab, at, _| {
             if let Some(i) = this.spine.drag {
-                let m = to_model(unit(this.spine.area.get()), at);
+                let b = this.spine.area.get();
+                let m = to_model(this.spine.view.around(b) * unit(b), at);
                 this.spine.points[i] = KPoint::new(m.x.clamp(0.02, 0.98), m.y.clamp(0.02, 0.98));
             }
         },
@@ -332,8 +349,10 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
     )
     .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, cx| {
         let b = this.spine.area.get();
-        let local = kp(e.position) - kp(b.origin);
-        this.spine.hover = Some(local.to_point());
+        let o = kp(b.origin).to_vec2();
+        // Window → unzoomed canvas-local pixels.
+        let world = (this.spine.view.around(b) * Affine::translate(o)).inverse() * kp(e.position);
+        this.spine.hover = Some(world);
         cx.notify();
     }))
     .rounded_lg()
@@ -350,22 +369,25 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
     .child(
         canvas(record(&lab.spine.area), move |bounds, _, window, _| {
             let spine = spine_in(points, limit, bounds);
+            // Unzoomed canvas-local pixels → window, through the camera.
+            let t = view.around(bounds) * Affine::translate(kp(bounds.origin).to_vec2());
             if gpu && let Ok(program) = &program {
-                let k = spine.shader_params(lo as f32, hi as f32);
+                // Fill the visible canvas; the spine goes in camera space (canvas-local
+                // pixels after pan and zoom) and the shader divides distances by the
+                // zoom so the pattern scales with the view.
+                let zoom = view.zoom();
+                let local = Affine::translate(-kp(bounds.origin).to_vec2()) * t;
+                let q = spine.quad();
+                let [p0, c, p1] = [q.p0, q.p1, q.p2].map(|p| local * p);
                 let instance = SpineInstance {
-                    a: [k[0], k[1], k[2], k[3]],
-                    b: [k[4], k[5], k[6], k[7]],
-                    style: [mode.index(), RADIUS as f32, 0., 0.],
+                    a: [p0.x as f32, p0.y as f32, c.x as f32, c.y as f32],
+                    b: [p1.x as f32, p1.y as f32, lo as f32, hi as f32],
+                    style: [mode.index(), RADIUS as f32, zoom as f32, 0.],
                 };
                 if let Err(e) = window.paint_custom_shader(bounds, program, instance) {
                     log::error!("spine field: {e:#}");
                 }
             }
-            // Local pixels → window.
-            let t = Affine::translate((
-                f64::from(f32::from(bounds.origin.x)),
-                f64::from(f32::from(bounds.origin.y)),
-            ));
             let q = spine.quad();
             let mut full = BezPath::new();
             full.move_to(q.p0);

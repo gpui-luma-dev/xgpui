@@ -3,7 +3,7 @@
 use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
 use xgpui_curve::geom;
-use xgpui_curve::kurbo::{BezPath, Point as KPoint};
+use xgpui_curve::kurbo::{Affine, BezPath, Point as KPoint};
 use xgpui_curve::node::{AutoSmooth, Node, NodeMode, NodePath, Side};
 
 const W: f64 = 900.;
@@ -22,6 +22,7 @@ pub struct NodesPanel {
     comb: bool,
     drag: Option<Drag>,
     area: Area,
+    view: Camera,
 }
 
 fn initial() -> NodePath {
@@ -62,11 +63,18 @@ impl NodesPanel {
             comb: true,
             drag: None,
             area: area(),
+            view: Camera::default(),
         }
     }
 
-    fn down(&mut self, at: Point<Pixels>, clicks: usize) {
-        let t = fit(self.area.get(), W, H);
+    /// Design space to window pixels, through the camera.
+    fn transform(&self, bounds: Bounds<Pixels>) -> Affine {
+        self.view.around(bounds) * fit(bounds, W, H)
+    }
+
+    /// Returns whether something was hit; empty space pans the view.
+    fn down(&mut self, at: Point<Pixels>, clicks: usize) -> bool {
+        let t = self.transform(self.area.get());
         let scale = t.as_coeffs()[0];
         let m = to_model(t, at);
         let near = |p: KPoint| (p - m).hypot() * scale <= 12.;
@@ -75,7 +83,7 @@ impl NodesPanel {
                 for (side, h) in [(Side::In, n.handle_in), (Side::Out, n.handle_out)] {
                     if h.is_some_and(near) {
                         self.drag = Some(Drag::Handle(i, side));
-                        return;
+                        return true;
                     }
                 }
             }
@@ -83,7 +91,7 @@ impl NodesPanel {
         if let Some(i) = self.path.nodes().iter().position(|n| near(n.anchor)) {
             self.selected = Some(i);
             self.drag = Some(Drag::Anchor(i));
-            return;
+            return true;
         }
         if let Some(hit) = geom::nearest_on_path(&self.path.to_bezpath(), m)
             && hit.distance * scale <= 10.
@@ -100,15 +108,15 @@ impl NodesPanel {
                     last: m,
                 });
             }
-            return;
+            return true;
         }
         self.selected = None;
         self.drag = None;
+        false
     }
 
     fn drag_to(&mut self, at: Point<Pixels>) {
-        let m = to_model(fit(self.area.get(), W, H), at);
-        let m = KPoint::new(m.x.clamp(0., W), m.y.clamp(0., H));
+        let m = to_model(self.transform(self.area.get()), at);
         match self.drag {
             Some(Drag::Anchor(i)) => {
                 let _ = self.path.move_anchor(i, m);
@@ -128,7 +136,7 @@ impl NodesPanel {
 pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLab>) -> AnyElement {
     let panel = &lab.nodes;
     let path = panel.path.clone();
-    let (selected, comb) = (panel.selected, panel.comb);
+    let (selected, comb, view) = (panel.selected, panel.comb, panel.view);
     let current = selected.and_then(|i| path.nodes().get(i)).map(|n| n.mode);
     let mut controls = div().flex().flex_wrap().gap_2();
     for (label, mode) in MODES {
@@ -178,6 +186,9 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
                 cx.notify();
             })),
         )
+        .child(view_button(cx, view, |lab: &mut CurveLab| {
+            &mut lab.nodes.view
+        }))
         .child(div().text_color(rgb(0x9fb0cc)).child(match selected {
             Some(i) => format!("Node {i} selected · mode buttons apply to it"),
             None => "No node selected · mode buttons apply to all".into(),
@@ -185,15 +196,18 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
     let surface = interactive(
         "nodes-surface",
         cx,
+        &panel.area,
+        |lab: &mut CurveLab| &mut lab.nodes.view,
         |this: &mut CurveLab, at, clicks, _| this.nodes.down(at, clicks),
         |this: &mut CurveLab, at, _| this.nodes.drag_to(at),
         |this: &mut CurveLab, _| this.nodes.drag = None,
     )
     .rounded_lg()
+    .overflow_hidden()
     .bg(rgb(0x101828))
     .child(
         canvas(record(&panel.area), move |bounds, _, window, _| {
-            let t = fit(bounds, W, H);
+            let t = view.around(bounds) * fit(bounds, W, H);
             if comb {
                 let teeth = path.curvature_comb(24, 4000.);
                 let mut spine = BezPath::new();

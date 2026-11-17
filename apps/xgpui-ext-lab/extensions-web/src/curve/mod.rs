@@ -155,6 +155,14 @@ impl Render for CurveLab {
                     })),
             )
             .child(div().text_color(rgb(0x9fb0cc)).child(panel.about()))
+            .when(panel != Panel::Series, |el| {
+                el.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(0x7f8fa9))
+                        .child(common::NAV_HINT),
+                )
+            })
             .child(div().flex_1().min_h_0().child(body))
     }
 }

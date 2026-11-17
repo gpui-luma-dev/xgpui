@@ -29,6 +29,7 @@ pub struct ShapesPanel {
     taper: bool,
     hover_sector: Option<usize>,
     draw_area: Area,
+    view: Camera,
     arc_area: Area,
 }
 
@@ -43,6 +44,7 @@ impl ShapesPanel {
             taper: true,
             hover_sector: None,
             draw_area: area(),
+            view: Camera::default(),
             arc_area: area(),
         };
         // A starting scribble so the stroke is visible before drawing.
@@ -94,6 +96,7 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
     let fitted = panel.fitted.clone();
     let raw = panel.raw.clone();
     let taper = panel.taper;
+    let view = panel.view;
     let hover = panel.hover_sector;
     let profile = if taper {
         StrokeProfile::tapered(18., 0.25, 0.3)
@@ -152,7 +155,10 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
                 this.shapes.fitted = None;
                 cx.notify();
             })),
-        );
+        )
+        .child(view_button(cx, view, |lab: &mut CurveLab| {
+            &mut lab.shapes.view
+        }));
 
     let squircle = card("Squircle (fill) vs circular corners (outline)").child(
         div().w(px(300.)).h(px(220.)).child(
@@ -221,15 +227,20 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
             interactive(
                 "freehand",
                 cx,
+                &panel.draw_area,
+                |lab: &mut CurveLab| &mut lab.shapes.view,
                 |this: &mut CurveLab, at, _, _| {
-                    let m = to_model(fit(this.shapes.draw_area.get(), DRAW_W, DRAW_H), at);
+                    let b = this.shapes.draw_area.get();
+                    let m = to_model(this.shapes.view.around(b) * fit(b, DRAW_W, DRAW_H), at);
                     this.shapes.raw = vec![m];
                     this.shapes.fitted = None;
                     this.shapes.drawing = true;
+                    true
                 },
                 |this: &mut CurveLab, at, _| {
                     if this.shapes.drawing {
-                        let m = to_model(fit(this.shapes.draw_area.get(), DRAW_W, DRAW_H), at);
+                        let b = this.shapes.draw_area.get();
+                        let m = to_model(this.shapes.view.around(b) * fit(b, DRAW_W, DRAW_H), at);
                         this.shapes.raw.push(m);
                     }
                 },
@@ -241,10 +252,11 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
                 },
             )
             .rounded_md()
+            .overflow_hidden()
             .bg(rgb(0x0c1220))
             .child(
                 canvas(record(&panel.draw_area), move |bounds, _, window, _| {
-                    let t = fit(bounds, DRAW_W, DRAW_H);
+                    let t = view.around(bounds) * fit(bounds, DRAW_W, DRAW_H);
                     if let Some(o) = &outline {
                         filled(window, o, t, rgb(0xe8eefc));
                     }

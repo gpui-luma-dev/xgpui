@@ -41,6 +41,7 @@ pub struct MeshPanel {
     tangents: bool,
     drag: Option<Drag>,
     area: Area,
+    view: Camera,
     cache: Option<(
         Vec<xgpui_curve::mesh::MeshControl>,
         Arc<xgpui_shader::MeshGradient>,
@@ -72,6 +73,7 @@ impl MeshPanel {
             tangents: false,
             drag: None,
             area: area(),
+            view: Camera::default(),
             cache: None,
         }
     }
@@ -99,11 +101,17 @@ impl MeshPanel {
         Some(paint)
     }
 
-    fn down(&mut self, at: Point<Pixels>) {
+    /// Lattice space (0..1 of the canvas) to window pixels, through the camera.
+    fn transform(&self, bounds: Bounds<Pixels>) -> Affine {
+        self.view.around(bounds) * unit(bounds)
+    }
+
+    fn down(&mut self, at: Point<Pixels>) -> bool {
         let bounds = self.area.get();
-        let t = unit(bounds);
+        let t = self.transform(bounds);
         let m = to_model(t, at);
-        let scale = f64::from(f32::from(bounds.size.width.min(bounds.size.height))).max(1.);
+        let scale = f64::from(f32::from(bounds.size.width.min(bounds.size.height))).max(1.)
+            * self.view.zoom();
         let mut best: Option<(f64, usize, usize)> = None;
         for r in 0..ROWS {
             for c in 0..COLS {
@@ -124,10 +132,11 @@ impl MeshPanel {
                 last: m,
             })
         };
+        self.drag.is_some()
     }
 
     fn drag_to(&mut self, at: Point<Pixels>) {
-        let m = to_model(unit(self.area.get()), at);
+        let m = to_model(self.transform(self.area.get()), at);
         match self.drag {
             Some(Drag::Node(r, c)) => {
                 let _ = self.lattice.set_point(
@@ -161,7 +170,7 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
     let panel = &mut lab.mesh;
     let gradient = panel.gradient();
     let lattice = panel.lattice.clone();
-    let (curved, tangents) = (panel.curved, panel.tangents);
+    let (curved, tangents, view) = (panel.curved, panel.tangents, panel.view);
     let explicit = (0..ROWS)
         .flat_map(|r| (0..COLS).map(move |c| (r, c)))
         .filter(|&(r, c)| {
@@ -209,6 +218,9 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
                 cx.notify();
             })),
         )
+        .child(view_button(cx, view, |lab: &mut CurveLab| {
+            &mut lab.mesh.view
+        }))
         .child(div().text_color(rgb(0x9fb0cc)).child(format!(
             "{explicit} of {} nodes have explicit tangents",
             ROWS * COLS
@@ -216,6 +228,8 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
     let surface = interactive(
         "mesh-surface",
         cx,
+        &panel.area,
+        |lab: &mut CurveLab| &mut lab.mesh.view,
         |this: &mut CurveLab, at, _, _| this.mesh.down(at),
         |this: &mut CurveLab, at, _| this.mesh.drag_to(at),
         |this: &mut CurveLab, _| this.mesh.drag = None,
@@ -225,16 +239,22 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
     .bg(rgb(0x05070c))
     .child(
         canvas(record(&panel.area), move |bounds, _, window, _| {
+            let camera = view.around(bounds);
             if let Some(content) = gradient {
+                // The gradient fills its rectangle, so zoom the rectangle itself.
+                let (a, b) = (
+                    camera * kp(bounds.origin),
+                    camera * kp(bounds.bottom_right()),
+                );
                 window.paint_custom(
                     CustomGeometry::RoundedRect {
-                        bounds,
+                        bounds: Bounds::from_corners(gp(a), gp(b)),
                         corner_radii: Corners::default(),
                     },
                     content,
                 );
             }
-            let t = unit(bounds);
+            let t = camera * unit(bounds);
             let wire = if curved {
                 lattice.wireframe()
             } else {

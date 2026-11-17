@@ -21,6 +21,7 @@ pub struct FuncPanel {
     kind: Kind,
     drag: Option<usize>,
     area: Area,
+    view: Camera,
     started: Instant,
     animate: bool,
 }
@@ -38,6 +39,7 @@ impl FuncPanel {
             kind: Kind::Monotone,
             drag: None,
             area: area(),
+            view: Camera::default(),
             started: Instant::now(),
             animate: true,
         }
@@ -69,8 +71,8 @@ impl FuncPanel {
     }
 
     /// Model is y-up in 0..1; the design square is y-down.
-    fn transform(bounds: Bounds<Pixels>) -> Affine {
-        fit(bounds, S, S) * Affine::new([S, 0., 0., -S, 0., S])
+    fn transform(view: Camera, bounds: Bounds<Pixels>) -> Affine {
+        view.around(bounds) * fit(bounds, S, S) * Affine::new([S, 0., 0., -S, 0., S])
     }
 }
 
@@ -121,6 +123,7 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
     let curve = panel.curve();
     let knots = panel.knots.clone();
     let kind = panel.kind;
+    let view = panel.view;
     let reduce = cx.reduce_motion();
     let phase = if panel.animate && !reduce {
         window.request_animation_frame();
@@ -148,23 +151,30 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
                     cx.notify();
                 },
             )),
-        );
+        )
+        .child(view_button(cx, view, |lab: &mut CurveLab| {
+            &mut lab.func.view
+        }));
     let lut = curve.as_ref().map(|c| c.to_lut_f32::<256>());
     let editor_curve = curve.clone();
     let editor = interactive(
         "tone-curve",
         cx,
+        &panel.area,
+        |lab: &mut CurveLab| &mut lab.func.view,
         |this: &mut CurveLab, at, _, _| {
-            let t = FuncPanel::transform(this.func.area.get());
+            let t = FuncPanel::transform(this.func.view, this.func.area.get());
             this.func.drag = this
                 .func
                 .knots
                 .iter()
                 .position(|k| (t * *k).distance(kp(at)) <= 12.);
+            this.func.drag.is_some()
         },
         |this: &mut CurveLab, at, _| {
             if let Some(i) = this.func.drag {
-                let m = FuncPanel::transform(this.func.area.get()).inverse() * kp(at);
+                let m =
+                    FuncPanel::transform(this.func.view, this.func.area.get()).inverse() * kp(at);
                 let k = &mut this.func.knots;
                 let n = k.len();
                 let (lo, hi) = match i {
@@ -177,9 +187,10 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
         },
         |this: &mut CurveLab, _| this.func.drag = None,
     )
+    .overflow_hidden()
     .child(
         canvas(record(&panel.area), move |bounds, _, window, _| {
-            let t = FuncPanel::transform(bounds);
+            let t = FuncPanel::transform(view, bounds);
             let frame = Affine::IDENTITY;
             let (a, b) = (t * KPoint::new(0., 0.), t * KPoint::new(1., 1.));
             window.paint_quad(fill(

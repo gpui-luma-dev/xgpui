@@ -5,13 +5,14 @@ struct Parameters {
     a: vec4<f32>,
     // p1.xy in pixels, t_min, t_max.
     b: vec4<f32>,
-    // mode (0 bands, 1 texture, 2 bent field), kernel radius, unused, unused.
+    // mode (0 bands, 1 texture, 2 bent field), kernel radius, view zoom, unused.
     style: vec4<f32>,
 }
 
 fn shade(input: ShaderInput, p: Parameters) -> vec4<f32> {
     let r = curve_spine_project(input.position, p.a.xy, p.a.zw, p.b.xy, p.b.z, p.b.w);
-    let d = r.x;
+    // Back to unzoomed pixels so the pattern zooms with the view.
+    let d = r.x / max(p.style.z, 1e-6);
     let along = r.z;
     let mode = p.style.x;
     let radius = max(p.style.y, 1.0);
