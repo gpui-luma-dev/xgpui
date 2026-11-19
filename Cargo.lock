@@ -8160,7 +8160,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-macos"
-version = "5.0.1"
+version = "5.0.2"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -8290,7 +8290,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-svg"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "web-time",
