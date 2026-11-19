@@ -47,8 +47,16 @@ pub struct Scene<T> {
 }
 
 impl<T> Scene<T> {
+    /// Build a scene, preserving caller paint indices.
+    ///
+    /// # Panics
+    /// Panics if any item has non-finite or inverted bounds.
     pub fn new(items: impl IntoIterator<Item = SceneItem<T>>) -> Self {
         let items: Vec<_> = items.into_iter().collect();
+        assert!(
+            items.iter().all(|item| item.bounds.is_valid()),
+            "scene item bounds must be finite and ordered"
+        );
         let index = SpatialIndex::new(&items);
         Self {
             items,
@@ -147,6 +155,19 @@ mod tests {
             data,
         }
     }
+    #[test]
+    fn constructor_rejects_nonfinite_and_inverted_bounds() {
+        for bounds in [
+            item(f64::NAN, 1., 0).bounds,
+            item(0., f64::INFINITY, 0).bounds,
+            item(2., 1., 0).bounds,
+        ] {
+            assert!(
+                std::panic::catch_unwind(|| Scene::new([SceneItem { bounds, data: () }])).is_err()
+            );
+        }
+    }
+
     #[test]
     fn cache_key_tracks_geometry_and_distinguishes_replacement_scenes() {
         let mut scene = Scene::new([item(0., 10., 0)]);

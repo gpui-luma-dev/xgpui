@@ -37,7 +37,8 @@ updates one item and refits its leaf and ancestors without rebuilding the tree.
 It returns false for invalid bounds or a missing index and leaves the scene
 unchanged. Rebuild for additions/removals or to restore partition quality after
 many large moves. Bounds must
-have finite, ordered min/max coordinates. Proxy selection uses original world
+have finite, ordered min/max coordinates; `Scene::new` panics if any item violates
+this requirement. Proxy selection uses original world
 bounds, without a screen-space tolerance.
 
 Sparse queries prune unrelated nodes. Dense or heavily overlapping scenes can
@@ -58,7 +59,8 @@ This is bounded local alignment, without equal-spacing or angle snapping.
 occupied cells. Each cell reports world bounds and an object count. Use
 `world_to_map`/`map_to_world` for aspect-preserving projection and navigation;
 inverse mapping clamps letterboxed regions to scene bounds. Map sizes must be
-positive and finite; world spans must be finite. Empty and zero-area scenes
+positive and finite; finite ordered bounds are supported even when their span
+exceeds `f64::MAX`. Empty and zero-area scenes
 receive a usable fallback domain. This is an approximate density map, not a
 thumbnail renderer. Rebuild the summary after scene edits, not on every redraw.
 `camera.center_on(world)` recenters without changing zoom.
