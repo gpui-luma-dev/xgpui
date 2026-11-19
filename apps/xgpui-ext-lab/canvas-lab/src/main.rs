@@ -333,11 +333,12 @@ impl Render for Lab {
                 if event.keystroke.key == "m" { this.cancel_interaction(); this.show_minimap = !this.show_minimap; cx.notify(); }
                 if event.keystroke.key == "escape" { this.cancel_interaction(); cx.notify(); }
                 if event.keystroke.key == "r" { this.reset_view(); cx.notify(); }
-                if event.keystroke.key == "o" {
+                if event.keystroke.key == "o" && !this.fractal.enabled {
                     this.cancel_interaction();
-                    this.camera = Camera2D::default();
                     let viewport = this.viewport();
-                    this.camera.zoom_at(WorldPoint::new(viewport.x / 2., viewport.y / 2.), viewport, 0.01);
+                    if let Some(bounds) = this.scene.bounds() {
+                        this.camera.fit_bounds_with_limits(bounds, viewport, 24., 1e-6, 64.);
+                    }
                     cx.notify();
                 }
                 if event.keystroke.key == "b" { this.cancel_interaction(); this.scene = make_scene(if this.scene.len() == 10_000 { 100_000 } else { 10_000 }); this.selected.clear(); this.invalidate_preview(); cx.notify(); }
@@ -357,7 +358,7 @@ impl Render for Lab {
                         cx.notify();
                     })))
                 .child(if self.fractal.enabled { if window.color_status().effective() == WindowColorMode::WideGamutSdr { "Mandelbrot · native P3 output • Drag: pan • Scroll: zoom • F: cards • R: reset" } else { "Mandelbrot · P3 source, sRGB preview • Drag: pan • Scroll: zoom • F: cards • R: reset" } } else { "Shift-drag: select • Drag cards: move/snap • Option: free move • Esc: cancel" })
-                .child(if self.fractal.enabled { if window.color_status().effective() == WindowColorMode::WideGamutSdr { "Display P3 wide SDR • M: preview (adds capture cost)" } else { "Standard SDR output — native P3 is not active • M: preview (adds capture cost)" } } else { "Scroll / Pinch: zoom • Background / Space-drag: pan • G: grid • R: reset • O: overview • B: 10k/100k • M: panel • T: map/view • F: Mandelbrot" })
+                .child(if self.fractal.enabled { if window.color_status().effective() == WindowColorMode::WideGamutSdr { "Display P3 wide SDR • M: preview (adds capture cost)" } else { "Standard SDR output — native P3 is not active • M: preview (adds capture cost)" } } else { "Scroll / Pinch: zoom • Background / Space-drag: pan • G: grid • R: reset • O: fit scene • B: 10k/100k • M: panel • T: map/view • F: Mandelbrot" })
                 .child(if self.fractal.enabled { format!("{:.1}% • {}", self.camera.zoom() * 100., self.fractal.status()) } else { format!("{:.1}% • {count}/{} visible • {full_count} elements • {proxy_count} proxies ({point_count} points) • {} selected", zoom * 100., self.scene.len(), self.selected.len()) }))
             .child(div().id("viewport").relative().flex_1().w_full().overflow_hidden()
                 .on_scroll(cx.listener(|this, event: &ScrollEvent, _, cx| {

@@ -177,9 +177,9 @@ fn paint(
         if let Some(thumbnail) = thumbnail
             && let Err(error) =
                 window.paint_image(bounds, bounds, Corners::default(), thumbnail, 0, false)
-            {
-                eprintln!("minimap thumbnail: {error}");
-            }
+        {
+            eprintln!("minimap thumbnail: {error}");
+        }
         let a = screen(visible.min);
         let b = screen(visible.max);
         // Keep tiny high-zoom viewports visible without changing navigation math.
@@ -351,6 +351,21 @@ pub(super) fn smoke_invalidation_and_modes(
             cx,
         );
         let lab = entity.read(cx);
+        if key == "o" {
+            let viewport = lab.viewport();
+            let projected = lab
+                .camera
+                .world_bounds_to_screen(lab.scene.bounds().unwrap(), viewport);
+            assert!(projected.min.x >= 24. - 1e-4 && projected.min.y >= 24. - 1e-4);
+            assert!(
+                projected.max.x <= viewport.x - 24. + 1e-4
+                    && projected.max.y <= viewport.y - 24. + 1e-4
+            );
+            assert!(
+                (projected.min.x.min(projected.min.y) - 24.).abs() < 1e-4,
+                "fit scene uses the available padded viewport"
+            );
+        }
         assert!(
             !lab.map_drag && !lab.drag.is_active() && lab.gesture.is_none(),
             "mode change cancels pointer ownership: {key}"

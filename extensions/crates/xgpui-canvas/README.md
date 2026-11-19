@@ -119,3 +119,19 @@ The website includes `?demo=canvas` (retained cards, selection/snapping and dens
 minimap) and `?demo=mandelbrot` (bounded progressive CPU fractal). They share this
 crate with the native lab. See [controls, API and browser limits](https://xgpui.dev/canvas.html).
 Build with `bash apps/xgpui-ext-lab/extensions-web/build.sh --release`.
+
+## Fit and project a view
+
+`camera.center()` returns the current world center. Use
+`camera.fit_bounds(bounds, viewport, padding)` for default zoom limits, or
+`fit_bounds_with_limits(bounds, viewport, padding, min, max)` for a larger scene.
+Both return false without changing the camera for invalid input or a fit that
+requires zoom below the minimum. Padding is uniform logical pixels. Point-sized
+bounds use the maximum zoom; a maximum limit may leave extra space.
+
+`world_bounds_to_screen` and `screen_bounds_to_world` project both corners using
+the same conventions as the point helpers. The checked
+`world_to_screen_affine` / `screen_to_world_affine` methods return optional
+`[a, b, c, d, e, f]` coefficients suitable for `kurbo::Affine::new`. Finite absolute
+affine coefficients can still lose local precision at distant centers; prefer
+the direct point helpers in those views.

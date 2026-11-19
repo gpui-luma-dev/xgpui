@@ -116,12 +116,14 @@ impl<T> Scene<T> {
     ) -> impl Iterator<Item = VisibleItem<'_, T>> {
         self.query(camera.visible_world_bounds(viewport))
             .map(move |item| {
-                let min = camera.world_to_screen(item.bounds.min, viewport);
-                let max = camera.world_to_screen(item.bounds.max, viewport);
+                let screen_bounds = camera.world_bounds_to_screen(item.bounds, viewport);
                 VisibleItem {
                     item,
-                    screen_bounds: WorldBounds { min, max },
-                    detail: LevelOfDetail::for_size(max.x - min.x, max.y - min.y),
+                    screen_bounds,
+                    detail: LevelOfDetail::for_size(
+                        screen_bounds.max.x - screen_bounds.min.x,
+                        screen_bounds.max.y - screen_bounds.min.y,
+                    ),
                 }
             })
     }
