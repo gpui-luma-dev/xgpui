@@ -173,6 +173,26 @@ mod tests {
     }
 
     #[test]
+    fn overflowing_snap_correction_preserves_valid_requested_movement() {
+        let moving = WorldBounds {
+            min: Point::new(-f64::MAX, 0.),
+            max: Point::new(-f64::MAX, 1.),
+        };
+        let scene = Scene::new([crate::SceneItem {
+            bounds: WorldBounds {
+                min: Point::new(f64::MAX, 0.),
+                max: Point::new(f64::MAX, 1.),
+            },
+            data: (),
+        }]);
+        let delta = Point::new(f64::MAX, 0.);
+        let result = scene.snap_translation(moving, delta, f64::MAX, f64::MAX, |_| false);
+        assert_eq!(result.delta, delta);
+        assert!(result.x.is_none() && result.y.is_none());
+        assert!(moving.translated(result.delta).is_valid());
+    }
+
+    #[test]
     fn overflowing_search_does_not_query_or_generate_guides() {
         let moving = WorldBounds {
             min: Point::new(f64::MAX, 0.),
