@@ -37,8 +37,8 @@ impl Overview {
         };
         for item in scene.items() {
             let center = Point::new(
-                item.bounds.min.x * 0.5 + item.bounds.max.x * 0.5,
-                item.bounds.min.y * 0.5 + item.bounds.max.y * 0.5,
+                midpoint(item.bounds.min.x, item.bounds.max.x),
+                midpoint(item.bounds.min.y, item.bounds.max.y),
             );
             let x = ((fraction(center.x, domain.min.x, domain.max.x) * SIDE as f64) as usize)
                 .min(SIDE - 1);
@@ -80,50 +80,25 @@ impl Overview {
 
     // Return occupied map size and letterbox offset, without materializing a world extent.
     fn projection(&self, size: Point) -> (Point, Point) {
-        let magnitude = self
-            .domain
-            .min
-            .x
-            .abs()
-            .max(self.domain.max.x.abs())
-            .max(self.domain.min.y.abs())
-            .max(self.domain.max.y.abs());
-        let extent = |min: f64, max: f64| {
+        // Compare fit scales in log space. Normalizing by a common world magnitude
+        // can erase a thin axis before a large viewport scale makes it representable.
+        let log_extent = |min: f64, max: f64| {
             let span = max - min;
             if span.is_finite() {
-                span / magnitude
+                span.ln()
             } else {
-                max / magnitude - min / magnitude
+                (max * 0.5 - min * 0.5).ln() + std::f64::consts::LN_2
             }
         };
-        let width = extent(self.domain.min.x, self.domain.max.x);
-        let height = extent(self.domain.min.y, self.domain.max.y);
-        // Normalize both extents and viewport before comparing aspect ratios.
-        // One extent is exactly 1, avoiding overflowing a fit scale for huge map sizes.
-        let extent = width.max(height);
-        let width = width / extent;
-        let height = height / extent;
-        let map_extent = size.x.max(size.y);
-        let occupied = if width * (size.y / map_extent) >= height * (size.x / map_extent) {
-            Point::new(
-                size.x,
-                if width == 1. {
-                    size.x * height
-                } else {
-                    size.x / width
-                },
-            )
+        let width = log_extent(self.domain.min.x, self.domain.max.x);
+        let height = log_extent(self.domain.min.y, self.domain.max.y);
+        let fit_x = size.x.ln() - width;
+        let fit_y = size.y.ln() - height;
+        let occupied = if fit_x <= fit_y {
+            Point::new(size.x, (height + fit_x).exp().min(size.y))
         } else {
-            Point::new(
-                if height == 1. {
-                    size.y * width
-                } else {
-                    size.y / height
-                },
-                size.y,
-            )
+            Point::new((width + fit_y).exp().min(size.x), size.y)
         };
-        let occupied = Point::new(occupied.x.min(size.x), occupied.y.min(size.y));
         (
             occupied,
             Point::new((size.x - occupied.x) / 2., (size.y - occupied.y) / 2.),
@@ -172,6 +147,16 @@ impl Overview {
     }
 }
 
+// Summing first preserves subnormal bits; halve first only when the sum overflows.
+fn midpoint(min: f64, max: f64) -> f64 {
+    let sum = min + max;
+    if sum.is_finite() {
+        sum * 0.5
+    } else {
+        min * 0.5 + max * 0.5
+    }
+}
+
 // Halve before subtracting only when the direct finite span would overflow.
 fn fraction(value: f64, min: f64, max: f64) -> f64 {
     let span = max - min;
@@ -200,6 +185,36 @@ fn interpolate(min: f64, max: f64, t: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn subnormal_centers_are_binned_at_the_rounded_midpoint() {
+        let unit = f64::from_bits(1);
+        let scene = Scene::new([crate::SceneItem {
+            bounds: WorldBounds {
+                min: Point::new(unit, unit),
+                max: Point::new(2. * unit, 2. * unit),
+            },
+            data: (),
+        }]);
+        let overview = Overview::new(&scene);
+        // The correctly rounded midpoint is 2 * unit, at the final density bin.
+        assert_eq!(overview.cells[SIDE * SIDE - 1], 1);
+    }
+
+    #[test]
+    fn extreme_aspect_ratios_preserve_representable_map_extent() {
+        let scene = Scene::new([crate::SceneItem {
+            bounds: WorldBounds {
+                min: Point::default(),
+                max: Point::new(1e-300, 1e300),
+            },
+            data: (),
+        }]);
+        let overview = Overview::new(&scene);
+        let (occupied, _) = overview.projection(Point::new(1e-307, 1e308));
+        assert!((occupied.x / 1e-307 - 1.).abs() < 1e-12);
+        assert!((occupied.y / 1e293 - 1.).abs() < 1e-12, "{occupied:?}");
+    }
+
     #[test]
     fn extreme_finite_domains_have_finite_cells_and_roundtrip() {
         for (min, max) in [
