@@ -107,6 +107,7 @@ impl GridPainter {
         )
     }
 
+    /// Returns an error for invalid options or unrepresentable world grid periods.
     pub fn paint_with_options(
         &self,
         camera: Camera2D,
@@ -119,29 +120,55 @@ impl GridPainter {
             f32::from(bounds.size.width) as f64,
             f32::from(bounds.size.height) as f64,
         );
-        window.paint_custom_shader(bounds, &self.0, grid_instance(camera, viewport, options))
+        window.paint_custom_shader(bounds, &self.0, grid_instance(camera, viewport, options)?)
     }
 }
 
-fn grid_instance(camera: Camera2D, viewport: Point, options: GridOptions) -> GridInstance {
-    // Successive powers of five keep the grid sparse at every supported zoom.
-    // Fade the finer level to zero at a transition so the previous major grid
-    // becomes the new minor grid without a hard visibility change.
+fn grid_instance(
+    camera: Camera2D,
+    viewport: Point,
+    options: GridOptions,
+) -> anyhow::Result<GridInstance> {
+    anyhow::ensure!(
+        [camera.center.x, camera.center.y, viewport.x, viewport.y]
+            .iter()
+            .all(|v| v.is_finite()),
+        "grid camera and viewport must be finite"
+    );
     let interval = options.major_interval as f64;
-    let level = (20. / (options.spacing * camera.zoom())).ln() / interval.ln();
-    let world_step = options.spacing * interval.powf(level.floor());
+    // Subtract logarithms: spacing * zoom and its reciprocal can overflow/underflow
+    // even when the resulting world and screen periods are representable.
+    let exponent =
+        ((20_f64.ln() - options.spacing.ln() - camera.zoom().ln()) / interval.ln()).floor();
+    let mut world_step = options.spacing * interval.powf(exponent);
+    if !world_step.is_finite() || world_step == 0. {
+        // The power alone may overflow/underflow before multiplication by spacing.
+        world_step = (options.spacing.ln() + exponent * interval.ln()).exp();
+    }
+    let major_world_step = world_step * interval;
     let step = world_step * camera.zoom();
-    let major_step = step * interval;
+    let major_step = major_world_step * camera.zoom();
+    anyhow::ensure!(
+        [world_step, major_world_step, step, major_step]
+            .iter()
+            .all(|v| v.is_finite() && *v > 0.)
+            && step >= f32::MIN_POSITIVE as f64
+            && major_step <= f32::MAX as f64,
+        "grid spacing is not representable at this zoom"
+    );
     let minimum = 20. / interval;
-    let origin = camera.screen_to_world(Point::default(), viewport);
-    let phase =
-        |coordinate: f64, period: f64| (coordinate.rem_euclid(period) * camera.zoom()) as f32;
-    GridInstance {
+    // Reduce the world center before adding the viewport offset. Forming their
+    // world-space sum first loses entire grid periods far from the origin.
+    let phase = |center: f64, offset: f64, period: f64, screen_period: f64| {
+        ((center.rem_euclid(period) * camera.zoom() - (offset / 2.).rem_euclid(screen_period))
+            .rem_euclid(screen_period)) as f32
+    };
+    Ok(GridInstance {
         phase: [
-            phase(origin.x, world_step),
-            phase(origin.y, world_step),
-            phase(origin.x, world_step * interval),
-            phase(origin.y, world_step * interval),
+            phase(camera.center.x, viewport.x, world_step, step),
+            phase(camera.center.y, viewport.y, world_step, step),
+            phase(camera.center.x, viewport.x, major_world_step, major_step),
+            phase(camera.center.y, viewport.y, major_world_step, major_step),
         ],
         metrics: [
             step as f32,
@@ -154,7 +181,7 @@ fn grid_instance(camera: Camera2D, viewport: Point, options: GridOptions) -> Gri
             },
         ],
         color: options.color,
-    }
+    })
 }
 
 /// Clipped spatial viewport with one procedural background quad.
@@ -219,6 +246,67 @@ impl RenderOnce for Canvas {
 mod tests {
     use super::*;
     #[::core::prelude::v1::test]
+    fn grid_is_finite_at_extreme_representable_zoom() {
+        for spacing in [0.001, 25., 1e12] {
+            for zoom in [1e-300, 1e300, 1e308] {
+                let mut camera = Camera2D::default();
+                camera.zoom_at_with_limits(Point::default(), Point::default(), zoom, zoom, zoom);
+                camera.center_on(Point::new(1e10, -1e10));
+                let instance = grid_instance(
+                    camera,
+                    Point::new(1100., 700.),
+                    GridOptions {
+                        spacing,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                assert!(
+                    instance
+                        .phase
+                        .iter()
+                        .chain(instance.metrics.iter())
+                        .all(|v| v.is_finite())
+                );
+                assert!(instance.metrics[0] > 0. && instance.metrics[1] > instance.metrics[0]);
+            }
+        }
+    }
+
+    #[::core::prelude::v1::test]
+    fn distant_deep_zoom_preserves_subpixel_pan_phase() {
+        let zoom = 1e8;
+        let mut camera = Camera2D::default();
+        camera.zoom_at_with_limits(Point::default(), Point::default(), zoom, zoom, zoom);
+        camera.center_on(Point::new(1e10, 1e10));
+        let a = grid_instance(camera, Point::new(1100., 700.), GridOptions::default()).unwrap();
+        let b = grid_instance(camera, Point::new(1101., 701.), GridOptions::default()).unwrap();
+        for axis in 0..4 {
+            let step = a.metrics[if axis < 2 { 0 } else { 1 }];
+            let error = (b.phase[axis] - a.phase[axis] + 0.5).rem_euclid(step);
+            assert!(
+                error.min(step - error) < 1e-4,
+                "phase lost half-pixel offset: {error}"
+            );
+        }
+    }
+
+    #[::core::prelude::v1::test]
+    fn unrepresentable_world_period_returns_error() {
+        let mut camera = Camera2D::default();
+        camera.zoom_at_with_limits(Point::default(), Point::default(), 1e-310, 1e-310, 1.);
+        assert!(grid_instance(camera, Point::new(1100., 700.), GridOptions::default()).is_err());
+        assert!(
+            grid_instance(
+                Camera2D::default(),
+                Point::new(f64::NAN, 700.),
+                GridOptions::default()
+            )
+            .is_err()
+        );
+    }
+
+    #[::core::prelude::v1::test]
     fn configurable_grid_rejects_invalid_values_and_preserves_spacing_ratio() {
         for interval in [2, 3, 5, 16] {
             let options = GridOptions {
@@ -228,7 +316,8 @@ mod tests {
                 ..Default::default()
             };
             options.validate().unwrap();
-            let instance = grid_instance(Camera2D::default(), Point::new(500., 300.), options);
+            let instance =
+                grid_instance(Camera2D::default(), Point::new(500., 300.), options).unwrap();
             assert!((instance.metrics[1] / instance.metrics[0] - interval as f32).abs() < 1e-5);
             assert_eq!(instance.color, options.color);
         }
@@ -269,7 +358,7 @@ mod tests {
         camera.pan_by(Point::new(1e10 + 13., -1e10 + 7.));
         for factor in [0.01, 100., 64.] {
             camera.zoom_at(Point::new(137., 247.), viewport, factor);
-            let instance = grid_instance(camera, viewport, GridOptions::default());
+            let instance = grid_instance(camera, viewport, GridOptions::default()).unwrap();
             let origin = camera.world_to_screen(Point::default(), viewport);
             for (axis, coordinate) in [origin.x, origin.y].into_iter().enumerate() {
                 let step = instance.metrics[1] as f64;
