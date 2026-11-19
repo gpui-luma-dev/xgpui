@@ -20,8 +20,8 @@
 </aside>
 <main id="content" tabindex="-1">
 <p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="whats-new">What's new</h1>
-<h2 id="xgpui-curve">Coming next — xgpui-curve: curves for editors, charts and gradients</h2>
-<p>A new extension crate, <a href="curve.html"><code>xgpui-curve</code></a>, gives xgpui one place for curve math: the geometry, splines, editing models and shader helpers that apps used to write themselves. It is on the <a href="https://github.com/gpui-luma-dev/xgpui/issues/55">#55</a> branch and not released yet; version 0.1.0 is planned. No GPUI changes are needed.</p>
+<h2 id="xgpui-curve">xgpui-curve 0.1.0 — curves for editors, charts and gradients</h2>
+<p>A new extension crate, <a href="curve.html"><code>xgpui-curve</code></a>, gives xgpui one place for curve math: the geometry, splines, editing models and shader helpers that apps used to write themselves. Three crates are published: <code>xgpui-curve</code> 0.1.0 (new), <code>xgpui-svg</code> 0.4.2 and <code>xgpui-macos</code> 5.0.2. No GPUI changes are needed, no migration is required, and the other 17 crates are unchanged. Release issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/390">#390</a>; release notes on <a href="https://github.com/gpui-luma-dev/xgpui/releases">GitHub releases</a>.</p>
 <h3>Highlights</h3>
 <ul>
 <li><strong>Curves you can touch.</strong> Nearest point with signed distance, curve–curve intersection, hit testing on fills and strokes, and exact bounds, so you can click, hover and snap to curves, not just draw them.</li>
@@ -33,10 +33,20 @@
 </ul>
 <h3>Try it</h3>
 <p>The curve lab has six panels, with wheel or pinch zoom and pan: <code>just curve</code> on the desktop, or the <a href="examples/extensions/?demo=curve">browser demo</a>. Read the <a href="curve.html">curves guide</a> for examples.</p>
-<h3>Also fixed along the way</h3>
+<h3>Bug fixes</h3>
 <ul>
-<li><strong>macOS:</strong> closing a window no longer logs <code>handling active status change … window not found</code> (<a href="https://github.com/gpui-luma-dev/xgpui/issues/371">#371</a>, already on <code>main</code>).</li>
+<li><strong>macOS:</strong> closing a window no longer logs <code>handling active status change … window not found</code> (<a href="https://github.com/gpui-luma-dev/xgpui/issues/371">#371</a>).</li>
 </ul>
+<h3>Deprecated</h3>
+<p><code>xgpui_svg::path_effects</code> (<code>Contour</code>, <code>Segment</code>, <code>MeasuredPath</code>, <code>PathEffect</code>) now delegates to xgpui-curve, behaves as before, and is deprecated; it will be removed in a later release. Use <code>xgpui_curve::measure::{MeasuredPath, PathEffect}</code> on a <code>kurbo::BezPath</code>, and stroke the result with <code>xgpui_curve::gpui_paint::append</code> into a <code>PathBuilder::stroke</code>. See <a href="curve.html#measure-and-svg">measure and SVG</a>.</p>
+<h3>Validation</h3>
+<p>CI passed on the merge into <code>main</code>. Windows and Linux were checked by hand on <code>main</code>.</p>
+<h3>Versions</h3>
+<table><thead><tr><th>Crate</th><th>Previous release</th><th>Released</th></tr></thead><tbody>
+<tr><td><code>xgpui-curve</code></td><td>—</td><td><strong>0.1.0</strong></td></tr>
+<tr><td><code>xgpui-macos</code></td><td>5.0.1</td><td><strong>5.0.2</strong></td></tr>
+<tr><td><code>xgpui-svg</code></td><td>0.4.1</td><td><strong>0.4.2</strong></td></tr>
+</tbody></table>
 <h2 id="xgpui-4-2-0">XGPUI 4.2.0 — plain GPUI text on Parley paragraphs</h2>
 <p>Standard GPUI text handles wrapped right-to-left and mixed text on Parley. Two crates are published: <code>xgpui</code> 4.2.0 and <code>xgpui-parley</code> 0.8.0. Both are additive: no migration is needed, and the other 17 crates are unchanged. Release issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/359">#359</a>; release notes on <a href="https://github.com/gpui-luma-dev/xgpui/releases">GitHub releases</a>.</p>
 <h3>Highlights</h3>
