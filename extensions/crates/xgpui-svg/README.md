@@ -9,7 +9,7 @@ effects.
 ```toml
 [dependencies]
 gpui = { package = "xgpui", version = "4.1.0" }
-xgpui-svg = "0.4.1"
+xgpui-svg = "0.4.2"
 ```
 
 ## Display a document
