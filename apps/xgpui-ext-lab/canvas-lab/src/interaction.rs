@@ -53,7 +53,7 @@ impl Lab {
                 current: world,
                 prior,
             });
-        } else if let Some(hit) = self.scene.hit_test(world).map(|item| item.data) {
+        } else if let Some(hit) = self.scene.hit_test_indexed(world).map(|(index, _)| index) {
             if !self.selected.contains(&hit) {
                 self.selected.clear();
                 self.selected.insert(hit);
@@ -81,8 +81,8 @@ impl Lab {
                 *current = world;
                 self.selected = self
                     .scene
-                    .query(rectangle(*start, world))
-                    .map(|item| item.data)
+                    .query_indexed(rectangle(*start, world))
+                    .map(|(index, _)| index)
                     .collect();
             }
             Some(Gesture::Move {
@@ -103,9 +103,13 @@ impl Lab {
                     delta = snap.delta;
                     self.snap_guides.extend(snap.x.into_iter().chain(snap.y));
                 }
-                for &(index, bounds) in originals.iter() {
-                    assert!(self.scene.set_bounds(index, bounds.translated(delta)));
-                }
+                assert!(
+                    self.scene.set_bounds_many(
+                        originals
+                            .iter()
+                            .map(|&(index, bounds)| (index, bounds.translated(delta)))
+                    )
+                );
             }
             None => (),
         }
@@ -131,9 +135,7 @@ impl Lab {
     pub(super) fn cancel_selection(&mut self) {
         match self.gesture.take() {
             Some(Gesture::Move { originals, .. }) => {
-                for (index, bounds) in originals {
-                    assert!(self.scene.set_bounds(index, bounds));
-                }
+                assert!(self.scene.set_bounds_many(originals));
             }
             Some(Gesture::Marquee { prior, .. }) => self.selected = prior,
             None => (),
