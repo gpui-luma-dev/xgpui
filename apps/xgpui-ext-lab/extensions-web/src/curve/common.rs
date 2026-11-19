@@ -129,36 +129,32 @@ pub const ZOOM_RANGE: (f64, f64) = (0.25, 32.);
 
 /// A canvas camera: pan and zoom applied on top of a panel's base transform,
 /// in canvas-local pixels (so it survives the canvas moving or resizing).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Camera {
-    transform: Affine,
+    camera: xgpui_canvas::Camera2D,
     pan_from: Option<KPoint>,
-}
-
-impl Default for Camera {
-    fn default() -> Self {
-        Self {
-            transform: Affine::IDENTITY,
-            pan_from: None,
-        }
-    }
 }
 
 impl Camera {
     /// Current zoom factor.
     pub fn zoom(&self) -> f64 {
-        self.transform.as_coeffs()[0]
+        self.camera.zoom()
     }
 
     /// Whether the view differs from the default.
     pub fn is_moved(&self) -> bool {
-        self.transform != Affine::IDENTITY
+        self.camera.zoom() != 1. || self.camera.center() != xgpui_canvas::Point::default()
     }
 
     /// The camera as a window-space transform for a canvas at `bounds`.
     pub fn around(&self, bounds: Bounds<Pixels>) -> Affine {
         let o = kp(bounds.origin).to_vec2();
-        Affine::translate(o) * self.transform * Affine::translate(-o)
+        let transform = Affine::new(
+            self.camera
+                .world_to_screen_affine(xgpui_canvas::Point::default())
+                .expect("curve camera retains representable affine coefficients"),
+        );
+        Affine::translate(o) * transform * Affine::translate(-o)
     }
 
     /// Zoom by `factor` keeping the window point `at` fixed.
@@ -166,16 +162,33 @@ impl Camera {
         if !factor.is_finite() || factor <= 0. {
             return;
         }
-        let zoom = self.zoom();
-        let factor = (zoom * factor).clamp(ZOOM_RANGE.0, ZOOM_RANGE.1) / zoom;
-        let a = (kp(at) - kp(bounds.origin)).to_point().to_vec2();
-        self.transform =
-            Affine::translate(a) * Affine::scale(factor) * Affine::translate(-a) * self.transform;
+        let local = kp(at) - kp(bounds.origin);
+        let mut next = self.camera;
+        next.zoom_at_with_limits(
+            xgpui_canvas::Point::new(local.x, local.y),
+            xgpui_canvas::Point::default(),
+            factor,
+            ZOOM_RANGE.0,
+            ZOOM_RANGE.1,
+        );
+        if next
+            .world_to_screen_affine(xgpui_canvas::Point::default())
+            .is_some()
+        {
+            self.camera = next;
+        }
     }
 
     /// Move the content by a window-space delta.
     pub fn pan_by(&mut self, dx: f64, dy: f64) {
-        self.transform = Affine::translate((dx, dy)) * self.transform;
+        let mut next = self.camera;
+        next.pan_by(xgpui_canvas::Point::new(dx, dy));
+        if next
+            .world_to_screen_affine(xgpui_canvas::Point::default())
+            .is_some()
+        {
+            self.camera = next;
+        }
     }
 
     pub fn reset(&mut self) {
