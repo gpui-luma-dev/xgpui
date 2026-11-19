@@ -104,16 +104,20 @@ impl Camera2D {
             self.center.y + (screen.y - viewport.y / 2.) / self.zoom,
         )
     }
+    /// Pan in logical pixels. Non-finite input or an overflowing result leaves both axes unchanged.
     pub fn pan_by(&mut self, delta: Point) {
         if delta.x.is_finite() && delta.y.is_finite() {
-            self.center.x -= delta.x / self.zoom;
-            self.center.y -= delta.y / self.zoom;
+            self.center_on(Point::new(
+                self.center.x - delta.x / self.zoom,
+                self.center.y - delta.y / self.zoom,
+            ));
         }
     }
     pub fn zoom_at(&mut self, anchor: Point, viewport: Point, factor: f64) {
         self.zoom_at_with_limits(anchor, viewport, factor, 0.01, 64.);
     }
     /// Pointer-anchored zoom with application-selected finite, positive limits.
+    /// Non-finite inputs or unrepresentable anchor/center coordinates leave the entire camera unchanged.
     pub fn zoom_at_with_limits(
         &mut self,
         anchor: Point,
@@ -128,11 +132,25 @@ impl Camera2D {
         if !factor.is_finite() || factor <= 0. || !anchor.x.is_finite() || !anchor.y.is_finite() {
             return;
         }
+        if !viewport.x.is_finite() || !viewport.y.is_finite() {
+            return;
+        }
         let before = self.screen_to_world(anchor, viewport);
-        self.zoom = (self.zoom * factor).clamp(min, max);
-        let after = self.screen_to_world(anchor, viewport);
-        self.center.x += before.x - after.x;
-        self.center.y += before.y - after.y;
+        let mut next = *self;
+        next.zoom = (self.zoom * factor).clamp(min, max);
+        let after = next.screen_to_world(anchor, viewport);
+        if ![before.x, before.y, after.x, after.y]
+            .iter()
+            .all(|v| v.is_finite())
+        {
+            return;
+        }
+        if next.center_on(Point::new(
+            self.center.x + (before.x - after.x),
+            self.center.y + (before.y - after.y),
+        )) {
+            *self = next;
+        }
     }
     pub fn visible_world_bounds(self, viewport: Point) -> WorldBounds {
         WorldBounds {
@@ -151,6 +169,37 @@ mod tests {
             "{a:?} != {b:?}"
         );
     }
+    #[test]
+    fn overflowing_pan_leaves_both_axes_unchanged() {
+        let mut camera = Camera2D::default();
+        camera.center_on(Point::new(f64::MAX, 17.));
+        camera.pan_by(Point::new(-f64::MAX, 5.));
+        assert_eq!(camera.center, Point::new(f64::MAX, 17.));
+        camera.center_on(Point::default());
+        camera.zoom_at_with_limits(Point::default(), Point::default(), 1e-310, 1e-310, 1.);
+        camera.pan_by(Point::new(1., 1.));
+        assert_eq!(camera.center, Point::default());
+    }
+
+    #[test]
+    fn invalid_or_unrepresentable_zoom_is_atomic() {
+        for viewport in [Point::new(f64::NAN, 100.), Point::new(100., f64::INFINITY)] {
+            let mut camera = Camera2D::default();
+            camera.zoom_at(Point::default(), viewport, 2.);
+            assert_eq!(camera.center, Point::default());
+            assert_eq!(camera.zoom(), 1.);
+        }
+        let mut camera = Camera2D::default();
+        camera.zoom_at_with_limits(Point::new(1., 1.), Point::default(), 1e-310, 1e-310, 1.);
+        assert_eq!(camera.center, Point::default());
+        assert_eq!(camera.zoom(), 1.);
+        // An unrepresentable old anchor must not contaminate a representable new zoom.
+        camera.zoom_at_with_limits(Point::default(), Point::default(), 1e-310, 1e-310, 1.);
+        camera.zoom_at_with_limits(Point::new(1., 1.), Point::default(), 1e308, 1e-310, 1.);
+        assert_eq!(camera.center, Point::default());
+        assert_eq!(camera.zoom(), 1e-310);
+    }
+
     #[test]
     fn extended_zoom_preserves_anchor_and_rejects_invalid_limits() {
         let mut camera = Camera2D::default();
