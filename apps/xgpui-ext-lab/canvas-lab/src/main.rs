@@ -1,5 +1,6 @@
 use xgpui_ext_lab::{LabApp, LabWindowTitle};
 mod interaction;
+mod editor;
 mod mandelbrot;
 mod minimap;
 mod overview_map;
@@ -16,6 +17,9 @@ use xgpui_canvas::{
 
 #[derive(Parser)]
 struct Options {
+    /// Open the mixed-shape spatial editor.
+    #[arg(long, conflicts_with_all = ["mandelbrot", "benchmark"])]
+    editor: bool,
     /// Open the coherent-frame Mandelbrot explorer.
     #[arg(long, conflicts_with_all = ["smoke", "benchmark"])]
     mandelbrot: bool,
@@ -492,6 +496,7 @@ fn make_scene(count: usize) -> Scene<usize> {
 
 fn main() {
     let options = Options::parse();
+    if options.editor { editor::run(options.smoke); return; }
     if let Some(directory) = &options.smoke {
         std::fs::create_dir_all(directory).expect("create smoke directory");
     }

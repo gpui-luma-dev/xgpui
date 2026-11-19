@@ -42,7 +42,13 @@ bin = "canvas-lab"
 group = "Main interactive labs"
 title = "Canvas / spatial cards"
 about = "Spatial viewport with 10,000 selectable cards (--smoke DIR, --benchmark FILE)"
-views = [{ name = "mandelbrot", title = "Mandelbrot explorer", args = ["--mandelbrot"] }]
+views = [{ name = "mandelbrot", title = "Mandelbrot explorer", args = ["--mandelbrot"] }, { name = "editor", title = "Mixed-shape editor", args = ["--editor"] }]
+
+[[lab.task]]
+name = "editor-smoke"
+about = "Real-window mixed-shape editing assertions and captures"
+args = ["--editor", "--smoke", "target/canvas-editor-smoke"]
+mkdir = ["target/canvas-editor-smoke"]
 
 [[lab.task]]
 name = "group-moves"
