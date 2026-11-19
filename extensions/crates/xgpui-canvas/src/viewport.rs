@@ -246,9 +246,58 @@ impl RenderOnce for Canvas {
 mod tests {
     use super::*;
     #[::core::prelude::v1::test]
+    fn grid_period_selection_stays_bounded_across_supported_intervals() {
+        for interval in 2..=16 {
+            for spacing in [0.001, 25., 1e12] {
+                for exponent in (-301..=308).step_by(7).chain([-304, 308]) {
+                    let zoom = 10_f64.powi(exponent);
+                    let mut camera = Camera2D::default();
+                    camera.zoom_at_with_limits(
+                        Point::default(),
+                        Point::default(),
+                        zoom,
+                        zoom,
+                        zoom,
+                    );
+                    camera.center_on(Point::new(f64::MAX, -f64::MAX));
+                    let instance = grid_instance(
+                        camera,
+                        Point::new(1100., 700.),
+                        GridOptions {
+                            spacing,
+                            major_interval: interval,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap_or_else(|error| {
+                        panic!("interval={interval} spacing={spacing} zoom={zoom:e}: {error}")
+                    });
+                    assert!(
+                        instance
+                            .phase
+                            .iter()
+                            .chain(instance.metrics.iter())
+                            .all(|v| v.is_finite())
+                    );
+                    let step = instance.metrics[0] as f64;
+                    assert!(
+                        step >= 20. / interval as f64 * 0.9999 && step <= 20.0001,
+                        "interval={interval} spacing={spacing} zoom={zoom:e} step={step}"
+                    );
+                    for (axis, phase) in instance.phase.into_iter().enumerate() {
+                        assert!(
+                            phase >= 0. && phase <= instance.metrics[if axis < 2 { 0 } else { 1 }]
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[::core::prelude::v1::test]
     fn grid_is_finite_at_extreme_representable_zoom() {
         for spacing in [0.001, 25., 1e12] {
-            for zoom in [1e-300, 1e300, 1e308] {
+            for zoom in [1e-306, 1e-300, 1e300, 1e308] {
                 let mut camera = Camera2D::default();
                 camera.zoom_at_with_limits(Point::default(), Point::default(), zoom, zoom, zoom);
                 camera.center_on(Point::new(1e10, -1e10));
