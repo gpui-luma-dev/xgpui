@@ -273,3 +273,9 @@ name = "macos_frames"
 path = "tests/macos_frames.rs"
 harness = false
 required-features = ["macos-window-tests"]
+
+[[test]]
+name = "pinch_after_keyboard"
+path = "tests/pinch_after_keyboard.rs"
+harness = false
+required-features = ["native-window-tests"]
