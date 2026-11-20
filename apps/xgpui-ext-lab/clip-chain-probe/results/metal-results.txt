@@ -1,0 +1,12 @@
+unclipped: gpu_cpu_max=0.0, submit_wait_readback_ms=8.146
+rectangle: gpu_cpu_max=0.0, submit_wait_readback_ms=2.880
+per-corner: gpu_cpu_max=0.0, submit_wait_readback_ms=3.019
+ellipse: gpu_cpu_max=0.0, submit_wait_readback_ms=2.466
+nested: gpu_cpu_max=0.0, submit_wait_readback_ms=2.906
+coincident: gpu_cpu_max=0.0, submit_wait_readback_ms=3.091
+depth-eight: gpu_cpu_max=0.0, submit_wait_readback_ms=3.195
+oversized-border: gpu_cpu_max=0.0, submit_wait_readback_ms=2.934
+disjoint: gpu_cpu_max=0.0, submit_wait_readback_ms=3.045
+dpi-1_25: gpu_cpu_max=0.0, submit_wait_readback_ms=3.005
+dpi-1_5: gpu_cpu_max=0.0, submit_wait_readback_ms=2.986
+dpi-2: gpu_cpu_max=0.0, submit_wait_readback_ms=2.376

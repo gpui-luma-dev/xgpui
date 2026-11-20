@@ -1,0 +1,100 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Issue 37 — clip-chain feasibility</title>
+<style>
+body{font:15px system-ui;background:#101821;color:#e4edf5;max-width:960px;margin:32px auto;padding:0 20px}h1{font-size:26px}p{line-height:1.5;color:#b7c7d6}label{display:inline-flex;gap:8px;align-items:center;margin:8px 16px 12px 0}canvas{width:100%;max-width:800px;border:1px solid #4b647a;border-radius:8px}output{display:block;padding:12px;background:#1d2d3d;margin:12px 0;white-space:pre-wrap}button,select{padding:6px}small{color:#a5bacb}
+</style>
+<h1>Clipping the intersection of shapes</h1>
+<p>Issue #37 feasibility experiment. A WebGL2 host shader clips overflowing raster/text texture and procedural shader content. This is a transport and coverage demo, not integrated GPUI rendering or event dispatch.</p>
+<label>Shape <select id="shape"><option value="rounded">Rounded rectangle</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option></select></label>
+<label>Radius <input id="radius" type="range" min="0" max="220" value="90"></label>
+<label><input id="nested" type="checkbox" checked>Nested ellipse</label>
+<label><input id="animate" type="checkbox">Animate radius</label>
+<label>Scroll <input id="scroll" type="range" min="0" max="180" value="0"></label>
+<canvas id="view" width="640" height="400"></canvas>
+<output id="interaction">Click the orange children near the corners. Excluded corners must not respond.</output>
+<output id="tests">Running WebGL2 fixtures…</output>
+<small>The 4×4 sample grid intersects geometry before estimating coverage. The viewport stays fixed while scrolling the texture and child positions. Boundary inclusion uses geometry, not an alpha threshold.</small>
+<script src="fixtures.js"></script>
+<script>
+'use strict';
+const canvas=document.querySelector('#view'),gl=canvas.getContext('webgl2',{antialias:false,premultipliedAlpha:true,preserveDrawingBuffer:true});
+if(!gl)throw Error('WebGL2 unavailable');
+const vs=`#version 300 es
+void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.-1.,0,1);}`;
+const fs=`#version 300 es
+precision highp float; precision highp int; precision highp usampler2D;
+uniform usampler2D records; uniform sampler2D content;
+uniform int count; uniform float height; uniform bool demo; uniform float time;
+out vec4 color;
+vec4 record(int i){return uintBitsToFloat(texelFetch(records,ivec2(i,0),0));}
+bool inside(vec2 p,int i){
+ vec4 b=record(i*4);vec2 q=p-b.xy;
+ if(any(lessThan(q,vec2(0)))||any(greaterThan(q,b.zw)))return false;
+ if(record(i*4+3).x==1.){vec2 d=(q-b.zw*.5)/(b.zw*.5);return dot(d,d)<=1.;}
+ vec4 rx=record(i*4+1),ry=record(i*4+2);
+ vec2 centers[4]=vec2[4](vec2(rx.x,ry.x),vec2(b.z-rx.y,ry.y),vec2(b.z-rx.z,b.w-ry.z),vec2(rx.w,b.w-ry.w));
+ for(int c=0;c<4;c++){
+  if(rx[c]==0.||ry[c]==0.)continue;
+  vec2 d=q-centers[c];float sx=(c==1||c==2)?1.:-1.,sy=c>=2?1.:-1.;
+  if(d.x*sx>0.&&d.y*sy>0.){vec2 e=d/vec2(rx[c],ry[c]);if(dot(e,e)>1.)return false;}
+ }return true;
+}
+void main(){
+ vec2 p=vec2(gl_FragCoord.x,height-gl_FragCoord.y);float a=0.;
+ for(int y=0;y<4;y++)for(int x=0;x<4;x++){
+  vec2 s=floor(p)+(vec2(x,y)+.5)/4.;bool visible=true;
+  for(int c=0;c<8;c++){if(c>=count)break;visible=visible&&inside(s,c);}
+  a+=visible?.0625:0.;
+ }
+ if(!demo){color=vec4(a,a,a,1);return;}
+ vec3 tex=texture(content,p/vec2(640,400)).rgb;
+ // Procedural shader output in the lower band, under the same host clip.
+ if(p.y>250.)tex=mix(tex,vec3(.15+.12*sin(p.x*.06+time),.65,.85),.5);
+ float checker=mod(floor(p.x/16.)+floor(p.y/16.),2.);
+ vec3 background=mix(vec3(.08,.12,.17),vec3(.12,.17,.22),checker);
+ color=vec4(mix(background,tex,a),1);
+}`;
+function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;}
+const program=gl.createProgram();gl.attachShader(program,shader(gl.VERTEX_SHADER,vs));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,fs));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));gl.useProgram(program);
+const loc=Object.fromEntries(['records','content','count','height','demo','time'].map(n=>[n,gl.getUniformLocation(program,n)]));
+const records=gl.createTexture();gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,records);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.uniform1i(loc.records,0);
+const content=gl.createTexture();gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,content);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.uniform1i(loc.content,1);
+// Complete the sampler during fixture rendering too (WebGL validates all samplers).
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
+function upload(shapes){if(shapes.length>8)throw Error('clip depth exceeds eight');const data=new Float32Array(128);shapes.forEach((s,i)=>data.set(s,i*16));gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,records);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32UI,32,1,0,gl.RGBA_INTEGER,gl.UNSIGNED_INT,new Uint32Array(data.buffer));gl.uniform1i(loc.count,shapes.length);}
+function contains(p,a){const q=[p[0]-a[0],p[1]-a[1]];if(a[2]<=0||a[3]<=0||q[0]<0||q[1]<0||q[0]>a[2]||q[1]>a[3])return false;if(a[12]===1)return ((q[0]-a[2]/2)/(a[2]/2))**2+((q[1]-a[3]/2)/(a[3]/2))**2<=1;
+ const centers=[[a[4],a[8]],[a[2]-a[5],a[9]],[a[2]-a[6],a[3]-a[10]],[a[7],a[3]-a[11]]];
+ for(let c=0;c<4;c++){const rx=a[4+c],ry=a[8+c];if(!rx||!ry)continue;const dx=q[0]-centers[c][0],dy=q[1]-centers[c][1];if(dx*(c===1||c===2?1:-1)>0&&dy*(c>=2?1:-1)>0&&(dx/rx)**2+(dy/ry)**2>1)return false;}return true;}
+function validate(){canvas.width=canvas.height=96;gl.viewport(0,0,96,96);gl.uniform1f(loc.height,96);gl.uniform1i(loc.demo,0);let max=0;let cases=0;
+ for(const fixture of FIXTURES){upload(fixture.shapes);gl.drawArrays(gl.TRIANGLES,0,3);const pixels=new Uint8Array(96*96*4);gl.readPixels(0,0,96,96,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
+ for(let y=0;y<96;y++)for(let x=0;x<96;x++){let n=0;for(let sy=0;sy<4;sy++)for(let sx=0;sx<4;sx++){if(fixture.shapes.every(s=>contains([x+(sx+.5)/4,y+(sy+.5)/4],s)))n++;}const error=Math.abs(pixels[((95-y)*96+x)*4]-Math.round(n/16*255));max=Math.max(max,error);}
+ cases++;}
+ const error=gl.getError();if(max>1||error!==gl.NO_ERROR)throw Error(`WebGL2 fixture mismatch: max=${max}, GL=${error}`);
+ document.querySelector('#tests').textContent=`WebGL2 PASS: ${cases} fixture readbacks; max CPU difference ${max}/255. Native GPUI integration remains untested.`;
+ canvas.width=640;canvas.height=400;gl.viewport(0,0,640,400);gl.uniform1f(loc.height,400);gl.uniform1i(loc.demo,1);
+}
+validate();
+const surface=document.createElement('canvas');surface.width=640;surface.height=400;const ctx=surface.getContext('2d');
+const ui=Object.fromEntries(['shape','radius','nested','animate','scroll'].map(n=>[n,document.getElementById(n)]));
+function rounded(r){r=Math.min(r,165);return [40,35,560,330,r,r,r,r,r,r,r,r,0,0,0,0];}
+function ellipse(b){return [...b,0,0,0,0,0,0,0,0,1,0,0,0];}
+let shapes=[],children=[],last=0;
+function frame(t){
+ const radius=ui.animate.checked?90+75*Math.sin(t*.001):Number(ui.radius.value);
+ shapes=[ui.shape.value==='ellipse'?ellipse([40,35,560,330]):rounded(ui.shape.value==='rectangle'?0:radius)];
+ if(ui.nested.checked)shapes.push(ellipse([65,20,520,365]));
+ const scroll=Number(ui.scroll.value);
+ ctx.fillStyle='#b9dfd5';ctx.fillRect(0,0,640,400);ctx.save();ctx.translate(0,-scroll);
+ const grad=ctx.createLinearGradient(0,0,640,260);grad.addColorStop(0,'#428dad');grad.addColorStop(1,'#e2b56e');ctx.fillStyle=grad;ctx.fillRect(0,0,640,260);
+ // A raster image-like scene, uploaded together with the overflowing text.
+ ctx.fillStyle='#f4cf80';ctx.beginPath();ctx.arc(470,75,46,0,Math.PI*2);ctx.fill();ctx.fillStyle='#2d686f';ctx.beginPath();ctx.moveTo(0,260);ctx.lineTo(145,65);ctx.lineTo(320,260);ctx.lineTo(435,125);ctx.lineTo(640,260);ctx.fill();
+ ctx.fillStyle='#132e38';ctx.font='bold 39px system-ui';ctx.fillText('OVERFLOWING TEXT → → →',-26,210);ctx.font='18px system-ui';ctx.fillText('Raster texture + text + shader output',90,240);
+ children=[[43,38-scroll,100,42],[497,38-scroll,100,42],[43,320-scroll,100,42]];
+ children.forEach((b,i)=>{ctx.fillStyle='#ff984f';ctx.fillRect(...b.slice(0,1),b[1]+scroll,b[2],b[3]);ctx.fillStyle='#302018';ctx.font='bold 14px system-ui';ctx.fillText(`Child ${i+1}`,b[0]+15,b[1]+scroll+26);});
+ ctx.restore();gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,content);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,surface);
+ upload(shapes);gl.uniform1f(loc.time,t*.001);gl.drawArrays(gl.TRIANGLES,0,3);last=t;requestAnimationFrame(frame);
+}
+canvas.addEventListener('click',event=>{const b=canvas.getBoundingClientRect(),p=[(event.clientX-b.left)*640/b.width,(event.clientY-b.top)*400/b.height];const visible=shapes.every(s=>contains(p,s));const child=children.findIndex(b=>p[0]>=b[0]&&p[0]<=b[0]+b[2]&&p[1]>=b[1]&&p[1]<=b[1]+b[3]);document.querySelector('#interaction').textContent=visible&&child>=0?`Child ${child+1} clicked at ${p.map(Math.round)}.`:`No child hit at ${p.map(Math.round)}${visible?' (background)':' (excluded by clip intersection)'}.`;});
+requestAnimationFrame(frame);
+</script>

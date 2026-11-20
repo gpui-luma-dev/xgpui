@@ -13,6 +13,7 @@ use std::{
     iter::Peekable,
     ops::{Add, Range, Sub},
     slice,
+    sync::Arc,
 };
 
 #[allow(non_camel_case_types, unused)]
@@ -39,6 +40,8 @@ impl From<bool> for PaddedBool32 {
 #[derive(Default)]
 #[expect(missing_docs)]
 pub struct Scene {
+    rounded_layer_clips:
+        collections::FxHashMap<usize, (Bounds<ScaledPixels>, Corners<ScaledPixels>)>,
     pub(crate) paint_operations: Vec<PaintOperation>,
     primitive_bounds: BoundsTree<ScaledPixels>,
     layer_stack: Vec<DrawOrder>,
@@ -63,6 +66,7 @@ pub struct Scene {
 impl Scene {
     pub fn clear(&mut self) {
         self.paint_operations.clear();
+        self.rounded_layer_clips.clear();
         self.primitive_bounds.clear();
         self.layer_stack.clear();
         self.paths.clear();
@@ -188,12 +192,28 @@ impl Scene {
         for operation in &prev_scene.paint_operations[range] {
             match operation {
                 PaintOperation::Primitive(primitive, identity) => {
+                    if let Primitive::LayerBoundary(boundary) = primitive {
+                        let key = Arc::as_ptr(&boundary.capture) as usize;
+                        if let Some(clip) = prev_scene.rounded_layer_clips.get(&key) {
+                            self.rounded_layer_clips.insert(key, *clip);
+                        }
+                    }
                     self.insert_retained_primitive(primitive.clone(), *identity)
                 }
                 PaintOperation::StartLayer(bounds) => self.push_layer(*bounds),
                 PaintOperation::EndLayer => self.pop_layer(),
             }
         }
+    }
+
+    pub(crate) fn set_rounded_layer_clip(
+        &mut self,
+        capture: &Arc<crate::LayerCapture>,
+        bounds: Bounds<ScaledPixels>,
+        radii: Corners<ScaledPixels>,
+    ) {
+        self.rounded_layer_clips
+            .insert(Arc::as_ptr(capture) as usize, (bounds, radii));
     }
 
     /// Begin an explicit captured subtree. End with the returned description.
@@ -271,10 +291,40 @@ impl Scene {
                     .ok_or_else(|| anyhow::anyhow!("missing layer boundary"))?;
                 if boundary.begin {
                     ensure!(
+                        stack.is_empty()
+                            || (!self
+                                .rounded_layer_clips
+                                .contains_key(&(Arc::as_ptr(&boundary.capture) as usize))
+                                && !stack.iter().any(|(capture, _)| self
+                                    .rounded_layer_clips
+                                    .contains_key(&(Arc::as_ptr(capture) as usize)))),
+                        "experimental rounded layer clips do not support nested captures"
+                    );
+                    ensure!(
                         plans.len() < crate::MAX_LAYER_GROUPS,
                         "at most four captured groups per frame"
                     );
-                    let plan = crate::LayerPlan::new(&boundary.capture, viewport, index)?;
+                    let mut plan = crate::LayerPlan::new(&boundary.capture, viewport, index)?;
+                    if let Some((bounds, radii)) = self
+                        .rounded_layer_clips
+                        .get(&(Arc::as_ptr(&boundary.capture) as usize))
+                    {
+                        // Composition-only extension to the existing six-float4 ABI.
+                        // A negative saturation tag selects rounded coverage, not a filter.
+                        plan.parameters[1][4][3] = -1.;
+                        plan.parameters[1][2] = [
+                            bounds.left().0,
+                            bounds.top().0,
+                            bounds.size.width.0,
+                            bounds.size.height.0,
+                        ];
+                        plan.parameters[1][5] = [
+                            radii.top_left.0,
+                            radii.top_right.0,
+                            radii.bottom_right.0,
+                            radii.bottom_left.0,
+                        ];
+                    }
                     if let Some((_, parent)) = stack.last() {
                         let p = &plans[*parent];
                         ensure!(

@@ -279,3 +279,8 @@ name = "pinch_after_keyboard"
 path = "tests/pinch_after_keyboard.rs"
 harness = false
 required-features = ["native-window-tests"]
+
+[[bin]]
+name = "rounded-overflow-lab"
+path = "rounded-overflow-lab/src/main.rs"
+required-features = ["native", "portable-shaders"]

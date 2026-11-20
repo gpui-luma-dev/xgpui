@@ -23,7 +23,9 @@ struct Varying { @builtin(position) screen: vec4<f32>, @location(0) uv: vec2<f32
  let position = p.bounds.xy + uv * p.bounds.zw;
  var out: Varying;
  out.screen = vec4(position / p.viewport.xy * vec2(2.,-2.) + vec2(-1.,1.),0.,1.);
- out.uv = p.uv.xy + uv * p.uv.zw;
+ // Rounded composition repurposes uv/radii as shape records. Source UVs
+ // remain the entire isolated crop; all ordinary passes retain their ABI.
+ out.uv = select(p.uv.xy + uv * p.uv.zw, uv, p.viewport.z == 4. && p.metrics.w < 0.);
  return out;
 }
 // Separable blend functions take straight RGB: destination first, source second.
@@ -113,6 +115,17 @@ fn layer_cell(cell: vec2<i32>, output_size: vec2<i32>) -> vec4<f32> {
   // Restore saved destination pixels outside the final output clip.
   if any(v.screen.xy < p.clip.xy) || any(v.screen.xy >= p.clip.zw) { return destination; }
   let captured = sample_image(image,v.uv);
+  if p.metrics.w < 0. {
+   let center = v.screen.xy - p.uv.xy - p.uv.zw * 0.5;
+   let left = select(p.radii.w,p.radii.x,center.y < 0.);
+   let right = select(p.radii.z,p.radii.y,center.y < 0.);
+   let radius = select(right,left,center.x < 0.);
+   let q = abs(center) - p.uv.zw * 0.5 + vec2(radius);
+   let distance = length(max(q,vec2(0.))) + min(max(q.x,q.y),0.) - radius;
+   let coverage = clamp(0.5-distance,0.,1.);
+   return blend_group(captured * p.metrics.z * coverage, destination, 0u);
+  }
+
   // The matrix is linear on associated RGB. Clamping to [0,alpha] is
   // equivalent to filtering/clamping straight RGB, without dividing tiny alpha.
   // Metal wide captures carry associated extended linear P3 (viewport.w=2).

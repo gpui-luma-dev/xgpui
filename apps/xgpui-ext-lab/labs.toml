@@ -600,3 +600,46 @@ platforms = ["web"]
 name = "build"
 about = "Build the browser gallery into pages/examples (needs wasm-bindgen)"
 command = ["bash", "apps/xgpui-ext-lab/extensions-web/build.sh", "--release"]
+
+
+[[lab]]
+name = "clip-chain-probe"
+group = "Diagnostics"
+title = "Rounded clip-chain feasibility (#37)"
+about = "CPU, native Metal, wgpu and WebGL2 coverage experiments; not integrated subtree clipping"
+
+[[lab.task]]
+name = "wgpu"
+about = "GPU readbacks and browser fixture generation"
+cargo = ["run", "--manifest-path", "apps/xgpui-ext-lab/clip-chain-probe/Cargo.toml", "--", "/tmp/issue-37-clip-results"]
+
+[[lab.task]]
+name = "test"
+about = "CPU geometry, bounded depth and coincident-edge checks"
+cargo = ["test", "--manifest-path", "apps/xgpui-ext-lab/clip-chain-probe/Cargo.toml"]
+
+[[lab.task]]
+name = "metal"
+about = "Native Metal readbacks against generated fixtures (run wgpu first)"
+platforms = ["macos"]
+steps = [
+  { command = ["swiftc", "-module-cache-path", "/tmp/issue-37-swift-cache", "apps/xgpui-ext-lab/clip-chain-probe/metal.swift", "-o", "/tmp/issue-37-metal-probe"] },
+  { command = ["/tmp/issue-37-metal-probe", "apps/xgpui-ext-lab/clip-chain-probe/clip.metal", "/tmp/issue-37-clip-results"] },
+]
+
+[[lab.task]]
+name = "browser"
+about = "Serve the generated WebGL2 demo at http://127.0.0.1:8737/demo.html (run wgpu first)"
+command = ["python3", "-m", "http.server", "8737", "--bind", "127.0.0.1", "--directory", "/tmp/issue-37-clip-results"]
+
+[[lab]]
+name = "rounded-overflow"
+bin = "rounded-overflow-lab"
+group = "Main interactive labs"
+title = "Rounded overflow / control backgrounds"
+about = "Compare legacy rectangular overflow with experimental rounded GPUI subtree composition (#37)"
+
+[[lab.task]]
+name = "check"
+about = "Real-window pixels, clipped clicks and radius-only invalidation"
+args = ["--check"]
