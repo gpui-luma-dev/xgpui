@@ -252,6 +252,8 @@ are not selectable as filled rectangles.
 - Click selects; Shift-click toggles group membership. Drag selected objects to
   move with alignment snapping, Option/Alt bypasses snapping, Escape restores the
   original geometry. Background dragging pans; wheel/pinch zooms at the pointer.
+- Click **Re-center** or press **0** to center grid origin `(0, 0)` without
+  changing zoom. This also cancels an active drag.
 - F fits visible scene bounds; S fits visible selection. C changes selection
   color. L toggles selection locking, H toggles selection visibility, V reveals
   all objects. Hidden/locked objects cannot be picked but selected ones retain

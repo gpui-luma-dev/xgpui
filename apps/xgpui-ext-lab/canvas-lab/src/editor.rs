@@ -157,6 +157,10 @@ impl Editor {
         self.pan.end();
         self.guides.clear();
     }
+    fn recenter(&mut self) {
+        self.cancel();
+        self.camera.center_on(WorldPoint::new(0., 0.));
+    }
     fn fit(&mut self, selection: bool) {
         self.cancel();
         let bounds = self
@@ -328,13 +332,15 @@ impl Render for Editor {
             .join(", ");
         div().track_focus(&self.focus).size_full().flex().flex_col().bg(rgb(0x101824)).text_color(rgb(0xe9eff7))
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
-                match e.keystroke.key.as_str() { "escape" => this.cancel(), "f" => this.fit(false), "s" => this.fit(true),
+                match e.keystroke.key.as_str() { "escape" => this.cancel(), "f" => this.fit(false), "s" => this.fit(true), "0" => this.recenter(),
                     "c"|"l"|"h"|"v" => this.edit(e.keystroke.key.as_str()), "r" => { this.cancel(); this.scene.rebuild_index(); }, _=>() } cx.notify();
             }))
             .child(div().p_3().flex_none().flex().flex_col().gap_1()
                 .child("Mixed-shape editor · rectangles, holes, concave fills and open curves")
                 .child("Click: select · Shift-click: group · Drag: move/snap · Option: free move · Background drag: pan · Wheel/pinch: zoom")
                 .child("F: fit scene · S: fit selection · C: color · L: lock/unlock selected · H: hide selected · V: show all · R: rebuild index · Esc: cancel")
+                .child(div().id("recenter").cursor_pointer().child("Re-center (0): grid origin")
+                    .on_click(cx.listener(|this, _, window, cx| { this.recenter(); this.focus.focus(window, cx); cx.notify(); })))
                 .child(format!("{:.1}% · {} selected · {names}",camera.zoom()*100.,self.selected.len())))
             .child(div().relative().flex_1().w_full().overflow_hidden()
                 .on_mouse_down(MouseButton::Left,cx.listener(|this,e:&MouseDownEvent,window,cx|{this.focus.focus(window,cx);this.down(e);cx.notify();}))
@@ -591,6 +597,18 @@ fn smoke(entity: &Entity<Editor>, window: &mut Window, cx: &mut App, directory: 
         .unwrap()
         .save(directory.join("fit-selection.png"))
         .unwrap();
+    let zoom = entity.read(cx).camera.zoom();
+    key("0", window, cx);
+    let editor = entity.read(cx);
+    assert_eq!(editor.camera.center(), WorldPoint::new(0., 0.));
+    assert_eq!(editor.camera.zoom(), zoom);
+    let origin = editor
+        .camera
+        .world_to_screen(WorldPoint::new(0., 0.), editor.viewport());
+    assert_eq!(
+        origin,
+        WorldPoint::new(editor.viewport().x / 2., editor.viewport().y / 2.)
+    );
     key("f", window, cx);
     let anchor = position(WorldPoint::new(270., 190.), cx);
     let before = entity.read(cx).world(anchor);
