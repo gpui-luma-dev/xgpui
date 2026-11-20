@@ -510,7 +510,7 @@ fn zoom_camera(
         anchor,
         viewport,
         factor,
-        0.01,
+        if fractal { 0.01 } else { 1e-6 },
         if fractal { 1e10 } else { 64. },
     );
 }
@@ -518,6 +518,37 @@ fn zoom_camera(
 #[cfg(test)]
 mod navigation_tests {
     use super::*;
+
+    #[::core::prelude::v1::test]
+    fn fit_scene_includes_tall_scenes_and_navigation_continues_without_a_jump() {
+        let viewport = WorldPoint::new(1000., 700.);
+        for count in [10_000, 100_000] {
+            let scene = make_scene(count);
+            let mut camera = Camera2D::default();
+            assert!(camera.fit_bounds_with_limits(
+                scene.bounds().unwrap(),
+                viewport,
+                24.,
+                1e-6,
+                64.
+            ));
+            let projected = camera.world_bounds_to_screen(scene.bounds().unwrap(), viewport);
+            assert!(projected.min.x >= 24. - 1e-8 && projected.min.y >= 24. - 1e-8);
+            assert!(
+                projected.max.x <= viewport.x - 24. + 1e-8
+                    && projected.max.y <= viewport.y - 24. + 1e-8
+            );
+            let fitted_zoom = camera.zoom();
+            zoom_camera(
+                &mut camera,
+                WorldPoint::new(500., 350.),
+                viewport,
+                0.9,
+                false,
+            );
+            assert!((camera.zoom() / fitted_zoom - 0.9).abs() < 1e-12);
+        }
+    }
 
     #[::core::prelude::v1::test]
     fn background_drag_pans_in_both_views_and_card_editing_is_preserved() {
