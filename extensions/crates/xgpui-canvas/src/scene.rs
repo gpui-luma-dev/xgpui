@@ -43,6 +43,7 @@ pub struct Scene<T> {
     items: Vec<SceneItem<T>>,
     index: SpatialIndex,
     revision: u64,
+    content_revision: u64,
     identity: usize,
 }
 
@@ -62,6 +63,7 @@ impl<T> Scene<T> {
             items,
             index,
             revision: 0,
+            content_revision: 0,
             identity: {
                 static NEXT: std::sync::atomic::AtomicUsize =
                     std::sync::atomic::AtomicUsize::new(1);
@@ -77,6 +79,26 @@ impl<T> Scene<T> {
 
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// Appearance-aware cache key. Geometry and mutable data access both invalidate it.
+    /// Like cache_key(), this is process-local and must not be serialized as object identity.
+    pub fn content_cache_key(&self) -> (usize, u64, u64) {
+        (self.identity, self.revision, self.content_revision)
+    }
+
+    /// Advances on successful mutable data access, even when no value is changed.
+    pub fn content_revision(&self) -> u64 {
+        self.content_revision
+    }
+
+    /// Mutate caller data without exposing bounds or rebuilding the index.
+    /// Conservatively invalidates content captures on access; geometry keys stay unchanged.
+    /// Callers changing geometric extent must also update the item's bounds.
+    pub fn data_mut(&mut self, index: usize) -> Option<&mut T> {
+        let item = self.items.get_mut(index)?;
+        self.content_revision = self.content_revision.wrapping_add(1);
+        Some(&mut item.data)
     }
 
     pub fn len(&self) -> usize {
@@ -107,6 +129,91 @@ impl<T> Scene<T> {
         self.revision = self.revision.wrapping_add(1);
         self.index.refit(&self.items, index);
         true
+    }
+
+    /// Atomically apply distinct bounds updates and refit shared ancestors once.
+    /// Rejects the whole batch for any missing/duplicate index or invalid bounds.
+    /// An empty batch succeeds without invalidation; a nonempty batch advances
+    /// geometry revision once. Indices remain stable paint-order positions.
+    pub fn set_bounds_many(
+        &mut self,
+        updates: impl IntoIterator<Item = (usize, WorldBounds)>,
+    ) -> bool {
+        let updates: Vec<_> = updates.into_iter().collect();
+        if updates.is_empty() {
+            return true;
+        }
+        if let [(index, bounds)] = updates.as_slice() {
+            return self.set_bounds(*index, *bounds);
+        }
+        let mut seen = std::collections::HashSet::with_capacity(updates.len());
+        if updates.iter().any(|(index, bounds)| {
+            *index >= self.items.len() || !bounds.is_valid() || !seen.insert(*index)
+        }) {
+            return false;
+        }
+        for &(index, bounds) in &updates {
+            self.items[index].bounds = bounds;
+        }
+        self.index
+            .refit_many(&self.items, updates.iter().map(|(index, _)| *index));
+        self.revision = self.revision.wrapping_add(1);
+        true
+    }
+
+    /// Restore spatial partition quality without changing geometry, data or paint indices.
+    /// Geometry/content cache keys remain unchanged because rendered content is unchanged.
+    pub fn rebuild_index(&mut self) {
+        self.index = SpatialIndex::new(&self.items);
+    }
+
+    /// Visible objects paired with their stable-within-this-scene paint indices.
+    pub fn visible_indexed(
+        &self,
+        camera: Camera2D,
+        viewport: Point,
+    ) -> impl Iterator<Item = (usize, VisibleItem<'_, T>)> {
+        self.query_indexed(camera.visible_world_bounds(viewport))
+            .map(move |(index, item)| {
+                let min = camera.world_to_screen(item.bounds.min, viewport);
+                let max = camera.world_to_screen(item.bounds.max, viewport);
+                (
+                    index,
+                    VisibleItem {
+                        item,
+                        screen_bounds: WorldBounds { min, max },
+                        detail: LevelOfDetail::for_size(max.x - min.x, max.y - min.y),
+                    },
+                )
+            })
+    }
+
+    /// Rectangle candidates in back-to-front paint order, paired with paint indices.
+    pub fn query_indexed(
+        &self,
+        bounds: WorldBounds,
+    ) -> impl DoubleEndedIterator<Item = (usize, &SceneItem<T>)> {
+        self.index
+            .query(&self.items, bounds)
+            .into_iter()
+            .map(|index| (index, &self.items[index]))
+    }
+
+    /// Topmost AABB hit with its paint index. Exact shape picking remains caller-owned.
+    pub fn hit_test_indexed(&self, world: Point) -> Option<(usize, &SceneItem<T>)> {
+        self.index
+            .hit_test(&self.items, world)
+            .map(|index| (index, &self.items[index]))
+    }
+
+    /// All point/AABB candidates, front-to-back. Continue after rejecting transparent,
+    /// locked or geometrically empty candidates in the caller's precise hit test.
+    pub fn hits_at(&self, world: Point) -> impl Iterator<Item = (usize, &SceneItem<T>)> {
+        self.query_indexed(WorldBounds {
+            min: world,
+            max: world,
+        })
+        .rev()
     }
 
     pub fn visible(
@@ -157,6 +264,155 @@ mod tests {
             data,
         }
     }
+    #[test]
+    fn indexed_queries_preserve_paint_order_and_allow_precise_hit_rejection() {
+        let scene = Scene::new([false, true, false].map(|opaque| SceneItem {
+            bounds: item(0., 10., 0).bounds,
+            data: opaque,
+        }));
+        let point = Point::new(5., 5.);
+        assert_eq!(
+            scene
+                .query_indexed(item(0., 10., 0).bounds)
+                .map(|(i, _)| i)
+                .collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+        assert_eq!(
+            scene.hits_at(point).map(|(i, _)| i).collect::<Vec<_>>(),
+            [2, 1, 0]
+        );
+        assert_eq!(scene.hit_test_indexed(point).unwrap().0, 2);
+        assert_eq!(
+            scene.hits_at(point).find(|(_, item)| item.data).unwrap().0,
+            1
+        );
+        assert_eq!(
+            scene
+                .visible_indexed(Camera2D::default(), Point::new(100., 100.))
+                .map(|(i, _)| i)
+                .collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+        assert_eq!(scene.hits_at(Point::new(10., 10.)).count(), 3);
+        assert_eq!(scene.hits_at(Point::new(f64::NAN, 0.)).count(), 0);
+        assert_eq!(Scene::<()>::new([]).hits_at(point).count(), 0);
+    }
+
+    #[test]
+    fn data_mutation_invalidates_content_without_touching_geometry() {
+        let mut scene = Scene::new([item(0., 10., 7)]);
+        let geometry = scene.cache_key();
+        let content = scene.content_cache_key();
+        assert!(scene.data_mut(1).is_none());
+        assert_eq!(scene.content_cache_key(), content);
+        *scene.data_mut(0).unwrap() = 42;
+        assert_eq!(scene.cache_key(), geometry);
+        assert_ne!(scene.content_cache_key(), content);
+        assert_eq!(scene.content_revision(), 1);
+        assert_eq!(scene.hit_test(Point::default()).unwrap().data, 42);
+        let content = scene.content_cache_key();
+        let _ = scene.data_mut(0);
+        assert_ne!(scene.content_cache_key(), content);
+        assert!(scene.set_bounds(0, item(20., 30., 0).bounds));
+        assert_eq!(scene.content_revision(), 2);
+        assert_ne!(scene.cache_key(), geometry);
+        assert_ne!(scene.content_cache_key().1, content.1);
+    }
+
+    #[test]
+    fn batch_updates_are_atomic_and_invalidate_geometry_once() {
+        let mut scene = Scene::new([item(0., 10., 0), item(20., 30., 1)]);
+        let before = scene.cache_key();
+        for updates in [
+            vec![
+                (0, item(100., 110., 0).bounds),
+                (99, item(0., 1., 0).bounds),
+            ],
+            vec![
+                (0, item(100., 110., 0).bounds),
+                (0, item(200., 210., 0).bounds),
+            ],
+            vec![
+                (0, item(100., 110., 0).bounds),
+                (1, item(f64::NAN, 1., 0).bounds),
+            ],
+            vec![(0, item(100., 110., 0).bounds), (1, item(2., 1., 0).bounds)],
+        ] {
+            assert!(!scene.set_bounds_many(updates));
+            assert_eq!(scene.cache_key(), before);
+            assert_eq!(scene.items()[0].bounds.min, Point::default());
+            assert_eq!(scene.hit_test(Point::default()).unwrap().data, 0);
+        }
+        assert!(scene.set_bounds_many([]));
+        assert_eq!(scene.cache_key(), before);
+        assert!(scene.set_bounds_many([
+            (0, item(-20., -10., 0).bounds),
+            (1, item(40., 50., 0).bounds)
+        ]));
+        assert_eq!(scene.revision(), 1);
+        assert_eq!(scene.content_revision(), 0);
+        assert!(scene.hit_test(Point::default()).is_none());
+        assert_eq!(scene.hit_test(Point::new(45., 45.)).unwrap().data, 1);
+    }
+
+    #[test]
+    fn batches_and_rebuilds_match_linear_queries_after_large_moves() {
+        let mut scene = Scene::new((0..513).map(|i| item(i as f64 * 5., i as f64 * 5. + 10., i)));
+        for round in 0..20 {
+            let updates: Vec<_> = (0..513)
+                .filter(|i| (i + round) % 7 == 0)
+                .map(|i| {
+                    (
+                        i,
+                        item(
+                            i as f64 * -11. + round as f64,
+                            i as f64 * -11. + round as f64 + 20.,
+                            i,
+                        )
+                        .bounds,
+                    )
+                })
+                .collect();
+            assert!(scene.set_bounds_many(updates));
+            for rebuild in [false, true] {
+                let key = scene.cache_key();
+                let content = scene.content_cache_key();
+                if rebuild {
+                    scene.rebuild_index();
+                }
+                assert_eq!(scene.cache_key(), key);
+                assert_eq!(scene.content_cache_key(), content);
+                for n in 0..50 {
+                    let q = item(n as f64 * -100., n as f64 * -100. + 300., 0).bounds;
+                    let expected: Vec<_> = scene
+                        .items()
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, item)| item.bounds.intersects(q))
+                        .map(|(i, _)| i)
+                        .collect();
+                    assert_eq!(
+                        scene.query_indexed(q).map(|(i, _)| i).collect::<Vec<_>>(),
+                        expected
+                    );
+                    let expected = scene
+                        .items()
+                        .iter()
+                        .enumerate()
+                        .rev()
+                        .find(|(_, item)| item.bounds.contains(q.min))
+                        .map(|(i, _)| i);
+                    assert_eq!(scene.hit_test_indexed(q.min).map(|(i, _)| i), expected);
+                }
+            }
+        }
+        let mut empty = Scene::<()>::new([]);
+        let key = empty.content_cache_key();
+        empty.rebuild_index();
+        assert_eq!(empty.content_cache_key(), key);
+    }
+
     #[test]
     fn constructor_rejects_nonfinite_and_inverted_bounds() {
         for bounds in [
