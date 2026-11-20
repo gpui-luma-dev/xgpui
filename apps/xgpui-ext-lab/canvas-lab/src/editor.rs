@@ -160,6 +160,27 @@ impl Editor {
     }
     fn recenter(&mut self) {
         self.cancel();
+        if let Some(bounds) = self
+            .scene
+            .items()
+            .iter()
+            .map(|item| item.bounds)
+            .reduce(union)
+        {
+            let delta = WorldPoint::new(
+                -(bounds.min.x / 2. + bounds.max.x / 2.),
+                -(bounds.min.y / 2. + bounds.max.y / 2.),
+            );
+            // Translate every shape together, preserving relative placement and identity.
+            let updates: Vec<_> = self
+                .scene
+                .items()
+                .iter()
+                .enumerate()
+                .map(|(i, item)| (i, item.bounds.translated(delta)))
+                .collect();
+            assert!(self.scene.set_bounds_many(updates));
+        }
         self.camera.center_on(WorldPoint::new(0., 0.));
         self.centered_zoom = true;
     }
@@ -355,7 +376,7 @@ impl Render for Editor {
                 .child("Mixed-shape editor · rectangles, holes, concave fills and open curves")
                 .child("Click: select · Shift-click: group · Drag: move/snap · Option: free move · Background drag: pan · Wheel/pinch: zoom")
                 .child("F: fit scene · S: fit selection · C: color · L: lock/unlock selected · H: hide selected · V: show all · R: rebuild index · Esc: cancel")
-                .child(div().id("recenter").cursor_pointer().child("Re-center (0): origin + centered zoom")
+                .child(div().id("recenter").cursor_pointer().child("Re-center (0): drawing + grid origin")
                     .on_click(cx.listener(|this, _, window, cx| { this.recenter(); this.focus.focus(window, cx); cx.notify(); })))
                 .child(format!("{:.1}% · {} selected · {names}",camera.zoom()*100.,self.selected.len())))
             .child(div().relative().flex_1().w_full().overflow_hidden()
@@ -615,8 +636,28 @@ fn smoke(entity: &Entity<Editor>, window: &mut Window, cx: &mut App, directory: 
         .save(directory.join("fit-selection.png"))
         .unwrap();
     let zoom = entity.read(cx).camera.zoom();
+    let original_bounds: Vec<_> = entity
+        .read(cx)
+        .scene
+        .items()
+        .iter()
+        .enumerate()
+        .map(|(i, item)| (i, item.bounds))
+        .collect();
     key("0", window, cx);
     let editor = entity.read(cx);
+    let drawing = editor
+        .scene
+        .items()
+        .iter()
+        .map(|item| item.bounds)
+        .reduce(union)
+        .unwrap();
+    assert!(
+        (drawing.min.x + drawing.max.x).abs() < 1e-9
+            && (drawing.min.y + drawing.max.y).abs() < 1e-9,
+        "re-center must place the drawing center over grid origin"
+    );
     assert_eq!(editor.camera.center(), WorldPoint::new(0., 0.));
     assert_eq!(editor.camera.zoom(), zoom);
     let origin = editor
@@ -626,6 +667,12 @@ fn smoke(entity: &Entity<Editor>, window: &mut Window, cx: &mut App, directory: 
         origin,
         WorldPoint::new(editor.viewport().x / 2., editor.viewport().y / 2.)
     );
+    window.draw(cx).clear(cx);
+    window
+        .render_to_image()
+        .unwrap()
+        .save(directory.join("recentered.png"))
+        .unwrap();
     let off_center = entity.read(cx).bounds.origin + point(px(80.), px(60.));
     for delta in [0.5, -0.25] {
         let previous_zoom = entity.read(cx).camera.zoom();
@@ -663,6 +710,9 @@ fn smoke(entity: &Entity<Editor>, window: &mut Window, cx: &mut App, directory: 
             "re-centered wheel must keep grid origin centered"
         );
     }
+    entity.update(cx, |this, _| {
+        assert!(this.scene.set_bounds_many(original_bounds));
+    });
     key("f", window, cx);
     let anchor = position(WorldPoint::new(270., 190.), cx);
     let before = entity.read(cx).world(anchor);

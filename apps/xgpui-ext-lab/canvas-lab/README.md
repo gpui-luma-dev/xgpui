@@ -252,8 +252,10 @@ are not selectable as filled rectangles.
 - Click selects; Shift-click toggles group membership. Drag selected objects to
   move with alignment snapping, Option/Alt bypasses snapping, Escape restores the
   original geometry. Background dragging pans; wheel/pinch zooms at the pointer.
-- Click **Re-center** or press **0** to center grid origin `(0, 0)` without
-  changing zoom. Subsequent wheel/pinch zoom stays centered on the origin even
+- Click **Re-center** or press **0** to translate the whole drawing so its bounds
+  center lies at grid origin `(0, 0)`, then center the view there without changing
+  zoom. Relative shape positions are preserved, including hidden/locked shapes.
+  Subsequent wheel/pinch zoom stays centered on the origin even
   with the pointer off-center. Background panning or F/S fitting restores
   pointer-anchored zoom. Re-center also cancels an active drag.
 - F fits visible scene bounds; S fits visible selection. C changes selection
