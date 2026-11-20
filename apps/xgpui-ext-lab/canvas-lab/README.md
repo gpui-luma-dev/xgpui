@@ -234,3 +234,41 @@ this revision prioritizes stable sharpness rather than claiming every rapid
 camera sweep has complete coverage. Ten regression tests passed. The manual
 GPU timing probe sampled 0.9–1.8 ms at the steady GPU resolution for 1×/32×/64×
 views; those samples do not establish a universal GPU budget.
+
+
+## Mixed-shape editor (#384)
+
+```sh
+just canvas editor
+just canvas editor-smoke
+```
+
+The editor combines overlapping rectangles, a filled path with a transparent
+hole, a concave filled path and an open cubic stroke. AABB candidates come from
+Canvas; xgpui-curve fill/stroke tests choose the actual painted object. Click
+through a hole to select the rectangle underneath; empty concave/stroke bounds
+are not selectable as filled rectangles.
+
+- Click selects; Shift-click toggles group membership. Drag selected objects to
+  move with alignment snapping, Option/Alt bypasses snapping, Escape restores the
+  original geometry. Background dragging pans; wheel/pinch zooms at the pointer.
+- Click **Re-center** or press **0** to translate the whole drawing so its bounds
+  center lies at grid origin `(0, 0)`, then center the view there without changing
+  zoom. Relative shape positions are preserved, including hidden/locked shapes.
+  Subsequent wheel/pinch zoom stays centered on the origin even
+  with the pointer off-center. Background panning or F/S fitting restores
+  pointer-anchored zoom. Re-center also cancels an active drag.
+- F fits visible scene bounds; S fits visible selection. C changes selection
+  color. L toggles selection locking, H toggles selection visibility, V reveals
+  all objects. Hidden/locked objects cannot be picked but selected ones retain
+  keyboard control so they can be restored. R rebuilds spatial partitions.
+- The bottom panel is a retained colored-bounds overview, not a shape thumbnail.
+  Its content-aware key refreshes after geometry or appearance edits; the
+  geometry-only key is unchanged by color edits.
+
+The editor is a native lab consumer, not a new reusable selection/minimap widget.
+The card and browser labs remain separate consumers. The registered smoke task
+checks hole picking, grouped/free/snapped moves, cancellation, appearance cache
+refresh, lock/hide/rebuild, fitting, anchored wheel/pinch and focus-loss restoration.
+It writes PNGs/report to `target/canvas-editor-smoke`; it makes no physical-input
+or performance guarantee. Windows/Linux runtime checks wait until main merge.

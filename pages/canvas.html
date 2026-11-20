@@ -35,6 +35,8 @@ CPU rendering with pointer-anchored zoom.</li>
 <p>Both support WebGPU and WebGL2. Run the native labs from the repository root:</p>
 <pre><code class="language-sh">just canvas-lab
 just canvas-lab --mandelbrot
+just canvas editor
+just canvas editor-smoke
 </code></pre>
 <table><thead><tr><th>Action</th><th>Cards</th><th>Mandelbrot</th></tr></thead><tbody>
 <tr><td>Pan</td><td>Scroll, middle drag or Space-drag</td><td>Left drag</td></tr>
@@ -45,6 +47,15 @@ just canvas-lab --mandelbrot
 </tbody></table>
 <p>Click/drag the card minimap to navigate. Native <strong>T</strong> switches minimap/live
 preview; <strong>M</strong> toggles the panel. Browser buttons change scene size and grid style.</p>
+<h2 id="mixed-shape-editor">Native mixed-shape editor</h2>
+<p><code>just canvas editor</code> combines rectangles, holed and concave fills,
+and open strokes. Canvas supplies indexed candidates, camera fitting and batch
+updates; xgpui-curve supplies precise geometry tests. Click through holes, Shift-click
+a group, drag with snapping (Alt bypasses it), and Escape to restore a move.
+F/S fit scene/selection; C changes color; L/H toggle selection lock/visibility;
+V reveals all; R rebuilds the index. A retained colored-bounds overview refreshes
+on geometry and appearance changes. This native example is separate from the
+browser gallery. <code>just canvas editor-smoke</code> runs the window assertions.</p>
 <h2 id="use-it">Use it</h2>
 <p>For development against this checkout:</p>
 <pre><code class="language-toml">xgpui-canvas = { path = "path/to/extensions/crates/xgpui-canvas", features = ["gpui"] }
@@ -85,8 +96,8 @@ deep detail. The native live preview uses GPU readback; the default minimap
 avoids that cost.</p>
 <p>Local macOS measurements averaged 16.7 ms/frame in normal card views and
 23.3 ms in the dense 100k overview. These are observations, not guarantees.
-<code>xgpui-canvas</code> has 19 unit tests (camera, scene/BVH, snapping, overview, input
-and grid). The <code>canvas-lab</code> binary adds 13 tests covering navigation, launch
+<code>xgpui-canvas</code> tests camera fitting/projection, scene/BVH queries,
+atomic batch updates, content invalidation, snapping, overview, input and grid math. The <code>canvas-lab</code> binary adds 13 tests covering navigation, launch
 validation, CPU Mandelbrot scheduling/precision and, on macOS, Metal pixel
 comparison with the f64 reference; a manual GPU timing test is ignored by
 default. Run them with:</p>
@@ -99,7 +110,7 @@ labs and <code>just labs test</code> owner-confirmed on 2026-11-04. Linux runtim
 is deferred until a Linux environment is available.</p>
 <p>Rotation, isometric grids, general subtree transforms, reusable selection/map
 widgets and large-scene indexing/rendering improvements remain follow-ups in
-<a href="https://github.com/gpui-luma-dev/xgpui/issues/54">issue #54</a>.</p>
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/384">issue #384</a>.</p>
 <h2 id="gpui-public-api-changes-additions-and-compatibility">GPUI public API changes: additions and compatibility</h2>
 <p>Canvas uses existing GPUI containers, clipping and the shader pipeline, with no
 new GPUI signatures or fields. See <a href="gpui-public-api.html#canvas-reuses-existing-gpui-apis">integration compatibility</a>.</p>

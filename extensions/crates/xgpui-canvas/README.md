@@ -150,3 +150,15 @@ the same conventions as the point helpers. The checked
 `[a, b, c, d, e, f]` coefficients suitable for `kurbo::Affine::new`. Finite absolute
 affine coefficients can still lose local precision at distant centers; prefer
 the direct point helpers in those views.
+
+
+## Optional vector coordinate adapters
+
+Enable `kurbo` to convert `Point` / `WorldBounds` to and from `kurbo::Point` /
+`kurbo::Rect` (kurbo 0.13), without pulling GPUI into math-only consumers. The
+conversions preserve coordinates, including inverted rectangles; validate bounds
+before constructing or updating a scene. Defaults remain dependency-free.
+
+The native `just canvas editor` view demonstrates precise fill/stroke picking,
+indexed selection, batch dragging, color/hide/lock edits, fit controls and content
+cache invalidation. `just canvas editor-smoke` runs its real-window assertions.

@@ -1,9 +1,11 @@
 # Canvas editor API contract (#384)
 
 This is the implementation contract for the mixed-shape editor epic, not a
-claim that the whole editor API already exists. Camera navigation is the first
-implementation slice. Scene editing and optional point/rectangle adapters remain planned work.
-All additions belong to the extension; no core GPUI API changes are planned.
+claim of a finished general-purpose editing framework. Camera navigation, scene
+editing and optional coordinate adapters are implemented on the #384 subtask
+branches, with a native mixed-shape editor exercising them.
+The new APIs belong to the extension. The editor also requires a core GPUI
+pinch-dispatch correction, documented separately for individual behavior review.
 
 ## Compatibility and identity
 
@@ -20,7 +22,7 @@ candidate. Consumers own fine fill/stroke tests, visibility and locked-item
 policy. Rejecting a candidate must allow inspection of the next candidate.
 Picking never implies that an entire AABB is a painted shape.
 
-## Planned scene mutation and invalidation
+## Scene mutation and invalidation
 
 - Preserve `revision()` and `cache_key()` as geometry-only invalidation contracts.
 - Add a distinct content revision/key incorporating scene identity, geometry
@@ -39,8 +41,9 @@ Picking never implies that an entire AABB is a painted shape.
   Because it changes only spatial partitioning, it does not invalidate geometry
   or content captures. An internal index generation can be added if needed.
 
-These policies must be tested when their implementation lands. They do not
-promise automatic spatial-bound tracking or a dynamic BVH.
+These policies are tested against linear query references, revision keys and
+atomic failure cases. They do not promise automatic spatial-bound tracking or a
+dynamic BVH.
 
 ## Implemented camera navigation
 
@@ -73,11 +76,35 @@ matrices can lose local precision at large translated centers even when every
 coefficient is finite. Use direct camera point projection for those views;
 affine conversion does not provide arbitrary-precision coordinates.
 
-Optional point/rectangle conversions remain follow-on work. The shared curve-view
-camera now delegates pan/zoom to Camera2D and constructs kurbo Affine from its
-coefficients. Its wrapper preserves panel-origin composition and resize behavior,
-and rejects updates whose absolute affine coefficients cannot be represented.
-Existing anchored zoom, limit, moved-panel and reset checks exercise this consumer.
+Optional point/rectangle conversions are enabled by the `kurbo` feature (kurbo
+0.13). `Point` and `WorldBounds` convert to/from `kurbo::Point` and `kurbo::Rect`,
+preserving raw coordinates without validating or normalizing inverted rectangles.
+Default camera/scene math still has no dependencies. The mixed-shape editor uses
+these adapters for path bounds and precise picking. The existing curve camera now
+reuses Camera2D while preserving its panel-fit composition and resize behavior.
+
+## Editor consumer
+
+Run `just canvas editor` (or `just canvas --editor`). Rectangles, a holed fill,
+a concave fill and an open cubic stroke overlap in one retained scene. The BVH
+provides front-to-back AABB candidates; fill/stroke tests decide which painted
+object receives input. Hidden and locked objects are skipped by application policy.
+
+The lab supports Shift-click group selection, snapped/free dragging, Escape
+restoration, fit scene/selection, color edits, hide/lock toggles and index rebuild.
+The retained bounds overview uses `content_cache_key`, so geometry and appearance
+changes both refresh it. It deliberately previews colored bounds, not full shape
+thumbnails. Shape geometry stays in the lab; Canvas does not depend on xgpui-curve.
+The default card and browser views remain available.
+
+`just canvas editor-smoke` is registered in labs.toml. It dispatches real GPUI
+window input and saves startup/selection/edited captures plus a report under
+`target/canvas-editor-smoke`. Focus observers are asynchronous, so its focus-loss
+assertions run after queued effects rather than immediately inside blur().
+
+The editor also exposed pinch suppression after keyboard input. That isolated
+core behavior fix and its registered window probe are in PR #402; individual
+compatibility review is recorded in `docs/api-reviews/384-pinch-input.md`.
 
 ## Validation and scope
 
@@ -86,7 +113,7 @@ bounds projection, invalid input, extreme finite/subnormal bounds, affine
 projection agreement and coefficient overflow. Lab navigation tests cover fitting
 both 10k/100k scenes and scrolling outward without a minimum-zoom jump.
 
-Scene/editor acceptance will add fine picking, appearance invalidation, batch
-updates, rebuild equivalence and real-window move/snap/cancel checks. Windows and
+Scene/editor checks cover fine picking, appearance invalidation, batch updates,
+rebuild equivalence and real-window move/snap/cancel/focus/zoom interactions. Windows and
 Linux rely on integration CI until main merge; do not request branch testing from
 the owner. No release/version change is part of this slice.

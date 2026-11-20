@@ -8,6 +8,8 @@
 mod viewport;
 #[cfg(feature = "gpui")]
 pub use viewport::{Canvas, GridOptions, GridPainter, GridStyle};
+#[cfg(feature = "kurbo")]
+mod kurbo_interop;
 mod input;
 pub use input::PanGesture;
 mod overview;
