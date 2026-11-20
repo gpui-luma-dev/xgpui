@@ -13,9 +13,11 @@ categories = ["gui", "graphics"]
 publish = ["crates-io"]
 
 [features]
+kurbo = ["dep:kurbo"]
 gpui = ["dep:gpui", "dep:xgpui-shader", "dep:bytemuck", "dep:anyhow"]
 
 [dependencies]
+kurbo = { version = "0.13", optional = true }
 gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "4.0.0", optional = true }
 xgpui-shader = { path = "../xgpui-shader", version = "0.5.0", features = ["portable-shaders"], optional = true , package = "xgpui-shader" }
 bytemuck = { version = "1", features = ["derive"], optional = true }

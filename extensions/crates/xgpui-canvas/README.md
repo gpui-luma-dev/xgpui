@@ -41,6 +41,21 @@ have finite, ordered min/max coordinates; `Scene::new` panics if any item violat
 this requirement. Proxy selection uses original world
 bounds, without a screen-space tolerance.
 
+Use `query_indexed`, `visible_indexed` and `hit_test_indexed` when edits need
+paint indices without duplicating them in item data. `hits_at` yields every
+point/AABB candidate front-to-back: continue after rejecting a candidate in your
+own fill/stroke hit test. These indices survive bounds/data edits and
+`rebuild_index`, but are not persistent IDs across scene replacement.
+
+`data_mut(index)` exposes only caller data and conservatively advances the
+content revision. `cache_key()` remains geometry-only; use
+`content_cache_key()` for appearance-dependent captures. Data changes that
+alter geometry also need a bounds update. `set_bounds_many` rejects an entire
+batch for invalid bounds or missing/duplicate indices, otherwise advancing the
+geometry revision once (an empty batch is a no-op). It refits shared ancestors
+once; single-item batches retain the individual refit path. `rebuild_index()`
+restores partition quality without changing either cache key or paint indices.
+
 Sparse queries prune unrelated nodes. Dense or heavily overlapping scenes can
 still visit every item; ordered rectangle results also cost O(k log k) to sort
 k matches. The index is not a guarantee of logarithmic queries, and it cannot
@@ -119,3 +134,31 @@ The website includes `?demo=canvas` (retained cards, selection/snapping and dens
 minimap) and `?demo=mandelbrot` (bounded progressive CPU fractal). They share this
 crate with the native lab. See [controls, API and browser limits](https://xgpui.dev/canvas.html).
 Build with `bash apps/xgpui-ext-lab/extensions-web/build.sh --release`.
+
+## Fit and project a view
+
+`camera.center()` returns the current world center. Use
+`camera.fit_bounds(bounds, viewport, padding)` for default zoom limits, or
+`fit_bounds_with_limits(bounds, viewport, padding, min, max)` for a larger scene.
+Both return false without changing the camera for invalid input or a fit that
+requires zoom below the minimum. Padding is uniform logical pixels. Point-sized
+bounds use the maximum zoom; a maximum limit may leave extra space.
+
+`world_bounds_to_screen` and `screen_bounds_to_world` project both corners using
+the same conventions as the point helpers. The checked
+`world_to_screen_affine` / `screen_to_world_affine` methods return optional
+`[a, b, c, d, e, f]` coefficients suitable for `kurbo::Affine::new`. Finite absolute
+affine coefficients can still lose local precision at distant centers; prefer
+the direct point helpers in those views.
+
+
+## Optional vector coordinate adapters
+
+Enable `kurbo` to convert `Point` / `WorldBounds` to and from `kurbo::Point` /
+`kurbo::Rect` (kurbo 0.13), without pulling GPUI into math-only consumers. The
+conversions preserve coordinates, including inverted rectangles; validate bounds
+before constructing or updating a scene. Defaults remain dependency-free.
+
+The native `just canvas editor` view demonstrates precise fill/stroke picking,
+indexed selection, batch dragging, color/hide/lock edits, fit controls and content
+cache invalidation. `just canvas editor-smoke` runs its real-window assertions.

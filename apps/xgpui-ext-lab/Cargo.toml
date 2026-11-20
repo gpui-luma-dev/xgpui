@@ -34,7 +34,7 @@ runtime-shaders = ["gpui_platform/runtime_shaders"]
 
 [dependencies]
 xgpui-shell = { path = "../../extensions/crates/xgpui-shell" , package = "xgpui-shell", version = "0.3.0" }
-xgpui-canvas = { path = "../../extensions/crates/xgpui-canvas", features = ["gpui"] , package = "xgpui-canvas", version = "0.4.0" }
+xgpui-canvas = { path = "../../extensions/crates/xgpui-canvas", features = ["gpui", "kurbo"] , package = "xgpui-canvas", version = "0.4.0" }
 anyhow = "1"
 env_logger = "0.11"
 gpui = { package = "xgpui", path = "../../gpui/crates/gpui", version = "4.0.0" }
@@ -273,3 +273,9 @@ name = "macos_frames"
 path = "tests/macos_frames.rs"
 harness = false
 required-features = ["macos-window-tests"]
+
+[[test]]
+name = "pinch_after_keyboard"
+path = "tests/pinch_after_keyboard.rs"
+harness = false
+required-features = ["native-window-tests"]

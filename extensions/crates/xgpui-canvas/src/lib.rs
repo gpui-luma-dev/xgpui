@@ -8,6 +8,8 @@
 mod viewport;
 #[cfg(feature = "gpui")]
 pub use viewport::{Canvas, GridOptions, GridPainter, GridStyle};
+#[cfg(feature = "kurbo")]
+mod kurbo_interop;
 mod input;
 pub use input::PanGesture;
 mod overview;
@@ -89,6 +91,131 @@ impl Camera2D {
         self.center = world;
         true
     }
+    /// World-space point at the viewport center.
+    pub fn center(self) -> Point {
+        self.center
+    }
+
+    /// Fit finite, ordered bounds into a positive viewport with uniform logical-pixel
+    /// padding, using the default zoom limits (0.01..=64).
+    /// Returns false without changing the camera if fitting is invalid or requires
+    /// zoom below the minimum. A point-sized target uses the maximum zoom.
+    pub fn fit_bounds(&mut self, bounds: WorldBounds, viewport: Point, padding: f64) -> bool {
+        self.fit_bounds_with_limits(bounds, viewport, padding, 0.01, 64.)
+    }
+
+    /// Fit bounds with application-selected positive finite zoom limits.
+    /// The maximum may leave extra space; the minimum never silently crops the target.
+    pub fn fit_bounds_with_limits(
+        &mut self,
+        bounds: WorldBounds,
+        viewport: Point,
+        padding: f64,
+        min: f64,
+        max: f64,
+    ) -> bool {
+        if !bounds.is_valid()
+            || ![viewport.x, viewport.y, padding, min, max]
+                .iter()
+                .all(|v| v.is_finite())
+            || viewport.x <= 0.
+            || viewport.y <= 0.
+            || padding < 0.
+            || min <= 0.
+            || max < min
+        {
+            return false;
+        }
+        let available = Point::new(
+            (viewport.x * 0.5 - padding) * 2.,
+            (viewport.y * 0.5 - padding) * 2.,
+        );
+        if available.x <= 0. || available.y <= 0. {
+            return false;
+        }
+        let midpoint = |lo: f64, hi: f64| {
+            let sum = lo + hi;
+            if sum.is_finite() {
+                sum * 0.5
+            } else {
+                lo * 0.5 + hi * 0.5
+            }
+        };
+        let center = Point::new(
+            midpoint(bounds.min.x, bounds.max.x),
+            midpoint(bounds.min.y, bounds.max.y),
+        );
+        // Use the actual representable center: a midpoint can round all the way
+        // to one endpoint of a tiny span at a distant world coordinate.
+        let fit_axis = |lo: f64, hi: f64, center: f64, pixels: f64| {
+            (pixels * 0.5) / (center - lo).max(hi - center)
+        };
+        let zoom = fit_axis(bounds.min.x, bounds.max.x, center.x, available.x).min(fit_axis(
+            bounds.min.y,
+            bounds.max.y,
+            center.y,
+            available.y,
+        ));
+        if zoom < min {
+            return false;
+        }
+        self.center = center;
+        self.zoom = zoom.min(max);
+        true
+    }
+
+    /// Project both corners, preserving the ordinary point-projection semantics.
+    /// Input and projected coordinates must be representable; no clamping is applied.
+    pub fn world_bounds_to_screen(self, bounds: WorldBounds, viewport: Point) -> WorldBounds {
+        WorldBounds {
+            min: self.world_to_screen(bounds.min, viewport),
+            max: self.world_to_screen(bounds.max, viewport),
+        }
+    }
+
+    /// Inverse-project both corners, without validation or clamping.
+    pub fn screen_bounds_to_world(self, bounds: WorldBounds, viewport: Point) -> WorldBounds {
+        WorldBounds {
+            min: self.screen_to_world(bounds.min, viewport),
+            max: self.screen_to_world(bounds.max, viewport),
+        }
+    }
+
+    /// Absolute affine coefficients [a, b, c, d, e, f], with x' = a*x + c*y + e.
+    /// Returns None if viewport/coefficients are non-finite. Absolute transforms can
+    /// lose local precision at distant centers; use point projection for those views.
+    pub fn world_to_screen_affine(self, viewport: Point) -> Option<[f64; 6]> {
+        let coefficients = [
+            self.zoom,
+            0.,
+            0.,
+            self.zoom,
+            viewport.x * 0.5 - self.center.x * self.zoom,
+            viewport.y * 0.5 - self.center.y * self.zoom,
+        ];
+        (viewport.x.is_finite()
+            && viewport.y.is_finite()
+            && coefficients.iter().all(|v| v.is_finite()))
+        .then_some(coefficients)
+    }
+
+    /// Inverse absolute affine coefficients, with the same precision caveat.
+    pub fn screen_to_world_affine(self, viewport: Point) -> Option<[f64; 6]> {
+        let scale = 1. / self.zoom;
+        let coefficients = [
+            scale,
+            0.,
+            0.,
+            scale,
+            self.center.x - viewport.x * 0.5 * scale,
+            self.center.y - viewport.y * 0.5 * scale,
+        ];
+        (viewport.x.is_finite()
+            && viewport.y.is_finite()
+            && coefficients.iter().all(|v| v.is_finite()))
+        .then_some(coefficients)
+    }
+
     pub fn zoom(self) -> f64 {
         self.zoom
     }
@@ -169,6 +296,148 @@ mod tests {
             "{a:?} != {b:?}"
         );
     }
+    fn bounds(min: Point, max: Point) -> WorldBounds {
+        WorldBounds { min, max }
+    }
+
+    #[test]
+    fn fit_bounds_centers_and_respects_padding() {
+        let mut camera = Camera2D::default();
+        let target = bounds(Point::new(100., -50.), Point::new(300., 50.));
+        let viewport = Point::new(1000., 600.);
+        assert!(camera.fit_bounds(target, viewport, 50.));
+        assert_eq!(camera.center(), Point::new(200., 0.));
+        assert_eq!(camera.zoom(), 4.5);
+        let projected = camera.world_bounds_to_screen(target, viewport);
+        close(projected.min, Point::new(50., 75.));
+        close(projected.max, Point::new(950., 525.));
+        let back = camera.screen_bounds_to_world(projected, viewport);
+        close(back.min, target.min);
+        close(back.max, target.max);
+    }
+
+    #[test]
+    fn fit_bounds_handles_points_lines_and_zoom_limits() {
+        let mut camera = Camera2D::default();
+        let viewport = Point::new(100., 100.);
+        let point = Point::new(7., -9.);
+        assert!(camera.fit_bounds(bounds(point, point), viewport, 0.));
+        assert_eq!(camera.center(), point);
+        assert_eq!(camera.zoom(), 64.);
+        assert!(camera.fit_bounds(bounds(point, Point::new(7., 91.)), viewport, 10.));
+        assert_eq!(camera.zoom(), 0.8);
+        let before = camera;
+        let large = bounds(Point::default(), Point::new(100000., 100000.));
+        assert!(!camera.fit_bounds(large, viewport, 0.));
+        assert_eq!(camera.center(), before.center());
+        assert_eq!(camera.zoom(), before.zoom());
+        assert!(camera.fit_bounds_with_limits(large, viewport, 0., 1e-6, 64.));
+        assert_eq!(camera.zoom(), 0.001);
+        assert!(camera.fit_bounds_with_limits(bounds(point, point), viewport, 0., 1., 2.));
+        assert_eq!(camera.zoom(), 2.);
+    }
+
+    #[test]
+    fn fit_bounds_rejects_invalid_inputs_atomically() {
+        let target = bounds(Point::default(), Point::new(10., 10.));
+        for (target, viewport, padding, min, max) in [
+            (target, Point::new(100., 100.), 50., 0.01, 64.),
+            (target, Point::new(f64::NAN, 100.), 0., 0.01, 64.),
+            (target, Point::new(0., 100.), 0., 0.01, 64.),
+            (target, Point::new(100., 100.), -1., 0.01, 64.),
+            (target, Point::new(100., 100.), f64::INFINITY, 0.01, 64.),
+            (target, Point::new(100., 100.), 0., 2., 1.),
+            (target, Point::new(100., 100.), 0., 0., 1.),
+            (
+                bounds(Point::new(2., 0.), Point::new(1., 1.)),
+                Point::new(100., 100.),
+                0.,
+                0.01,
+                64.,
+            ),
+        ] {
+            let mut camera = Camera2D::default();
+            camera.center_on(Point::new(4., 5.));
+            assert!(!camera.fit_bounds_with_limits(target, viewport, padding, min, max));
+            assert_eq!(camera.center(), Point::new(4., 5.));
+            assert_eq!(camera.zoom(), 1.);
+        }
+    }
+
+    #[test]
+    fn fit_extreme_finite_and_subnormal_bounds() {
+        let mut camera = Camera2D::default();
+        let target = bounds(
+            Point::new(-f64::MAX, -f64::MAX),
+            Point::new(f64::MAX, f64::MAX),
+        );
+        assert!(camera.fit_bounds_with_limits(target, Point::new(1000., 1000.), 0., 1e-310, 64.));
+        close(
+            camera.world_to_screen(target.min, Point::new(1000., 1000.)),
+            Point::default(),
+        );
+        close(
+            camera.world_to_screen(target.max, Point::new(1000., 1000.)),
+            Point::new(1000., 1000.),
+        );
+        let unit = f64::from_bits(1);
+        let target = bounds(Point::new(unit, unit), Point::new(2. * unit, 2. * unit));
+        assert!(camera.fit_bounds(target, Point::new(100., 100.), 0.));
+        assert_eq!(camera.center(), Point::new(2. * unit, 2. * unit));
+        assert_eq!(camera.zoom(), 64.);
+    }
+
+    #[test]
+    fn fitted_view_contains_bounds_when_midpoint_rounds_to_an_endpoint() {
+        let lo = 1e10_f64;
+        let hi = f64::from_bits(lo.to_bits() + 1);
+        let target = bounds(Point::new(lo, lo), Point::new(hi, hi));
+        let viewport = Point::new(1000., 1000.);
+        let mut camera = Camera2D::default();
+        assert!(camera.fit_bounds_with_limits(target, viewport, 50., 1e-6, 1e10));
+        let screen = camera.world_bounds_to_screen(target, viewport);
+        assert!(screen.min.x >= 50. - 1e-8 && screen.min.y >= 50. - 1e-8);
+        assert!(
+            screen.max.x <= 950. + 1e-8 && screen.max.y <= 950. + 1e-8,
+            "{screen:?}"
+        );
+    }
+
+    #[test]
+    fn affine_coefficients_match_projection_and_reject_overflow() {
+        let mut camera = Camera2D::default();
+        let viewport = Point::new(1000., 600.);
+        camera.center_on(Point::new(123., -45.));
+        camera.zoom_at(Point::new(500., 300.), viewport, 3.);
+        let apply = |m: [f64; 6], p: Point| {
+            Point::new(
+                m[0] * p.x + m[2] * p.y + m[4],
+                m[1] * p.x + m[3] * p.y + m[5],
+            )
+        };
+        for p in [Point::default(), Point::new(200., -100.)] {
+            let screen = camera.world_to_screen(p, viewport);
+            close(
+                apply(camera.world_to_screen_affine(viewport).unwrap(), p),
+                screen,
+            );
+            close(
+                apply(camera.screen_to_world_affine(viewport).unwrap(), screen),
+                p,
+            );
+        }
+        camera.center_on(Point::new(f64::MAX, 0.));
+        assert!(camera.world_to_screen_affine(viewport).is_none());
+        assert!(
+            camera
+                .screen_to_world_affine(Point::new(f64::NAN, 0.))
+                .is_none()
+        );
+        let mut tiny = Camera2D::default();
+        tiny.zoom_at_with_limits(Point::default(), Point::default(), 1e-310, 1e-310, 1.);
+        assert!(tiny.screen_to_world_affine(viewport).is_none());
+    }
+
     #[test]
     fn overflowing_pan_leaves_both_axes_unchanged() {
         let mut camera = Camera2D::default();

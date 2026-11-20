@@ -80,21 +80,50 @@ impl SpatialIndex {
     pub fn refit<T>(&mut self, items: &[SceneItem<T>], item: usize) {
         let mut next = Some(self.leaves[item]);
         while let Some(index) = next {
-            let mut bounds = if let Some((left, _)) = self.nodes[index].children {
-                self.nodes[left].bounds
-            } else {
-                items[self.order[self.nodes[index].items.start]].bounds
-            };
-            if let Some((_, right)) = self.nodes[index].children {
-                bounds = union(bounds, self.nodes[right].bounds);
-            } else {
-                for &item in &self.order[self.nodes[index].items.clone()] {
-                    bounds = union(bounds, items[item].bounds);
-                }
-            }
-            self.nodes[index].bounds = bounds;
+            self.refit_node(items, index);
             next = self.nodes[index].parent;
         }
+    }
+
+    pub fn refit_many<T>(
+        &mut self,
+        items: &[SceneItem<T>],
+        changed: impl IntoIterator<Item = usize>,
+    ) {
+        let mut affected = std::collections::HashSet::new();
+        for item in changed {
+            let mut next = Some(self.leaves[item]);
+            while let Some(index) = next {
+                if !affected.insert(index) {
+                    break;
+                }
+                next = self.nodes[index].parent;
+            }
+        }
+        // Parents are allocated before children. Descending indices ensure every
+        // changed child is refitted before its parent, without scanning untouched nodes.
+        let mut affected: Vec<_> = affected.into_iter().collect();
+        affected.sort_unstable_by(|a, b| b.cmp(a));
+        for index in affected {
+            self.refit_node(items, index);
+        }
+    }
+
+    fn refit_node<T>(&mut self, items: &[SceneItem<T>], index: usize) {
+        let node = &self.nodes[index];
+        let mut bounds = if let Some((left, _)) = node.children {
+            self.nodes[left].bounds
+        } else {
+            items[self.order[node.items.start]].bounds
+        };
+        if let Some((_, right)) = node.children {
+            bounds = union(bounds, self.nodes[right].bounds);
+        } else {
+            for &item in &self.order[node.items.clone()] {
+                bounds = union(bounds, items[item].bounds);
+            }
+        }
+        self.nodes[index].bounds = bounds;
     }
 
     pub fn query<T>(&self, items: &[SceneItem<T>], bounds: WorldBounds) -> Vec<usize> {

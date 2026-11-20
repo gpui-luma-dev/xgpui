@@ -411,7 +411,10 @@ impl Interactivity {
     pub fn on_pinch(&mut self, listener: impl Fn(&PinchEvent, &mut Window, &mut App) + 'static) {
         self.pinch_listeners
             .push(Box::new(move |event, phase, hitbox, window, cx| {
-                if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
+                // Keyboard focus suppresses hover styling, not gesture delivery.
+                if phase == DispatchPhase::Bubble
+                    && hitbox.id.is_hovered_ignoring_last_input(window)
+                {
                     (listener)(event, window, cx);
                 }
             }));
