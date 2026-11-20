@@ -4,7 +4,7 @@
 overview, target list, unpublished status and browser workflow.
 
 An unpublished development package containing native labs, benchmarks and browser
-demos. It uses one Cargo manifest and lockfile. Extension libraries stay in
+demos. The main package uses one Cargo manifest and lockfile. Extension libraries stay in
 `extensions/crates/`; their dependency graphs do not include this package.
 
 The package is version `0.2.0` with `publish = false`. Publishing can be enabled
@@ -61,3 +61,9 @@ macOS window probes) are opt-in through their `*-window-tests` features, and
 `just labs test` doesn't enable them. Run them with `just window-probes <probe>`;
 `just labs window-probes` lists the probes for this OS. `just labs check` fails if a
 window test isn't registered.
+
+The [clip-chain feasibility lab](clip-chain-probe/README.md) (#37) keeps its isolated
+GPU experiment in a separate unpublished Cargo package under this lab directory.
+Use `just clip-chain-probe test`, `just clip-chain-probe wgpu`,
+`just clip-chain-probe metal` (macOS), or `just clip-chain-probe browser`.
+Its proposal and integration plan are in [docs/issue-37](../../docs/issue-37/README.md).

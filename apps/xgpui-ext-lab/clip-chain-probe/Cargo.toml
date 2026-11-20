@@ -1,0 +1,12 @@
+[package]
+name = "clip-chain-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+wgpu = "=30.0.1"
+pollster = "=0.4.0"
+bytemuck = "=1.25.0"

@@ -1,0 +1,16 @@
+Date: 2026-11-19 (America/Chicago)
+Repository base: 398458ee90ef9b26d2ba9283b47b4295478aa1cc
+GPU: Apple M4 Max (integrated), Metal
+wgpu: 30.0.1 (see standalone Cargo.lock for transitive versions)
+Target: 96x96 R32Float for native/wgpu; RGBA8 browser WebGL2
+Coverage: 4x4 fixed-grid joint containment; CPU dense reference 32x32
+Browser: Codex in-app browser; actual WebGL2, RGBA32UI texture records
+WebGL2: PASS 12 fixture readbacks; max CPU difference 0/255
+UI: rounded excluded corner (50,46) rejected; visible child (135,60) accepted;
+    rectangular mode accepted child at (50,46); nesting, ellipse, scroll and
+    animation controls exercised. Screenshot shows nested rounded mode.
+Native/wgpu tolerances: one 4x4 sample (0.0625); observed exact matches.
+Browser tolerance: one RGBA8 value; observed exact matches.
+Timings: wall time including command submission/wait/readback, not GPU benchmarks.
+Not verified: GPUI integration, native D3D11, WebGPU, Naga-generated WebGL transport,
+    Windows/Linux runtime, effects/wide gamut/subpixel text and ordinary UI overhead.
