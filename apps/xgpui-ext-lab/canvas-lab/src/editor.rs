@@ -52,6 +52,7 @@ struct Editor {
     selected: BTreeSet<usize>,
     guides: Vec<AlignmentGuide>,
     fitted: bool,
+    centered_zoom: bool,
     preview_key: Option<(usize, u64, u64)>,
     preview: Vec<(WorldBounds, u32)>,
     overview: Arc<Overview>,
@@ -160,9 +161,23 @@ impl Editor {
     fn recenter(&mut self) {
         self.cancel();
         self.camera.center_on(WorldPoint::new(0., 0.));
+        self.centered_zoom = true;
+    }
+    fn zoom(&mut self, position: Point<Pixels>, factor: f64) {
+        self.cancel();
+        let viewport = self.viewport();
+        let anchor = if self.centered_zoom {
+            WorldPoint::new(viewport.x / 2., viewport.y / 2.)
+        } else {
+            let p = position - self.bounds.origin;
+            WorldPoint::new(f32::from(p.x) as f64, f32::from(p.y) as f64)
+        };
+        self.camera
+            .zoom_at_with_limits(anchor, viewport, factor, 1e-6, 64.);
     }
     fn fit(&mut self, selection: bool) {
         self.cancel();
+        self.centered_zoom = false;
         let bounds = self
             .scene
             .items()
@@ -210,6 +225,7 @@ impl Editor {
             if !event.modifiers.shift {
                 self.selected.clear();
             }
+            self.centered_zoom = false;
             self.pan.begin(WorldPoint::new(
                 f32::from(event.position.x) as f64,
                 f32::from(event.position.y) as f64,
@@ -339,7 +355,7 @@ impl Render for Editor {
                 .child("Mixed-shape editor · rectangles, holes, concave fills and open curves")
                 .child("Click: select · Shift-click: group · Drag: move/snap · Option: free move · Background drag: pan · Wheel/pinch: zoom")
                 .child("F: fit scene · S: fit selection · C: color · L: lock/unlock selected · H: hide selected · V: show all · R: rebuild index · Esc: cancel")
-                .child(div().id("recenter").cursor_pointer().child("Re-center (0): grid origin")
+                .child(div().id("recenter").cursor_pointer().child("Re-center (0): origin + centered zoom")
                     .on_click(cx.listener(|this, _, window, cx| { this.recenter(); this.focus.focus(window, cx); cx.notify(); })))
                 .child(format!("{:.1}% · {} selected · {names}",camera.zoom()*100.,self.selected.len())))
             .child(div().relative().flex_1().w_full().overflow_hidden()
@@ -347,8 +363,8 @@ impl Render for Editor {
                 .on_mouse_move(cx.listener(|this,e:&MouseMoveEvent,_,cx|{if e.pressed_button==Some(MouseButton::Left){this.movement(e.position,e.modifiers.alt);cx.notify();}else{this.pan.end();}}))
                 .on_mouse_up(MouseButton::Left,cx.listener(|this,e:&MouseUpEvent,_,cx|{if this.moving.is_some(){this.movement(e.position,e.modifiers.alt);}this.moving=None;this.pan.end();this.guides.clear();cx.notify();}))
                 .on_mouse_up_out(MouseButton::Left,cx.listener(|this,e:&MouseUpEvent,_,cx|{if this.moving.is_some(){this.movement(e.position,e.modifiers.alt);}this.moving=None;this.pan.end();this.guides.clear();cx.notify();}))
-                .on_scroll(cx.listener(|this,e:&ScrollEvent,_,cx|{this.cancel();let p=e.position-this.bounds.origin;let d=e.delta.pixel_delta(px(24.));this.camera.zoom_at_with_limits(WorldPoint::new(f32::from(p.x) as f64,f32::from(p.y) as f64),this.viewport(),(f32::from(d.y) as f64*0.005).clamp(-1.,1.).exp(),1e-6,64.);cx.stop_propagation();cx.notify();}))
-                .on_pinch(cx.listener(|this,e:&PinchEvent,_,cx|{this.cancel();let p=e.position-this.bounds.origin;this.camera.zoom_at_with_limits(WorldPoint::new(f32::from(p.x) as f64,f32::from(p.y) as f64),this.viewport(),(1.+f64::from(e.delta)).max(0.01),1e-6,64.);cx.stop_propagation();cx.notify();}))
+                .on_scroll(cx.listener(|this,e:&ScrollEvent,_,cx|{let d=e.delta.pixel_delta(px(24.));this.zoom(e.position,(f32::from(d.y) as f64*0.005).clamp(-1.,1.).exp());cx.stop_propagation();cx.notify();}))
+                .on_pinch(cx.listener(|this,e:&PinchEvent,_,cx|{this.zoom(e.position,(1.+f64::from(e.delta)).max(0.01));cx.stop_propagation();cx.notify();}))
                 .child(SpatialCanvas::new(camera,&self.grid,GridStyle::Lines).size_full()
                     .child(canvas(move|bounds,_,cx|{entity.update(cx,|this,cx|{if this.bounds!=bounds{this.bounds=bounds;cx.notify();}});},move|bounds,_,window,_|{
                         if let Some(matrix)=camera.world_to_screen_affine(viewport) {
@@ -425,6 +441,7 @@ pub(super) fn run(smoke: Option<PathBuf>) {
                         selected: BTreeSet::new(),
                         guides: Vec::new(),
                         fitted: false,
+                        centered_zoom: false,
                         preview_key: None,
                         preview: Vec::new(),
                         overview,
@@ -609,6 +626,43 @@ fn smoke(entity: &Entity<Editor>, window: &mut Window, cx: &mut App, directory: 
         origin,
         WorldPoint::new(editor.viewport().x / 2., editor.viewport().y / 2.)
     );
+    let off_center = entity.read(cx).bounds.origin + point(px(80.), px(60.));
+    for delta in [0.5, -0.25] {
+        let previous_zoom = entity.read(cx).camera.zoom();
+        window.dispatch_event(
+            PlatformInput::Pinch(PinchEvent {
+                position: off_center,
+                delta,
+                ..Default::default()
+            }),
+            cx,
+        );
+        let editor = entity.read(cx);
+        assert_ne!(editor.camera.zoom(), previous_zoom);
+        assert_eq!(
+            editor.camera.center(),
+            WorldPoint::new(0., 0.),
+            "re-centered pinch must keep grid origin centered"
+        );
+    }
+    for delta in [30., -30.] {
+        let previous_zoom = entity.read(cx).camera.zoom();
+        window.dispatch_event(
+            PlatformInput::Scroll(ScrollEvent {
+                position: off_center,
+                delta: ScrollDelta::Pixels(point(px(0.), px(delta))),
+                ..Default::default()
+            }),
+            cx,
+        );
+        let editor = entity.read(cx);
+        assert_ne!(editor.camera.zoom(), previous_zoom);
+        assert_eq!(
+            editor.camera.center(),
+            WorldPoint::new(0., 0.),
+            "re-centered wheel must keep grid origin centered"
+        );
+    }
     key("f", window, cx);
     let anchor = position(WorldPoint::new(270., 190.), cx);
     let before = entity.read(cx).world(anchor);
@@ -709,7 +763,7 @@ fn smoke(entity: &Entity<Editor>, window: &mut Window, cx: &mut App, directory: 
         entity.update(cx, |this, cx| this.focus.focus(window, cx));
         window.draw(cx).clear(cx);
         window.render_to_image().unwrap().save(directory.join("edited.png")).unwrap();
-        let report = serde_json::json!({"passed":true,"checks":["hole picking","group move","free move","snap guides","Escape restore","appearance invalidation","rebuild","lock/hide","fit scene/selection","pinch anchor","wheel anchor","background pan","focus-loss restore"]});
+        let report = serde_json::json!({"passed":true,"checks":["hole picking","group move","free move","snap guides","Escape restore","appearance invalidation","rebuild","lock/hide","fit scene/selection","centered zoom in/out","pinch anchor","wheel anchor","background pan","focus-loss restore"]});
         std::fs::write(directory.join("report.json"),serde_json::to_vec_pretty(&report).unwrap()).unwrap();
         cx.quit();
     }).expect("editor focus verification window"); });
