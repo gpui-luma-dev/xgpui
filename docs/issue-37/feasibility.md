@@ -1,6 +1,8 @@
 # Issue 37: bounded descendant clipping investigation
 
-Status: proposal and isolated feasibility experiment; no production clipping API or renderer change.
+Status: preserved feasibility baseline; see the [native milestone](rounded-overflow-milestone.md)
+for subsequent experimental integration and its separate API review.
+The inventory below describes the original proposal/probe, before that integration.
 Investigated 2026-11-19 against `398458ee90ef9b26d2ba9283b47b4295478aa1cc`.
 Issue: https://github.com/gpui-luma-dev/xgpui/issues/37. Separate from #36.
 

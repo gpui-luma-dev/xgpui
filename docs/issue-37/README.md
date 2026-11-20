@@ -13,7 +13,8 @@ actual descendant content to rounded container boundaries.
 
 The isolated probe works on the tested native Metal, wgpu and WebGL2 paths. It is
 not an integrated GPUI implementation or a production performance/edge-quality claim.
-No core public API has changed.
+The baseline introduced no core public API changes. The implementation milestone
+adds experimental hooks pending the [core API review](api-review.md).
 
 ## Agreed next implementation scope
 
@@ -27,3 +28,9 @@ Ellipses remain feasibility groundwork; polygons and arbitrary paths are deferre
 Keep work on issue-37 branches, with PRs targeting `issue-37/epic`. Nothing goes into
 `main`, and no PR is merged without explicit user approval. Concrete core public API
 changes require individual final review under the repository instructions.
+
+## Native implementation milestone
+
+- [Milestone report](rounded-overflow-milestone.md).
+- [Native rounded-overflow lab](../../apps/xgpui-ext-lab/rounded-overflow-lab/README.md): `just rounded-overflow`.
+- [Core public API review](api-review.md), pending final approval.

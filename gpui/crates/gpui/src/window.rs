@@ -1059,6 +1059,7 @@ pub(crate) struct Frame {
     pub(crate) dispatch_tree: DispatchTree,
     pub(crate) scene: Scene,
     pub(crate) hitboxes: Vec<Hitbox>,
+    rounded_hit_test_masks: FxHashMap<HitboxId, Arc<[RoundedHitTestMask]>>,
     pub(crate) window_control_hitboxes: Vec<(WindowControlArea, Hitbox)>,
     pub(crate) deferred_draws: Vec<DeferredDraw>,
     pub(crate) input_handlers: Vec<Option<PlatformInputHandler>>,
@@ -1115,6 +1116,7 @@ impl Frame {
             dispatch_tree,
             scene: Scene::default(),
             hitboxes: Vec::new(),
+            rounded_hit_test_masks: FxHashMap::default(),
             window_control_hitboxes: Vec::new(),
             deferred_draws: Vec::new(),
             input_handlers: Vec::new(),
@@ -1145,6 +1147,7 @@ impl Frame {
         self.tooltip_requests.clear();
         self.cursor_styles.clear();
         self.hitboxes.clear();
+        self.rounded_hit_test_masks.clear();
         self.window_control_hitboxes.clear();
         self.deferred_draws.clear();
         self.tab_stops.clear();
@@ -1183,7 +1186,12 @@ impl Frame {
         let mut hit_test = HitTest::default();
         for hitbox in self.hitboxes.iter().rev() {
             let bounds = hitbox.bounds.intersect(&hitbox.content_mask.bounds);
-            if bounds.contains(&position) {
+            if bounds.contains(&position)
+                && self
+                    .rounded_hit_test_masks
+                    .get(&hitbox.id)
+                    .is_none_or(|masks| masks.iter().all(|mask| mask.contains(position)))
+            {
                 hit_test.ids.push(hitbox.id);
                 if !set_hover_hitbox_count
                     && hitbox.behavior == HitboxBehavior::BlockMouseExceptScroll
@@ -1260,6 +1268,7 @@ pub struct Window {
     layer_capture_sources: Vec<Bounds<Pixels>>,
     layer_capture_clips: Vec<Bounds<Pixels>>,
     pub(crate) content_mask_stack: Vec<ContentMask<Pixels>>,
+    pub(crate) rounded_hit_test_mask: Option<Arc<[RoundedHitTestMask]>>,
     pub(crate) requested_autoscroll: Option<Bounds<Pixels>>,
     /// The [`TextInputConfiguration`] most recently forwarded to the platform
     /// window, so that only actual changes are forwarded (reconfiguring a live
@@ -2399,6 +2408,7 @@ impl Window {
             rendered_entity_stack: Vec::new(),
             element_offset_stack: Vec::new(),
             content_mask_stack: Vec::new(),
+            rounded_hit_test_mask: None,
             element_opacity: 1.0,
             layer_capture_depth: 0,
             layer_capture_sources: Vec::new(),
@@ -2490,6 +2500,43 @@ pub struct DispatchEventResult {
 pub struct ContentMask<P: Clone + Debug + Default + PartialEq> {
     /// The bounds
     pub bounds: Bounds<P>,
+}
+
+/// Immutable CPU counterpart of a circular per-corner rounded clip.
+/// Private so the experimental input scope does not change Hitbox's public layout.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct RoundedHitTestMask {
+    bounds: Bounds<Pixels>,
+    radii: Corners<Pixels>,
+}
+impl RoundedHitTestMask {
+    fn contains(&self, position: Point<Pixels>) -> bool {
+        let b = self.bounds;
+        if b.is_empty() || !b.contains(&position) {
+            return false;
+        }
+        let x = f32::from(position.x - b.left());
+        let y = f32::from(position.y - b.top());
+        let w = f32::from(b.size.width);
+        let h = f32::from(b.size.height);
+        for (r, cx, cy, sx, sy) in [
+            (self.radii.top_left, 0., 0., -1., -1.),
+            (self.radii.top_right, w, 0., 1., -1.),
+            (self.radii.bottom_right, w, h, 1., 1.),
+            (self.radii.bottom_left, 0., h, -1., 1.),
+        ] {
+            let r = f32::from(r);
+            if r <= 0. {
+                continue;
+            }
+            let dx = x - (cx - sx * r);
+            let dy = y - (cy - sy * r);
+            if dx * sx > 0. && dy * sy > 0. && dx * dx + dy * dy > r * r {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 impl ContentMask<Pixels> {
@@ -4331,6 +4378,17 @@ impl Window {
     }
 
     pub(crate) fn reuse_prepaint(&mut self, range: Range<PrepaintStateIndex>) {
+        if !self.rendered_frame.rounded_hit_test_masks.is_empty() {
+            for hitbox in
+                &self.rendered_frame.hitboxes[range.start.hitboxes_index..range.end.hitboxes_index]
+            {
+                if let Some(masks) = self.rendered_frame.rounded_hit_test_masks.get(&hitbox.id) {
+                    self.next_frame
+                        .rounded_hit_test_masks
+                        .insert(hitbox.id, masks.clone());
+                }
+            }
+        }
         self.next_frame.hitboxes.extend(
             self.rendered_frame.hitboxes[range.start.hitboxes_index..range.end.hitboxes_index]
                 .iter()
@@ -4514,6 +4572,59 @@ impl Window {
         } else {
             f(self)
         }
+    }
+
+    /// Restrict descendant hit-testing to a rounded rectangle during prepaint.
+    ///
+    /// Experimental companion to explicitly composited rounded overflow. This does
+    /// not clip painting: the caller must apply the same geometry to its output.
+    /// Radii follow GPUI's per-corner clamp. Nested input masks intersect, and
+    /// escaped deferred overlays retain their existing semantics.
+    pub fn with_rounded_hit_test_mask<R>(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        radii: Corners<Pixels>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> anyhow::Result<R> {
+        self.invalidator.debug_assert_prepaint();
+        anyhow::ensure!(
+            [
+                f32::from(bounds.origin.x),
+                f32::from(bounds.origin.y),
+                f32::from(bounds.size.width),
+                f32::from(bounds.size.height),
+                f32::from(radii.top_left),
+                f32::from(radii.top_right),
+                f32::from(radii.bottom_right),
+                f32::from(radii.bottom_left),
+            ]
+            .iter()
+            .all(|v| v.is_finite()),
+            "non-finite rounded hit-test geometry"
+        );
+        anyhow::ensure!(
+            bounds.size.width >= px(0.)
+                && bounds.size.height >= px(0.)
+                && [
+                    radii.top_left,
+                    radii.top_right,
+                    radii.bottom_right,
+                    radii.bottom_left
+                ]
+                .iter()
+                .all(|r| *r >= px(0.)),
+            "negative rounded hit-test geometry"
+        );
+        let radii = radii.clamp_radii_for_quad_size(bounds.size);
+        let previous = self.rounded_hit_test_mask.clone();
+        if radii != Corners::default() {
+            let mut masks = previous.as_deref().unwrap_or(&[]).to_vec();
+            masks.push(RoundedHitTestMask { bounds, radii });
+            self.rounded_hit_test_mask = Some(masks.into());
+        }
+        let result = self.with_content_mask(Some(ContentMask { bounds }), f);
+        self.rounded_hit_test_mask = previous;
+        Ok(result)
     }
 
     /// Updates the global element offset relative to the current offset. This is used to implement
@@ -5704,6 +5815,70 @@ impl Window {
         program: Arc<crate::SceneShaderProgram>,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
+        self.with_layer_color_filter_impl(bounds, opacity, color_filter, program, None, f)
+    }
+
+    /// Experimentally clip a completed isolated subtree to circular rounded corners.
+    ///
+    /// Uses the existing bounded layer compositor and requires its matching rounded
+    /// composition shader. Pair with `with_rounded_hit_test_mask` during prepaint.
+    /// Nested captured groups are unsupported in this initial path. No style or
+    /// primitive layout changes are implied by this explicit scope.
+    pub fn with_rounded_layer_clip<R>(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        radii: Corners<Pixels>,
+        program: Arc<crate::SceneShaderProgram>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> anyhow::Result<R> {
+        anyhow::ensure!(
+            !self.is_layer_captured(),
+            "rounded layer clips cannot nest inside a captured group"
+        );
+        anyhow::ensure!(
+            [
+                f32::from(bounds.left()),
+                f32::from(bounds.top()),
+                f32::from(bounds.size.width),
+                f32::from(bounds.size.height),
+                f32::from(radii.top_left),
+                f32::from(radii.top_right),
+                f32::from(radii.bottom_right),
+                f32::from(radii.bottom_left),
+            ]
+            .iter()
+            .all(|v| v.is_finite())
+                && bounds.size.width >= px(0.)
+                && bounds.size.height >= px(0.)
+                && [
+                    radii.top_left,
+                    radii.top_right,
+                    radii.bottom_right,
+                    radii.bottom_left
+                ]
+                .iter()
+                .all(|r| *r >= px(0.)),
+            "invalid rounded layer geometry"
+        );
+        Ok(self.with_layer_color_filter_impl(
+            bounds,
+            1.,
+            crate::LayerColorFilter::default(),
+            program,
+            Some(radii.clamp_radii_for_quad_size(bounds.size)),
+            f,
+        ))
+    }
+
+    fn with_layer_color_filter_impl<R>(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        opacity: f32,
+        color_filter: crate::LayerColorFilter,
+        program: Arc<crate::SceneShaderProgram>,
+        rounded_clip: Option<Corners<Pixels>>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
         self.invalidator.debug_assert_paint();
         let viewport = Bounds::new(Point::default(), self.viewport_size);
         let (source, clipped) = self.layer_capture_regions(bounds);
@@ -5728,6 +5903,13 @@ impl Window {
         let fence = ContentMask {
             bounds: viewport.scale(scale),
         };
+        if let Some(radii) = rounded_clip {
+            self.next_frame.scene.set_rounded_layer_clip(
+                &capture,
+                bounds.scale(scale),
+                radii.scale(scale),
+            );
+        }
         self.next_frame
             .scene
             .begin_layer_capture(capture.clone(), fence);
@@ -6033,6 +6215,11 @@ impl Window {
             content_mask,
             behavior,
         };
+        if let Some(masks) = &self.rounded_hit_test_mask {
+            self.next_frame
+                .rounded_hit_test_masks
+                .insert(id, masks.clone());
+        }
         self.next_frame.hitboxes.push(hitbox.clone());
         hitbox
     }
@@ -11276,5 +11463,151 @@ mod inspector_tests {
             }
         })
         .expect("closed inspector has no bookkeeping and no style overrides");
+    }
+}
+
+#[cfg(test)]
+mod rounded_hit_test_tests {
+    use super::*;
+    #[gpui::test]
+    fn rounded_input_masks_follow_cached_prepaint_and_radius_changes(
+        cx: &mut crate::TestAppContext,
+    ) {
+        use crate::{prelude::*, *};
+        struct Child {
+            renders: Rc<Cell<usize>>,
+        }
+        impl Render for Child {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                self.renders.set(self.renders.get() + 1);
+                div()
+                    .size_full()
+                    .on_mouse_down(MouseButton::Left, |_, _, _| {})
+            }
+        }
+        struct Parent {
+            radius: f32,
+            child: Entity<Child>,
+        }
+        impl Render for Parent {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let child = self.child.clone();
+                let radius = self.radius;
+                canvas(
+                    move |bounds, window, cx| {
+                        let mut child = child
+                            .cached(StyleRefinement::default().w(px(100.)).h(px(80.)))
+                            .into_any_element();
+                        child.layout_as_root(Size::<AvailableSpace>::from(bounds.size), window, cx);
+                        window
+                            .with_rounded_hit_test_mask(
+                                bounds,
+                                Corners::all(px(radius)),
+                                |window| child.prepaint_at(bounds.origin, window, cx),
+                            )
+                            .unwrap();
+                        child
+                    },
+                    |_, mut child, window, cx| child.paint(window, cx),
+                )
+                .w(px(100.))
+                .h(px(80.))
+            }
+        }
+        let renders = Rc::new(Cell::new(0));
+        let saved = renders.clone();
+        let window = cx.add_window(move |_, cx| Parent {
+            radius: 30.,
+            child: cx.new(|_| Child { renders: saved }),
+        });
+        // Same-mask redraw must reuse the child's hitboxes. Radius-only edits must
+        // invalidate cached prepaint even though the rectangular bounds are unchanged.
+        for (radius, corner_visible) in [(30., false), (30., false), (0., true), (30., false)] {
+            window
+                .update(cx, |parent, _, cx| {
+                    parent.radius = radius;
+                    cx.notify();
+                })
+                .unwrap();
+            cx.update_window(window.into(), |_, window, cx| window.draw(cx).clear(cx))
+                .unwrap();
+            cx.update_window(window.into(), |_, window, _| {
+                assert_eq!(
+                    !window
+                        .rendered_frame
+                        .hit_test(point(px(1.), px(1.)))
+                        .ids
+                        .is_empty(),
+                    corner_visible
+                );
+                assert!(
+                    !window
+                        .rendered_frame
+                        .hit_test(point(px(50.), px(20.)))
+                        .ids
+                        .is_empty()
+                );
+            })
+            .unwrap();
+        }
+        assert_eq!(
+            renders.get(),
+            3,
+            "unchanged scope should reuse prepaint; radius changes should invalidate it"
+        );
+    }
+
+    #[::core::prelude::v1::test]
+    fn rounded_corners_do_not_occlude_mouse_or_scroll_targets() {
+        let mut frame = Frame::new(DispatchTree::new(
+            Rc::new(RefCell::new(crate::Keymap::default())),
+            Rc::new(crate::ActionRegistry::default()),
+        ));
+        let bounds = Bounds::new(point(px(0.), px(0.)), size(px(100.), px(80.)));
+        for (id, behavior) in [
+            (HitboxId(1), HitboxBehavior::Normal),
+            (HitboxId(2), HitboxBehavior::BlockMouse),
+        ] {
+            frame.hitboxes.push(Hitbox {
+                id,
+                bounds,
+                content_mask: ContentMask { bounds },
+                behavior,
+            });
+        }
+        let mask = RoundedHitTestMask {
+            bounds,
+            radii: Corners::all(px(30.)),
+        };
+        frame
+            .rounded_hit_test_masks
+            .insert(HitboxId(2), Arc::from([mask.clone()]));
+        assert_eq!(
+            frame.hit_test(point(px(1.), px(1.))).ids.as_slice(),
+            &[HitboxId(1)]
+        );
+        assert_eq!(
+            frame.hit_test(point(px(50.), px(10.))).ids.as_slice(),
+            &[HitboxId(2)]
+        );
+        frame.hitboxes[1].behavior = HitboxBehavior::BlockMouseExceptScroll;
+        let inside = frame.hit_test(point(px(50.), px(10.)));
+        assert_eq!(inside.ids.as_slice(), &[HitboxId(2), HitboxId(1)]);
+        assert_eq!(inside.hover_hitbox_count, 1);
+        let corner = frame.hit_test(point(px(1.), px(1.)));
+        assert_eq!(corner.ids.as_slice(), &[HitboxId(1)]);
+        assert_eq!(corner.hover_hitbox_count, 1);
+        // Preserve the actual intersection rather than merging rounded bounds.
+        let nested = RoundedHitTestMask {
+            bounds: Bounds::new(point(px(10.), px(10.)), size(px(60.), px(60.))),
+            radii: Corners::all(px(28.)),
+        };
+        frame
+            .rounded_hit_test_masks
+            .insert(HitboxId(2), Arc::from([mask, nested]));
+        assert_eq!(
+            frame.hit_test(point(px(12.), px(12.))).ids.as_slice(),
+            &[HitboxId(1)]
+        );
     }
 }

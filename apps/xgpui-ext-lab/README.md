@@ -67,3 +67,7 @@ GPU experiment in a separate unpublished Cargo package under this lab directory.
 Use `just clip-chain-probe test`, `just clip-chain-probe wgpu`,
 `just clip-chain-probe metal` (macOS), or `just clip-chain-probe browser`.
 Its proposal and integration plan are in [docs/issue-37](../../docs/issue-37/README.md).
+
+The [rounded overflow lab](rounded-overflow-lab/README.md) compares legacy overflow
+with actual rounded GPUI subtree composition for configurable control backgrounds:
+`just rounded-overflow` or `just rounded-overflow check`.

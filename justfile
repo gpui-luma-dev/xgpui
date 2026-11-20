@@ -214,3 +214,7 @@ clippy *args:
 # Rounded clip-chain feasibility experiments (#37).
 clip-chain-probe *args:
     @XGPUI_LAB_DIRECT=1 {{ lab }} clip-chain-probe "$@"
+
+# Rounded control background comparison (#37).
+rounded-overflow *args:
+    @XGPUI_LAB_DIRECT=1 {{ lab }} rounded-overflow "$@"

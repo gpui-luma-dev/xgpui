@@ -66,3 +66,8 @@ pub use layer_effect::LayerEffect;
 
 /// Selectable kinetic typography with optional brush fills and glyph-only shadows.
 pub mod typography;
+
+#[cfg(feature = "portable-shaders")]
+mod rounded_overflow;
+#[cfg(feature = "portable-shaders")]
+pub use rounded_overflow::RoundedOverflow;

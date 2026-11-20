@@ -1,0 +1,9 @@
+2026-11-20 · Apple M4 Max · native Metal · 2x window scale
+rounded-overflow: PASS real subtree pixels, corner/visible clicks, radius-only paint/input invalidation and configured background changes
+Capture: comparison.png (restored 48px outer radius, uniform 2px border, gradient)
+This is a correctness check, not a performance benchmark or final API approval.
+
+Core rounded input tests: 2 passed (occlusion/intersections; cached prepaint/radius changes).
+Extension rounded tests: 3 passed (shared shader translation; Metal pixels/replay; wgpu pixels/replay).
+Existing subtree layer-effect suite: 40 passed.
+Lab registry and formatting/whitespace checks passed.

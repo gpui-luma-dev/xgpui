@@ -336,6 +336,7 @@ struct ViewElementCacheKey {
     glyph_brush: Option<crate::window::GlyphBrushCacheKey>,
     layer_captured: bool,
     layer_clip: Option<Bounds<Pixels>>,
+    rounded_hit_test_mask: Option<std::sync::Arc<[crate::window::RoundedHitTestMask]>>,
     opacity: f32,
 }
 
@@ -551,6 +552,7 @@ fn prepaint_view(
                 let glyph_brush = window.glyph_brush_cache_key();
                 let layer_captured = window.is_layer_captured();
                 let layer_clip = window.layer_capture_visible_bounds();
+                let rounded_hit_test_mask = window.rounded_hit_test_mask.clone();
                 let opacity = window.element_opacity();
 
                 // Opacity is compared by bits so that a NaN opacity still matches itself
@@ -562,6 +564,7 @@ fn prepaint_view(
                     && element_state.cache_key.glyph_brush == glyph_brush
                     && element_state.cache_key.layer_captured == layer_captured
                     && element_state.cache_key.layer_clip == layer_clip
+                    && element_state.cache_key.rounded_hit_test_mask == rounded_hit_test_mask
                     && element_state.cache_key.opacity.to_bits() == opacity.to_bits()
                     && !window.dirty_views.contains(&entity_id)
                     && !window.refreshing
@@ -601,6 +604,7 @@ fn prepaint_view(
                             glyph_brush,
                             layer_captured,
                             layer_clip,
+                            rounded_hit_test_mask,
                             opacity,
                         },
                     },
