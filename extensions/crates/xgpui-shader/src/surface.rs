@@ -159,12 +159,6 @@ pub struct PaintedElement {
     #[cfg(feature = "portable-shaders")]
     layer_effect: Option<crate::LayerEffect>,
 }
-impl IntoElement for PaintedElement {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl IntoElement for Painted {
     type Element = PaintedElement;
     fn into_element(mut self) -> PaintedElement {
@@ -509,12 +503,6 @@ impl Element for PaintedElement {
 struct ClippedChild {
     child: AnyElement,
     geometry: Rc<Geometry>,
-}
-impl IntoElement for ClippedChild {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
 }
 impl Element for ClippedChild {
     type RequestLayoutState = ();

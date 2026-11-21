@@ -19,12 +19,12 @@ use crate::{
     Action, AnyDrag, AnyElement, AnyTooltip, AnyView, App, BackGestureEvent, Bounds, ClickEvent,
     DispatchPhase, Display, Element, ElementId, Entity, EntityId, ExternalDragPayload,
     ExternalDragPayloadSource, FileDropEvent, FocusHandle, Global, GlobalElementId, Hitbox,
-    HitboxBehavior, HitboxId, InspectorElementId, IntoElement, IsZero, KeyContext, KeyDownEvent,
-    KeyUpEvent, KeyboardButton, KeyboardClickEvent, LayoutId, LongPressEvent,
-    ModifiersChangedEvent, MouseButton, MouseClickEvent, MouseDownEvent, MouseExitEvent,
-    MouseMoveEvent, MousePressureEvent, MouseUpEvent, OngoingScroll, Overflow, ParentElement,
-    PinchEvent, Pixels, Point, Render, ScrollEvent, SharedString, Size, Style, StyleRefinement,
-    Styled, Task, TooltipId, TouchPhase, Visibility, Window, WindowControlArea, point, px, size,
+    HitboxBehavior, HitboxId, InspectorElementId, IsZero, KeyContext, KeyDownEvent, KeyUpEvent,
+    KeyboardButton, KeyboardClickEvent, LayoutId, LongPressEvent, ModifiersChangedEvent,
+    MouseButton, MouseClickEvent, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
+    MousePressureEvent, MouseUpEvent, OngoingScroll, Overflow, ParentElement, PinchEvent, Pixels,
+    Point, Render, ScrollEvent, SharedString, Size, Style, StyleRefinement, Styled, Task,
+    TooltipId, TouchPhase, Visibility, Window, WindowControlArea, point, px, size,
 };
 use collections::HashMap;
 use gpui_util::ResultExt;
@@ -1845,8 +1845,14 @@ pub(crate) type ActionListener =
 /// Construct a new [`Div`] element
 #[track_caller]
 pub fn div() -> Div {
+    #[allow(unused_mut)]
+    let mut interactivity = InteractivityBox::new();
+    #[cfg(debug_assertions)]
+    {
+        interactivity.source_location = Some(core::panic::Location::caller());
+    }
     Div {
-        interactivity: Interactivity::new(),
+        interactivity,
         children: SmallVec::default(),
         prepaint_listener: None,
         image_cache: None,
@@ -1854,9 +1860,55 @@ pub fn div() -> Div {
     }
 }
 
+/// Where a [`Div`]'s [`Interactivity`] lives. Divs built while a frame is drawn, which is
+/// nearly all of them, use the element arena so they don't each cost a heap allocation;
+/// the arena outlives every element built during the frame.
+enum InteractivityBox {
+    Arena(crate::ArenaBox<Interactivity>),
+    Heap(Box<Interactivity>),
+}
+
+impl InteractivityBox {
+    /// Builds the `Interactivity` in place, since moving one in would copy over a kilobyte.
+    #[inline]
+    fn new() -> Self {
+        if crate::window::draw_in_progress() {
+            Self::Arena(crate::window::with_element_arena(|arena| {
+                arena.alloc(Interactivity::default)
+            }))
+        } else {
+            Self::Heap(Box::default())
+        }
+    }
+}
+
+impl std::ops::Deref for InteractivityBox {
+    type Target = Interactivity;
+
+    #[inline]
+    fn deref(&self) -> &Interactivity {
+        match self {
+            Self::Arena(interactivity) => interactivity,
+            Self::Heap(interactivity) => interactivity,
+        }
+    }
+}
+
+impl std::ops::DerefMut for InteractivityBox {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Interactivity {
+        match self {
+            Self::Arena(interactivity) => interactivity,
+            Self::Heap(interactivity) => interactivity,
+        }
+    }
+}
+
 /// A [`Div`] element, the all-in-one element for building complex UIs in GPUI
 pub struct Div {
-    interactivity: Interactivity,
+    // Kept out of line because builder methods move the `Div` by value on every call,
+    // and `Interactivity` is over a kilobyte.
+    interactivity: InteractivityBox,
     children: SmallVec<[StackSafe<AnyElement>; 2]>,
     prepaint_listener: Option<Box<dyn Fn(Vec<Bounds<Pixels>>, &mut Window, &mut App) + 'static>>,
     image_cache: Option<Box<dyn ImageCacheProvider>>,
@@ -2144,14 +2196,6 @@ impl Element for Div {
                 },
             )
         });
-    }
-}
-
-impl IntoElement for Div {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
     }
 }
 
@@ -4233,17 +4277,6 @@ where
     }
 }
 
-impl<E> IntoElement for Stateful<E>
-where
-    E: Element,
-{
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
 impl<E> ParentElement for Stateful<E>
 where
     E: ParentElement,
@@ -4506,8 +4539,9 @@ impl ScrollHandle {
 mod tests {
     use super::*;
     use crate::{
-        AnyWindowHandle, AppContext as _, Context, GestureTuning, InputEvent, Keystroke,
-        MouseMoveEvent, TestAppContext, TouchEvent, TouchId, canvas, util::FluentBuilder as _,
+        AnyWindowHandle, AppContext as _, Context, GestureTuning, InputEvent, IntoElement,
+        Keystroke, MouseMoveEvent, TestAppContext, TouchEvent, TouchId, canvas,
+        util::FluentBuilder as _,
     };
     use std::{cell::Cell, rc::Weak};
 
@@ -4608,6 +4642,87 @@ mod tests {
         assert_eq!(render_count.get(), initial_render_count + 2);
         assert_eq!(anonymous_paint_count.get(), 1);
         assert_eq!(stateful_width.get(), px(10.));
+    }
+
+    /// Draws one `Div` built outside any draw (heap-backed `Interactivity`) and one built
+    /// during `render` (arena-backed), and records which storage each one used.
+    struct InteractivityStorageTestView {
+        prebuilt: Option<Stateful<Div>>,
+        drawn_used_arena: Rc<Cell<Option<bool>>>,
+        hovered: Rc<RefCell<Vec<&'static str>>>,
+    }
+
+    impl Render for InteractivityStorageTestView {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            let hovered = self.hovered.clone();
+            let drawn = div()
+                .id("drawn")
+                .absolute()
+                .left(px(40.))
+                .top_0()
+                .size(px(20.))
+                .on_hover(move |is_hovered, _, _| {
+                    if *is_hovered {
+                        hovered.borrow_mut().push("drawn");
+                    }
+                });
+            self.drawn_used_arena.set(Some(matches!(
+                drawn.element.interactivity,
+                InteractivityBox::Arena(_)
+            )));
+            div()
+                .relative()
+                .size_full()
+                .child(drawn)
+                .children(self.prebuilt.take())
+        }
+    }
+
+    #[gpui::test]
+    fn div_interactivity_works_from_heap_and_element_arena(cx: &mut TestAppContext) {
+        let hovered = Rc::new(RefCell::new(Vec::new()));
+        let prebuilt = div()
+            .id("prebuilt")
+            .absolute()
+            .left_0()
+            .top_0()
+            .size(px(20.))
+            .on_hover({
+                let hovered = hovered.clone();
+                move |is_hovered, _, _| {
+                    if *is_hovered {
+                        hovered.borrow_mut().push("prebuilt");
+                    }
+                }
+            });
+        assert!(
+            matches!(prebuilt.element.interactivity, InteractivityBox::Heap(_)),
+            "a Div built outside a draw must not borrow the element arena"
+        );
+
+        let drawn_used_arena = Rc::new(Cell::new(None));
+        let window = cx.add_window({
+            let hovered = hovered.clone();
+            let drawn_used_arena = drawn_used_arena.clone();
+            move |_, _| InteractivityStorageTestView {
+                prebuilt: Some(prebuilt),
+                drawn_used_arena,
+                hovered,
+            }
+        });
+        let window = AnyWindowHandle::from(window);
+        cx.update_window(window, |_, window, cx| window.draw(cx).clear(cx))
+            .unwrap();
+        assert_eq!(drawn_used_arena.get(), Some(true));
+
+        // Listeners must stay usable after the frame that built them has finished.
+        for position in [point(px(10.), px(10.)), point(px(50.), px(10.))] {
+            cx.update_window(window, |_, window, cx| {
+                window.simulate_mouse_move(position, cx)
+            })
+            .unwrap();
+        }
+        assert_eq!(*hovered.borrow(), ["prebuilt", "drawn"]);
     }
 
     struct HoverListenerLayoutTestView {
@@ -4849,14 +4964,6 @@ mod tests {
     struct TooltipCaptureElement {
         child: AnyElement,
         captured_active_tooltip: CapturedActiveTooltip,
-    }
-
-    impl IntoElement for TooltipCaptureElement {
-        type Element = Self;
-
-        fn into_element(self) -> Self::Element {
-            self
-        }
     }
 
     impl Element for TooltipCaptureElement {
