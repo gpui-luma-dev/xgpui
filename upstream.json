@@ -15,6 +15,7 @@
       "gpui-windows": "xgpui-windows",
       "xgpui-canvas": "xgpui-canvas",
       "xgpui-color": "xgpui-color",
+      "xgpui-curve": "xgpui-curve",
       "xgpui-gamut": "xgpui-gamut",
       "xgpui-gpu-interop": "xgpui-gpu-interop",
       "xgpui-media": "xgpui-media",
@@ -25,25 +26,26 @@
     },
     "version": "1.0.0",
     "versions": {
-      "xgpui": "3.2.0",
-      "xgpui-apple": "4.1.0",
-      "xgpui-canvas": "0.3.4",
-      "xgpui-color": "0.3.2",
-      "xgpui-gamut": "0.3.4",
-      "xgpui-gpu-interop": "0.1.0",
-      "xgpui-ios": "1.26.5",
-      "xgpui-linux": "2.1.1",
-      "xgpui-macos": "4.0.2",
-      "xgpui-macros": "1.0.3",
-      "xgpui-media": "0.5.4",
-      "xgpui-parley": "0.5.1",
-      "xgpui-platform": "2.0.4",
-      "xgpui-shader": "0.4.4",
-      "xgpui-shell": "0.1.1",
-      "xgpui-svg": "0.3.4",
-      "xgpui-web": "2.0.4",
-      "xgpui-wgpu": "2.3.0",
-      "xgpui-windows": "2.2.0"
+      "xgpui": "4.2.0",
+      "xgpui-apple": "5.0.1",
+      "xgpui-canvas": "0.4.1",
+      "xgpui-color": "0.4.0",
+      "xgpui-curve": "0.1.0",
+      "xgpui-gamut": "0.5.0",
+      "xgpui-gpu-interop": "0.3.0",
+      "xgpui-ios": "2.0.1",
+      "xgpui-linux": "3.0.1",
+      "xgpui-macos": "5.0.2",
+      "xgpui-macros": "1.0.4",
+      "xgpui-media": "0.7.0",
+      "xgpui-parley": "0.8.0",
+      "xgpui-platform": "3.0.1",
+      "xgpui-shader": "0.5.1",
+      "xgpui-shell": "0.3.1",
+      "xgpui-svg": "0.4.2",
+      "xgpui-web": "3.0.1",
+      "xgpui-wgpu": "3.0.1",
+      "xgpui-windows": "3.0.1"
     }
   },
   "normalization": {
@@ -111,7 +113,7 @@
       "ztracing": "ztracing-gpui-unofficial",
       "ztracing-macro": "ztracing-macro-gpui-unofficial"
     },
-    "version": "1.28.1"
+    "version": "1.29.3"
   },
   "repository": "https://github.com/gpui-archipelago/gpui-unofficial",
   "source_packages": {
