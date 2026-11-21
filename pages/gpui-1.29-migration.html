@@ -24,7 +24,7 @@
      Lists only changes that stop downstream code from compiling (see the API ledger for everything else).
      Release tag, date and the version table are filled in by package 08. -->
 <p><strong>Draft — not released.</strong> The GPUI sources follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/tree/c70ecc6b614c9c2113c69555937ed23ba7891bbe">1.29.3</a> (Zed <code>v1.29.3</code>). Tracking issue: <a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a>.</p>
-<p>This page lists only the changes that can stop your code from compiling, with the fix for each. Behavior changes and new APIs are in <a href="whats-new.html">What's new</a>; the complete record is the <a href="https://github.com/gpui-luma-dev/xgpui/blob/issue-406/epic/docs/upstream/1.29.3-api-ledger.md">API ledger</a>.</p>
+<p>This page lists only the changes that can stop your code from compiling, with the fix for each. Behavior changes and new APIs are in <a href="whats-new.html">What's new</a>; the complete record is the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.29.3-api-ledger.md">API ledger</a>.</p>
 
 <h2 id="update-together">Update the GPUI family together</h2>
 <p><code>xgpui</code> takes a major version. Its types are distinct from the previous major's, so every crate whose public API exposes them takes a breaking version too. Move all of them in one step; mixing majors produces type-mismatch errors between, for example, an extension's elements and your <code>gpui</code>. The version table is added when the release is prepared.</p>

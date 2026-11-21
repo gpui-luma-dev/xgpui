@@ -38,6 +38,18 @@ existing APIs. That integration is awaiting final public API approval. Its
 links the original GPUI commits and pull requests.</p>
 <p>The maintained XGPUI feature changes below are compared with pre-feature main
 <code>9b64657</code>.</p>
+<h2 id="gpui-1293-sync-406">GPUI 1.29.3 sync: next core major (#406)</h2>
+<p>Upstream API changes carried in from gpui-unofficial 1.29.3, approved individually in the
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a> API review (2026-11-21). Not yet
+published; the core version is set when it is. The
+<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.29.3-api-ledger.md">API ledger</a>
+gives each change's purpose, compatibility and migration in full, and the
+<a href="gpui-1.29-migration.html">migration page</a> lists the fixes for code that stops compiling.</p>
+<ul>
+<li><strong>Breaking, <code>xgpui</code>:</strong> every <code>Element</code> implements <code>IntoElement</code> through a blanket impl and <code>Element</code> drops the supertrait; <code>Along::apply_along</code> takes <code>impl Fn</code>; <code>WindowTextSystem::layout_line</code> is generic over its text; <code>GraphicalEnvironment</code> gains <code>current_desktop</code> on Linux/FreeBSD; a <code>const</code> <code>SharedString</code> can no longer be a <code>match</code> pattern; the <code>bench-support</code> randomized-tree enums gain <code>ChildText</code>.</li>
+<li><strong>Added, core:</strong> <code>Add</code> and <code>Along</code> for <code>Edges</code>, <code>GraphicalEnvironment::desktop_environment()</code>, <code>RandomizedElementTreeConfig::with_paths</code>.</li>
+<li><strong>Changed values:</strong> <code>guess_compositor()</code> returns <code>"headless"</code> instead of <code>"Headless"</code>; <code>FontFeatures::default()</code> shares one empty list.</li>
+</ul>
 <h2 id="paragraph-text-core-41-325">Paragraph text across backends: core 4.1 (#325)</h2>
 <p>Each change was approved individually in its PR
 (<a href="https://github.com/gpui-luma-dev/xgpui/pull/326">#326</a>–<a href="https://github.com/gpui-luma-dev/xgpui/pull/329">#329</a>,

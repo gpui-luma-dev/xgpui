@@ -1,6 +1,6 @@
 # xgpui-ios
 
-iOS backend for XGPUI, derived from gpui-unofficial `release/1.28.1` and
+iOS backend for XGPUI, derived from gpui-unofficial `release/1.29.3` and
 originally developed in Zed. The current downstream package version is **2.0.0**;
 the selected family uses core 4.0.0 and Apple 5.0.0. Simulator compilation is
 checked; interactive simulator and device validation remain pending.
