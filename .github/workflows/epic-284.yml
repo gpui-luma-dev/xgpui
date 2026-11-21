@@ -1,6 +1,6 @@
 name: Epic validation (#284)
 
-# Automated platform evidence for the GPUI 1.28.1 integration, so no step needs a
+# Automated platform evidence for GPUI upstream integrations (1.28.1 in #284, 1.29.3 in #406), so no step needs a
 # person at a Windows, Linux or Mac machine. Each job runs its backend's full test
 # suite plus real-window probes. Probes live with the package PR that needs them
 # and run whenever their test target exists on the branch.

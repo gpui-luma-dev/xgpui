@@ -1976,7 +1976,7 @@ impl Window {
                 // callbacks and forced renders). A redraw requested only with
                 // `cx.notify()` is not throttled, as `WindowOptions` documents
                 // (#211): engine surfaces present new frames that way. Upstream
-                // GPUI 1.28.1 also throttles notify-driven redraws.
+                // GPUI (since 1.28.1) also throttles notify-driven redraws.
                 let should_throttle = !request_frame_options.require_presentation
                     && (force_render || has_next_frame_callbacks);
                 let inactive_without_high_rate_input =
@@ -8861,7 +8861,7 @@ mod tests {
         let mut collector = journal.collector();
         // XGPUI throttles animation-frame demand only; a dirty-only redraw is not
         // throttled (see `test_notify_redraw_bypasses_inactive_throttle`), so both
-        // cases schedule a next-frame callback. Upstream 1.28.1 also covers a
+        // cases schedule a next-frame callback. Upstream (since 1.28.1) also covers a
         // dirty-only case here because it throttles notify-driven redraws.
         for (initially_dirty, schedule_callback) in [(true, true), (false, true)] {
             // Keep the throttle closed without depending on short wall-clock deadlines.

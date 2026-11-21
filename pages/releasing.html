@@ -283,7 +283,7 @@ prerequisites are in <a href="local-development.html#build-prerequisites">Local 
 <p>gpui-unofficial is xgpui's upstream. <code>main</code> contains xgpui's maintained code.
 Sync prepares an <strong>incoming tree proposal</strong>, not an integrated or buildable update.</p>
 <h3 id="review-a-release">Review a release</h3>
-<p>Imports run locally on an issue epic, as <a href="https://github.com/gpui-luma-dev/xgpui/issues/284">#284</a> did for 1.28.1.
+<p>Imports run locally on an issue epic, as <a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a> did for 1.29.3.
 Build the tool, then compare a release with xgpui's current tree:</p>
 <pre><code class="language-sh">cargo build --locked --release --manifest-path tools/release-sync/Cargo.toml --target-dir target/release-sync
 tool=target/release-sync/release/xgpui-release
@@ -448,11 +448,11 @@ pulls of the upstream framework alongside the local fork.</p>
 version overrides for ten framework/backend crates and seven extensions.
 Normalization applies those versions while keeping directory names, library names
 and dependency aliases stable. The helper package version follows the captured
-<code>release/1.28.1</code> provenance independently. <code>upstream.json</code> records both sets.</p>
+<code>release/1.29.3</code> provenance independently. <code>upstream.json</code> records both sets.</p>
 <p>For example, the local <code>gpui</code> crate is packaged as <code>xgpui</code>; applications retain
 <code>use gpui::*</code> through a Cargo alias. Internal dependencies use exact requirements
 from the release map. Supporting packages retain their upstream identities and
-<code>=1.28.1</code> requirements. The selected downstream family uses core 4.0.0, Apple 5.0.0 and macOS 5.0.0, with
+<code>=1.29.3</code> requirements. The selected downstream family uses core 4.0.0, Apple 5.0.0 and macOS 5.0.0, with
 matching pins.
 Interactive iOS simulator/device validation remains pending.</p>
 <h2 id="website-deployment">Website deployment</h2>
