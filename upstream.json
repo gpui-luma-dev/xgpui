@@ -1,5 +1,5 @@
 {
-  "commit": "c356a29b7be6c4b9cec73d3576152324a34aeaaf",
+  "commit": "c70ecc6b614c9c2113c69555937ed23ba7891bbe",
   "destination": "gpui",
   "distribution": {
     "packages": {
@@ -92,7 +92,7 @@
     "gpui-wgpu": "gpui/crates/gpui-wgpu",
     "gpui-windows": "gpui/crates/gpui-windows"
   },
-  "ref": "release/1.28.1",
+  "ref": "release/1.29.3",
   "registry_packages": {
     "packages": {
       "collections": "collections-gpui-unofficial",
@@ -145,6 +145,6 @@
     "ztracing-gpui-unofficial": "gpui/crates/ztracing-gpui-unofficial",
     "ztracing-macro-gpui-unofficial": "gpui/crates/ztracing-macro-gpui-unofficial"
   },
-  "zed_commit": "e8bc16acee5ae1937600d571d441c4b5d7b0d288",
-  "zed_tag": "v1.28.1"
+  "zed_commit": "d01b134cddf5e4f71964deb2d6f81cdb38fcf1e7",
+  "zed_tag": "v1.29.3"
 }

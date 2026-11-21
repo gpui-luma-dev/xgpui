@@ -28,7 +28,7 @@
     "gpui_web",
     "gpui_platform"
   ],
-  "transformed_at": "2026-11-12T08:27:26.789566+00:00",
-  "zed_commit": "e8bc16acee5ae1937600d571d441c4b5d7b0d288",
-  "zed_tag": "v1.28.1"
+  "transformed_at": "2026-11-20T21:22:11.277783258+00:00",
+  "zed_commit": "d01b134cddf5e4f71964deb2d6f81cdb38fcf1e7",
+  "zed_tag": "v1.29.3"
 }
