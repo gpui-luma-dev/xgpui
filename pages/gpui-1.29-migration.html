@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Compile-breaking changes in the XGPUI GPUI 1.29.3 sync and how to migrate.">
+<title>GPUI 1.29.3 migration · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/gpui-1.29-migration.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="right-to-left-text.html">Right-to-left text</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.29-migration.html">GPUI 1.29.3 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-curve.html">xgpui-curve</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="whats-new.html">← What's new</a></p><article class="extension-document"><h1 id="gpui-1293-migration">GPUI 1.29.3 migration</h1>
+<!-- DRAFT for issue #406. Replaces the 1.28.1 page in the navigation; not deployed until the crates are published.
+     Lists only changes that stop downstream code from compiling (see the API ledger for everything else).
+     Release tag, date and the version table are filled in by package 08. -->
+<p><strong>Draft — not released.</strong> The GPUI sources follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/tree/c70ecc6b614c9c2113c69555937ed23ba7891bbe">1.29.3</a> (Zed <code>v1.29.3</code>). Tracking issue: <a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a>.</p>
+<p>This page lists only the changes that can stop your code from compiling, with the fix for each. Behavior changes and new APIs are in <a href="whats-new.html">What's new</a>; the complete record is the <a href="https://github.com/gpui-luma-dev/xgpui/blob/issue-406/epic/docs/upstream/1.29.3-api-ledger.md">API ledger</a>.</p>
+
+<h2 id="update-together">Update the GPUI family together</h2>
+<p><code>xgpui</code> takes a major version. Its types are distinct from the previous major's, so every crate whose public API exposes them takes a breaking version too. Move all of them in one step; mixing majors produces type-mismatch errors between, for example, an extension's elements and your <code>gpui</code>. The version table is added when the release is prepared.</p>
+
+<h2 id="breaking-changes">Breaking changes and migration</h2>
+<table><thead><tr><th>Change</th><th>Crate</th><th>Migration</th></tr></thead><tbody>
+<tr><td>Every <code>Element</code> implements <code>IntoElement</code> through a blanket impl, and <code>Element</code> no longer requires <code>IntoElement</code>. A type with its own <code>impl IntoElement</code> next to <code>impl Element</code> fails with E0119 (conflicting implementations).</td><td><code>xgpui</code></td><td>Delete the <code>impl IntoElement</code> block. <code>IntoElement</code> on components that aren't <code>Element</code>s, including <code>#[derive(IntoElement)]</code>, is unchanged.</td></tr>
+<tr><td><code>Along::apply_along</code> takes <code>impl Fn</code> instead of <code>impl FnOnce</code>.</td><td><code>xgpui</code></td><td>Implementors change <code>FnOnce</code> to <code>Fn</code>. Callers whose closure moves a captured value out clone it instead.</td></tr>
+<tr><td><code>SharedString</code> implements <code>PartialEq</code> by hand, so a <code>const</code> <code>SharedString</code> can no longer be used as a <code>match</code> pattern.</td><td><code>xgpui</code></td><td>Compare with <code>==</code>, or match on <code>.as_ref()</code> against string literals.</td></tr>
+<tr><td>With feature <code>bench-support</code>: <code>RandomizedElementTreeMutationKind</code> and <code>RandomizedElementTreeMutation</code> gain a <code>ChildText</code> variant.</td><td><code>xgpui</code></td><td>Add a <code>ChildText</code> arm to exhaustive matches.</td></tr>
+</tbody></table>
+
+<h3 id="into-element-example">Removing a redundant <code>IntoElement</code> impl</h3>
+<pre><code class="language-rust">impl Element for Gauge {
+    // …unchanged…
+}
+
+// Delete this block: the blanket impl now provides it.
+impl IntoElement for Gauge {
+    type Element = Self;
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}</code></pre>
+</article>
+</main>
+<footer>Source evidence and review hypotheses are kept distinct.</footer>
+</body>
+</html>
