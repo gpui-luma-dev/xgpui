@@ -36,10 +36,17 @@ const NUMPAD_ENTER_KEY: u32 = 0x03;
 const TAB_KEY: u32 = 0x09;
 const SHIFT_TAB_KEY: u32 = 0x19;
 
-pub fn key_to_native(key: &str) -> Cow<'_, str> {
+// Menu key equivalents use different character values than the ones NSEvent
+// reports for the same physical keys.
+//
+// See https://developer.apple.com/documentation/appkit/nsmenuitem/keyequivalent#Discussion
+const BACKSPACE_KEY_EQUIVALENT: u32 = 0x08;
+const DELETE_KEY_EQUIVALENT: u32 = 0x7f;
+
+pub(crate) fn key_to_menu_equivalent(key: &str) -> Cow<'_, str> {
     let code = match key {
         "space" => SPACE_KEY,
-        "backspace" => BACKSPACE_KEY,
+        "backspace" => BACKSPACE_KEY_EQUIVALENT,
         "escape" => u32::from(ESCAPE_KEY),
         "up" => NSUpArrowFunctionKey,
         "down" => NSDownArrowFunctionKey,
@@ -49,7 +56,7 @@ pub fn key_to_native(key: &str) -> Cow<'_, str> {
         "pagedown" => NSPageDownFunctionKey,
         "home" => NSHomeFunctionKey,
         "end" => NSEndFunctionKey,
-        "delete" => NSDeleteFunctionKey,
+        "delete" => DELETE_KEY_EQUIVALENT,
         "insert" => NSHelpFunctionKey,
         "f1" => NSF1FunctionKey,
         "f2" => NSF2FunctionKey,
@@ -569,4 +576,18 @@ fn chars_for_modified_key(code: CGKeyCode, modifiers: u32) -> String {
         let _: () = msg_send![keyboard, release];
     }
     String::from_utf16(&buffer[..buffer_size]).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn menu_key_equivalents_use_appkit_codes_for_backspace_and_delete() {
+        // AppKit menus expect BS (0x08) and DEL (0x7f), not the codes NSEvent reports
+        // for the same keys; with those, the shortcuts never fire.
+        assert_eq!(key_to_menu_equivalent("backspace"), "\u{8}");
+        assert_eq!(key_to_menu_equivalent("delete"), "\u{7f}");
+        assert_eq!(key_to_menu_equivalent("a"), "a");
+    }
 }
