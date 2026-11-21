@@ -170,13 +170,6 @@ pub(crate) struct PaintRun {
     strikethrough: Option<StrikethroughStyle>,
 }
 
-impl IntoElement for Typeset {
-    type Element = Self;
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
 /// Request-layout state: the fitted text, or plain GPUI text without an engine.
 pub struct TypesetLayout {
     fitted: Rc<RefCell<Option<Fitted>>>,
