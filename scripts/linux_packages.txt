@@ -1,0 +1,64 @@
+# System packages for building and running xgpui on Linux (#389).
+# Read by scripts/linux_setup.sh (what to install) and scripts/linux_doctor.sh
+# (what to check). docs/LINUX-SETUP.md explains each group.
+#
+# The debian column mirrors the apt-get lists in .github/workflows/*.yml; when
+# CI's list changes, change the matching row for every distribution here.
+# Distribution detection and the RHEL/openSUSE/Arch notes follow Zed's
+# script/linux, but Zed's own extras (libgit2, sqlite, libva, musl) are left out.
+#
+# Columns, separated by |:
+#   group    base, luma (GTK 3 for xgpui-luma) or headless (window probes)
+#   check    how linux_doctor.sh verifies it; a leading ? makes a miss a warning:
+#              pc:<module>   pkg-config --exists <module>
+#              cmd:<name>    <name> is on PATH
+#              lib:<soname>  ldconfig knows <soname>
+#              icd           a Vulkan driver JSON exists in .../vulkan/icd.d
+#              portal        the xdg-desktop-portal service binary exists
+#   fedora   Fedora, RHEL, CentOS Stream, Rocky, Alma (dnf)
+#   debian   Debian, Ubuntu, Mint, Pop!_OS (apt)
+#   suse     openSUSE Leap and Tumbleweed (zypper)
+#   arch     Arch, Manjaro, EndeavourOS (pacman)
+#   purpose  shown by the doctor
+# A package column may list several names separated by spaces; - means none.
+#
+# group|check|fedora|debian|suse|arch|purpose
+base|cmd:cc|gcc|build-essential|gcc|base-devel|cc, the C compiler
+base|cmd:c++|gcc-c++|build-essential|gcc-c++|base-devel|c++, the C++ compiler
+base|cmd:make|make|build-essential|make|base-devel|make
+base|cmd:clang|clang|clang|clang|clang|clang, for C builds and bindgen
+base|cmd:cmake|cmake|cmake|cmake|cmake|cmake, for native library builds
+base|cmd:pkg-config|pkgconf-pkg-config|pkg-config|pkgconf-pkg-config|pkgconf|pkg-config, to find libraries
+base|cmd:git|git|git|git|git|git, for git dependencies
+base|?cmd:ld.lld|lld|lld|lld|lld|ld.lld, an optional faster linker
+base|pc:fontconfig|fontconfig-devel|libfontconfig1-dev|fontconfig-devel|fontconfig|font discovery
+base|pc:freetype2|freetype-devel|libfreetype6-dev|freetype2-devel|freetype2|font rasterizing
+base|pc:wayland-client|wayland-devel|libwayland-dev|wayland-devel|wayland|Wayland backend
+base|pc:xkbcommon|libxkbcommon-devel|libxkbcommon-dev|libxkbcommon-devel|libxkbcommon|keyboard layouts
+base|pc:xkbcommon-x11|libxkbcommon-x11-devel|libxkbcommon-x11-dev|libxkbcommon-x11-devel|libxkbcommon-x11|keyboard layouts (X11)
+base|pc:x11-xcb|libX11-devel|libx11-xcb-dev|libX11-devel|libx11|X11 backend
+base|pc:xcb-shape|libxcb-devel|libxcb-shape0-dev|libxcb-devel|libxcb|X11 backend
+base|pc:xcb-xfixes|libxcb-devel|libxcb-xfixes0-dev|libxcb-devel|libxcb|X11 backend
+base|pc:xrandr|libXrandr-devel|libxrandr-dev|libXrandr-devel|libxrandr|X11 monitors
+base|pc:xi|libXi-devel|libxi-dev|libXi-devel|libxi|X11 input
+base|pc:xcursor|libXcursor-devel|libxcursor-dev|libXcursor-devel|libxcursor|X11 cursors
+base|pc:xinerama|libXinerama-devel|libxinerama-dev|libXinerama-devel|libxinerama|X11 monitors
+base|pc:alsa|alsa-lib-devel|libasound2-dev|alsa-devel|alsa-lib|audio
+base|pc:libudev|systemd-devel|libudev-dev|libudev-devel|systemd-libs|input devices
+base|pc:vulkan|vulkan-loader-devel|libvulkan-dev|vulkan-devel|vulkan-icd-loader vulkan-headers|Vulkan headers
+base|pc:libpipewire-0.3|pipewire-devel|libpipewire-0.3-dev|pipewire-devel|libpipewire|screen capture
+base|pc:gbm|mesa-libgbm-devel|libgbm-dev|libgbm-devel|mesa|DMA-BUF buffers
+base|pc:egl|libglvnd-devel|libegl-dev|Mesa-libEGL-devel|libglvnd|EGL
+base|pc:dbus-1|dbus-devel|libdbus-1-dev|dbus-1-devel|dbus|D-Bus
+base|lib:libvulkan.so.1|vulkan-loader|libvulkan1|libvulkan1|vulkan-icd-loader|Vulkan loader
+base|icd|mesa-vulkan-drivers|mesa-vulkan-drivers|-|-|Vulkan GPU driver
+base|cmd:vulkaninfo|vulkan-tools|vulkan-tools|vulkan-tools|vulkan-tools|vulkaninfo, to check the GPU
+base|portal|xdg-desktop-portal|xdg-desktop-portal|xdg-desktop-portal|xdg-desktop-portal|desktop portal (file dialogs, settings)
+luma|pc:gtk+-3.0|gtk3-devel|libgtk-3-dev|gtk3-devel|gtk3|GTK 3 (xgpui-luma)
+headless|cmd:Xvfb|xorg-x11-server-Xvfb|xvfb|xorg-x11-server-Xvfb|xorg-server-xvfb|virtual X server
+headless|cmd:weston|weston|weston|weston|weston|nested Wayland compositor
+headless|cmd:openbox|openbox|openbox|openbox|openbox|X11 window manager
+headless|cmd:xdpyinfo|xdpyinfo|x11-utils|xdpyinfo|xorg-xdpyinfo|X11 display info
+headless|cmd:xprop|xprop|x11-utils|xprop|xorg-xprop|X11 window properties
+headless|cmd:dbus-launch|dbus-x11|dbus-x11|dbus-1-x11|dbus|D-Bus session launcher
+headless|cmd:mutter|mutter|mutter|mutter|mutter|headless Mutter compositor

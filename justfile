@@ -207,6 +207,18 @@ pages-demos-clean:
 test *args:
     bash scripts/test_all.sh "$@"
 
+# Linux setup step 1: system packages for this distribution (--luma, --headless-tests, --all, --dry-run).
+linux-setup *args:
+    bash scripts/linux_setup.sh "$@"
+
+# Linux setup step 2: Rust stable with rustup, as your user (--dry-run).
+linux-rust *args:
+    bash scripts/linux_rust.sh "$@"
+
+# Check a Linux machine's build, Vulkan, session and portal setup; changes nothing.
+linux-doctor *args:
+    bash scripts/linux_doctor.sh "$@"
+
 # Clippy under the #280 policy, as CI runs it (optional: upstream | ours).
 clippy *args:
     bash .github/scripts/clippy.sh "$@"

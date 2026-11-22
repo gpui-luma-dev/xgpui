@@ -59,6 +59,10 @@ just build   # Build optimized native libraries.
 just shader # Launch the shader examples.
 ```
 
+On Linux, install the system packages and Rust first with
+`scripts/linux_setup.sh` and `scripts/linux_rust.sh`, then check the machine with
+`scripts/linux_doctor.sh`; see [Linux setup](docs/LINUX-SETUP.md).
+
 Recipes use Bash (on Windows, Git for Windows Bash must be on PATH).
 Without just, use `cargo build --release --locked`.
 
