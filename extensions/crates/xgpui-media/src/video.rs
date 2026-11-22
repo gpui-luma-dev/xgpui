@@ -2,8 +2,8 @@
 use anyhow::{Result, ensure};
 use gpui::{
     App, Bounds, Corners, CustomContent, CustomGeometry, DevicePixels, Element, ElementId,
-    GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels, Size, Style,
-    StyleRefinement, Styled, Window,
+    GlobalElementId, InspectorElementId, LayoutId, Pixels, Size, Style, StyleRefinement, Styled,
+    Window,
 };
 use std::{
     sync::{Arc, Mutex},
@@ -296,12 +296,6 @@ impl VideoView {
 impl Styled for VideoView {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
-    }
-}
-impl IntoElement for VideoView {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
     }
 }
 impl Element for VideoView {

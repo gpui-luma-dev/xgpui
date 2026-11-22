@@ -242,7 +242,7 @@ fn prepare_manifest(
 }
 
 /// Development-only edges from a package to packages that depend on it.
-/// Platform depends on core and iOS; web depends on core.
+/// Platform depends on core and iOS; web depends on core; core depends on macros.
 fn reverse_development_dependencies(local: &str) -> &'static [(&'static str, &'static str)] {
     match local {
         "gpui" => &[
@@ -250,6 +250,7 @@ fn reverse_development_dependencies(local: &str) -> &'static [(&'static str, &'s
             ("gpui_web", "../gpui-web"),
         ],
         "gpui-ios" => &[("gpui_platform", "../gpui-platform")],
+        "gpui-macros" => &[("gpui", "../gpui")],
         _ => &[],
     }
 }
@@ -1109,6 +1110,33 @@ mod tests {
             let dependency = &document["dev-dependencies"]["gpui_platform"];
             assert_eq!(dependency["package"].as_str(), Some("xgpui-platform"));
             assert_eq!(dependency["path"].as_str(), Some("../gpui-platform"));
+            assert!(dependency.get("version").is_none());
+            assert_eq!(dependency["features"][0].as_str(), Some("test-support"));
+        }
+    }
+
+    #[test]
+    fn macros_core_development_dependency_stays_local_across_normalization() {
+        // Core depends on macros, so macros' test edge to core must stay path-only (#280).
+        let release = BTreeMap::from([
+            ("gpui".into(), "xgpui".into()),
+            ("gpui-macros".into(), "xgpui-macros".into()),
+        ]);
+        let mut document = "[package]\nname='xgpui-macros'\nversion='1.0.4'\n[dev-dependencies]\ngpui={package='xgpui',path='../gpui',features=['test-support']}\n"
+            .parse::<DocumentMut>().unwrap();
+        for _ in 0..2 {
+            prepare_manifest(
+                &mut document,
+                &Names::new(),
+                "1.29.3",
+                &release,
+                "1.0.0",
+                &BTreeMap::from([("xgpui".into(), "4.2.0".into())]),
+            )
+            .unwrap();
+            let dependency = &document["dev-dependencies"]["gpui"];
+            assert_eq!(dependency["package"].as_str(), Some("xgpui"));
+            assert_eq!(dependency["path"].as_str(), Some("../gpui"));
             assert!(dependency.get("version").is_none());
             assert_eq!(dependency["features"][0].as_str(), Some("test-support"));
         }

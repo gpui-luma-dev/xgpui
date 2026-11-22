@@ -14,7 +14,7 @@
 <body><a class="skip" href="#content">Skip to content</a>
 <aside>
 <a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
-<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="right-to-left-text.html">Right-to-left text</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="right-to-left-text.html">Right-to-left text</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.29-migration.html">GPUI 1.29.3 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
 <div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-curve.html">xgpui-curve</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
@@ -38,6 +38,18 @@ existing APIs. That integration is awaiting final public API approval. Its
 links the original GPUI commits and pull requests.</p>
 <p>The maintained XGPUI feature changes below are compared with pre-feature main
 <code>9b64657</code>.</p>
+<h2 id="gpui-1293-sync-406">GPUI 1.29.3 sync: next core major (#406)</h2>
+<p>Upstream API changes carried in from gpui-unofficial 1.29.3, approved individually in the
+<a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a> API review (2026-11-21). Not yet
+published; the core version is set when it is. The
+<a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.29.3-api-ledger.md">API ledger</a>
+gives each change's purpose, compatibility and migration in full, and the
+<a href="gpui-1.29-migration.html">migration page</a> lists the fixes for code that stops compiling.</p>
+<ul>
+<li><strong>Breaking, <code>xgpui</code>:</strong> every <code>Element</code> implements <code>IntoElement</code> through a blanket impl and <code>Element</code> drops the supertrait; <code>Along::apply_along</code> takes <code>impl Fn</code>; <code>WindowTextSystem::layout_line</code> is generic over its text; <code>GraphicalEnvironment</code> gains <code>current_desktop</code> on Linux/FreeBSD; a <code>const</code> <code>SharedString</code> can no longer be a <code>match</code> pattern; the <code>bench-support</code> randomized-tree enums gain <code>ChildText</code>.</li>
+<li><strong>Added, core:</strong> <code>Add</code> and <code>Along</code> for <code>Edges</code>, <code>GraphicalEnvironment::desktop_environment()</code>, <code>RandomizedElementTreeConfig::with_paths</code>.</li>
+<li><strong>Changed values:</strong> <code>guess_compositor()</code> returns <code>"headless"</code> instead of <code>"Headless"</code>; <code>FontFeatures::default()</code> shares one empty list.</li>
+</ul>
 <h2 id="paragraph-text-core-41-325">Paragraph text across backends: core 4.1 (#325)</h2>
 <p>Each change was approved individually in its PR
 (<a href="https://github.com/gpui-luma-dev/xgpui/pull/326">#326</a>–<a href="https://github.com/gpui-luma-dev/xgpui/pull/329">#329</a>,

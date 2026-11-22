@@ -22,7 +22,7 @@ pub use upload::{FrameUploadLimits, UploadLimits, UploadStats};
 
 use gpui::{
     App, Bounds, Corners, CustomGeometry, Element, ElementId, GlobalElementId, InspectorElementId,
-    IntoElement, LayoutId, Pixels, Style, StyleRefinement, Styled, Window,
+    LayoutId, Pixels, Style, StyleRefinement, Styled, Window,
 };
 use std::sync::Arc;
 
@@ -131,12 +131,6 @@ impl MediaImageView {
 impl Styled for MediaImageView {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
-    }
-}
-impl IntoElement for MediaImageView {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
     }
 }
 impl Element for MediaImageView {

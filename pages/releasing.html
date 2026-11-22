@@ -14,7 +14,7 @@
 <body><a class="skip" href="#content">Skip to content</a>
 <aside>
 <a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
-<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="right-to-left-text.html">Right-to-left text</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.28-migration.html">GPUI 1.28.1 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="releasing.html">Releasing XGPUI</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="right-to-left-text.html">Right-to-left text</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="gpui-1.29-migration.html">GPUI 1.29.3 migration</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
 <div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-curve.html">xgpui-curve</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
 <p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
 </aside>
@@ -283,7 +283,7 @@ prerequisites are in <a href="local-development.html#build-prerequisites">Local 
 <p>gpui-unofficial is xgpui's upstream. <code>main</code> contains xgpui's maintained code.
 Sync prepares an <strong>incoming tree proposal</strong>, not an integrated or buildable update.</p>
 <h3 id="review-a-release">Review a release</h3>
-<p>Imports run locally on an issue epic, as <a href="https://github.com/gpui-luma-dev/xgpui/issues/284">#284</a> did for 1.28.1.
+<p>Imports run locally on an issue epic, as <a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a> did for 1.29.3.
 Build the tool, then compare a release with xgpui's current tree:</p>
 <pre><code class="language-sh">cargo build --locked --release --manifest-path tools/release-sync/Cargo.toml --target-dir target/release-sync
 tool=target/release-sync/release/xgpui-release
@@ -448,11 +448,11 @@ pulls of the upstream framework alongside the local fork.</p>
 version overrides for ten framework/backend crates and seven extensions.
 Normalization applies those versions while keeping directory names, library names
 and dependency aliases stable. The helper package version follows the captured
-<code>release/1.28.1</code> provenance independently. <code>upstream.json</code> records both sets.</p>
+<code>release/1.29.3</code> provenance independently. <code>upstream.json</code> records both sets.</p>
 <p>For example, the local <code>gpui</code> crate is packaged as <code>xgpui</code>; applications retain
 <code>use gpui::*</code> through a Cargo alias. Internal dependencies use exact requirements
 from the release map. Supporting packages retain their upstream identities and
-<code>=1.28.1</code> requirements. The selected downstream family uses core 4.0.0, Apple 5.0.0 and macOS 5.0.0, with
+<code>=1.29.3</code> requirements. The selected downstream family uses core 4.0.0, Apple 5.0.0 and macOS 5.0.0, with
 matching pins.
 Interactive iOS simulator/device validation remains pending.</p>
 <h2 id="website-deployment">Website deployment</h2>

@@ -295,12 +295,6 @@ fn accessible_run(text: &str) -> accesskit::Node {
 struct TextLine {
     entity: Entity<SelectableText>,
 }
-impl IntoElement for TextLine {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl Element for TextLine {
     type RequestLayoutState = ();
     type PrepaintState = ShapedLine;

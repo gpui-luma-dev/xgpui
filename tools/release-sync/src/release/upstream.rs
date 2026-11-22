@@ -383,20 +383,16 @@ fn api(endpoint: &str) -> Result<Json> {
 fn collect(inputs: &Json) -> Result<Json> {
     collect_with(inputs, api)
 }
-fn collect_with(inputs: &Json, mut api: impl FnMut(&str) -> Result<Json>) -> Result<Json> {
-    let base = str_at(inputs, "base_commit");
-    let head = str_at(inputs, "head_commit");
-    ensure!(
-        inputs["repository"] == "zed-industries/zed" && full_sha(base) && full_sha(head),
-        "Context requires pinned Zed commit SHAs"
-    );
+/// Commits in `from...to` (GitHub compare: merge base of the two → `to`), deduplicated, with the
+/// first page's compare summary. Fails unless pagination returned every commit.
+fn range_commits(
+    api: &mut impl FnMut(&str) -> Result<Json>,
+    from: &str,
+    to: &str,
+) -> Result<(Json, Vec<(String, Json)>)> {
     let pages = api(&format!(
-        "repos/zed-industries/zed/compare/{base}...{head}?per_page=100"
+        "repos/zed-industries/zed/compare/{from}...{to}?per_page=100"
     ))?;
-    ensure!(
-        matches!(str_at(&pages[0], "status"), "ahead" | "identical"),
-        "Zed commits do not form forward range"
-    );
     let mut commits = Vec::new();
     let mut seen = BTreeSet::new();
     for page in rows(&pages) {
@@ -411,43 +407,116 @@ fn collect_with(inputs: &Json, mut api: impl FnMut(&str) -> Result<Json>) -> Res
         commits.len() as u64 == pages[0]["total_commits"].as_u64().unwrap_or(u64::MAX),
         "Incomplete Zed commit pagination"
     );
+    Ok((pages[0].clone(), commits))
+}
+/// One context entry: the commit's subject and which of its files fall in captured crates or the
+/// shared root Cargo files.
+fn describe_commit(
+    api: &mut impl FnMut(&str) -> Result<Json>,
+    sha: &str,
+    commit: &Json,
+    paths: &BTreeSet<String>,
+) -> Result<Json> {
+    let pages = api(&format!(
+        "repos/zed-industries/zed/commits/{sha}?per_page=100"
+    ))?;
+    let files: Vec<_> = rows(&pages)
+        .iter()
+        .flat_map(|p| rows(&p["files"]))
+        .collect();
+    ensure!(
+        files.len() < 3000,
+        "Zed commit may exceed API file limit; inspect with Git"
+    );
+    let names: BTreeSet<_> = files
+        .iter()
+        .flat_map(|e| {
+            [e["filename"].as_str(), e["previous_filename"].as_str()]
+                .into_iter()
+                .flatten()
+        })
+        .collect();
+    let captured: Vec<_> = names
+        .iter()
+        .filter(|n| {
+            paths
+                .iter()
+                .any(|p| **n == p || n.starts_with(&format!("{p}/")))
+        })
+        .collect();
+    let shared: Vec<_> = names
+        .iter()
+        .filter(|n| matches!(**n, "Cargo.toml" | "Cargo.lock"))
+        .collect();
+    Ok(
+        json!({"sha":sha,"subject":str_at(&commit["commit"],"message").lines().next().unwrap_or(""),"captured_paths":captured,"workspace_paths":shared}),
+    )
+}
+/// Every `#N` mention in `text`, in order.
+fn pr_mentions(text: &str) -> Vec<u64> {
+    text.split('#')
+        .skip(1)
+        .filter_map(|rest| {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            digits.parse().ok()
+        })
+        .collect()
+}
+fn collect_with(inputs: &Json, mut api: impl FnMut(&str) -> Result<Json>) -> Result<Json> {
+    let base = str_at(inputs, "base_commit");
+    let head = str_at(inputs, "head_commit");
+    ensure!(
+        inputs["repository"] == "zed-industries/zed" && full_sha(base) && full_sha(head),
+        "Context requires pinned Zed commit SHAs"
+    );
+    let (summary, commits) = range_commits(&mut api, base, head)?;
+    // Zed cuts each minor release on its own branch, so consecutive releases may diverge: the
+    // range is then merge base → head, and the old branch's own commits are reported separately.
+    // `behind` (head older than base) stays rejected.
+    let status = str_at(&summary, "status").to_owned();
+    ensure!(
+        matches!(status.as_str(), "ahead" | "identical" | "diverged"),
+        "Zed commits do not form forward range"
+    );
     let paths = strings(&inputs["paths"]);
     let mut entries = Vec::new();
-    for (sha, commit) in commits {
-        let pages = api(&format!(
-            "repos/zed-industries/zed/commits/{sha}?per_page=100"
-        ))?;
-        let files: Vec<_> = rows(&pages)
-            .iter()
-            .flat_map(|p| rows(&p["files"]))
-            .collect();
-        ensure!(
-            files.len() < 3000,
-            "Zed commit may exceed API file limit; inspect with Git"
-        );
-        let names: BTreeSet<_> = files
-            .iter()
-            .flat_map(|e| {
-                [e["filename"].as_str(), e["previous_filename"].as_str()]
-                    .into_iter()
-                    .flatten()
-            })
-            .collect();
-        let captured: Vec<_> = names
-            .iter()
-            .filter(|n| {
-                paths
-                    .iter()
-                    .any(|p| **n == p || n.starts_with(&format!("{p}/")))
-            })
-            .collect();
-        let shared: Vec<_> = names
-            .iter()
-            .filter(|n| matches!(**n, "Cargo.toml" | "Cargo.lock"))
-            .collect();
-        entries.push(json!({"sha":sha,"subject":str_at(&commit["commit"],"message").lines().next().unwrap_or(""),"captured_paths":captured,"workspace_paths":shared}));
+    for (sha, commit) in &commits {
+        entries.push(describe_commit(&mut api, sha, commit, &paths)?);
     }
     let mut report = inputs.clone();
+    report["status"] = json!(status);
+    report["ahead_by"] = json!(commits.len());
+    report["behind_by"] = json!(0);
+    report["base_only_commits"] = json!([]);
+    if status == "diverged" {
+        let merge_base = str_at(&summary["merge_base_commit"], "sha");
+        let behind = summary["behind_by"].as_u64().unwrap_or(u64::MAX);
+        ensure!(
+            full_sha(merge_base) && behind > 0,
+            "Diverged Zed range lacks a merge base"
+        );
+        let (_, only_base) = range_commits(&mut api, head, base)?;
+        ensure!(
+            only_base.len() as u64 == behind,
+            "Incomplete Zed base-only commits"
+        );
+        let in_range: BTreeSet<u64> = entries
+            .iter()
+            .flat_map(|e| pr_mentions(str_at(e, "subject")))
+            .collect();
+        let mut base_only = Vec::new();
+        for (sha, commit) in &only_base {
+            let mut entry = describe_commit(&mut api, sha, commit, &paths)?;
+            // Heuristic: a cherry-pick's first `#N` is the original PR. Informational only.
+            let original = pr_mentions(str_at(&entry, "subject")).first().copied();
+            entry["original_pr"] = json!(original);
+            entry["in_range"] = json!(original.map(|n| in_range.contains(&n)));
+            base_only.push(entry);
+        }
+        report["merge_base_commit"] = json!(merge_base);
+        report["behind_by"] = json!(behind);
+        report["base_only_commits"] = json!(base_only);
+    }
     report["commits"] = json!(entries);
     Ok(report)
 }
@@ -480,6 +549,15 @@ fn markdown(context: &Json) -> String {
         "## Zed release context\n\nExact provenance range: [`{base}` → `{head}`](https://github.com/zed-industries/zed/compare/{base}...{head}).\n\nScope: **{} captured crate paths**, union of both release inventories. Shared root Cargo files are reported separately.\n\nThis is upstream context, not a claim that every Zed change is present in captured crates.\n",
         rows(&context["paths"]).len()
     );
+    let merge_base = str_at(context, "merge_base_commit");
+    if !merge_base.is_empty() {
+        out += &format!(
+            "\nThe release branches diverged at merge base [`{}`](https://github.com/zed-industries/zed/commit/{merge_base}): the incoming release is {} commits ahead and {} behind the recorded one. Commits below are merge base → incoming; the recorded release's own commits are listed separately.\n",
+            &merge_base[..merge_base.len().min(10)],
+            context["ahead_by"],
+            context["behind_by"]
+        );
+    }
     for (title, kind) in [
         ("Captured-crate commits", 0),
         ("Shared workspace dependency context", 1),
@@ -515,6 +593,33 @@ fn markdown(context: &Json) -> String {
                 out += &format!(
                     "  - Relevant paths: {}\n",
                     strings(relevant)
+                        .into_iter()
+                        .map(|p| format!("`{p}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+        }
+    }
+    let base_only = rows(&context["base_only_commits"]);
+    if !base_only.is_empty() {
+        out += "\n### Only in the recorded release\n\nCommits on the recorded release's branch that are not ancestors of the incoming release, usually cherry-picks. \"Also in range\" means the PR it cites appears in an incoming commit subject; this is a heuristic, so check any captured-crate commit marked otherwise.\n\n";
+        for c in base_only {
+            let sha = str_at(c, "sha");
+            let subject = link_mentions(str_at(c, "subject"));
+            let status = match (c["original_pr"].as_u64(), c["in_range"].as_bool()) {
+                (Some(n), Some(true)) => format!("also in range (#{n})"),
+                (Some(n), _) => format!("**#{n} not found in range — check**"),
+                _ => "no PR reference".to_owned(),
+            };
+            out += &format!(
+                "- [`{}`](https://github.com/zed-industries/zed/commit/{sha}) — {subject} — {status}\n",
+                &sha[..sha.len().min(10)]
+            );
+            if !rows(&c["captured_paths"]).is_empty() {
+                out += &format!(
+                    "  - Touches captured crates: {}\n",
+                    strings(&c["captured_paths"])
                         .into_iter()
                         .map(|p| format!("`{p}`"))
                         .collect::<Vec<_>>()
@@ -978,6 +1083,98 @@ mod context_regressions {
         ] {
             assert!(collect_with(&inputs, |_| Ok(response.clone())).is_err());
         }
+    }
+    fn diverged_api(merge_base: Json, base_only: Vec<Json>) -> impl FnMut(&str) -> Result<Json> {
+        let (base, head) = ("a".repeat(40), "b".repeat(40));
+        move |endpoint| {
+            if endpoint.contains(&format!("/compare/{base}...{head}")) {
+                Ok(
+                    json!([{"status":"diverged","total_commits":2,"behind_by":3,"merge_base_commit":merge_base,"commits":[
+                        {"sha":"1".repeat(40),"commit":{"message":"gpui: Fix pasteboard (#100)"}},
+                        {"sha":"2".repeat(40),"commit":{"message":"Bump to 2.0.0"}}
+                    ]}]),
+                )
+            } else if endpoint.contains(&format!("/compare/{head}...{base}")) {
+                Ok(json!([{"status":"diverged","total_commits":3,"commits":base_only}]))
+            } else if endpoint.contains(&"1".repeat(40)) || endpoint.contains(&"3".repeat(40)) {
+                Ok(json!([{"files":[{"filename":"crates/gpui/src/pasteboard.rs"}]}]))
+            } else if endpoint.contains(&"4".repeat(40)) {
+                Ok(json!([{"files":[{"filename":"crates/gpui/src/window.rs"}]}]))
+            } else {
+                Ok(json!([{"files":[{"filename":"script/bump"}]}]))
+            }
+        }
+    }
+    fn base_only_commits() -> Vec<Json> {
+        vec![
+            json!({"sha":"3".repeat(40),"commit":{"message":"gpui: Fix pasteboard (#100) (cherry-pick to stable) (#101)"}}),
+            json!({"sha":"4".repeat(40),"commit":{"message":"gpui: Stable-only fix (#200) (cherry-pick to stable) (#201)"}}),
+            json!({"sha":"5".repeat(40),"commit":{"message":"v1.0.x stable"}}),
+        ]
+    }
+    #[test]
+    fn diverged_release_branches_report_base_only_cherry_picks() {
+        let inputs = json!({"repository":"zed-industries/zed","base_commit":"a".repeat(40),"head_commit":"b".repeat(40),"paths":["crates/gpui"]});
+        let context = collect_with(
+            &inputs,
+            diverged_api(json!({"sha":"d".repeat(40)}), base_only_commits()),
+        )
+        .unwrap();
+        assert_eq!(context["status"], "diverged");
+        assert_eq!(context["merge_base_commit"], "d".repeat(40));
+        assert_eq!(
+            (context["ahead_by"].clone(), context["behind_by"].clone()),
+            (json!(2), json!(3))
+        );
+        assert_eq!(rows(&context["commits"]).len(), 2);
+        let only = rows(&context["base_only_commits"]);
+        assert_eq!(only.len(), 3);
+        assert_eq!(
+            (only[0]["original_pr"].clone(), only[0]["in_range"].clone()),
+            (json!(100), json!(true))
+        );
+        assert_eq!(
+            (only[1]["original_pr"].clone(), only[1]["in_range"].clone()),
+            (json!(200), json!(false))
+        );
+        assert_eq!(
+            only[1]["captured_paths"],
+            json!(["crates/gpui/src/window.rs"])
+        );
+        assert_eq!(
+            (only[2]["original_pr"].clone(), only[2]["in_range"].clone()),
+            (Json::Null, Json::Null)
+        );
+        let text = markdown(&context);
+        assert!(text.contains("3 behind"));
+        assert!(text.contains("### Only in the recorded release"));
+        assert!(text.contains("also in range (#100)"));
+        assert!(text.contains("**#200 not found in range — check**"));
+        assert!(text.contains("Touches captured crates: `crates/gpui/src/window.rs`"));
+        assert!(text.contains("no PR reference"));
+    }
+    #[test]
+    fn diverged_context_without_merge_base_or_all_base_commits_fails_closed() {
+        let inputs = json!({"repository":"zed-industries/zed","base_commit":"a".repeat(40),"head_commit":"b".repeat(40),"paths":[]});
+        assert!(collect_with(&inputs, diverged_api(Json::Null, base_only_commits())).is_err());
+        let mut short = base_only_commits();
+        short.pop();
+        assert!(collect_with(&inputs, diverged_api(json!({"sha":"d".repeat(40)}), short)).is_err());
+    }
+    #[test]
+    fn forward_context_has_no_base_only_section() {
+        let inputs = json!({"repository":"zed-industries/zed","base_commit":"a".repeat(40),"head_commit":"b".repeat(40),"paths":[]});
+        let context = collect_with(&inputs, |endpoint| {
+            if endpoint.contains("/compare/") {
+                Ok(json!([{"status":"ahead","total_commits":1,"commits":[{"sha":"1".repeat(40),"commit":{"message":"x"}}]}]))
+            } else {
+                Ok(json!([{"files":[]}]))
+            }
+        })
+        .unwrap();
+        assert_eq!(context["behind_by"], 0);
+        assert!(context.get("merge_base_commit").is_none());
+        assert!(!markdown(&context).contains("Only in the recorded release"));
     }
 }
 #[cfg(test)]
