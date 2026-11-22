@@ -223,6 +223,16 @@ for path in sorted((PAGES / "benchmarks").glob("*.json")):
 check("MIT LICENSE" in (PAGES / "vendor/prism/LICENSE").read_text(), "Prism license missing")
 print("Checked benchmark reports and vendored licenses.")
 
+# 7. Hand-added raster images are WebP (#422). Convert with, for example:
+#    cwebp -q 82 -resize 1600 0 in.png -o out.webp   (and a 2x copy for srcset)
+# Build output listed in GENERATED (such as the Italy comparison photos) is exempt.
+for path in sorted(PAGES.rglob("*")):
+    if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif"}:
+        name = rel(path)
+        check(any(fnmatch(name, pattern) for pattern in GENERATED),
+              f"{name}: use WebP for site images (cwebp -q 82 -resize 1600 0 in.png -o out.webp)")
+print("Checked that site images are WebP.")
+
 if failures:
     print(f"\n{len(failures)} problem(s):", file=sys.stderr)
     for failure in failures:

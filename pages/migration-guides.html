@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Every XGPUI migration guide, newest first: what changed in each GPUI upstream sync and how to update your code.">
+<title>Migration guides · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/migration-guides.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="right-to-left-text.html">Right-to-left text</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="migration-guides.html">Migration guides</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-curve.html">xgpui-curve</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="migration-guides">Migration guides</h1>
+<p>Each GPUI upstream sync that changes XGPUI's public API has a guide. Start with the newest one for the version you're moving to; if you're skipping releases, work through each guide in between, oldest first. Since GPUI 1.29.3, a guide lists only the changes that stop existing code from compiling; behavior changes and new APIs are in <a href="whats-new.html">What's new</a>.</p>
+<table><thead><tr><th>Guide</th><th>Shipped in</th><th>Covers</th></tr></thead><tbody>
+<tr><td><a href="gpui-1.29-migration.html"><strong>GPUI 1.29.3</strong></a> (latest)</td><td>XGPUI 5.0.0, November 22, 2026</td><td>Compile-breaking changes and their fixes: blanket <code>IntoElement</code>, <code>Along</code>, <code>layout_line</code>, <code>GraphicalEnvironment</code> and more</td></tr>
+<tr><td><a href="gpui-1.28-migration.html">GPUI 1.28.1</a></td><td>XGPUI 4.0.0, November 15, 2026</td><td>Breaking changes and migration, new APIs, behavior changes</td></tr>
+<tr><td><a href="gpui-1.27-migration.html">GPUI 1.27.0</a></td><td>The November 5, 2026 release (variable fonts)</td><td>Integration and API review</td></tr>
+<tr><td><a href="gpui-public-api.html#gpui-1262-migration">GPUI 1.26.2</a></td><td>XGPUI 2.0.0</td><td>A section of the GPUI API changes page</td></tr>
+</tbody></table>
+<p>Every public API change, compatible or not, is also listed on <a href="gpui-public-api.html">GPUI API changes</a>.</p>
+</article>
+</main>
+<footer>Source evidence and review hypotheses are kept distinct.</footer>
+</body>
+</html>
