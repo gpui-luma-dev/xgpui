@@ -247,6 +247,7 @@ lab="--manifest-path apps/xgpui-ext-lab/Cargo.toml"
 
 # Shared: tools, CPU extensions, labs and core benchmarks.
 suite runner-selftest all "bash scripts/test_all_selftest.sh"
+suite linux-setup-selftest all "bash scripts/linux_setup_selftest.sh"
 suite paints-selftest all "bash .github/paints/run_selftest.sh"
 # Rust release preparation, publication-policy, archive, import and generator tests.
 suite release-sync all "cargo_capture test --locked --manifest-path tools/release-sync/Cargo.toml {cargo}"
