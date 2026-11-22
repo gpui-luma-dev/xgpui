@@ -14,7 +14,7 @@ supported family:
 
 Other distributions (Void, Gentoo, NixOS, Alpine) aren't automated: the setup
 script stops and names the package table to copy from. The Ubuntu names are
-exactly the ones CI installs; the others are each distribution's equivalents
+the ones CI installs (with one rename, below); the others are each distribution's equivalents
 and haven't all been tried on a real machine yet (see [Status](#status)).
 
 The scripts take their distribution detection, the `sudo`/`doas` fallback and
@@ -403,19 +403,26 @@ the issue.
 - `scripts/linux_packages.txt` is the only package list. Edit a row and both
   the setup script and the doctor pick it up.
 - The **debian** column mirrors the `apt-get install` lines in
-  `.github/workflows/*.yml`. When CI adds a library, add a row with the
+  `.github/workflows/*.yml`, except `libfreetype-dev` for CI's
+  `libfreetype6-dev`. On Ubuntu 25.04+ the old name is only an alias that
+  `libfreetype-dev` provides. When CI adds a library, add a row with the
   `pkg-config` module (or command) and every family's package name.
 - To check a change without a Linux machine, run each family with
   `OS_RELEASE=<file> scripts/linux_setup.sh --all --dry-run`, using a small
   os-release file with `ID=…` (and `ID_LIKE=…`). This shows the selected
   list. Whether the names exist can only be checked on that distribution.
-- Run `shellcheck -x -P SCRIPTDIR scripts/linux_*.sh` before committing.
+- Run `bash scripts/linux_setup_selftest.sh` (also part of `just test`) and
+  `shellcheck -x -P SCRIPTDIR scripts/linux_*.sh` before committing. The
+  self-test drives the scripts with fake package managers, so it runs on any
+  machine.
 
 ## Status
 
 Tracked in [#389](https://github.com/gpui-luma-dev/xgpui/issues/389).
 
-- Verified: `shellcheck` is clean. Dry runs and stubbed installs were run on
+- Verified on a real Ubuntu machine (PR 429): the install ran. Its
+  `libfreetype6-dev` failure is fixed and covered by the self-test.
+- Verified: `shellcheck` and `scripts/linux_setup_selftest.sh` are clean. Dry runs and stubbed installs were run on
   macOS against os-release files for Fedora 43, Rocky 9, Debian 13, Ubuntu
   24.04/20.04, openSUSE Tumbleweed, Arch and Void. They covered the
   missing-package, idempotent re-run, undo-record, root-check and

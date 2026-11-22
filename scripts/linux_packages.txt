@@ -3,7 +3,9 @@
 # (what to check). docs/LINUX-SETUP.md explains each group.
 #
 # The debian column mirrors the apt-get lists in .github/workflows/*.yml; when
-# CI's list changes, change the matching row for every distribution here.
+# CI's list changes, change the matching row for every distribution here. One
+# deliberate difference: libfreetype-dev, not CI's libfreetype6-dev, which is
+# only a name libfreetype-dev provides on Ubuntu 25.04+ (exists since 22.04).
 # Distribution detection and the RHEL/openSUSE/Arch notes follow Zed's
 # script/linux, but Zed's own extras (libgit2, sqlite, libva, musl) are left out.
 #
@@ -32,7 +34,7 @@ base|cmd:pkg-config|pkgconf-pkg-config|pkg-config|pkgconf-pkg-config|pkgconf|pkg
 base|cmd:git|git|git|git|git|git, for git dependencies
 base|?cmd:ld.lld|lld|lld|lld|lld|ld.lld, an optional faster linker
 base|pc:fontconfig|fontconfig-devel|libfontconfig1-dev|fontconfig-devel|fontconfig|font discovery
-base|pc:freetype2|freetype-devel|libfreetype6-dev|freetype2-devel|freetype2|font rasterizing
+base|pc:freetype2|freetype-devel|libfreetype-dev|freetype2-devel|freetype2|font rasterizing
 base|pc:wayland-client|wayland-devel|libwayland-dev|wayland-devel|wayland|Wayland backend
 base|pc:xkbcommon|libxkbcommon-devel|libxkbcommon-dev|libxkbcommon-devel|libxkbcommon|keyboard layouts
 base|pc:xkbcommon-x11|libxkbcommon-x11-devel|libxkbcommon-x11-dev|libxkbcommon-x11-devel|libxkbcommon-x11|keyboard layouts (X11)

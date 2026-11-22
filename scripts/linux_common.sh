@@ -58,8 +58,18 @@ package_rows() {
 package_installed() {
   case "$pkg_manager" in
     dnf | zypper) rpm -q --whatprovides "$1" >/dev/null 2>&1 ;;
-    apt-get) [[ $(dpkg-query -W -f='${db:Status-Status}' "$1" 2>/dev/null) == installed ]] ;;
-    pacman) pacman -Q "$1" >/dev/null 2>&1 || pacman -Qg "$1" >/dev/null 2>&1 ;;
+    apt-get)
+      [[ $(dpkg-query -W -f='${db:Status-Status}' "$1" 2>/dev/null) == installed ]] && return 0
+      # A virtual name (Ubuntu 25.04+'s libfreetype6-dev) is satisfied by an
+      # installed package that Provides it; apt installs that package instead.
+      dpkg-query -W -f='${db:Status-Status}\t${Provides}\n' 2>/dev/null |
+        awk -F'\t' -v n="$1" '$1 == "installed" {
+          k = split($2, p, /, */)
+          for (i = 1; i <= k; i++) { sub(/[ :].*/, "", p[i]); if (p[i] == n) f = 1 }
+        } END { exit !f }'
+      ;;
+    # -T (deptest) also accepts names that an installed package provides.
+    pacman) pacman -T "$1" >/dev/null 2>&1 || pacman -Qg "$1" >/dev/null 2>&1 ;;
     *) return 1 ;;
   esac
 }

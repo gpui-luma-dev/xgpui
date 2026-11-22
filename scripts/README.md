@@ -14,7 +14,8 @@ root, as your normal user, in this order:
 
 `linux_packages.txt` is the package list steps 1 and 3 read, with each
 distribution's package names. `linux_common.sh` holds helpers the three scripts
-share. With `just`, the scripts also run as `just linux-setup`,
+share, and `linux_setup_selftest.sh` tests them with fake package managers
+(part of `just test`). With `just`, the scripts also run as `just linux-setup`,
 `just linux-rust` and `just linux-doctor`.
 
 Prerequisites (git, Chrome, optional rustup, optional xgpui-luma clone), what
