@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-curve"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 publish = ["crates-io"]
 description = "Curve and contour math for xgpui: geometry, arc length, plot series curves, functional curves, mesh lattices, curved field spines, node editing, strokes, and gpui paths"
@@ -28,7 +28,7 @@ gpui = ["dep:gpui"]
 
 [dependencies]
 kurbo = "0.13.1"
-gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "4.2.0", optional = true }
+gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "5.0.0", optional = true }
 
 [dev-dependencies]
 naga = { version = "30.0.1", features = ["wgsl-in", "msl-out", "hlsl-out", "spv-out"] }
