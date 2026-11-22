@@ -10,6 +10,35 @@ directly as our upstream.
 
 **[Read the documentation →](https://xgpui.dev/)**
 
+## Latest release
+
+**XGPUI 5.0.0**, released November 22, 2026, tracks upstream
+**gpui-unofficial 1.29.3** (Zed `v1.29.3`). The captured upstream release and
+commit are recorded in [`upstream.json`](upstream.json); XGPUI crates keep their
+own version numbers, independent of the upstream version.
+
+- Highlights: every `Element` is an `IntoElement` through a blanket impl, lighter
+  `Div` builders, text-system speedups, color glyphs composited on the CPU on
+  Windows, and Canvas spatial editing APIs.
+- Upgrading from 4.x: the [GPUI 1.29.3 migration guide](https://xgpui.dev/gpui-1.29-migration.html)
+  lists every compile-breaking change and its fix. Update the GPUI family together.
+- [Release notes](https://github.com/gpui-luma-dev/xgpui/releases/latest) ·
+  [What's new](https://xgpui.dev/whats-new.html) ·
+  [All migration guides](https://xgpui.dev/migration-guides.html)
+
+## Lookless UI controls: xgpui-luma
+
+[xgpui-luma](https://github.com/gpui-luma-dev/xgpui-luma) is the lookless UI
+controls suite built on XGPUI: controls, layouts, focus, interaction and motion in
+one SDK, with Shadcn and Radix looks as separate adapters, plus color controls and
+charts. Documentation: [gpui-luma.dev](https://gpui-luma.dev).
+
+Its **XGPUI Lab** app brings most of XGPUI's extension labs together in one
+application: canvas, color, gamut, GPU interop, media, Parley text, shaders, the
+desktop shell and SVG.
+
+![XGPUI Lab, part of xgpui-luma: the Lab Explorer lists the xgpui extensions and shows the GPU Interop Lab rendering waves in Display P3 next to an sRGB preview](pages/images/xgpui-lab-1600.webp)
+
 ## How it works
 
 - Modified framework/backend crates are captured under `gpui/`; supporting
@@ -40,59 +69,6 @@ for targets, launch commands and why the lab package is unpublished.
 `just build` builds the libraries supported by the selected target; it does not
 launch an application.
 
-## Crate release preflight
-
-Run the version audit (Rust tooling; requires Git and curl) while developing or before asking an
-agent to prepare a release:
-
-```sh
-cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-check --epoch release-2026-11-15-04ba149f08ca
-```
-
-`just release-check` is a different step: the tagged no-upload check run during
-publication. The audit detects crate changes, including staged,
-unstaged and non-ignored new files, and checks crates.io for versions that
-would prevent those changes from being published.
-
-The tracking epoch is `release-2026-11-03-712732c7cf07`, configured in
-`scripts/release-check.json`. Pass `--epoch TAG` with the latest completed release, as above.
-The epoch is a trusted completed release baseline. For each crate, a later
-non-draft GitHub release advances that baseline only when its notes contain a
-three-column verification row (`Crate | Version | Result` or `Verification`)
-with `published-verified` or `already-published`, the version agrees with the
-tagged manifest, and that version exists on crates.io. Release agents must
-retain these verification rows when editing release notes. Partial/draft or
-unverified releases never advance the baseline. Tags must be available locally;
-run `git fetch origin --tags` when the command reports a missing release tag.
-
-Results distinguish:
-
-- **Version bump required:** crate files changed, or an internal dependency
-  changed, but the current version is already published.
-- **Dependency pin update required:** a candidate has a new version but still
-  references an old internal dependency version.
-- **Ready for new version:** changes have an unpublished version and matching
-  internal pins. This is ready for release preparation, not publication approval.
-- **Unchanged:** no changes since that crate's verified baseline; no bump needed.
-
-The command exits successfully when no changes would be missed, including when
-there is nothing to release. Missing registry/history checks and disabled
-publication for changed candidates fail the check. Version bumps remain a
-review decision; this command never edits versions or uploads anything.
-
-Change detection conservatively covers crate directories (including tests,
-examples and READMEs, excluding Cargo.lock), explicitly configured external
-readme/license/build files, and transitive internal dependencies, including
-optional/target-specific and versioned development dependencies. Root website
-and tooling edits alone do not require crate bumps. This is a Git-based change
-check, not a normalized archive comparison; other shared inputs outside crate
-directories need release review. Builds, API compatibility and exact payload
-verification remain separate release steps.
-
-The check reads public GitHub release metadata and crates.io metadata without
-publication credentials. Add `--report PATH` (outside the checkout) to save the machine-readable report, or `--json` for JSON
-on stdout.
-
 ## Documentation website
 
 The website at <https://xgpui.dev/> is the static `pages/` directory: guides,
@@ -103,7 +79,7 @@ just pages-serve
 just pages-check
 ```
 
-See [website deployment](https://xgpui.dev/releasing.html#website-deployment) for publishing.
+See [website deployment](docs/RELEASING.md#website-deployment) for publishing.
 
 ## Contributing
 

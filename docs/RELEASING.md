@@ -297,3 +297,29 @@ macOS, Linux and Windows for every PR; the owner's manual Windows and Linux chec
 happen on `main`. Use the labs (`just labs`) for graphical checks. `just pages-check`
 checks the static website in `pages/`, which is edited by hand. Toolchain and host
 prerequisites are in [Local development](https://xgpui.dev/local-development.html#build-prerequisites).
+
+## Website deployment
+
+`.github/workflows/pages.yml` runs on manual dispatch only. It checks `pages/`, builds both demo collections, checks that the bundles exist and uploads `pages/` as is. Internal documentation and tooling are never uploaded.
+
+Select **Settings → Pages → Source: GitHub Actions**. After deployment, repeat the browser checks at `https://xgpui.dev/` and refresh nested URLs directly to catch stale assets.
+
+### Custom domain
+
+Production traffic for `xgpui.dev` was migrated in [issue #61](https://github.com/gpui-luma-dev/xgpui/issues/61) and [PR #64](https://github.com/gpui-luma-dev/xgpui/pull/64) (verified 2026-10-28).
+
+- The repository Pages custom domain is `xgpui.dev`, with **Enforce HTTPS**. The certificate covers `xgpui.dev` and `www.xgpui.dev`.
+- Organization ownership is verified by the TXT record at `_github-pages-challenge-gpui-luma-dev.xgpui.dev`. Retain it.
+- Apex A records: `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`. `www` is a CNAME to `gpui-luma-dev.github.io`. Preserve unrelated DNS records.
+- No `CNAME` file is needed: Actions publishing uses the repository setting.
+- `http://xgpui.dev/`, `https://www.xgpui.dev/` and the former project URL `https://gpui-luma-dev.github.io/xgpui/…` redirect to the HTTPS apex, keeping path and query. Keep site links relative so localhost previews also work.
+
+```sh
+dig A xgpui.dev +short
+dig CNAME www.xgpui.dev +short
+dig TXT _github-pages-challenge-gpui-luma-dev.xgpui.dev +short
+curl -IL https://www.xgpui.dev/
+curl -IL 'https://gpui-luma-dev.github.io/xgpui/examples/extensions/?demo=color&backend=webgl'
+```
+
+For rollback, redeploy a known-good commit through the workflow. If removing the domain mapping, change Pages DNS before removing the GitHub custom-domain association, and keep the ownership record. GitHub's [custom domain](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site) and [troubleshooting](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/troubleshooting-custom-domains-and-github-pages) guides have the details.
