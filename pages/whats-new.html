@@ -20,8 +20,8 @@
 </aside>
 <main id="content" tabindex="-1">
 <p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="whats-new">What's new</h1>
-<h2 id="gpui-1-29-3">In preparation — GPUI 1.29.3 upstream sync</h2>
-<p>The GPUI sources follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/releases/tag/v1.29.3">1.29.3</a> (Zed <code>v1.29.3</code>); 1.29.1 and 1.29.2 changed no GPUI sources. Where an upstream change conflicted with XGPUI behavior, XGPUI’s behavior was kept. Tracking issue: <a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a>. Not yet published; versions and the release tag are added when it is.</p>
+<h2 id="xgpui-5-0-0">XGPUI 5.0.0 — GPUI 1.29.3 and Canvas spatial editing</h2>
+<p>The GPUI sources follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/releases/tag/v1.29.3">1.29.3</a> (Zed <code>v1.29.3</code>); 1.29.1 and 1.29.2 changed no GPUI sources. Where an upstream change conflicted with XGPUI behavior, XGPUI’s behavior was kept (<a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a>). Canvas gains spatial editing APIs. <code>xgpui</code> 5.0.0 has compile-breaking changes, so every crate that exposes its types takes a breaking version; 18 crates are published, and <code>xgpui-color</code> and <code>xgpui-macros</code> are unchanged.</p>
 <h3>Highlights</h3>
 <ul>
 <li><strong>Elements:</strong> every <code>Element</code> is an <code>IntoElement</code> through a blanket impl, and <code>Div</code> keeps its interactivity out of line, so builder chains copy far less.</li>
@@ -30,9 +30,40 @@
 <li><strong>macOS:</strong> menu shortcuts bound to backspace and delete fire.</li>
 <li><strong>Wayland:</strong> frame callbacks are timed from receipt, since the protocol leaves the compositor clock unspecified.</li>
 <li><strong>Core:</strong> <code>list()</code> respects horizontal padding and borders, a drag’s cursor applies immediately, animated WebP images decode every frame, and <code>GraphicalEnvironment::desktop_environment()</code> reports the Linux desktop.</li>
+<li><strong>Canvas spatial editing</strong> (<a href="https://github.com/gpui-luma-dev/xgpui/issues/384">#384</a>): camera centering and padded fitting, indexed queries and front-to-back picking candidates, separate geometry and content invalidation, mutable item data, atomic batch bounds updates and explicit index rebuild, with a mixed-shape editor demo (<code>just canvas editor</code>).</li>
+</ul>
+<h3>Bug fixes</h3>
+<ul>
+<li><strong>Canvas:</strong> pan and zoom update atomically, invalid viewport, scene-bounds, snapping and grid inputs are rejected, and extreme finite coordinates no longer overflow (<a href="https://github.com/gpui-luma-dev/xgpui/issues/383">#383</a>).</li>
+<li><strong>Gestures:</strong> pinch gestures reach their listeners while keyboard focus suppresses hover styling (<a href="https://github.com/gpui-luma-dev/xgpui/pull/404">#404</a>).</li>
 </ul>
 <h3>Migration</h3>
 <p>Some changes stop existing code from compiling; each is listed with its fix on the <a href="gpui-1.29-migration.html">GPUI 1.29.3 migration</a> page. The most common: delete any <code>impl IntoElement</code> next to an <code>impl Element</code>. Update the GPUI family together. The full record is in the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.29.3-api-ledger.md">API ledger</a> and the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.29.3-accounting.md">upstream change accounting</a>.</p>
+<h3>Validation</h3>
+<p>CI passed on the merge into <code>main</code>, including real-window Linux (Wayland and X11), Windows and macOS jobs. Windows and Linux were checked by hand, Windows at several zoom levels. xgpui-luma built and passed all its tests against the release candidate after removing five <code>IntoElement</code> impls.</p>
+<h3>Versions</h3>
+<table><thead><tr><th>Crate</th><th>Previous release</th><th>Released</th></tr></thead><tbody>
+<tr><td><code>xgpui</code></td><td>4.2.0</td><td><strong>5.0.0</strong></td></tr>
+<tr><td><code>xgpui-apple</code></td><td>5.0.1</td><td><strong>6.0.0</strong></td></tr>
+<tr><td><code>xgpui-canvas</code></td><td>0.4.1</td><td><strong>0.5.0</strong></td></tr>
+<tr><td><code>xgpui-color</code></td><td>0.4.0</td><td>0.4.0</td></tr>
+<tr><td><code>xgpui-curve</code></td><td>0.1.0</td><td><strong>0.2.0</strong></td></tr>
+<tr><td><code>xgpui-gamut</code></td><td>0.5.0</td><td><strong>0.6.0</strong></td></tr>
+<tr><td><code>xgpui-gpu-interop</code></td><td>0.3.0</td><td><strong>0.4.0</strong></td></tr>
+<tr><td><code>xgpui-ios</code></td><td>2.0.1</td><td><strong>3.0.0</strong></td></tr>
+<tr><td><code>xgpui-linux</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td></tr>
+<tr><td><code>xgpui-macos</code></td><td>5.0.2</td><td><strong>6.0.0</strong></td></tr>
+<tr><td><code>xgpui-macros</code></td><td>1.0.4</td><td>1.0.4</td></tr>
+<tr><td><code>xgpui-media</code></td><td>0.7.0</td><td><strong>0.8.0</strong></td></tr>
+<tr><td><code>xgpui-parley</code></td><td>0.8.0</td><td><strong>0.9.0</strong></td></tr>
+<tr><td><code>xgpui-platform</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td></tr>
+<tr><td><code>xgpui-shader</code></td><td>0.5.1</td><td><strong>0.6.0</strong></td></tr>
+<tr><td><code>xgpui-shell</code></td><td>0.3.1</td><td><strong>0.4.0</strong></td></tr>
+<tr><td><code>xgpui-svg</code></td><td>0.4.2</td><td><strong>0.5.0</strong></td></tr>
+<tr><td><code>xgpui-web</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td></tr>
+<tr><td><code>xgpui-wgpu</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td></tr>
+<tr><td><code>xgpui-windows</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td></tr>
+</tbody></table>
 
 <h2 id="xgpui-curve">xgpui-curve 0.1.0 — curves for editors, charts and gradients</h2>
 <p>A new extension crate, <a href="curve.html"><code>xgpui-curve</code></a>, gives xgpui one place for curve math: the geometry, splines, editing models and shader helpers that apps used to write themselves. Three crates are published: <code>xgpui-curve</code> 0.1.0 (new), <code>xgpui-svg</code> 0.4.2 and <code>xgpui-macos</code> 5.0.2. No GPUI changes are needed, no migration is required, and the other 17 crates are unchanged. Release issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/390">#390</a>; release notes on <a href="https://github.com/gpui-luma-dev/xgpui/releases">GitHub releases</a>.</p>

@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-windows"
-version = "3.0.1"
+version = "4.0.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -22,7 +22,7 @@ test-support = ["gpui/test-support"]
 screen-capture = ["gpui/screen-capture", "scap"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
-gpui = { package = "xgpui", version = "4.0.0", default-features = false }
+gpui = { package = "xgpui", version = "5.0.0", default-features = false }
 accesskit = { version = "0.24.0", features = ["enumn"] }
 accesskit_windows = { version = "0.34" }
 anyhow = { version = "1.0.86" }

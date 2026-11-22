@@ -20,14 +20,31 @@
 </aside>
 <main id="content" tabindex="-1">
 <p><a href="whats-new.html">← What's new</a></p><article class="extension-document"><h1 id="gpui-1293-migration">GPUI 1.29.3 migration</h1>
-<!-- DRAFT for issue #406. Replaces the 1.28.1 page in the navigation; not deployed until the crates are published.
-     Lists only changes that stop downstream code from compiling (see the API ledger for everything else).
-     Release tag, date and the version table are filled in by package 08. -->
-<p><strong>Draft — not released.</strong> The GPUI sources follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/tree/c70ecc6b614c9c2113c69555937ed23ba7891bbe">1.29.3</a> (Zed <code>v1.29.3</code>). Tracking issue: <a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a>.</p>
+<p>Released in XGPUI 5.0.0 (<a href="whats-new.html#xgpui-5-0-0">What's new</a>, release issue <a href="https://github.com/gpui-luma-dev/xgpui/issues/417">#417</a>). The GPUI sources follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/tree/c70ecc6b614c9c2113c69555937ed23ba7891bbe">1.29.3</a> (Zed <code>v1.29.3</code>). Tracking issue: <a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a>.</p>
 <p>This page lists only the changes that can stop your code from compiling, with the fix for each. Behavior changes and new APIs are in <a href="whats-new.html">What's new</a>; the complete record is the <a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.29.3-api-ledger.md">API ledger</a>.</p>
 
 <h2 id="update-together">Update the GPUI family together</h2>
-<p><code>xgpui</code> takes a major version. Its types are distinct from the previous major's, so every crate whose public API exposes them takes a breaking version too. Move all of them in one step; mixing majors produces type-mismatch errors between, for example, an extension's elements and your <code>gpui</code>. The version table is added when the release is prepared.</p>
+<p><code>xgpui</code> takes a major version. Its types are distinct from the previous major's, so every crate whose public API exposes them takes a breaking version too. Move all of them in one step; mixing majors produces type-mismatch errors between, for example, an extension's elements and your <code>gpui</code>. <code>xgpui-color</code> 0.4.0 and <code>xgpui-macros</code> 1.0.4 are unchanged.</p>
+<table><thead><tr><th>Crate</th><th>Previous release</th><th>Use</th></tr></thead><tbody>
+<tr><td><code>xgpui</code></td><td>4.2.0</td><td><strong>5.0.0</strong></td></tr>
+<tr><td><code>xgpui-apple</code></td><td>5.0.1</td><td><strong>6.0.0</strong></td></tr>
+<tr><td><code>xgpui-canvas</code></td><td>0.4.1</td><td><strong>0.5.0</strong></td></tr>
+<tr><td><code>xgpui-curve</code></td><td>0.1.0</td><td><strong>0.2.0</strong></td></tr>
+<tr><td><code>xgpui-gamut</code></td><td>0.5.0</td><td><strong>0.6.0</strong></td></tr>
+<tr><td><code>xgpui-gpu-interop</code></td><td>0.3.0</td><td><strong>0.4.0</strong></td></tr>
+<tr><td><code>xgpui-ios</code></td><td>2.0.1</td><td><strong>3.0.0</strong></td></tr>
+<tr><td><code>xgpui-linux</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td></tr>
+<tr><td><code>xgpui-macos</code></td><td>5.0.2</td><td><strong>6.0.0</strong></td></tr>
+<tr><td><code>xgpui-media</code></td><td>0.7.0</td><td><strong>0.8.0</strong></td></tr>
+<tr><td><code>xgpui-parley</code></td><td>0.8.0</td><td><strong>0.9.0</strong></td></tr>
+<tr><td><code>xgpui-platform</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td></tr>
+<tr><td><code>xgpui-shader</code></td><td>0.5.1</td><td><strong>0.6.0</strong></td></tr>
+<tr><td><code>xgpui-shell</code></td><td>0.3.1</td><td><strong>0.4.0</strong></td></tr>
+<tr><td><code>xgpui-svg</code></td><td>0.4.2</td><td><strong>0.5.0</strong></td></tr>
+<tr><td><code>xgpui-web</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td></tr>
+<tr><td><code>xgpui-wgpu</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td></tr>
+<tr><td><code>xgpui-windows</code></td><td>3.0.1</td><td><strong>4.0.0</strong></td></tr>
+</tbody></table>
 
 <h2 id="breaking-changes">Breaking changes and migration</h2>
 <table><thead><tr><th>Change</th><th>Crate</th><th>Migration</th></tr></thead><tbody>

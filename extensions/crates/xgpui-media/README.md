@@ -8,8 +8,8 @@ frames.
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui", version = "4.1.0" }
-xgpui-media = "0.7.0"
+gpui = { package = "xgpui", version = "5.0.0" }
+xgpui-media = "0.8.0"
 ```
 
 ## Pixels and color metadata

@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-shell"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 license = "Apache-2.0"
 description = "Desktop-aware window shell for XGPUI applications"
@@ -13,8 +13,8 @@ categories = ["gui"]
 publish = ["crates-io"]
 
 [dependencies]
-gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "4.0.0" }
+gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "5.0.0" }
 anyhow = "1"
 
 [dev-dependencies]
-gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "4.0.0", features = ["test-support"] }
+gpui = { package = "xgpui", path = "../../../gpui/crates/gpui", version = "5.0.0", features = ["test-support"] }
