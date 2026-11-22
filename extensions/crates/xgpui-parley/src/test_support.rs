@@ -7,8 +7,17 @@ pub(crate) const PLEX: &[u8] = include_bytes!(concat!(
 ));
 pub(crate) const INTER: &[u8] = include_bytes!("../tests/fonts/InterVariable.ttf");
 
+/// The test fonts only, never the machine's installed fonts. `FontContext::new()` discovers
+/// system fonts when the `system-fonts` feature is on, which makes tests that rely on a
+/// script or emoji font being absent depend on what the host has installed.
 pub(crate) fn fonts() -> FontContext {
-    let mut fonts = FontContext::new();
+    let mut fonts = FontContext {
+        collection: parley::fontique::Collection::new(parley::fontique::CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        }),
+        source_cache: Default::default(),
+    };
     for data in [INTER, PLEX, FLEX] {
         fonts
             .collection
