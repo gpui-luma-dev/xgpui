@@ -7833,7 +7833,7 @@ checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
 
 [[package]]
 name = "xgpui"
-version = "4.2.0"
+version = "5.0.0"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -7921,7 +7921,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-apple"
-version = "5.0.1"
+version = "6.0.0"
 dependencies = [
  "anyhow",
  "async-task",
@@ -7976,7 +7976,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-canvas"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -7998,7 +7998,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-curve"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kurbo",
  "naga 30.0.1",
@@ -8063,7 +8063,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-gamut"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -8078,7 +8078,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-gpu-interop"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "ash",
@@ -8096,7 +8096,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-ios"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -8118,7 +8118,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-linux"
-version = "3.0.1"
+version = "4.0.0"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -8161,7 +8161,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-macos"
-version = "5.0.2"
+version = "6.0.0"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -8213,7 +8213,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-media"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "half",
@@ -8232,7 +8232,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-parley"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "parley",
@@ -8245,7 +8245,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-platform"
-version = "3.0.1"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -8261,7 +8261,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-shader"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -8283,7 +8283,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-shell"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "xgpui",
@@ -8291,7 +8291,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-svg"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "web-time",
@@ -8301,7 +8301,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-web"
-version = "3.0.1"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -8329,7 +8329,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-wgpu"
-version = "3.0.1"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "ash",
@@ -8359,7 +8359,7 @@ dependencies = [
 
 [[package]]
 name = "xgpui-windows"
-version = "3.0.1"
+version = "4.0.0"
 dependencies = [
  "accesskit",
  "accesskit_windows",
