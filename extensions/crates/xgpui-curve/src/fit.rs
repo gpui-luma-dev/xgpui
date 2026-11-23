@@ -1,9 +1,17 @@
 //! Freehand curve fitting: Ramer–Douglas–Peucker simplification and
 //! Schneider's least-squares cubic fitting ("An Algorithm for Automatically
 //! Fitting Digitized Curves", Graphics Gems, 1990), with corner splitting.
+//! [`fit_parameterized`] instead retains caller-supplied source parameters
+//! and reports paired sample errors and segment-budget exhaustion.
 
 use crate::error::{CurveError, finite};
 use crate::geom::{BezPath, CubicBez, ParamCurve, Point, Vec2};
+
+mod parameterized;
+pub use parameterized::{
+    FitDiagnostics, ParameterizedFit, ParameterizedFitOptions, ParameterizedSegment,
+    fit_parameterized,
+};
 
 /// Options for [`fit_cubic_path`].
 #[derive(Clone, Copy, Debug, PartialEq)]

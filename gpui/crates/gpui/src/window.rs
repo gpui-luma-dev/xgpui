@@ -2614,6 +2614,16 @@ impl Window {
             .map(|view| view.clone().downcast::<E>().ok())
     }
 
+    /// Opt into three-finger vertical trackpad drag as zoom instead of pinch.
+    ///
+    /// On macOS, upward motion zooms in, anchored at the cursor when the third
+    /// finger lands. Existing `on_pinch` handlers receive the zoom deltas.
+    /// Two-finger scroll remains available. Other platforms ignore this setting.
+    /// System-reserved gestures may prevent the app from receiving the contacts.
+    pub fn set_three_finger_zoom(&mut self, enabled: bool) {
+        self.platform_window.set_three_finger_zoom(enabled);
+    }
+
     /// Obtain a handle to the window that belongs to this context.
     pub fn window_handle(&self) -> AnyWindowHandle {
         self.handle

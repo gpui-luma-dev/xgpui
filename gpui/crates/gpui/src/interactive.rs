@@ -593,7 +593,8 @@ pub struct PinchEvent {
     /// The position of the pinch center on the window.
     pub position: Point<Pixels>,
 
-    /// The zoom delta for this event.
+    /// The zoom delta for this event. On macOS this also carries three-finger
+    /// drag zoom when enabled with `Window::set_three_finger_zoom`.
     /// Positive values indicate zooming in, negative values indicate zooming out.
     /// For example, 0.1 represents a 10% zoom increase.
     pub delta: f32,

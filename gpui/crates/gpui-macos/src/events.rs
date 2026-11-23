@@ -98,7 +98,7 @@ pub(crate) fn key_to_menu_equivalent(key: &str) -> Cow<'_, str> {
     Cow::Owned(String::from_utf16(&[code as u16]).unwrap())
 }
 
-fn read_modifiers(native_event: &NSEvent) -> Modifiers {
+pub(crate) fn read_modifiers(native_event: &NSEvent) -> Modifiers {
     let modifiers = native_event.modifierFlags();
     let control = modifiers.contains(NSEventModifierFlags::Control);
     let alt = modifiers.contains(NSEventModifierFlags::Option);

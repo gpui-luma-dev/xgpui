@@ -256,6 +256,7 @@ group = "Main interactive labs"
 title = "Curves / xgpui-curve"
 about = "Mesh wires, spine inspector, node modes, plot series, easing, squircles and fitted strokes"
 views = [
+  { name = "zeta", title = "Animated Riemann zeta mapping", args = ["--panel", "zeta"] },
   { name = "spine", title = "Spine inspector (GPU field)", args = ["--panel", "spine"] },
   { name = "nodes", title = "Node editor", args = ["--panel", "nodes"] },
   { name = "series", title = "Series curve gallery", args = ["--panel", "series"] },

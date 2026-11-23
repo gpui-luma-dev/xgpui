@@ -50,7 +50,15 @@ mod tests {
 
     #[::core::prelude::v1::test]
     fn every_panel_is_selectable_from_the_command_line() {
-        for name in ["mesh", "spine", "nodes", "series", "functions", "shapes"] {
+        for name in [
+            "mesh",
+            "spine",
+            "nodes",
+            "series",
+            "functions",
+            "shapes",
+            "zeta",
+        ] {
             assert!(
                 Options::try_parse_from(["curve-lab", "--panel", name]).is_ok(),
                 "{name}"
