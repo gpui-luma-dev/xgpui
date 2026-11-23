@@ -269,6 +269,16 @@ name = "test"
 about = "Curve lab command-line checks"
 cargo = ["test", "--bin", "curve-lab"]
 
+[[lab.task]]
+name = "zeta-capture"
+about = "Six deterministic zeta UI captures and draw/readback timing JSON"
+args = ["--panel", "zeta", "--zeta-capture", "target/zeta-review"]
+
+[[lab.task]]
+name = "zeta-benchmark"
+about = "CPU evaluation, parameter fitting, measurement and path-building baseline"
+args = ["--zeta-benchmark", "target/zeta-review/cpu-baseline.json"]
+
 [[lab]]
 name = "color"
 bin = "color-lab"

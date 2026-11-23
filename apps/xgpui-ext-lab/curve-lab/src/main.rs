@@ -3,6 +3,8 @@
 //! the browser demo (`?demo=curve`).
 #![recursion_limit = "256"]
 use clap::Parser;
+use std::path::PathBuf;
+mod review;
 use gpui::{prelude::*, *};
 use xgpui_ext_lab::{LabApp, LabWindowTitle};
 
@@ -15,10 +17,19 @@ struct Options {
     /// Panel to open first; all panels are available from tabs in the window.
     #[arg(long, value_enum, default_value = "mesh")]
     panel: curve::Panel,
+    /// Capture deterministic zeta review frames and CPU draw/readback timings, then exit.
+    #[arg(long, conflicts_with = "zeta_benchmark")]
+    zeta_capture: Option<PathBuf>,
+    /// Write a deterministic CPU baseline without opening a window, then exit.
+    #[arg(long)]
+    zeta_benchmark: Option<PathBuf>,
 }
 
 fn main() -> anyhow::Result<()> {
     let options = Options::parse();
+    if let Some(output) = &options.zeta_benchmark {
+        return curve::zeta_benchmark(output);
+    }
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     gpui_platform::application().run(move |cx: &mut App| {
         cx.on_window_closed(|cx, _| {
@@ -28,18 +39,25 @@ fn main() -> anyhow::Result<()> {
         })
         .detach();
         let bounds = Bounds::centered(None, size(px(1280.), px(900.)), cx);
-        cx.open_lab_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                ..Default::default()
-            },
-            |window, cx| {
-                window.set_lab_title("XGPUI Curve Lab");
-                cx.new(|_| curve::CurveLab::new(options.panel))
-            },
-        )
-        .expect("open curve lab");
+        let mut lab_entity = None;
+        let window = cx
+            .open_lab_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    ..Default::default()
+                },
+                |window, cx| {
+                    window.set_lab_title("XGPUI Curve Lab");
+                    let lab = cx.new(|_| curve::CurveLab::new(options.panel));
+                    lab_entity = Some(lab.clone());
+                    lab
+                },
+            )
+            .expect("open curve lab");
         cx.activate(true);
+        if let Some(directory) = options.zeta_capture {
+            review::capture(window, lab_entity.unwrap(), directory, cx);
+        }
     });
     Ok(())
 }

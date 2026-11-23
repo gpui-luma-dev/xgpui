@@ -138,6 +138,9 @@ impl FittedTrace {
         options.max_segments = 4096;
         let fit =
             fit_parameterized(points, &parameters, options).expect("finite bounded lab samples");
+        Self::from_fit(fit)
+    }
+    fn from_fit(fit: ParameterizedFit) -> Self {
         let mut spans = Vec::new();
         let mut total = 0.;
         for segment in fit.segments() {
@@ -278,6 +281,14 @@ impl ZetaPanel {
             compare: false,
             pending_t: None,
         }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    pub(super) fn snapshot(&mut self, phase: f64, sigma: f64) {
+        self.set_sigma(sigma);
+        self.pending_t = None;
+        self.phase = phase;
+        self.playing = false;
+        self.last = None;
     }
     fn move_source(&mut self, at: Point<Pixels>) {
         let b = self.source_area.get();
@@ -1059,11 +1070,16 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
         .size_full(),
     )
     .child(source);
+    let navigation = if cfg!(target_family = "wasm") {
+        "Wheel/pinch to zoom · two-finger scroll to pan"
+    } else {
+        "macOS: three-finger up/down to zoom · two fingers to pan"
+    };
     div().size_full().flex().flex_col().gap_2().child(controls).child(thickness).child(curve_controls)
         .child(format!("ζ({sigma:.3} + it) · t = {:.1} / 120 · {zero_count} detected zeros · drag source line to change σ",current_t))
         .child(format!("{segment_count} Bézier segments / {} samples · length {total_length:.2} · paired sample error: max {fit_error:.5}, RMS {fit_rms:.5} · {fit_status}",TRACE_STEPS+1))
         .child(timeline).child(div().flex_1().min_h_0().child(plot))
-        .child(div().text_xs().child("macOS: three-finger up/down to zoom · two fingers to pan · Lab approximation · |z − 1| < 0.12 excluded · tolerance simplifies sampled geometry; it is not a certified function-error bound"))
+        .child(div().text_xs().child(format!("{navigation} · Lab approximation · |z − 1| < 0.12 excluded · tolerance simplifies sampled geometry; it is not a certified function-error bound")))
         .into_any_element()
 }
 #[cfg(test)]
@@ -1160,3 +1176,9 @@ mod tests {
         }
     }
 }
+
+#[cfg(not(target_family = "wasm"))]
+#[path = "zeta_review.rs"]
+mod review;
+#[cfg(not(target_family = "wasm"))]
+pub use review::benchmark;

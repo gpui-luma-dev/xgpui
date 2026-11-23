@@ -11,6 +11,8 @@ mod series;
 mod shapes;
 mod spine;
 mod zeta;
+#[cfg(not(target_family = "wasm"))]
+pub use zeta::benchmark as zeta_benchmark;
 
 /// The lab's panels, in tab order.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -111,6 +113,12 @@ pub struct CurveLab {
 }
 
 impl CurveLab {
+    /// Select a deterministic paused zeta review frame (native capture task).
+    #[cfg(not(target_family = "wasm"))]
+    pub fn zeta_snapshot(&mut self, phase: f64, sigma: f64) {
+        self.panel = Panel::Zeta;
+        self.zeta.snapshot(phase, sigma);
+    }
     /// A lab opened on `panel`.
     pub fn new(panel: Panel) -> Self {
         Self {

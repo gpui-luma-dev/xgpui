@@ -101,3 +101,14 @@ three-finger trackpad delivery has not been verified on hardware. Windows and
 Linux retain default behavior; they have not been tested locally.
 
 AppKit reference: [Handling Trackpad Events](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/EventOverview/HandlingTouchEvents/HandlingTouchEvents.html).
+
+## Review tasks
+
+`just curve zeta-capture` writes six fixed-state native screenshots plus separate
+CPU draw and GPU render/readback timings. `just curve zeta-benchmark` writes a
+CPU-only evaluation/fitting/measurement/path-building baseline. Both tasks exit
+when complete and put results under `target/zeta-review/`.
+
+See [review/README.md](review/README.md) for reproducible commands, measured
+limitations and initial results, and [API_REVIEW.md](API_REVIEW.md) for the
+individual public API decisions pending review.
