@@ -1330,6 +1330,11 @@ pub enum TextInputStateChange {
 
 #[expect(missing_docs)]
 pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
+    /// Opt into three-finger vertical trackpad drag as zoom instead of pinch.
+    /// macOS emits the resulting magnification through `PinchEvent`; other
+    /// platforms retain their existing gestures. Disabled by default.
+    fn set_three_finger_zoom(&mut self, _enabled: bool) {}
+
     /// Negotiate presentation for one window. Unsupported requests preserve state.
     fn set_color_mode(&mut self, mode: WindowColorMode) -> anyhow::Result<WindowColorStatus> {
         match mode {

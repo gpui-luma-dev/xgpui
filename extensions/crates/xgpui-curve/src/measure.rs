@@ -92,6 +92,23 @@ pub struct Location {
     pub tangent: Option<Vec2>,
 }
 
+/// Differential geometry at an arc-length position on a [`MeasuredPath`].
+/// These are properties of the selected segment, without averaging across joins.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct PathGeometry {
+    /// Point, unit tangent, contour/segment indices and local parameter.
+    pub location: Location,
+    /// Unit tangent rotated +90° in the path's coordinates. This can use the
+    /// tangent's one-sided fallback at a stationary endpoint.
+    pub normal: Option<Vec2>,
+    /// Signed curvature in inverse path-coordinate units. Positive bends toward
+    /// `normal`. `None` where derivative magnitude is <= 1e-12 or the computed
+    /// curvature is non-finite; a regular straight segment has `Some(0.)`.
+    /// A fallback tangent alone does not make curvature defined at a cusp.
+    pub curvature: Option<f64>,
+}
+
 /// Arc-length tables for a path, reusable while animating trims and dashes.
 #[derive(Clone, Debug)]
 pub struct MeasuredPath {
@@ -225,6 +242,41 @@ impl MeasuredPath {
             s -= contour.length;
         }
         None
+    }
+
+    /// Query point, tangent, normal and signed curvature with one arc-length
+    /// lookup. Finite `s` clamps to `0..=length`; non-finite input, an empty
+    /// path or a non-finite evaluated point returns `None`.
+    ///
+    /// Segment/contour boundaries use [`Self::locate`]'s selection rules,
+    /// including skipping leading zero-length segments. Closed paths clamp at
+    /// the end rather than wrapping. Geometry is in path coordinates, not
+    /// transformed screen coordinates; there is no smoothing across corners.
+    pub fn geometry_at(&self, s: f64) -> Option<PathGeometry> {
+        if !s.is_finite() {
+            return None;
+        }
+        let mut location = self.locate(s)?;
+        if !location.point.x.is_finite() || !location.point.y.is_finite() {
+            return None;
+        }
+        location.tangent = location
+            .tangent
+            .filter(|v| v.x.is_finite() && v.y.is_finite());
+        let normal = location.tangent.map(|v| Vec2::new(-v.y, v.x));
+        let segment = self.contours[location.contour].segs[location.segment].seg;
+        let speed = geom::deriv1(segment, location.t).hypot();
+        let curvature = if speed.is_finite() && speed > 1e-12 {
+            let k = geom::curvature(segment, location.t);
+            k.is_finite().then_some(k)
+        } else {
+            None
+        };
+        Some(PathGeometry {
+            location,
+            normal,
+            curvature,
+        })
     }
 
     /// The point at arc length `s`.

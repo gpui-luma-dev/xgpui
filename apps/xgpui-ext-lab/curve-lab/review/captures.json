@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "os": "macos",
+  "arch": "aarch64",
+  "logical_window": [
+    1280,
+    900
+  ],
+  "notes": "Fixed paused states. CPU draw includes UI composition/path construction; GPU rendering and synchronous image readback are combined. These are capture costs, not presentation timings or end-to-end FPS. PNG encoding is excluded. Pixel dimensions follow display scale.",
+  "frames": [
+    {
+      "name": "01-grid",
+      "phase": 0.0,
+      "sigma": 0.5,
+      "width": 2560,
+      "height": 1800,
+      "cpu_draw_ms": 8.612209,
+      "gpu_render_and_readback_ms": 205.861042
+    },
+    {
+      "name": "02-mapping",
+      "phase": 0.25,
+      "sigma": 0.5,
+      "width": 2560,
+      "height": 1800,
+      "cpu_draw_ms": 8.725416,
+      "gpu_render_and_readback_ms": 203.152083
+    },
+    {
+      "name": "03-mapped",
+      "phase": 0.5,
+      "sigma": 0.5,
+      "width": 2560,
+      "height": 1800,
+      "cpu_draw_ms": 9.550666,
+      "gpu_render_and_readback_ms": 202.614167
+    },
+    {
+      "name": "04-trace",
+      "phase": 0.72,
+      "sigma": 0.5,
+      "width": 2560,
+      "height": 1800,
+      "cpu_draw_ms": 13.397709,
+      "gpu_render_and_readback_ms": 205.620834
+    },
+    {
+      "name": "05-complete",
+      "phase": 1.0,
+      "sigma": 0.5,
+      "width": 2560,
+      "height": 1800,
+      "cpu_draw_ms": 17.992625,
+      "gpu_render_and_readback_ms": 207.71308299999998
+    },
+    {
+      "name": "06-offset-line",
+      "phase": 0.72,
+      "sigma": 0.7,
+      "width": 2560,
+      "height": 1800,
+      "cpu_draw_ms": 12.592042,
+      "gpu_render_and_readback_ms": 202.076
+    }
+  ]
+}

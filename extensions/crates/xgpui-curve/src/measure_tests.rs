@@ -181,3 +181,104 @@ fn locate_at_a_leading_zero_length_segment_has_the_next_tangent() {
     assert_eq!(at.point, Point::new(5., 0.));
     assert!(at.tangent.is_some());
 }
+
+#[test]
+fn geometry_query_matches_analytic_parabola_and_scales() {
+    let mut path = BezPath::new();
+    path.move_to((0., 0.));
+    path.quad_to((0.5, 0.), (1., 1.));
+    let q = QuadBez::new((0., 0.), (0.5, 0.), (1., 1.));
+    let s = quad_arclen(q, 0., 0.5);
+    let measured = MeasuredPath::new(&path, 1e-10).unwrap();
+    let g = measured.geometry_at(s).unwrap();
+    assert!(g.location.point.distance(Point::new(0.5, 0.25)) < 1e-9);
+    let tangent = Vec2::new(1., 1.).normalize();
+    assert!((g.location.tangent.unwrap() - tangent).hypot() < 1e-9);
+    assert!((g.normal.unwrap() - Vec2::new(-tangent.y, tangent.x)).hypot() < 1e-9);
+    let expected = 1. / 2f64.sqrt();
+    assert!((g.curvature.unwrap() - expected).abs() < 1e-9);
+    for (transform, expected_k) in [
+        (crate::geom::Affine::scale(3.), expected / 3.),
+        (crate::geom::Affine::scale_non_uniform(1., -1.), -expected),
+    ] {
+        let transformed = transform * &path;
+        let m = MeasuredPath::new(&transformed, 1e-10).unwrap();
+        let scaled_s = if expected_k > 0. { s * 3. } else { s };
+        assert!((m.geometry_at(scaled_s).unwrap().curvature.unwrap() - expected_k).abs() < 1e-9);
+    }
+}
+
+#[test]
+fn geometry_distinguishes_straight_and_stationary_points() {
+    let mut straight = BezPath::new();
+    straight.move_to((0., 0.));
+    straight.line_to((3., 0.));
+    let m = MeasuredPath::new(&straight, 1e-9).unwrap();
+    let g = m.geometry_at(1.).unwrap();
+    assert_eq!(g.curvature, Some(0.));
+    assert!((g.normal.unwrap() - Vec2::new(0., 1.)).hypot() < 1e-12);
+    let mut stationary = BezPath::new();
+    stationary.move_to((0., 0.));
+    stationary.curve_to((0., 0.), (1., 0.), (2., 0.));
+    let m = MeasuredPath::new(&stationary, 1e-9).unwrap();
+    let start = m.geometry_at(0.).unwrap();
+    assert!((start.location.tangent.unwrap() - Vec2::new(1., 0.)).hypot() < 1e-12);
+    assert!((start.normal.unwrap() - Vec2::new(0., 1.)).hypot() < 1e-12);
+    assert_eq!(start.curvature, None);
+    assert_eq!(m.geometry_at(0.5).unwrap().curvature, Some(0.));
+    let mut collapsed = BezPath::new();
+    collapsed.move_to((1., 2.));
+    collapsed.line_to((1., 2.));
+    let g = MeasuredPath::new(&collapsed, 1e-9)
+        .unwrap()
+        .geometry_at(0.)
+        .unwrap();
+    assert_eq!(g.location.point, Point::new(1., 2.));
+    assert_eq!(g.location.tangent, None);
+    assert_eq!(g.normal, None);
+    assert_eq!(g.curvature, None);
+}
+
+#[test]
+fn geometry_query_preserves_boundary_and_contour_selection() {
+    let mut path = BezPath::new();
+    path.move_to((0., 0.));
+    path.line_to((0., 0.));
+    path.line_to((2., 0.));
+    path.move_to((10., 10.));
+    path.line_to((10., 12.));
+    let m = MeasuredPath::new(&path, 1e-9).unwrap();
+    assert_eq!(m.geometry_at(0.).unwrap().location.segment, 1);
+    assert_eq!(m.geometry_at(2.).unwrap().location.contour, 0);
+    let next = m.geometry_at(3.).unwrap();
+    assert_eq!(next.location.contour, 1);
+    assert_eq!(next.location.point, Point::new(10., 11.));
+    assert_eq!(next.normal, Some(Vec2::new(-1., 0.)));
+    assert_eq!(m.geometry_at(-100.).unwrap().location.point, Point::ZERO);
+    assert_eq!(
+        m.geometry_at(100.).unwrap().location.point,
+        Point::new(10., 12.)
+    );
+    for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(m.geometry_at(bad).is_none());
+    }
+    assert!(
+        MeasuredPath::new(&BezPath::new(), 1e-9)
+            .unwrap()
+            .geometry_at(0.)
+            .is_none()
+    );
+    let mut closed = BezPath::new();
+    closed.move_to((0., 0.));
+    closed.line_to((1., 0.));
+    closed.line_to((1., 1.));
+    closed.close_path();
+    let m = MeasuredPath::new(&closed, 1e-9).unwrap();
+    let end = m.geometry_at(m.length()).unwrap();
+    assert!(end.location.point.distance(Point::ZERO) < 1e-12);
+    assert_eq!(end.location.segment, 2);
+    assert_ne!(
+        end.location.tangent,
+        m.geometry_at(0.).unwrap().location.tangent
+    );
+}
