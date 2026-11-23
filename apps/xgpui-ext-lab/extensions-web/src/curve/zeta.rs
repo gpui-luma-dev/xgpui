@@ -212,13 +212,14 @@ impl Trace {
                 t -= ((f.0 * d.0 + f.1 * d.1) / denom).clamp(-0.05, 0.05);
             }
             let f = zeta(C(sigma, t));
-            if (t - seed).abs() < 0.1 && (0. ..=TRACE_MAX).contains(&t) && f.0.hypot(f.1) < 1e-8 {
-                if zeros
+            if (t - seed).abs() < 0.1
+                && (0. ..=TRACE_MAX).contains(&t)
+                && f.0.hypot(f.1) < 1e-8
+                && zeros
                     .last()
                     .is_none_or(|last: &f64| (t - *last).abs() > 0.01)
-                {
-                    zeros.push(t);
-                }
+            {
+                zeros.push(t);
             }
         }
         let fitted = FittedTrace::new(&points);
@@ -303,17 +304,16 @@ impl ZetaPanel {
     }
     fn set_sigma(&mut self, sigma: f64) {
         if (sigma - self.sigma).abs() > 1e-9 {
-            if self.phase >= 0.5 {
-                if let Some(trace) = &self.trace {
-                    self.pending_t = Some(if self.constant_speed {
-                        trace.fitted.t_at_s(
-                            ((self.phase - 0.5) * 2.).clamp(0., 1.)
-                                * trace.fitted.measured.length(),
-                        )
-                    } else {
-                        trace_t(self.phase)
-                    });
-                }
+            if self.phase >= 0.5
+                && let Some(trace) = &self.trace
+            {
+                self.pending_t = Some(if self.constant_speed {
+                    trace.fitted.t_at_s(
+                        ((self.phase - 0.5) * 2.).clamp(0., 1.) * trace.fitted.measured.length(),
+                    )
+                } else {
+                    trace_t(self.phase)
+                });
             }
             self.sigma = sigma;
             self.trace = None;
@@ -326,24 +326,24 @@ impl ZetaPanel {
         if self.constant_speed == enabled {
             return;
         }
-        if self.phase >= 0.5 {
-            if let Some(trace) = &self.trace {
-                let progress = ((self.phase - 0.5) * 2.).clamp(0., 1.);
-                let source_t = if self.constant_speed {
-                    trace
-                        .fitted
-                        .t_at_s(progress * trace.fitted.measured.length())
-                } else {
-                    trace_t(self.phase)
-                };
-                self.phase = 0.5
-                    + 0.5
-                        * if enabled {
-                            trace.fitted.s_at_t(source_t) / trace.fitted.measured.length()
-                        } else {
-                            source_t / TRACE_MAX
-                        };
-            }
+        if self.phase >= 0.5
+            && let Some(trace) = &self.trace
+        {
+            let progress = ((self.phase - 0.5) * 2.).clamp(0., 1.);
+            let source_t = if self.constant_speed {
+                trace
+                    .fitted
+                    .t_at_s(progress * trace.fitted.measured.length())
+            } else {
+                trace_t(self.phase)
+            };
+            self.phase = 0.5
+                + 0.5
+                    * if enabled {
+                        trace.fitted.s_at_t(source_t) / trace.fitted.measured.length()
+                    } else {
+                        source_t / TRACE_MAX
+                    };
         }
         self.constant_speed = enabled;
     }
@@ -1052,66 +1052,61 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
                     a + (b - a) * fraction
                 };
                 let tip = t * model_tip;
-                if inspector {
-                    if let Some(geometry) = &geometry {
-                        let location = &geometry.location;
-                        if let Some(tangent) = location.tangent {
-                            let direction =
-                                (t * (location.point + tangent) - t * location.point).normalize();
-                            stroke(
-                                window,
-                                &clip_to_rect(
-                                    &line(tip - direction * 42., tip + direction * 42.),
-                                    rect,
-                                ),
-                                Affine::IDENTITY,
-                                1.5,
-                                rgb(0x70e6ff),
-                            );
-                            if let Some(k) = geometry.curvature {
-                                let scale = (t * P::new(1., 0.) - t * P::ZERO).hypot();
-                                let radius = 1. / k.abs();
-                                if k.abs() > 1e-6 && radius * scale < 2000. {
-                                    if let Some(normal) = geometry.normal {
-                                        let center = location.point + normal / k;
-                                        let circle =
-                                            xgpui_curve::kurbo::Circle::new(center, radius)
-                                                .to_path(0.25 / scale);
-                                        stroke(
-                                            window,
-                                            &clip_to_rect(&(t * &circle), rect),
-                                            Affine::IDENTITY,
-                                            1.,
-                                            hsla(0.8, 0.65, 0.75, 0.65),
-                                        );
-                                        stroke(
-                                            window,
-                                            &clip_to_rect(
-                                                &line(t * location.point, t * center),
-                                                rect,
-                                            ),
-                                            Affine::IDENTITY,
-                                            1.,
-                                            hsla(0.8, 0.65, 0.75, 0.4),
-                                        );
-                                    }
-                                }
-                                axis_label(
-                                    format!("κ = {k:.3} · radius = {radius:.3}"),
-                                    P::new(rect.x0 + 10., rect.y1 - 26.),
-                                    false,
+                if inspector && let Some(geometry) = &geometry {
+                    let location = &geometry.location;
+                    if let Some(tangent) = location.tangent {
+                        let direction =
+                            (t * (location.point + tangent) - t * location.point).normalize();
+                        stroke(
+                            window,
+                            &clip_to_rect(
+                                &line(tip - direction * 42., tip + direction * 42.),
+                                rect,
+                            ),
+                            Affine::IDENTITY,
+                            1.5,
+                            rgb(0x70e6ff),
+                        );
+                        if let Some(k) = geometry.curvature {
+                            let scale = (t * P::new(1., 0.) - t * P::ZERO).hypot();
+                            let radius = 1. / k.abs();
+                            if k.abs() > 1e-6
+                                && radius * scale < 2000.
+                                && let Some(normal) = geometry.normal
+                            {
+                                let center = location.point + normal / k;
+                                let circle = xgpui_curve::kurbo::Circle::new(center, radius)
+                                    .to_path(0.25 / scale);
+                                stroke(
                                     window,
-                                    cx,
+                                    &clip_to_rect(&(t * &circle), rect),
+                                    Affine::IDENTITY,
+                                    1.,
+                                    hsla(0.8, 0.65, 0.75, 0.65),
                                 );
-                            } else {
-                                axis_label(
-                                    "Curvature undefined at stationary point".into(),
-                                    P::new(rect.x0 + 10., rect.y1 - 26.),
-                                    false,
+                                stroke(
                                     window,
-                                    cx,
+                                    &clip_to_rect(&line(t * location.point, t * center), rect),
+                                    Affine::IDENTITY,
+                                    1.,
+                                    hsla(0.8, 0.65, 0.75, 0.4),
                                 );
                             }
+                            axis_label(
+                                format!("κ = {k:.3} · radius = {radius:.3}"),
+                                P::new(rect.x0 + 10., rect.y1 - 26.),
+                                false,
+                                window,
+                                cx,
+                            );
+                        } else {
+                            axis_label(
+                                "Curvature undefined at stationary point".into(),
+                                P::new(rect.x0 + 10., rect.y1 - 26.),
+                                false,
+                                window,
+                                cx,
+                            );
                         }
                     }
                 }
@@ -1254,7 +1249,7 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
         .child("Why this shows off curves")
         .child(div().text_sm().text_color(rgb(0xb8c6de)).child("xgpui-curve turns mathematical samples into curves you can measure, animate, and inspect. Compare Fitted Béziers with Original samples, then switch the motion mode to see what the crate contributes."))
         .child(button(if show_curve_details {"Hide curve features"}else{"Show curve features"},show_curve_details)
-            .on_click(cx.listener(|lab,_,_,cx| {lab.zeta.show_curve_details=!lab.zeta.show_curve_details;cx.notify();})))
+            .on_click(cx.listener(|lab,_,_,cx| {lab.zeta.show_curve_details = !lab.zeta.show_curve_details;cx.notify();})))
         .when(show_curve_details,|el| el.child(div().flex().flex_wrap().gap_3().children(curve_features.into_iter().map(|(title,body)| {
             div().flex_1().min_w(px(250.)).flex().flex_col().gap_1()
                 .child(div().text_sm().child(title))
