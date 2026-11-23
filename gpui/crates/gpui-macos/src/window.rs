@@ -160,6 +160,17 @@ unsafe fn build_classes() {
                 sel!(mouseExited:),
                 handle_view_event as extern "C" fn(_, Sel, *mut AnyObject),
             );
+            for selector in [
+                sel!(touchesBeganWithEvent:),
+                sel!(touchesMovedWithEvent:),
+                sel!(touchesEndedWithEvent:),
+                sel!(touchesCancelledWithEvent:),
+            ] {
+                decl.add_method(
+                    selector,
+                    handle_trackpad_touches as extern "C" fn(_, Sel, *mut AnyObject),
+                );
+            }
             decl.add_method(
                 sel!(magnifyWithEvent:),
                 handle_view_event as extern "C" fn(_, Sel, *mut AnyObject),
@@ -680,6 +691,9 @@ struct MacWindowState {
     last_key_equivalent: Option<KeyDownEvent>,
     last_left_mouse_down_event: Option<Retained<AnyObject>>,
     synthetic_drag_counter: usize,
+    three_finger_zoom: bool,
+    trackpad_zoom: crate::trackpad_zoom::TrackpadZoom,
+    trackpad_zoom_anchor: Option<Point<Pixels>>,
     traffic_light_position: Option<Point<Pixels>>,
     traffic_light_frames: Option<TrafficLightFrames>,
     pre_fullscreen_traffic_light_frames: Option<TrafficLightFrames>,
@@ -1145,6 +1159,9 @@ impl MacWindow {
                 last_key_equivalent: None,
                 last_left_mouse_down_event: None,
                 synthetic_drag_counter: 0,
+                three_finger_zoom: false,
+                trackpad_zoom: Default::default(),
+                trackpad_zoom_anchor: None,
                 traffic_light_position: titlebar
                     .as_ref()
                     .and_then(|titlebar| titlebar.traffic_light_position),
@@ -1484,6 +1501,22 @@ fn color_status_for_window(state: &MacWindowState) -> gpui::WindowColorStatus {
 }
 
 impl PlatformWindow for MacWindow {
+    fn set_three_finger_zoom(&mut self, enabled: bool) {
+        let mut state = self.0.lock();
+        if state.three_finger_zoom == enabled {
+            return;
+        }
+        state.three_finger_zoom = enabled;
+        state.trackpad_zoom = Default::default();
+        state.trackpad_zoom_anchor = None;
+        unsafe {
+            let _: () =
+                msg_send![state.native_view.as_ptr(), setWantsRestingTouches: Bool::from(enabled)];
+            // NSTouchTypeMaskIndirect = 1 << NSTouchTypeIndirect (1).
+            let _: () = msg_send![state.native_view.as_ptr(), setAllowedTouchTypes: if enabled { 2usize } else { 0usize }];
+        }
+    }
+
     fn set_color_mode(
         &mut self,
         mode: gpui::WindowColorMode,
@@ -2937,6 +2970,68 @@ extern "C" fn handle_key_event(
     }
 }
 
+extern "C" fn handle_trackpad_touches(this: &AnyObject, selector: Sel, event: *mut AnyObject) {
+    let window_state = unsafe { get_window_state(this) };
+    let mut state = window_state.lock();
+    if !state.three_finger_zoom {
+        return;
+    }
+    let cancelled = selector == sel!(touchesCancelledWithEvent:);
+    let mut positions = Vec::new();
+    if !cancelled {
+        unsafe {
+            // NSTouchPhaseTouching = Began | Moved | Stationary = 7.
+            let touches: *mut AnyObject =
+                msg_send![event, touchesMatchingPhase: 7usize inView: this];
+            let objects: *mut AnyObject = msg_send![touches, allObjects];
+            let count: usize = msg_send![objects, count];
+            for i in 0..count {
+                let touch: *mut AnyObject = msg_send![objects, objectAtIndex: i];
+                let position: NSPoint = msg_send![touch, normalizedPosition];
+                positions.push(position.y);
+            }
+        }
+    }
+    let rebase = selector != sel!(touchesMovedWithEvent:);
+    let was_active = state.trackpad_zoom_anchor.is_some();
+    let delta = state.trackpad_zoom.update(&positions, rebase);
+    let phase = if positions.len() == 3 {
+        if !was_active {
+            let at: NSPoint = unsafe { msg_send![event, locationInWindow] };
+            state.trackpad_zoom_anchor = Some(point(
+                px(at.x as f32),
+                state.content_size().height - px(at.y as f32),
+            ));
+        }
+        if was_active {
+            gpui::TouchPhase::Moved
+        } else {
+            gpui::TouchPhase::Started
+        }
+    } else if was_active {
+        gpui::TouchPhase::Ended
+    } else {
+        return;
+    };
+    let position = state.trackpad_zoom_anchor.unwrap();
+    if phase == gpui::TouchPhase::Ended {
+        state.trackpad_zoom_anchor = None;
+    }
+    let zoom = gpui::PinchEvent {
+        position,
+        delta: delta.unwrap_or(0.),
+        modifiers: unsafe {
+            crate::events::read_modifiers(&*event.cast::<objc2_app_kit::NSEvent>())
+        },
+        phase,
+    };
+    if let Some(mut callback) = state.event_callback.take() {
+        drop(state);
+        callback(PlatformInput::Pinch(zoom));
+        window_state.lock().event_callback = Some(callback);
+    }
+}
+
 extern "C" fn handle_view_event(this: &AnyObject, _: Sel, native_event: *mut AnyObject) {
     let window_state = unsafe { get_window_state(this) };
     let weak_window_state = Rc::downgrade(&window_state);
@@ -2953,6 +3048,17 @@ extern "C" fn handle_view_event(this: &AnyObject, _: Sel, native_event: *mut Any
             lock.last_left_mouse_down_event = None;
         }
         _ => {}
+    }
+    if lock.three_finger_zoom {
+        if native_event_type == NSEventType::Magnify {
+            return;
+        }
+        if native_event_type == NSEventType::ScrollWheel && lock.trackpad_zoom.suppress_scroll {
+            let precise: Bool = unsafe { msg_send![native_event, hasPreciseScrollingDeltas] };
+            if precise.as_bool() {
+                return;
+            }
+        }
     }
     let event = unsafe { platform_input_from_native(native_event, Some(window_height)) };
 
@@ -3397,6 +3503,9 @@ extern "C" fn window_did_change_key_status(this: &AnyObject, selector: Sel, _: *
             }
             if is_active {
                 lock.move_traffic_light();
+            } else {
+                lock.trackpad_zoom = Default::default();
+                lock.trackpad_zoom_anchor = None;
             }
 
             if let Some(mut callback) = lock.activate_callback.take() {

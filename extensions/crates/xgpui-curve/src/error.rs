@@ -17,7 +17,7 @@ pub enum CurveError {
         /// Points supplied.
         actual: usize,
     },
-    /// Knot x coordinates must strictly increase.
+    /// Knot x coordinates or source parameters must strictly increase.
     NotIncreasing,
     /// The operation would exceed a documented work bound.
     WorkLimit(&'static str),

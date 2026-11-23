@@ -10,6 +10,9 @@ mod nodes;
 mod series;
 mod shapes;
 mod spine;
+mod zeta;
+#[cfg(not(target_family = "wasm"))]
+pub use zeta::benchmark as zeta_benchmark;
 
 /// The lab's panels, in tab order.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -28,16 +31,19 @@ pub enum Panel {
     Functions,
     /// Squircles, arcs, variable-width strokes and freehand fitting.
     Shapes,
+    /// Animated complex-plane zeta mapping.
+    Zeta,
 }
 
 impl Panel {
-    const ALL: [Panel; 6] = [
+    const ALL: [Panel; 7] = [
         Panel::Mesh,
         Panel::Spine,
         Panel::Nodes,
         Panel::Series,
         Panel::Functions,
         Panel::Shapes,
+        Panel::Zeta,
     ];
 
     /// Parse a `panel=` query value (the same names as the native `--panel`).
@@ -50,6 +56,7 @@ impl Panel {
             "series" => Panel::Series,
             "functions" => Panel::Functions,
             "shapes" => Panel::Shapes,
+            "zeta" => Panel::Zeta,
             _ => return None,
         })
     }
@@ -62,11 +69,15 @@ impl Panel {
             Panel::Series => "Series curves",
             Panel::Functions => "Functions & easing",
             Panel::Shapes => "Shapes & strokes",
+            Panel::Zeta => "Zeta mapping",
         }
     }
 
     fn about(self) -> &'static str {
         match self {
+            Panel::Zeta => {
+                "Animate a complex grid into ζ(z). Scrub the timeline; zoom to inspect the sampled curves. The pole at z = 1 is excluded."
+            }
             Panel::Mesh => {
                 "Drag nodes, or drag a wire to bend both of its tangents. Wires are the exact patch edges the GPU mesh gradient renders."
             }
@@ -98,9 +109,16 @@ pub struct CurveLab {
     series: series::SeriesPanel,
     func: func::FuncPanel,
     shapes: shapes::ShapesPanel,
+    zeta: zeta::ZetaPanel,
 }
 
 impl CurveLab {
+    /// Select a deterministic paused zeta review frame (native capture task).
+    #[cfg(not(target_family = "wasm"))]
+    pub fn zeta_snapshot(&mut self, phase: f64, sigma: f64) {
+        self.panel = Panel::Zeta;
+        self.zeta.snapshot(phase, sigma);
+    }
     /// A lab opened on `panel`.
     pub fn new(panel: Panel) -> Self {
         Self {
@@ -111,6 +129,7 @@ impl CurveLab {
             series: series::SeriesPanel::default(),
             func: func::FuncPanel::new(),
             shapes: shapes::ShapesPanel::new(),
+            zeta: zeta::ZetaPanel::new(),
         }
     }
 }
@@ -118,6 +137,7 @@ impl CurveLab {
 impl Render for CurveLab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let panel = self.panel;
+        window.set_three_finger_zoom(panel == Panel::Zeta);
         let body = match panel {
             Panel::Mesh => mesh::render(self, window, cx),
             Panel::Spine => spine::render(self, window, cx),
@@ -125,6 +145,7 @@ impl Render for CurveLab {
             Panel::Series => series::render(self, window, cx),
             Panel::Functions => func::render(self, window, cx),
             Panel::Shapes => shapes::render(self, window, cx),
+            Panel::Zeta => zeta::render(self, window, cx),
         };
         div()
             .id("curve-lab")
@@ -155,7 +176,7 @@ impl Render for CurveLab {
                     })),
             )
             .child(div().text_color(rgb(0x9fb0cc)).child(panel.about()))
-            .when(panel != Panel::Series, |el| {
+            .when(panel != Panel::Series && panel != Panel::Zeta, |el| {
                 el.child(
                     div()
                         .text_xs()
