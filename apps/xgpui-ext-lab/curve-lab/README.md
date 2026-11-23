@@ -8,8 +8,8 @@ browser gallery (`?demo=curve&panel=zeta`).
   Then the mapped grid fades into the background while the colored critical-line
   image `ζ(½ + it)` for `0 ≤ t ≤ 120` draws on top over thirty more seconds.
   Pause freezes either stage.
-- Drag the timeline to inspect any intermediate state. Grid and ζ(z) select
-  the grid states; Trace end selects the completed line. Play at the endpoint
+- Drag the timeline to inspect any intermediate state. The numbered Straight
+  grid, Zeta grid, and Full trace buttons pause at those stages. Play at the endpoint
   restarts the complete sequence. The first half of the timeline is the grid
   deformation; the second half is the overlaid trace.
 - On macOS, three-finger vertical movement zooms at the cursor: up zooms in,
@@ -19,34 +19,38 @@ browser gallery (`?demo=curve&panel=zeta`).
 - macOS must deliver the contacts to the app. If three-finger movement invokes
   Mission Control or another system gesture, that system assignment can consume
   the gesture. The lab does not change system preferences.
-- Tolerance cycles through 0.2, 0.6 and 1.5 pixel simplification thresholds.
-- Sample points displays the retained polyline vertices.
+- Controls are grouped into **Path**, **Motion**, and **Guides**, with explicit
+  choices and On/Off states. **Show drawing settings** reveals stroke thickness,
+  the 0.2/0.6/1.5 px background-grid tolerance choices, and grid vertices.
+- **Why this shows off curves** at the bottom explains the lab’s purpose;
+  **Show curve features** expands all six capability descriptions. The panel
+  scrolls on smaller windows so help and controls remain accessible.
 - Source line and Trace thickness buttons independently set their screen-space
   stroke widths. Defaults are 1 px for the inset and 1.25 px for the trace.
-- **Bézier trace** (on by default) uses the prototype `fit_parameterized` API,
+- **Fitted Béziers** (the default Path choice) uses the prototype `fit_parameterized` API,
   with 0.002 model-unit tolerance and a 4096-segment budget. Fitting and
   measurement are cached when σ changes. The crate reports maximum/RMS paired
   sample error and whether it met tolerance or exhausted the segment budget.
-- **Constant speed** (on by default) advances by fitted arc length instead of
+- **Steady visual speed** (the default Motion choice) advances by fitted arc length instead of
   source t. Toggle it to compare the two motions while preserving the source
   parameter. Each fitted segment retains its original source-t interval;
   segment arc lengths and `MeasuredPath::locate` map between source t and path
   distance, without the former approximate sampled lookup. Numerical arc-length
   inversion still has finite accuracy. The source marker and zero pulses use
   the recovered source t.
-- **Compare samples** overlays the original polyline in white with sparse
-  sample markers. Turn Bézier trace off to draw the original sampled trace.
-- **Tangent & curvature** shows a cyan tangent and a violet osculating circle
+- **Sample overlay: On** overlays the original polyline in white with sparse
+  sample markers. Choose **Original samples** to draw the sampled trace.
+- **Tangent + bend circle** shows a cyan tangent and a violet osculating circle
   through `MeasuredPath::geometry_at`, without maintaining a separate segment
   list. The readout gives signed curvature and
   radius in model units; nearly flat or extremely large circles are omitted.
   Curvature is local to the fitted segment and may change at fit boundaries.
   Stationary points with undefined curvature are identified explicitly.
-- Tip guides draws orthogonal projections from the mapped tip to both axes,
+- **Axis guides** draws orthogonal projections from the mapped tip to both axes,
   with a small right-angle corner marker; toggle it off for an uncluttered view.
 - The source-plane inset shows `s = σ + it`. Drag its vertical line left/right
   to vary σ between 0.1 and 0.9 in 0.025 increments while preserving the current
-  t. **Critical line σ = ½** restores the original line. Matching yellow markers
+  t. **Reset source line to σ = ½** restores the original line. Matching yellow markers
   identify the source point and the mapped drawing tip.
 - The mapped origin pulses after a numerically detected zero crossing. Detection
   refines local minima of |ζ| and requires a residual below 1e-8; near misses

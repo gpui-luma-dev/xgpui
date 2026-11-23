@@ -255,6 +255,8 @@ pub struct ZetaPanel {
     inspector: bool,
     compare: bool,
     pending_t: Option<f64>,
+    show_settings: bool,
+    show_curve_details: bool,
 }
 impl ZetaPanel {
     pub fn new() -> Self {
@@ -280,6 +282,8 @@ impl ZetaPanel {
             inspector: true,
             compare: false,
             pending_t: None,
+            show_settings: false,
+            show_curve_details: false,
         }
     }
     #[cfg(not(target_family = "wasm"))]
@@ -317,6 +321,31 @@ impl ZetaPanel {
             self.phase = self.phase.max(0.5);
             self.last = None;
         }
+    }
+    fn set_constant_speed(&mut self, enabled: bool) {
+        if self.constant_speed == enabled {
+            return;
+        }
+        if self.phase >= 0.5 {
+            if let Some(trace) = &self.trace {
+                let progress = ((self.phase - 0.5) * 2.).clamp(0., 1.);
+                let source_t = if self.constant_speed {
+                    trace
+                        .fitted
+                        .t_at_s(progress * trace.fitted.measured.length())
+                } else {
+                    trace_t(self.phase)
+                };
+                self.phase = 0.5
+                    + 0.5
+                        * if enabled {
+                            trace.fitted.s_at_t(source_t) / trace.fitted.measured.length()
+                        } else {
+                            source_t / TRACE_MAX
+                        };
+            }
+        }
+        self.constant_speed = enabled;
     }
     fn scrub(&mut self, at: Point<Pixels>) {
         let b = self.timeline.get();
@@ -376,6 +405,24 @@ fn axis_label(text: String, at: P, centered: bool, window: &mut Window, cx: &mut
     ));
     let _ = line.paint(origin, px(18.), TextAlign::Left, None, window, cx);
 }
+fn width_options() -> Div {
+    div().flex().flex_wrap().gap_2()
+}
+
+fn control_group(title: &'static str, help: &'static str) -> Div {
+    div()
+        .flex_1()
+        .min_w(px(240.))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .p_2()
+        .rounded_md()
+        .bg(rgb(0x151d2e))
+        .child(div().text_color(rgb(0xe3eaf6)).child(title))
+        .child(div().text_xs().text_color(rgb(0x9fb0cc)).child(help))
+}
+
 pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab>) -> AnyElement {
     let p = &mut lab.zeta;
     let wires = p.wires.get_or_insert_with(|| Rc::new(grid())).clone();
@@ -436,66 +483,164 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
     } else {
         trace.fitted.s_at_t(current_t)
     };
-    let controls = div()
+    let show_settings = p.show_settings;
+    let show_curve_details = p.show_curve_details;
+    let playback = div()
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .gap_2()
+        .child(
+            button(
+                if p.playing {
+                    "Pause animation"
+                } else if phase >= 1. {
+                    "Replay sequence"
+                } else {
+                    "Resume animation"
+                },
+                p.playing,
+            )
+            .on_click(cx.listener(|lab, _, _, cx| {
+                let p = &mut lab.zeta;
+                if p.phase >= 1. {
+                    p.phase = 0.;
+                }
+                p.playing = !p.playing;
+                p.last = None;
+                cx.notify();
+            })),
+        )
+        .child(
+            div()
+                .ml_2()
+                .text_xs()
+                .text_color(rgb(0x9fb0cc))
+                .child("Pause at:"),
+        )
+        .children(
+            [
+                ("1 · Straight grid", 0.),
+                ("2 · Zeta grid", 0.5),
+                ("3 · Full trace", 1.),
+            ]
+            .into_iter()
+            .map(|(label, target)| {
+                button(label, phase == target).on_click(cx.listener(move |lab, _, _, cx| {
+                    lab.zeta.phase = target;
+                    lab.zeta.playing = false;
+                    lab.zeta.last = None;
+                    cx.notify();
+                }))
+            }),
+        );
+    let path_controls = control_group(
+        "Path",
+        "Béziers fit the samples; overlay shows the originals.",
+    )
+    .child(
+        div().flex().flex_wrap().gap_2().children(
+            [("Fitted Béziers", true), ("Original samples", false)]
+                .into_iter()
+                .map(|(label, enabled)| {
+                    button(label, bezier == enabled).on_click(cx.listener(move |lab, _, _, cx| {
+                        lab.zeta.bezier = enabled;
+                        cx.notify();
+                    }))
+                }),
+        ),
+    )
+    .child(
+        button(
+            if compare {
+                "Sample overlay: On"
+            } else {
+                "Sample overlay: Off"
+            },
+            compare,
+        )
+        .on_click(cx.listener(|lab, _, _, cx| {
+            lab.zeta.compare = !lab.zeta.compare;
+            cx.notify();
+        })),
+    );
+    let motion_controls = control_group(
+        "Motion",
+        "Change how the drawing tip travels along the curve.",
+    )
+    .child(
+        div().flex().flex_wrap().gap_2().children(
+            [("Steady visual speed", true), ("Equal steps in t", false)]
+                .into_iter()
+                .map(|(label, enabled)| {
+                    button(label, constant_speed == enabled).on_click(cx.listener(
+                        move |lab, _, _, cx| {
+                            lab.zeta.set_constant_speed(enabled);
+                            cx.notify();
+                        },
+                    ))
+                }),
+        ),
+    )
+    .child(
+        div()
+            .text_xs()
+            .text_color(rgb(0x9fb0cc))
+            .child("Steady speed uses arc length; equal t reveals the function’s changing speed."),
+    );
+    let inspect_controls =
+        control_group("Guides", "Turn helpers on or off. Blue means enabled.")
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap_2()
+                    .child(
+                        button(
+                            if inspector {
+                                "Tangent + bend circle: On"
+                            } else {
+                                "Tangent + bend circle: Off"
+                            },
+                            inspector,
+                        )
+                        .on_click(cx.listener(|lab, _, _, cx| {
+                            lab.zeta.inspector = !lab.zeta.inspector;
+                            cx.notify();
+                        })),
+                    )
+                    .child(
+                        button(
+                            if tip_guides {
+                                "Axis guides: On"
+                            } else {
+                                "Axis guides: Off"
+                            },
+                            tip_guides,
+                        )
+                        .on_click(cx.listener(|lab, _, _, cx| {
+                            lab.zeta.tip_guides = !lab.zeta.tip_guides;
+                            cx.notify();
+                        })),
+                    ),
+            )
+            .child(div().text_xs().text_color(rgb(0x9fb0cc)).child(
+                "Cyan = tangent · violet circle = local bend · gold = projections to axes.",
+            ));
+    let modes = div()
         .flex()
         .flex_wrap()
         .gap_2()
+        .child(path_controls)
+        .child(motion_controls)
+        .child(inspect_controls);
+    let view_controls = div()
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .gap_2()
         .child(
-            button(if p.playing { "Pause" } else { "Play" }, p.playing).on_click(cx.listener(
-                |lab, _, _, cx| {
-                    let p = &mut lab.zeta;
-                    if p.phase >= 1. {
-                        p.phase = 0.;
-                    }
-                    p.playing = !p.playing;
-                    p.last = None;
-                    cx.notify();
-                },
-            )),
-        )
-        .child(
-            button("Grid", phase == 0.).on_click(cx.listener(|lab, _, _, cx| {
-                lab.zeta.phase = 0.;
-                lab.zeta.playing = false;
-                cx.notify();
-            })),
-        )
-        .child(
-            button("Mapped grid", phase == 0.5).on_click(cx.listener(|lab, _, _, cx| {
-                lab.zeta.phase = 0.5;
-                lab.zeta.playing = false;
-                cx.notify();
-            })),
-        )
-        .child(
-            button("Trace end", phase == 1.).on_click(cx.listener(|lab, _, _, cx| {
-                lab.zeta.phase = 1.;
-                lab.zeta.playing = false;
-                cx.notify();
-            })),
-        )
-        .child(
-            button(format!("Tolerance: {tolerance:.1} px"), false).on_click(cx.listener(
-                |lab, _, _, cx| {
-                    lab.zeta.tolerance = if lab.zeta.tolerance < 0.3 {
-                        0.6
-                    } else if lab.zeta.tolerance < 1. {
-                        1.5
-                    } else {
-                        0.2
-                    };
-                    cx.notify();
-                },
-            )),
-        )
-        .child(
-            button("Sample points", dots).on_click(cx.listener(|lab, _, _, cx| {
-                lab.zeta.dots = !lab.zeta.dots;
-                cx.notify();
-            })),
-        )
-        .child(
-            button("Critical line σ = ½", (sigma - 0.5).abs() < 1e-9).on_click(cx.listener(
+            button("Reset source line to σ = ½", (sigma - 0.5).abs() < 1e-9).on_click(cx.listener(
                 |lab, _, _, cx| {
                     lab.zeta.set_sigma(0.5);
                     cx.notify();
@@ -504,86 +649,90 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
         )
         .child(view_button(cx, view, |lab: &mut CurveLab| {
             &mut lab.zeta.view
-        }));
-    let thickness = div()
-        .flex()
-        .flex_wrap()
-        .items_center()
-        .gap_2()
-        .child("Source line:")
-        .children([0.75f32, 1., 2., 3.].into_iter().map(|width| {
-            button(format!("{width} px"), source_width == width).on_click(cx.listener(
-                move |lab, _, _, cx| {
-                    lab.zeta.source_width = width;
-                    cx.notify();
-                },
-            ))
-        }))
-        .child(div().ml_2().child("Trace:"))
-        .children([0.75f32, 1.25, 2., 3.].into_iter().map(|width| {
-            // Separate IDs from the source width controls.
-            button(format!("Trace {width} px"), trace_width == width).on_click(cx.listener(
-                move |lab, _, _, cx| {
-                    lab.zeta.trace_width = width;
-                    cx.notify();
-                },
-            ))
         }))
         .child(
-            button("Tip guides", tip_guides).on_click(cx.listener(|lab, _, _, cx| {
-                lab.zeta.tip_guides = !lab.zeta.tip_guides;
+            button(
+                if show_settings {
+                    "Hide drawing settings"
+                } else {
+                    "Show drawing settings"
+                },
+                show_settings,
+            )
+            .on_click(cx.listener(|lab, _, _, cx| {
+                lab.zeta.show_settings = !lab.zeta.show_settings;
                 cx.notify();
             })),
         );
-    let curve_controls = div()
+    let settings = div()
         .flex()
         .flex_wrap()
-        .gap_2()
+        .gap_3()
         .child(
-            button("Bézier trace", bezier).on_click(cx.listener(|lab, _, _, cx| {
-                lab.zeta.bezier = !lab.zeta.bezier;
-                cx.notify();
-            })),
+            control_group(
+                "Inset line thickness",
+                "Width of the draggable line in the source inset.",
+            )
+            .child(
+                width_options().children([0.75f32, 1., 2., 3.].into_iter().map(|width| {
+                    button(format!("Source {width} px"), source_width == width).on_click(
+                        cx.listener(move |lab, _, _, cx| {
+                            lab.zeta.source_width = width;
+                            cx.notify();
+                        }),
+                    )
+                })),
+            ),
         )
         .child(
-            button("Constant speed", constant_speed).on_click(cx.listener(|lab, _, _, cx| {
-                let p = &mut lab.zeta;
-                if p.phase >= 0.5 {
-                    if let Some(trace) = &p.trace {
-                        let progress = ((p.phase - 0.5) * 2.).clamp(0., 1.);
-                        let t = if p.constant_speed {
-                            trace
-                                .fitted
-                                .t_at_s(progress * trace.fitted.measured.length())
-                        } else {
-                            trace_t(p.phase)
-                        };
-                        p.constant_speed = !p.constant_speed;
-                        p.phase = 0.5
-                            + 0.5
-                                * if p.constant_speed {
-                                    trace.fitted.s_at_t(t) / trace.fitted.measured.length()
-                                } else {
-                                    t / TRACE_MAX
-                                };
-                    }
-                } else {
-                    p.constant_speed = !p.constant_speed;
-                }
-                cx.notify();
-            })),
+            control_group(
+                "Colored trace thickness",
+                "Width of the curve in the main graph.",
+            )
+            .child(
+                width_options().children([0.75f32, 1.25, 2., 3.].into_iter().map(|width| {
+                    button(format!("Trace {width} px"), trace_width == width).on_click(cx.listener(
+                        move |lab, _, _, cx| {
+                            lab.zeta.trace_width = width;
+                            cx.notify();
+                        },
+                    ))
+                })),
+            ),
         )
         .child(
-            button("Tangent & curvature", inspector).on_click(cx.listener(|lab, _, _, cx| {
-                lab.zeta.inspector = !lab.zeta.inspector;
-                cx.notify();
-            })),
-        )
-        .child(
-            button("Compare samples", compare).on_click(cx.listener(|lab, _, _, cx| {
-                lab.zeta.compare = !lab.zeta.compare;
-                cx.notify();
-            })),
+            control_group(
+                "Background grid detail",
+                "Lower tolerance retains more grid vertices; it does not change the Bézier fit.",
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap_2()
+                    .children([0.2, 0.6, 1.5].into_iter().map(|value| {
+                        button(format!("Grid {value:.1} px"), tolerance == value).on_click(
+                            cx.listener(move |lab, _, _, cx| {
+                                lab.zeta.tolerance = value;
+                                cx.notify();
+                            }),
+                        )
+                    })),
+            )
+            .child(
+                button(
+                    if dots {
+                        "Grid vertices: On"
+                    } else {
+                        "Grid vertices: Off"
+                    },
+                    dots,
+                )
+                .on_click(cx.listener(|lab, _, _, cx| {
+                    lab.zeta.dots = !lab.zeta.dots;
+                    cx.notify();
+                })),
+            ),
         );
     let source = div()
         .id("zeta-source")
@@ -1075,16 +1224,94 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
     } else {
         "macOS: three-finger up/down to zoom · two fingers to pan"
     };
-    div().size_full().flex().flex_col().gap_2().child(controls).child(thickness).child(curve_controls)
-        .child(format!("ζ({sigma:.3} + it) · t = {:.1} / 120 · {zero_count} detected zeros · drag source line to change σ",current_t))
-        .child(format!("{segment_count} Bézier segments / {} samples · length {total_length:.2} · paired sample error: max {fit_error:.5}, RMS {fit_rms:.5} · {fit_status}",TRACE_STEPS+1))
-        .child(timeline).child(div().flex_1().min_h_0().child(plot))
-        .child(div().text_xs().child(format!("{navigation} · Lab approximation · |z − 1| < 0.12 excluded · tolerance simplifies sampled geometry; it is not a certified function-error bound")))
+    let curve_features = [
+        (
+            "Fitting",
+            "Thousands of samples become hundreds of Bézier segments, with measured approximation error.",
+        ),
+        (
+            "Source parameters",
+            "Each segment retains its source interval, keeping the source marker and mapped trace synchronized through overlapping loops.",
+        ),
+        (
+            "Measurement",
+            "Arc length lets the tip move at a steady visual speed instead of speeding up and slowing down with the function.",
+        ),
+        (
+            "Differential geometry",
+            "The tangent and curvature circle reveal the curve’s local direction and bend.",
+        ),
+        (
+            "Clipping & painting",
+            "Dense paths stay navigable through pan, zoom, and changing stroke widths.",
+        ),
+        (
+            "Diagnostics",
+            "Sample error, tolerance status, and segment-budget results make approximation quality assessable.",
+        ),
+    ];
+    let explanation=div().flex().flex_col().gap_2().p_3().rounded_lg().bg(rgb(0x151d2e))
+        .child("Why this shows off curves")
+        .child(div().text_sm().text_color(rgb(0xb8c6de)).child("xgpui-curve turns mathematical samples into curves you can measure, animate, and inspect. Compare Fitted Béziers with Original samples, then switch the motion mode to see what the crate contributes."))
+        .child(button(if show_curve_details {"Hide curve features"}else{"Show curve features"},show_curve_details)
+            .on_click(cx.listener(|lab,_,_,cx| {lab.zeta.show_curve_details=!lab.zeta.show_curve_details;cx.notify();})))
+        .when(show_curve_details,|el| el.child(div().flex().flex_wrap().gap_3().children(curve_features.into_iter().map(|(title,body)| {
+            div().flex_1().min_w(px(250.)).flex().flex_col().gap_1()
+                .child(div().text_sm().child(title))
+                .child(div().text_xs().text_color(rgb(0x9fb0cc)).child(body))
+        }))));
+    let graph_height = (f32::from(window.viewport_size().height) - 530.).clamp(340., 700.);
+    div().id("zeta-panel-scroll").size_full().overflow_y_scroll().flex().flex_col().gap_3()
+        .child(playback).child(modes).child(view_controls)
+        .when(show_settings,|el| el.child(settings))
+        .child(div().flex().flex_col().gap_1()
+            .child(format!("ζ({sigma:.3} + it) · t = {current_t:.1} / 120 · {zero_count} zeros detected along this source line"))
+            .child(div().text_xs().text_color(rgb(0x9fb0cc)).child(format!("Fit quality: {segment_count} Béziers from {} samples · arc length {total_length:.2} · sample error max {fit_error:.5}, RMS {fit_rms:.5} · {fit_status} (model units)",TRACE_STEPS+1))))
+        .child(div().flex().flex_col().gap_1()
+            .child(div().text_xs().text_color(rgb(0x9fb0cc)).child("Drag the timeline to scrub: straight grid → zeta grid → colored trace"))
+            .child(timeline))
+        .child(div().h(px(graph_height)).flex_shrink_0().child(plot))
+        .child(div().text_xs().text_color(rgb(0x9fb0cc)).child(format!("{navigation} · Drag the inset’s vertical line to change σ.")))
+        .child(explanation)
+        .child(div().text_xs().text_color(rgb(0x7f8fa9)).child("Numerical approximation · |z − 1| < 0.12 excluded. Fit error covers supplied samples, not the continuous function between them. Grid tolerance only simplifies the background grid."))
         .into_any_element()
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ::core::prelude::v1::test;
+    #[gpui::test]
+    fn thickness_options_stay_inside_a_narrow_group(cx: &mut TestAppContext) {
+        let handle = cx.add_window(|_, _| EmptyView);
+        let mut visual = VisualTestContext::from_window(handle.into(), cx);
+        visual.draw(
+            Point::default(),
+            size(
+                AvailableSpace::Definite(px(280.)),
+                AvailableSpace::MinContent,
+            ),
+            |_, _| {
+                width_options()
+                    .w(px(280.))
+                    .debug_selector(|| "width-row".into())
+                    .children((0..4).map(|i| {
+                        div()
+                            .w(px(95.))
+                            .h(px(28.))
+                            .flex_shrink_0()
+                            .debug_selector(move || format!("width-{i}"))
+                    }))
+            },
+        );
+        let row = visual.debug_bounds("width-row").unwrap();
+        let first = visual.debug_bounds("width-0").unwrap();
+        let last = visual.debug_bounds("width-3").unwrap();
+        assert!(last.right() <= row.right() && last.bottom() <= row.bottom());
+        assert!(
+            last.top() > first.top(),
+            "options must wrap instead of overflowing their card"
+        );
+    }
     #[::core::prelude::v1::test]
     fn known_values_and_conjugation() {
         for (s, want) in [
