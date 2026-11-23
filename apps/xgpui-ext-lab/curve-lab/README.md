@@ -75,7 +75,7 @@ curve crate README. They need no core API changes. The earlier optional macOS
 three-finger navigation adds the core APIs described below.
 
 
-## Core API review: three-finger navigation (pending)
+## Core API review: three-finger navigation (approved 2026-11-23)
 
 1. `Window::set_three_finger_zoom(enabled: bool)` opts a window into macOS
    three-finger vertical-drag zoom, delivered to existing `on_pinch` handlers.
@@ -111,4 +111,4 @@ when complete and put results under `target/zeta-review/`.
 
 See [review/README.md](review/README.md) for reproducible commands, measured
 limitations and initial results, and [API_REVIEW.md](API_REVIEW.md) for the
-individual public API decisions pending review.
+individual public API decisions approved by the user on 2026-11-23.

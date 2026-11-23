@@ -60,7 +60,8 @@ The generated web bundle stays outside the committed source changes.
 
 ## Remaining review
 
-See [API_REVIEW.md](../API_REVIEW.md). Core input API decisions are still pending.
+See [API_REVIEW.md](../API_REVIEW.md). The user approved the documented core and
+extension API designs on 2026-11-23; merge approval remains separate.
 Windows/Linux native behavior is unverified locally; rely on CI until changes
 reach main. Adaptive sampling and the other issue 430 follow-ups remain separate
 work. The current benchmark is a baseline, not a performance regression gate.

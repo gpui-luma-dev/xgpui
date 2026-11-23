@@ -1,8 +1,9 @@
 # Issue 430: public API review
 
-Status: **pending user review**. Implementation and passing tests do not approve
-these APIs for finalization or release. This document inventories the APIs in
-the initial zeta-lab PR; it is not a request to approve a merge.
+Status: **approved by the user on 2026-11-23** following review of draft PR #431.
+Approval covers the API designs and semantics documented here, through code
+commit `37528a3`. Further API/behavior changes require review. This records API
+approval only; it does not authorize a pull-request merge or release.
 
 ## Non-extension GPUI changes (review individually)
 
@@ -21,7 +22,7 @@ public interface does not give an extension safe ownership of GPUIView's native
 touch callbacks. A more general input bridge could permit this later; review
 whether a narrowly named window method is appropriate before accepting it.
 
-- [ ] Accept this API or request a revised extension/input boundary.
+- [x] Approved: this opt-in window API.
 
 ### 2. `PlatformWindow::set_three_finger_zoom(enabled: bool)`
 
@@ -36,7 +37,7 @@ callback. An extension cannot provide that hook through the existing interface.
 This is the same architectural decision as item 1, but a separate public trait
 addition that needs review.
 
-- [ ] Accept this trait addition or request a different backend capability.
+- [x] Approved: the default no-op backend hook.
 
 ### 3. Opt-in `PinchEvent` semantics
 
@@ -53,7 +54,7 @@ Extension alternative: a distinct trackpad event would preserve the literal
 meaning of "pinch" but require a larger event/listener API. Review that tradeoff,
 OS gesture conflicts, and whether window-wide opt-in is the right scope.
 
-- [ ] Accept the semantic expansion or request a distinct event.
+- [x] Approved: opt-in three-finger magnification through `PinchEvent`.
 
 ## Extension additions
 
@@ -83,5 +84,5 @@ Existing `FitOptions`, `fit_cubic_path`, `Location`, `locate`, and `point_at`
 contracts remain unchanged. `CurveError::NotIncreasing` documentation now also
 covers source parameters; the variant and its existing display text are unchanged.
 
-- [ ] Review the parameter-preserving fit API and its budget/error contract.
-- [ ] Review measured geometry's degeneracy and join semantics.
+- [x] Approved: parameter-preserving fit API and its budget/error contract.
+- [x] Approved: measured geometry's degeneracy and join semantics.
