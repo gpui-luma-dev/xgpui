@@ -1,6 +1,11 @@
 # #439: simulating window hover in tests
 
-Core GPUI public API changes for review, presented individually. All are in
+Status: **approved by the user on 2026-11-24** following review of PR #440.
+Approval covers the APIs and behavior documented here, through code commit
+`e34b594`. Further API/behavior changes require review. This records API
+approval only; it does not authorize a pull-request merge or release.
+
+Core GPUI public API changes, presented individually. All are in
 test-support code (`TestPlatform` / `TestAppContext`), not in production paths.
 
 ## 1. `TestWindow::simulate_hover_status_change(&self, hovered: bool)` (new)
@@ -15,6 +20,7 @@ test-support code (`TestPlatform` / `TestAppContext`), not in production paths.
 - Migration: none.
 - Extension alternative: no. Hover lives in private `Window` state that only the
   platform callback can set; an extension can't reach it.
+- [x] Approved: `TestWindow::simulate_hover_status_change`.
 
 ## 2. `TestAppContext::simulate_window_hover_status_change(window, hovered)` and `VisualTestContext::simulate_hover_status_change(hovered)` (new)
 
@@ -24,6 +30,7 @@ test-support code (`TestPlatform` / `TestAppContext`), not in production paths.
 - Source/serialization compatibility: additive.
 - Migration: none.
 - Extension alternative: no, same reason as (1).
+- [x] Approved: both context helpers.
 
 ## 3. Behavior change: test windows are hovered while active
 
@@ -40,6 +47,7 @@ test-support code (`TestPlatform` / `TestAppContext`), not in production paths.
   macOS, where the stored hover value is not read.
 - Migration: a test that needs an active-but-unhovered window calls
   `simulate_hover_status_change(false)` after activating it.
+- [x] Approved: test windows hovered while active.
 
 ## Verification
 
@@ -48,6 +56,3 @@ test-support code (`TestPlatform` / `TestAppContext`), not in production paths.
   passes after it. Its explicit-simulation assertions run only on
   Windows/Linux/FreeBSD, the hosts that read the hover flag.
 - Verified locally on Windows only; macOS and Linux rely on CI.
-
-The PR presents these API changes for owner review. Implementation approval
-does not imply approval of the final public API.
