@@ -36,6 +36,7 @@ pub(crate) struct TestWindowState {
     active_status_change_callback: Option<Box<dyn FnMut(bool)>>,
     visibility: WindowVisibility,
     visibility_callback: Option<Box<dyn FnMut(WindowVisibility)>>,
+    hovered: bool,
     hover_status_change_callback: Option<Box<dyn FnMut(bool)>>,
     resize_callback: Option<Box<dyn FnMut(Size<Pixels>, f32)>>,
     visual_viewport: Option<Bounds<Pixels>>,
@@ -111,6 +112,7 @@ impl TestWindow {
             active_status_change_callback: None,
             visibility: WindowVisibility::Visible,
             visibility_callback: None,
+            hovered: false,
             hover_status_change_callback: None,
             resize_callback: None,
             visual_viewport: None,
@@ -256,14 +258,30 @@ impl TestWindow {
         self.simulate_resize(size);
     }
 
+    /// Activating a test window also marks it hovered, and deactivating it
+    /// clears hover, so `Window::is_window_hovered` gives the same answer on
+    /// every host OS (on macOS it follows the active status).
     pub(crate) fn simulate_active_status_change(&self, active: bool) {
-        let mut lock = self.0.lock();
-        let Some(mut callback) = lock.active_status_change_callback.take() else {
-            return;
+        let callback = self.0.lock().active_status_change_callback.take();
+        if let Some(mut callback) = callback {
+            callback(active);
+            self.0.lock().active_status_change_callback = Some(callback);
+        }
+        self.simulate_hover_status_change(active);
+    }
+
+    /// Simulates the mouse cursor entering (`true`) or leaving (`false`) this
+    /// window, as a platform reports through its hover status callback.
+    pub fn simulate_hover_status_change(&self, hovered: bool) {
+        let callback = {
+            let mut state = self.0.lock();
+            state.hovered = hovered;
+            state.hover_status_change_callback.take()
         };
-        drop(lock);
-        callback(active);
-        self.0.lock().active_status_change_callback = Some(callback);
+        if let Some(mut callback) = callback {
+            callback(hovered);
+            self.0.lock().hover_status_change_callback = Some(callback);
+        }
     }
 
     pub fn simulate_appearance_change(&self, appearance: WindowAppearance) {
@@ -438,7 +456,7 @@ impl PlatformWindow for TestWindow {
     }
 
     fn is_hovered(&self) -> bool {
-        false
+        self.0.lock().hovered
     }
 
     fn background_appearance(&self) -> WindowBackgroundAppearance {

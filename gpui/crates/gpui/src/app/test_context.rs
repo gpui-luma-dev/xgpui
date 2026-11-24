@@ -477,6 +477,20 @@ impl TestAppContext {
             .simulate_visibility_change(visibility);
     }
 
+    /// Simulates the mouse cursor entering (`true`) or leaving (`false`) the window.
+    ///
+    /// Test windows are also hovered while active and unhovered when
+    /// deactivated, so [`Window::is_window_hovered`] behaves the same on every
+    /// host OS. Use this to test the cases where the two differ.
+    pub fn simulate_window_hover_status_change(
+        &self,
+        window_handle: AnyWindowHandle,
+        hovered: bool,
+    ) {
+        self.test_window(window_handle)
+            .simulate_hover_status_change(hovered);
+    }
+
     /// Simulates connecting a display.
     pub fn simulate_display_added(
         &self,
@@ -1017,6 +1031,12 @@ impl VisualTestContext {
     /// Simulates a change in whether the platform is presenting this window.
     pub fn simulate_visibility_change(&self, visibility: WindowVisibility) {
         self.simulate_window_visibility_change(self.window, visibility);
+    }
+
+    /// Simulates the mouse cursor entering (`true`) or leaving (`false`) the window.
+    /// See [`TestAppContext::simulate_window_hover_status_change`].
+    pub fn simulate_hover_status_change(&self, hovered: bool) {
+        self.simulate_window_hover_status_change(self.window, hovered);
     }
 
     /// Simulates the window moving to a display with a different scale factor.

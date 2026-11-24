@@ -11211,6 +11211,61 @@ mod tests {
             CursorStyle::IBeam
         );
     }
+
+    /// Regression test for #439: on Windows/Linux/FreeBSD hover comes from the
+    /// platform hover callback, which test windows never fired, so
+    /// `is_window_hovered` was always false there while macOS (which follows
+    /// active status) reported true.
+    #[gpui::test]
+    fn test_window_hover_follows_activation_and_simulation(cx: &mut TestAppContext) {
+        let cx = cx.add_empty_window();
+        let is_hovered =
+            |cx: &mut crate::VisualTestContext| cx.update(|window, _| window.is_window_hovered());
+
+        // Test windows open inactive, so they start unhovered on every host OS.
+        assert!(!is_hovered(cx));
+
+        cx.update(|window, _| window.activate_window());
+        cx.run_until_parked();
+        assert!(
+            is_hovered(cx),
+            "an active test window must report hovered on every host OS"
+        );
+
+        cx.deactivate_window();
+        assert!(
+            !is_hovered(cx),
+            "deactivating a test window must clear hover"
+        );
+
+        cx.simulate_hover_status_change(true);
+        if cfg!(any(
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )) {
+            assert!(
+                is_hovered(cx),
+                "simulated hover must be visible while the window is inactive"
+            );
+        }
+
+        cx.update(|window, _| window.activate_window());
+        cx.run_until_parked();
+        assert!(is_hovered(cx));
+
+        cx.simulate_hover_status_change(false);
+        if cfg!(any(
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "freebsd"
+        )) {
+            assert!(
+                !is_hovered(cx),
+                "simulated hover exit must be visible while the window is active"
+            );
+        }
+    }
 }
 
 #[cfg(all(test, debug_assertions))]
