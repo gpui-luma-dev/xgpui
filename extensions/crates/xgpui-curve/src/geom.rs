@@ -7,9 +7,9 @@
 //! the points are in: counter-clockwise for y-up math coordinates, clockwise on
 //! screen with y down.
 
-pub use kurbo::{
-    Affine, BezPath, CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveNearest, PathEl,
-    PathSeg, Point, QuadBez, Rect, Shape, Vec2,
+pub use crate::geometry::{
+    Affine, BezPath, CubicBez, Line, PathEl, PathSeg, Point, QuadBez, Rect, Vec2, circle_path,
+    rounded_rect_path,
 };
 
 const EPS: f64 = 1e-12;
@@ -396,7 +396,11 @@ pub fn clip_to_rect(path: &BezPath, rect: Rect) -> BezPath {
     let clip = |seg: PathSeg, out: &mut BezPath, pen: &mut Option<Point>, whole: &mut bool| {
         let mut ts = vec![0., 1.];
         for edge in edges {
-            ts.extend(seg.intersect_line(edge).iter().map(|hit| hit.segment_t));
+            ts.extend(
+                seg.intersect_line(edge)
+                    .into_iter()
+                    .map(|hit| hit.segment_t),
+            );
         }
         ts.sort_by(f64::total_cmp);
         ts.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
@@ -424,7 +428,7 @@ pub fn clip_to_rect(path: &BezPath, rect: Rect) -> BezPath {
                 continue;
             }
             PathEl::LineTo(p) => PathSeg::Line(Line::new(current, p)),
-            PathEl::QuadTo(c, p) => PathSeg::Quad(kurbo::QuadBez::new(current, c, p)),
+            PathEl::QuadTo(c, p) => PathSeg::Quad(QuadBez::new(current, c, p)),
             PathEl::CurveTo(c1, c2, p) => PathSeg::Cubic(CubicBez::new(current, c1, c2, p)),
             PathEl::ClosePath => {
                 if current != start {
@@ -462,23 +466,27 @@ pub fn push_seg(path: &mut BezPath, seg: PathSeg) {
 /// end with their first point repeated.
 pub fn flatten_polylines(path: &BezPath, tolerance: f64) -> Vec<Vec<Point>> {
     let mut lines: Vec<Vec<Point>> = Vec::new();
-    kurbo::flatten(path.iter(), tolerance.max(1e-9), |el| match el {
-        PathEl::MoveTo(p) => lines.push(vec![p]),
-        PathEl::LineTo(p) => {
-            if let Some(line) = lines.last_mut() {
-                line.push(p);
+    kurbo::flatten(
+        path.backend_elements(),
+        tolerance.max(1e-9),
+        |el| match PathEl::from_backend(el) {
+            PathEl::MoveTo(p) => lines.push(vec![p]),
+            PathEl::LineTo(p) => {
+                if let Some(line) = lines.last_mut() {
+                    line.push(p);
+                }
             }
-        }
-        PathEl::ClosePath => {
-            if let Some(line) = lines.last_mut()
-                && let Some(&first) = line.first()
-                && line.last() != Some(&first)
-            {
-                line.push(first);
+            PathEl::ClosePath => {
+                if let Some(line) = lines.last_mut()
+                    && let Some(&first) = line.first()
+                    && line.last() != Some(&first)
+                {
+                    line.push(first);
+                }
             }
-        }
-        _ => {}
-    });
+            _ => {}
+        },
+    );
     lines
 }
 

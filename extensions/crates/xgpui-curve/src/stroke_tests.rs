@@ -1,5 +1,5 @@
 use super::*;
-use crate::geom::{FillRule, Shape};
+use crate::geom::FillRule;
 
 fn wave() -> BezPath {
     let mut p = BezPath::new();
@@ -61,7 +61,7 @@ fn tapered_strokes_vanish_at_the_ends() {
 
 #[test]
 fn closed_strokes_are_rings_and_caps_extend() {
-    let circle = kurbo::Circle::new((0., 0.), 50.).to_path(1e-6);
+    let circle = geom::circle_path((0., 0.), 50., 1e-6);
     let ring = StrokeProfile::constant(8.)
         .unwrap()
         .outline(&circle, 0.01)
@@ -116,8 +116,8 @@ fn profiles_are_validated() {
     assert!(StrokeProfile::new(vec![]).is_err());
     assert!(StrokeProfile::new(vec![(0., -1.)]).is_err());
     assert!(StrokeProfile::new(vec![(0.5, 1.), (0.2, 1.)]).is_err());
-    let kurbo_outline = kurbo_stroke(&wave(), &kurbo::Stroke::new(4.), 0.01);
-    assert!(!kurbo_outline.elements().is_empty());
+    let outline = stroke_outline(&wave(), &StrokeStyle::new(4.), 0.01);
+    assert!(!outline.elements().is_empty());
 }
 
 /// With round joins and caps a stroke is exactly the points within half the

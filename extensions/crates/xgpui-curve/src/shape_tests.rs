@@ -1,6 +1,5 @@
 use super::*;
-use crate::geom::{self, ParamCurve, PathSeg};
-use kurbo::Shape;
+use crate::geom::{self, PathSeg};
 
 fn rounded_rect_sdf(rect: Rect, radius: f64, p: Point) -> f64 {
     let c = rect.center();

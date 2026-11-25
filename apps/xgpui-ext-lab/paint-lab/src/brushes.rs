@@ -825,7 +825,7 @@ fn expanded_demo_points(count: usize) -> Vec<BrushPoint> {
 fn wired(
     id: &'static str,
     preview: impl IntoElement,
-    wires: xgpui_curve::kurbo::BezPath,
+    wires: xgpui_curve::geom::BezPath,
     area: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
     cx: &mut Context<super::Lab>,
 ) -> Stateful<Div> {
@@ -834,7 +834,7 @@ fn wired(
             f32::from(b.size.width).max(1.),
             f32::from(b.size.height).max(1.),
         );
-        xgpui_curve::kurbo::Point::new(
+        xgpui_curve::geom::Point::new(
             (f32::from(at.x - b.origin.x) / w) as f64,
             (f32::from(at.y - b.origin.y) / h) as f64,
         )

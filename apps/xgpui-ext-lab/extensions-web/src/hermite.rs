@@ -1,8 +1,8 @@
 //! Browser UI for paint-lab's shared Hermite editing model.
 use gpui::{prelude::*, *};
 use std::{cell::Cell, collections::HashMap, rc::Rc};
+use xgpui_curve::geom::Point as KPoint;
 use xgpui_curve::gpui_paint::{bounds_transform, paint_contrasting_path};
-use xgpui_curve::kurbo::Point as KPoint;
 use xgpui_shader::painted;
 
 #[path = "../../../web-support/mesh_tangent.rs"]

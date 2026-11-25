@@ -7980,7 +7980,6 @@ version = "0.5.0"
 dependencies = [
  "anyhow",
  "bytemuck",
- "kurbo",
  "xgpui",
  "xgpui-shader",
 ]

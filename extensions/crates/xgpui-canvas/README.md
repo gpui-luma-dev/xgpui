@@ -147,17 +147,10 @@ bounds use the maximum zoom; a maximum limit may leave extra space.
 `world_bounds_to_screen` and `screen_bounds_to_world` project both corners using
 the same conventions as the point helpers. The checked
 `world_to_screen_affine` / `screen_to_world_affine` methods return optional
-`[a, b, c, d, e, f]` coefficients suitable for `kurbo::Affine::new`. Finite absolute
+`[a, b, c, d, e, f]` coefficients suitable for `xgpui_curve::geom::Affine::new`. Finite absolute
 affine coefficients can still lose local precision at distant centers; prefer
 the direct point helpers in those views.
 
-
-## Optional vector coordinate adapters
-
-Enable `kurbo` to convert `Point` / `WorldBounds` to and from `kurbo::Point` /
-`kurbo::Rect` (kurbo 0.13), without pulling GPUI into math-only consumers. The
-conversions preserve coordinates, including inverted rectangles; validate bounds
-before constructing or updating a scene. Defaults remain dependency-free.
 
 The native `just canvas editor` view demonstrates precise fill/stroke picking,
 indexed selection, batch dragging, color/hide/lock edits, fit controls and content

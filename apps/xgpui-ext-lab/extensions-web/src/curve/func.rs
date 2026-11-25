@@ -4,7 +4,7 @@ use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
 use web_time::Instant;
 use xgpui_curve::func::{Easing, FunctionalCurve, LinearStop, StepPosition};
-use xgpui_curve::kurbo::{Affine, BezPath, Point as KPoint};
+use xgpui_curve::geom::{Affine, BezPath, Point as KPoint};
 
 const S: f64 = 300.;
 

@@ -10,7 +10,7 @@ use std::{
     },
 };
 use web_time::Instant;
-use xgpui_curve::kurbo::{Affine, BezPath};
+use xgpui_curve::geom::{Affine, BezPath};
 use xgpui_curve::measure::{MeasuredPath, PathEffect};
 use xgpui_media::{
     ImageFilter,

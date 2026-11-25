@@ -4,9 +4,7 @@
 //! Module map: [`geom`] is always available. Every other module has a Cargo
 //! feature of the same name (`svg-path` for [`svg_path`]), all on by default.
 
-/// The kurbo version this crate builds on. Its types appear in this crate's
-/// public API, so a kurbo major version change is a breaking change here too.
-pub use kurbo;
+mod geometry;
 
 pub mod error;
 pub mod geom;

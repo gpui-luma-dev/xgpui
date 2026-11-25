@@ -1,5 +1,5 @@
 use super::*;
-use crate::geom::{self, ParamCurve, PathEl, PathSeg};
+use crate::geom::{self, PathEl, PathSeg};
 
 fn pts(xy: &[(f64, f64)]) -> Vec<Point> {
     xy.iter().map(|&(x, y)| Point::new(x, y)).collect()
@@ -300,7 +300,6 @@ fn closed_series_edge_cases() {
     // Closed area is the shape's, regardless of where the loop starts.
     let mut rotated = radar();
     rotated.rotate_left(2);
-    use geom::Shape;
     for curve in [ClosedCurve::Basis, ClosedCurve::CatmullRom { alpha: 0.5 }] {
         let a = series_path_closed(&radar(), curve).area();
         let b = series_path_closed(&rotated, curve).area();

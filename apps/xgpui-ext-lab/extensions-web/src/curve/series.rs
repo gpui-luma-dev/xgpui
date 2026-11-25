@@ -4,7 +4,7 @@
 use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
 use std::f64::consts::{FRAC_PI_2, TAU};
-use xgpui_curve::kurbo::{Point as KPoint, Rect};
+use xgpui_curve::geom::{Point as KPoint, Rect};
 use xgpui_curve::series::{
     Baseline, ClosedCurve, SeriesCurve, series_area, series_path, series_path_clipped,
     series_path_closed,
@@ -135,7 +135,7 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
                             series_path(&points, curve)
                         };
                         if clip {
-                            let mut frame = xgpui_curve::kurbo::BezPath::new();
+                            let mut frame = xgpui_curve::geom::BezPath::new();
                             frame.move_to((viewport.x0, viewport.y0));
                             frame.line_to((viewport.x1, viewport.y0));
                             frame.line_to((viewport.x1, viewport.y1));

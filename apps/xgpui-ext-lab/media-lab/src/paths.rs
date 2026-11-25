@@ -2,7 +2,7 @@ use crate::{model::Lab, ui::button};
 use anyhow::{Result, ensure};
 use gpui::{prelude::*, *};
 use std::{path::Path as FilePath, time::Instant};
-use xgpui_curve::kurbo::{Affine, BezPath};
+use xgpui_curve::geom::{Affine, BezPath};
 use xgpui_curve::measure::{MeasuredPath, PathEffect};
 
 pub fn samples() -> Result<Vec<MeasuredPath>> {

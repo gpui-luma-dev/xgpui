@@ -7,10 +7,22 @@ with matching WGSL and Metal shader code, an editable node path, squircles,
 variable-width strokes, freehand fitting, SVG path data, and GPUI path
 adapters.
 
-All math is `f64` and built on [kurbo](https://docs.rs/kurbo), which is
-re-exported as `xgpui_curve::kurbo`. kurbo types (`Point`, `Vec2`, `BezPath`,
-`CubicBez`, …) appear in this crate's API, so a kurbo major version change is
-a breaking change here.
+Geometry uses xgpui-owned `f64` types in `xgpui_curve::geom`.
+Kurbo provides numerical algorithms internally.
+
+## Migrating from the kurbo API
+
+- Import `Point`, `Vec2`, `Rect`, `Affine`, `BezPath`, and segment types from
+  `xgpui_curve::geom`. Curve evaluation and path bounds are inherent methods.
+  Use `geom::circle_path` and `geom::rounded_rect_path` to construct shape paths.
+- Replace `kurbo_stroke` and `kurbo::Stroke` with `stroke::stroke_outline`
+  and `stroke::StrokeStyle`. Set `Join::Miter(limit)` for a miter join.
+- Canvas callers should remove the `kurbo` feature and convert canvas points
+  and bounds by copying their coordinates at the call site.
+- This changes Rust source compatibility. Use `svg_path::parse` and
+  `svg_path::to_svg` for SVG `d` strings. They use the same codec and
+  preserve the existing absolute-command output and arc-to-cubic conversion.
+  The owned types define no Rust serialization format.
 
 ## Dependency
 
@@ -40,7 +52,7 @@ Every module except `geom` has a feature of the same name (`svg-path` for
 ## Plot a series
 
 ```rust
-use xgpui_curve::kurbo::Point;
+use xgpui_curve::geom::Point;
 use xgpui_curve::series::{SeriesCurve, series_path};
 
 let samples = [Point::new(0., 1.), Point::new(1., 3.), Point::new(2., 2.), Point::new(3., 5.)];
@@ -51,7 +63,7 @@ assert_eq!(path.segments().count(), 3);
 ## Bend a field along a spine
 
 ```rust
-use xgpui_curve::kurbo::Point;
+use xgpui_curve::geom::Point;
 use xgpui_curve::spine::CurveSpine;
 
 let mut spine = CurveSpine::with_bend(Point::new(0.2, 0.5), Point::new(0.8, 0.5), 0.3);
@@ -73,7 +85,7 @@ The GPU code computes the same projection: include `CURVE_SPINE_WGSL` (or
 
 ```rust
 use xgpui_curve::func::{Easing, FunctionalCurve};
-use xgpui_curve::kurbo::Point;
+use xgpui_curve::geom::Point;
 
 let curve = FunctionalCurve::monotone(&[Point::new(0., 0.), Point::new(0.5, 0.65), Point::new(1., 1.)])?;
 let lut = curve.to_lut_f32::<256>();
@@ -90,7 +102,7 @@ and signed curvature. It performs one arc-length lookup and uses the selected
 segment directly, so callers do not need a parallel segment list.
 
 ```rust
-use xgpui_curve::{kurbo::{BezPath, Point}, measure::MeasuredPath};
+use xgpui_curve::{geom::{BezPath, Point}, measure::MeasuredPath};
 let mut path = BezPath::new();
 path.move_to((0., 0.));
 path.line_to((10., 0.));
@@ -125,7 +137,7 @@ source interval; evaluation within it uses the linearly normalized source
 parameter. Loops and repeated positions retain their source ordering.
 
 ```rust
-use xgpui_curve::{fit::{fit_parameterized, ParameterizedFitOptions}, kurbo::Point};
+use xgpui_curve::{fit::{fit_parameterized, ParameterizedFitOptions}, geom::Point};
 
 let source = [0., 0.1, 0.4, 1.];
 let points = [Point::new(0., 0.), Point::new(0.1, 0.2),
@@ -173,7 +185,7 @@ wildcard arm.
 ## GPUI public API changes: additions and compatibility
 
 None. The optional `gpui` feature uses the existing `PathBuilder` and
-`Window::paint_path`; everything else is plain Rust on kurbo types. See
+`Window::paint_path`; everything else is plain Rust on owned geometry types. See
 [curve integration compatibility](https://xgpui.dev/gpui-public-api.html#curve-reuses-existing-gpui-apis).
 
 ## License

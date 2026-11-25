@@ -161,14 +161,14 @@ below before integrating a producer. System playback adapters are tracked in
 <p>Trim and dash effects live in <a href="curve.html#measure-and-svg">xgpui-curve</a>. A map route
 can use dashes; a progress indicator can reveal a fraction of a curve:</p>
 <pre><code class="language-rust,ignore">use gpui::{PathBuilder, px};
-use xgpui_curve::{gpui_paint, kurbo::Affine, measure::PathEffect};
+use xgpui_curve::{gpui_paint, geom::Affine, measure::PathEffect};
 
 let effect = PathEffect::new().trim(0.0..0.65)?.dash(&amp;[12., 6.], 0.)?;
 let mut stroke = PathBuilder::stroke(px(3.));
 gpui_paint::append(&amp;mut stroke, &amp;measured_path.apply(&amp;effect)?, Affine::IDENTITY);
 // Paint the resulting GPUI path in a canvas: window.paint_path(stroke.build()?, color).
 </code></pre>
-<p>Here <code>measured_path</code> is a retained <code>xgpui_curve::measure::MeasuredPath</code> built from a <code>kurbo::BezPath</code>. Measure
+<p>Here <code>measured_path</code> is a retained <code>xgpui_curve::measure::MeasuredPath</code> built from a <code>xgpui_curve::geom::BezPath</code>. Measure
 once, then change the effect as progress updates. See the
 <a href="svg-rendering.html">contour effects guide</a> for constructing and painting a path.</p>
 <h2 id="try-the-examples">Try the examples</h2>

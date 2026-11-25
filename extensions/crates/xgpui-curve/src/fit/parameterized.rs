@@ -4,7 +4,7 @@ use super::{generate, max_error};
 use crate::{
     CurveError,
     error::finite,
-    geom::{BezPath, CubicBez, ParamCurve, Point, Vec2},
+    geom::{BezPath, CubicBez, Point, Vec2},
 };
 use std::ops::Range;
 

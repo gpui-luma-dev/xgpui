@@ -6,7 +6,7 @@ use web_time::Instant;
 use xgpui_curve::{
     fit::{ParameterizedFit, ParameterizedFitOptions, fit_parameterized, rdp},
     geom::clip_to_rect,
-    kurbo::{Affine, BezPath, PathSeg, Point as P, Rect, Shape},
+    geom::{Affine, BezPath, PathSeg, Point as P, Rect},
     measure::{MeasuredPath, PathEffect},
 };
 
@@ -1075,8 +1075,8 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
                                 && let Some(normal) = geometry.normal
                             {
                                 let center = location.point + normal / k;
-                                let circle = xgpui_curve::kurbo::Circle::new(center, radius)
-                                    .to_path(0.25 / scale);
+                                let circle =
+                                    xgpui_curve::geom::circle_path(center, radius, 0.25 / scale);
                                 stroke(
                                     window,
                                     &clip_to_rect(&(t * &circle), rect),
