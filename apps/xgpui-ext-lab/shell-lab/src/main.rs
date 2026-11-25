@@ -589,8 +589,10 @@ impl Lab {
         let desktop = cx.desktop_preferences();
         let coverage = if linux_window_operations(cx.platform_info()) {
             "Linux portal preferences plus optional GNOME/KDE fallbacks. Not reported means unavailable, unsupported or still pending; it does not mean the OS has no preference."
+        } else if cx.platform_info().os == OperatingSystem::Windows {
+            "Windows reports the system contrast theme setting. The other desktop preferences use fallback values or your overrides."
         } else {
-            "Desktop preference detection is currently implemented only for Linux. On this platform, accent/font/contrast/motion/title-bar action detection is not implemented. Appearance and actual window state are available separately. The app bar and preview use fallback values or your overrides."
+            "The app bar and preview use fallback desktop preferences or your overrides. Appearance and actual window state are available separately."
         };
         section(
             "Platform preferences — actual readings",

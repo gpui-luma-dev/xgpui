@@ -3,8 +3,8 @@
 /// Desktop preferences exposed by the platform, independent of a particular toolkit.
 ///
 /// `None` means unavailable or unset, not an instruction to override an app's defaults.
-/// Linux reads Settings portal keys with optional native desktop fallbacks; other
-/// platforms currently return an empty snapshot. Color scheme and button placement
+/// Linux reads Settings portal keys with optional native desktop fallbacks.
+/// Windows reports the system high-contrast setting. Color scheme and button placement
 /// retain their existing separate APIs.
 /// These preferences do not change application styling or behavior automatically.
 #[derive(Clone, Debug, Default, PartialEq)]
