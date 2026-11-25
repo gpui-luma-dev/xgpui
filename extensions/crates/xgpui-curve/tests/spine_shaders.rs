@@ -5,7 +5,7 @@ use xgpui_curve::spine::CURVE_SPINE_WGSL;
 // The GPU comparison runs on Metal, so its cases and checks are macOS-only;
 // WGSL translation is checked everywhere.
 #[cfg(target_os = "macos")]
-use xgpui_curve::kurbo::{ParamCurve, Point};
+use xgpui_curve::geom::Point;
 #[cfg(target_os = "macos")]
 use xgpui_curve::measure::quad_arclen;
 #[cfg(target_os = "macos")]

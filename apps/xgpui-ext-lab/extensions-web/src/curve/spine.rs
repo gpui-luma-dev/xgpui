@@ -5,7 +5,7 @@
 use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
 use std::sync::Arc;
-use xgpui_curve::kurbo::{Affine, BezPath, ParamCurve, Point as KPoint};
+use xgpui_curve::geom::{Affine, BezPath, Point as KPoint};
 use xgpui_curve::spine::{CURVE_SPINE_WGSL, CurveSpine};
 use xgpui_shader::WindowShaderExt;
 use xgpui_shader::instanced::{InstanceField, ShaderInstance, ShaderProgram};
@@ -437,7 +437,7 @@ pub fn render(lab: &mut CurveLab, window: &mut Window, cx: &mut Context<CurveLab
                 contrast(window, &head, t, 2.5);
             }
             // Frame at frame_t.
-            let seg = xgpui_curve::kurbo::PathSeg::Quad(q);
+            let seg = xgpui_curve::geom::PathSeg::Quad(q);
             let p = q.eval(frame_t);
             if let (Some(tan), Some(nrm)) = (
                 xgpui_curve::geom::tangent(seg, frame_t),

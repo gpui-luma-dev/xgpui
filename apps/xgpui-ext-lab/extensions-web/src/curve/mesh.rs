@@ -3,7 +3,7 @@
 use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
 use std::{cell::RefCell, rc::Rc, sync::Arc};
-use xgpui_curve::kurbo::{ParamCurve, Point as KPoint, Rect, Vec2};
+use xgpui_curve::geom::{Point as KPoint, Rect, Vec2};
 use xgpui_curve::mesh::{Axis, MeshLattice};
 
 const ROWS: usize = 3;
@@ -383,7 +383,7 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
             let wire = if curved {
                 lattice.wireframe()
             } else {
-                let mut p = xgpui_curve::kurbo::BezPath::new();
+                let mut p = xgpui_curve::geom::BezPath::new();
                 for r in 0..ROWS {
                     for c in 0..COLS {
                         if c + 1 < COLS {
@@ -444,7 +444,7 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
         .into_any_element()
 }
 
-use xgpui_curve::kurbo::Affine;
+use xgpui_curve::geom::Affine;
 
 #[cfg(test)]
 mod tests {
@@ -481,7 +481,7 @@ mod tests {
                     visible.y0 + anchor.1 * visible.height(),
                 );
                 let origin = fixed - Vec2::new(anchor.0 * size.x, anchor.1 * size.y);
-                let zoomed = Rect::from_origin_size(origin, size.to_size());
+                let zoomed = Rect::from_origin_size(origin, (size.x, size.y));
                 let (rect, cropped) = crop(&grid, zoomed, visible).unwrap();
                 let cropped = cropped.expect("zoomed in past the canvas");
                 // Covers the screen, and stays far below the 16384px texture limit

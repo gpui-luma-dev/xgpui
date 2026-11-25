@@ -3,7 +3,7 @@
 use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
 use xgpui_curve::geom;
-use xgpui_curve::kurbo::{Affine, BezPath, Point as KPoint};
+use xgpui_curve::geom::{Affine, BezPath, Point as KPoint};
 use xgpui_curve::node::{AutoSmooth, Node, NodeMode, NodePath, Side};
 
 const W: f64 = 900.;

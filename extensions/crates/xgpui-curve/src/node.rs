@@ -2,7 +2,7 @@
 //! continuity modes, and edits that keep each mode's constraint.
 
 use crate::error::{CurveError, finite};
-use crate::geom::{self, BezPath, CubicBez, ParamCurve, PathSeg, Point, Vec2};
+use crate::geom::{self, BezPath, CubicBez, PathSeg, Point, Vec2};
 
 /// How automatic nodes compute their handles.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -217,7 +217,7 @@ impl NodePath {
         }
     }
 
-    /// The path as a kurbo path.
+    /// The path as a Bézier path.
     pub fn to_bezpath(&self) -> BezPath {
         let mut path = BezPath::new();
         let Some(first) = self.nodes.first() else {

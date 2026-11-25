@@ -52,7 +52,7 @@ results are prevented from replacing newer settings.
 `path_effects::{Contour, Segment, MeasuredPath, PathEffect}` is deprecated and
 will be removed after one release. It now delegates to `xgpui-curve`, so it
 behaves as before. Use `xgpui_curve::measure::{MeasuredPath, PathEffect}` on a
-`kurbo::BezPath` instead, and stroke the result with
+`xgpui_curve::geom::BezPath` instead, and stroke the result with
 `xgpui_curve::gpui_paint::append` into a `PathBuilder::stroke`. See the
 [curves guide](https://xgpui.dev/curve.html#measure-and-svg).
 

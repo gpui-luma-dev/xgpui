@@ -166,8 +166,14 @@ impl Squircle {
             let a1 = (at(x2, y2) - center).atan2();
             let sweep = (a1 - a0 + PI).rem_euclid(TAU) - PI;
             if sweep.abs() > 1e-12 {
-                kurbo::Arc::new(center, (k.radius, k.radius), a0, sweep, 0.)
-                    .to_cubic_beziers(tolerance, |c1, c2, p| path.curve_to(c1, c2, p));
+                crate::geometry::arc_to_cubics(
+                    center,
+                    k.radius,
+                    a0,
+                    sweep,
+                    tolerance,
+                    |c1, c2, p| path.curve_to(c1, c2, p),
+                );
             }
             // Outgoing transition, the mirror image: (d, c), (d, b + c), then the edge at p.
             if k.a + k.b + k.c + k.d > 1e-12 {
@@ -282,12 +288,14 @@ impl ArcShape {
         let c = self.center;
         let tolerance = tolerance.max(1e-9);
         path.move_to(c + Vec2::from_angle(o0) * r1);
-        kurbo::Arc::new(c, (r1, r1), o0, o1 - o0, 0.)
-            .to_cubic_beziers(tolerance, |a, b, p| path.curve_to(a, b, p));
+        crate::geometry::arc_to_cubics(c, r1, o0, o1 - o0, tolerance, |a, b, p| {
+            path.curve_to(a, b, p)
+        });
         if r0 > 1e-12 {
             path.line_to(c + Vec2::from_angle(i1) * r0);
-            kurbo::Arc::new(c, (r0, r0), i1, i0 - i1, 0.)
-                .to_cubic_beziers(tolerance, |a, b, p| path.curve_to(a, b, p));
+            crate::geometry::arc_to_cubics(c, r0, i1, i0 - i1, tolerance, |a, b, p| {
+                path.curve_to(a, b, p)
+            });
         } else {
             path.line_to(c);
         }

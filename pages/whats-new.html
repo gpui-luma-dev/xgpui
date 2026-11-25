@@ -83,7 +83,7 @@
 <li><strong>macOS:</strong> closing a window no longer logs <code>handling active status change … window not found</code> (<a href="https://github.com/gpui-luma-dev/xgpui/issues/371">#371</a>).</li>
 </ul>
 <h3>Deprecated</h3>
-<p><code>xgpui_svg::path_effects</code> (<code>Contour</code>, <code>Segment</code>, <code>MeasuredPath</code>, <code>PathEffect</code>) now delegates to xgpui-curve, behaves as before, and is deprecated; it will be removed in a later release. Use <code>xgpui_curve::measure::{MeasuredPath, PathEffect}</code> on a <code>kurbo::BezPath</code>, and stroke the result with <code>xgpui_curve::gpui_paint::append</code> into a <code>PathBuilder::stroke</code>. See <a href="curve.html#measure-and-svg">measure and SVG</a>.</p>
+<p><code>xgpui_svg::path_effects</code> (<code>Contour</code>, <code>Segment</code>, <code>MeasuredPath</code>, <code>PathEffect</code>) now delegates to xgpui-curve, behaves as before, and is deprecated; it will be removed in a later release. Use <code>xgpui_curve::measure::{MeasuredPath, PathEffect}</code> on a <code>xgpui_curve::geom::BezPath</code>, and stroke the result with <code>xgpui_curve::gpui_paint::append</code> into a <code>PathBuilder::stroke</code>. See <a href="curve.html#measure-and-svg">measure and SVG</a>.</p>
 <h3>Validation</h3>
 <p>CI passed on the merge into <code>main</code>. Windows and Linux were checked by hand on <code>main</code>.</p>
 <h3>Versions</h3>

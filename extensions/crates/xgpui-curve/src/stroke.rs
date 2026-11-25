@@ -4,10 +4,10 @@
 //! stroke width at arc length s. Offset curves are fitted with cubic Hermite
 //! pieces that match the true offset's position and derivative at both ends
 //! (d/dt[P + wN] = P′ + w′N − w·κ|P′|T), subdividing until the midpoint
-//! error is within tolerance. Constant-width strokes can use [`kurbo_stroke`].
+//! error is within tolerance. Constant-width strokes can use [`stroke_outline`].
 
 use crate::error::{CurveError, finite};
-use crate::geom::{self, BezPath, Hermite, ParamCurve, PathSeg, Point, Vec2};
+use crate::geom::{self, BezPath, Hermite, PathSeg, Point, Vec2};
 use crate::measure::{MeasuredPath, arclen};
 
 /// Most subdivisions per offset piece.
@@ -297,7 +297,11 @@ impl StrokeProfile {
             };
             let mut prev = before;
             let mut arcs = Vec::new();
-            kurbo::Arc::new(at, (half, half), (before - at).atan2(), sweep, 0.).to_cubic_beziers(
+            crate::geometry::arc_to_cubics(
+                at,
+                half,
+                (before - at).atan2(),
+                sweep,
                 1e-3 * half,
                 |c1, c2, p| {
                     arcs.push(PathSeg::Cubic(geom::CubicBez::new(prev, c1, c2, p)));
@@ -353,7 +357,11 @@ impl StrokeProfile {
                     sweep += std::f64::consts::TAU;
                 }
                 let mut prev = from;
-                kurbo::Arc::new(at, (r, r), a0, sweep, 0.).to_cubic_beziers(
+                crate::geometry::arc_to_cubics(
+                    at,
+                    r,
+                    a0,
+                    sweep,
                     1e-3 * r.max(1e-9),
                     |c1, c2, p| {
                         out.push(PathSeg::Cubic(geom::CubicBez::new(prev, c1, c2, p)));
@@ -626,8 +634,9 @@ fn cap(out: &mut BezPath, at: Point, dir: Vec2, half: f64, cap: Cap, to: Point) 
                 }
             };
             if half > 0. {
-                kurbo::Arc::new(at, (half, half), a0, sweep, 0.)
-                    .to_cubic_beziers(1e-3 * half, |c1, c2, p| out.curve_to(c1, c2, p));
+                crate::geometry::arc_to_cubics(at, half, a0, sweep, 1e-3 * half, |c1, c2, p| {
+                    out.curve_to(c1, c2, p)
+                });
             }
             out.line_to(to);
         }
@@ -672,14 +681,61 @@ fn append_closed(out: &mut BezPath, segs: &[PathSeg]) {
     }
 }
 
-/// Constant-width stroking through kurbo (handles joins, caps and dashes).
-pub fn kurbo_stroke(path: &BezPath, style: &kurbo::Stroke, tolerance: f64) -> BezPath {
-    kurbo::stroke(
-        path.iter(),
-        style,
+/// Style of a constant-width stroke.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StrokeStyle {
+    /// Width of the stroke.
+    pub width: f64,
+    /// Join between consecutive segments.
+    pub join: Join,
+    /// Cap at the start of each open subpath.
+    pub start_cap: Cap,
+    /// Cap at the end of each open subpath.
+    pub end_cap: Cap,
+    /// Alternating on/off lengths. An empty pattern gives a solid stroke.
+    pub dash_pattern: Vec<f64>,
+    /// Offset along the dash pattern at the beginning of a subpath.
+    pub dash_offset: f64,
+}
+
+impl StrokeStyle {
+    /// Creates a solid stroke with round joins and round caps.
+    pub const fn new(width: f64) -> Self {
+        Self {
+            width,
+            join: Join::Round,
+            start_cap: Cap::Round,
+            end_cap: Cap::Round,
+            dash_pattern: Vec::new(),
+            dash_offset: 0.,
+        }
+    }
+}
+
+/// Returns the outline of a constant-width stroke with the specified style.
+pub fn stroke_outline(path: &BezPath, style: &StrokeStyle, tolerance: f64) -> BezPath {
+    let (join, miter_limit) = match style.join {
+        Join::Bevel => (kurbo::Join::Bevel, 4.),
+        Join::Miter(limit) => (kurbo::Join::Miter, limit),
+        Join::Round => (kurbo::Join::Round, 4.),
+    };
+    let cap = |cap| match cap {
+        Cap::Butt => kurbo::Cap::Butt,
+        Cap::Round => kurbo::Cap::Round,
+        Cap::Square => kurbo::Cap::Square,
+    };
+    let backend_style = kurbo::Stroke::new(style.width)
+        .with_join(join)
+        .with_miter_limit(miter_limit)
+        .with_start_cap(cap(style.start_cap))
+        .with_end_cap(cap(style.end_cap))
+        .with_dashes(style.dash_offset, &style.dash_pattern);
+    BezPath::from_backend(kurbo::stroke(
+        path.backend_elements(),
+        &backend_style,
         &kurbo::StrokeOpts::default(),
         tolerance.max(1e-9),
-    )
+    ))
 }
 
 #[cfg(test)]

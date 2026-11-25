@@ -1,0 +1,10 @@
+[package]
+name = "xgpui-curve-consumer-check"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+xgpui-curve = { path = "../../../extensions/crates/xgpui-curve", default-features = false, features = ["stroke", "svg-path"] }

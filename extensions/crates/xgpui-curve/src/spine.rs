@@ -10,7 +10,7 @@
 //! with every degenerate case kept finite.
 
 use crate::error::{CurveError, finite};
-use crate::geom::{self, ParamCurve, PathSeg, Point, QuadBez, Vec2};
+use crate::geom::{self, PathSeg, Point, QuadBez, Vec2};
 use crate::measure::quad_arclen;
 
 /// WGSL helpers: `curve_spine_eval`, `curve_spine_arclen` and
@@ -76,7 +76,7 @@ impl CurveSpine {
         }
     }
 
-    /// The spine as a kurbo quadratic.
+    /// The spine as a quadratic Bézier curve.
     pub fn quad(&self) -> QuadBez {
         QuadBez::new(self.p0, self.control, self.p1)
     }

@@ -5,7 +5,7 @@ use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
 use std::f64::consts::TAU;
 use xgpui_curve::fit::{FitOptions, fit_cubic_path};
-use xgpui_curve::kurbo::{BezPath, Point as KPoint, Rect, RoundedRect, Shape};
+use xgpui_curve::geom::{BezPath, Point as KPoint, Rect, rounded_rect_path};
 use xgpui_curve::shape::{ArcShape, Squircle};
 use xgpui_curve::stroke::{Cap, StrokeProfile};
 use xgpui_curve::svg_path;
@@ -170,7 +170,7 @@ pub fn render(lab: &mut CurveLab, _window: &mut Window, cx: &mut Context<CurveLa
                     if let Ok(s) = Squircle::new(rect, radius, smoothing) {
                         filled(window, &s.to_path(0.05), t, rgb(0x3a6bc4));
                     }
-                    let round = RoundedRect::from_rect(rect, radius.min(90.)).to_path(0.05);
+                    let round = rounded_rect_path(rect, radius.min(90.), 0.05);
                     stroke(window, &round, t, 1.5, hsla(0.12, 1., 0.6, 0.9));
                 },
             )

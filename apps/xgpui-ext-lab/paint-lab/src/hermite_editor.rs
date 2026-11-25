@@ -1,7 +1,7 @@
 //! Live controls for the shared-point direct/legacy Hermite comparison.
 use super::{Control, editor::MeshTangent};
 use std::sync::Arc;
-use xgpui_curve::kurbo::{BezPath, Point as KPoint, Vec2};
+use xgpui_curve::geom::{BezPath, Point as KPoint, Vec2};
 use xgpui_curve::mesh::{Axis, MeshLattice, Tangent};
 use xgpui_shader::{Brush, BrushMeshPoint, ControlPoint, MeshGradient, MeshGrid};
 
@@ -344,7 +344,6 @@ mod tests {
                     + (t3 - t2) * m1[k]
             })
         };
-        use xgpui_curve::kurbo::ParamCurve;
         for t in [0.25, 0.5, 0.75] {
             let e = edge.eval(t);
             let r = h(t);

@@ -2,7 +2,7 @@
 //! Coordinates, dash lengths, phase and tolerance are logical pixels.
 //!
 //! Deprecated: use [`xgpui_curve::measure`] directly. Build a
-//! `kurbo::BezPath` (re-exported as `xgpui_curve::kurbo`), measure it with
+//! `xgpui_curve::geom::BezPath`, measure it with
 //! `xgpui_curve::measure::MeasuredPath`, apply an
 //! `xgpui_curve::measure::PathEffect`, and stroke the result with
 //! `xgpui_curve::gpui_paint::append` into a `PathBuilder::stroke`. This module
@@ -11,13 +11,15 @@
 use anyhow::{Result, ensure};
 use gpui::{Path, PathBuilder, Pixels, Point, point, px};
 use std::ops::Range;
-use xgpui_curve::kurbo::{self, BezPath, PathEl};
+use xgpui_curve::geom::{BezPath, PathEl, Point as CurvePoint};
 use xgpui_curve::measure;
 
 const MAX_SEGMENTS: usize = 8192;
 
 /// Retained vector segment; the start point is the preceding endpoint.
-#[deprecated(note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a kurbo::BezPath, and xgpui_curve::gpui_paint to stroke the result")]
+#[deprecated(
+    note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a xgpui_curve::geom::BezPath, and xgpui_curve::gpui_paint to stroke the result"
+)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Segment {
     Line(Point<Pixels>),
@@ -40,7 +42,9 @@ impl Segment {
     }
 }
 /// One open or closed contour. Input is validated when measuring.
-#[deprecated(note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a kurbo::BezPath, and xgpui_curve::gpui_paint to stroke the result")]
+#[deprecated(
+    note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a xgpui_curve::geom::BezPath, and xgpui_curve::gpui_paint to stroke the result"
+)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Contour {
     start: Point<Pixels>,
@@ -93,7 +97,9 @@ impl Contour {
 /// Trim the total concatenated path length, then dash each retained contour.
 /// Dash phase restarts at each retained contour; positive offset advances pattern.
 /// Trim is a nonwrapping normalized range, including empty ranges.
-#[deprecated(note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a kurbo::BezPath, and xgpui_curve::gpui_paint to stroke the result")]
+#[deprecated(
+    note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a xgpui_curve::geom::BezPath, and xgpui_curve::gpui_paint to stroke the result"
+)]
 #[derive(Clone, Debug, Default)]
 pub struct PathEffect(measure::PathEffect);
 impl PathEffect {
@@ -120,7 +126,9 @@ impl PathEffect {
 }
 /// Reusable arc-length tables. Curve slicing retains Bézier verbs using de
 /// Casteljau subdivision. Reuse while animating.
-#[deprecated(note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a kurbo::BezPath, and xgpui_curve::gpui_paint to stroke the result")]
+#[deprecated(
+    note = "use xgpui_curve::measure::{MeasuredPath, PathEffect} on a xgpui_curve::geom::BezPath, and xgpui_curve::gpui_paint to stroke the result"
+)]
 #[derive(Clone, Debug)]
 pub struct MeasuredPath(measure::MeasuredPath);
 impl MeasuredPath {
@@ -209,10 +217,10 @@ fn validate(p: Point<Pixels>) -> Result<()> {
     );
     Ok(())
 }
-fn raw(p: Point<Pixels>) -> kurbo::Point {
-    kurbo::Point::new(f32::from(p.x) as f64, f32::from(p.y) as f64)
+fn raw(p: Point<Pixels>) -> CurvePoint {
+    CurvePoint::new(f32::from(p.x) as f64, f32::from(p.y) as f64)
 }
-fn pixel(p: kurbo::Point) -> Point<Pixels> {
+fn pixel(p: CurvePoint) -> Point<Pixels> {
     point(px(p.x as f32), px(p.y as f32))
 }
 /// The effect output as GPUI-pixel contours, one per subpath.
