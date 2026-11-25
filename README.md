@@ -5,8 +5,7 @@ for building applications such as photo editors, backed by documentation and tes
 
 XGPUI started from [gpui-unofficial](https://github.com/gpui-archipelago/gpui-unofficial),
 which captures GPUI and its supporting crates from
-[Zed](https://github.com/zed-industries/zed). We are moving toward using Zed
-directly as our upstream.
+[Zed](https://github.com/zed-industries/zed). 
 
 **[Read the documentation →](https://xgpui.dev/)**
 
