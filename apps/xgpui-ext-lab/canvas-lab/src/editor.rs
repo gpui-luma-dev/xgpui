@@ -2,9 +2,8 @@
 use super::*;
 use xgpui_canvas::{AlignmentGuide, Overview, PanGesture};
 use xgpui_curve::{
-    geom::{FillRule, fill_contains, stroke_contains},
+    geom::{Affine, BezPath, FillRule, Point as CurvePoint, fill_contains, stroke_contains},
     gpui_paint,
-    kurbo::{Affine, BezPath, Shape as _},
 };
 
 #[derive(Clone)]
@@ -26,7 +25,7 @@ impl Object {
     }
     fn contains(&self, bounds: WorldBounds, world: WorldPoint) -> bool {
         let offset = self.offset(bounds);
-        let p = WorldPoint::new(world.x - offset.x, world.y - offset.y).into();
+        let p = CurvePoint::new(world.x - offset.x, world.y - offset.y);
         if self.fill {
             fill_contains(&self.path, p, FillRule::NonZero)
         } else {
@@ -69,7 +68,10 @@ fn object(name: &'static str, path: BezPath, fill: bool, color: u32) -> SceneIte
     let rect = path
         .bounding_box()
         .inflate(if fill { 0. } else { 4. }, if fill { 0. } else { 4. });
-    let bounds: WorldBounds = rect.into();
+    let bounds = WorldBounds {
+        min: WorldPoint::new(rect.x0, rect.y0),
+        max: WorldPoint::new(rect.x1, rect.y1),
+    };
     SceneItem {
         bounds,
         data: Object {

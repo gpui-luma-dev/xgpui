@@ -6,9 +6,7 @@
 use std::ops::Range;
 
 use crate::error::{CurveError, finite};
-use crate::geom::{
-    self, BezPath, ParamCurve, ParamCurveArclen, PathEl, PathSeg, Point, QuadBez, Vec2,
-};
+use crate::geom::{self, BezPath, PathEl, PathSeg, Point, QuadBez, Vec2};
 
 /// Most segments (including implicit closing lines) a [`MeasuredPath`] accepts.
 pub const MAX_SEGMENTS: usize = 8192;

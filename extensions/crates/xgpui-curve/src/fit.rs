@@ -5,7 +5,7 @@
 //! and reports paired sample errors and segment-budget exhaustion.
 
 use crate::error::{CurveError, finite};
-use crate::geom::{BezPath, CubicBez, ParamCurve, Point, Vec2};
+use crate::geom::{BezPath, CubicBez, Point, Vec2};
 
 mod parameterized;
 pub use parameterized::{

@@ -10,7 +10,7 @@
 //! the rendered patch edges.
 
 use crate::error::{CurveError, finite};
-use crate::geom::{self, BezPath, CubicBez, Hermite, ParamCurve, PathSeg, Point, Vec2};
+use crate::geom::{self, BezPath, CubicBez, Hermite, PathSeg, Point, Vec2};
 
 /// Default fold clamp: a tangent may be at most this fraction of the distance
 /// to the nearer neighbor along its axis (the lab's `GEOMETRY_TANGENT_LIMIT`).

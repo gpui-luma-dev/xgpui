@@ -1,8 +1,8 @@
 //! Drawing and interaction helpers shared by the curve panels.
 use gpui::{prelude::*, *};
 use std::{cell::Cell, rc::Rc};
+use xgpui_curve::geom::{Affine, BezPath, Point as KPoint};
 use xgpui_curve::gpui_paint;
-use xgpui_curve::kurbo::{Affine, BezPath, Point as KPoint};
 
 /// Bounds of an interactive canvas, recorded during prepaint.
 pub type Area = Rc<Cell<Bounds<Pixels>>>;
@@ -360,7 +360,7 @@ mod tests {
         // Move the canvas: the content moves with it.
         let moved = Bounds::new(point(px(140.), px(80.)), b.size);
         let at_moved = camera.around(moved) * (p + kp(moved.origin).to_vec2());
-        assert!(((at_moved - at) - xgpui_curve::kurbo::Vec2::new(100., 50.)).hypot() < 1e-9);
+        assert!(((at_moved - at) - xgpui_curve::geom::Vec2::new(100., 50.)).hypot() < 1e-9);
         camera.reset();
         assert!(!camera.is_moved());
     }

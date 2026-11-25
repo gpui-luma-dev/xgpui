@@ -7,18 +7,20 @@ use crate::geom::BezPath;
 
 /// Parse SVG path data.
 pub fn parse(d: &str) -> Result<BezPath, CurveError> {
-    BezPath::from_svg(d).map_err(|e| CurveError::Svg(e.to_string()))
+    kurbo::BezPath::from_svg(d)
+        .map(BezPath::from_backend)
+        .map_err(|e| CurveError::Svg(e.to_string()))
 }
 
 /// Serialize as SVG path data with absolute commands.
 pub fn to_svg(path: &BezPath) -> String {
-    path.to_svg()
+    path.to_backend().to_svg()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geom::{ParamCurve, PathEl, Point};
+    use crate::geom::{PathEl, Point};
 
     #[test]
     fn round_trips_every_command_kind() {

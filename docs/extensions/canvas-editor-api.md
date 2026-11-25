@@ -71,16 +71,13 @@ the editor rather than a separate camera implementation.
 `[a, b, c, d, e, f]` coefficients, where
 `x' = a*x + c*y + e` and `y' = b*x + d*y + f`.
 They return None for non-finite viewport/coefficients. No dependencies are added;
-consumers can construct `kurbo::Affine::new(coefficients)` directly. Absolute
+consumers can construct `xgpui_curve::geom::Affine::new(coefficients)` directly. Absolute
 matrices can lose local precision at large translated centers even when every
 coefficient is finite. Use direct camera point projection for those views;
 affine conversion does not provide arbitrary-precision coordinates.
 
-Optional point/rectangle conversions are enabled by the `kurbo` feature (kurbo
-0.13). `Point` and `WorldBounds` convert to/from `kurbo::Point` and `kurbo::Rect`,
-preserving raw coordinates without validating or normalizing inverted rectangles.
-Default camera/scene math still has no dependencies. The mixed-shape editor uses
-these adapters for path bounds and precise picking. The existing curve camera now
+The mixed-shape editor copies canvas point and bounds coordinates into curve
+geometry for path bounds and precise picking. The existing curve camera now
 reuses Camera2D while preserving its panel-fit composition and resize behavior.
 
 ## Editor consumer

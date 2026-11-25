@@ -1,4 +1,4 @@
-//! GPUI adapters: turn kurbo paths into `gpui::Path<Pixels>` with native
+//! GPUI adapters: turn curve paths into `gpui::Path<Pixels>` with native
 //! `move_to` / `line_to` / `curve_to` / `cubic_bezier_to` commands (no CPU
 //! rasterization), and paint high-contrast gizmos.
 //!

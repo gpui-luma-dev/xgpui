@@ -605,7 +605,7 @@ callers project children explicitly and own application input/selection policy.<
 Its optional <code>gpui</code> feature builds paths with the existing
 <code>PathBuilder</code> and paints them with <code>Window::paint_path</code>; the
 spine shader helpers are plain WGSL and MSL sources for callers' own programs.
-Everything else is standalone math on kurbo types. See the <a href="curve.html">curves guide</a>.</p>
+Everything else is standalone math on xgpui-owned types. See the <a href="curve.html">curves guide</a>.</p>
 <h2 id="supplied-pixels-custom-rgb-and-native-color-checks">Supplied pixels, custom RGB and native color checks</h2>
 <p>Start with <a href="color-workflows.html">color tasks</a> for practical integration. <code>PixelColor</code> distinguishes named <code>ImageColor</code>, custom <code>RgbDefinition</code> and extended-linear source samples. <code>MediaLoader::load_pixel_buffer</code> accepts that resolved interpretation, an explicit storage space and a mapping policy. Storage can be bounded P3 or Rec.2020 RGBA16F; native-wide placement converts it into the compositor's extended coordinates.</p>
 <p><code>RgbDefinition</code> supports reference-white adaptation and independent channel curves. <code>from_relative_xyz_matrix</code> preserves relative colorants whose sum differs from the declared XYZ reference white. The optional <code>xgpui-color/icc</code> parser constructs definitions from a bounded RGB matrix/TRC subset; it does not add image-file decoding or a general ICC transform engine. See <a href="pixels-and-metadata.html">pixels + metadata</a> and <a href="icc-profiles.html">ICC scope</a>.</p>
