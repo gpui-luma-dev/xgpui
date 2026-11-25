@@ -5,7 +5,7 @@
 //! keyboard focus ring. A [`ShellControlPresenter`] supplies everything drawn
 //! inside the control: background, icon, size of the icon and state treatment.
 use crate::ShellColors;
-use gpui::{AnyElement, App, Pixels, Window, WindowAppearance};
+use gpui::{AnyElement, App, Pixels, Size, Window, WindowAppearance};
 use std::{fmt, rc::Rc};
 
 /// A window control drawn by the shell.
@@ -61,9 +61,11 @@ pub struct ShellControlState {
     pub focus_color: u32,
     /// Logical text/target scale (0.5–4), independent of device DPI.
     pub scale: f32,
-    /// Side of the square clickable target. Presenter content is centered in it
-    /// and clipped to it; draw the icon smaller to keep a comfortable target.
+    /// Shorter side of the clickable target, suitable for sizing square artwork.
     pub target_size: Pixels,
+    /// Dimensions of the clickable target. Artwork is centered and clipped to
+    /// this rectangle on Windows, and to the circular target on other platforms.
+    pub target_bounds: Size<Pixels>,
     /// Drawn in an inert [`crate::ClientFramePreview`], not a real window.
     pub preview: bool,
 }

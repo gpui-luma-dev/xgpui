@@ -64,7 +64,7 @@ Who owns what:
 
 - **The shell** keeps control order, desktop-configured omissions, capability filtering, Maximize/Restore identity, the clickable target size, accessible names, pointer/keyboard/accessibility activation, drag isolation and the keyboard focus ring. Clicking a control never starts a window drag.
 - **The presenter** draws everything inside the target. Its content is centered in the target and clipped to it; draw the icon smaller than `state.target_size` to keep a comfortable target. Don't attach click handlers in presenter content.
-- `ShellControlState` carries the control, hover, pressed, keyboard focus, window activation, appearance, high contrast, the frame's resolved colors, the focus color, logical scale and target size. With `high_contrast` set, switch to high-contrast artwork; the shell doesn't override presenter colors.
+- `ShellControlState` carries the control, interaction and appearance state, resolved colors, logical scale, and target geometry. Use `target_bounds` to fill the rectangular Windows target and `target_size` to size square artwork to its shorter side. When `high_contrast` is set, the presenter supplies high-contrast artwork.
 - `set_control_presenter(None)` restores the built-in look; you can swap presenters at runtime.
 - `ClientFramePreview::control_presenter` previews the same artwork; preview controls stay inert (`state.preview` is `true`).
 
