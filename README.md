@@ -28,10 +28,10 @@ own version numbers, independent of the upstream version.
 
 ## Lookless UI controls: xgpui-luma
 
-[xgpui-luma](https://github.com/gpui-luma-dev/xgpui-luma) is the lookless UI
+[xgpui-luma.dev](https://xgpui-luma.dev) is the lookless UI
 controls suite built on XGPUI: controls, layouts, focus, interaction and motion in
 one SDK, with Shadcn and Radix looks as separate adapters, plus color controls and
-charts. Documentation: [gpui-luma.dev](https://gpui-luma.dev).
+charts. Documentation: [xgpui-luma.dev](https://xgpui-luma.dev).
 
 Its **XGPUI Lab** app brings most of XGPUI's extension labs together in one
 application: canvas, color, gamut, GPU interop, media, Parley text, shaders, the
