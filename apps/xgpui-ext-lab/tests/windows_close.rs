@@ -1,20 +1,22 @@
-//! Real-window probe for #277: closing a window must not log errors.
+//! Native window close and instanced shader teardown on Windows (#277, #445).
 //!
 //! Windows destroys the HWND before GPUI drops its window, so anything that still
 //! called Win32 with that handle afterwards logged `Invalid window handle`
 //! (0x80070578, or `DRAGDROP_E_INVALIDHWND` from `RevokeDragDrop`). This closes one
-//! window through each path, with an untouched anchor window keeping the app alive:
+//! window through each path, with a shader window keeping the app alive:
 //! the system menu's Close (`SC_CLOSE`, sent by the caption X and Alt+F4), a plain
-//! `WM_CLOSE`, and GPUI's `remove_window()`. It fails if any error is logged.
+//! `WM_CLOSE`, and GPUI's `remove_window()`. Finally it closes the shader window and
+//! verifies that the application returns normally without logging errors.
 #[cfg(target_os = "windows")]
 fn main() {
     use gpui::{prelude::*, *};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    use std::{sync::Mutex, time::Duration};
+    use std::{cell::Cell, rc::Rc, sync::Mutex, time::Duration};
     use windows::Win32::{
         Foundation::{HWND, LPARAM, WPARAM},
         UI::WindowsAndMessaging::{IsWindow, PostMessageW, SC_CLOSE, WM_CLOSE, WM_SYSCOMMAND},
     };
+    use xgpui_shader::{Brush, painted};
 
     /// Records every warning and error the backend logs.
     struct Capture(Mutex<Vec<String>>);
@@ -37,22 +39,15 @@ fn main() {
     log::set_logger(&CAPTURE).expect("install the capturing logger");
     log::set_max_level(log::LevelFilter::Warn);
 
-    struct Blank;
-    impl Render for Blank {
+    struct Surface(Option<Brush>);
+    impl Render for Surface {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div().size_full().bg(rgb(0x202020))
-        }
-    }
-
-    fn report(result: Result<String, String>) -> ! {
-        match result {
-            Ok(summary) => {
-                println!("windows close probe passed: {summary}");
-                std::process::exit(0);
-            }
-            Err(error) => {
-                eprintln!("windows close probe failed: {error}");
-                std::process::exit(1);
+            match &self.0 {
+                Some(brush) => painted()
+                    .size_full()
+                    .bg_brush(brush.clone())
+                    .into_any_element(),
+                None => div().size_full().bg(rgb(0x202020)).into_any_element(),
             }
         }
     }
@@ -67,8 +62,10 @@ fn main() {
         HWND(handle.hwnd.get() as *mut _)
     }
 
+    let posted_last_close = Rc::new(Cell::new(false));
+    let posted = posted_last_close.clone();
     gpui_platform::application().run(move |cx| {
-        let open = |cx: &mut App, x: f32| {
+        let open = |cx: &mut App, x: f32, brush: Option<Brush>| {
             cx.open_window(
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(Bounds::new(
@@ -77,14 +74,14 @@ fn main() {
                     ))),
                     ..Default::default()
                 },
-                |_, cx| cx.new(|_| Blank),
+                |_, cx| cx.new(|_| Surface(brush)),
             )
             .expect("open real window")
         };
-        let anchor = open(cx, 40.);
-        let system_close = open(cx, 260.);
-        let plain_close = open(cx, 480.);
-        let removed = open(cx, 700.);
+        let anchor = open(cx, 40., Some(Brush::solid([0., 1., 0., 1.]).unwrap()));
+        let system_close = open(cx, 260., None);
+        let plain_close = open(cx, 480., None);
+        let removed = open(cx, 700., None);
         cx.activate(true);
 
         cx.spawn(async move |cx| {
@@ -132,29 +129,39 @@ fn main() {
             .filter(|(_, h)| unsafe { IsWindow(Some(*h)) }.as_bool())
             .map(|(path, _)| path)
             .collect();
-            if !still_open.is_empty() {
-                report(Err(format!(
-                    "windows still open after closing: {still_open:?}"
-                )));
+            assert!(still_open.is_empty(), "windows still open: {still_open:?}");
+            // #445: release the instanced shader renderer through native last-window close.
+            let last = anchor
+                .update(cx, |_, window, _| {
+                    let image = window.render_to_image().expect("read back shader frame");
+                    let pixel = image.get_pixel(image.width() / 2, image.height() / 2).0;
+                    assert!(
+                        pixel[1] > 200 && pixel[0] < 50,
+                        "missing green shader: {pixel:?}"
+                    );
+                    hwnd(window)
+                })
+                .expect("shader window");
+            unsafe {
+                PostMessageW(
+                    Some(last),
+                    WM_SYSCOMMAND,
+                    WPARAM(SC_CLOSE as usize),
+                    LPARAM(0),
+                )
             }
-            if anchor.update(cx, |_, _, _| ()).is_err() {
-                report(Err("the anchor window closed too".into()));
-            }
-            let errors = CAPTURE.0.lock().unwrap().clone();
-            if !errors.is_empty() {
-                report(Err(format!(
-                    "{} error(s) logged while closing:\n  {}",
-                    errors.len(),
-                    errors.join("\n  ")
-                )));
-            }
-            report(Ok(
-                "SC_CLOSE, WM_CLOSE and remove_window() closed with no errors".into(),
-            ));
+            .expect("post last-window SC_CLOSE");
+            posted.set(true);
         })
         .detach();
     });
-    panic!("windows close probe ended without a verdict");
+    assert!(
+        posted_last_close.get(),
+        "app exited before the last SC_CLOSE"
+    );
+    let errors = CAPTURE.0.lock().unwrap();
+    assert!(errors.is_empty(), "errors closing final window: {errors:?}");
+    println!("windows close probe passed, including the final shader window");
 }
 
 #[cfg(not(target_os = "windows"))]
