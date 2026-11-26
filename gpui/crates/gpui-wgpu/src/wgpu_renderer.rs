@@ -17,7 +17,6 @@ use std::num::NonZeroU64;
 use std::ops::Range;
 use std::rc::Rc;
 use std::sync::Arc;
-use wgpu::util::DeviceExt;
 
 const MAX_INSTANCE_BUFFER_SIZE: u64 = 256 * 1024 * 1024;
 const OPAQUE_QUAD_DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -57,6 +56,44 @@ fn least_common_multiple(left: u64, right: u64) -> u64 {
         second = remainder;
     }
     left / first * right
+}
+
+struct PathTileUpload {
+    alignment: u64,
+    curve_offset: u64,
+    paint_offset: u64,
+    size: u64,
+}
+
+impl PathTileUpload {
+    fn new(tile_count: usize, curve_count: usize, texture: bool, storage_alignment: u64) -> Self {
+        let tile_stride = std::mem::size_of::<gpui::PathTile>() as u64;
+        let curve_stride = std::mem::size_of::<gpui::PathCurve>() as u64;
+        let paint_stride = std::mem::size_of::<gpui::PathTilePaint>() as u64;
+        let (alignment, curve_alignment, paint_alignment) = if texture {
+            let curve_alignment = least_common_multiple(INSTANCE_TEXTURE_TEXEL_SIZE, curve_stride);
+            let paint_alignment = least_common_multiple(INSTANCE_TEXTURE_TEXEL_SIZE, paint_stride);
+            (
+                least_common_multiple(
+                    tile_stride,
+                    least_common_multiple(curve_alignment, paint_alignment),
+                ),
+                curve_alignment,
+                paint_alignment,
+            )
+        } else {
+            (storage_alignment, storage_alignment, storage_alignment)
+        };
+        let curve_offset = (tile_count as u64 * tile_stride).next_multiple_of(curve_alignment);
+        let paint_offset = (curve_offset + curve_count.max(1) as u64 * curve_stride)
+            .next_multiple_of(paint_alignment);
+        Self {
+            alignment,
+            curve_offset,
+            paint_offset,
+            size: paint_offset + paint_stride,
+        }
+    }
 }
 
 #[repr(C)]
@@ -137,7 +174,7 @@ struct WgpuPipelines {
     opaque_quads: Option<wgpu::RenderPipeline>,
     shadows: wgpu::RenderPipeline,
     path_rasterization: wgpu::RenderPipeline,
-    path_tiles: Option<wgpu::RenderPipeline>,
+    path_tiles: wgpu::RenderPipeline,
     paths: wgpu::RenderPipeline,
     underlines: wgpu::RenderPipeline,
     mono_sprites: wgpu::RenderPipeline,
@@ -516,7 +553,13 @@ impl WgpuRenderer {
         let surface_format = surface_config.format;
         let alpha_mode = surface_config.alpha_mode;
         let max_texture_size = context.device.limits().max_texture_dimension_2d;
-        let core = WgpuRendererCore::new(context, atlas.clone(), surface_format, alpha_mode);
+        let core = WgpuRendererCore::new(
+            context,
+            atlas.clone(),
+            surface_format,
+            alpha_mode,
+            context.uses_webgl_instance_data(),
+        );
 
         Ok(Self {
             context: gpu_context,
@@ -894,20 +937,18 @@ impl WgpuRendererCore {
             &shader_module,
         );
 
-        let path_tiles = layouts.path_tiles.as_ref().map(|layout| {
-            create_pipeline(
-                "path_tiles",
-                "vs_path_tile",
-                "fs_path_tile",
-                &layouts.globals,
-                layout,
-                None,
-                wgpu::PrimitiveTopology::TriangleStrip,
-                &[Some(color_target.clone())],
-                1,
-                &shader_module,
-            )
-        });
+        let path_tiles = create_pipeline(
+            "path_tiles",
+            "vs_path_tile",
+            "fs_path_tile",
+            &layouts.globals,
+            layouts.path_tiles.as_ref().unwrap_or(&layouts.instances),
+            None,
+            wgpu::PrimitiveTopology::TriangleStrip,
+            &[Some(color_target.clone())],
+            1,
+            &shader_module,
+        );
 
         let path_rasterization = create_pipeline(
             "path_rasterization",
@@ -1337,11 +1378,11 @@ impl WgpuRendererCore {
         atlas: Arc<WgpuAtlas>,
         target_format: wgpu::TextureFormat,
         alpha_mode: wgpu::CompositeAlphaMode,
+        uses_webgl_instance_data: bool,
     ) -> Self {
         let device = Arc::clone(&context.device);
         let queue = Arc::clone(&context.queue);
         let rendering_params = RenderingParameters::new(&context.adapter, target_format);
-        let uses_webgl_instance_data = context.uses_webgl_instance_data();
         let dual_source_blending =
             context.supports_dual_source_blending() && !uses_webgl_instance_data;
         let bind_group_layouts = Self::create_bind_group_layouts(&device, uses_webgl_instance_data);
@@ -2054,7 +2095,7 @@ impl WgpuRendererCore {
                     PrimitiveBatch::Paths(range) => {
                         let mut paths = &scene.paths[range];
                         while let Some((first, rest)) = paths.split_first() {
-                            if self.draw_path_tiles(first, &mut pass) {
+                            if self.draw_path_tiles(first, &mut instance_offset, &mut pass)? {
                                 paths = rest;
                                 continue;
                             }
@@ -2290,75 +2331,128 @@ impl WgpuRendererCore {
         }
     }
 
-    fn can_draw_path_tiles(&self, path: &Path<ScaledPixels>) -> bool {
-        let Some(tiles) = path.winding_tiles() else {
-            return false;
-        };
-        let limit = self
-            .resources()
-            .device
-            .limits()
-            .max_storage_buffer_binding_size as usize;
-        self.resources().pipelines.path_tiles.is_some()
-            && std::mem::size_of_val(tiles.tiles()) <= limit
-            && std::mem::size_of_val(tiles.curves()) <= limit
+    fn path_tile_upload(&self, tiles: &gpui::PathTiles) -> PathTileUpload {
+        PathTileUpload::new(
+            tiles.tiles().len(),
+            tiles.curves().len(),
+            self.uses_webgl_instance_data,
+            self.instance_data_alignment,
+        )
     }
 
-    fn draw_path_tiles(&self, path: &Path<ScaledPixels>, pass: &mut wgpu::RenderPass<'_>) -> bool {
-        if !self.can_draw_path_tiles(path) {
-            return false;
-        }
-        let resources = self.resources();
-        let tiles = path.winding_tiles().unwrap();
-        let paint = path.winding_tile_paint().unwrap();
+    fn can_draw_path_tiles(&self, path: &Path<ScaledPixels>) -> bool {
+        path.winding_tiles()
+            .is_some_and(|tiles| self.path_tile_upload(tiles).size <= self.max_instance_data_size)
+    }
 
-        // A fully covered tile can have no listed curves. The layout still
-        // requires a nonempty binding, though no invocation reads it.
-        let dummy = [0; std::mem::size_of::<gpui::PathCurve>()];
-        let buffers = [
-            unsafe { Self::instance_bytes(tiles.tiles()) },
-            if tiles.curves().is_empty() {
-                &dummy
-            } else {
-                unsafe { Self::instance_bytes(tiles.curves()) }
-            },
-            unsafe { Self::instance_bytes(std::slice::from_ref(&paint)) },
-        ]
-        .map(|contents| {
-            resources
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("path_tile_data"),
-                    usage: wgpu::BufferUsages::STORAGE,
-                    contents,
-                })
-        });
-        let [tile_buffer, curve_buffer, paint_buffer] = &buffers;
-        let binding = resources
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("path_tiles"),
-                layout: resources.bind_group_layouts.path_tiles.as_ref().unwrap(),
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: tile_buffer.as_entire_binding(),
+    fn draw_path_tiles(
+        &mut self,
+        path: &Path<ScaledPixels>,
+        instance_offset: &mut u64,
+        pass: &mut wgpu::RenderPass<'_>,
+    ) -> Result<bool> {
+        let Some(tiles) = path.winding_tiles() else {
+            return Ok(false);
+        };
+        let upload = self.path_tile_upload(tiles);
+        if upload.size > self.max_instance_data_size {
+            return Ok(false);
+        }
+        let mut base = instance_offset.next_multiple_of(upload.alignment);
+        if base + upload.size > self.instance_data_capacity {
+            self.grow_instance_data(upload.size)?;
+            base = 0;
+        }
+        *instance_offset = base + upload.size;
+
+        let paint = path.winding_tile_paint().unwrap();
+        let resources = self.resources();
+        let layout = &resources.bind_group_layouts;
+        let first_instance;
+        let binding = match &resources.instance_data {
+            InstanceData::Storage(buffer) => {
+                // With offset bindings each path can use its relative tile indices.
+                first_instance = 0;
+                let dummy = [0; std::mem::size_of::<gpui::PathCurve>()];
+                let data = [
+                    unsafe { Self::instance_bytes(tiles.tiles()) },
+                    if tiles.curves().is_empty() {
+                        &dummy
+                    } else {
+                        unsafe { Self::instance_bytes(tiles.curves()) }
                     },
+                    unsafe { Self::instance_bytes(std::slice::from_ref(&paint)) },
+                ];
+                let offsets = [base, base + upload.curve_offset, base + upload.paint_offset];
+                let entries = [0, 1, 2].map(|index| {
+                    resources
+                        .queue
+                        .write_buffer(buffer, offsets[index], data[index]);
                     wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: curve_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: paint_buffer.as_entire_binding(),
-                    },
-                ],
-            });
-        pass.set_pipeline(resources.pipelines.path_tiles.as_ref().unwrap());
+                        binding: index as u32,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer,
+                            offset: offsets[index],
+                            size: NonZeroU64::new(data[index].len() as u64),
+                        }),
+                    }
+                });
+                resources
+                    .device
+                    .create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("path_tiles"),
+                        layout: layout.path_tiles.as_ref().unwrap(),
+                        entries: &entries,
+                    })
+            }
+            InstanceData::Texture { view, .. } => {
+                // The texture binds its whole address space. Rebase each tile
+                // to the location of its paint and curves within that texture.
+                first_instance = (base / std::mem::size_of::<gpui::PathTile>() as u64) as u32;
+                let paint_index = ((base + upload.paint_offset)
+                    / std::mem::size_of::<gpui::PathTilePaint>() as u64)
+                    as u32;
+                let curve_index = ((base + upload.curve_offset)
+                    / std::mem::size_of::<gpui::PathCurve>() as u64)
+                    as u32;
+                let rebased: Vec<_> = tiles
+                    .tiles()
+                    .iter()
+                    .map(|tile| gpui::PathTile {
+                        paint: paint_index,
+                        curve_start: tile.curve_start + curve_index,
+                        ..*tile
+                    })
+                    .collect();
+                Self::write_instance_texture(resources, base, unsafe {
+                    Self::instance_bytes(&rebased)
+                });
+                Self::write_instance_texture(resources, base + upload.curve_offset, unsafe {
+                    Self::instance_bytes(tiles.curves())
+                });
+                Self::write_instance_texture(resources, base + upload.paint_offset, unsafe {
+                    Self::instance_bytes(std::slice::from_ref(&paint))
+                });
+                resources
+                    .device
+                    .create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("path_tiles_texture"),
+                        layout: &layout.instances,
+                        entries: &[wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(view),
+                        }],
+                    })
+            }
+        };
+        pass.set_pipeline(&resources.pipelines.path_tiles);
         pass.set_bind_group(0, &resources.globals_bind_group, &[]);
         pass.set_bind_group(1, &binding, &[]);
-        pass.draw(0..4, 0..tiles.tiles().len() as u32);
-        true
+        pass.draw(
+            0..4,
+            first_instance..first_instance + tiles.tiles().len() as u32,
+        );
+        Ok(true)
     }
 
     fn draw_instances(
@@ -2954,6 +3048,10 @@ pub struct WgpuHeadlessRenderer {
 ))]
 impl WgpuHeadlessRenderer {
     pub fn new() -> anyhow::Result<Self> {
+        Self::new_with_texture_transport(false)
+    }
+
+    fn new_with_texture_transport(texture_transport: bool) -> anyhow::Result<Self> {
         let (context, target_format) = WgpuContext::new_headless()?;
         // The device may be shared with earlier renderers; observe only errors raised from
         // here on, including any while this renderer builds its pipelines.
@@ -2964,6 +3062,7 @@ impl WgpuHeadlessRenderer {
             atlas,
             target_format,
             wgpu::CompositeAlphaMode::Opaque,
+            texture_transport,
         );
 
         Ok(Self {
@@ -3402,6 +3501,54 @@ mod tests {
     #[cfg(target_os = "linux")]
     const BLACK: [u8; 4] = [0, 0, 0, 255];
 
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[test]
+    fn webgl_texture_transport_draws_paths_at_distinct_offsets() -> anyhow::Result<()> {
+        use gpui::{
+            AppContext, Context, HeadlessAppContext, IntoElement, PathBuilder, Render, Styled as _,
+            Window, canvas, fill, point, px, size,
+        };
+
+        struct TestPaths;
+        impl Render for TestPaths {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                canvas(
+                    |_, _, _| (),
+                    |bounds, (), window, _| {
+                        window.paint_quad(fill(bounds, gpui::black()));
+                        for (x, color) in [(3., gpui::red()), (24., gpui::blue())] {
+                            let mut path = PathBuilder::fill();
+                            path.move_to(point(px(x), px(4.)));
+                            path.line_to(point(px(x + 12.), px(4.)));
+                            path.line_to(point(px(x + 12.), px(20.)));
+                            path.line_to(point(px(x), px(20.)));
+                            path.close();
+                            window.paint_path(path.build().unwrap(), color);
+                        }
+                    },
+                )
+                .size_full()
+            }
+        }
+        let mut cx = HeadlessAppContext::with_platform(
+            Arc::new(gpui::NoopTextSystem::new()),
+            Arc::new(()),
+            || {
+                Ok(Some(Box::new(
+                    WgpuHeadlessRenderer::new_with_texture_transport(true)?,
+                )))
+            },
+        );
+        let window = cx.open_window(size(px(48.), px(24.)), |_, cx| cx.new(|_| TestPaths))?;
+        cx.simulate_window_scale_factor_change(window.into(), 1.);
+        cx.update_window(window.into(), |_, window, cx| window.draw(cx).clear(cx))?;
+        let image = cx.capture_screenshot(window.into())?;
+        assert_eq!(image.get_pixel(8, 12).0, [255, 0, 0, 255]);
+        assert_eq!(image.get_pixel(18, 12).0, [0, 0, 0, 255]);
+        assert_eq!(image.get_pixel(30, 12).0, [0, 0, 255, 255]);
+        Ok(())
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn headless_renderer_draws_quads_with_distinct_colors() -> anyhow::Result<()> {
@@ -3531,6 +3678,9 @@ mod tests {
         assert_eq!(std::mem::size_of::<Shadow>(), 28 * 4);
         assert_eq!(std::mem::size_of::<PathRasterizationVertex>(), 26 * 4);
         assert_eq!(std::mem::size_of::<PathSprite>(), 4 * 4);
+        assert_eq!(std::mem::size_of::<gpui::PathTile>(), 14 * 4);
+        assert_eq!(std::mem::size_of::<gpui::PathCurve>(), 10 * 4);
+        assert_eq!(std::mem::size_of::<gpui::PathTilePaint>(), 28 * 4);
         assert_eq!(std::mem::size_of::<Underline>(), 16 * 4);
         assert_eq!(std::mem::size_of::<MonochromeSprite>(), 28 * 4);
         assert_eq!(std::mem::size_of::<SubpixelSprite>(), 28 * 4);
