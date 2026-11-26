@@ -14,15 +14,6 @@ on:
       - 'Cargo.lock'
       - '.cargo/validation.toml'
       - 'rust-toolchain*'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/gpu-recovery.yml'
-      - 'gpui/crates/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.cargo/validation.toml'
-      - 'rust-toolchain*'
 
 permissions:
   contents: read

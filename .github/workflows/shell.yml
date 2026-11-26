@@ -15,18 +15,6 @@ on:
       - 'Cargo.lock'
       - '.cargo/validation.toml'
       - 'rust-toolchain*'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/shell.yml'
-      - 'extensions/crates/xgpui-shell/**'
-      - 'apps/xgpui-ext-lab/shell-lab/**'
-      - 'apps/xgpui-ext-lab/Cargo.toml'
-      - 'gpui/crates/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.cargo/validation.toml'
-      - 'rust-toolchain*'
 
 permissions:
   contents: read
