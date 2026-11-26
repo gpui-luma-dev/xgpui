@@ -129,6 +129,7 @@ gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.30.2" }
 hdrhistogram = { version = "7", default-features = false, optional = true }
 waker-fn = "1.2.0"
 lyon = "1.0"
+tiny-skia-path = "0.12"
 pin-project = "1.1.10"
 spin = { version = "0.10", default-features = false, features = ["mutex", "spin_mutex", "lock_api"] }
 url = { version = "2.2" }

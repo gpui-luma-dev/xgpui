@@ -17,6 +17,7 @@ use std::num::NonZeroU64;
 use std::ops::Range;
 use std::rc::Rc;
 use std::sync::Arc;
+use wgpu::util::DeviceExt;
 
 const MAX_INSTANCE_BUFFER_SIZE: u64 = 256 * 1024 * 1024;
 const OPAQUE_QUAD_DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -136,6 +137,7 @@ struct WgpuPipelines {
     opaque_quads: Option<wgpu::RenderPipeline>,
     shadows: wgpu::RenderPipeline,
     path_rasterization: wgpu::RenderPipeline,
+    path_tiles: Option<wgpu::RenderPipeline>,
     paths: wgpu::RenderPipeline,
     underlines: wgpu::RenderPipeline,
     mono_sprites: wgpu::RenderPipeline,
@@ -166,6 +168,7 @@ struct InstanceBindings {
 }
 
 struct WgpuBindGroupLayouts {
+    path_tiles: Option<wgpu::BindGroupLayout>,
     globals: wgpu::BindGroupLayout,
     instances: wgpu::BindGroupLayout,
     texture: wgpu::BindGroupLayout,
@@ -660,7 +663,28 @@ impl WgpuRendererCore {
             ],
         });
 
+        let path_tiles = (!uses_webgl_instance_data).then(|| {
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("path_tiles_layout"),
+                entries: &[0, 1, 2].map(|binding| wgpu::BindGroupLayoutEntry {
+                    binding,
+                    visibility: if binding == 1 {
+                        wgpu::ShaderStages::FRAGMENT
+                    } else {
+                        wgpu::ShaderStages::VERTEX_FRAGMENT
+                    },
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }),
+            })
+        });
+
         WgpuBindGroupLayouts {
+            path_tiles,
             globals,
             instances,
             texture,
@@ -870,6 +894,21 @@ impl WgpuRendererCore {
             &shader_module,
         );
 
+        let path_tiles = layouts.path_tiles.as_ref().map(|layout| {
+            create_pipeline(
+                "path_tiles",
+                "vs_path_tile",
+                "fs_path_tile",
+                &layouts.globals,
+                layout,
+                None,
+                wgpu::PrimitiveTopology::TriangleStrip,
+                &[Some(color_target.clone())],
+                1,
+                &shader_module,
+            )
+        });
+
         let path_rasterization = create_pipeline(
             "path_rasterization",
             "vs_path_rasterization",
@@ -995,6 +1034,7 @@ impl WgpuRendererCore {
             opaque_quads,
             shadows,
             path_rasterization,
+            path_tiles,
             paths,
             underlines,
             mono_sprites,
@@ -2012,39 +2052,48 @@ impl WgpuRendererCore {
                         &mut pass,
                     ),
                     PrimitiveBatch::Paths(range) => {
-                        let paths = &scene.paths[range];
-                        if paths.is_empty() {
-                            continue;
-                        }
-
-                        drop(pass);
-                        let rasterized = self.draw_paths_to_intermediate(
-                            &mut encoder,
-                            paths,
-                            &mut instance_offset,
-                        )?;
-
-                        pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: Some("main_pass_continued"),
-                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: frame_view,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Load,
-                                    store: wgpu::StoreOp::Store,
-                                },
-                                depth_slice: None,
-                            })],
-                            depth_stencil_attachment: None,
-                            ..Default::default()
-                        });
-
-                        if rasterized {
-                            self.draw_paths_from_intermediate(
-                                paths,
+                        let mut paths = &scene.paths[range];
+                        while let Some((first, rest)) = paths.split_first() {
+                            if self.draw_path_tiles(first, &mut pass) {
+                                paths = rest;
+                                continue;
+                            }
+                            let legacy_count = paths
+                                .iter()
+                                .skip(1)
+                                .position(|path| self.can_draw_path_tiles(path))
+                                .map_or(paths.len(), |index| index + 1);
+                            let (legacy, rest) = paths.split_at(legacy_count);
+                            paths = rest;
+                            drop(pass);
+                            let rasterized = self.draw_paths_to_intermediate(
+                                &mut encoder,
+                                legacy,
                                 &mut instance_offset,
-                                &mut pass,
                             )?;
+
+                            pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                label: Some("main_pass_continued"),
+                                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                    view: frame_view,
+                                    resolve_target: None,
+                                    ops: wgpu::Operations {
+                                        load: wgpu::LoadOp::Load,
+                                        store: wgpu::StoreOp::Store,
+                                    },
+                                    depth_slice: None,
+                                })],
+                                depth_stencil_attachment: None,
+                                ..Default::default()
+                            });
+
+                            if rasterized {
+                                self.draw_paths_from_intermediate(
+                                    legacy,
+                                    &mut instance_offset,
+                                    &mut pass,
+                                )?;
+                            }
                         }
                     }
                     PrimitiveBatch::Underlines(range) => self.draw_instances(
@@ -2239,6 +2288,77 @@ impl WgpuRendererCore {
                 },
             );
         }
+    }
+
+    fn can_draw_path_tiles(&self, path: &Path<ScaledPixels>) -> bool {
+        let Some(tiles) = path.winding_tiles() else {
+            return false;
+        };
+        let limit = self
+            .resources()
+            .device
+            .limits()
+            .max_storage_buffer_binding_size as usize;
+        self.resources().pipelines.path_tiles.is_some()
+            && std::mem::size_of_val(tiles.tiles()) <= limit
+            && std::mem::size_of_val(tiles.curves()) <= limit
+    }
+
+    fn draw_path_tiles(&self, path: &Path<ScaledPixels>, pass: &mut wgpu::RenderPass<'_>) -> bool {
+        if !self.can_draw_path_tiles(path) {
+            return false;
+        }
+        let resources = self.resources();
+        let tiles = path.winding_tiles().unwrap();
+        let paint = path.winding_tile_paint().unwrap();
+
+        // A fully covered tile can have no listed curves. The layout still
+        // requires a nonempty binding, though no invocation reads it.
+        let dummy = [0; std::mem::size_of::<gpui::PathCurve>()];
+        let buffers = [
+            unsafe { Self::instance_bytes(tiles.tiles()) },
+            if tiles.curves().is_empty() {
+                &dummy
+            } else {
+                unsafe { Self::instance_bytes(tiles.curves()) }
+            },
+            unsafe { Self::instance_bytes(std::slice::from_ref(&paint)) },
+        ]
+        .map(|contents| {
+            resources
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("path_tile_data"),
+                    usage: wgpu::BufferUsages::STORAGE,
+                    contents,
+                })
+        });
+        let [tile_buffer, curve_buffer, paint_buffer] = &buffers;
+        let binding = resources
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("path_tiles"),
+                layout: resources.bind_group_layouts.path_tiles.as_ref().unwrap(),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: tile_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: curve_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: paint_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+        pass.set_pipeline(resources.pipelines.path_tiles.as_ref().unwrap());
+        pass.set_bind_group(0, &resources.globals_bind_group, &[]);
+        pass.set_bind_group(1, &binding, &[]);
+        pass.draw(0..4, 0..tiles.tiles().len() as u32);
+        true
     }
 
     fn draw_instances(

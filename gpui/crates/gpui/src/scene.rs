@@ -105,9 +105,13 @@ impl Scene {
     }
 
     fn insert_retained_primitive(&mut self, mut primitive: Primitive, identity: u64) {
-        let clipped_bounds = primitive
-            .bounds()
-            .intersect(&primitive.content_mask().bounds);
+        let mut bounds = *primitive.bounds();
+        if let Primitive::Path(path) = &primitive
+            && let Some(tiles) = path.winding_tiles()
+        {
+            bounds = bounds.union(&tiles.painted_bounds());
+        }
+        let clipped_bounds = bounds.intersect(&primitive.content_mask().bounds);
 
         if clipped_bounds.is_empty() {
             return;
@@ -501,7 +505,10 @@ fn sort_in_place<T: Copy>(
 fn primitive_sort_preserves_insertion_order_for_equal_keys() {
     let mut entries = [(2, 0, 'a'), (1, 1, 'b'), (2, 0, 'c'), (1, 0, 'd')];
     sort_in_place(&mut entries, &mut Vec::new(), |entry| (entry.0, entry.1));
-    assert_eq!(entries, [(1, 0, 'd'), (1, 1, 'b'), (2, 0, 'a'), (2, 0, 'c')]);
+    assert_eq!(
+        entries,
+        [(1, 0, 'd'), (1, 1, 'b'), (2, 0, 'a'), (2, 0, 'c')]
+    );
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Default)]
@@ -1240,6 +1247,16 @@ pub struct Path<P: Clone + Debug + Default + PartialEq> {
     start: Point<P>,
     current: Point<P>,
     contour_count: usize,
+    winding: Option<std::sync::Arc<PathWinding>>,
+    tiles: Option<std::sync::Arc<crate::PathTiles>>,
+}
+
+#[derive(Debug)]
+struct PathWinding {
+    curves: Vec<crate::PathCurve>,
+    even_odd: bool,
+    original_vertices: Vec<PathVertex<Pixels>>,
+    original_bounds: Bounds<Pixels>,
 }
 
 impl Path<Pixels> {
@@ -1258,7 +1275,40 @@ impl Path<Pixels> {
             content_mask: Default::default(),
             color: Default::default(),
             contour_count: 0,
+            winding: None,
+            tiles: None,
         }
+    }
+
+    pub(crate) fn set_winding_curves(&mut self, curves: Vec<crate::PathCurve>, even_odd: bool) {
+        if curves.is_empty() || self.vertices.is_empty() {
+            return;
+        }
+        // The public triangle stream remains authoritative for callers that
+        // edit it. Only unmodified builder output uses the winding outline.
+        self.winding = Some(std::sync::Arc::new(PathWinding {
+            curves,
+            even_odd,
+            original_vertices: self.vertices.clone(),
+            original_bounds: self.bounds,
+        }));
+    }
+
+    pub(crate) fn scale_for_stock_paint(&self, factor: f32) -> Path<ScaledPixels> {
+        let mut path = self.scale(factor);
+        if let Some(winding) = &self.winding
+            && self.vertices == winding.original_vertices
+            && self.bounds == winding.original_bounds
+            && factor.is_finite()
+            && factor > 0.
+        {
+            let mut tiles = crate::path_winding::bin(&winding.curves, winding.even_odd, factor);
+            tiles.retain_visible(path.content_mask.bounds);
+            if !tiles.tiles().is_empty() {
+                path.tiles = Some(std::sync::Arc::new(tiles));
+            }
+        }
+        path
     }
 
     /// Scale this path by the given factor.
@@ -1276,6 +1326,8 @@ impl Path<Pixels> {
             start: self.start.map(|start| start.scale(factor)),
             current: self.current.scale(factor),
             contour_count: self.contour_count,
+            winding: None,
+            tiles: None,
             color: self.color,
         }
     }
@@ -1372,7 +1424,28 @@ impl From<Path<ScaledPixels>> for Primitive {
     }
 }
 
-#[derive(Clone, Debug)]
+impl Path<ScaledPixels> {
+    #[doc(hidden)]
+    #[allow(missing_docs)]
+    pub fn winding_tile_paint(&self) -> Option<crate::PathTilePaint> {
+        let tiles = self.winding_tiles()?;
+        Some(crate::PathTilePaint {
+            bounds: self.bounds,
+            content_mask: self.content_mask.bounds,
+            color: self.color,
+            even_odd: tiles.even_odd().into(),
+            pad: 0,
+        })
+    }
+
+    #[doc(hidden)]
+    #[allow(missing_docs)]
+    pub fn winding_tiles(&self) -> Option<&crate::PathTiles> {
+        self.tiles.as_deref()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
 #[expect(missing_docs)]
 pub struct PathVertex<P: Clone + Debug + Default + PartialEq> {

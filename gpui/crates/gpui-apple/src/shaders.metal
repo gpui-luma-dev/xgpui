@@ -1306,3 +1306,186 @@ float4 fill_color(Background background,
 
   return color;
 }
+
+struct PathCurve {
+    float2 p0;
+    float2 p1;
+    float2 a;
+    float2 b;
+    float sign;
+    uint pad;
+};
+
+struct PathTile {
+    uint paint;
+    uint curve_start;
+    uint curve_count;
+    int backdrop;
+    float2 top_left;
+    float2 bottom_right;
+    float2 reference;
+    float2 curves_top_left;
+    float2 curves_bottom_right;
+};
+
+struct PathPaint {
+    Bounds_ScaledPixels bounds;
+    Bounds_ScaledPixels content_mask;
+    Background color;
+    uint even_odd;
+    uint pad;
+};
+
+struct PathTileFragmentInput {
+  float4 position [[position]];
+  uint tile_id [[flat]];
+  float4 curve_box [[flat]];
+  float4 background_solid [[flat]];
+  float4 background_color0 [[flat]];
+  float4 background_color1 [[flat]];
+};
+
+vertex PathTileFragmentInput path_tile_vertex(
+    uint vertex_id [[vertex_id]], uint tile_id [[instance_id]],
+    constant PathTile *tiles [[buffer(0)]],
+    constant PathPaint *paints [[buffer(2)]],
+    constant Size_DevicePixels *viewport_size
+    [[buffer(3)]]) {
+  PathTile tile = tiles[tile_id];
+  PathPaint paint = paints[tile.paint];
+
+  float2 mask_top_left = float2(paint.content_mask.origin.x,
+                                paint.content_mask.origin.y);
+  float2 mask_bottom_right =
+      mask_top_left + float2(paint.content_mask.size.width,
+                             paint.content_mask.size.height);
+  float2 top_left = clamp(float2(tile.top_left.x, tile.top_left.y),
+                          mask_top_left, mask_bottom_right);
+  float2 bottom_right = clamp(float2(tile.bottom_right.x, tile.bottom_right.y),
+                              top_left, mask_bottom_right);
+  float2 position =
+      float2((vertex_id & 1u) != 0u ? bottom_right.x : top_left.x,
+             (vertex_id & 2u) != 0u ? bottom_right.y : top_left.y);
+
+  GradientColor gradient = prepare_fill_color(
+      paint.color.tag, paint.color.color_space, paint.color.solid,
+      paint.color.colors[0].color, paint.color.colors[1].color);
+  return PathTileFragmentInput{
+      to_device_position_impl(position, viewport_size),
+      tile_id,
+      float4(tile.curves_top_left.x, tile.curves_top_left.y,
+             tile.curves_bottom_right.x, tile.curves_bottom_right.y),
+      gradient.solid, gradient.color0, gradient.color1};
+}
+
+// Solves a*t^2 + b*t + c = 0 for the root in [0, 1] on a monotone piece.
+float monotone_quadratic_root(float a, float b, float c, float direction) {
+  float discriminant = max(b * b - 4.0 * a * c, 0.0);
+  float denominator = b + direction * sqrt(discriminant);
+  if (denominator == 0.0) {
+    return 0.0;
+  }
+  return saturate(-2.0 * c / denominator);
+}
+
+// Coverage estimate adapted from https://github.com/EricLengyel/Slug/blob/be3c13eb7d63f9e8aa5c583e42d92c374cb91d98/SlugPixelShader.hlsl
+// Copyright (c) 2017 Eric Lengyel.
+// Licensed under the MIT license.
+
+// Accumulates the curve's winding along the pixel's leftward and upward rays.
+// Like Slug, a crossing within half a pixel of the center counts fractionally.
+void add_curve_winding(PathCurve curve, float2 center, thread float2 &winding,
+                       thread float2 &weight) {
+  float2 p0 = float2(curve.p0.x, curve.p0.y);
+  float2 p1 = float2(curve.p1.x, curve.p1.y);
+  float2 a = float2(curve.a.x, curve.a.y);
+  float2 b = float2(curve.b.x, curve.b.y);
+  float min_x = min(p0.x, p1.x);
+  float max_x = max(p0.x, p1.x);
+
+  if (p0.y <= center.y && center.y < p1.y) {
+    if (max_x <= center.x - 0.5) {
+      winding.x += curve.sign;
+    } else {
+      float t = monotone_quadratic_root(a.y, b.y, p0.y - center.y, 1.0);
+      float x = (a.x * t + b.x) * t + p0.x;
+      float distance = center.x - x;
+      winding.x += curve.sign * saturate(distance + 0.5);
+      weight.x = max(weight.x, saturate(1.0 - 2.0 * abs(distance)));
+    }
+  }
+
+  if (min_x <= center.x && center.x < max_x) {
+    float direction = p1.x > p0.x ? 1.0 : -1.0;
+    if (p1.y <= center.y - 0.5) {
+      winding.y -= curve.sign * direction;
+    } else if (p0.y < center.y + 0.5) {
+      float t = monotone_quadratic_root(a.x, b.x, p0.x - center.x, direction);
+      float y = (a.y * t + b.y) * t + p0.y;
+      float distance = center.y - y;
+      winding.y -= curve.sign * direction * saturate(distance + 0.5);
+      weight.y = max(weight.y, saturate(1.0 - 2.0 * abs(distance)));
+    }
+  }
+}
+
+// The backdrop gives the unlisted curves' winding along a leftward ray from
+// the tile's reference corner. We need it at the current pixel, along both
+// leftward and upward rays. Because paths are closed, chains of unlisted
+// curves can only begin or end where a listed curve does. So, we can compute
+// the winding at the current pixel by correcting the backdrop for each listed
+// endpoint between its ray and the pixel.
+void correct_for_endpoint(float2 endpoint, float step, float2 reference,
+                          float2 center, thread float2 &winding) {
+  if (endpoint.x <= reference.x) {
+    winding.x -= step * (float(endpoint.y <= center.y) -
+                         float(endpoint.y <= reference.y));
+  }
+  if (endpoint.y <= reference.y && endpoint.x <= center.x) {
+    winding.y += step;
+  }
+}
+
+fragment float4 path_tile_fragment(
+    PathTileFragmentInput input [[stage_in]],
+    constant PathTile *tiles [[buffer(0)]],
+    constant PathCurve *curves [[buffer(1)]],
+    constant PathPaint *paints [[buffer(2)]]) {
+  float2 center = floor(input.position.xy) + 0.5;
+  PathTile tile = tiles[input.tile_id];
+  PathPaint paint = paints[tile.paint];
+  float2 reference = float2(tile.reference.x, tile.reference.y);
+
+  float2 winding = float2(float(tile.backdrop));
+  float2 weight = float2(0.0);
+  for (uint i = 0u; i < tile.curve_count; i++) {
+    PathCurve curve = curves[tile.curve_start + i];
+    float2 p0 = float2(curve.p0.x, curve.p0.y);
+    float2 p1 = float2(curve.p1.x, curve.p1.y);
+    if (min(p0.x, p1.x) >= center.x + 0.5) {
+      break;
+    }
+    if (p0.y < center.y + 0.5) {
+      add_curve_winding(curve, center, winding, weight);
+      correct_for_endpoint(p0, curve.sign, reference, center, winding);
+      correct_for_endpoint(p1, -curve.sign, reference, center, winding);
+    }
+  }
+
+  // Weight the winding computed by each ray by its nearest crossing's distance
+  // from the pixel center, using Slug's technique.
+  float coverage =
+      max(abs(dot(winding, weight)) / max(weight.x + weight.y, 1.0 / 65536.0),
+          min(abs(winding.x), abs(winding.y)));
+  coverage = paint.even_odd != 0u
+                 ? 1.0 - abs(1.0 - fract(coverage * 0.5) * 2.0)
+                 : saturate(coverage);
+
+  if (coverage == 0.0) {
+    return float4(0.0);
+  }
+
+  float4 color = fill_color(paint.color, input.position.xy, paint.bounds,
+                            input.background_solid, input.background_color0, input.background_color1);
+  return float4(color.rgb, color.a * coverage);
+}

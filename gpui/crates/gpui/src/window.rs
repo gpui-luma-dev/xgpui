@@ -5208,7 +5208,7 @@ impl Window {
         path.color = color.opacity(opacity);
         self.next_frame
             .scene
-            .insert_primitive(path.scale(scale_factor));
+            .insert_primitive(path.scale_for_stock_paint(scale_factor));
     }
 
     /// Record a validated path brush. The host applies inherited opacity once.

@@ -50,6 +50,9 @@ mod interactive;
 mod key_dispatch;
 mod keymap;
 mod path_builder;
+mod path_winding;
+#[doc(hidden)]
+pub use path_winding::{PathCurve, PathTile, PathTilePaint, PathTiles};
 mod platform;
 mod platform_scheduler;
 mod scene;
