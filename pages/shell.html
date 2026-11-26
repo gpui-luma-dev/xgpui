@@ -69,6 +69,7 @@ handle.update(cx, |shell, _, cx| shell.set_control_presenter(Some(presenter), cx
 <ul>
 <li><strong>The shell keeps</strong> control order, desktop-configured omissions, capability filtering, Maximize/Restore identity, the clickable target size, accessible names, pointer/keyboard/accessibility activation, drag isolation and the keyboard focus ring. Clicking a control never starts a window drag.</li>
 <li><strong>The presenter draws</strong> everything inside the target. Its content is centered in the target and clipped to it; draw the icon smaller than <code>state.target_size</code> to keep a comfortable target. Don't attach click handlers in presenter content.</li>
+<li>On Windows, shell 0.4.1 uses full-height rectangular caption buttons with Windows glyphs and red close feedback. Presenter artwork can fill the rectangular target. The 4.0.1 Windows backend reports system high contrast through desktop preferences.</li>
 <li><code>ShellControlState</code> carries the control, hover, pressed, keyboard focus, window activation, appearance, high contrast, the frame's resolved colors, the focus color, logical scale and target size. With <code>high_contrast</code> set, switch to high-contrast artwork; the shell doesn't override presenter colors.</li>
 <li><code>set_control_presenter(None)</code> restores the built-in look, and presenters can be swapped at runtime. <code>ClientFramePreview::control_presenter</code> previews the same artwork with inert controls (<code>state.preview</code> is <code>true</code>).</li>
 </ul>

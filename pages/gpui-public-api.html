@@ -38,6 +38,11 @@ existing APIs. That integration is awaiting final public API approval. Its
 links the original GPUI commits and pull requests.</p>
 <p>The maintained XGPUI feature changes below are compared with pre-feature main
 <code>9b64657</code>.</p>
+<h2 id="core-5-1-window-input">Window input and test support in core 5.1</h2>
+<ul>
+<li><code>Window::set_three_finger_zoom</code> opts into three-finger drag zoom with macOS backend 6.1.0. It delivers existing <code>PinchEvent</code> values. The corresponding <code>PlatformWindow</code> method has a default no-op.</li>
+<li><code>TestWindow::simulate_hover_status_change</code>, <code>TestAppContext::simulate_window_hover_status_change</code>, and <code>VisualTestContext::simulate_hover_status_change</code> drive test-window hover. Activation now updates hover on Windows, Linux and FreeBSD. Simulate false explicitly to test an active but unhovered window.</li>
+</ul>
 <h2 id="gpui-1293-sync-406">GPUI 1.29.3 sync: core 5.0 (#406)</h2>
 <p>Upstream API changes carried in from gpui-unofficial 1.29.3, approved individually in the
 <a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a> API review (2026-11-21). Ships in

@@ -20,6 +20,29 @@
 </aside>
 <main id="content" tabindex="-1">
 <p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="whats-new">What's new</h1>
+<h2 id="xgpui-5-1-0">XGPUI 5.1.0 — owned curve geometry, macOS zoom and Windows fixes</h2>
+<p>Follow <a href="https://github.com/gpui-luma-dev/xgpui/issues/450">release issue #450</a> for publication status and the <a href="https://github.com/gpui-luma-dev/xgpui/releases">GitHub releases</a> for verified packages.</p>
+<ul>
+<li><strong>Curve 0.3.</strong> Public point, path and affine types now live in <code>xgpui_curve::geom</code>. It also adds parameterized fitting, adaptive measurement and variable-width stroke work. See the <a href="curve.html">curve guide</a>.</li>
+<li><strong>Zeta lab tools.</strong> <code>just curve zeta-capture</code> saves six deterministic UI captures and draw/readback timing JSON. <code>just curve zeta-benchmark</code> records a CPU baseline for curve evaluation, parameter fitting, measurement and path building. See the <a href="extension-lab.html#zeta-lab-tools">lab commands</a>.</li>
+<li><strong>Canvas 0.6.</strong> Remove the <code>kurbo</code> feature and replace its implicit point and bounds conversions with explicit coordinate conversion. Existing viewport affine coefficients can construct <code>xgpui_curve::geom::Affine</code>.</li>
+<li><strong>macOS trackpad zoom.</strong> Call <code>Window::set_three_finger_zoom(true)</code> with the 6.1.0 macOS backend to receive three-finger drag zoom through existing pinch callbacks.</li>
+<li><strong>Test window hover.</strong> Activating test windows now also simulates hover on Windows, Linux and FreeBSD. Tests covering active but unhovered windows can explicitly simulate hover false.</li>
+<li><strong>Windows.</strong> <a href="shell.html">Shell</a> caption controls use rectangular targets, Windows glyphs and red close feedback. Windows 4.0.1 reports high contrast through desktop preferences and fixes an instanced shader teardown crash.</li>
+<li><strong>SVG.</strong> Existing deprecated path-effect wrappers still work. New callers can use curve measurement and effects directly.</li>
+</ul>
+<div class="table-wrap"><table>
+<thead><tr><th>Crate</th><th>Previous</th><th>Release</th></tr></thead>
+<tbody>
+<tr><td><code>xgpui</code></td><td>5.0.0</td><td><strong>5.1.0</strong></td></tr>
+<tr><td><code>xgpui-macos</code></td><td>6.0.0</td><td><strong>6.1.0</strong></td></tr>
+<tr><td><code>xgpui-windows</code></td><td>4.0.0</td><td><strong>4.0.1</strong></td></tr>
+<tr><td><code>xgpui-macros</code></td><td>1.0.4</td><td><strong>1.0.5</strong></td></tr>
+<tr><td><code>xgpui-canvas</code></td><td>0.5.0</td><td><strong>0.6.0</strong></td></tr>
+<tr><td><code>xgpui-curve</code></td><td>0.2.0</td><td><strong>0.3.0</strong></td></tr>
+<tr><td><code>xgpui-shell</code></td><td>0.4.0</td><td><strong>0.4.1</strong></td></tr>
+<tr><td><code>xgpui-svg</code></td><td>0.5.0</td><td><strong>0.5.1</strong></td></tr>
+</tbody></table></div>
 <h2 id="xgpui-5-0-0">XGPUI 5.0.0 — GPUI 1.29.3 and Canvas spatial editing</h2>
 <p>The GPUI sources follow gpui-unofficial <a href="https://github.com/gpui-archipelago/gpui-unofficial/releases/tag/v1.29.3">1.29.3</a> (Zed <code>v1.29.3</code>); 1.29.1 and 1.29.2 changed no GPUI sources. Where an upstream change conflicted with XGPUI behavior, XGPUI’s behavior was kept (<a href="https://github.com/gpui-luma-dev/xgpui/issues/406">#406</a>). Canvas gains spatial editing APIs. <code>xgpui</code> 5.0.0 has compile-breaking changes, so every crate that exposes its types takes a breaking version; 18 crates are published, and <code>xgpui-color</code> and <code>xgpui-macros</code> are unchanged.</p>
 <h3>Highlights</h3>
