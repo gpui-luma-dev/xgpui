@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-macos"
-version = "6.0.0"
+version = "6.1.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/gpui-luma-dev/xgpui"
@@ -25,7 +25,7 @@ font-kit = ["gpui_apple/font-kit"]
 screen-capture = ["gpui/screen-capture", "dep:objc2-core-media", "dep:objc2-screen-capture-kit"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
-gpui = { package = "xgpui", version = "5.0.0" }
+gpui = { package = "xgpui", version = "5.1.0" }
 accesskit = { version = "0.24.0", features = ["enumn"] }
 accesskit_macos = { version = "0.26.0" }
 anyhow = { version = "1.0.86" }
@@ -80,7 +80,7 @@ uuid = { version = "1.1", features = ["serde"] }
 # GPUI and the extracted renderer. A dependency does not inherit this crate's
 # `cfg(test)`, so dev-dependencies enable those APIs only for test builds.
 [target.'cfg(target_os = "macos")'.dev-dependencies]
-gpui = { package = "xgpui", version = "5.0.0", features = ["test-support"] }
+gpui = { package = "xgpui", version = "5.1.0", features = ["test-support"] }
 gpui_apple = { package = "xgpui-apple", version = "6.0.0", features = ["test-support"] }
 
 [lints]

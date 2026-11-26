@@ -12,7 +12,7 @@ For application setup, use the matching framework packages:
 
 ```toml
 [dependencies]
-gpui = { package = "xgpui", version = "5.0.0" }
+gpui = { package = "xgpui", version = "5.1.0" }
 gpui_platform = { package = "xgpui-platform", version = "4.0.0" }
 ```
 

@@ -1,6 +1,6 @@
 [package]
 name = "xgpui-svg"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 publish = ["crates-io"]
 license = "Apache-2.0"
@@ -14,7 +14,7 @@ categories = ["gui", "graphics", "multimedia::images"]
 
 [dependencies]
 anyhow = "1"
-xgpui-curve = { path = "../xgpui-curve", version = "0.2.0", default-features = false, features = ["measure"], package = "xgpui-curve" }
+xgpui-curve = { path = "../xgpui-curve", version = "0.3.0", default-features = false, features = ["measure"], package = "xgpui-curve" }
 web-time = "1"
 gpui = { path = "../../../gpui/crates/gpui" , package = "xgpui", version = "5.0.0" }
 
