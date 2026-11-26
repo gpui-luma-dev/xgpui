@@ -38,6 +38,18 @@ existing APIs. That integration is awaiting final public API approval. Its
 links the original GPUI commits and pull requests.</p>
 <p>The maintained XGPUI feature changes below are compared with pre-feature main
 <code>9b64657</code>.</p>
+<h2 id="gpui-1302-review">GPUI 1.30.2 integration review</h2>
+<p>These changes are implemented on the integration branch and await API approval. The <a href="https://github.com/gpui-luma-dev/xgpui/pull/466">package 07 ledger review</a> lists individual methods, renderer records, and compatibility decisions.</p>
+<table><thead><tr><th>Area</th><th>Public surface</th></tr></thead><tbody>
+<tr><td>Window and focus</td><td><code>App::active_display</code>, <code>FocusHandle::is_rendered</code>, and <code>Window::set_native_titlebar_visibility</code>. The default <code>PlatformWindow</code> titlebar hook is implemented on macOS.</td></tr>
+<tr><td>Test support</td><td>Headless scale simulation and test-window decoration simulation.</td></tr>
+<tr><td>Diagnostics</td><td><code>App::debug_state</code>, <code>Platform::debug_state</code>, and <code>PlatformWindow::debug_state</code> expose diagnostic JSON. Its shape may change. The platform traits supply defaults.</td></tr>
+<tr><td>SVG</td><td><code>Svg::with_timed_transformation</code>, <code>TimedTransformation</code>, <code>Easing</code>, and SVG-only opacity on <code>Transformation</code>. See the <a href="svg-rendering.html#retained-svg-transforms">timed transform example</a>.</td></tr>
+<tr><td>Paths</td><td>Existing generic paths, builders, mutable vertices, and scene signatures remain available. <code>PathVertex&lt;P&gt;</code> gains <code>PartialEq</code>. Doc-hidden winding records and accessors serve the backend crates.</td></tr>
+</tbody></table>
+<h3 id="gpui-1302-dependencies">Dependency compatibility</h3>
+<p>If your application directly imports a helper type that it exchanges with GPUI, align that dependency to the same 1.30.2 helper crate or import the GPUI re-export. This applies to shared strings, refinement traits, scheduler types, and HTTP clients. Imports already using GPUI re-exports continue to work.</p>
+<p>Keep usvg 0.46 if you explicitly name the error returned by <code>SvgRenderer</code> or matched through <code>ImageCacheError::Usvg</code>. The internal rasterizer uses 0.49.</p>
 <h2 id="core-5-1-window-input">Window input and test support in core 5.1</h2>
 <ul>
 <li><code>Window::set_three_finger_zoom</code> opts into three-finger drag zoom with macOS backend 6.1.0. It delivers existing <code>PinchEvent</code> values. The corresponding <code>PlatformWindow</code> method has a default no-op.</li>

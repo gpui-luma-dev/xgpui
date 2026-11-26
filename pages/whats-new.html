@@ -20,6 +20,13 @@
 </aside>
 <main id="content" tabindex="-1">
 <p><a href="index.html">← Overview</a></p><article class="extension-document"><h1 id="whats-new">What's new</h1>
+<h2 id="gpui-1302-preview">GPUI 1.30.2 integration preview</h2>
+<p>The integration is on the <a href="https://github.com/gpui-luma-dev/xgpui/issues/458">upstream epic</a> and its public APIs are under review. Follow the <a href="gpui-public-api.html#gpui-1302-review">API review and compatibility notes</a> for the implemented changes.</p>
+<ul>
+<li>Stock fills and strokes use tiled path rendering on D3D11, Metal, and wgpu, including WebGL2 texture transport. Shader masks and direct brushes keep their existing coverage paths.</li>
+<li>Timed SVG transforms animate retained sprites using the executor clock. A changed pose invalidates cached backdrop captures that sample it. The <a href="svg-rendering.html#retained-svg-transforms">SVG guide</a> shows how to opt in.</li>
+<li>The SVG rasterizer gains SVGZ support and the displacement-map crash fix. Typed callers keep the public usvg 0.46 error contract.</li>
+</ul>
 <h2 id="xgpui-5-1-0">XGPUI 5.1.0 — owned curve geometry, macOS zoom and Windows fixes</h2>
 <p>Follow <a href="https://github.com/gpui-luma-dev/xgpui/issues/450">release issue #450</a> for publication status and the <a href="https://github.com/gpui-luma-dev/xgpui/releases">GitHub releases</a> for verified packages.</p>
 <ul>
