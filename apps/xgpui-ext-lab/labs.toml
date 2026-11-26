@@ -543,7 +543,7 @@ cargo = ["test", "--features", "windows-window-tests", "--test", "color_mode_win
 
 [[lab.task]]
 name = "close"
-about = "Closing through SC_CLOSE (caption X, Alt+F4), WM_CLOSE and remove_window() logs no errors (#277)"
+about = "Native window close paths and last-window shader teardown (#277, #445)"
 platforms = ["windows"]
 profile = "dev"
 cargo = ["test", "--features", "windows-window-tests", "--test", "windows_close"]
