@@ -1303,6 +1303,7 @@ pub struct Window {
         SingleSubscriberSet<Box<dyn FnMut(WindowVisibility, &mut Window, &mut App) -> bool>>,
     hovered: Rc<Cell<bool>>,
     pub(crate) needs_present: Rc<Cell<bool>>,
+    scene_animation_interval: Rc<Cell<Option<Duration>>>,
     /// Tracks recent input event timestamps to determine if input is arriving at a high rate.
     /// Used to selectively enable VRR optimization only when input rate exceeds 60fps.
     pub(crate) input_rate_tracker: Rc<RefCell<InputRateTracker>>,
@@ -1752,6 +1753,7 @@ impl Window {
         profiler::journal::record_window_visibility(handle.window_id(), visibility);
         let hovered = Rc::new(Cell::new(platform_window.is_hovered()));
         let needs_present = Rc::new(Cell::new(false));
+        let scene_animation_interval = Rc::new(Cell::new(None));
         let next_frame_callbacks: Rc<RefCell<Vec<FrameCallback>>> = Default::default();
         let input_rate_tracker = Rc::new(RefCell::new(InputRateTracker::default()));
 
@@ -1917,6 +1919,7 @@ impl Window {
             let invalidator = invalidator.clone();
             let active = active.clone();
             let needs_present = needs_present.clone();
+            let scene_animation_interval = scene_animation_interval.clone();
             let next_frame_callbacks = next_frame_callbacks.clone();
             let input_rate_tracker = input_rate_tracker.clone();
             let mut deferred_force_render = false;
@@ -1976,7 +1979,9 @@ impl Window {
                 // underclocking, but subject to the same power limits as redraws.
                 let high_rate_input = input_rate_tracker.borrow_mut().is_high_rate();
                 let has_next_frame_callbacks = !next_frame_callbacks.borrow().is_empty();
-                let has_frame_demand = invalidator.is_dirty()
+                let animation_interval = scene_animation_interval.get();
+                let has_frame_demand = animation_interval.is_some()
+                    || invalidator.is_dirty()
                     || force_render
                     || has_next_frame_callbacks
                     || request_frame_options.require_presentation
@@ -1994,8 +1999,12 @@ impl Window {
                 // `cx.notify()` is not throttled, as `WindowOptions` documents
                 // (#211): engine surfaces present new frames that way. Upstream
                 // GPUI (since 1.28.1) also throttles notify-driven redraws.
+                let animation_only = animation_interval.is_some()
+                    && !invalidator.is_dirty()
+                    && !high_rate_input
+                    && !needs_present.get();
                 let should_throttle = !request_frame_options.require_presentation
-                    && (force_render || has_next_frame_callbacks);
+                    && (force_render || has_next_frame_callbacks || animation_only);
                 let inactive_without_high_rate_input =
                     should_throttle && !active.get() && !high_rate_input;
                 let (thermal_state, power_mode) =
@@ -2010,6 +2019,15 @@ impl Window {
                     power_mode,
                 );
 
+                let min_frame_interval = if animation_only
+                    && !request_frame_options.require_presentation
+                    && !force_render
+                    && !has_next_frame_callbacks
+                {
+                    min_frame_interval.max(animation_interval)
+                } else {
+                    min_frame_interval
+                };
                 let now = Instant::now();
                 // Idle display-link ticks must neither consume a frame slot nor
                 // wake a demand-driven frame source.
@@ -2070,7 +2088,8 @@ impl Window {
                 let should_draw = invalidator.is_dirty() || force_render;
                 let needs_present = request_frame_options.require_presentation
                     || needs_present.get()
-                    || high_rate_input;
+                    || high_rate_input
+                    || animation_interval.is_some();
                 if should_draw {
                     measure("frame duration", || {
                         handle
@@ -2098,7 +2117,10 @@ impl Window {
                     })
                 } else if needs_present {
                     handle
-                        .update(&mut cx, |_, window, _| window.present())
+                        .update(&mut cx, |_, window, cx| {
+                            window.advance_scene_animations(cx);
+                            window.present();
+                        })
                         .with_context(|| {
                             format!("presenting frame for window {:?}", handle.window_id())
                         })
@@ -2109,6 +2131,7 @@ impl Window {
                     .update(&mut cx, |_, window, _| {
                         if window.invalidator.is_dirty()
                             || !window.next_frame_callbacks.borrow().is_empty()
+                            || window.scene_animation_interval.get().is_some()
                         {
                             window.platform_window.schedule_frame();
                         }
@@ -2126,7 +2149,10 @@ impl Window {
                 // after this frame (the window was re-invalidated mid-draw, or
                 // animations scheduled next-frame callbacks), re-arm the frame
                 // source explicitly.
-                if invalidator.is_dirty() || !next_frame_callbacks.borrow().is_empty() {
+                if invalidator.is_dirty()
+                    || !next_frame_callbacks.borrow().is_empty()
+                    || scene_animation_interval.get().is_some()
+                {
                     invalidator.wake_platform();
                 }
                 #[cfg(feature = "profiler")]
@@ -2449,6 +2475,7 @@ impl Window {
             visibility_observers: SingleSubscriberSet::new(),
             hovered,
             needs_present,
+            scene_animation_interval,
             input_rate_tracker,
             #[cfg(feature = "profiler")]
             window_profiler: profiler::WindowProfiler::new(handle.window_id())?,
@@ -3926,6 +3953,9 @@ impl Window {
         let previous_focus_path = self.rendered_frame.focus_path();
         let previous_window_active = self.rendered_frame.window_active;
         mem::swap(&mut self.rendered_frame, &mut self.next_frame);
+        self.scene_animation_interval
+            .set(self.rendered_frame.scene.animation_frame_interval());
+        self.advance_scene_animations(cx);
         self.next_frame.clear();
         let current_focus_path = self.rendered_frame.focus_path();
         let current_window_active = self.rendered_frame.window_active;
@@ -4019,6 +4049,16 @@ impl Window {
     pub fn submit_frame_for_validation(&self) -> anyhow::Result<()> {
         self.platform_window
             .submit_scene_for_validation(&self.rendered_frame.scene)
+    }
+
+    pub(crate) fn advance_scene_animations(&mut self, cx: &App) {
+        if self.scene_animation_interval.get().is_some() {
+            let elapsed = cx
+                .background_executor()
+                .now()
+                .saturating_duration_since(cx.synced_animation_epoch);
+            self.rendered_frame.scene.advance_animations(elapsed);
+        }
     }
 
     #[profiling::function]
@@ -5479,6 +5519,19 @@ impl Window {
         color: Hsla,
         cx: &App,
     ) -> Result<()> {
+        self.paint_animated_svg(bounds, path, data, transformation, None, color, cx)
+    }
+
+    pub(crate) fn paint_animated_svg(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        path: SharedString,
+        data: Option<&[u8]>,
+        transformation: TransformationMatrix,
+        animation: Option<crate::SpriteAnimation>,
+        color: Hsla,
+        cx: &App,
+    ) -> Result<()> {
         self.invalidator.debug_assert_paint();
 
         let element_opacity = self.element_opacity();
@@ -5519,7 +5572,7 @@ impl Window {
             .map_origin(|value| ScaledPixels(round_half_toward_zero(value.0)))
             .map_size(|size| size.ceil());
 
-        self.next_frame.scene.insert_primitive(MonochromeSprite {
+        let sprite = MonochromeSprite {
             order: 0,
             pad: 0,
             bounds: final_bounds,
@@ -5527,7 +5580,14 @@ impl Window {
             color: color.opacity(element_opacity),
             tile,
             transformation,
-        });
+        };
+        match animation {
+            Some(animation) => self
+                .next_frame
+                .scene
+                .insert_animated_sprite(sprite, animation),
+            None => self.next_frame.scene.insert_primitive(sprite),
+        }
 
         Ok(())
     }

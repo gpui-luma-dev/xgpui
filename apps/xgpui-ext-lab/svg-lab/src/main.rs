@@ -534,6 +534,9 @@ fn main() -> Result<()> {
 }
 
 #[cfg(test)]
+mod animation_checks;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

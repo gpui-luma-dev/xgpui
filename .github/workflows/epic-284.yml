@@ -54,6 +54,9 @@ jobs:
       - name: Paint lab path readback and retained replay
         if: ${{ !cancelled() }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin paint-lab --features wgpu path_paints
+      - name: SVG lab animated backdrop invalidation
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin svg-lab --features wgpu animation_invalidates_backdrop
       - name: Build the real-window test (outside the smoke script's 60 s run limit)
         if: ${{ !cancelled() }}
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features linux-window-tests,runtime-shaders,portable-shaders,wgpu --test linux_windows --no-run
@@ -97,6 +100,9 @@ jobs:
       - name: Paint lab path readback and retained replay
         if: ${{ !cancelled() }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin paint-lab --features wgpu path_paints
+      - name: SVG lab animated backdrop invalidation
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin svg-lab --features wgpu animation_invalidates_backdrop
       - name: Real-window input probe (when present on this branch)
         if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/windows_input.rs') != '' }}
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features windows-window-tests --test windows_input
@@ -130,6 +136,9 @@ jobs:
       - name: Paint lab path readback and retained replay
         if: ${{ !cancelled() }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin paint-lab --features runtime-shaders,wgpu path_paints
+      - name: SVG lab animated backdrop invalidation
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin svg-lab --features runtime-shaders,wgpu animation_invalidates_backdrop
       - name: macOS backend tests (display link, keyboard, window)
         if: ${{ !cancelled() }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-macos --lib
