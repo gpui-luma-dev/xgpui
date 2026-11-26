@@ -626,7 +626,7 @@ impl<'a> Iterator for BatchIterator<'a> {
     type Item = PrimitiveBatch;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut orders_and_kinds = [
+        let orders_and_kinds = [
             (
                 self.layer_boundary_iter.peek().map(|d| d.order),
                 PrimitiveKind::LayerBoundary,
@@ -670,15 +670,22 @@ impl<'a> Iterator for BatchIterator<'a> {
                 PrimitiveKind::Surface,
             ),
         ];
-        orders_and_kinds.sort_by_key(|(order, kind)| (order.unwrap_or(u32::MAX), *kind));
-
-        let first = orders_and_kinds[0];
-        let second = orders_and_kinds[1];
-        let (batch_kind, max_order_and_kind) = if first.0.is_some() {
-            (first.1, (second.0.unwrap_or(u32::MAX), second.1))
-        } else {
-            return None;
-        };
+        // Only the next batch and the first competing primitive constrain this batch.
+        // The kind tie-break is the same as painting the fully sorted sequence.
+        let mut first = None;
+        let mut second = None;
+        for (order, kind) in orders_and_kinds {
+            let Some(order) = order else { continue };
+            let candidate = (order, kind);
+            if first.is_none_or(|first| candidate < first) {
+                second = first;
+                first = Some(candidate);
+            } else if second.is_none_or(|second| candidate < second) {
+                second = Some(candidate);
+            }
+        }
+        let (_, batch_kind) = first?;
+        let max_order_and_kind = second.unwrap_or((u32::MAX, PrimitiveKind::LayerBoundary));
 
         match batch_kind {
             PrimitiveKind::LayerBoundary => {

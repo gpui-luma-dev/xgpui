@@ -26,11 +26,13 @@ impl Render for BackdropScene {
                     1.,
                 );
                 if foreground {
-                    // This quad misses the output rectangle but overlaps its sampling halo.
-                    window.paint_quad(fill(
-                        Bounds::new(point(px(48.), px(0.)), size(px(48.), px(64.))),
-                        rgb(0xff0000),
-                    ));
+                    // This opaque run can use the depth pass. It misses the output
+                    // rectangle but overlaps the earlier backdrop's sampling halo.
+                    let bounds = Bounds::new(point(px(48.), px(0.)), size(px(48.), px(64.)));
+                    for color in [0x00ff00, 0x0000ff].into_iter().cycle().take(7) {
+                        window.paint_quad(fill(bounds, rgb(color)));
+                    }
+                    window.paint_quad(fill(bounds, rgb(0xff0000)));
                 }
             },
         )

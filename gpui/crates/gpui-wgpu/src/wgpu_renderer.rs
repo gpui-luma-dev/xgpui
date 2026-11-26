@@ -19,6 +19,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 const MAX_INSTANCE_BUFFER_SIZE: u64 = 256 * 1024 * 1024;
+const OPAQUE_QUAD_DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 const INSTANCE_TEXTURE_TEXEL_SIZE: u64 = 16;
 
@@ -62,7 +63,7 @@ fn least_common_multiple(left: u64, right: u64) -> u64 {
 struct GlobalParams {
     viewport_size: [f32; 2],
     premultiplied_alpha: u32,
-    pad: u32,
+    opaque_quad_reverse_index: u32,
 }
 
 #[repr(C)]
@@ -132,6 +133,7 @@ pub struct WgpuSurfaceConfig {
 
 struct WgpuPipelines {
     quads: wgpu::RenderPipeline,
+    opaque_quads: Option<wgpu::RenderPipeline>,
     shadows: wgpu::RenderPipeline,
     path_rasterization: wgpu::RenderPipeline,
     paths: wgpu::RenderPipeline,
@@ -223,6 +225,7 @@ struct WgpuRendererCore {
     shaders: ShaderRenderer,
     backdrops: Option<crate::backdrop::Backdrops>,
     surface_frame: Option<surface_frame::SurfaceFrame>,
+    opaque_quad_depth: Option<(wgpu::Extent3d, wgpu::TextureView)>,
     atlas: Arc<WgpuAtlas>,
     path_globals_offset: u64,
     gamma_offset: u64,
@@ -809,7 +812,13 @@ impl WgpuRendererCore {
                     unclipped_depth: false,
                     conservative: false,
                 },
-                depth_stencil: None,
+                depth_stencil: (vs_entry == "vs_opaque_quad").then(|| wgpu::DepthStencilState {
+                    format: OPAQUE_QUAD_DEPTH_FORMAT,
+                    depth_write_enabled: Some(true),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
                 multisample: wgpu::MultisampleState {
                     count: sample_count,
                     mask: !0,
@@ -832,6 +841,21 @@ impl WgpuRendererCore {
             1,
             &shader_module,
         );
+
+        let opaque_quads = (!uses_webgl_instance_data).then(|| {
+            create_pipeline(
+                "opaque_quads",
+                "vs_opaque_quad",
+                "fs_quad",
+                &layouts.globals,
+                &layouts.instances,
+                None,
+                wgpu::PrimitiveTopology::TriangleStrip,
+                &[Some(color_target.clone())],
+                1,
+                &shader_module,
+            )
+        });
 
         let shadows = create_pipeline(
             "shadows",
@@ -968,6 +992,7 @@ impl WgpuRendererCore {
 
         WgpuPipelines {
             quads,
+            opaque_quads,
             shadows,
             path_rasterization,
             paths,
@@ -1396,6 +1421,7 @@ impl WgpuRendererCore {
             shaders: ShaderRenderer::default(),
             backdrops: None,
             surface_frame: None,
+            opaque_quad_depth: None,
             resources: WgpuResources {
                 device,
                 queue,
@@ -1706,10 +1732,18 @@ impl WgpuRendererCore {
             is_bgr: self.is_bgr as u32,
             _pad: 0,
         };
+        let opaque_quad_batch = self
+            .resources
+            .pipelines
+            .opaque_quads
+            .as_ref()
+            .and_then(|_| opaque_quad_batch(scene));
         let globals = GlobalParams {
             viewport_size: [size.width.0 as f32, size.height.0 as f32],
             premultiplied_alpha: premultiplied_alpha as u32,
-            pad: 0,
+            opaque_quad_reverse_index: opaque_quad_batch
+                .as_ref()
+                .map_or(0, |range| (range.start + range.end - 1) as u32),
         };
         let path_globals = GlobalParams {
             premultiplied_alpha: 0,
@@ -1731,11 +1765,17 @@ impl WgpuRendererCore {
             bytemuck::bytes_of(&gamma_params),
         );
 
-        self.record_frame(scene, target_view, clear_color, &custom_draws)
-            .inspect_err(|_| {
-                // Queue writes are staged before encoding; flush them even if the frame fails.
-                self.resources.queue.submit(std::iter::empty());
-            })
+        self.record_frame(
+            scene,
+            target_view,
+            clear_color,
+            &custom_draws,
+            opaque_quad_batch,
+        )
+        .inspect_err(|_| {
+            // Queue writes are staged before encoding; flush them even if the frame fails.
+            self.resources.queue.submit(std::iter::empty());
+        })
     }
 
     fn record_frame(
@@ -1744,7 +1784,31 @@ impl WgpuRendererCore {
         frame_view: &wgpu::TextureView,
         clear_color: wgpu::Color,
         custom_draws: &[crate::custom_draw::PreparedDraw],
+        opaque_quad_batch: Option<Range<usize>>,
     ) -> Result<wgpu::SubmissionIndex> {
+        if opaque_quad_batch.is_some() {
+            let size = frame_view.texture().size();
+            if self
+                .opaque_quad_depth
+                .as_ref()
+                .is_none_or(|(old, _)| *old != size)
+            {
+                let depth = self
+                    .resources
+                    .device
+                    .create_texture(&wgpu::TextureDescriptor {
+                        label: Some("opaque_quad_depth"),
+                        size,
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: OPAQUE_QUAD_DEPTH_FORMAT,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                        view_formats: &[],
+                    });
+                self.opaque_quad_depth = Some((size, depth.create_view(&Default::default())));
+            }
+        }
         let mut executed_backdrops = Vec::new();
         let mut executed_groups = Vec::new();
         let mut skip_group_end = None;
@@ -1920,6 +1984,20 @@ impl WgpuRendererCore {
                             ..Default::default()
                         });
                         backdrops.composite(&mut pass, index);
+                    }
+                    PrimitiveBatch::Quads(range) if opaque_quad_batch.as_ref() == Some(&range) => {
+                        drop(pass);
+                        let depth = &self.opaque_quad_depth.as_ref().unwrap().1;
+                        {
+                            let mut opaque = begin_quad_pass(&mut encoder, frame_view, Some(depth));
+                            self.draw_instances(
+                                &instance_bindings.quads,
+                                self.resources.pipelines.opaque_quads.as_ref().unwrap(),
+                                instance_range(range),
+                                &mut opaque,
+                            );
+                        }
+                        pass = begin_quad_pass(&mut encoder, frame_view, None);
                     }
                     PrimitiveBatch::Quads(range) => self.draw_instances(
                         &instance_bindings.quads,
@@ -3016,6 +3094,63 @@ impl gpui::PlatformHeadlessRenderer for WgpuHeadlessRenderer {
     fn sprite_atlas(&self) -> Arc<dyn gpui::PlatformAtlas> {
         self.core.atlas.clone()
     }
+}
+
+fn opaque_quad_batch(scene: &Scene) -> Option<Range<usize>> {
+    // Retained capture groups can redirect or skip draws. Keep their existing
+    // pass structure and only optimize batches in the normal target.
+    if !scene.layer_boundaries.is_empty() || scene.quads.len() < 8 {
+        return None;
+    }
+    scene
+        .batches()
+        .filter_map(|batch| match batch {
+            PrimitiveBatch::Quads(range) if range.len() >= 8 && range.end <= (1 << 24) => {
+                let quads = &scene.quads[range.clone()];
+                let opaque = quads.iter().all(|quad| {
+                    quad.background
+                        .as_solid()
+                        .is_some_and(|color| color.is_opaque())
+                        && quad.corner_radii == gpui::Corners::default()
+                        && quad.border_widths == gpui::Edges::default()
+                });
+                (opaque
+                    && quads
+                        .windows(2)
+                        .any(|pair| pair[0].bounds.intersects(&pair[1].bounds)))
+                .then_some(range)
+            }
+            _ => None,
+        })
+        .max_by_key(|range| range.len())
+}
+
+fn begin_quad_pass<'a>(
+    encoder: &'a mut wgpu::CommandEncoder,
+    color: &wgpu::TextureView,
+    depth: Option<&wgpu::TextureView>,
+) -> wgpu::RenderPass<'a> {
+    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("quad batch"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: color,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: wgpu::StoreOp::Store,
+            },
+            depth_slice: None,
+        })],
+        depth_stencil_attachment: depth.map(|view| wgpu::RenderPassDepthStencilAttachment {
+            view,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Clear(1.0),
+                store: wgpu::StoreOp::Discard,
+            }),
+            stencil_ops: None,
+        }),
+        ..Default::default()
+    })
 }
 
 fn instance_range(range: Range<usize>) -> Range<u32> {
