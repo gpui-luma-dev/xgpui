@@ -1,4 +1,4 @@
-//! Main-target instanced draws. Deferred lists restore the surrounding native state.
+//! Main-target instanced draws. A private context state isolates shader bindings from surrounding draws.
 use super::*;
 use gpui::{Scene, SceneShaderProgram};
 use std::{
@@ -50,7 +50,7 @@ pub(crate) struct ShaderRenderer {
     globals: ID3D11Buffer,
     blend: ID3D11BlendState,
     wide_blend: ID3D11BlendState,
-    deferred: ID3D11DeviceContext,
+    state: ID3DDeviceContextState,
 }
 impl ShaderRenderer {
     pub fn new(device: &ID3D11Device) -> Result<Self> {
@@ -65,10 +65,17 @@ impl ShaderRenderer {
             BlendOpAlpha: D3D11_BLEND_OP_ADD,
             RenderTargetWriteMask: D3D11_COLOR_WRITE_ENABLE_ALL.0 as u8,
         };
-        let (mut blend, mut deferred) = (None, None);
+        let (mut blend, mut state) = (None, None);
         unsafe {
             device.CreateBlendState(&desc, Some(&mut blend))?;
-            device.CreateDeferredContext(0, Some(&mut deferred))?;
+            device.cast::<ID3D11Device1>()?.CreateDeviceContextState(
+                0,
+                &[device.GetFeatureLevel()],
+                D3D11_SDK_VERSION,
+                &ID3D11Device::IID,
+                None,
+                Some(&mut state),
+            )?;
         }
         desc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
         let mut wide_blend = None;
@@ -83,7 +90,7 @@ impl ShaderRenderer {
             globals: dynamic_uniform_buffer(device)?,
             blend: blend.context("shader blend")?,
             wide_blend: wide_blend.context("wide shader blend")?,
-            deferred: deferred.context("shader context")?,
+            state: state.context("shader context state")?,
         })
     }
     pub fn prepare(
@@ -165,8 +172,8 @@ impl ShaderRenderer {
             // Its compilation failed in `prepare`; that was logged once.
             return Ok(());
         };
-        let dc = &self.deferred;
-        pipeline.shader.bind(dc);
+
+        let dc = context.cast::<ID3D11DeviceContext1>()?;
         let globals = [
             (extent.width.0 as f32).to_bits(),
             (extent.height.0 as f32).to_bits(),
@@ -175,7 +182,7 @@ impl ShaderRenderer {
         ];
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
         unsafe {
-            dc.Map(
+            context.Map(
                 &self.globals,
                 0,
                 D3D11_MAP_WRITE_DISCARD,
@@ -183,7 +190,12 @@ impl ShaderRenderer {
                 Some(&mut mapped),
             )?;
             std::ptr::copy_nonoverlapping(globals.as_ptr().cast::<u8>(), mapped.pData.cast(), 16);
-            dc.Unmap(&self.globals, 0);
+            context.Unmap(&self.globals, 0);
+            // Emulated command lists can fault in the D3D11 command-list cache on
+            // reuse or destruction (#445). This batch already runs on the draw thread.
+            let mut previous = None;
+            dc.SwapDeviceContextState(&self.state, Some(&mut previous));
+            pipeline.shader.bind(&dc);
             dc.OMSetRenderTargets(Some(&[Some(target.clone())]), None);
             dc.RSSetViewports(Some(&[viewport(extent)]));
             dc.OMSetBlendState(
@@ -215,10 +227,10 @@ impl ShaderRenderer {
                 ),
             );
             dc.DrawInstanced(6, range.len() as u32, 0, 0);
-            dc.PSSetShaderResources(0, Some(&[None]));
-            let mut commands = None;
-            dc.FinishCommandList(false, Some(&mut commands))?;
-            context.ExecuteCommandList(commands.as_ref().context("shader command list")?, true);
+            // Release the batch bindings, including the swap-chain render target,
+            // before saving this state for the next draw.
+            dc.ClearState();
+            dc.SwapDeviceContextState(previous.as_ref(), None);
             pipeline.shader.device.GetDeviceRemovedReason()?;
         }
         Ok(())
