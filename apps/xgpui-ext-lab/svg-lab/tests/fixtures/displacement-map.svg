@@ -1,0 +1,10 @@
+<!-- Regression fixture from zed-industries/zed#67423. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="533.333">
+  <filter id="f" x="-5" y="-5" width="100%" height="100%"
+          filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <feFlood flood-color="#808080" result="map"/>
+    <feDisplacementMap in="SourceGraphic" in2="map" scale="5"
+                       xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <rect width="8" height="8" transform="translate(557.05 436.333)" filter="url(#f)"/>
+</svg>

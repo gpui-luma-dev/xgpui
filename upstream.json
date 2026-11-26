@@ -26,26 +26,26 @@
     },
     "version": "1.0.0",
     "versions": {
-      "xgpui": "5.0.0",
+      "xgpui": "5.1.0",
       "xgpui-apple": "6.0.0",
-      "xgpui-canvas": "0.5.0",
+      "xgpui-canvas": "0.6.0",
       "xgpui-color": "0.4.0",
-      "xgpui-curve": "0.2.0",
+      "xgpui-curve": "0.3.0",
       "xgpui-gamut": "0.6.0",
       "xgpui-gpu-interop": "0.4.0",
       "xgpui-ios": "3.0.0",
       "xgpui-linux": "4.0.0",
-      "xgpui-macos": "6.0.0",
-      "xgpui-macros": "1.0.4",
+      "xgpui-macos": "6.1.0",
+      "xgpui-macros": "1.0.5",
       "xgpui-media": "0.8.0",
       "xgpui-parley": "0.9.0",
       "xgpui-platform": "4.0.0",
       "xgpui-shader": "0.6.0",
-      "xgpui-shell": "0.4.0",
-      "xgpui-svg": "0.5.0",
+      "xgpui-shell": "0.4.1",
+      "xgpui-svg": "0.5.1",
       "xgpui-web": "4.0.0",
       "xgpui-wgpu": "4.0.0",
-      "xgpui-windows": "4.0.0"
+      "xgpui-windows": "4.0.1"
     }
   },
   "normalization": {
@@ -113,7 +113,7 @@
       "ztracing": "ztracing-gpui-unofficial",
       "ztracing-macro": "ztracing-macro-gpui-unofficial"
     },
-    "version": "1.29.3"
+    "version": "1.30.2"
   },
   "repository": "https://github.com/gpui-archipelago/gpui-unofficial",
   "source_packages": {
