@@ -132,7 +132,8 @@ if match:
     check(sorted(forwarded) == sorted(crates), "index.html: forwarded crates must match crate pages")
     for doc in repo_docs.values():
         check((ROOT / doc).is_file(), f"index.html: forwarded repository document missing: {doc}")
-check(f"gpui-unofficial {upstream['ref']}." in index, "index.html: upstream baseline differs from upstream.json")
+check(f"gpui-unofficial {upstream['ref']}." in pages["migration-guides.html"].read_text(),
+      "migration-guides.html: upstream baseline differs from upstream.json")
 for name in pages:
     if name.endswith(".html") and name != "404.html" and not name.startswith("examples/"):
         rail = (PAGES / name).read_text()
