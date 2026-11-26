@@ -1,9 +1,9 @@
 # Prism syntax highlighting
 
 Prism 1.30.0, matching the local assets used by the Luma documentation:
-https://gpui-luma.dev/checkbox.html
+https://xgpui-luma.dev/checkbox.html
 
-Files copied from https://gpui-luma.dev/vendor/prism/ on 2026-10-26:
+Files copied from https://xgpui-luma.dev/vendor/prism/ on 2026-10-26:
 
 - prism-core.min.js
 - prism-rust.min.js

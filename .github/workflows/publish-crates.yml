@@ -1,0 +1,86 @@
+name: Publish crates
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Reviewed release tag (release-YYYY-MM-DD-COMMIT)
+        required: true
+        type: string
+      confirmation:
+        description: Enter publish followed by a space and the full release commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crates-io-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify and check out the release tag
+        id: source
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^release-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{12}$ ]]; then
+            echo "Expected a release-YYYY-MM-DD-COMMIT tag." >&2
+            exit 1
+          fi
+          commit=$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}")
+          git merge-base --is-ancestor "$commit" "$GITHUB_SHA"
+          if [[ "$RELEASE_TAG" != *"-${commit:0:12}" || "$RELEASE_CONFIRMATION" != "publish $commit" ]]; then
+            echo "The tag suffix and publication confirmation must match the release commit." >&2
+            exit 1
+          fi
+          git switch --detach "$commit"
+          test -z "$(git status --porcelain)"
+          printf 'report_dir=%s/xgpui-release-artifacts/%s\n' "$(dirname "$GITHUB_WORKSPACE")" "$commit" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Test release tooling
+        run: cargo test --locked --manifest-path tools/release-sync/Cargo.toml
+
+      - name: Plan registry publication
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-flow preflight --tag "$RELEASE_TAG"
+
+      - name: Check registry packaging
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-flow check --tag "$RELEASE_TAG"
+
+      - name: Publish and verify crates
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- release-flow publish --tag "$RELEASE_TAG"
+
+      - name: Upload release reports
+        if: always() && steps.source.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: crates-io-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.source.outputs.report_dir }}/*.json
+            ${{ steps.source.outputs.report_dir }}/*/report.json
+          if-no-files-found: warn
+          retention-days: 30

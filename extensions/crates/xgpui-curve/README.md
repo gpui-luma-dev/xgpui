@@ -28,7 +28,7 @@ Kurbo provides numerical algorithms internally.
 
 ```toml
 [dependencies]
-xgpui-curve = "0.2.0"
+xgpui-curve = "0.3.0"
 ```
 
 Every module except `geom` has a feature of the same name (`svg-path` for

@@ -100,6 +100,13 @@ scroll or a drag on empty space pans:</p>
 <pre><code class="language-sh">just curve
 just curve spine
 </code></pre>
+<h4 id="zeta-lab-tools">Zeta lab tools</h4>
+<dl>
+<dt><code>just curve zeta-capture</code></dt>
+<dd>Writes six deterministic native Zeta UI captures and JSON with CPU draw and GPU render/readback timings to <code>target/zeta-review/</code>.</dd>
+<dt><code>just curve zeta-benchmark</code></dt>
+<dd>Writes the CPU baseline for curve evaluation, parameter fitting, measurement and path building to <code>target/zeta-review/cpu-baseline.json</code>.</dd>
+</dl>
 <h3 id="metal-producer-regression-macos">Metal producer regression (macOS)</h3>
 <p>Run the supervised control and dense 512-producer workload, including replay,
 scene replacement and pixel checks:</p>

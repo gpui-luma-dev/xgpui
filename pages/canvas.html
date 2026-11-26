@@ -57,6 +57,7 @@ V reveals all; R rebuilds the index. A retained colored-bounds overview refreshe
 on geometry and appearance changes. This native example is separate from the
 browser gallery. <code>just canvas editor-smoke</code> runs the window assertions.</p>
 <h2 id="use-it">Use it</h2>
+<p>When upgrading to Canvas 0.6, remove the <code>kurbo</code> feature and convert points and bounds explicitly. Viewport affine methods still return six coefficients, which can construct <code>xgpui_curve::geom::Affine</code>.</p>
 <p>For development against this checkout:</p>
 <pre><code class="language-toml">xgpui-canvas = { path = "path/to/extensions/crates/xgpui-canvas", features = ["gpui"] }
 </code></pre>
