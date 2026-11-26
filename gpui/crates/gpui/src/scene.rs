@@ -42,6 +42,7 @@ pub struct Scene {
     pub(crate) paint_operations: Vec<PaintOperation>,
     primitive_bounds: BoundsTree<ScaledPixels>,
     layer_stack: Vec<DrawOrder>,
+    sort_keys: Vec<(u64, usize)>,
     pub shadows: Vec<Shadow>,
     pub quads: Vec<Quad>,
     pub paths: Vec<Path<ScaledPixels>>,
@@ -401,16 +402,20 @@ impl Scene {
     }
 
     pub fn finish(&mut self) {
-        self.shadows.sort_by_key(|shadow| shadow.order);
-        self.quads.sort_by_key(|quad| quad.order);
+        let keys = &mut self.sort_keys;
+        sort_in_place(&mut self.shadows, keys, |shadow| (shadow.order, 0));
+        sort_in_place(&mut self.quads, keys, |quad| (quad.order, 0));
         self.paths.sort_by_key(|path| path.order);
-        self.underlines.sort_by_key(|underline| underline.order);
-        self.monochrome_sprites
-            .sort_by_key(|sprite| (sprite.order, sprite.tile.texture_id.index));
-        self.subpixel_sprites
-            .sort_by_key(|sprite| (sprite.order, sprite.tile.texture_id.index));
-        self.polychrome_sprites
-            .sort_by_key(|sprite| (sprite.order, sprite.tile.texture_id.index));
+        sort_in_place(&mut self.underlines, keys, |underline| (underline.order, 0));
+        sort_in_place(&mut self.monochrome_sprites, keys, |sprite| {
+            (sprite.order, sprite.tile.texture_id.index)
+        });
+        sort_in_place(&mut self.subpixel_sprites, keys, |sprite| {
+            (sprite.order, sprite.tile.texture_id.index)
+        });
+        sort_in_place(&mut self.polychrome_sprites, keys, |sprite| {
+            (sprite.order, sprite.tile.texture_id.index)
+        });
         self.surfaces.sort_by_key(|surface| surface.order);
         self.custom_draws.sort_by_key(|draw| draw.order);
         self.shader_draws.sort_by_key(|draw| draw.order);
@@ -453,6 +458,50 @@ impl Scene {
             surfaces_iter: self.surfaces.iter().peekable(),
         }
     }
+}
+
+/// Sort compact keys, keeping insertion order for ties, then permute the primitives once.
+fn sort_in_place<T: Copy>(
+    primitives: &mut [T],
+    keys: &mut Vec<(u64, usize)>,
+    key: impl Fn(&T) -> (u32, u32),
+) {
+    if primitives.is_sorted_by_key(&key) {
+        return;
+    }
+    keys.clear();
+    keys.extend(primitives.iter().enumerate().map(|(index, primitive)| {
+        let (major, minor) = key(primitive);
+        ((u64::from(major) << 32) | u64::from(minor), index)
+    }));
+    keys.sort_unstable();
+
+    // Each index maps a target to its source. Visit each permutation cycle once.
+    for start in 0..primitives.len() {
+        if keys[start].1 == start {
+            continue;
+        }
+        let displaced = primitives[start];
+        let mut target = start;
+        loop {
+            let source = keys[target].1;
+            keys[target].1 = target;
+            if source == start {
+                primitives[target] = displaced;
+                break;
+            }
+            primitives[target] = primitives[source];
+            target = source;
+        }
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn primitive_sort_preserves_insertion_order_for_equal_keys() {
+    let mut entries = [(2, 0, 'a'), (1, 1, 'b'), (2, 0, 'c'), (1, 0, 'd')];
+    sort_in_place(&mut entries, &mut Vec::new(), |entry| (entry.0, entry.1));
+    assert_eq!(entries, [(1, 0, 'd'), (1, 1, 'b'), (2, 0, 'a'), (2, 0, 'c')]);
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Default)]
@@ -577,7 +626,7 @@ impl<'a> Iterator for BatchIterator<'a> {
     type Item = PrimitiveBatch;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut orders_and_kinds = [
+        let orders_and_kinds = [
             (
                 self.layer_boundary_iter.peek().map(|d| d.order),
                 PrimitiveKind::LayerBoundary,
@@ -621,15 +670,22 @@ impl<'a> Iterator for BatchIterator<'a> {
                 PrimitiveKind::Surface,
             ),
         ];
-        orders_and_kinds.sort_by_key(|(order, kind)| (order.unwrap_or(u32::MAX), *kind));
-
-        let first = orders_and_kinds[0];
-        let second = orders_and_kinds[1];
-        let (batch_kind, max_order_and_kind) = if first.0.is_some() {
-            (first.1, (second.0.unwrap_or(u32::MAX), second.1))
-        } else {
-            return None;
-        };
+        // Only the next batch and the first competing primitive constrain this batch.
+        // The kind tie-break is the same as painting the fully sorted sequence.
+        let mut first = None;
+        let mut second = None;
+        for (order, kind) in orders_and_kinds {
+            let Some(order) = order else { continue };
+            let candidate = (order, kind);
+            if first.is_none_or(|first| candidate < first) {
+                second = first;
+                first = Some(candidate);
+            } else if second.is_none_or(|second| candidate < second) {
+                second = Some(candidate);
+            }
+        }
+        let (_, batch_kind) = first?;
+        let max_order_and_kind = second.unwrap_or((u32::MAX, PrimitiveKind::LayerBoundary));
 
         match batch_kind {
             PrimitiveKind::LayerBoundary => {

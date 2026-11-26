@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod alpha_checks;
+#[cfg(test)]
+mod backdrop_checks;
 mod gradient_checks;
 #[cfg(test)]
 mod paint_checks;
@@ -7,6 +9,8 @@ mod paint_checks;
 mod portable_checks;
 #[cfg(test)]
 mod preparation_checks;
+#[cfg(test)]
+mod primitive_checks;
 #[cfg(test)]
 mod producer_checks;
 #[cfg(test)]

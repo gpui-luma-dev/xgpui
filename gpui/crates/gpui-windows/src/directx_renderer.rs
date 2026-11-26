@@ -91,6 +91,7 @@ struct DirectXResources {
     swap_chain: Option<IDXGISwapChain1>,
     render_target: Option<ID3D11Texture2D>,
     render_target_view: Option<ID3D11RenderTargetView>,
+    quad_depth: Option<(ID3D11DepthStencilView, ID3D11DepthStencilState)>,
 
     // Path intermediate textures (with MSAA)
     path_intermediate_texture: ID3D11Texture2D,
@@ -584,6 +585,7 @@ impl DirectXRenderer {
         let mut executed_backdrops = Vec::new();
         let mut executed_groups = Vec::new();
         let mut skip_group_end = None;
+        let mut used_quad_depth = false;
         for batch in scene.batches() {
             if let Some(end) = skip_group_end {
                 if !matches!(&batch,PrimitiveBatch::LayerBoundary(index) if *index==end) {
@@ -606,6 +608,15 @@ impl DirectXRenderer {
             }
             if let PrimitiveBatch::Backdrop(index) = &batch {
                 executed_backdrops.push(*index);
+            }
+            if !used_quad_depth
+                && scene.layer_boundaries.is_empty()
+                && let PrimitiveBatch::Quads(range) = &batch
+                && opaque_quad_run(&scene.quads[range.clone()])
+            {
+                self.draw_opaque_quads(range.start, range.len())?;
+                used_quad_depth = true;
+                continue;
             }
             self.render_batch(scene, &custom_outputs, batch)?;
         }
@@ -893,6 +904,7 @@ impl DirectXRenderer {
             swap_chain: original.swap_chain.clone(),
             render_target: Some(target.texture.clone()),
             render_target_view: Some(target.rtv.clone()),
+            quad_depth: None,
             path_intermediate_texture,
             path_intermediate_srv,
             path_intermediate_msaa_texture,
@@ -1151,6 +1163,89 @@ impl DirectXRenderer {
             start as u32,
             len as u32,
         )
+    }
+
+    fn draw_opaque_quads(&mut self, start: usize, len: usize) -> Result<()> {
+        let devices = self.devices.as_ref().context("devices missing")?;
+        let resources = self.resources.as_mut().context("resources missing")?;
+        if resources.quad_depth.is_none() {
+            let mut texture = None;
+            let mut view = None;
+            let mut state = None;
+            let stencil = D3D11_DEPTH_STENCILOP_DESC {
+                StencilFailOp: D3D11_STENCIL_OP_KEEP,
+                StencilDepthFailOp: D3D11_STENCIL_OP_KEEP,
+                StencilPassOp: D3D11_STENCIL_OP_KEEP,
+                StencilFunc: D3D11_COMPARISON_ALWAYS,
+            };
+            unsafe {
+                devices.device.CreateTexture2D(
+                    &D3D11_TEXTURE2D_DESC {
+                        Width: resources.viewport.Width as u32,
+                        Height: resources.viewport.Height as u32,
+                        MipLevels: 1,
+                        ArraySize: 1,
+                        Format: DXGI_FORMAT_D32_FLOAT,
+                        SampleDesc: DXGI_SAMPLE_DESC {
+                            Count: 1,
+                            Quality: 0,
+                        },
+                        Usage: D3D11_USAGE_DEFAULT,
+                        BindFlags: D3D11_BIND_DEPTH_STENCIL.0 as u32,
+                        ..Default::default()
+                    },
+                    None,
+                    Some(&mut texture),
+                )?;
+                devices.device.CreateDepthStencilView(
+                    texture.as_ref().context("depth texture missing")?,
+                    None,
+                    Some(&mut view),
+                )?;
+                devices.device.CreateDepthStencilState(
+                    &D3D11_DEPTH_STENCIL_DESC {
+                        DepthEnable: true.into(),
+                        DepthWriteMask: D3D11_DEPTH_WRITE_MASK_ALL,
+                        DepthFunc: D3D11_COMPARISON_LESS,
+                        FrontFace: stencil,
+                        BackFace: stencil,
+                        ..Default::default()
+                    },
+                    Some(&mut state),
+                )?;
+            }
+            resources.quad_depth = Some((
+                view.context("depth view missing")?,
+                state.context("depth state missing")?,
+            ));
+        }
+        let (depth, state) = resources.quad_depth.as_ref().unwrap();
+        let context = &devices.device_context;
+        let targets = Some(slice::from_ref(&resources.render_target_view));
+        let pipeline = &self.pipelines.quad_pipeline;
+        update_buffer(
+            context,
+            self.globals
+                .batch_params_buffer
+                .as_ref()
+                .context("batch params buffer missing")?,
+            &[BatchParams {
+                start_index: start as u32,
+                opaque_quad_count: len as u32,
+                _padding: [0; 2],
+            }],
+        )?;
+        unsafe {
+            context.ClearDepthStencilView(depth, D3D11_CLEAR_DEPTH.0 as u32, 1.0, 0);
+            context.OMSetRenderTargets(targets, depth);
+            context.OMSetDepthStencilState(state, 0);
+        }
+        let result = pipeline.draw(context, D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP, 4, len as u32);
+        unsafe {
+            context.OMSetRenderTargets(targets, None);
+            context.OMSetDepthStencilState(None, 0);
+        }
+        result
     }
 
     fn draw_paths_to_intermediate(&mut self, paths: &[Path<ScaledPixels>]) -> Result<()> {
@@ -1431,6 +1526,7 @@ impl DirectXResources {
             swap_chain: None,
             render_target: Some(target.texture),
             render_target_view: Some(target.rtv),
+            quad_depth: None,
             path_intermediate_texture,
             path_intermediate_srv,
             path_intermediate_msaa_texture,
@@ -1471,6 +1567,7 @@ impl DirectXResources {
             swap_chain: Some(swap_chain),
             render_target: Some(render_target),
             render_target_view,
+            quad_depth: None,
             path_intermediate_texture,
             path_intermediate_msaa_texture,
             path_intermediate_msaa_view,
@@ -1502,6 +1599,7 @@ impl DirectXResources {
         )?;
         self.render_target = Some(render_target);
         self.render_target_view = render_target_view;
+        self.quad_depth = None;
         self.path_intermediate_texture = path_intermediate_texture;
         self.path_intermediate_msaa_texture = path_intermediate_msaa_texture;
         self.path_intermediate_msaa_view = path_intermediate_msaa_view;
@@ -1654,7 +1752,8 @@ struct GlobalParams {
 #[repr(C, align(16))]
 struct BatchParams {
     start_index: u32,
-    _padding: [u32; 3],
+    opaque_quad_count: u32,
+    _padding: [u32; 2],
 }
 
 const _: () = assert!(std::mem::size_of::<BatchParams>() == 16);
@@ -2233,9 +2332,24 @@ fn update_batch_start(
         buffer,
         &[BatchParams {
             start_index: first_instance,
-            _padding: [0; 3],
+            opaque_quad_count: 0,
+            _padding: [0; 2],
         }],
     )
+}
+
+fn opaque_quad_run(quads: &[Quad]) -> bool {
+    (8..=(1 << 24)).contains(&quads.len())
+        && quads.iter().all(|quad| {
+            quad.background
+                .as_solid()
+                .is_some_and(|color| color.is_opaque())
+                && quad.corner_radii == Corners::default()
+                && quad.border_widths == Edges::default()
+        })
+        && quads
+            .windows(2)
+            .any(|pair| pair[0].bounds.intersects(&pair[1].bounds))
 }
 
 #[inline]
