@@ -204,8 +204,10 @@ impl SvgRenderer {
     }
 
     /// Parses SVG data into a [`ParsedSvg`] that can be rasterized at any scale.
-    pub fn parse_svg(&self, bytes: &[u8]) -> Result<ParsedSvg, usvg::Error> {
-        usvg::Tree::from_data(bytes, &self.usvg_options).map(ParsedSvg)
+    pub fn parse_svg(&self, bytes: &[u8]) -> Result<ParsedSvg, usvg_legacy::Error> {
+        usvg::Tree::from_data(bytes, &self.usvg_options)
+            .map(ParsedSvg)
+            .map_err(legacy_svg_error)
     }
 
     /// Rasterizes a previously parsed SVG into an image buffer.
@@ -213,7 +215,7 @@ impl SvgRenderer {
         &self,
         svg: &ParsedSvg,
         size: impl Into<SvgSize>,
-    ) -> Result<Arc<RenderImage>, usvg::Error> {
+    ) -> Result<Arc<RenderImage>, usvg_legacy::Error> {
         let (size, image_scale_factor) = match size.into() {
             SvgSize::Size(size) => (SvgSize::Size(size), 1.0),
             SvgSize::ExactSize(size) => (SvgSize::ExactSize(size), 1.0),
@@ -223,7 +225,7 @@ impl SvgRenderer {
                 SMOOTH_SVG_SCALE_FACTOR,
             ),
         };
-        let pixmap = rasterize_tree(&svg.0, size)?;
+        let pixmap = rasterize_tree(&svg.0, size).map_err(legacy_svg_error)?;
         let mut buffer =
             image::ImageBuffer::from_raw(pixmap.width(), pixmap.height(), pixmap.take()).unwrap();
 
@@ -241,7 +243,7 @@ impl SvgRenderer {
         &self,
         bytes: &[u8],
         scale_factor: f32,
-    ) -> Result<Arc<RenderImage>, usvg::Error> {
+    ) -> Result<Arc<RenderImage>, usvg_legacy::Error> {
         let svg = self.parse_svg(bytes)?;
         self.render_parsed(&svg, scale_factor)
     }
@@ -282,6 +284,19 @@ impl SvgRenderer {
     fn render_pixmap(&self, bytes: &[u8], size: SvgSize) -> Result<Pixmap, usvg::Error> {
         let tree = usvg::Tree::from_data(bytes, &self.usvg_options)?;
         rasterize_tree(&tree, size)
+    }
+}
+
+fn legacy_svg_error(error: usvg::Error) -> usvg_legacy::Error {
+    match error {
+        usvg::Error::NotAnUtf8Str => usvg_legacy::Error::NotAnUtf8Str,
+        // GPUI enables svgz, so the feature-disabled case is only a fallback.
+        usvg::Error::MalformedGZip | usvg::Error::SvgzFeatureNotEnabled => {
+            usvg_legacy::Error::MalformedGZip
+        }
+        usvg::Error::ElementsLimitReached => usvg_legacy::Error::ElementsLimitReached,
+        usvg::Error::InvalidSize => usvg_legacy::Error::InvalidSize,
+        usvg::Error::ParsingFailed(error) => usvg_legacy::Error::ParsingFailed(error),
     }
 }
 

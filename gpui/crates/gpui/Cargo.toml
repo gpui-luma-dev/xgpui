@@ -109,6 +109,8 @@ resvg = { version = "0.49", default-features = false, features = [
     "memmap-fonts",
     "raster-images"] }
 usvg = { version = "0.49", default-features = false, features = ["svgz"] }
+# Preserve the public SVG error type while parsing and rendering with 0.49.
+usvg_legacy = { package = "usvg", version = "0.46.0", default-features = false }
 ttf-parser = "0.25"
 schemars = { version = "1.0", default-features = false, features = ["std", "indexmap2", "derive"] }
 seahash = "4.1"
