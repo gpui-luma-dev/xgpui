@@ -1,0 +1,1780 @@
+{
+  "release": "1.30.2",
+  "base_commit": "bc849b7743a329d96cdcfa5940a685ddd27c7139",
+  "previous_source_commit": "c70ecc6b614c9c2113c69555937ed23ba7891bbe",
+  "source_commit": "4a23609352610cbc11f144d63fa17bb592ae6f9e",
+  "method": "Normalized captures from xgpui-release review prepare; committed local Git blobs; CRLF normalized for known text extensions; SHA-256 of file contents. File mode is excluded on this Windows capture.",
+  "entries": [
+    {
+      "path": "gpui/crates/gpui-apple/Cargo.toml",
+      "kind": "cargo",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "fecf18a3b7de23a5288991caae26ac2a9570b000fecf0996e063b8c44701aaea",
+      "local": "314bedfd03292b848282384d6863446572762b3e20551df4f0f184cd96ab9f9b",
+      "incoming": "20e66532501fe22c66e0da63cbca9108f9596fdd03f92f859c59343af811ef51"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/README.md",
+      "kind": "metadata",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "5c884a244fe464087fc18d1106abebe32623a3d15bdf9f18222d755c9f5de33a",
+      "local": "b385e4a9f07c5973aa4cff990bfe29d0ea750f6b94e0adba555d31393b276234",
+      "incoming": "7e7f6179b0fb77c4083c46c45b10df99453315ba53e37897fcee40dd320d3b00"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/assets/fonts/lilex/Lilex-Regular.ttf",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "8a467ad5a1941dc7c9cebaee34e3ed9364a73b48393034e363e4b528bd711d04",
+      "local": null,
+      "incoming": "8a467ad5a1941dc7c9cebaee34e3ed9364a73b48393034e363e4b528bd711d04"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/assets/fonts/lilex/OFL.txt",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "a356708a399e3f54b937ec7d9b722c26dabba21365b60f95c56eb7ebca0dee40",
+      "local": null,
+      "incoming": "a356708a399e3f54b937ec7d9b722c26dabba21365b60f95c56eb7ebca0dee40"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/build.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "492da55b3268ad6665ebd5bc508985044411c445b32ecbef79cae94d269e7b0e",
+      "local": "492da55b3268ad6665ebd5bc508985044411c445b32ecbef79cae94d269e7b0e",
+      "incoming": "67fd706a813fb03ff393c69062c36b137f0763f2a6906df3dbd4780cec83c945"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/gpui/src/geometry.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "965ae8f6c1d4bd2e7dcb43e253a99dd4363252b1ef6dc19c3031ea50c5192408",
+      "local": "965ae8f6c1d4bd2e7dcb43e253a99dd4363252b1ef6dc19c3031ea50c5192408",
+      "incoming": "895d78320dbdfa353e9941ce3b78284cbdc6a4727a0359838720cc05d09e8c0b"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/gpui/src/platform.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "1e3c27bc3d5204796a3148c718955f8ba1e77c3fae118f7789f0f02f22edca42",
+      "local": "1e3c27bc3d5204796a3148c718955f8ba1e77c3fae118f7789f0f02f22edca42",
+      "incoming": "cb0984e7d9f451781f860cf3d1a5e6d6ef9432d71c122cbbe479b235881ffd99"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/gpui/src/scene.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "b615c926356b9180c81706d84e1033501ff9f4cd70895374b0ce63fcf4bc153e",
+      "local": "b615c926356b9180c81706d84e1033501ff9f4cd70895374b0ce63fcf4bc153e",
+      "incoming": "c3dce7f0f23d5443b85b38315d26c8e068d480eda67079b6772b87edad380df8"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/gpui/src/window.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "65d9626dbaf1d18cc5f5ae6379991460e45acba04f9736b59b6b89eb82444663",
+      "local": "65d9626dbaf1d18cc5f5ae6379991460e45acba04f9736b59b6b89eb82444663",
+      "incoming": "60835a2c16d09e02e508b582e9e49ae1c72d57e1c56614bae1121654f00621df"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw.metal",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "3e80cb064a0489b516be7e4fda71b0ef57f2b419cf63074e62b27635e47d9e07",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "d0f6776587a8d27d22b8851b777fd9d1b716756ff8566cad66e6588b94f97961",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw/core_video.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "f2ce2138e743a332adc9132634953034ce6d6b04ff50803e23b1b5f546c08fea",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw/coverage_cache.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "bca7b19c4969e612619c7ffe40ae26a914b706311d194a26be8b475c7f49a913",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw/coverage_cache/tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "03e12a8d4552b095055071be5993975c7130bcf8b47d242a2a8218920d0401a7",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw/submission_tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "422a02072a03724b178aa3a0a6cb609a1a383a6716375f04240f0f738c5c776c",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/custom_draw/wide_output_tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "8dba432c65da8563b5a8146d6a5910188d506c5de5bc3d8ff1865f2f9717260b",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/display_link.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "1a1776d9a8d5a0083ec07faced6ba16a9a0fa833c256ae2888d4cc784f7e356f",
+      "local": "1a1776d9a8d5a0083ec07faced6ba16a9a0fa833c256ae2888d4cc784f7e356f",
+      "incoming": "7230f23601a50a518816dd7c71ecbcab723dfc6d57ed68f8671975d2098043b0"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/gpui_apple.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "699d1bb1676ad55b8edca5020896b00c31c3de901a677227a102cdfcb5960563",
+      "local": "619ad9280701be294200349b77559ef22eb94ba9677bcd415ae5c8126f0eab7f",
+      "incoming": "699d1bb1676ad55b8edca5020896b00c31c3de901a677227a102cdfcb5960563"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "2b0c244c09caca867586c39c1c89ead4a781ef3ba18e759e35b0796fb209e7b9",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_atlas.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "0889f2ff0ec3091bc0749ea629b4c87eab2c6253f84cb459693895a48dcb1e73",
+      "local": "322a0bdafadb5530f1d8b92e1bebc889f01082d799737e0feaa6798b9071850c",
+      "incoming": "0889f2ff0ec3091bc0749ea629b4c87eab2c6253f84cb459693895a48dcb1e73"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "a1b4fa7dcdfe636b0cd311bf7e0d20b3e05399756be8021fb0a2872dda042c99",
+      "local": "28cfdfd84c5811121406fce0fb6edfd9b513bc5f25c113b1bd171bd168b86c23",
+      "incoming": "295a474ee0137f572e7323f35954b8197a2b1f2c555ec7bd6a2ff355e0c5cd80",
+      "text_merge": "conflict",
+      "conflict_regions": 43
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/backdrop.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "0821a6a75095be13f97180f14becd50bd3a46b29d3d25b39d09d96da82c5ec47",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/backdrop/groups.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "58bf281e4ddf1983a3ce2f17b02a63b10e69889763816833a79e4a63917547bd",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/submission_tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "a4972f4b702c6c371b506de06efe4aef5a174c27a49932a919a8b6001e5479d8",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr.metal",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "605e1e13af765724e5f50c71cb0a53bbcdaad487ff63c2104c7963babe89d9f4",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "6e4c9adca50041dc8c29822ee765dce6c9a46c6a9d849904bdc25f74c291250c",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr/rec2020_reference.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "fa5c0f710c8428de57ff9b4535aad069a3e6efe14bafeb2988ff264ca627edfb",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/metal_renderer/wide_sdr/tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "3132b005c72e575c72b4897bbc3079b0f95180cbe477fdc7dde36371d091c879",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/shaders.metal",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "436647169d914d26092fcf3bfd4020a6638a97d1ea3b39466fd2d4641d1c219e",
+      "local": "f575d1f84e1c1b85de93648c22a13f961d88e140446b70f88e7733322def0a1f",
+      "incoming": "b5187edc3a9d9a207a547edd723cd8f5ba3cada94818613edcf2cf05d231da5c",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-apple/src/text_system.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "60d24dc954844660db4d7e3800a6d194514ebdf250bc3d7fe716a043f9d46665",
+      "local": "f28c5eccc690413af5a188ce4297f5c63490e4fa593854d2dc816acdb606955d",
+      "incoming": "60d24dc954844660db4d7e3800a6d194514ebdf250bc3d7fe716a043f9d46665"
+    },
+    {
+      "path": "gpui/crates/gpui-ios/Cargo.toml",
+      "kind": "cargo",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "ae6967705395fe8a69f8b606e1c5ca91c4a20e85c15f33c2950138c4d297eee9",
+      "local": "ee31c3185fb2de58f0fc7583b20fe57597527e08a8b040b3dcf432c885132e5b",
+      "incoming": "3017fed042d3c2cae79cf8f984b3abcd14c03eb2c2bf3b591206580e2babbaab"
+    },
+    {
+      "path": "gpui/crates/gpui-ios/README.md",
+      "kind": "metadata",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "3e9f0014ee12571934f372eb2079fa33727d38b384c358059540fe718dfac16a",
+      "local": "d1c0fb5994c325d304f274b7a044d89e6391ba8a3deb8377395163834ef8c327",
+      "incoming": "9eba0771761bddc1c01d7f1c6595bea5a356cf15d19f17d59ed0c94d06c51bb0"
+    },
+    {
+      "path": "gpui/crates/gpui-ios/examples/ios/build-simulator.sh",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "08ca7551e7d21dce979374a106ffcd64216e545d87eee1c4ac88622b40eeb7e9",
+      "local": "df760cd0eac27c53eb46ba26512e77ccdcb3767898492d7c2e0c23f3904989cf",
+      "incoming": "08ca7551e7d21dce979374a106ffcd64216e545d87eee1c4ac88622b40eeb7e9"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/Cargo.toml",
+      "kind": "cargo",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "26b590059d68d0c16dc2963c9e7444a8d7cdee4999a85669275ecdcf5fb37ef2",
+      "local": "eb48674425f1346dea8c97158c21e5f558420e5fa8d60be0d0e82c218e18d3ac",
+      "incoming": "719d0643b22e344c0cfa33bde6f3b8603cd4b97237f1a66142baed42e6591f8f"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/README.md",
+      "kind": "metadata",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "46ed15c81ca73fd8fd083299968a6b9f17cdd3101049260f065e3246a8ac200e",
+      "local": "61b2e32bd1769b77ce0c371261e13152565c7b693a982fc926925bf9f9fa3071",
+      "incoming": "56cecbaddf2962489f6895001f47cb8d5d0ebd1b1d04baf6edacfb955c74e167"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "3c4b0d62f5252bea02ea070cb71b81cc6dd790902b59d9f57850231dd2d5a88c",
+      "local": "f20bd644046fa9c8fb83105a874d60c79a2d2e3506017ed7e2197f3c452f1c59",
+      "incoming": "3c4b0d62f5252bea02ea070cb71b81cc6dd790902b59d9f57850231dd2d5a88c"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/desktop_settings.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "e63bbcac047311ab939c53296db0f651ae9dba9b9014dd43ea3e6bb45c67cae4",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/gpu_recovery.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "c7c7393d6440875dd66ed5674bc293469e3ce1b4705ab0592d70c46829075c07",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/platform.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "ed51476a3dbf0842a27f6a0f3a0aac3d28d646b7e887cc201c0ee66b603bac13",
+      "local": "6b6bed2c8953358eb6568bd90e503159676dfd9969a83abec585c2f772264a64",
+      "incoming": "510f0e9b4d8fabd60c19ac76f8031f53da5571c1dd5b80fb060b7bc85935d4ac",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/power.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "47259f7055c348b44267c8d3912759b6ff85bb3f256b17ec95f806f2cd6bb062",
+      "local": "f4087d4553d9d79c39179b8416427a5f78c0e85452bf76f2536f01f3f6c93270",
+      "incoming": "47259f7055c348b44267c8d3912759b6ff85bb3f256b17ec95f806f2cd6bb062"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/wayland.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "d8b52fcd37912d441ad1c9be3687422ccda2765e41ddc942b25400c89fd3cfe7",
+      "local": "4cbc5e70ce3c80d1c1407d5eec5b7d580fb3b394548c10a053aa5559da9caa2f",
+      "incoming": "d8b52fcd37912d441ad1c9be3687422ccda2765e41ddc942b25400c89fd3cfe7"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/wayland/client.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "8f8467b709a316fade5071204864af540598cbb226a1fc7d24ff6261c756366b",
+      "local": "b128a6d0a7c243f6f19462cb09904fff0008d139c979e58064e67509bbf6bc00",
+      "incoming": "8f8467b709a316fade5071204864af540598cbb226a1fc7d24ff6261c756366b"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/wayland/frame_diagnostics.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "7623f86e78e9081a574c7994ae7bcc07d2b0c2bdea36c8440fc6efd822de7100",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/wayland/window.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "ca85aacd35b79e4d390711d6b770c426f1fd821ab12ed57bbe4bfe42217f6b02",
+      "local": "5f73fe8a6183b6635d685ff79c94e602e2225ad07568dc7418038714d43e8066",
+      "incoming": "cc37baf35bd5e1dafaec66567656fd43a79fd8ac12f1142a2a58e2213eef328c",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/x11/client.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "9312432f6a5cea2e816dea192395faf92fe8e88bc52d35e0eb13d090283fc6b4",
+      "local": "f29eeef88e8a8371f6ba5cf1a2a80f1c790efdf75c8a66e24a98630ee1ae04cc",
+      "incoming": "9312432f6a5cea2e816dea192395faf92fe8e88bc52d35e0eb13d090283fc6b4"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/x11/clipboard.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "580eb2519d8c38422b3e5baba24a11e6fa5e942392c9a9e74abedfa3fa84c0f3",
+      "local": "b1a2cae585b8cedbd48a34730b88aa006e703bbd9cc46e7b7225b333d4890b98",
+      "incoming": "54c455e5c61ae78d9e574ad8c458aca3f5eba4967942960f79ce86a340056bac",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/x11/window.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "87b737ecda518123196c3f60369120c6a8fb8021b43a4830cc21bf7834eda438",
+      "local": "e50de0b4d506c6246f36204ce808034fef850b1ad6f913d7ef3acc50b85a95cb",
+      "incoming": "999751dc94cb609468bb4777e76609a377f9cabda4f2c6d7f92cb14d062b757c",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-linux/src/linux/xdg_desktop_portal.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "2e3a8eb44718dbd31b21fc368ad2f5c2105b340ef04f7e002ee0029adb9f3cc1",
+      "local": "9626d504328b30a7e6575db8da7455b187519e9631a3e4fce13f754816882c9e",
+      "incoming": "2e3a8eb44718dbd31b21fc368ad2f5c2105b340ef04f7e002ee0029adb9f3cc1"
+    },
+    {
+      "path": "gpui/crates/gpui-macos/Cargo.toml",
+      "kind": "cargo",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "9ed46333fda82fa22e60bb15a9343d52098f3ea6e1530d3f92117cf0f6838846",
+      "local": "d99ef6bae440f19c0bd41aee9a6936b1eb6b691ec35155499ba3ef48437b86e1",
+      "incoming": "14d48d543cceac299e61120de341120e674ffb3f18764759655a840a378ee561"
+    },
+    {
+      "path": "gpui/crates/gpui-macos/README.md",
+      "kind": "metadata",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "b25ee680d1ba321a1ed4a6040ce22fd8f3d1d639defd1e6f0c6e0c6334a91b73",
+      "local": "24f63d7684d8f0c81b70ce6beb54f32180f65b994d0d59e014564810d886c673",
+      "incoming": "495c685e480b65183fb83177370f6120f9d7f0147723812b0b3c07d26ec98b53"
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/display_link.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "b74ca5ae9b60a0a585d1105a24ce2c238efc41ca14310a7509b51e93bcc57a5b",
+      "local": "436d901c738708a6c57e7a8741d933ba19cdd6da451b97cfabfb797145f44c90",
+      "incoming": "e0aeb4a68a01158489f22dcdba679f28f359b3c2d8346f1213538e5428580285",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/events.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "dce8446c49d37f61ac2c23ceb0c5b5817a8fd1f3a71f2dba53e6d8efcbbe5c94",
+      "local": "9ed7749bdfcbc9198cb37fc0a352b2b992598a808c62c6c236cc8ed19ed7729f",
+      "incoming": "dce8446c49d37f61ac2c23ceb0c5b5817a8fd1f3a71f2dba53e6d8efcbbe5c94"
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/gpui_macos.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "a0f917b3e28b087b8ce80ccc78a2eb316b2f571c191ab03dc4ca12e305dfb8db",
+      "local": "25fdb61e4a79f8040d1eb44026fa5dff6ac8b0450c62feddae2a299835b76603",
+      "incoming": "0c688b7ea3a133ff5538c936406a2827ccdbc4bb17500244a0bbf5aae748f89d",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/pasteboard.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "cb5079ced3a2a69e130c127a5c723228894d1b232c8d9c5ac4d35359b63c5292",
+      "local": "37257741f63e6070f607bd3a043fc2b5bfbd52f0d44198afb24bdd0d48b3324b",
+      "incoming": "cb5079ced3a2a69e130c127a5c723228894d1b232c8d9c5ac4d35359b63c5292"
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/platform.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "46842cd5eade91c3a423308cf86de72e590fe83cbad5bbf64998ec86b3ddd5df",
+      "local": "dcfae7cafcc681127370615d37fc388a11c568f65451baf792e40361a2f3379c",
+      "incoming": "2901c18963a7bb77e3738bfa9acf568774bd5ebb33ec7af7dcfab193140aa76b",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/system_notifications.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "df8374f075932996d58b99c043d97a82e1cefebab79e5b0f4648c8a3776ea5fe",
+      "local": "df8374f075932996d58b99c043d97a82e1cefebab79e5b0f4648c8a3776ea5fe",
+      "incoming": "9a9b3b8741b7d4efc37223295d30f86b5933a347c4b5808076f6f43fc3c87e5f"
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/trackpad_zoom.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "6149271d662b5d9f7db6322eb5bf7dacc164ac28c5ed967a5dfcd7fe366c49cf",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-macos/src/window.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "73fce4ce13ef5f28d1424eabbbccd96e044e7cf81513a3e70993f5c92c32ad70",
+      "local": "41bb40bd78a06b64b735542af36e54b3be2427f19b70d47f787635cabdca9f31",
+      "incoming": "3a948a8a4b97c53ff86e0b4f9d4999210d7c5c192b8b1ec106de76316c606bdd",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-macros/Cargo.toml",
+      "kind": "cargo",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "b7ac16ed6dc260c85a4ffeedc2e8afff68323f7874360f25732202df00a81223",
+      "local": "3aa886ffa038bbf1004b59dfa3cdd58eacf320aee38be698b9063fecce5258d4",
+      "incoming": "b7ac16ed6dc260c85a4ffeedc2e8afff68323f7874360f25732202df00a81223"
+    },
+    {
+      "path": "gpui/crates/gpui-macros/README.md",
+      "kind": "metadata",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "b4489d1600b54307ddbc0b24289944a23f9067a669ca7cc57daf8021910f9bee",
+      "local": "b9eb6d0f3fd374df70572dfa1fdb03eacf27138e1df7921836a1ab21ee47b3c9",
+      "incoming": "1264cdf9458cdd50bd347ee43b20dab7aeb37089491fb209a19f12ec1dc04b53"
+    },
+    {
+      "path": "gpui/crates/gpui-platform/Cargo.toml",
+      "kind": "cargo",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "a96c684c0c356997a35f45c3f7db3eccef12869ba2ce56241bdfc8d3ac680f59",
+      "local": "490fb130df9224d0348a706426142a1889a4c40b609ffa00c8cabde05e281d1e",
+      "incoming": "a96c684c0c356997a35f45c3f7db3eccef12869ba2ce56241bdfc8d3ac680f59"
+    },
+    {
+      "path": "gpui/crates/gpui-platform/README.md",
+      "kind": "metadata",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "38e76f9fd85eb1c74959f9ddb11d0fabb7121b8708d1a61566e56a1638da1977",
+      "local": "794ae5ae84ece5cc775136b3db03a975bd88b229c31d303e29cc3f3e49daac9d",
+      "incoming": "4c87771cfd07eda9e4616b3f0a5115353ec856813b2b680344aa41dd31826cab"
+    },
+    {
+      "path": "gpui/crates/gpui-platform/benches/atlas_upload.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "1863bce6031605561447a73a145148a27b37556fe03c870e503f20da0968a3fc",
+      "local": "5a459b2766f9865a96e993ff43a357d5478cf794137dbe8e0a1a35b749960f4b",
+      "incoming": "a768880d85a8d33dc2034fbe9a989870e53096fea8eddea25573063afd5eace8",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-platform/benches/focus_cleanup.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "e6b98a08fe04314d6d0c1a0068c8d8a7cef095588d8d79ffe788723b2d140ab4",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-platform/benches/inspector_render.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "fe2978276f855beec657e9eb5c39796d41387dac64a816049789d4d29c07f414",
+      "local": "01ca089360638e2f45d2a683ea116b89039f0c8fab660ff4db76ff8535015ced",
+      "incoming": "fe2978276f855beec657e9eb5c39796d41387dac64a816049789d4d29c07f414"
+    },
+    {
+      "path": "gpui/crates/gpui-platform/benches/primitives.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "85c434697e35c6c5b61b9f9f327c581a1a0d92962709254e069e778031cc1802",
+      "local": "4c1678ae155b7a412864f352b08f706b0043f42275a2c0d2d696742f64bcac59",
+      "incoming": "eaf4a8afc0c969ca40a2505d8d9b22250081d64b58aa16fe119ee50b99fe4406",
+      "text_merge": "conflict",
+      "conflict_regions": 1
+    },
+    {
+      "path": "gpui/crates/gpui-platform/benches/randomized_element_tree.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "597c1f055609d8d39ad09f2e9fe8839c7c2b9430aec73c60af5a6e2575d920c0",
+      "local": "bfd2e7e2da7a4686c31789dee72e1bb8af771bedc552dee91173fc89413b70da",
+      "incoming": "597c1f055609d8d39ad09f2e9fe8839c7c2b9430aec73c60af5a6e2575d920c0"
+    },
+    {
+      "path": "gpui/crates/gpui-platform/src/gpui_platform.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "d9f9f29a11ed22efdd8cd260ff9582f53f9466064994340ff919be9ef706f075",
+      "local": "b7aea93a16fc55a6ec4e723c62f3911315024aba7a6c07b84c0aad84e734de1f",
+      "incoming": "d9f9f29a11ed22efdd8cd260ff9582f53f9466064994340ff919be9ef706f075"
+    },
+    {
+      "path": "gpui/crates/gpui-web/Cargo.toml",
+      "kind": "cargo",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "2dc96ce365bcd74cae53ef57598f408e2dd3d20e05e8d87da7f4d5d9153e003f",
+      "local": "45fe54e4b9fd0c6fdd2448251bcbd76bdf4f5a24ae2030bbf2645d23aea88799",
+      "incoming": "d66bcff1563123656f7a5217246bde6ee479bc8224e0543b7725a110a4ce7b75"
+    },
+    {
+      "path": "gpui/crates/gpui-web/README.md",
+      "kind": "metadata",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "6c9cab19c0b0e6c8a0ff74db61a27cf0d22abd0c1b8df16dcf1291848016eee4",
+      "local": "6236b2e5251184c034225e8714c3b75d165d740ab0ef47bccdea3952a0a81d09",
+      "incoming": "651d85be528d908275652b66b8163a28678ef6fb0ec8d26c1b63b5fae1c509ba"
+    },
+    {
+      "path": "gpui/crates/gpui-web/examples/hello_web/Cargo.toml",
+      "kind": "cargo",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "3f33d34cc3b04122bb44fe6eb288224ded03a82e584ea7cb5eac7f7162b81f97",
+      "local": "9fccbd1390fcd9de3fbc0543945a41f3384ba2d47e8a916f83279cb4c715ac71",
+      "incoming": "3f33d34cc3b04122bb44fe6eb288224ded03a82e584ea7cb5eac7f7162b81f97"
+    },
+    {
+      "path": "gpui/crates/gpui-web/examples/hello_web/test_canvas_fallback.mjs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "72779b118fbf15bb800c6dead09eb1630cdcfed3b983591631a9669f0248f805",
+      "local": null,
+      "incoming": "72779b118fbf15bb800c6dead09eb1630cdcfed3b983591631a9669f0248f805"
+    },
+    {
+      "path": "gpui/crates/gpui-web/examples/hello_web/test_http_client.mjs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "fa9da7ed599a0658d9d06bfe72baad29d06203a5f31352b364b6f0b6c3ac2a62",
+      "local": null,
+      "incoming": "fa9da7ed599a0658d9d06bfe72baad29d06203a5f31352b364b6f0b6c3ac2a62"
+    },
+    {
+      "path": "gpui/crates/gpui-web/examples/hello_web/test_queue.mjs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "eae8067a080a914a78fc7cb48aa615186b64030fb1938a92dcd3b3e67782685b",
+      "local": null,
+      "incoming": "eae8067a080a914a78fc7cb48aa615186b64030fb1938a92dcd3b3e67782685b"
+    },
+    {
+      "path": "gpui/crates/gpui-web/src/events.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "250ba40e44975b282cd74797e76c96de6ef5bdcc537a8009f7e876c8a47ff239",
+      "local": "250ba40e44975b282cd74797e76c96de6ef5bdcc537a8009f7e876c8a47ff239",
+      "incoming": "32c9e63039879fbd05e138736f8f37cf543661ad63a644ad44e9c2bb5c8f295d"
+    },
+    {
+      "path": "gpui/crates/gpui-web/src/text_system.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "50d2d9da4a628d4363264dee69ae7eb271655007ccd5ef1bfbdb88954315808f",
+      "local": "b0f186efd6b41cbf911bc23315260aa339a68be23860f600dab0cc18283c6841",
+      "incoming": "50d2d9da4a628d4363264dee69ae7eb271655007ccd5ef1bfbdb88954315808f"
+    },
+    {
+      "path": "gpui/crates/gpui-web/src/viewport.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "2f64241c990f6de9a874e7680baafa61feba6db96228c48fab26ac7faaf623f5",
+      "local": "2f64241c990f6de9a874e7680baafa61feba6db96228c48fab26ac7faaf623f5",
+      "incoming": "61ced38d635803890e5cb61e7fe49d8f05013ce17d64fd90ba1056fe4f01e05f"
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/Cargo.toml",
+      "kind": "cargo",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "509e7377f7c16bee7fa2bf7ee597dc6477f2c1aca0b67100e8e8dcee8ab9b940",
+      "local": "e762f53c1486f4d48d5fe532d53cc81e655eab594b1a5b70d04ea4d54361e01d",
+      "incoming": "4bcdc0201fbe1f05c11372900d46ff800ace33aeeb71c1838e5ee8d6f9a71134"
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/README.md",
+      "kind": "metadata",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "19ff88e1eb80184ec221489f0e3b91888ea5f5fb07e1091e13fdfe1e2e2136de",
+      "local": "5401a8a1d7ac22286bb43327e00a7d1006c9f1e0331539db7635be36b6cee5f2",
+      "incoming": "a46a7e5cbd92984c17855811a3a29414e3e0b0240fd7614b9dce77654b2317c9"
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/backdrop.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "2758e283fc2633cbaf04041b0c321e90f24da4c7c23c1bf3d6b79e8e61ebd7ea",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/backdrop/groups.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "d4c474935fe8d50edba9a116687e92a045a527d42c01abbb9a60d1711f970681",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/cosmic_text_system.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "6fe4b2cdc1f85d27bff3a17364cb9ccc6cc9541ccdb4045717ea29d95c0a00c3",
+      "local": "88075a48c76374e4c8913aae352c8a45c455fe045a6efafcddd894f12eaeb0f9",
+      "incoming": "1121b7efe1244ea3c6634d3cb60bac9e65aea753fdbffea1ffd48a370efb92e3",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "b330c12eafae5b48e4be888fbdc06c77b46b3b0d75739037012f6ad0878a4bb5",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw.wgsl",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "f03e2718462d90448df3d448c6f483eb663b0b45f67154129fa67ed629915ff1",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/coverage_cache.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "bca7b19c4969e612619c7ffe40ae26a914b706311d194a26be8b475c7f49a913",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/coverage_cache/tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "03e12a8d4552b095055071be5993975c7130bcf8b47d242a2a8218920d0401a7",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/dma_buf.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "3cb5a7055ce40daf8a19d2ba9730f9cba8c2d2c234b1a0152379523eb094fa82",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/dma_buf/native_tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "cca35b7ca02489a4689b2f74ac70105894fa17f3fdce5b3b07f21c25abd6c4e2",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/custom_draw/tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "d69a0573c0e6a09e1152dd65d8460f8e06750b88ee91ae79d7686543ab6121db",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/gpui_wgpu.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "b51033ac07d187c89c4079f208d3a557c6fff309b1cd403927ce8974e795afa0",
+      "local": "a178ff4ad2321979853d49ad5e5a96c5c8e7ceb1fd1c6e89dbfbac1e8fa7055e",
+      "incoming": "b51033ac07d187c89c4079f208d3a557c6fff309b1cd403927ce8974e795afa0"
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/shaders.wgsl",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "bf22f0bd45bdc2da6fc88e5c678e03549941d270d6d85f5a2d1044f875f75729",
+      "local": "bf22f0bd45bdc2da6fc88e5c678e03549941d270d6d85f5a2d1044f875f75729",
+      "incoming": "f317ef559b84966b989ca624b20544cfacc3a7406a2c24c31d955059d8281e92"
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/shaders_storage.wgsl",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "5e7935445569ec610b2f7ab520c6d2b3ad8613248fc4465072e8dfae941017ca",
+      "local": "5e7935445569ec610b2f7ab520c6d2b3ad8613248fc4465072e8dfae941017ca",
+      "incoming": "3a746a8291cfffc4da6023796ed4c6606474824d83b63014a4ef415d67fdd3cf"
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/shaders_webgl.wgsl",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "d0e1f65206d720604371f2936fb1c64d9e58def4f7ec39a70b9edc3640f27b3d",
+      "local": "d0e1f65206d720604371f2936fb1c64d9e58def4f7ec39a70b9edc3640f27b3d",
+      "incoming": "65e3727f171445cfdab6ebc4ff312ed768ec353e1cfc9b7160bd26b2c1712d88"
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/surface_frame.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "b91ea9e7493718bf402bf9ef8bd7b58af148ec315df7bef3c186e778630966f9",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/wgpu_context.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "4d2c8f0d5f2f0a8a6a26764bd894cd59b407b1b9dcc1a8c2bcde5b784827569b",
+      "local": "11c52bf15d52512fb1085a94bf50f163ade61cd99899589d400bd71860362b65",
+      "incoming": "9ce93b892d7ffe4c45fab0ac9b77d890443b98822da6a316a8cbd293a6932e34",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-wgpu/src/wgpu_renderer.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "de462d75db1bbca68a6e49b85304502b643c5779e28806040adb3804e468eb5f",
+      "local": "a63a61170a41a7b10a9b9f54f77040118c3eda4cc4823e231aa1b4562bdfe16c",
+      "incoming": "94c8143fa672e47a9891f96122ca657fb02dd5676ea87fdaa799d43e71703500",
+      "text_merge": "conflict",
+      "conflict_regions": 5
+    },
+    {
+      "path": "gpui/crates/gpui-windows/Cargo.toml",
+      "kind": "cargo",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "0486873c64706783534e5c33bac32b89c3ce9987beee6a3236b5dd9bba3f079d",
+      "local": "870414681152ad7f9720b68e81a4a71854c19ac4d70277c130e857e06d69633d",
+      "incoming": "e22292aefd6f2c31fdef3afe30c34b47a6ce11b1f986d4204206d8feae32af2c"
+    },
+    {
+      "path": "gpui/crates/gpui-windows/README.md",
+      "kind": "metadata",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "ea10c0b8805e773ddedf23971d5d1e5e5445e5593f896bfc78a6eb3cd3614a2d",
+      "local": "93fb59d65b15ee884ebbc5162f2cb5d7290c9a6c149a58b9ef577db943506a3b",
+      "incoming": "9f8c368da7c6d1ced022094aaf6030398f66859c31367d7ee6fe17aaa996fc4c"
+    },
+    {
+      "path": "gpui/crates/gpui-windows/build.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "11d433546230b6b4dbb98b0532c3428a6157f480b160e18e52ac18b8f6a5702c",
+      "local": "5d35c7611a2563bf9d744328250a67740702fd6cee426d8a1bc1cdcea5551496",
+      "incoming": "c8090d2e5d9820f647da839ddaf69ccecf76d5401a5585861737899224630ece",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw.hlsl",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "4f215cd0c2b7c973bc5c98d270a5e2796fcb072cff760d3e487b90246edcbd0f",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "134692c1c0df0998d72f2409d8b149c2ad86185695525ff480d24041138a111e",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/backdrop.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "8e5983edd1d63aec93fd3035fff19ceb24827af7c6b26859ad455b09c3a69fc7",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/backdrop/groups.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "bd6cc054c219a082a4672746992624ad7ce1a445e793e98668a5bb5a21a5c9a7",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/coverage_cache.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "bca7b19c4969e612619c7ffe40ae26a914b706311d194a26be8b475c7f49a913",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/coverage_cache/tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "03e12a8d4552b095055071be5993975c7130bcf8b47d242a2a8218920d0401a7",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/dxgi.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "06bcc6355c296218e9feea4c8e4ad75172cab4393823f8222fcfe39e11ebef4b",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/instanced.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "8e18427565cae3294dfc5628a83cedc0c724566cb691339e888e515b013191d8",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "4da866bf433c0c09820ed992947fc1608e633bbd117b57aee560bf3b6d2b4f2c",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/wide_output.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "497e622d364ee26cabc735f7db1399a56298b0c7a129bedc8380a1227a244d16",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/custom_draw/wide_output/tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "ea527d4f8f1fb7b1fb991163431ba01ee26a0d47726bda7535210b52cc6a5390",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/direct_write.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "ecac3afb76ab93fef713464cca43ef4326e4674f717cf0c2fb50427075e175e9",
+      "local": "90aec11ed9056ea094922e679733bd917b4f2e584022aabb58616458797ba12b",
+      "incoming": "ecac3afb76ab93fef713464cca43ef4326e4674f717cf0c2fb50427075e175e9"
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_devices.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "83372170f6225db45033473d118fc43708942ec9687467de09e2b5215c835cf1",
+      "local": "09ca04e1d394cf6d98e5303eea78c35fe4da550d20b8f97aaf4bf46a59adeb45",
+      "incoming": "83372170f6225db45033473d118fc43708942ec9687467de09e2b5215c835cf1"
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "d38ea8338ba50d36f0f362204e25fb52c52baf15b3d8c12ce08ba37378534690",
+      "local": "9db0540a2e449868e7752c1db2c05f2b194f0e7ecd06ab315d23e6b4bfed1d12",
+      "incoming": "74e341229b6b360bd2d7f732c2ef9a51a3765e17fda3d6c3d23085cd54567b05",
+      "text_merge": "conflict",
+      "conflict_regions": 1
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/color_presentation.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "86fcf0370b526a83d915340d2dd167f75b86b59070435f7d107880f2d0480326",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/color_presentation/policy.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "00225d8de2c5b0ad5a17c38a5f5c8785d0a759aa069be99fb1b1bb06b8f123b9",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/color_presentation/tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "bc379b6c0574fdba62d42712dc2612a84663b3efcb99bc90c73d27fdfa880661",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/device_failure_tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "5ff633ce3efc8d3a6bd9e7425f300c9b474630e88dcfca0a25bec6d60e8692ca",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/headless_retirement_tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "e3afed2c648306925329c053ea72d8878b8d368aaa7530447f044348b0f7e5d8",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/retirement.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "57c7c0357a0fd6ccb540a65352075b6f23522c3224ae283a0c9122aa0b6048ef",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr.hlsl",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "81332ac252b54955175a6bda71d676e7b6edc6e3b80fd520c75a7db82aedc413",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "d7a20f6b49f9f19e3aad19b525f2a4ac5f943b660b6a1b06671d68546c1c28fb",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr/grayscale.hlsl",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "41ad48f3497902f990c3807dd072ea43c80bb4e859d3d178b99767d28b20f4fb",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr/reference.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "75926044fe223fe28ca653d6d226aa3dab80f470e366f4c2a7215d2d29f9fff6",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/directx_renderer/wide_sdr/tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "fc684da9ea5bfe22142eb87257a3be6b83e7bfa799d14d6f8d7b031a9600a922",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/events.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "110f57879a626d2f09db307824b6cb47ad37765d873ca9203154eceb60190dfd",
+      "local": "7a91c64176be28fe79811dd9b4bd27eeb3fc74f2c95c2cd0e9e44d14d0e96072",
+      "incoming": "bd23d64389b2ef57f4aac9643d56df0c3be64adb28078984a9b38653b6c720bd",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/gpu_fault.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "639e52804af8478e3b9397838bf90b9b80ae1fb98aa1be880e8a1cdb92f91695",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/gpui_windows.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "75343c98433a942fa1f4a700592e11361edb9a236a5523fd9a6327523b0c9b6a",
+      "local": "35ca9b13105a7dab0a1992e20ba1417ad6b036a9847966234c3058a5e02c5a47",
+      "incoming": "75343c98433a942fa1f4a700592e11361edb9a236a5523fd9a6327523b0c9b6a"
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/platform.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "2249e81cbdd101f26cafa43aa03fdaaa5d52dbf819d100f1592c472e5c2f39d0",
+      "local": "ba984b66ac677618879ac22807f4bcf29e3c158e305fbdde380b0714c5cf593d",
+      "incoming": "47fe6ab8cf2b8b52e9f1a29558e6f1f669335adf1d27ae4ad1334ff681f09872",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/shaders.hlsl",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "16045fea900725fcd9cc349266207078c7fe774507d38ed0b5832a320c7c55c5",
+      "local": "16045fea900725fcd9cc349266207078c7fe774507d38ed0b5832a320c7c55c5",
+      "incoming": "fbfce2de66d9f28316e0ee91ea4d7af73055540d242804bab613ef2daa8d1588"
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/system_settings.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "a9d22571c2405f610d44b85d86fbcf0356f7cc6aeeffad269a534b42eeffbdd9",
+      "local": "6d390b90cfd5055e5a09740f22e84b42823467189103d335c24679db6a197c13",
+      "incoming": "a9d22571c2405f610d44b85d86fbcf0356f7cc6aeeffad269a534b42eeffbdd9"
+    },
+    {
+      "path": "gpui/crates/gpui-windows/src/window.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "f57b35718272a6feb67a49fd7a044eea3785605ceb6bcefbd7fc5fa54c649ca9",
+      "local": "d9caa8fe8d58654c4766f4e98c10e864293381c08f670cc77eb5659e04d95b08",
+      "incoming": "f57b35718272a6feb67a49fd7a044eea3785605ceb6bcefbd7fc5fa54c649ca9"
+    },
+    {
+      "path": "gpui/crates/gpui/.gitignore",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "9e7e5b8470baad143c828fe1f9e34ad2d856cf515e63ab8654a9eff82c591ce1",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/Cargo.toml",
+      "kind": "cargo",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "e06d1737f370634c86af6e67e2af231b1371e9adc3a22a91e6912047006cf939",
+      "local": "547310e41e5e3358067be3987bb84ad00d0b51a759566d84be014de5c275d5f1",
+      "incoming": "46403d88d202a193fa1c2ddc22b66ac8dcd6bc939b4650cbf29d4ed24c772c88"
+    },
+    {
+      "path": "gpui/crates/gpui/README.md",
+      "kind": "metadata",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "e3d1406d50a36add0efaaa14fd8e2ebde89c904e8037feae8f356bcd6716ee42",
+      "local": "6b9e5df888b2d0405d72c8bf096aae20d766bd1c18faae62f416e95ff7c7008c",
+      "incoming": "8baea982cc3efe212b53c934941666262b1581ffcd728463c5d15c2cf21c8a53"
+    },
+    {
+      "path": "gpui/crates/gpui/bench-metrics-provenance.json",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "983e2a228fac901f5916e6eb67db040c6474d8f700efd383a4cd251bb62362ad",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/examples/README.md",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "7fa416c24854b64f0e0bd5bfed7b39caffba2cf0cdefae01850c0ef805c1c32c",
+      "local": "805d6cfe6fbfefea0b5e2f0a6d9a3d047a06b54d5edd80a5ead34c4d1a86e1d7",
+      "incoming": "7fa416c24854b64f0e0bd5bfed7b39caffba2cf0cdefae01850c0ef805c1c32c"
+    },
+    {
+      "path": "gpui/crates/gpui/examples/animation.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "0c36449cf96c897e0520cef592933e86759471108c77f53a00cda4e21969df4b",
+      "local": "9e38aa07eedae3a2cce743d24b765a81da0a8b97b83230de436cbd35364c5174",
+      "incoming": "0c36449cf96c897e0520cef592933e86759471108c77f53a00cda4e21969df4b"
+    },
+    {
+      "path": "gpui/crates/gpui/examples/input.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "0c2f9c60620f83896e78b24e46e0e3fadb5dcdcd712d470437e402406d178547",
+      "local": "1860fc0040f08ada49ca12249a6e2341f09232e9965c0610ccebe3e58055c991",
+      "incoming": "0c2f9c60620f83896e78b24e46e0e3fadb5dcdcd712d470437e402406d178547"
+    },
+    {
+      "path": "gpui/crates/gpui/examples/painting.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "fa856d8218217acfc6fc48a1c4c92883faca2f0b0cbf0b9e842d3d59bab558c2",
+      "local": "fa856d8218217acfc6fc48a1c4c92883faca2f0b0cbf0b9e842d3d59bab558c2",
+      "incoming": "cfae975dd27a063a16164ffc501bec7a3bbd65f25f13dae5fa33fbba3c9c1580"
+    },
+    {
+      "path": "gpui/crates/gpui/examples/paths_bench.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "936a02d1e82c1612abfcedbdd6c39596481d72e0179c79b021a182400afe28bd",
+      "local": "936a02d1e82c1612abfcedbdd6c39596481d72e0179c79b021a182400afe28bd",
+      "incoming": "43be709ef01ed91e0dcdc900d315dc388e1dfd21f9b3d994a8dba681a40a2461"
+    },
+    {
+      "path": "gpui/crates/gpui/examples/svg_animation.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "added",
+      "baseline": null,
+      "local": null,
+      "incoming": "5e5514798f9019f22f7bbd7a8d26c7b3ff4a65e247f6300d21136324f2587439"
+    },
+    {
+      "path": "gpui/crates/gpui/examples/system_notifications.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "692166db2266fb434f565efe2bc2f8da8f2baa8b6ab75ebc027f1e3d4722d474",
+      "local": "692166db2266fb434f565efe2bc2f8da8f2baa8b6ab75ebc027f1e3d4722d474",
+      "incoming": "498d896c196b705529ae79042a1888d60ad98a32b75249510f75a8f48198f130"
+    },
+    {
+      "path": "gpui/crates/gpui/src/app.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "9ef209ac40563ce34fd3585287063f357d0212af9828dce106a64cc6c19aee5d",
+      "local": "487da381ef19323c70c08dddb7ce8f4bc8ac77b6beb5887fa1692dc3965a59ad",
+      "incoming": "62d1d43b9577684b9297c8078eae2eeda0a30001e246177a40d55f238d321d8a",
+      "text_merge": "conflict",
+      "conflict_regions": 1
+    },
+    {
+      "path": "gpui/crates/gpui/src/app/bench_context.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "2fe59222d05a2dead8cf3e12ed00f61e90362f7a04cadc468e1ef9b08f7c8e47",
+      "local": "211b9a3cede108f8cd0493e9d7e6abb7e0b7230bcc31a65f59dbaec6f24ea91a",
+      "incoming": "2fe59222d05a2dead8cf3e12ed00f61e90362f7a04cadc468e1ef9b08f7c8e47"
+    },
+    {
+      "path": "gpui/crates/gpui/src/app/headless_app_context.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "11f273fc2aeda076cb40b49b5a658d7ea2be50f72d3fe56524b2e78f7a04bc15",
+      "local": "11f273fc2aeda076cb40b49b5a658d7ea2be50f72d3fe56524b2e78f7a04bc15",
+      "incoming": "0025b8654b5f61be78f7ba16459a44c704f5c6ff4dc61b2652f2be0937fa01aa"
+    },
+    {
+      "path": "gpui/crates/gpui/src/app/test_context.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "c80518d26716c66724d4f91d2d6b2b7a539d757d07eef1469c27074f8fbcf228",
+      "local": "5c22c395b733c141379e623e70bc12d699adb051e3a5c82e1eb42f951afa4d9f",
+      "incoming": "a92b1bbbe96942bde4a9dcc75ec6cfce491b738c9c803d45015ddce253243452",
+      "text_merge": "conflict",
+      "conflict_regions": 1
+    },
+    {
+      "path": "gpui/crates/gpui/src/backdrop.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "16159a561d50f5167257fb79cf2d24c3202b0a7609a6b635582a658e1af87f35",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/backdrop_cache.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "3d00a3414f0a0340170824928ef083cb3e9411411a8e13f69bf3e11b04128301",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/bench_metrics.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "485608bf6634a8ef1b2c2a05bcd9a9003e88d155766022fd46a6b0ec69188273",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/bounds_tree.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "c3da5abcd110191eea8b7b73a88bb8d1fd89251549e889c9cd42d1a7857a1b4c",
+      "local": "c3da5abcd110191eea8b7b73a88bb8d1fd89251549e889c9cd42d1a7857a1b4c",
+      "incoming": "450a00f08407bcb5e830b199b7734825eae2a26880197f0ffef9057cdf346bc0"
+    },
+    {
+      "path": "gpui/crates/gpui/src/elements/animation.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "f23b16feaa20ec891c729423d86debbf8192f69413bc40c7793018807cab4ef2",
+      "local": "f155b4a9da98cb5dbd47c46048facc6ec08089aa1ac5674a25d69e1ef28b5809",
+      "incoming": "5b8c44bb372d14a144c825be12491829604b2c71843c63231a51b08ff6437278",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui/src/elements/div.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "ec082eb55cf2e039f08870b9fae829b0b153ee2b245c420767fee427897583c4",
+      "local": "4835963ebc2069901c1effb959578c0be7457c7e83c2aecb9b70fb8d5fca2a2a",
+      "incoming": "ec082eb55cf2e039f08870b9fae829b0b153ee2b245c420767fee427897583c4"
+    },
+    {
+      "path": "gpui/crates/gpui/src/elements/svg.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "9fcabac2d034b41763a3a124b112dc8b3e01da8153593e2dc306cf95d20dc67c",
+      "local": "9fcabac2d034b41763a3a124b112dc8b3e01da8153593e2dc306cf95d20dc67c",
+      "incoming": "2b769a2618a7d0fc00f9168d4a104b7b9d43e81d665ab2aac537e808dbd2fc49"
+    },
+    {
+      "path": "gpui/crates/gpui/src/elements/text.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "53f6eec09ee71846b8e516b9b42de469efc36e57144d7db49575c8e89e6deb2d",
+      "local": "64ed1f1ac719bbfb75c44f79873efa6937d2a225da4b2fb0d285f219a2e62cee",
+      "incoming": "53f6eec09ee71846b8e516b9b42de469efc36e57144d7db49575c8e89e6deb2d"
+    },
+    {
+      "path": "gpui/crates/gpui/src/geometry.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "965ae8f6c1d4bd2e7dcb43e253a99dd4363252b1ef6dc19c3031ea50c5192408",
+      "local": "0d97c302d126a055555c6510cc340ed93ecc3be9fc5075ceccdadf6c6e5a0bbf",
+      "incoming": "895d78320dbdfa353e9941ce3b78284cbdc6a4727a0359838720cc05d09e8c0b",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui/src/gpui.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "e1c5f74225bd7bd80e19997c83d5283abd3c54c38dda1ba1158867faf25dc978",
+      "local": "9ff3781ce67551361bb05aa93d7c2b5a694add69ab8714879082bc39bb9197ca",
+      "incoming": "05e066b0294e08febde9737ea32cb589f06c160df3e610432acecc093fed4060",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui/src/image_texture.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "8700f295c6fdb4c68d89f8eefad6df586bbe405054fb2fba1e4cdc8e6851210c",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/interactive.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "1f6eda4a1113e968c42cd19e6927f490c34b27c4e74e17a3fdb383e9dbb2bb34",
+      "local": "26e20aa8702f0748f319dc5276863d61f4cd4dcd52b2b4d364a84f9726ac6203",
+      "incoming": "1f6eda4a1113e968c42cd19e6927f490c34b27c4e74e17a3fdb383e9dbb2bb34"
+    },
+    {
+      "path": "gpui/crates/gpui/src/keymap.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "a3dde9fafbbafe6b7488408401a4108f7dde5403b08d613eb05b438335efec00",
+      "local": "a3dde9fafbbafe6b7488408401a4108f7dde5403b08d613eb05b438335efec00",
+      "incoming": "0248bc25c4c5d34e46f7ce6ecbdab1d39c3fe8880c2ed75b7647c2dc4b8e88db"
+    },
+    {
+      "path": "gpui/crates/gpui/src/layer_effect.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "fd61f3cc7a4b2035e98a20840aa40c17adfeedb81a7bb6ae4d1cc6ee19e54be6",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/path_builder.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "07fa0b21e5493cf46ce54976d77ffea3a430ddbbc369c4d4e247a3bc68854e35",
+      "local": "07fa0b21e5493cf46ce54976d77ffea3a430ddbbc369c4d4e247a3bc68854e35",
+      "incoming": "8460e765368781c2b334708949c3ee574a438ceb575daa4f49076d951a0efac8"
+    },
+    {
+      "path": "gpui/crates/gpui/src/path_winding.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "added",
+      "baseline": null,
+      "local": null,
+      "incoming": "b094c5403b38f445b5384887e275d32fd1ca21ca6bf31aba49a04cf107ed1f5d"
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "1e3c27bc3d5204796a3148c718955f8ba1e77c3fae118f7789f0f02f22edca42",
+      "local": "184c8bc45e8b0bf8a5f3bcec020852779f38c263b1086f1618326475365e6a07",
+      "incoming": "cb0984e7d9f451781f860cf3d1a5e6d6ef9432d71c122cbbe479b235881ffd99",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform/color_presentation.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "fce3c1fb2b14cc60b10a094a94ffd467c8fbd3f205cca28335efef30a7ea7e67",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform/desktop_preferences.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "796edbe154941dfd9c134b8eefcd83e353d0477f586008b1e3ec730ff7543dce",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform/test/platform.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "9094f074fdba411f68ba136a65dadfaa208a0f4cf889a95edf8670c6b6ee010c",
+      "local": "e775a899f5b698bed38c10eb5665f21923069e3440c03771ea04c04dfe76058f",
+      "incoming": "100dfe035f117b92485f03188081e77cdf030ca31528ead51294299ef870fe7d",
+      "text_merge": "conflict",
+      "conflict_regions": 1
+    },
+    {
+      "path": "gpui/crates/gpui/src/platform/test/window.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "0a9e1c0a0ce8885e64439bfda766a5c39fed5f2fffae3781e56104031ee4012e",
+      "local": "5eadb1630bee0ef10e1906edb5f71b3d3bc7c8e478e6b568d2d822e828e245dd",
+      "incoming": "3a60d9c5bc0882b8cdc569dd46a7176d706d240422ff10fb7f3f9b63147a8983",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui/src/profiler.rs",
+      "kind": "code",
+      "disposition": "already-matches",
+      "upstream_change": "modified",
+      "baseline": "46450da2077a4dce7a624c3a6047a1151b35dc04cb8ba896f0623e9501d30c97",
+      "local": "ca0fd3ef36d6ddb7dfa418a0d6298152beb250267fbf6be599d5938d886e7367",
+      "incoming": "ca0fd3ef36d6ddb7dfa418a0d6298152beb250267fbf6be599d5938d886e7367"
+    },
+    {
+      "path": "gpui/crates/gpui/src/profiler/journal.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "66b07a3d29c2585d56886c5a6984022fed70cbc6e11f1ceb4ac331315042132a",
+      "local": "86e16e613eb58265e1fec097d980c403f611b61b3f0d1aea97c758cbf1539248",
+      "incoming": "f3e4dd3ea6fbb101d1bd1a192345731629782cc42c91bae53caf99a0dc04d77f",
+      "text_merge": "clean"
+    },
+    {
+      "path": "gpui/crates/gpui/src/randomized_element_tree.rs",
+      "kind": "code",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "dc4d37e52c7311c5f7def5acb7441b34d1beb0be78a6ceab1adcb8102266a06c",
+      "local": "dc4d37e52c7311c5f7def5acb7441b34d1beb0be78a6ceab1adcb8102266a06c",
+      "incoming": "b01f9293cba4f90f26ed2a3f1816aefb53e85db7e0a926260a2a80354187a7ae"
+    },
+    {
+      "path": "gpui/crates/gpui/src/scene.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "b615c926356b9180c81706d84e1033501ff9f4cd70895374b0ce63fcf4bc153e",
+      "local": "3b2b31582b7960c34a6e931fff47ee37fd8d556edd13e0da3d50092949e7087e",
+      "incoming": "c3dce7f0f23d5443b85b38315d26c8e068d480eda67079b6772b87edad380df8",
+      "text_merge": "conflict",
+      "conflict_regions": 9
+    },
+    {
+      "path": "gpui/crates/gpui/src/scene/preparation_tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "dac752dcabbb782178f2ffe42d626a8480acb541ea4869828979c84defca3651",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/style.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "27753a378e4b3a30f535f796a592d1f2191c0f77580c99436ed1bfcd7b6a8da9",
+      "local": "47b195b30b37d135e4393017f2610413a457f6ddb7356f68652ed85c27966372",
+      "incoming": "27753a378e4b3a30f535f796a592d1f2191c0f77580c99436ed1bfcd7b6a8da9"
+    },
+    {
+      "path": "gpui/crates/gpui/src/styled.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "caa8f1f8b3cbb1ff4a2b53877f4ca5fabb848d63f7a561d46ec27113ec904f27",
+      "local": "226a6244929b42a374dc034fd844b12d186c838b466dd62da783c33f02ca42a1",
+      "incoming": "caa8f1f8b3cbb1ff4a2b53877f4ca5fabb848d63f7a561d46ec27113ec904f27"
+    },
+    {
+      "path": "gpui/crates/gpui/src/svg_renderer.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "863d89c4643f616459cca24417f7060fbcee91a7a82a28243c58365e7dc2c693",
+      "local": "81d0c36b63b24e1269a08920203efc5e9c3388995f117532aa32dcb9a4469410",
+      "incoming": "15c72f16520f64e35535f007ae3341bf45266eeb6925b8440ae9e1af2a10418f",
+      "text_merge": "conflict",
+      "conflict_regions": 1
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "da9646a80df5b016ef39acc90c757b47f641a021bcc04aae1f608dbe35c62fc8",
+      "local": "1f30af08e69c80c30210f84b3401d39b719fe417ca9f44054984fe7d6ca5de0c",
+      "incoming": "da9646a80df5b016ef39acc90c757b47f641a021bcc04aae1f608dbe35c62fc8"
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/font_features.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "cfd2af26dc7e269393858f2d7ce272380f7253a7f5eaa3a9a1f3fab4338623fc",
+      "local": "41337d7657ee34e0fd24045b5c7a18034295429ea09a36259da17f1d16621d1e",
+      "incoming": "cfd2af26dc7e269393858f2d7ce272380f7253a7f5eaa3a9a1f3fab4338623fc"
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/font_inspection.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "4e48d75080f2a1842a1e6fa708307bb9da6dae3e152872851f7e35f3a0d0fb7f",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/font_introspection.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "6928875f509f8d791c36a30f6dc3c9766c2ad49be2da040c131dd782860f9224",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/font_variations.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "21519d8fd12f3547ad21b45e2d0843eb18a2fad238e7641dbd5a27edcb3b1088",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/line.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "f7c1a408230b277ff9adaca531042217de2b74c59c1b85bc0c465e5a3afc8045",
+      "local": "3d53cebf7ed2df1cde0030ab29ea8b8eb07b6074b6bc18f58a6ff2e72da6c109",
+      "incoming": "fefe71f0883144ad5e38ae6b63bf8ff99f283b15b6b27753825297d20e25b282",
+      "text_merge": "conflict",
+      "conflict_regions": 1
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/line_layout.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "79bc9f4779861ea7c0ff63f016dba0a7866623076b729f1b539d9bd92c2e6379",
+      "local": "ba2eea495eb917f594e1138f989fe528969204033909f802cfc67c48c26b4db3",
+      "incoming": "79bc9f4779861ea7c0ff63f016dba0a7866623076b729f1b539d9bd92c2e6379"
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/line_wrapper.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "8912c5d16dc00bbcc1f19f56c2f2f4e3b826aa244b4f7c04c62a3934b22f7c4f",
+      "local": "f0843937333653e02b03e7d78b1ef2387e7980ff8d37ed75b4bb3f317fe19e65",
+      "incoming": "8912c5d16dc00bbcc1f19f56c2f2f4e3b826aa244b4f7c04c62a3934b22f7c4f"
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/paragraph.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "2f5703a364dd43f7fe98fc15bda0c490de5d51732e44bfa8af502210f4cdccda",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/paragraph_cache.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "cf371ba0ea027b6db5514671c322efe69f1d441968c3634df5916759cad42271",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/paragraph_fallback.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "386bf02dc0d1d441a26e506b7b1759491697cafec917a5090ca8cd88dad3ae62",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/paragraph_fallback/tests.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "173e3824ccfc317a0419bc2bee1f87d8c8de4ab585b358994b89f8cb948fea18",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/text_system/text_layout_provider.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": null,
+      "local": "888dc6015df66cebce9b2b3aeac83ffea8de2e89687b269e8d17ae66f9e5a619",
+      "incoming": null
+    },
+    {
+      "path": "gpui/crates/gpui/src/view.rs",
+      "kind": "code",
+      "disposition": "local-only",
+      "upstream_change": null,
+      "baseline": "0992f511a5b78384a130eb7671672256bd2d9601040e115d524d29933283fe5a",
+      "local": "811acc51aefa847498f1930b8be171dd2f7596adc94b3d03d4269ad8cb7d1105",
+      "incoming": "0992f511a5b78384a130eb7671672256bd2d9601040e115d524d29933283fe5a"
+    },
+    {
+      "path": "gpui/crates/gpui/src/window.rs",
+      "kind": "code",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "aba1e73a77c05e8888e7752ae199b87b8b7d54090ab42f0a410b700d3eb696d9",
+      "local": "c8a899ce2736b8739f9e0aeef0587eabfaa4280acabaced9179e31065dda54ab",
+      "incoming": "b6709248bc9c68da619f8b4c2aebaae93b53527643f5959a62bef5a1bd3f8fb6",
+      "text_merge": "conflict",
+      "conflict_regions": 1
+    },
+    {
+      "path": "gpui/crates/transform-metadata.json",
+      "kind": "metadata",
+      "disposition": "upstream-only",
+      "upstream_change": "modified",
+      "baseline": "89e82bc6c2e3327e360232889dba35b40c0a6c31c0544feda5679783ebdff296",
+      "local": "89e82bc6c2e3327e360232889dba35b40c0a6c31c0544feda5679783ebdff296",
+      "incoming": "280c5b783af48678f8b345ce8f8437f8296270904cd22c416f03d3f06d4a453a"
+    },
+    {
+      "path": "upstream.json",
+      "kind": "metadata",
+      "disposition": "overlap",
+      "upstream_change": "modified",
+      "baseline": "5d3c0d5d9cefa334d33d8f876713d4edaadc84d4336686f58264d196bad57aab",
+      "local": "a94d609ef4c53f13ddc038ffc87b2da870ec70a2a8e2b03ee1dd31e3524ad4a8",
+      "incoming": "c5d936c36478766288a46cc2f0da4ab859373d4a49301ed885dff46a2c7cf89c"
+    }
+  ]
+}
