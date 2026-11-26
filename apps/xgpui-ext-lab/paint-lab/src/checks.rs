@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod alpha_checks;
+#[cfg(test)]
+mod backdrop_checks;
 mod gradient_checks;
 #[cfg(test)]
 mod paint_checks;
