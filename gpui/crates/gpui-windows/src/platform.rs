@@ -39,6 +39,8 @@ use windows::{
 use crate::*;
 use gpui::*;
 
+const WM_GPUI_DESKTOP_PREFERENCES_CHANGED: u32 = WM_USER + 11;
+
 struct TrackedWindow {
     handle: SafeHwnd,
     frame_signal: Arc<PlatformFrameSignal>,
@@ -99,6 +101,7 @@ pub(crate) struct WindowsPlatformState {
     pub(crate) draw_coordinator: Rc<DrawCoordinator>,
     directx_devices: RefCell<Option<DirectXDevices>>,
     low_power_mode_enabled: Cell<bool>,
+    high_contrast: Cell<Option<bool>>,
     /// Device recovery failed and the app was told.
     gpu_device_failed: Cell<bool>,
 }
@@ -116,6 +119,7 @@ struct PlatformCallbacks {
     system_wake: Cell<Option<Box<dyn FnMut()>>>,
     low_power_mode_change: Cell<Option<Box<dyn FnMut()>>>,
     displays_changed: Cell<Option<Box<dyn FnMut()>>>,
+    desktop_preferences_changed: Cell<Option<Box<dyn FnMut()>>>,
     gpu_device_lost: Cell<Option<Box<dyn FnMut(GpuDeviceLost)>>>,
 }
 
@@ -133,6 +137,7 @@ impl WindowsPlatformState {
             draw_coordinator: Rc::new(DrawCoordinator::new()),
             directx_devices: RefCell::new(directx_devices),
             low_power_mode_enabled: Cell::new(false),
+            high_contrast: Cell::new(system_high_contrast()),
             gpu_device_failed: Cell::new(false),
             menus: RefCell::new(Vec::new()),
         }
@@ -780,6 +785,21 @@ impl Platform for WindowsPlatform {
         system_appearance().log_err().unwrap_or_default()
     }
 
+    fn desktop_preferences(&self) -> DesktopPreferences {
+        DesktopPreferences {
+            high_contrast: self.inner.state.high_contrast.get(),
+            ..Default::default()
+        }
+    }
+
+    fn on_desktop_preferences_changed(&self, callback: Box<dyn FnMut()>) {
+        self.inner
+            .state
+            .callbacks
+            .desktop_preferences_changed
+            .set(Some(callback));
+    }
+
     fn open_url(&self, url: &str) {
         if url.is_empty() {
             return;
@@ -1242,10 +1262,24 @@ impl WindowsPlatformInner {
             | WM_GPUI_DOCK_MENU_ACTION
             | WM_GPUI_KEYBOARD_LAYOUT_CHANGED
             | WM_GPUI_DISPLAYS_CHANGED
+            | WM_GPUI_DESKTOP_PREFERENCES_CHANGED
             | WM_GPUI_GPU_DEVICE_LOST
             | WM_GPUI_GPU_DEVICE_FAILED => self.handle_gpui_events(msg, wparam, lparam),
             WM_POWERBROADCAST => self.handle_power_broadcast(wparam, lparam),
             WM_DISPLAYCHANGE => self.handle_display_change(handle),
+            WM_SETTINGCHANGE | WM_SYSCOLORCHANGE | WM_THEMECHANGED => {
+                // Defer app callbacks until the message loop regains control.
+                unsafe {
+                    PostMessageW(
+                        Some(handle),
+                        WM_GPUI_DESKTOP_PREFERENCES_CHANGED,
+                        WPARAM(self.validation_number),
+                        LPARAM(0),
+                    )
+                    .log_err();
+                }
+                None
+            }
             WM_QUERYENDSESSION => Some(1),
             WM_ENDSESSION if wparam.0 != 0 => self.handle_end_session(),
             _ => None,
@@ -1280,6 +1314,17 @@ impl WindowsPlatformInner {
             WM_GPUI_DOCK_MENU_ACTION => self.handle_dock_action_event(lparam.0 as _),
             WM_GPUI_KEYBOARD_LAYOUT_CHANGED => self.handle_keyboard_layout_change(),
             WM_GPUI_DISPLAYS_CHANGED => self.handle_displays_changed(),
+            WM_GPUI_DESKTOP_PREFERENCES_CHANGED => {
+                if let Some(high_contrast) = system_high_contrast()
+                    && self.state.high_contrast.replace(Some(high_contrast)) != Some(high_contrast)
+                {
+                    self.with_callback(
+                        |callbacks| &callbacks.desktop_preferences_changed,
+                        |callback| callback(),
+                    );
+                }
+                Some(0)
+            }
             WM_GPUI_GPU_DEVICE_LOST => self.handle_device_lost(lparam),
             _ => unreachable!(),
         }

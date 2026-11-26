@@ -489,6 +489,24 @@ fn render_client_frame(
     frame.into_any_element()
 }
 
+fn caption_target(look: &ResolvedShellLook, scale: f32, windows: bool) -> Size<Pixels> {
+    if windows {
+        size(
+            px(46. * scale),
+            px((32. * scale).max(look.typography.size * 1.5 + 4. * scale)),
+        )
+    } else {
+        size(px(look.button_size), px(look.button_size))
+    }
+}
+
+fn caption_shape(element: Stateful<Div>, target: Size<Pixels>, windows: bool) -> Stateful<Div> {
+    element
+        .w(target.width)
+        .h(target.height)
+        .when(!windows, |s| s.rounded_full())
+}
+
 fn render_titlebar(
     state: &ClientFrameState,
     titlebar: Option<AnyElement>,
@@ -504,7 +522,12 @@ fn render_titlebar(
     let controls = state.controls;
     let left_buttons = visible_buttons(state.button_layout.left, controls);
     let right_buttons = visible_buttons(state.button_layout.right, controls);
-    let side_width = px((left_buttons.len().max(right_buttons.len()) as f32 * 33. + 8.) * scale);
+    let windows = cx.platform_info().os == OperatingSystem::Windows
+        && !(left_buttons.is_empty() && right_buttons.is_empty());
+    let target = caption_target(&look, scale, windows);
+    let side_padding = if windows { px(0.) } else { px(8. * scale) };
+    let side_width =
+        target.width * left_buttons.len().max(right_buttons.len()) as f32 + side_padding;
     let custom_header = titlebar.is_some();
     let mut buttons = |side: Vec<WindowButton>, right: bool| {
         let mut row = div()
@@ -512,7 +535,7 @@ fn render_titlebar(
             .items_center()
             .flex_none()
             .min_w(if custom_header {
-                px((side.len() as f32 * 33. + 8.) * scale)
+                target.width * side.len() as f32 + side_padding
             } else {
                 side_width
             })
@@ -530,6 +553,7 @@ fn render_titlebar(
                     &look,
                     interactive,
                     (preview_focus, preview_hover),
+                    (target, windows),
                     window,
                     cx,
                 )
@@ -540,6 +564,7 @@ fn render_titlebar(
                     &look,
                     interactive,
                     (preview_focus, preview_hover),
+                    (target, windows),
                 )
             };
             row = row.child(element);
@@ -552,15 +577,19 @@ fn render_titlebar(
         .id("shell-titlebar")
         .debug_selector(|| "shell-titlebar-bounds".into())
         .flex_none()
-        .h(px(look.titlebar_height))
-        .px(px(4. * scale))
+        .h(if windows {
+            target.height
+        } else {
+            px(look.titlebar_height)
+        })
+        .px(if windows { px(0.) } else { px(4. * scale) })
         .flex()
         .items_center()
         .bg(rgb(palette.header))
         .text_color(rgb(palette.text))
         .font(look.typography.font.clone())
         .text_size(px(look.typography.size))
-        .border_b_1()
+        .when(!windows, |s| s.border_b_1())
         .border_color(rgb(palette.border))
         .child(left)
         .pl(px(if mac_native { 80.0 } else { 0.0 }))
@@ -679,12 +708,13 @@ fn presented_control(
     look: &ResolvedShellLook,
     interactive: bool,
     (preview_focus, preview_hover): (bool, bool),
+    (target_bounds, windows): (Size<Pixels>, bool),
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let control = shell_control(button, state.maximized);
     let label = control.accessible_label();
-    let target_size = px(look.button_size);
+    let target_size = target_bounds.width.min(target_bounds.height);
     let interaction = interactive.then(|| {
         window.use_keyed_state(
             SharedString::from(format!("shell-control-state-{}", button.id())),
@@ -719,6 +749,7 @@ fn presented_control(
         focus_color: look.focus,
         scale: state.preferences.text_scale,
         target_size,
+        target_bounds,
         preview: !interactive,
     };
     let artwork = presenter.render(&control_state, window, cx);
@@ -737,17 +768,16 @@ fn presented_control(
         } else {
             format!("Preview: {label}")
         })
-        .size(target_size)
         .flex_none()
         .flex()
         .items_center()
         .justify_center()
         .overflow_hidden()
-        .rounded_full()
-        .border_2()
+        .when(!windows || focused, |s| s.border_2())
         .border_color(transparent_black())
         .when(focused, |s| s.border_color(rgb(accent)))
         .child(artwork);
+    element = caption_shape(element, target_bounds, windows);
     if let Some(interaction) = interaction {
         let focus = interaction.read(cx).focus.clone();
         let (hover_state, down_state, up_state, out_state) = (
@@ -804,30 +834,68 @@ fn builtin_control(
     look: &ResolvedShellLook,
     interactive: bool,
     preview: (bool, bool),
+    (target, windows): (Size<Pixels>, bool),
 ) -> AnyElement {
     let maximized = state.maximized;
     let palette = look.colors;
     let scale = state.preferences.text_scale;
     let label = control_label(button, maximized);
-    with_control_behavior(
+    let mut element = caption_shape(
         control_button(
             button.id(),
             label,
             palette,
             look.focus,
-            px(look.button_size),
+            windows,
             interactive,
             preview,
         ),
-        button,
-        interactive,
-    )
-    .child(builtin_symbol(
-        shell_control(button, maximized),
-        scale,
-        palette.text,
-    ))
-    .into_any_element()
+        target,
+        windows,
+    );
+    let control = shell_control(button, maximized);
+    if windows {
+        let ((hover, hover_text), (pressed, pressed_text)) =
+            windows_caption_colors(control, palette, state.preferences.high_contrast);
+        let glyph = match control {
+            ShellControl::Minimize => "\u{e921}",
+            ShellControl::Maximize => "\u{e922}",
+            ShellControl::Restore => "\u{e923}",
+            ShellControl::Close => "\u{e8bb}",
+        };
+        element = element
+            .text_color(rgb(palette.text))
+            .when(preview.1, |s| s.bg(hover).text_color(hover_text))
+            .when(interactive, |s| {
+                s.hover(move |s| s.bg(hover).text_color(hover_text))
+                    .active(move |s| s.bg(pressed).text_color(pressed_text))
+            })
+            .child(
+                div()
+                    .font_family("Segoe MDL2 Assets")
+                    .text_size(px(10. * scale))
+                    .child(glyph),
+            );
+    } else {
+        element = element.child(builtin_symbol(control, scale, palette.text));
+    }
+    with_control_behavior(element, button, interactive).into_any_element()
+}
+
+fn windows_caption_colors(
+    control: ShellControl,
+    palette: ShellColors,
+    high_contrast: bool,
+) -> ((Rgba, Rgba), (Rgba, Rgba)) {
+    let text = rgb(palette.text);
+    if high_contrast {
+        ((rgb(palette.hover), text), (text, rgb(palette.header)))
+    } else if control == ShellControl::Close {
+        let white = rgb(0xffffff);
+        ((rgb(0xc42b1c), white), (rgba(0xc42b1ce6), white))
+    } else {
+        ((text.opacity(0.10), text), (text.opacity(0.06), text))
+    }
 }
 
 /// The built-in control symbols, drawn as vectors in one shared 10px box so all
@@ -1189,7 +1257,7 @@ mod frame {
         label: &'static str,
         palette: Palette,
         accent: u32,
-        size: Pixels,
+        windows: bool,
         interactive: bool,
         (preview_focus, preview_hover): (bool, bool),
     ) -> Stateful<Div> {
@@ -1208,17 +1276,15 @@ mod frame {
             .when(interactive, |s| {
                 s.focusable().tab_stop(!NATIVE_CAPTION_CLICKS)
             })
-            .size(size)
             .flex_none()
             .flex()
             .items_center()
             .justify_center()
-            .rounded_full()
             .border_2()
             .border_color(transparent_black())
             .when(preview_focus, |s| s.border_color(rgb(accent)))
-            .when(preview_hover, |s| s.bg(rgb(palette.hover)))
-            .when(interactive, |s| {
+            .when(preview_hover && !windows, |s| s.bg(rgb(palette.hover)))
+            .when(interactive && !windows, |s| {
                 s.cursor_pointer().hover(move |s| s.bg(rgb(palette.hover)))
             })
             .focus_visible(move |s| s.border_color(rgb(accent)))
@@ -1267,7 +1333,7 @@ mod frame {
                 "Close",
                 palette,
                 0x3584e4,
-                px(33.),
+                false,
                 false,
                 (false, false),
             );
@@ -1276,7 +1342,7 @@ mod frame {
                 "Close",
                 palette,
                 0x3584e4,
-                px(33.),
+                false,
                 false,
                 (false, true),
             );
@@ -1316,6 +1382,42 @@ mod frame {
 #[cfg(test)]
 mod input_tests {
     use super::*;
+
+    #[::core::prelude::v1::test]
+    fn windows_caption_targets_accept_rectangular_or_round_artwork() {
+        let preferences = ShellOptions::default().resolved_preferences(&Default::default());
+        let look = preferences.resolved_look(WindowAppearance::Light, true);
+        let target = caption_target(&look, 1., true);
+        assert_eq!(target, size(px(46.), px(32.)));
+        let mut wrapper = caption_shape(div().id("caption").overflow_hidden(), target, true);
+        assert_eq!(wrapper.style().corner_radii, Default::default());
+
+        let mut artwork = div().rounded_full();
+        assert_ne!(artwork.style().corner_radii, Default::default());
+        let mut linux_wrapper =
+            caption_shape(div().id("caption"), caption_target(&look, 1., false), false);
+        assert_ne!(linux_wrapper.style().corner_radii, Default::default());
+    }
+
+    #[::core::prelude::v1::test]
+    fn windows_close_uses_red_only_outside_high_contrast() {
+        let palette = ShellColors::new(WindowAppearance::Light, true, false);
+        assert_eq!(
+            windows_caption_colors(ShellControl::Close, palette, false),
+            (
+                (rgb(0xc42b1c), rgb(0xffffff)),
+                (rgba(0xc42b1ce6), rgb(0xffffff))
+            )
+        );
+        let contrast = ShellColors::new(WindowAppearance::Dark, true, true);
+        assert_eq!(
+            windows_caption_colors(ShellControl::Close, contrast, true),
+            (
+                (rgb(contrast.hover), rgb(contrast.text)),
+                (rgb(contrast.text), rgb(contrast.header))
+            )
+        );
+    }
 
     #[::core::prelude::v1::test]
     fn desktop_preferences_follow_live_values_and_explicit_overrides_win() {
@@ -1867,7 +1969,8 @@ mod presenter_tests {
         );
         for state in &frame {
             assert!(!state.preview && !state.hovered && !state.pressed && !state.focused);
-            assert_eq!(state.target_size, px(33.));
+            assert_eq!(state.target_size, px(32.));
+            assert_eq!(state.target_bounds, size(px(46.), px(32.)));
             assert_eq!(state.scale, 1.);
         }
         // The built-in glyphs are replaced, not drawn underneath.

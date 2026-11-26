@@ -4,10 +4,31 @@ use std::{
 };
 
 use gpui_util::ResultExt;
-use windows::Win32::UI::WindowsAndMessaging::{
-    SPI_GETWHEELSCROLLCHARS, SPI_GETWHEELSCROLLLINES, SYSTEM_PARAMETERS_INFO_ACTION,
-    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
+use windows::Win32::UI::{
+    Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW},
+    WindowsAndMessaging::{
+        SPI_GETHIGHCONTRAST, SPI_GETWHEELSCROLLCHARS, SPI_GETWHEELSCROLLLINES,
+        SYSTEM_PARAMETERS_INFO_ACTION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
+    },
 };
+
+pub(crate) fn system_high_contrast() -> Option<bool> {
+    let mut contrast = HIGHCONTRASTW {
+        cbSize: size_of::<HIGHCONTRASTW>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: SPI_GETHIGHCONTRAST writes a HIGHCONTRASTW to this initialized buffer.
+    unsafe {
+        SystemParametersInfoW(
+            SPI_GETHIGHCONTRAST,
+            contrast.cbSize,
+            Some((&raw mut contrast).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS::default(),
+        )
+    }
+    .log_err()?;
+    Some(contrast.dwFlags.contains(HCF_HIGHCONTRASTON))
+}
 
 /// Windows settings pulled from SystemParametersInfo
 /// https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfow
