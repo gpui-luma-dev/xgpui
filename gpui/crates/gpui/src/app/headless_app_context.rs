@@ -13,7 +13,7 @@ use crate::{
     Context, Entity, EntityId, ForegroundExecutor, Global, Pixels, PlatformHeadlessRenderer,
     PlatformTextSystem, Render, Reservation, Size, Task, TestDispatcher, TestPlatform, TextSystem,
     Window, WindowBounds, WindowHandle, WindowOptions,
-    app::{GpuiBorrow, GpuiMode},
+    app::{GpuiBorrow, GpuiMode, test_context::test_window},
 };
 use anyhow::Result;
 use image::RgbaImage;
@@ -123,6 +123,15 @@ impl HeadlessAppContext {
             },
             build_root,
         )
+    }
+
+    /// Simulates the window moving to a display with a different scale factor.
+    pub fn simulate_window_scale_factor_change(
+        &mut self,
+        window: AnyWindowHandle,
+        scale_factor: f32,
+    ) {
+        test_window(&self.app, window).simulate_scale_factor_change(scale_factor);
     }
 
     /// Runs all pending tasks until parked.
@@ -280,5 +289,25 @@ impl AppContext for HeadlessAppContext {
     {
         let app = self.app.borrow();
         app.read_global(callback)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Empty, NoopTextSystem, px, size};
+
+    #[test]
+    fn headless_scale_change_preserves_logical_viewport() -> Result<()> {
+        let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem));
+        let viewport = size(px(320.), px(180.));
+        let window = cx.open_window(viewport, |_, cx| cx.new(|_| Empty))?;
+
+        cx.simulate_window_scale_factor_change(window.into(), 2.);
+        cx.update_window(window.into(), |_, window, _| {
+            assert_eq!(window.scale_factor(), 2.);
+            assert_eq!(window.viewport_size(), viewport);
+        })?;
+        Ok(())
     }
 }

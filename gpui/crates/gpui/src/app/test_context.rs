@@ -1,12 +1,13 @@
 use crate::{
     Action, AnyView, AnyWindowHandle, App, AppCell, AppContext, AsyncApp, AvailableSpace,
-    BackgroundExecutor, BorrowAppContext, Bounds, Capslock, ClipboardItem, DisplayId, DrawPhase,
-    Drawable, Element, Empty, EntityId, EventEmitter, ForegroundExecutor, Global, InputEvent,
-    Keystroke, Modifiers, ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Pixels, Platform, PlatformTextSystem, Point, Render, Result, SharedString, Size,
-    SystemNotification, SystemNotificationResponse, Task, TestDispatcher, TestPlatform,
-    TestScreenCaptureSource, TestWindow, TextSystem, VisualContext, Window, WindowBounds,
-    WindowHandle, WindowOptions, WindowVisibility, app::GpuiMode, window::ElementArenaScope,
+    BackgroundExecutor, BorrowAppContext, Bounds, Capslock, ClipboardItem, Decorations, DisplayId,
+    DrawPhase, Drawable, Element, Empty, EntityId, EventEmitter, ForegroundExecutor, Global,
+    InputEvent, Keystroke, Modifiers, ModifiersChangedEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Platform, PlatformTextSystem, Point, Render, Result,
+    SharedString, Size, SystemNotification, SystemNotificationResponse, Task, TestDispatcher,
+    TestPlatform, TestScreenCaptureSource, TestWindow, TextSystem, VisualContext, Window,
+    WindowBounds, WindowHandle, WindowOptions, WindowVisibility, app::GpuiMode,
+    window::ElementArenaScope,
 };
 use anyhow::{anyhow, bail};
 use futures::{Stream, StreamExt, channel::oneshot};
@@ -477,6 +478,16 @@ impl TestAppContext {
             .simulate_visibility_change(visibility);
     }
 
+    /// Simulates the platform changing how the window is decorated.
+    pub fn simulate_window_decorations_change(
+        &self,
+        window_handle: AnyWindowHandle,
+        decorations: Decorations,
+    ) {
+        self.test_window(window_handle)
+            .simulate_decorations_change(decorations);
+    }
+
     /// Simulates the mouse cursor entering (`true`) or leaving (`false`) the window.
     ///
     /// Test windows are also hovered while active and unhovered when
@@ -673,17 +684,7 @@ impl TestAppContext {
 
     /// Returns the `TestWindow` backing the given handle.
     pub(crate) fn test_window(&self, window: AnyWindowHandle) -> TestWindow {
-        self.app
-            .borrow_mut()
-            .windows
-            .get_mut(window.id)
-            .unwrap()
-            .as_deref_mut()
-            .unwrap()
-            .platform_window
-            .as_test()
-            .unwrap()
-            .clone()
+        test_window(&self.app, window)
     }
 
     /// Returns a stream of notifications whenever the Entity is updated.
@@ -871,6 +872,19 @@ impl<V> Entity<V> {
             drop(subscriptions);
         }
     }
+}
+
+pub(super) fn test_window(app: &AppCell, window: AnyWindowHandle) -> TestWindow {
+    app.borrow_mut()
+        .windows
+        .get_mut(window.id)
+        .unwrap()
+        .as_deref_mut()
+        .unwrap()
+        .platform_window
+        .as_test()
+        .unwrap()
+        .clone()
 }
 
 use derive_more::{Deref, DerefMut};

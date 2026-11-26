@@ -1081,6 +1081,25 @@ impl Platform for MacPlatform {
         self.ensure_system_power_observers();
     }
 
+    fn debug_state(&self) -> serde_json::Value {
+        let app = NSApplication::sharedApplication(self.1);
+        let key_window: *mut AnyObject = unsafe { msg_send![&*app, keyWindow] };
+        let main_window: *mut AnyObject = unsafe { msg_send![&*app, mainWindow] };
+        let window_number = |window: *mut AnyObject| -> Option<isize> {
+            (!window.is_null()).then(|| unsafe { msg_send![window, windowNumber] })
+        };
+        serde_json::json!({
+            "app_is_active": app.isActive(),
+            "app_is_hidden": app.isHidden(),
+            "app_occlusion_state_visible": app
+                .occlusionState()
+                .contains(objc2_app_kit::NSApplicationOcclusionState::Visible),
+            "key_window_number": window_number(key_window),
+            "main_window_number": window_number(main_window),
+            "low_power_mode": NSProcessInfo::processInfo().isLowPowerModeEnabled(),
+        })
+    }
+
     fn thermal_state(&self) -> ThermalState {
         process_info::thermal_state()
     }
@@ -1098,14 +1117,30 @@ impl Platform for MacPlatform {
 
     fn show_system_notification(&self, notification: gpui::SystemNotification) {
         let mut state = self.0.lock();
-        let executor = state.foreground_executor.clone();
-        state.system_notifications.show(&executor, notification);
+        let foreground = state.foreground_executor.clone();
+        let background = state.background_executor.clone();
+        state
+            .system_notifications
+            .send(
+                &foreground,
+                &background,
+                crate::system_notifications::NotificationCommand::Show(notification),
+            )
+            .detach();
     }
 
     fn dismiss_system_notification(&self, tag: &str) {
         let mut state = self.0.lock();
-        let executor = state.foreground_executor.clone();
-        state.system_notifications.dismiss(&executor, tag);
+        let foreground = state.foreground_executor.clone();
+        let background = state.background_executor.clone();
+        state
+            .system_notifications
+            .send(
+                &foreground,
+                &background,
+                crate::system_notifications::NotificationCommand::Dismiss(tag.into()),
+            )
+            .detach();
     }
 
     fn on_system_notification_response(
