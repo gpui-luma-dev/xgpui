@@ -1,0 +1,27 @@
+name: Main smoke checks
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Main repository and website checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check generated manifests
+        run: cargo run --locked --manifest-path tools/release-sync/Cargo.toml -- build-manifests --check
+      - name: Check website
+        run: python3 scripts/check_pages.py

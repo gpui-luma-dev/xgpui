@@ -21,20 +21,6 @@ on:
       - 'Cargo.lock'
       - '.cargo/validation.toml'
       - 'rust-toolchain*'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/gpu-interop.yml'
-      - 'extensions/crates/xgpui-gpu-interop/**'
-      - 'apps/xgpui-ext-lab/gpu-interop-lab/**'
-      - 'apps/xgpui-ext-lab/gpu-canvas-workbench/**'
-      - 'apps/xgpui-ext-lab/interop-boids/**'
-      - 'apps/xgpui-ext-lab/Cargo.toml'
-      - 'gpui/crates/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.cargo/validation.toml'
-      - 'rust-toolchain*'
 
 permissions:
   contents: read

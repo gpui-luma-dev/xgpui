@@ -302,9 +302,12 @@ git diff --check
 
 `just test` runs the current host's suites. Use `just test --list` to inspect
 coverage, or `just test --only native-libraries` to isolate a failure. CI covers
-macOS, Linux and Windows for every PR; the owner's manual Windows and Linux checks
-happen on `main`. Use the labs (`just labs`) for graphical checks. `just pages-check`
-checks the static website in `pages/`, which is edited by hand. Toolchain and host
+macOS, Linux and Windows for PRs into `main`. After a push to `main`, the
+smoke workflow checks generated manifests and the static site on the integrated
+commit. For an explicitly approved direct push that bypasses PR checks, dispatch
+the applicable full validation workflows on `main`. The owner's manual Windows
+and Linux checks happen on `main`. Use the labs (`just labs`) for graphical checks.
+`just pages-check` checks the static website in `pages/`, which is edited by hand. Toolchain and host
 prerequisites are in [Local development](https://xgpui.dev/local-development.html#build-prerequisites).
 
 ## Website deployment
