@@ -673,17 +673,7 @@ impl TestAppContext {
 
     /// Returns the `TestWindow` backing the given handle.
     pub(crate) fn test_window(&self, window: AnyWindowHandle) -> TestWindow {
-        self.app
-            .borrow_mut()
-            .windows
-            .get_mut(window.id)
-            .unwrap()
-            .as_deref_mut()
-            .unwrap()
-            .platform_window
-            .as_test()
-            .unwrap()
-            .clone()
+        test_window(&self.app, window)
     }
 
     /// Returns a stream of notifications whenever the Entity is updated.
@@ -871,6 +861,19 @@ impl<V> Entity<V> {
             drop(subscriptions);
         }
     }
+}
+
+pub(super) fn test_window(app: &AppCell, window: AnyWindowHandle) -> TestWindow {
+    app.borrow_mut()
+        .windows
+        .get_mut(window.id)
+        .unwrap()
+        .as_deref_mut()
+        .unwrap()
+        .platform_window
+        .as_test()
+        .unwrap()
+        .clone()
 }
 
 use derive_more::{Deref, DerefMut};

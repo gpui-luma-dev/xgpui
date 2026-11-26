@@ -1098,14 +1098,30 @@ impl Platform for MacPlatform {
 
     fn show_system_notification(&self, notification: gpui::SystemNotification) {
         let mut state = self.0.lock();
-        let executor = state.foreground_executor.clone();
-        state.system_notifications.show(&executor, notification);
+        let foreground = state.foreground_executor.clone();
+        let background = state.background_executor.clone();
+        state
+            .system_notifications
+            .send(
+                &foreground,
+                &background,
+                crate::system_notifications::NotificationCommand::Show(notification),
+            )
+            .detach();
     }
 
     fn dismiss_system_notification(&self, tag: &str) {
         let mut state = self.0.lock();
-        let executor = state.foreground_executor.clone();
-        state.system_notifications.dismiss(&executor, tag);
+        let foreground = state.foreground_executor.clone();
+        let background = state.background_executor.clone();
+        state
+            .system_notifications
+            .send(
+                &foreground,
+                &background,
+                crate::system_notifications::NotificationCommand::Dismiss(tag.into()),
+            )
+            .detach();
     }
 
     fn on_system_notification_response(
