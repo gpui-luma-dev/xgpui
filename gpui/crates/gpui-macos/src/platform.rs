@@ -1081,6 +1081,25 @@ impl Platform for MacPlatform {
         self.ensure_system_power_observers();
     }
 
+    fn debug_state(&self) -> serde_json::Value {
+        let app = NSApplication::sharedApplication(self.1);
+        let key_window: *mut AnyObject = unsafe { msg_send![&*app, keyWindow] };
+        let main_window: *mut AnyObject = unsafe { msg_send![&*app, mainWindow] };
+        let window_number = |window: *mut AnyObject| -> Option<isize> {
+            (!window.is_null()).then(|| unsafe { msg_send![window, windowNumber] })
+        };
+        serde_json::json!({
+            "app_is_active": app.isActive(),
+            "app_is_hidden": app.isHidden(),
+            "app_occlusion_state_visible": app
+                .occlusionState()
+                .contains(objc2_app_kit::NSApplicationOcclusionState::Visible),
+            "key_window_number": window_number(key_window),
+            "main_window_number": window_number(main_window),
+            "low_power_mode": NSProcessInfo::processInfo().isLowPowerModeEnabled(),
+        })
+    }
+
     fn thermal_state(&self) -> ThermalState {
         process_info::thermal_state()
     }

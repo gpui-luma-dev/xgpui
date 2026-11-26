@@ -8185,6 +8185,7 @@ dependencies = [
  "raw-window-handle",
  "scheduler-gpui-unofficial",
  "semver",
+ "serde_json",
  "smallvec",
  "strum",
  "uuid",
