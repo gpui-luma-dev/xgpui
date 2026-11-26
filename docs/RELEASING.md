@@ -7,8 +7,8 @@ reviews live in [release-reviews/](release-reviews/).
 A release starts as a **release issue** that shows the whole plan in one place:
 what changed, every crate's next version and why, the release notes and the
 remaining steps. Everything that changes the repository then lands through
-reviewed PRs. The owner makes the decisions and does the two irreversible steps
-by hand: publishing the crates and deploying the website.
+reviewed PRs. The owner makes the decisions and manually starts the workflows
+that publish the crates and deploy the website.
 
 | Step | Who | Result |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ by hand: publishing the crates and deploying the website.
 | 2. Decisions | owner | Version questions answered on the issue |
 | 3. Release PRs | agent, owner merges | Versions and pins, website docs, records, merged to `main` |
 | 4. Tag and draft record | agent | Release tag on the merged commit and a draft GitHub release |
-| 5. Publish crates | owner | Crates uploaded locally from the tag |
+| 5. Publish crates | owner starts CI | Crates uploaded from the tag, with verification reports |
 | 6. Finish the record | agent | Verification table added and the GitHub release published |
 | 7. Deploy the website | owner | Pages workflow run manually |
 
@@ -114,13 +114,20 @@ On the merged commit, **before any upload**:
   first 12 hex characters) and verify that it resolves to the full commit SHA.
   Each distinct commit gets its own tag; a retry of the same release reuses it.
 - Create a **draft** GitHub release on that tag with the issue's title, notes and
-  old → new version table. Keep a copy of the title and body; the registry
-  workflow's finalizer overwrites them if it runs.
+  old → new version table. Keep a copy of the title and body for the final record.
 - Add the tag and the draft's link to the issue.
 
 ## 5. Publish crates — owner
 
-From a clean checkout of the tag, with `CARGO_REGISTRY_TOKEN` set:
+In GitHub Actions, run **Publish crates** on `main`. Enter the exact reviewed
+release tag and `publish FULL_COMMIT_SHA` using the full SHA verified in step 4.
+The workflow checks that the tag resolves to that commit in `main`'s history,
+tests the release tooling, then runs preflight, packaging checks and publication
+from the tagged source. The repository must have access to the organization's
+`CARGO_REGISTRY_TOKEN` Actions secret. Only the publish step receives it.
+
+The optional local path uses the same stages from a clean checkout of the tag,
+with `CARGO_REGISTRY_TOKEN` set:
 
 ```sh
 git switch --detach release-YYYY-MM-DD-COMMIT
@@ -129,8 +136,9 @@ just release-check       # package and build check; no uploads
 just release-publish     # uploads in dependency order
 ```
 
-Each step requires the previous step's report for the same tag. Reports are kept
-in `../xgpui-release-artifacts/<commit>/`. `release-publish` skips versions already
+Each stage requires the previous stage's report for the same tag. The workflow
+uploads JSON reports as the `crates-io-release-<run>-<attempt>` artifact. Local
+runs keep reports in `../xgpui-release-artifacts/<commit>/`. Publication skips versions already
 on crates.io with identical contents, verifies each upload before its dependents
 proceed, and stops on an unknown upload outcome.
 
@@ -143,7 +151,8 @@ old draft superseded and keep its tag.
 
 After the owner reports the publish:
 
-- Read the publish report. Every crate must be `published-verified` or
+- Read the publish report from the Actions artifact or the local release
+  artifacts directory. Every crate must be `published-verified` or
   `already-published` with a registry checksum, and the source SHA must match the
   tag.
 - Check the release from a fresh consumer outside the checkout: exact versions from
