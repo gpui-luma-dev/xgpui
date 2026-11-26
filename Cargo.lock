@@ -7892,6 +7892,7 @@ dependencies = [
  "sum-tree-gpui-unofficial",
  "taffy",
  "thiserror 2.0.21",
+ "tiny-skia-path 0.12.0",
  "ttf-parser",
  "unicode-bidi",
  "unicode-segmentation",

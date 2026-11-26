@@ -145,6 +145,7 @@ pub struct MetalRenderer {
     opaque: bool,
     command_queue: CommandQueue,
     paths_rasterization_pipeline_state: metal::RenderPipelineState,
+    path_tiles_pipeline_state: metal::RenderPipelineState,
     path_sprites_pipeline_state: metal::RenderPipelineState,
     shadows_pipeline_state: metal::RenderPipelineState,
     quads_pipeline_state: metal::RenderPipelineState,
@@ -396,6 +397,14 @@ impl MetalRenderer {
                 .context("allocating Metal unit vertices")?
         };
 
+        let path_tiles_pipeline_state = build_pipeline_state(
+            &device,
+            &library,
+            "path_tiles",
+            "path_tile_vertex",
+            "path_tile_fragment",
+            MTLPixelFormat::BGRA8Unorm,
+        )?;
         let paths_rasterization_pipeline_state = build_path_rasterization_pipeline_state(
             &device,
             &library,
@@ -522,6 +531,7 @@ impl MetalRenderer {
             opaque,
             command_queue,
             paths_rasterization_pipeline_state,
+            path_tiles_pipeline_state,
             path_sprites_pipeline_state,
             shadows_pipeline_state,
             quads_pipeline_state,
@@ -1444,32 +1454,51 @@ impl MetalRenderer {
                     self.draw_quads(range, instance_bindings, viewport_size, &command_encoder);
                 }
                 PrimitiveBatch::Paths(range) => {
-                    let paths = &scene.paths[range];
-                    command_encoder.endEncoding();
+                    let mut paths = &scene.paths[range];
+                    while let Some((first, rest)) = paths.split_first() {
+                        if first.winding_tiles().is_some() {
+                            if let Err(error) =
+                                self.draw_path_tiles(first, writer, viewport_size, &command_encoder)
+                            {
+                                command_encoder.endEncoding();
+                                return Err(error);
+                            }
+                            paths = rest;
+                            continue;
+                        }
+                        let legacy_count = paths
+                            .iter()
+                            .skip(1)
+                            .position(|path| path.winding_tiles().is_some())
+                            .map_or(paths.len(), |index| index + 1);
+                        let (legacy, rest) = paths.split_at(legacy_count);
+                        paths = rest;
+                        command_encoder.endEncoding();
 
-                    let did_draw = self.draw_paths_to_intermediate(
-                        paths,
-                        writer,
-                        viewport_size,
-                        &command_buffer,
-                    )?;
-
-                    command_encoder = new_command_encoder_for_texture(
-                        &command_buffer,
-                        texture,
-                        viewport_size,
-                        None,
-                    );
-
-                    if did_draw {
-                        if let Err(error) = self.draw_paths_from_intermediate(
-                            paths,
+                        let did_draw = self.draw_paths_to_intermediate(
+                            legacy,
                             writer,
                             viewport_size,
-                            &command_encoder,
-                        ) {
-                            command_encoder.endEncoding();
-                            return Err(error);
+                            &command_buffer,
+                        )?;
+
+                        command_encoder = new_command_encoder_for_texture(
+                            &command_buffer,
+                            texture,
+                            viewport_size,
+                            None,
+                        );
+
+                        if did_draw {
+                            if let Err(error) = self.draw_paths_from_intermediate(
+                                legacy,
+                                writer,
+                                viewport_size,
+                                &command_encoder,
+                            ) {
+                                command_encoder.endEncoding();
+                                return Err(error);
+                            }
                         }
                     }
                 }
@@ -1516,6 +1545,57 @@ impl MetalRenderer {
         }
 
         Ok(command_buffer.to_owned())
+    }
+
+    fn draw_path_tiles(
+        &self,
+        path: &Path<ScaledPixels>,
+        writer: &mut InstanceBufferWriter,
+        viewport_size: Size<DevicePixels>,
+        encoder: &metal::RenderCommandEncoderRef,
+    ) -> Result<()> {
+        let tiles = path.winding_tiles().unwrap();
+        let paint = path.winding_tile_paint().unwrap();
+        let tile_binding = writer.write(tiles.tiles())?;
+        let curve_binding = if tiles.curves().is_empty() {
+            writer.write(&[0u8; std::mem::size_of::<gpui::PathCurve>()])?
+        } else {
+            writer.write(tiles.curves())?
+        };
+        let paint_binding = writer.write(&[paint])?;
+
+        encoder.setRenderPipelineState(&self.path_tiles_pipeline_state);
+        unsafe {
+            for (index, binding) in [&tile_binding, &curve_binding, &paint_binding]
+                .into_iter()
+                .enumerate()
+            {
+                encoder.setFragmentBuffer_offset_atIndex(
+                    Some(&binding.buffer),
+                    binding.offset,
+                    index,
+                );
+                if index != 1 {
+                    encoder.setVertexBuffer_offset_atIndex(
+                        Some(&binding.buffer),
+                        binding.offset,
+                        index,
+                    );
+                }
+            }
+            encoder.setVertexBytes_length_atIndex(
+                std::ptr::NonNull::from(&viewport_size).cast(),
+                mem::size_of_val(&viewport_size),
+                3,
+            );
+            encoder.drawPrimitives_vertexStart_vertexCount_instanceCount(
+                metal::MTLPrimitiveType::TriangleStrip,
+                0,
+                4,
+                tiles.tiles().len(),
+            );
+        }
+        Ok(())
     }
 
     fn draw_paths_to_intermediate(
@@ -2938,10 +3018,8 @@ mod tests {
         }
 
         for (width, height) in [(0, 64), (64, 0), (-1, 64), (64, -1)] {
-            renderer.update_path_intermediate_textures(size(
-                DevicePixels(width),
-                DevicePixels(height),
-            ));
+            renderer
+                .update_path_intermediate_textures(size(DevicePixels(width), DevicePixels(height)));
             assert!(renderer.path_intermediate_texture.is_none());
             assert!(renderer.path_intermediate_msaa_texture.is_none());
             renderer.update_path_intermediate_textures(initial_size);

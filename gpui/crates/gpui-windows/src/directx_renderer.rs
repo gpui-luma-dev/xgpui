@@ -1,10 +1,10 @@
 mod color_presentation;
-mod retirement;
-mod wide_sdr;
 #[cfg(test)]
 mod device_failure_tests;
 #[cfg(test)]
 mod headless_retirement_tests;
+mod retirement;
+mod wide_sdr;
 
 use std::{
     slice,
@@ -107,6 +107,9 @@ struct DirectXRenderPipelines {
     shadow_pipeline: PipelineState<Shadow>,
     quad_pipeline: PipelineState<Quad>,
     path_rasterization_pipeline: PipelineState<PathRasterizationSprite>,
+    path_tile_pipeline: PipelineState<gpui::PathTile>,
+    path_curves: StructuredBuffer<gpui::PathCurve>,
+    path_paints: StructuredBuffer<gpui::PathTilePaint>,
     path_sprite_pipeline: PipelineState<PathSprite>,
     underline_pipeline: PipelineState<Underline>,
     mono_sprites: PipelineState<MonochromeSprite>,
@@ -723,8 +726,24 @@ impl DirectXRenderer {
             PrimitiveBatch::Quads(range) => self.draw_quads(range.start, range.len()),
             PrimitiveBatch::Paths(range) => {
                 let paths = &scene.paths[range];
-                self.draw_paths_to_intermediate(paths)?;
-                self.draw_paths_from_intermediate(paths)
+                let mut paths = paths;
+                while let Some((first, rest)) = paths.split_first() {
+                    if Self::can_draw_path_tiles(first) {
+                        self.draw_path_tiles(first)?;
+                        paths = rest;
+                    } else {
+                        let legacy_count = paths
+                            .iter()
+                            .skip(1)
+                            .position(Self::can_draw_path_tiles)
+                            .map_or(paths.len(), |index| index + 1);
+                        let (legacy, rest) = paths.split_at(legacy_count);
+                        self.draw_paths_to_intermediate(legacy)?;
+                        self.draw_paths_from_intermediate(legacy)?;
+                        paths = rest;
+                    }
+                }
+                Ok(())
             }
             PrimitiveBatch::Underlines(range) => self.draw_underlines(range.start, range.len()),
             PrimitiveBatch::MonochromeSprites { texture_id, range } => {
@@ -1248,6 +1267,56 @@ impl DirectXRenderer {
         result
     }
 
+    fn can_draw_path_tiles(path: &Path<ScaledPixels>) -> bool {
+        path.winding_tiles().is_some_and(|tiles| {
+            std::mem::size_of_val(tiles.tiles()) <= MAX_INSTANCE_BUFFER_SIZE
+                && std::mem::size_of_val(tiles.curves()) <= MAX_INSTANCE_BUFFER_SIZE
+        })
+    }
+
+    fn draw_path_tiles(&mut self, path: &Path<ScaledPixels>) -> Result<()> {
+        let tiles = path.winding_tiles().unwrap();
+        let paint = path.winding_tile_paint().unwrap();
+        let devices = self.devices.as_ref().context("devices missing")?;
+        let device = &devices.device;
+        let context = &devices.device_context;
+        let pipeline = &mut self.pipelines.path_tile_pipeline;
+        pipeline.update_buffer(device, context, tiles.tiles())?;
+        self.pipelines
+            .path_curves
+            .write(device, context, tiles.curves())?;
+        self.pipelines
+            .path_paints
+            .write(device, context, &[paint])?;
+
+        update_batch_start(
+            context,
+            self.globals
+                .batch_params_buffer
+                .as_ref()
+                .context("batch params buffer missing")?,
+            0,
+        )?;
+        set_pipeline_state(
+            context,
+            &[
+                pipeline.view.clone(),
+                self.pipelines.path_curves.view.clone(),
+                self.pipelines.path_paints.view.clone(),
+            ],
+            D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
+            &pipeline.vertex,
+            &pipeline.fragment,
+            &pipeline.blend_state,
+        );
+        unsafe {
+            context.DrawInstanced(4, tiles.tiles().len() as u32, 0, 0);
+            context.VSSetShaderResources(1, Some(&[None, None, None]));
+            context.PSSetShaderResources(1, Some(&[None, None, None]));
+        }
+        Ok(())
+    }
+
     fn draw_paths_to_intermediate(&mut self, paths: &[Path<ScaledPixels>]) -> Result<()> {
         if paths.is_empty() {
             return Ok(());
@@ -1625,6 +1694,15 @@ impl DirectXRenderPipelines {
             64,
             create_blend_state(device)?,
         )?;
+        let path_tile_pipeline = PipelineState::new(
+            device,
+            "path_tile_pipeline",
+            ShaderModule::PathTile,
+            64,
+            create_blend_state(device)?,
+        )?;
+        let path_curves = StructuredBuffer::new(device, "path_curves", 256)?;
+        let path_paints = StructuredBuffer::new(device, "path_paints", 1)?;
         let path_rasterization_pipeline = PipelineState::new(
             device,
             "path_rasterization_pipeline",
@@ -1672,6 +1750,9 @@ impl DirectXRenderPipelines {
             shadow_pipeline,
             quad_pipeline,
             path_rasterization_pipeline,
+            path_tile_pipeline,
+            path_curves,
+            path_paints,
             path_sprite_pipeline,
             underline_pipeline,
             mono_sprites,
@@ -1757,6 +1838,65 @@ struct BatchParams {
 }
 
 const _: () = assert!(std::mem::size_of::<BatchParams>() == 16);
+
+struct StructuredBuffer<T> {
+    label: &'static str,
+    buffer: ID3D11Buffer,
+    capacity: usize,
+    view: Option<ID3D11ShaderResourceView>,
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<T> StructuredBuffer<T> {
+    fn new(device: &ID3D11Device, label: &'static str, capacity: usize) -> Result<Self> {
+        let buffer = create_buffer(device, std::mem::size_of::<T>(), capacity)?;
+        let view = create_buffer_view(device, &buffer)?;
+        Ok(StructuredBuffer {
+            label,
+            buffer,
+            capacity,
+            view,
+            _marker: std::marker::PhantomData,
+        })
+    }
+
+    fn write(
+        &mut self,
+        device: &ID3D11Device,
+        device_context: &ID3D11DeviceContext,
+        data: &[T],
+    ) -> Result<()> {
+        self.ensure_capacity(device, data.len())?;
+        update_buffer(device_context, &self.buffer, data)
+    }
+
+    fn ensure_capacity(&mut self, device: &ID3D11Device, len: usize) -> Result<()> {
+        if self.capacity < len {
+            let element_size = std::mem::size_of::<T>().max(1);
+            let required_size = len.checked_mul(element_size);
+            anyhow::ensure!(
+                required_size.is_some_and(|size| size <= MAX_INSTANCE_BUFFER_SIZE),
+                "{} buffer needs {len} elements of {element_size} bytes, above the maximum of {MAX_INSTANCE_BUFFER_SIZE} bytes",
+                self.label
+            );
+            let new_capacity = len
+                .next_power_of_two()
+                .min(MAX_INSTANCE_BUFFER_SIZE / element_size);
+            log::debug!(
+                "Updating {} buffer size from {} to {}",
+                self.label,
+                self.capacity,
+                new_capacity
+            );
+            let buffer = create_buffer(device, std::mem::size_of::<T>(), new_capacity)?;
+            let view = create_buffer_view(device, &buffer)?;
+            self.buffer = buffer;
+            self.view = view;
+            self.capacity = new_capacity;
+        }
+        Ok(())
+    }
+}
 
 struct PipelineState<T> {
     label: &'static str,
@@ -2400,6 +2540,7 @@ pub(crate) mod shader_resources {
         Shadow,
         Underline,
         PathRasterization,
+        PathTile,
         PathSprite,
         MonochromeSprite,
         SubpixelSprite,
@@ -2460,6 +2601,10 @@ pub(crate) mod shader_resources {
                 ShaderModule::PathRasterization => match target {
                     ShaderTarget::Vertex => PATH_RASTERIZATION_VERTEX_BYTES,
                     ShaderTarget::Fragment => PATH_RASTERIZATION_FRAGMENT_BYTES,
+                },
+                ShaderModule::PathTile => match target {
+                    ShaderTarget::Vertex => PATH_TILE_VERTEX_BYTES,
+                    ShaderTarget::Fragment => PATH_TILE_FRAGMENT_BYTES,
                 },
                 ShaderModule::PathSprite => match target {
                     ShaderTarget::Vertex => PATH_SPRITE_VERTEX_BYTES,
@@ -2554,6 +2699,7 @@ pub(crate) mod shader_resources {
                 ShaderModule::Underline => "underline",
                 ShaderModule::PathRasterization => "path_rasterization",
                 ShaderModule::PathSprite => "path_sprite",
+                ShaderModule::PathTile => "path_tile",
                 ShaderModule::MonochromeSprite => "monochrome_sprite",
                 ShaderModule::SubpixelSprite => "subpixel_sprite",
                 ShaderModule::PolychromeSprite => "polychrome_sprite",

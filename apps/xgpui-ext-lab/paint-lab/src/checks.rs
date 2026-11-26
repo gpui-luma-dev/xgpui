@@ -5,6 +5,8 @@ mod backdrop_checks;
 mod gradient_checks;
 #[cfg(test)]
 mod paint_checks;
+#[cfg(test)]
+mod path_checks;
 #[cfg(feature = "portable-shaders")]
 mod portable_checks;
 #[cfg(test)]
