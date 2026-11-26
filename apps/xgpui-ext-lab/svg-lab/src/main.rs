@@ -538,6 +538,21 @@ mod tests {
     use super::*;
 
     #[::core::prelude::v1::test]
+    fn displacement_map_renders_when_layer_is_wider_than_filter_region() {
+        let renderer = SvgRenderer::new(Arc::new(()));
+        let image = renderer
+            .render_single_frame(include_bytes!("../tests/fixtures/displacement-map.svg"), 1.)
+            .unwrap();
+        let dimensions = image.size(0);
+        assert_eq!(dimensions, size(DevicePixels(1600), DevicePixels(1066)));
+
+        let width = dimensions.width.0 as usize;
+        let pixels = image.as_bytes(0).unwrap().as_chunks::<4>().0;
+        assert_eq!(pixels[880 * width + 1122][3], 255, "rectangle center");
+        assert_eq!(pixels[0][3], 0, "background");
+    }
+
+    #[::core::prelude::v1::test]
     fn loads_portrait_file_without_distortion_and_rejects_invalid_input() {
         let renderer = SvgRenderer::new(Arc::new(()));
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("svg-lab/tests/fixtures/portrait.svg");
