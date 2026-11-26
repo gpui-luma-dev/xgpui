@@ -176,7 +176,10 @@ impl HeadlessAppContext {
     /// returns `Some` via [`HeadlessAppContext::with_platform`].
     pub fn capture_screenshot(&mut self, window: AnyWindowHandle) -> Result<RgbaImage> {
         let mut app = self.app.borrow_mut();
-        app.update_window(window, |_, window, _| window.render_to_image())?
+        app.update_window(window, |_, window, cx| {
+            window.advance_scene_animations(cx);
+            window.render_to_image()
+        })?
     }
 
     /// Returns the text system.

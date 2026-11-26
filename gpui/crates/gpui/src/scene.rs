@@ -13,7 +13,48 @@ use std::{
     iter::Peekable,
     ops::{Add, Range, Sub},
     slice,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
 };
+
+fn next_command_identity() -> u64 {
+    static NEXT_COMMAND: AtomicU64 = AtomicU64::new(1);
+    NEXT_COMMAND.fetch_add(1, Ordering::Relaxed)
+}
+
+#[derive(Clone)]
+pub(crate) struct SpriteAnimation {
+    transformation: crate::TimedTransformation,
+    center: Point<Pixels>,
+    scale_factor: f32,
+    pose: crate::Transformation,
+    base_color: Hsla,
+    sprite_indices: smallvec::SmallVec<[usize; 1]>,
+    revision: u64,
+}
+
+impl SpriteAnimation {
+    pub(crate) fn new(
+        transformation: crate::TimedTransformation,
+        center: Point<Pixels>,
+        scale_factor: f32,
+    ) -> Self {
+        Self {
+            transformation,
+            center,
+            scale_factor,
+            pose: transformation.at(Duration::ZERO),
+            base_color: Hsla::default(),
+            sprite_indices: smallvec::SmallVec::new(),
+            revision: 0,
+        }
+    }
+
+    fn apply(&self, sprite: &mut MonochromeSprite) {
+        sprite.transformation = self.pose.into_matrix(self.center, self.scale_factor);
+        sprite.color = self.base_color.opacity(self.pose.alpha_factor());
+    }
+}
 
 #[allow(non_camel_case_types, unused)]
 #[expect(missing_docs)]
@@ -43,6 +84,7 @@ pub struct Scene {
     primitive_bounds: BoundsTree<ScaledPixels>,
     layer_stack: Vec<DrawOrder>,
     sort_keys: Vec<(u64, usize)>,
+    sprite_animations: collections::FxHashMap<u64, SpriteAnimation>,
     pub shadows: Vec<Shadow>,
     pub quads: Vec<Quad>,
     pub paths: Vec<Path<ScaledPixels>>,
@@ -64,6 +106,7 @@ pub struct Scene {
 impl Scene {
     pub fn clear(&mut self) {
         self.paint_operations.clear();
+        self.sprite_animations.clear();
         self.primitive_bounds.clear();
         self.layer_stack.clear();
         self.paths.clear();
@@ -97,15 +140,17 @@ impl Scene {
     }
 
     pub fn insert_primitive(&mut self, primitive: impl Into<Primitive>) {
-        static NEXT_COMMAND: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        self.insert_retained_primitive(
-            primitive.into(),
-            NEXT_COMMAND.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-        );
+        self.insert_retained_primitive(primitive.into(), next_command_identity());
     }
 
     fn insert_retained_primitive(&mut self, mut primitive: Primitive, identity: u64) {
-        let mut bounds = *primitive.bounds();
+        // The animation can move beyond its starting bounds. Order it
+        // against every primitive it can touch within the sprite's clip.
+        let mut bounds = if self.sprite_animations.contains_key(&identity) {
+            primitive.content_mask().bounds
+        } else {
+            *primitive.bounds()
+        };
         if let Primitive::Path(path) = &primitive
             && let Some(tiles) = path.winding_tiles()
         {
@@ -189,10 +234,59 @@ impl Scene {
             .push(PaintOperation::Primitive(primitive, identity));
     }
 
+    pub(crate) fn insert_animated_sprite(
+        &mut self,
+        sprite: MonochromeSprite,
+        mut animation: SpriteAnimation,
+    ) {
+        if sprite.content_mask.bounds.is_empty() {
+            return;
+        }
+        let identity = next_command_identity();
+        animation.revision = identity;
+        animation.base_color = sprite.color;
+        self.sprite_animations.insert(identity, animation);
+        self.insert_retained_primitive(sprite.into(), identity);
+    }
+
+    pub(crate) fn animation_frame_interval(&self) -> Option<Duration> {
+        self.sprite_animations
+            .values()
+            .map(|animation| {
+                animation
+                    .transformation
+                    .min_frame_interval()
+                    .unwrap_or_default()
+            })
+            .min()
+    }
+
+    pub(crate) fn advance_animations(&mut self, elapsed: Duration) {
+        for animation in self.sprite_animations.values_mut() {
+            let pose = animation.transformation.at(elapsed);
+            if animation.pose != pose {
+                animation.pose = pose;
+                animation.revision = next_command_identity();
+                for &index in &animation.sprite_indices {
+                    animation.apply(&mut self.monochrome_sprites[index]);
+                }
+            }
+        }
+    }
+
+    fn visual_revision(&self, identity: u64) -> u64 {
+        self.sprite_animations
+            .get(&identity)
+            .map_or(identity, |animation| animation.revision)
+    }
+
     pub fn replay(&mut self, range: Range<usize>, prev_scene: &Scene) {
         for operation in &prev_scene.paint_operations[range] {
             match operation {
                 PaintOperation::Primitive(primitive, identity) => {
+                    if let Some(animation) = prev_scene.sprite_animations.get(identity) {
+                        self.sprite_animations.insert(*identity, animation.clone());
+                    }
                     self.insert_retained_primitive(primitive.clone(), *identity)
                 }
                 PaintOperation::StartLayer(bounds) => self.push_layer(*bounds),
@@ -258,7 +352,7 @@ impl Scene {
                 if closing && depth + 1 == stack.len() {
                     continue;
                 }
-                revisions[*slot].push(*identity);
+                revisions[*slot].push(self.visual_revision(*identity));
                 ensure!(
                     revisions[*slot].len() <= crate::MAX_LAYER_COMMANDS,
                     "captured group exceeds 65536 commands"
@@ -392,7 +486,7 @@ impl Scene {
                     Primitive::Backdrop(p) => p.order,
                     Primitive::LayerBoundary(p) => p.order,
                 };
-                revision.push((*identity, order));
+                revision.push((self.visual_revision(*identity), order));
             } else {
                 reusable = false;
             }
@@ -414,6 +508,30 @@ impl Scene {
         sort_in_place(&mut self.monochrome_sprites, keys, |sprite| {
             (sprite.order, sprite.tile.texture_id.index)
         });
+        if !self.sprite_animations.is_empty() {
+            // Match the same stable order as the renderer vector without
+            // changing MonochromeSprite's public layout.
+            for animation in self.sprite_animations.values_mut() {
+                animation.sprite_indices.clear();
+            }
+            let mut identities: Vec<_> = self
+                .paint_operations
+                .iter()
+                .filter_map(|op| match op {
+                    PaintOperation::Primitive(Primitive::MonochromeSprite(sprite), identity) => {
+                        Some(((sprite.order, sprite.tile.texture_id.index), *identity))
+                    }
+                    _ => None,
+                })
+                .collect();
+            identities.sort_by_key(|entry| entry.0);
+            for (index, (_, identity)) in identities.into_iter().enumerate() {
+                if let Some(animation) = self.sprite_animations.get_mut(&identity) {
+                    animation.sprite_indices.push(index);
+                    animation.apply(&mut self.monochrome_sprites[index]);
+                }
+            }
+        }
         sort_in_place(&mut self.subpixel_sprites, keys, |sprite| {
             (sprite.order, sprite.tile.texture_id.index)
         });
