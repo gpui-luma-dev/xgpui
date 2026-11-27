@@ -1255,7 +1255,7 @@ impl DirectXRenderer {
             }],
         )?;
         unsafe {
-            context.ClearDepthStencilView(depth, D3D11_CLEAR_DEPTH.0 as u32, 1.0, 0);
+            context.ClearDepthStencilView(depth, D3D11_CLEAR_DEPTH.0, 1.0, 0);
             context.OMSetRenderTargets(targets, depth);
             context.OMSetDepthStencilState(state, 0);
         }
