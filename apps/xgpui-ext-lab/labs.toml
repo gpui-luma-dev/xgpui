@@ -330,15 +330,20 @@ views = [
   { name = "parley", title = "Parley text only", args = ["--backend", "parley"] },
   { name = "paragraph", title = "Paragraph comparison", args = ["--workload", "paragraph"] },
   { name = "bidi", title = "Right-to-left and GPUI paragraphs, native and Parley", args = ["--workload", "bidi"] },
-  { name = "direction", title = "Plain text base direction (Parley)", args = ["--workload", "bidi", "--backend", "parley"] },
   { name = "l10n", title = "Localization QA: one screen in 8 locales, checked, native and Parley", args = ["--workload", "l10n"] },
   { name = "scroll", title = "Text scrolling", args = ["--workload", "scroll"] },
   { name = "timings", title = "Text CPU timings", args = ["--timings-only"] },
 ]
 
 [[lab.task]]
+name = "direction"
+about = "Open the interactive Parley text direction demo"
+profile = "dev"
+args = ["--workload", "bidi", "--backend", "parley"]
+
+[[lab.task]]
 name = "direction-window"
-about = "Changing plain text direction redraws an existing Parley window"
+about = "Run the automated Parley direction redraw probe"
 platforms = ["macos", "linux", "windows"]
 profile = "dev"
 cargo = ["test", "--features", "native-window-tests", "--test", "text_layout_direction_window"]
