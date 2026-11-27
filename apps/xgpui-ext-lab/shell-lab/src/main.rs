@@ -1,4 +1,5 @@
 //! Interactive diagnostics for the shared shell; no desktop settings are written.
+mod cursor_gallery;
 mod titlebar;
 use anyhow::{Context as _, Result};
 use clap::Parser;
@@ -51,6 +52,9 @@ struct Options {
     /// Open default and 48-logical-pixel Windows caption rows side by side.
     #[arg(long)]
     compare_caption_heights: bool,
+    /// Open the Windows hover gallery for GPUI cursor styles.
+    #[arg(long, alias = "cursor-gallery", conflicts_with_all = ["client_decorations", "fixed_size", "compare_caption_heights"])]
+    windows_cursor_gallery: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -1441,7 +1445,9 @@ fn main() {
                 } else {
                     WindowDecorations::Server
                 };
-            let result = if options.compare_caption_heights {
+            let result = if options.windows_cursor_gallery {
+                cursor_gallery::open(cx)
+            } else if options.compare_caption_heights {
                 compare_caption_heights(cx, options.fixed_size)
             } else {
                 open_lab(cx, decorations, options.fixed_size).map(|_| ())

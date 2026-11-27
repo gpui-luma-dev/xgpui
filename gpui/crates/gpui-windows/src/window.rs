@@ -81,6 +81,7 @@ pub struct WindowsWindowState {
 
     pub click_state: ClickState,
     pub current_cursor: Cell<Option<HCURSOR>>,
+    pub(crate) system_cursor: Cell<Option<HCURSOR>>,
     /// Shared with [`WindowsPlatformState::cursor_visible`].
     pub cursor_visible: Arc<AtomicBool>,
     pub nc_button_pressed: Cell<Option<u32>>,
@@ -198,6 +199,7 @@ impl WindowsWindowState {
             force_render_pending: Cell::new(false),
             click_state,
             current_cursor: Cell::new(current_cursor),
+            system_cursor: Cell::new(None),
             destroyed: Cell::new(false),
             cursor_visible,
             nc_button_pressed: Cell::new(nc_button_pressed),
@@ -1632,6 +1634,37 @@ pub(crate) fn window_from_hwnd(hwnd: HWND) -> Option<Rc<WindowsWindowInner>> {
     } else {
         None
     }
+}
+
+pub(crate) fn apply_system_cursor(window: &Window, cursor: Option<HCURSOR>) -> Result<()> {
+    let native = rwh::HasWindowHandle::window_handle(window)
+        .map_err(|error| anyhow::anyhow!("cannot access the native window: {error}"))?;
+    let rwh::RawWindowHandle::Win32(handle) = native.as_raw() else {
+        anyhow::bail!("expected a Windows window");
+    };
+    let hwnd = HWND(handle.hwnd.get() as _);
+    // The raw handle can come from another PlatformWindow implementation.
+    // Validate our window procedure before reading GPUI's window userdata.
+    let procedure = unsafe { get_window_long(hwnd, GWLP_WNDPROC) };
+    anyhow::ensure!(
+        procedure == window_procedure as *const () as isize,
+        "expected a window owned by xgpui-windows"
+    );
+    let inner = window_from_hwnd(hwnd).context("Windows window is closed")?;
+    if inner.state.system_cursor.get() != cursor {
+        // Hover callbacks can run during a draw. WindowFromPoint can send
+        // WM_NCHITTEST on this thread, so refresh after the App borrow ends.
+        unsafe {
+            PostMessageW(
+                Some(hwnd),
+                WM_GPUI_REFRESH_SYSTEM_CURSOR,
+                WPARAM(0),
+                LPARAM(0),
+            )?;
+        }
+        inner.state.system_cursor.set(cursor);
+    }
+    Ok(())
 }
 
 fn get_module_handle() -> HMODULE {
