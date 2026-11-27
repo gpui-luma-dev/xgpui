@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Migration and compatibility notes for the GPUI 1.30.2 integration in XGPUI.">
+<title>GPUI 1.30.2 migration · XGPUI - Extended GPUI</title>
+<link rel="canonical" href="https://xgpui.dev/gpui-1.30-migration.html">
+<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" sizes="32x32" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<!-- Prism 1.30.0: local Rust grammar; MIT license in vendor/prism/LICENSE. -->
+<script defer src="vendor/prism/prism-core.min.js" data-manual></script><script defer src="vendor/prism/prism-rust.min.js"></script><script defer src="code-examples.js"></script>
+</head>
+<body><a class="skip" href="#content">Skip to content</a>
+<aside>
+<a class="brand" href="index.html">xgpui</a><a class="rail-repository" href="https://github.com/gpui-luma-dev/xgpui">GitHub repository ↗</a>
+<nav aria-label="Documentation"><a href="index.html">Overview</a><a href="whats-new.html">What's new</a><a href="color-workflows.html">Color &amp; wide gamut</a><a href="shell.html">Desktop shell</a><a href="font-controls.html">Fonts &amp; OpenType</a><a href="right-to-left-text.html">Right-to-left text</a><a href="extension-lab.html">Labs &amp; benchmarks</a><a href="performance-study.html">Performance study</a><a href="gpui-public-api.html">GPUI API changes</a><a href="migration-guides.html">Migration guides</a><a href="shader-options.html">Shader options</a><a class="rail-demo" href="examples/extensions/">Live demos ↗</a></nav>
+<div id="crate-list"><p class="group-label">Extensions</p><a class="crate-link" href="crates/xgpui-canvas.html">xgpui-canvas</a><a class="crate-link" href="crates/xgpui-color.html">xgpui-color</a><a class="crate-link" href="crates/xgpui-curve.html">xgpui-curve</a><a class="crate-link" href="crates/xgpui-gamut.html">xgpui-gamut</a><a class="crate-link" href="crates/xgpui-gpu-interop.html">xgpui-gpu-interop</a><a class="crate-link" href="crates/xgpui-media.html">xgpui-media</a><a class="crate-link" href="crates/xgpui-parley.html">xgpui-parley</a><a class="crate-link" href="crates/xgpui-shader.html">xgpui-shader</a><a class="crate-link" href="crates/xgpui-shell.html">xgpui-shell</a><a class="crate-link" href="crates/xgpui-svg.html">xgpui-svg</a><p class="group-label">Core</p><a class="crate-link" href="crates/gpui.html">gpui</a><a class="crate-link" href="crates/gpui-macros.html">gpui-macros</a><p class="group-label">Platforms &amp; rendering</p><a class="crate-link" href="crates/gpui-apple.html">gpui-apple</a><a class="crate-link" href="crates/gpui-ios.html">gpui-ios</a><a class="crate-link" href="crates/gpui-linux.html">gpui-linux</a><a class="crate-link" href="crates/gpui-macos.html">gpui-macos</a><a class="crate-link" href="crates/gpui-platform.html">gpui-platform</a><a class="crate-link" href="crates/gpui-web.html">gpui-web</a><a class="crate-link" href="crates/gpui-wgpu.html">gpui-wgpu</a><a class="crate-link" href="crates/gpui-windows.html">gpui-windows</a></div>
+<p class="rail-foot">A map of the captured source.<br>Review before changing the contract.</p>
+</aside>
+<main id="content" tabindex="-1">
+<p><a href="migration-guides.html">← Migration guides</a></p>
+<article class="extension-document">
+<h1 id="gpui-1302-migration">GPUI 1.30.2 migration</h1>
+<p>GPUI 1.30.2 is available from the XGPUI main branch. The <a href="https://github.com/gpui-luma-dev/xgpui/pull/468">integration PR</a> records the approved API changes and CI results. Its source is the pinned <a href="https://github.com/gpui-archipelago/gpui-unofficial/tree/4a23609352610cbc11f144d63fa17bb592ae6f9e">gpui-unofficial 1.30.2 capture</a>.</p>
+
+<h2 id="dependency-alignment">Align direct helper dependencies</h2>
+<p>If your app passes types from a directly imported helper crate across the GPUI boundary, use that helper at version 1.30.2 or import the GPUI re-export. Code that already uses the GPUI re-exports can keep its imports.</p>
+<table><thead><tr><th>Boundary</th><th>Migration</th></tr></thead><tbody>
+<tr><td>Shared strings and refinement</td><td>Use GPUI's <code>SharedString</code> and <code>Refineable</code> re-exports, or align the direct helper crates to 1.30.2.</td></tr>
+<tr><td>HTTP clients and scheduler types</td><td>Use <code>gpui::http_client</code> or the matching published helper crates. Align a direct scheduler dependency when scheduler types cross the GPUI or backend boundary.</td></tr>
+<tr><td>Typed SVG errors</td><td>Keep usvg 0.46 when naming the error returned by <code>SvgRenderer</code> or carried by <code>ImageCacheError::Usvg</code>. The rasterizer uses 0.49 internally and supports SVGZ.</td></tr>
+</tbody></table>
+
+<h2 id="existing-callers">Existing path and platform callers</h2>
+<p>Keep using <code>Path&lt;P&gt;</code>, <code>PathBuilder::build</code>, <code>PathBuilder::build_path</code>, and <code>Window::paint_path</code>. Existing shader brush masks, direct brushes, and paths with manually edited vertices keep triangle coverage. Eligible stock fills and strokes use tiled rendering behind the same APIs.</p>
+<p>Existing calls to <code>WindowBounds::centered</code> and notification dismissal keep their signatures. Platform trait implementations can use the defaults for the new titlebar and diagnostic hooks.</p>
+
+<h2 id="related-guides">New APIs and integration details</h2>
+<ul>
+<li><a href="gpui-public-api.html#gpui-1302-review">Public API and compatibility notes</a></li>
+<li><a href="svg-rendering.html#retained-svg-transforms">Timed SVG transform example</a></li>
+<li><a href="whats-new.html#gpui-1302-preview">Rendering and SVG integration highlights</a></li>
+<li><a href="https://github.com/gpui-luma-dev/xgpui/blob/main/docs/upstream/1.30.2-api-ledger.md">Complete API ledger</a></li>
+</ul>
+</article>
+</main>
+<footer>Source evidence and review hypotheses are kept distinct.</footer>
+</body>
+</html>
