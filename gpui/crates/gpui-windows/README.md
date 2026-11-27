@@ -28,6 +28,17 @@ The registry package is `xgpui-windows`; its Rust library name is
 
 ## Documentation
 
+`WindowsSystemCursor::STANDARD` lists the named Win32 cursors and
+`WindowsSystemCursor::ADDITIONAL` lists the additional predefined resources
+documented by Microsoft. `load()` returns a shared Win32 handle or an error
+when a resource is unavailable.
+
+Use `WindowsSystemCursor::set_for_window(window, Some(WindowsSystemCursor::Wait))`
+to show a built-in cursor over a GPUI window's client area while an operation
+is running. Pass `None` to restore GPUI's normal hover cursor. To explore the
+installed Windows cursors, choose **Windows cursor gallery** under
+**Shell / window controls** in `just labs`, or run `just shell windows-cursors`.
+
 - [xgpui API additions and compatibility](https://xgpui.dev/gpui-public-api.html)
 - [Release preparation](https://xgpui.dev/releasing.html)
 - [Repository](https://github.com/gpui-luma-dev/xgpui) · [Website](https://xgpui.dev/)

@@ -8044,6 +8044,7 @@ dependencies = [
  "xgpui-gamut",
  "xgpui-gpu-interop",
  "xgpui-linux",
+ "xgpui-macos",
  "xgpui-media",
  "xgpui-parley",
  "xgpui-platform",

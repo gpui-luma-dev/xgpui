@@ -25,6 +25,7 @@ pub mod metal_renderer {
 }
 
 mod platform;
+pub mod system_cursor;
 mod window;
 mod window_appearance;
 

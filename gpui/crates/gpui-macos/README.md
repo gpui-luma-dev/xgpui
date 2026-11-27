@@ -30,6 +30,15 @@ The registry package is `xgpui-macos`; its Rust library name is
 
 ## Documentation
 
+`system_cursor::MacSystemCursor` provides the built-in cursors from public
+AppKit selectors. On the main thread, `load()` returns the native `NSCursor`
+when the selector is available. Use `set_for_window(window, Some(cursor))`
+to select it for a GPUI window's content view and pass `None` to restore
+GPUI's regular hover behavior.
+
+On macOS, choose **macOS cursor gallery** under **Shell / window controls**
+in `just labs`, or run `just shell macos-cursors`.
+
 - [xgpui API additions and compatibility](https://xgpui.dev/gpui-public-api.html)
 - [Release preparation](https://xgpui.dev/releasing.html)
 - [Repository](https://github.com/gpui-luma-dev/xgpui) · [Website](https://xgpui.dev/)

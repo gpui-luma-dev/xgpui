@@ -42,6 +42,18 @@ about = "Linux cursor gallery (Wayland protocol and Xcursor availability)"
 platforms = ["linux"]
 args = ["--linux-cursor-gallery"]
 
+[[lab.task]]
+name = "macos-cursors"
+about = "macOS cursor gallery (public AppKit cursors)"
+platforms = ["macos"]
+args = ["--macos-cursor-gallery"]
+
+[[lab.task]]
+name = "windows-cursors"
+about = "Windows cursor gallery (Win32 built-ins and GPUI fallbacks)"
+platforms = ["windows"]
+args = ["--windows-cursor-gallery"]
+
 [[lab]]
 name = "canvas"
 bin = "canvas-lab"
@@ -535,7 +547,7 @@ cargo = ["test", "--features", "linux-window-tests", "--test", "linux_windows"]
 
 [[lab.task]]
 name = "windows-input"
-about = "Synthetic WM_MOUSEMOVE suppression and reentrant WM_DISPLAYCHANGE on a live window"
+about = "Synthetic moves, display changes, and stock cursor updates on a live Win32 window"
 platforms = ["windows"]
 profile = "dev"
 cargo = ["test", "--features", "windows-window-tests", "--test", "windows_input"]

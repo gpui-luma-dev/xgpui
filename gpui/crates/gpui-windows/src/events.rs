@@ -30,6 +30,7 @@ pub(crate) const WM_GPUI_GPU_DEVICE_LOST: u32 = WM_USER + 7;
 /// Device recovery failed. On the platform window, `lparam` owns a `Box<String>` reason.
 pub(crate) const WM_GPUI_GPU_DEVICE_FAILED: u32 = WM_USER + 8;
 pub(crate) const WM_GPUI_DISPLAYS_CHANGED: u32 = WM_USER + 10;
+pub(crate) const WM_GPUI_REFRESH_SYSTEM_CURSOR: u32 = WM_USER + 11;
 
 const SIZE_MOVE_LOOP_TIMER_ID: usize = 1;
 
@@ -164,6 +165,7 @@ impl WindowsWindowInner {
             WM_IME_STARTCOMPOSITION => self.handle_ime_position(handle),
             WM_IME_COMPOSITION => self.handle_ime_composition(handle, lparam),
             WM_SETCURSOR => self.handle_set_cursor(handle, lparam),
+            WM_GPUI_REFRESH_SYSTEM_CURSOR => self.refresh_system_cursor(handle),
             WM_SETTINGCHANGE => self.handle_system_settings_changed(handle, wparam, lparam),
             WM_INPUTLANGCHANGE => self.handle_input_language_changed(),
             WM_SHOWWINDOW => self.handle_window_visibility_changed(handle, wparam),
@@ -382,7 +384,7 @@ impl WindowsWindowInner {
 
     fn handle_mouse_move_msg(&self, handle: HWND, lparam: LPARAM, wparam: WPARAM) -> Option<isize> {
         self.start_tracking_mouse(handle, TME_LEAVE);
-        self.restore_cursor_after_hide();
+        self.restore_cursor_after_hide(true);
 
         let x = lparam.signed_loword() as f32;
         let y = lparam.signed_hiword() as f32;
@@ -1109,7 +1111,7 @@ impl WindowsWindowInner {
 
     fn handle_nc_mouse_move_msg(&self, handle: HWND, lparam: LPARAM) -> Option<isize> {
         self.start_tracking_mouse(handle, TME_LEAVE | TME_NONCLIENT);
-        self.restore_cursor_after_hide();
+        self.restore_cursor_after_hide(false);
 
         let mut func = self.state.callbacks.input.take()?;
         let scale_factor = self.state.scale_factor.get();
@@ -1254,7 +1256,9 @@ impl WindowsWindowInner {
             Some(HCURSOR(lparam.0 as _))
         });
 
-        if had_cursor != self.state.current_cursor.get().is_some() {
+        if self.state.system_cursor.get().is_none()
+            && had_cursor != self.state.current_cursor.get().is_some()
+        {
             unsafe { SetCursor(self.state.current_cursor.get()) };
         }
 
@@ -1278,7 +1282,7 @@ impl WindowsWindowInner {
             return None;
         }
         let cursor = if self.state.cursor_visible.load(Ordering::Relaxed) {
-            self.state.current_cursor.get()
+            self.cursor_for_area(lparam.loword() as u32 == HTCLIENT)
         } else {
             None
         };
@@ -1287,6 +1291,26 @@ impl WindowsWindowInner {
         };
         // TRUE tells Windows the cursor is handled and stops further processing.
         Some(1)
+    }
+
+    fn refresh_system_cursor(&self, hwnd: HWND) -> Option<isize> {
+        // Refresh a stationary pointer while respecting the native frame and
+        // any other window that has moved in front of this one.
+        let mut point = POINT::default();
+        let mut bounds = RECT::default();
+        unsafe {
+            if self.state.cursor_visible.load(Ordering::Relaxed)
+                && IsWindowEnabled(hwnd).as_bool()
+                && GetCursorPos(&mut point).is_ok()
+                && WindowFromPoint(point) == hwnd
+                && ScreenToClient(hwnd, &mut point).as_bool()
+                && GetClientRect(hwnd, &mut bounds).is_ok()
+                && PtInRect(&bounds, point).as_bool()
+            {
+                SetCursor(self.cursor_for_area(true));
+            }
+        }
+        Some(0)
     }
 
     fn handle_system_settings_changed(
@@ -1525,12 +1549,19 @@ impl WindowsWindowInner {
     }
 
     /// Clear the hidden flag and restore the cursor immediately
-    fn restore_cursor_after_hide(&self) {
+    fn restore_cursor_after_hide(&self, client_area: bool) {
         if !self.state.cursor_visible.swap(true, Ordering::Relaxed) {
             unsafe {
-                SetCursor(self.state.current_cursor.get());
+                SetCursor(self.cursor_for_area(client_area));
             }
         }
+    }
+
+    fn cursor_for_area(&self, client_area: bool) -> Option<HCURSOR> {
+        if client_area && let Some(cursor) = self.state.system_cursor.get() {
+            return Some(cursor);
+        }
+        self.state.current_cursor.get()
     }
 
     fn start_tracking_mouse(&self, handle: HWND, flags: TRACKMOUSEEVENT_FLAGS) {
