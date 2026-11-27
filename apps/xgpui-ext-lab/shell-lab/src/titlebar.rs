@@ -133,6 +133,10 @@ impl Render for LabTitleBar {
         let look = options
             .resolved_preferences(&cx.desktop_preferences())
             .resolved_look(window.appearance(), window.is_window_active());
+        let windows_metrics = window
+            .root::<ShellWindow>()
+            .flatten()
+            .and_then(|root| root.read(cx).windows_titlebar_metrics(window, cx));
         let next = if lab.preview_appearance == Some(WindowAppearance::Dark) {
             WindowAppearance::Light
         } else {
@@ -140,6 +144,7 @@ impl Render for LabTitleBar {
         };
         div()
             .size_full()
+            .when_some(windows_metrics, |header, metrics| header.h(metrics.height))
             .flex()
             .items_center()
             .gap_2()
@@ -175,6 +180,14 @@ impl Render for LabTitleBar {
                 )
                 .options(options),
             )
+            .when_some(windows_metrics, |header, metrics| {
+                header.child(
+                    div()
+                        .flex_none()
+                        .text_sm()
+                        .child(format!("{} px", metrics.height.as_f32())),
+                )
+            })
             .child(self.button(
                 "header-theme",
                 "Toggle preview appearance",
