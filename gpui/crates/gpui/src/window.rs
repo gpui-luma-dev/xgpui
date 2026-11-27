@@ -633,6 +633,15 @@ impl FocusHandle {
         self.id.contains(other.id, window)
     }
 
+    /// Obtains whether the element associated with this handle is part of the most recently rendered frame.
+    pub fn is_rendered(&self, window: &Window) -> bool {
+        window
+            .rendered_frame
+            .dispatch_tree
+            .focusable_node_id(self.id)
+            .is_some()
+    }
+
     /// Dispatch an action on the element that rendered this focus handle
     pub fn dispatch_action(&self, action: &dyn Action, window: &mut Window, cx: &mut App) {
         if let Some(node_id) = window
@@ -1238,6 +1247,7 @@ pub struct Window {
     pub(crate) display_observers: SingleSubscriberSet<AnyObserver>,
     is_resizable: bool,
     is_minimizable: bool,
+    last_window_bounds: WindowBounds,
     sprite_atlas: Arc<dyn PlatformAtlas>,
     text_system: Rc<WindowTextSystem>,
     text_rendering_mode: Rc<Cell<TextRenderingMode>>,
@@ -1293,6 +1303,7 @@ pub struct Window {
         SingleSubscriberSet<Box<dyn FnMut(WindowVisibility, &mut Window, &mut App) -> bool>>,
     hovered: Rc<Cell<bool>>,
     pub(crate) needs_present: Rc<Cell<bool>>,
+    scene_animation_interval: Rc<Cell<Option<Duration>>>,
     /// Tracks recent input event timestamps to determine if input is arriving at a high rate.
     /// Used to selectively enable VRR optimization only when input rate exceeds 60fps.
     pub(crate) input_rate_tracker: Rc<RefCell<InputRateTracker>>,
@@ -1585,26 +1596,16 @@ pub(crate) struct ElementStateBox {
     pub(crate) type_name: &'static str,
 }
 
-fn default_bounds(display_id: Option<DisplayId>, cx: &mut App) -> WindowBounds {
-    // TODO, BUG: if you open a window with the currently active window
-    // on the stack, this will erroneously fallback to `None`
-    //
-    // TODO these should be the initial window bounds not considering maximized/fullscreen
-    let active_window_bounds = cx
-        .active_window()
-        .and_then(|w| w.update(cx, |_, window, _| window.window_bounds()).ok());
-
+fn default_bounds(
+    active_window_bounds: Option<WindowBounds>,
+    display: Option<&dyn PlatformDisplay>,
+) -> WindowBounds {
     const CASCADE_OFFSET: f32 = 25.0;
-
-    let display = display_id
-        .map(|id| cx.find_display(id))
-        .unwrap_or_else(|| cx.primary_display());
 
     let default_placement = || Bounds::new(point(px(0.), px(0.)), DEFAULT_WINDOW_SIZE);
 
     // Use visible_bounds to exclude taskbar/dock areas
     let display_bounds = display
-        .as_ref()
         .map(|d| d.visible_bounds())
         .unwrap_or_else(default_placement);
 
@@ -1622,7 +1623,6 @@ fn default_bounds(display_id: Option<DisplayId>, cx: &mut App) -> WindowBounds {
         },
         None => (
             display
-                .as_ref()
                 .map(|d| d.default_bounds())
                 .unwrap_or_else(default_placement),
             WindowBounds::Windowed,
@@ -1689,7 +1689,25 @@ impl Window {
             .as_ref()
             .and_then(|titlebar| titlebar.title.clone());
 
-        let window_bounds = window_bounds.unwrap_or_else(|| default_bounds(display_id, cx));
+        let active_window_placement = cx.active_window_placement();
+        // Explicit bounds only make sense on the display they were computed for.
+        let target_display_id = display_id.or_else(|| {
+            active_window_placement
+                .filter(|_| window_bounds.is_none())
+                .and_then(|(display_id, _)| display_id)
+        });
+        let display = target_display_id
+            .and_then(|display_id| cx.find_display(display_id))
+            .or_else(|| cx.primary_display());
+        let display_id = display
+            .as_ref()
+            .map(|display| display.id())
+            .or(target_display_id);
+        let active_window_bounds = active_window_placement
+            .filter(|(active_display_id, _)| *active_display_id == display_id)
+            .map(|(_, bounds)| bounds);
+        let window_bounds = window_bounds
+            .unwrap_or_else(|| default_bounds(active_window_bounds, display.as_deref()));
         let mut platform_window = cx.platform.open_window(
             handle,
             WindowParams {
@@ -1735,6 +1753,7 @@ impl Window {
         profiler::journal::record_window_visibility(handle.window_id(), visibility);
         let hovered = Rc::new(Cell::new(platform_window.is_hovered()));
         let needs_present = Rc::new(Cell::new(false));
+        let scene_animation_interval = Rc::new(Cell::new(None));
         let next_frame_callbacks: Rc<RefCell<Vec<FrameCallback>>> = Default::default();
         let input_rate_tracker = Rc::new(RefCell::new(InputRateTracker::default()));
 
@@ -1900,6 +1919,7 @@ impl Window {
             let invalidator = invalidator.clone();
             let active = active.clone();
             let needs_present = needs_present.clone();
+            let scene_animation_interval = scene_animation_interval.clone();
             let next_frame_callbacks = next_frame_callbacks.clone();
             let input_rate_tracker = input_rate_tracker.clone();
             let mut deferred_force_render = false;
@@ -1959,7 +1979,9 @@ impl Window {
                 // underclocking, but subject to the same power limits as redraws.
                 let high_rate_input = input_rate_tracker.borrow_mut().is_high_rate();
                 let has_next_frame_callbacks = !next_frame_callbacks.borrow().is_empty();
-                let has_frame_demand = invalidator.is_dirty()
+                let animation_interval = scene_animation_interval.get();
+                let has_frame_demand = animation_interval.is_some()
+                    || invalidator.is_dirty()
                     || force_render
                     || has_next_frame_callbacks
                     || request_frame_options.require_presentation
@@ -1977,8 +1999,12 @@ impl Window {
                 // `cx.notify()` is not throttled, as `WindowOptions` documents
                 // (#211): engine surfaces present new frames that way. Upstream
                 // GPUI (since 1.28.1) also throttles notify-driven redraws.
+                let animation_only = animation_interval.is_some()
+                    && !invalidator.is_dirty()
+                    && !high_rate_input
+                    && !needs_present.get();
                 let should_throttle = !request_frame_options.require_presentation
-                    && (force_render || has_next_frame_callbacks);
+                    && (force_render || has_next_frame_callbacks || animation_only);
                 let inactive_without_high_rate_input =
                     should_throttle && !active.get() && !high_rate_input;
                 let (thermal_state, power_mode) =
@@ -1993,6 +2019,15 @@ impl Window {
                     power_mode,
                 );
 
+                let min_frame_interval = if animation_only
+                    && !request_frame_options.require_presentation
+                    && !force_render
+                    && !has_next_frame_callbacks
+                {
+                    min_frame_interval.max(animation_interval)
+                } else {
+                    min_frame_interval
+                };
                 let now = Instant::now();
                 // Idle display-link ticks must neither consume a frame slot nor
                 // wake a demand-driven frame source.
@@ -2053,7 +2088,8 @@ impl Window {
                 let should_draw = invalidator.is_dirty() || force_render;
                 let needs_present = request_frame_options.require_presentation
                     || needs_present.get()
-                    || high_rate_input;
+                    || high_rate_input
+                    || animation_interval.is_some();
                 if should_draw {
                     measure("frame duration", || {
                         handle
@@ -2081,7 +2117,10 @@ impl Window {
                     })
                 } else if needs_present {
                     handle
-                        .update(&mut cx, |_, window, _| window.present())
+                        .update(&mut cx, |_, window, cx| {
+                            window.advance_scene_animations(cx);
+                            window.present();
+                        })
                         .with_context(|| {
                             format!("presenting frame for window {:?}", handle.window_id())
                         })
@@ -2092,6 +2131,7 @@ impl Window {
                     .update(&mut cx, |_, window, _| {
                         if window.invalidator.is_dirty()
                             || !window.next_frame_callbacks.borrow().is_empty()
+                            || window.scene_animation_interval.get().is_some()
                         {
                             window.platform_window.schedule_frame();
                         }
@@ -2109,7 +2149,10 @@ impl Window {
                 // after this frame (the window was re-invalidated mid-draw, or
                 // animations scheduled next-frame callbacks), re-arm the frame
                 // source explicitly.
-                if invalidator.is_dirty() || !next_frame_callbacks.borrow().is_empty() {
+                if invalidator.is_dirty()
+                    || !next_frame_callbacks.borrow().is_empty()
+                    || scene_animation_interval.get().is_some()
+                {
                     invalidator.wake_platform();
                 }
                 #[cfg(feature = "profiler")]
@@ -2385,6 +2428,7 @@ impl Window {
             display_observers: SingleSubscriberSet::new(),
             is_resizable,
             is_minimizable,
+            last_window_bounds: window_bounds,
             sprite_atlas,
             text_system,
             text_rendering_mode: cx.text_rendering_mode.clone(),
@@ -2431,6 +2475,7 @@ impl Window {
             visibility_observers: SingleSubscriberSet::new(),
             hovered,
             needs_present,
+            scene_animation_interval,
             input_rate_tracker,
             #[cfg(feature = "profiler")]
             window_profiler: profiler::WindowProfiler::new(handle.window_id())?,
@@ -2536,6 +2581,65 @@ impl Window {
         if self.invalidator.is_dirty() || self.needs_present.get() {
             profiler::journal::record_frame_pending(self.handle.window_id(), Instant::now());
         }
+    }
+
+    /// This window's part of [`App::debug_state`].
+    ///
+    /// Values GPUI caches are reported next to what the platform reports now,
+    /// so a stale cache shows up as a mismatch.
+    pub(crate) fn debug_state(&self) -> serde_json::Value {
+        let platform_window = &self.platform_window;
+        serde_json::json!({
+            "id": self.handle.window_id().as_u64(),
+            "title": platform_window.get_title(),
+            "bounds": platform_window.bounds(),
+            "window_bounds": format!("{:?}", platform_window.window_bounds()),
+            "content_size": platform_window.content_size(),
+            "viewport_size": self.viewport_size,
+            "scale_factor": {
+                "cached": self.scale_factor,
+                "platform": platform_window.scale_factor(),
+            },
+            "display_id": {
+                "cached": self.display_id.map(u64::from),
+                "platform": platform_window.display().map(|display| u64::from(display.id())),
+            },
+            "active": {
+                "cached": self.active.get(),
+                "platform": platform_window.is_active(),
+            },
+            "hovered": {
+                "cached": self.hovered.get(),
+                "platform": platform_window.is_hovered(),
+            },
+            "visibility": {
+                "cached": format!("{:?}", self.visibility),
+                "platform": format!("{:?}", platform_window.visibility()),
+            },
+            "appearance": {
+                "cached": format!("{:?}", self.appearance),
+                "platform": format!("{:?}", platform_window.appearance()),
+            },
+            "is_fullscreen": platform_window.is_fullscreen(),
+            "is_maximized": platform_window.is_maximized(),
+            "mouse_position": {
+                "cached": self.mouse_position,
+                "platform": platform_window.mouse_position(),
+            },
+            "modifiers": {
+                "cached": self.modifiers,
+                "platform": platform_window.modifiers(),
+            },
+            "cursor_style": self.rendered_frame.cursor_style(self),
+            "frame": {
+                "dirty": self.invalidator.is_dirty(),
+                "needs_present": self.needs_present.get(),
+                "refreshing": self.refreshing,
+                "next_frame_callbacks": self.next_frame_callbacks.borrow().len(),
+            },
+            "gpu": platform_window.gpu_specs(),
+            "platform": platform_window.debug_state(),
+        })
     }
 
     /// Whether the platform is presenting this window's frames (see
@@ -2780,6 +2884,14 @@ impl Window {
     /// after it has been closed
     pub fn window_bounds(&self) -> WindowBounds {
         self.platform_window.window_bounds()
+    }
+
+    pub(crate) fn last_window_bounds(&self) -> WindowBounds {
+        self.last_window_bounds
+    }
+
+    pub(crate) fn display_id(&self) -> Option<DisplayId> {
+        self.display_id
     }
 
     /// Return the `WindowBounds` excluding insets (Wayland and X11)
@@ -3051,6 +3163,8 @@ impl Window {
     pub fn bounds_changed(&mut self, cx: &mut App) {
         self.scale_factor = self.platform_window.scale_factor();
         self.viewport_size = self.platform_window.content_size();
+        self.last_window_bounds = self.platform_window.window_bounds();
+        cx.sync_window_update_entry(self);
         self.mouse_position = self.platform_window.mouse_position();
 
         self.refresh();
@@ -3341,6 +3455,12 @@ impl Window {
     #[cfg(target_os = "macos")]
     pub fn set_traffic_light_position(&self, position: Point<Pixels>) {
         self.platform_window.set_traffic_light_position(position);
+    }
+
+    /// Shows or hides the native macOS titlebar, including the traffic light buttons.
+    #[cfg(target_os = "macos")]
+    pub fn set_native_titlebar_visibility(&self, visible: bool) {
+        self.platform_window.set_native_titlebar_visibility(visible);
     }
 
     /// Sets the application identifier.
@@ -3833,6 +3953,9 @@ impl Window {
         let previous_focus_path = self.rendered_frame.focus_path();
         let previous_window_active = self.rendered_frame.window_active;
         mem::swap(&mut self.rendered_frame, &mut self.next_frame);
+        self.scene_animation_interval
+            .set(self.rendered_frame.scene.animation_frame_interval());
+        self.advance_scene_animations(cx);
         self.next_frame.clear();
         let current_focus_path = self.rendered_frame.focus_path();
         let current_window_active = self.rendered_frame.window_active;
@@ -3926,6 +4049,16 @@ impl Window {
     pub fn submit_frame_for_validation(&self) -> anyhow::Result<()> {
         self.platform_window
             .submit_scene_for_validation(&self.rendered_frame.scene)
+    }
+
+    pub(crate) fn advance_scene_animations(&mut self, cx: &App) {
+        if self.scene_animation_interval.get().is_some() {
+            let elapsed = cx
+                .background_executor()
+                .now()
+                .saturating_duration_since(cx.synced_animation_epoch);
+            self.rendered_frame.scene.advance_animations(elapsed);
+        }
     }
 
     #[profiling::function]
@@ -5115,7 +5248,7 @@ impl Window {
         path.color = color.opacity(opacity);
         self.next_frame
             .scene
-            .insert_primitive(path.scale(scale_factor));
+            .insert_primitive(path.scale_for_stock_paint(scale_factor));
     }
 
     /// Record a validated path brush. The host applies inherited opacity once.
@@ -5386,6 +5519,19 @@ impl Window {
         color: Hsla,
         cx: &App,
     ) -> Result<()> {
+        self.paint_animated_svg(bounds, path, data, transformation, None, color, cx)
+    }
+
+    pub(crate) fn paint_animated_svg(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        path: SharedString,
+        data: Option<&[u8]>,
+        transformation: TransformationMatrix,
+        animation: Option<crate::SpriteAnimation>,
+        color: Hsla,
+        cx: &App,
+    ) -> Result<()> {
         self.invalidator.debug_assert_paint();
 
         let element_opacity = self.element_opacity();
@@ -5426,7 +5572,7 @@ impl Window {
             .map_origin(|value| ScaledPixels(round_half_toward_zero(value.0)))
             .map_size(|size| size.ceil());
 
-        self.next_frame.scene.insert_primitive(MonochromeSprite {
+        let sprite = MonochromeSprite {
             order: 0,
             pad: 0,
             bounds: final_bounds,
@@ -5434,7 +5580,14 @@ impl Window {
             color: color.opacity(element_opacity),
             tile,
             transformation,
-        });
+        };
+        match animation {
+            Some(animation) => self
+                .next_frame
+                .scene
+                .insert_animated_sprite(sprite, animation),
+            None => self.next_frame.scene.insert_primitive(sprite),
+        }
 
         Ok(())
     }
@@ -9010,6 +9163,67 @@ mod tests {
         }
     }
 
+    /// A stale cache is only visible if the snapshot reports GPUI's cached
+    /// value separately from what the platform reports now.
+    #[gpui::test]
+    fn test_debug_state_reports_cached_and_platform_values(cx: &mut TestAppContext) {
+        use crate::WindowVisibility;
+
+        let window = cx.add_window(|_, _| EmptyView);
+        let window_id = window.window_id().as_u64();
+        let window_state = |cx: &mut TestAppContext| {
+            let state = cx.update(|cx| cx.debug_state());
+            state["windows"]
+                .as_array()
+                .and_then(|windows| windows.iter().find(|window| window["id"] == window_id))
+                .cloned()
+                .expect("the open window is listed")
+        };
+
+        let state = window_state(cx);
+        assert_eq!(state["visibility"]["cached"], "Visible");
+        assert_eq!(state["visibility"]["platform"], "Visible");
+
+        cx.test_window(window.into())
+            .simulate_visibility_change(WindowVisibility::Hidden);
+        let state = window_state(cx);
+        assert_eq!(state["visibility"]["cached"], "Hidden");
+        assert_eq!(state["visibility"]["platform"], "Hidden");
+
+        window
+            .update(cx, |_, _, cx| {
+                let state = cx.debug_state();
+                let windows = state["windows"].as_array().unwrap();
+                assert!(windows.contains(&serde_json::json!({
+                    "id": window_id,
+                    "updating": true,
+                })));
+            })
+            .unwrap();
+    }
+
+    #[gpui::test]
+    fn test_simulated_decorations_reach_appearance_observers(cx: &mut TestAppContext) {
+        use crate::{Decorations, Tiling};
+
+        let window = cx.add_window(|_, _| EmptyView);
+        let observed = Rc::new(Cell::new(None));
+        let _subscription = window
+            .update(cx, |_, window, _| {
+                let observed = observed.clone();
+                window.observe_window_appearance(move |window, _| {
+                    observed.set(Some(window.window_decorations()));
+                })
+            })
+            .unwrap();
+        let decorations = Decorations::Client {
+            tiling: Tiling::default(),
+        };
+        cx.simulate_window_decorations_change(window.into(), decorations);
+        cx.run_until_parked();
+        assert_eq!(observed.get(), Some(decorations));
+    }
+
     /// Visibility transitions reach observers exactly once each, with the new
     /// state already stored on the window, and never wake the platform for a
     /// frame: the platform requests one itself when it resumes presenting.
@@ -9166,6 +9380,48 @@ mod tests {
                 Empty
             }
         }
+    }
+
+    #[gpui::test]
+    fn test_window_opened_from_bounds_observer_uses_new_bounds(cx: &mut TestAppContext) {
+        use crate::Subscription;
+
+        struct BoundsObserver {
+            _subscription: Subscription,
+        }
+
+        impl Render for BoundsObserver {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                Empty
+            }
+        }
+
+        let opened_window = Rc::new(Cell::new(None));
+        let window = cx.add_window({
+            let opened_window = opened_window.clone();
+            move |window, cx| BoundsObserver {
+                _subscription: cx.observe_window_bounds(window, move |_, _, cx| {
+                    let handle = cx
+                        .open_window(WindowOptions::default(), |_, cx| cx.new(|_| EmptyView))
+                        .unwrap();
+                    opened_window.set(Some(AnyWindowHandle::from(handle)));
+                }),
+            }
+        });
+        window
+            .update(cx, |_, window, _| window.activate_window())
+            .unwrap();
+
+        let new_size = size(px(400.), px(300.));
+        cx.simulate_window_resize(window.into(), new_size);
+
+        let opened_window = opened_window
+            .take()
+            .expect("bounds observer should have opened a window");
+        let opened_size = opened_window
+            .update(cx, |_, window, _| window.bounds().size)
+            .unwrap();
+        assert_eq!(opened_size, new_size);
     }
 
     #[gpui::test]
@@ -9479,6 +9735,50 @@ mod tests {
                 (scale_factor, expected_bounds, resized_size)
             );
         }
+    }
+
+    #[gpui::test]
+    fn test_fullscreen_toggle_reports_current_bounds(cx: &mut TestAppContext) {
+        let window = cx.add_window(|_, _| EmptyView);
+        let handle = AnyWindowHandle::from(window);
+        let notifications = Rc::new(Cell::new(0));
+        window
+            .update(cx, {
+                let notifications = notifications.clone();
+                |_, window, cx| {
+                    cx.observe_window_bounds(window, move |_, _, _| {
+                        notifications.set(notifications.get() + 1)
+                    })
+                    .detach();
+                }
+            })
+            .unwrap();
+        let window_state = |cx: &mut TestAppContext| {
+            cx.update_window(handle, |_, window, _| {
+                (
+                    window.is_fullscreen(),
+                    window.bounds().size,
+                    window.viewport_size(),
+                )
+            })
+            .unwrap()
+        };
+        let initial_size = window_state(cx).1;
+
+        window
+            .update(cx, |_, window, _| window.toggle_fullscreen())
+            .unwrap();
+        cx.run_until_parked();
+        assert_eq!(window_state(cx), (true, initial_size, initial_size));
+        assert_eq!(notifications.get(), 1);
+
+        let resized_size = size(px(800.), px(600.));
+        window
+            .update(cx, |_, window, _| window.toggle_fullscreen())
+            .unwrap();
+        cx.simulate_window_resize(handle, resized_size);
+        cx.run_until_parked();
+        assert_eq!(window_state(cx), (false, resized_size, resized_size));
     }
 
     /// Platforms that stop requesting frames for idle windows (currently web)

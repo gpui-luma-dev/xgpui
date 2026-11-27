@@ -4,6 +4,8 @@
 //! Windows re-posts `WM_MOUSEMOVE` at the cursor's position when a window
 //! repaints under a stationary cursor. The app must not see those, but must
 //! see real moves and moves with a button held.
+//! It also checks that `WM_DISPLAYCHANGE` delivered during an app update
+//! can return without reentering the app.
 #[cfg(target_os = "windows")]
 fn main() {
     use gpui::{prelude::*, *};
@@ -12,7 +14,9 @@ fn main() {
     use windows::Win32::{
         Foundation::{HWND, LPARAM, POINT, WPARAM},
         Graphics::Gdi::ClientToScreen,
-        UI::WindowsAndMessaging::{GetCursorPos, PostMessageW, SetCursorPos, WM_MOUSEMOVE},
+        UI::WindowsAndMessaging::{
+            GetCursorPos, PostMessageW, SendMessageW, SetCursorPos, WM_DISPLAYCHANGE, WM_MOUSEMOVE,
+        },
     };
 
     const MK_LBUTTON: usize = 0x0001;
@@ -71,7 +75,13 @@ fn main() {
                         else {
                             panic!("expected a Win32 window handle");
                         };
-                        (HWND(handle.hwnd.get() as *mut _), window.scale_factor())
+                        let hwnd = HWND(handle.hwnd.get() as *mut _);
+                        // A display change delivered inside this update must
+                        // defer its callback until the App borrow is released.
+                        let result =
+                            unsafe { SendMessageW(hwnd, WM_DISPLAYCHANGE, None, None) };
+                        assert_eq!(result.0, 0);
+                        (hwnd, window.scale_factor())
                     })
                     .expect("read window handle");
                 let check = (|| -> Result<String, String> {

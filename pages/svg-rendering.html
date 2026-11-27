@@ -79,6 +79,18 @@ recover when corrected.</li>
 <tr><td>Optional shared pool</td><td style="text-align: right">128 MiB accounted image costs, 2 active jobs</td></tr>
 </tbody></table>
 <p>Override per-image settings with <code>.policy(RasterPolicy { .. })</code>.</p>
+<h2 id="retained-svg-transforms">Timed transforms for core SVG elements</h2>
+<p>This API is under review for the <a href="gpui-public-api.html#gpui-1302-review">GPUI 1.30.2 integration</a>. It applies to the core <code>gpui::svg()</code> element.</p>
+<pre><code class="language-rust">use gpui::{Easing, TimedTransformation, Transformation, point, px, svg};
+use std::time::Duration;
+
+let icon = svg().path("icons/activity.svg").with_timed_transformation(
+    TimedTransformation::new(Duration::from_secs(2))
+        .to(Transformation::translate(point(px(8.), px(0.))).with_alpha(0.6))
+        .with_easing(Easing::EaseInOut)
+        .alternate(),
+);</code></pre>
+<p>The sprite moves without a layout change or view rebuild. Reduced-motion mode displays the starting pose. Backdrop captures that sample the sprite refresh when the pose changes. Replaying the same pose preserves its cache identity.</p>
 <h2 id="shared-scheduling">Shared scheduling</h2>
 <p>Create <strong>one</strong> pool per intended group, then clone it into every participating
 image. Without <code>.scheduler(...)</code>, elements retain independent queues.</p>

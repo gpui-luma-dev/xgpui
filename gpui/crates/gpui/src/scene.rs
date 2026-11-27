@@ -13,7 +13,48 @@ use std::{
     iter::Peekable,
     ops::{Add, Range, Sub},
     slice,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
 };
+
+fn next_command_identity() -> u64 {
+    static NEXT_COMMAND: AtomicU64 = AtomicU64::new(1);
+    NEXT_COMMAND.fetch_add(1, Ordering::Relaxed)
+}
+
+#[derive(Clone)]
+pub(crate) struct SpriteAnimation {
+    transformation: crate::TimedTransformation,
+    center: Point<Pixels>,
+    scale_factor: f32,
+    pose: crate::Transformation,
+    base_color: Hsla,
+    sprite_indices: smallvec::SmallVec<[usize; 1]>,
+    revision: u64,
+}
+
+impl SpriteAnimation {
+    pub(crate) fn new(
+        transformation: crate::TimedTransformation,
+        center: Point<Pixels>,
+        scale_factor: f32,
+    ) -> Self {
+        Self {
+            transformation,
+            center,
+            scale_factor,
+            pose: transformation.at(Duration::ZERO),
+            base_color: Hsla::default(),
+            sprite_indices: smallvec::SmallVec::new(),
+            revision: 0,
+        }
+    }
+
+    fn apply(&self, sprite: &mut MonochromeSprite) {
+        sprite.transformation = self.pose.into_matrix(self.center, self.scale_factor);
+        sprite.color = self.base_color.opacity(self.pose.alpha_factor());
+    }
+}
 
 #[allow(non_camel_case_types, unused)]
 #[expect(missing_docs)]
@@ -42,6 +83,8 @@ pub struct Scene {
     pub(crate) paint_operations: Vec<PaintOperation>,
     primitive_bounds: BoundsTree<ScaledPixels>,
     layer_stack: Vec<DrawOrder>,
+    sort_keys: Vec<(u64, usize)>,
+    sprite_animations: collections::FxHashMap<u64, SpriteAnimation>,
     pub shadows: Vec<Shadow>,
     pub quads: Vec<Quad>,
     pub paths: Vec<Path<ScaledPixels>>,
@@ -63,6 +106,7 @@ pub struct Scene {
 impl Scene {
     pub fn clear(&mut self) {
         self.paint_operations.clear();
+        self.sprite_animations.clear();
         self.primitive_bounds.clear();
         self.layer_stack.clear();
         self.paths.clear();
@@ -96,17 +140,23 @@ impl Scene {
     }
 
     pub fn insert_primitive(&mut self, primitive: impl Into<Primitive>) {
-        static NEXT_COMMAND: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        self.insert_retained_primitive(
-            primitive.into(),
-            NEXT_COMMAND.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-        );
+        self.insert_retained_primitive(primitive.into(), next_command_identity());
     }
 
     fn insert_retained_primitive(&mut self, mut primitive: Primitive, identity: u64) {
-        let clipped_bounds = primitive
-            .bounds()
-            .intersect(&primitive.content_mask().bounds);
+        // The animation can move beyond its starting bounds. Order it
+        // against every primitive it can touch within the sprite's clip.
+        let mut bounds = if self.sprite_animations.contains_key(&identity) {
+            primitive.content_mask().bounds
+        } else {
+            *primitive.bounds()
+        };
+        if let Primitive::Path(path) = &primitive
+            && let Some(tiles) = path.winding_tiles()
+        {
+            bounds = bounds.union(&tiles.painted_bounds());
+        }
+        let clipped_bounds = bounds.intersect(&primitive.content_mask().bounds);
 
         if clipped_bounds.is_empty() {
             return;
@@ -184,10 +234,59 @@ impl Scene {
             .push(PaintOperation::Primitive(primitive, identity));
     }
 
+    pub(crate) fn insert_animated_sprite(
+        &mut self,
+        sprite: MonochromeSprite,
+        mut animation: SpriteAnimation,
+    ) {
+        if sprite.content_mask.bounds.is_empty() {
+            return;
+        }
+        let identity = next_command_identity();
+        animation.revision = identity;
+        animation.base_color = sprite.color;
+        self.sprite_animations.insert(identity, animation);
+        self.insert_retained_primitive(sprite.into(), identity);
+    }
+
+    pub(crate) fn animation_frame_interval(&self) -> Option<Duration> {
+        self.sprite_animations
+            .values()
+            .map(|animation| {
+                animation
+                    .transformation
+                    .min_frame_interval()
+                    .unwrap_or_default()
+            })
+            .min()
+    }
+
+    pub(crate) fn advance_animations(&mut self, elapsed: Duration) {
+        for animation in self.sprite_animations.values_mut() {
+            let pose = animation.transformation.at(elapsed);
+            if animation.pose != pose {
+                animation.pose = pose;
+                animation.revision = next_command_identity();
+                for &index in &animation.sprite_indices {
+                    animation.apply(&mut self.monochrome_sprites[index]);
+                }
+            }
+        }
+    }
+
+    fn visual_revision(&self, identity: u64) -> u64 {
+        self.sprite_animations
+            .get(&identity)
+            .map_or(identity, |animation| animation.revision)
+    }
+
     pub fn replay(&mut self, range: Range<usize>, prev_scene: &Scene) {
         for operation in &prev_scene.paint_operations[range] {
             match operation {
                 PaintOperation::Primitive(primitive, identity) => {
+                    if let Some(animation) = prev_scene.sprite_animations.get(identity) {
+                        self.sprite_animations.insert(*identity, animation.clone());
+                    }
                     self.insert_retained_primitive(primitive.clone(), *identity)
                 }
                 PaintOperation::StartLayer(bounds) => self.push_layer(*bounds),
@@ -253,7 +352,7 @@ impl Scene {
                 if closing && depth + 1 == stack.len() {
                     continue;
                 }
-                revisions[*slot].push(*identity);
+                revisions[*slot].push(self.visual_revision(*identity));
                 ensure!(
                     revisions[*slot].len() <= crate::MAX_LAYER_COMMANDS,
                     "captured group exceeds 65536 commands"
@@ -387,7 +486,7 @@ impl Scene {
                     Primitive::Backdrop(p) => p.order,
                     Primitive::LayerBoundary(p) => p.order,
                 };
-                revision.push((*identity, order));
+                revision.push((self.visual_revision(*identity), order));
             } else {
                 reusable = false;
             }
@@ -401,16 +500,44 @@ impl Scene {
     }
 
     pub fn finish(&mut self) {
-        self.shadows.sort_by_key(|shadow| shadow.order);
-        self.quads.sort_by_key(|quad| quad.order);
+        let keys = &mut self.sort_keys;
+        sort_in_place(&mut self.shadows, keys, |shadow| (shadow.order, 0));
+        sort_in_place(&mut self.quads, keys, |quad| (quad.order, 0));
         self.paths.sort_by_key(|path| path.order);
-        self.underlines.sort_by_key(|underline| underline.order);
-        self.monochrome_sprites
-            .sort_by_key(|sprite| (sprite.order, sprite.tile.texture_id.index));
-        self.subpixel_sprites
-            .sort_by_key(|sprite| (sprite.order, sprite.tile.texture_id.index));
-        self.polychrome_sprites
-            .sort_by_key(|sprite| (sprite.order, sprite.tile.texture_id.index));
+        sort_in_place(&mut self.underlines, keys, |underline| (underline.order, 0));
+        sort_in_place(&mut self.monochrome_sprites, keys, |sprite| {
+            (sprite.order, sprite.tile.texture_id.index)
+        });
+        if !self.sprite_animations.is_empty() {
+            // Match the same stable order as the renderer vector without
+            // changing MonochromeSprite's public layout.
+            for animation in self.sprite_animations.values_mut() {
+                animation.sprite_indices.clear();
+            }
+            let mut identities: Vec<_> = self
+                .paint_operations
+                .iter()
+                .filter_map(|op| match op {
+                    PaintOperation::Primitive(Primitive::MonochromeSprite(sprite), identity) => {
+                        Some(((sprite.order, sprite.tile.texture_id.index), *identity))
+                    }
+                    _ => None,
+                })
+                .collect();
+            identities.sort_by_key(|entry| entry.0);
+            for (index, (_, identity)) in identities.into_iter().enumerate() {
+                if let Some(animation) = self.sprite_animations.get_mut(&identity) {
+                    animation.sprite_indices.push(index);
+                    animation.apply(&mut self.monochrome_sprites[index]);
+                }
+            }
+        }
+        sort_in_place(&mut self.subpixel_sprites, keys, |sprite| {
+            (sprite.order, sprite.tile.texture_id.index)
+        });
+        sort_in_place(&mut self.polychrome_sprites, keys, |sprite| {
+            (sprite.order, sprite.tile.texture_id.index)
+        });
         self.surfaces.sort_by_key(|surface| surface.order);
         self.custom_draws.sort_by_key(|draw| draw.order);
         self.shader_draws.sort_by_key(|draw| draw.order);
@@ -453,6 +580,53 @@ impl Scene {
             surfaces_iter: self.surfaces.iter().peekable(),
         }
     }
+}
+
+/// Sort compact keys, keeping insertion order for ties, then permute the primitives once.
+fn sort_in_place<T: Copy>(
+    primitives: &mut [T],
+    keys: &mut Vec<(u64, usize)>,
+    key: impl Fn(&T) -> (u32, u32),
+) {
+    if primitives.is_sorted_by_key(&key) {
+        return;
+    }
+    keys.clear();
+    keys.extend(primitives.iter().enumerate().map(|(index, primitive)| {
+        let (major, minor) = key(primitive);
+        ((u64::from(major) << 32) | u64::from(minor), index)
+    }));
+    keys.sort_unstable();
+
+    // Each index maps a target to its source. Visit each permutation cycle once.
+    for start in 0..primitives.len() {
+        if keys[start].1 == start {
+            continue;
+        }
+        let displaced = primitives[start];
+        let mut target = start;
+        loop {
+            let source = keys[target].1;
+            keys[target].1 = target;
+            if source == start {
+                primitives[target] = displaced;
+                break;
+            }
+            primitives[target] = primitives[source];
+            target = source;
+        }
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn primitive_sort_preserves_insertion_order_for_equal_keys() {
+    let mut entries = [(2, 0, 'a'), (1, 1, 'b'), (2, 0, 'c'), (1, 0, 'd')];
+    sort_in_place(&mut entries, &mut Vec::new(), |entry| (entry.0, entry.1));
+    assert_eq!(
+        entries,
+        [(1, 0, 'd'), (1, 1, 'b'), (2, 0, 'a'), (2, 0, 'c')]
+    );
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Default)]
@@ -577,7 +751,7 @@ impl<'a> Iterator for BatchIterator<'a> {
     type Item = PrimitiveBatch;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut orders_and_kinds = [
+        let orders_and_kinds = [
             (
                 self.layer_boundary_iter.peek().map(|d| d.order),
                 PrimitiveKind::LayerBoundary,
@@ -621,15 +795,22 @@ impl<'a> Iterator for BatchIterator<'a> {
                 PrimitiveKind::Surface,
             ),
         ];
-        orders_and_kinds.sort_by_key(|(order, kind)| (order.unwrap_or(u32::MAX), *kind));
-
-        let first = orders_and_kinds[0];
-        let second = orders_and_kinds[1];
-        let (batch_kind, max_order_and_kind) = if first.0.is_some() {
-            (first.1, (second.0.unwrap_or(u32::MAX), second.1))
-        } else {
-            return None;
-        };
+        // Only the next batch and the first competing primitive constrain this batch.
+        // The kind tie-break is the same as painting the fully sorted sequence.
+        let mut first = None;
+        let mut second = None;
+        for (order, kind) in orders_and_kinds {
+            let Some(order) = order else { continue };
+            let candidate = (order, kind);
+            if first.is_none_or(|first| candidate < first) {
+                second = first;
+                first = Some(candidate);
+            } else if second.is_none_or(|second| candidate < second) {
+                second = Some(candidate);
+            }
+        }
+        let (_, batch_kind) = first?;
+        let max_order_and_kind = second.unwrap_or((u32::MAX, PrimitiveKind::LayerBoundary));
 
         match batch_kind {
             PrimitiveKind::LayerBoundary => {
@@ -1184,6 +1365,16 @@ pub struct Path<P: Clone + Debug + Default + PartialEq> {
     start: Point<P>,
     current: Point<P>,
     contour_count: usize,
+    winding: Option<std::sync::Arc<PathWinding>>,
+    tiles: Option<std::sync::Arc<crate::PathTiles>>,
+}
+
+#[derive(Debug)]
+struct PathWinding {
+    curves: Vec<crate::PathCurve>,
+    even_odd: bool,
+    original_vertices: Vec<PathVertex<Pixels>>,
+    original_bounds: Bounds<Pixels>,
 }
 
 impl Path<Pixels> {
@@ -1202,7 +1393,40 @@ impl Path<Pixels> {
             content_mask: Default::default(),
             color: Default::default(),
             contour_count: 0,
+            winding: None,
+            tiles: None,
         }
+    }
+
+    pub(crate) fn set_winding_curves(&mut self, curves: Vec<crate::PathCurve>, even_odd: bool) {
+        if curves.is_empty() || self.vertices.is_empty() {
+            return;
+        }
+        // The public triangle stream remains authoritative for callers that
+        // edit it. Only unmodified builder output uses the winding outline.
+        self.winding = Some(std::sync::Arc::new(PathWinding {
+            curves,
+            even_odd,
+            original_vertices: self.vertices.clone(),
+            original_bounds: self.bounds,
+        }));
+    }
+
+    pub(crate) fn scale_for_stock_paint(&self, factor: f32) -> Path<ScaledPixels> {
+        let mut path = self.scale(factor);
+        if let Some(winding) = &self.winding
+            && self.vertices == winding.original_vertices
+            && self.bounds == winding.original_bounds
+            && factor.is_finite()
+            && factor > 0.
+        {
+            let mut tiles = crate::path_winding::bin(&winding.curves, winding.even_odd, factor);
+            tiles.retain_visible(path.content_mask.bounds);
+            if !tiles.tiles().is_empty() {
+                path.tiles = Some(std::sync::Arc::new(tiles));
+            }
+        }
+        path
     }
 
     /// Scale this path by the given factor.
@@ -1220,6 +1444,8 @@ impl Path<Pixels> {
             start: self.start.map(|start| start.scale(factor)),
             current: self.current.scale(factor),
             contour_count: self.contour_count,
+            winding: None,
+            tiles: None,
             color: self.color,
         }
     }
@@ -1316,7 +1542,28 @@ impl From<Path<ScaledPixels>> for Primitive {
     }
 }
 
-#[derive(Clone, Debug)]
+impl Path<ScaledPixels> {
+    #[doc(hidden)]
+    #[allow(missing_docs)]
+    pub fn winding_tile_paint(&self) -> Option<crate::PathTilePaint> {
+        let tiles = self.winding_tiles()?;
+        Some(crate::PathTilePaint {
+            bounds: self.bounds,
+            content_mask: self.content_mask.bounds,
+            color: self.color,
+            even_odd: tiles.even_odd().into(),
+            pad: 0,
+        })
+    }
+
+    #[doc(hidden)]
+    #[allow(missing_docs)]
+    pub fn winding_tiles(&self) -> Option<&crate::PathTiles> {
+        self.tiles.as_deref()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
 #[expect(missing_docs)]
 pub struct PathVertex<P: Clone + Debug + Default + PartialEq> {

@@ -51,6 +51,12 @@ jobs:
       - name: wgpu renderer tests (surface configuration, recovery)
         if: ${{ !cancelled() }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-wgpu --lib
+      - name: Paint lab path readback and retained replay
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin paint-lab --features wgpu path_paints
+      - name: SVG lab animated backdrop invalidation
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin svg-lab --features wgpu animation_invalidates_backdrop
       - name: Build the real-window test (outside the smoke script's 60 s run limit)
         if: ${{ !cancelled() }}
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features linux-window-tests,runtime-shaders,portable-shaders,wgpu --test linux_windows --no-run
@@ -91,6 +97,12 @@ jobs:
           shared-key: epic-284-windows-v1
       - name: Windows backend tests (DirectWrite, input, renderer)
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-windows --features test-support --lib -- --test-threads=1
+      - name: Paint lab path readback and retained replay
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin paint-lab --features wgpu path_paints
+      - name: SVG lab animated backdrop invalidation
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin svg-lab --features wgpu animation_invalidates_backdrop
       - name: Real-window input probe (when present on this branch)
         if: ${{ !cancelled() && hashFiles('apps/xgpui-ext-lab/tests/windows_input.rs') != '' }}
         run: cargo test --locked --config .cargo/validation.toml --manifest-path apps/xgpui-ext-lab/Cargo.toml --features windows-window-tests --test windows_input
@@ -121,6 +133,12 @@ jobs:
           shared-key: epic-284-macos-v1
       - name: Apple renderer and text tests (Metal)
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-apple --features test-support,font-kit,runtime_shaders --lib
+      - name: Paint lab path readback and retained replay
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin paint-lab --features runtime-shaders,wgpu path_paints
+      - name: SVG lab animated backdrop invalidation
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --config .cargo/validation.toml -p xgpui-ext-lab --bin svg-lab --features runtime-shaders,wgpu animation_invalidates_backdrop
       - name: macOS backend tests (display link, keyboard, window)
         if: ${{ !cancelled() }}
         run: cargo test --locked --config .cargo/validation.toml -p xgpui-macos --lib

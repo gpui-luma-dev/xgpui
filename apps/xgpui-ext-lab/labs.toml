@@ -529,7 +529,7 @@ cargo = ["test", "--features", "linux-window-tests", "--test", "linux_windows"]
 
 [[lab.task]]
 name = "windows-input"
-about = "Synthetic WM_MOUSEMOVE suppression on a live window"
+about = "Synthetic WM_MOUSEMOVE suppression and reentrant WM_DISPLAYCHANGE on a live window"
 platforms = ["windows"]
 profile = "dev"
 cargo = ["test", "--features", "windows-window-tests", "--test", "windows_input"]

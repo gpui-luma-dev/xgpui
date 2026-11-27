@@ -260,3 +260,42 @@ fn load_poly_sprite(instance_id: u32) -> PolychromeSprite {
         read_corners(&cursor),
     );
 }
+
+fn load_path_tile(instance_id: u32) -> PathTile {
+    var cursor = instance_cursor(instance_id * 14u);
+    return PathTile(
+        read_word(&cursor),
+        read_word(&cursor),
+        read_word(&cursor),
+        read_i32(&cursor),
+        read_vec2_f32(&cursor),
+        read_vec2_f32(&cursor),
+        read_vec2_f32(&cursor),
+        read_vec2_f32(&cursor),
+        read_vec2_f32(&cursor),
+    );
+}
+
+// Tiles index absolute paint and curve records in the packed instance texture.
+fn load_path_curve(index: u32) -> PathCurve {
+    var cursor = instance_cursor(index * 10u);
+    return PathCurve(
+        read_vec2_f32(&cursor),
+        read_vec2_f32(&cursor),
+        read_vec2_f32(&cursor),
+        read_vec2_f32(&cursor),
+        read_f32(&cursor),
+        read_word(&cursor),
+    );
+}
+
+fn load_path_paint(index: u32) -> PathPaint {
+    var cursor = instance_cursor(index * 28u);
+    return PathPaint(
+        read_bounds(&cursor),
+        read_bounds(&cursor),
+        read_background(&cursor),
+        read_word(&cursor),
+        read_word(&cursor),
+    );
+}

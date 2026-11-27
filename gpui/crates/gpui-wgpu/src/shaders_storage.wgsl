@@ -40,3 +40,19 @@ fn load_mono_sprite(instance_id: u32) -> MonochromeSprite {
 fn load_poly_sprite(instance_id: u32) -> PolychromeSprite {
     return b_poly_sprites[instance_id];
 }
+
+@group(1) @binding(0) var<storage, read> b_path_tiles: array<PathTile>;
+@group(1) @binding(1) var<storage, read> b_path_curves: array<PathCurve>;
+@group(1) @binding(2) var<storage, read> b_path_paints: array<PathPaint>;
+
+fn load_path_tile(instance_id: u32) -> PathTile {
+    return b_path_tiles[instance_id];
+}
+
+fn load_path_curve(index: u32) -> PathCurve {
+    return b_path_curves[index];
+}
+
+fn load_path_paint(index: u32) -> PathPaint {
+    return b_path_paints[index];
+}

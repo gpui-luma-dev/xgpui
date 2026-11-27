@@ -61,7 +61,7 @@ anyhow = { version = "1.0.86" }
 async-task = { version = "4.7" }
 backtrace = { version = "0.3" }
 bitflags = { version = "2.6.0" }
-collections = { package = "collections-gpui-unofficial", version = "=1.29.3" }
+collections = { package = "collections-gpui-unofficial", version = "=1.30.2" }
 criterion = { version = "0.8.2", features = ["html_reports"], optional = true }
 ctor = { version = "1.0.12" }
 derive_more = { version = "2.1", features = ["deref", "deref_mut", "from_str", "add", "add_assign", "mul", "mul_assign", "not"] }
@@ -69,8 +69,8 @@ etagere = { version = "0.2" }
 futures = { version = "0.3.34" }
 futures-concurrency = { version = "7.7.1", optional = true }
 gpui_macros = { package = "xgpui-macros", version = "1.0.2" }
-gpui_shared_string = { package = "gpui-shared-string-gpui-unofficial", version = "=1.29.3" }
-http_client = { package = "http-client-gpui-unofficial", version = "=1.29.3" }
+gpui_shared_string = { package = "gpui-shared-string-gpui-unofficial", version = "=1.30.2" }
+http_client = { package = "http-client-gpui-unofficial", version = "=1.30.2" }
 icu_segmenter = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
 image = { version = "0.25.1", default-features = false, features = [
     "bmp",
@@ -101,14 +101,16 @@ profiling = { version = "1" }
 rand = { version = "0.9", default-features = false, features = ["std", "std_rng", "os_rng", "small_rng", "thread_rng"] }
 raw-window-handle = { version = "0.6" }
 regex = { version = "1.5", default-features = true, features = ["std", "perf"] }
-refineable = { package = "refineable-gpui-unofficial", version = "=1.29.3" }
-scheduler = { package = "scheduler-gpui-unofficial", version = "=1.29.3" }
-resvg = { version = "0.46.0", default-features = false, features = [
+refineable = { package = "refineable-gpui-unofficial", version = "=1.30.2" }
+scheduler = { package = "scheduler-gpui-unofficial", version = "=1.30.2" }
+resvg = { version = "0.49", default-features = false, features = [
     "text",
     "system-fonts",
     "memmap-fonts",
     "raster-images"] }
-usvg = { version = "0.46.0", default-features = false }
+usvg = { version = "0.49", default-features = false, features = ["svgz"] }
+# Preserve the public SVG error type while parsing and rendering with 0.49.
+usvg_legacy = { package = "usvg", version = "0.46.0", default-features = false }
 ttf-parser = "0.25"
 schemars = { version = "1.0", default-features = false, features = ["std", "indexmap2", "derive"] }
 seahash = "4.1"
@@ -118,15 +120,16 @@ slotmap = { version = "1.0.6" }
 smallvec = { version = "1.6", features = ["union", "const_new"] }
 stacksafe = { version = "1.0", optional = true }
 strum = { version = "0.28", features = ["derive"] }
-sum_tree = { package = "sum-tree-gpui-unofficial", version = "=1.29.3" }
+sum_tree = { package = "sum-tree-gpui-unofficial", version = "=1.30.2" }
 taffy = { version = "=0.15.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "grid", "block_layout", "float_layout", "content_size"] }
 thiserror = { version = "2.0.12" }
 unicode-segmentation = { version = "1.10" }
 unicode-bidi = { version = "0.3.18" }
-gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.29.3" }
+gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.30.2" }
 hdrhistogram = { version = "7", default-features = false, optional = true }
 waker-fn = "1.2.0"
 lyon = "1.0"
+tiny-skia-path = "0.12"
 pin-project = "1.1.10"
 spin = { version = "0.10", default-features = false, features = ["mutex", "spin_mutex", "lock_api"] }
 url = { version = "2.2" }
@@ -180,7 +183,7 @@ windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Gd
 
 [dev-dependencies]
 backtrace = { version = "0.3" }
-collections = { package = "collections-gpui-unofficial", version = "=1.29.3", features = ["test-support"] }
+collections = { package = "collections-gpui-unofficial", version = "=1.30.2", features = ["test-support"] }
 env_logger = { version = "0.11" }
 futures-concurrency = { version = "7.7.1" }
 postage = { version = "0.5", default-features = false, features = ["blocking"] }
@@ -188,16 +191,16 @@ web-time = { version = "1.1.0" }
 # Repository-only tests/examples: omit this dependency from the published crate
 # to avoid requiring xgpui-platform before its own xgpui dependency is published.
 gpui_platform = { package = "xgpui-platform", path = "../gpui-platform" }
-gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.29.3" }
+gpui_util = { package = "gpui-util-gpui-unofficial", version = "=1.30.2" }
 lyon = { version = "1.0", features = ["extra"] }
 rand = { version = "0.9", default-features = true, features = ["std", "std_rng", "os_rng"] }
-scheduler = { package = "scheduler-gpui-unofficial", version = "=1.29.3", features = ["test-support"] }
-util_macros = { package = "util-macros-gpui-unofficial", version = "=1.29.3" }
+scheduler = { package = "scheduler-gpui-unofficial", version = "=1.30.2", features = ["test-support"] }
+util_macros = { package = "util-macros-gpui-unofficial", version = "=1.30.2" }
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
-http_client = { package = "http-client-gpui-unofficial", version = "=1.29.3", features = ["test-support"] }
+http_client = { package = "http-client-gpui-unofficial", version = "=1.30.2", features = ["test-support"] }
 proptest = { version = "1.12.0", features = ["attr-macro"] }
-reqwest_client = { package = "reqwest-client-gpui-unofficial", version = "=1.29.3", features = ["test-support"] }
+reqwest_client = { package = "reqwest-client-gpui-unofficial", version = "=1.30.2", features = ["test-support"] }
 
 [target.'cfg(target_family = "wasm")'.dev-dependencies]
 # Repository-only image examples: kept path-only so the published crate omits it

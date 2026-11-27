@@ -145,9 +145,13 @@ pub struct MetalRenderer {
     opaque: bool,
     command_queue: CommandQueue,
     paths_rasterization_pipeline_state: metal::RenderPipelineState,
+    path_tiles_pipeline_state: metal::RenderPipelineState,
     path_sprites_pipeline_state: metal::RenderPipelineState,
     shadows_pipeline_state: metal::RenderPipelineState,
     quads_pipeline_state: metal::RenderPipelineState,
+    opaque_quad_pipeline: metal::RenderPipelineState,
+    opaque_quad_state: Retained<ProtocolObject<dyn MTLDepthStencilState>>,
+    opaque_quad_depth: Option<metal::Texture>,
     underlines_pipeline_state: metal::RenderPipelineState,
     monochrome_sprites_pipeline_state: metal::RenderPipelineState,
     polychrome_sprites_pipeline_state: metal::RenderPipelineState,
@@ -393,6 +397,14 @@ impl MetalRenderer {
                 .context("allocating Metal unit vertices")?
         };
 
+        let path_tiles_pipeline_state = build_pipeline_state(
+            &device,
+            &library,
+            "path_tiles",
+            "path_tile_vertex",
+            "path_tile_fragment",
+            MTLPixelFormat::BGRA8Unorm,
+        )?;
         let paths_rasterization_pipeline_state = build_path_rasterization_pipeline_state(
             &device,
             &library,
@@ -426,6 +438,20 @@ impl MetalRenderer {
             "quad_fragment",
             MTLPixelFormat::BGRA8Unorm,
         )?;
+        let opaque_quad_pipeline = build_pipeline_state(
+            &device,
+            &library,
+            "opaque_quads",
+            "opaque_quad_vertex",
+            "quad_fragment",
+            MTLPixelFormat::BGRA8Unorm,
+        )?;
+        let depth_descriptor = MTLDepthStencilDescriptor::new();
+        depth_descriptor.setDepthCompareFunction(MTLCompareFunction::Less);
+        depth_descriptor.setDepthWriteEnabled(true);
+        let opaque_quad_state = device
+            .newDepthStencilStateWithDescriptor(&depth_descriptor)
+            .context("creating opaque quad depth state")?;
         let underlines_pipeline_state = build_pipeline_state(
             &device,
             &library,
@@ -505,9 +531,13 @@ impl MetalRenderer {
             opaque,
             command_queue,
             paths_rasterization_pipeline_state,
+            path_tiles_pipeline_state,
             path_sprites_pipeline_state,
             shadows_pipeline_state,
             quads_pipeline_state,
+            opaque_quad_pipeline,
+            opaque_quad_state,
+            opaque_quad_depth: None,
             underlines_pipeline_state,
             monochrome_sprites_pipeline_state,
             polychrome_sprites_pipeline_state,
@@ -1272,6 +1302,7 @@ impl MetalRenderer {
         let mut executed_backdrops = Vec::new();
         let mut executed_groups = Vec::new();
         let mut skip_group_end = None;
+        let mut used_quad_depth = false;
         for batch in scene.batches() {
             if let Some(end) = skip_group_end {
                 if !matches!(&batch,PrimitiveBatch::LayerBoundary(index) if *index==end) {
@@ -1372,35 +1403,102 @@ impl MetalRenderer {
                     self.draw_shadows(range, instance_bindings, viewport_size, &command_encoder)
                 }
                 PrimitiveBatch::Quads(range) => {
-                    self.draw_quads(range, instance_bindings, viewport_size, &command_encoder)
+                    if !used_quad_depth
+                        && scene.layer_boundaries.is_empty()
+                        && range.end <= (1 << 24)
+                        && opaque_quad_run(&scene.quads[range.clone()])
+                    {
+                        if self.opaque_quad_depth.as_ref().is_none_or(|depth| {
+                            depth.width() != texture.width() || depth.height() != texture.height()
+                        }) {
+                            let descriptor = metal::TextureDescriptor::new();
+                            descriptor.setPixelFormat(MTLPixelFormat::Depth32Float);
+                            // The size comes from an existing render target.
+                            unsafe {
+                                descriptor.setWidth(texture.width());
+                                descriptor.setHeight(texture.height());
+                            }
+                            descriptor.setStorageMode(MTLStorageMode::Private);
+                            descriptor.setUsage(MTLTextureUsage::RenderTarget);
+                            self.opaque_quad_depth =
+                                self.device.newTextureWithDescriptor(&descriptor);
+                        }
+                        if let Some(depth) = self.opaque_quad_depth.as_ref() {
+                            command_encoder.endEncoding();
+                            let opaque = command_encoder_for_texture(
+                                &command_buffer,
+                                texture,
+                                viewport_size,
+                                None,
+                                Some(depth),
+                            );
+                            opaque.setDepthStencilState(Some(&self.opaque_quad_state));
+                            self.draw_quad_batch(
+                                range,
+                                instance_bindings,
+                                viewport_size,
+                                &opaque,
+                                true,
+                            );
+                            opaque.endEncoding();
+                            command_encoder = new_command_encoder_for_texture(
+                                &command_buffer,
+                                texture,
+                                viewport_size,
+                                None,
+                            );
+                            used_quad_depth = true;
+                            continue;
+                        }
+                    }
+                    self.draw_quads(range, instance_bindings, viewport_size, &command_encoder);
                 }
                 PrimitiveBatch::Paths(range) => {
-                    let paths = &scene.paths[range];
-                    command_encoder.endEncoding();
+                    let mut paths = &scene.paths[range];
+                    while let Some((first, rest)) = paths.split_first() {
+                        if first.winding_tiles().is_some() {
+                            if let Err(error) =
+                                self.draw_path_tiles(first, writer, viewport_size, &command_encoder)
+                            {
+                                command_encoder.endEncoding();
+                                return Err(error);
+                            }
+                            paths = rest;
+                            continue;
+                        }
+                        let legacy_count = paths
+                            .iter()
+                            .skip(1)
+                            .position(|path| path.winding_tiles().is_some())
+                            .map_or(paths.len(), |index| index + 1);
+                        let (legacy, rest) = paths.split_at(legacy_count);
+                        paths = rest;
+                        command_encoder.endEncoding();
 
-                    let did_draw = self.draw_paths_to_intermediate(
-                        paths,
-                        writer,
-                        viewport_size,
-                        &command_buffer,
-                    )?;
-
-                    command_encoder = new_command_encoder_for_texture(
-                        &command_buffer,
-                        texture,
-                        viewport_size,
-                        None,
-                    );
-
-                    if did_draw {
-                        if let Err(error) = self.draw_paths_from_intermediate(
-                            paths,
+                        let did_draw = self.draw_paths_to_intermediate(
+                            legacy,
                             writer,
                             viewport_size,
-                            &command_encoder,
-                        ) {
-                            command_encoder.endEncoding();
-                            return Err(error);
+                            &command_buffer,
+                        )?;
+
+                        command_encoder = new_command_encoder_for_texture(
+                            &command_buffer,
+                            texture,
+                            viewport_size,
+                            None,
+                        );
+
+                        if did_draw {
+                            if let Err(error) = self.draw_paths_from_intermediate(
+                                legacy,
+                                writer,
+                                viewport_size,
+                                &command_encoder,
+                            ) {
+                                command_encoder.endEncoding();
+                                return Err(error);
+                            }
                         }
                     }
                 }
@@ -1447,6 +1545,57 @@ impl MetalRenderer {
         }
 
         Ok(command_buffer.to_owned())
+    }
+
+    fn draw_path_tiles(
+        &self,
+        path: &Path<ScaledPixels>,
+        writer: &mut InstanceBufferWriter,
+        viewport_size: Size<DevicePixels>,
+        encoder: &metal::RenderCommandEncoderRef,
+    ) -> Result<()> {
+        let tiles = path.winding_tiles().unwrap();
+        let paint = path.winding_tile_paint().unwrap();
+        let tile_binding = writer.write(tiles.tiles())?;
+        let curve_binding = if tiles.curves().is_empty() {
+            writer.write(&[0u8; std::mem::size_of::<gpui::PathCurve>()])?
+        } else {
+            writer.write(tiles.curves())?
+        };
+        let paint_binding = writer.write(&[paint])?;
+
+        encoder.setRenderPipelineState(&self.path_tiles_pipeline_state);
+        unsafe {
+            for (index, binding) in [&tile_binding, &curve_binding, &paint_binding]
+                .into_iter()
+                .enumerate()
+            {
+                encoder.setFragmentBuffer_offset_atIndex(
+                    Some(&binding.buffer),
+                    binding.offset,
+                    index,
+                );
+                if index != 1 {
+                    encoder.setVertexBuffer_offset_atIndex(
+                        Some(&binding.buffer),
+                        binding.offset,
+                        index,
+                    );
+                }
+            }
+            encoder.setVertexBytes_length_atIndex(
+                std::ptr::NonNull::from(&viewport_size).cast(),
+                mem::size_of_val(&viewport_size),
+                3,
+            );
+            encoder.drawPrimitives_vertexStart_vertexCount_instanceCount(
+                metal::MTLPrimitiveType::TriangleStrip,
+                0,
+                4,
+                tiles.tiles().len(),
+            );
+        }
+        Ok(())
     }
 
     fn draw_paths_to_intermediate(
@@ -1668,11 +1817,40 @@ impl MetalRenderer {
         viewport_size: Size<DevicePixels>,
         command_encoder: &metal::RenderCommandEncoderRef,
     ) {
+        self.draw_quad_batch(
+            quads,
+            instance_bindings,
+            viewport_size,
+            command_encoder,
+            false,
+        );
+    }
+
+    fn draw_quad_batch(
+        &self,
+        quads: Range<usize>,
+        instance_bindings: &InstanceBindings,
+        viewport_size: Size<DevicePixels>,
+        command_encoder: &metal::RenderCommandEncoderRef,
+        depth: bool,
+    ) {
         if quads.is_empty() {
             return;
         }
 
-        command_encoder.setRenderPipelineState(&self.quads_pipeline_state);
+        if depth {
+            command_encoder.setRenderPipelineState(&self.opaque_quad_pipeline);
+            let reverse_index = (quads.start + quads.end - 1) as u32;
+            unsafe {
+                command_encoder.setVertexBytes_length_atIndex(
+                    ptr::NonNull::from(&reverse_index).cast(),
+                    mem::size_of_val(&reverse_index),
+                    QuadInputIndex::ReverseIndex as usize,
+                );
+            }
+        } else {
+            command_encoder.setRenderPipelineState(&self.quads_pipeline_state);
+        }
         unsafe {
             command_encoder.setVertexBuffer_offset_atIndex(
                 Some(&self.unit_vertices),
@@ -2169,11 +2347,35 @@ impl MetalRenderer {
     }
 }
 
+fn opaque_quad_run(quads: &[gpui::Quad]) -> bool {
+    quads.len() >= 8
+        && quads.iter().all(|quad| {
+            quad.background
+                .as_solid()
+                .is_some_and(|color| color.is_opaque())
+                && quad.corner_radii == gpui::Corners::default()
+                && quad.border_widths == gpui::Edges::default()
+        })
+        && quads
+            .windows(2)
+            .any(|pair| pair[0].bounds.intersects(&pair[1].bounds))
+}
+
 fn new_command_encoder_for_texture<'a>(
     command_buffer: &'a metal::CommandBufferRef,
     texture: &'a metal::TextureRef,
     viewport_size: Size<DevicePixels>,
     clear_color: Option<metal::MTLClearColor>,
+) -> metal::RenderCommandEncoder {
+    command_encoder_for_texture(command_buffer, texture, viewport_size, clear_color, None)
+}
+
+fn command_encoder_for_texture(
+    command_buffer: &metal::CommandBufferRef,
+    texture: &metal::TextureRef,
+    viewport_size: Size<DevicePixels>,
+    clear_color: Option<metal::MTLClearColor>,
+    depth: Option<&metal::TextureRef>,
 ) -> metal::RenderCommandEncoder {
     let render_pass_descriptor = metal::RenderPassDescriptor::new();
     let color_attachment = unsafe {
@@ -2188,6 +2390,13 @@ fn new_command_encoder_for_texture<'a>(
         color_attachment.setClearColor(clear_color);
     } else {
         color_attachment.setLoadAction(metal::MTLLoadAction::Load);
+    }
+    if let Some(depth) = depth {
+        let attachment = render_pass_descriptor.depthAttachment();
+        attachment.setTexture(Some(depth));
+        attachment.setLoadAction(MTLLoadAction::Clear);
+        attachment.setClearDepth(1.0);
+        attachment.setStoreAction(MTLStoreAction::DontCare);
     }
 
     let command_encoder = command_buffer
@@ -2258,6 +2467,9 @@ fn build_pipeline_state(
     descriptor.setLabel(Some(&objc2_foundation::NSString::from_str(label)));
     descriptor.setVertexFunction(Some(vertex_fn.as_ref()));
     descriptor.setFragmentFunction(Some(fragment_fn.as_ref()));
+    if vertex_fn_name == "opaque_quad_vertex" {
+        descriptor.setDepthAttachmentPixelFormat(MTLPixelFormat::Depth32Float);
+    }
     let color_attachment = unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) };
     color_attachment.setPixelFormat(pixel_format);
     color_attachment.setBlendingEnabled(true);
@@ -2524,6 +2736,7 @@ enum QuadInputIndex {
     Vertices = 0,
     Quads = 1,
     ViewportSize = 2,
+    ReverseIndex = 3,
 }
 
 #[repr(C)]
@@ -2805,10 +3018,8 @@ mod tests {
         }
 
         for (width, height) in [(0, 64), (64, 0), (-1, 64), (64, -1)] {
-            renderer.update_path_intermediate_textures(size(
-                DevicePixels(width),
-                DevicePixels(height),
-            ));
+            renderer
+                .update_path_intermediate_textures(size(DevicePixels(width), DevicePixels(height)));
             assert!(renderer.path_intermediate_texture.is_none());
             assert!(renderer.path_intermediate_msaa_texture.is_none());
             renderer.update_path_intermediate_textures(initial_size);
