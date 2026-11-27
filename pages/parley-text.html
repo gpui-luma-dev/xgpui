@@ -206,6 +206,8 @@ languages.</p>
 <p><code>ParleyTextSystem</code>, <code>FaceRegistry</code>, <code>RegisteredFace</code>, <code>GlyphRasterizer</code>,
 <code>ParagraphShape</code>, <code>ParagraphLayout</code>, <code>VariationPreview</code>, <code>ParagraphOptions</code>,
 <code>TextLanguage</code>, <code>Typeset</code>, <code>typeset::install</code> and <code>install_text_layout</code> belong to <strong>xgpui-parley</strong>, not GPUI.
+<code>set_text_layout_direction</code> sets the app-wide <a href="right-to-left-text.html#default-direction">plain text base direction</a> at runtime.
+The default is <code>Auto</code>. <code>AutoOr</code> sets a fallback for text without a strong character, and <code>Fixed</code> sets the base for every plain text layout.
 <code>xgpui_parley::TextDirection</code> re-exports <code>gpui::TextDirection</code> (since 0.7).
 Parley/HarfRust/Skrifa types do not enter the core signatures.</p>
 <p>The paragraph additions add no required trait methods. Core 4.1 made

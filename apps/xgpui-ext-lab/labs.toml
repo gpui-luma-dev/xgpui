@@ -336,6 +336,13 @@ views = [
 ]
 
 [[lab.task]]
+name = "direction-window"
+about = "Changing plain text direction redraws an existing Parley window"
+platforms = ["macos", "linux", "windows"]
+profile = "dev"
+cargo = ["test", "--features", "native-window-tests", "--test", "text_layout_direction_window"]
+
+[[lab.task]]
 name = "test"
 about = "Text lab tests"
 cargo = ["test", "--bin", "text-lab"]

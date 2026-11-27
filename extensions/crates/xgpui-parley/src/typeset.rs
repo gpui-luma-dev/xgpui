@@ -1424,7 +1424,9 @@ fn truncated(
 
 #[path = "typeset/text_layout.rs"]
 mod text_layout;
-pub use text_layout::install_text_layout;
+pub use text_layout::{
+    BaseDir, TextLayoutDirection, install_text_layout, set_text_layout_direction,
+};
 
 #[cfg(test)]
 #[path = "typeset/tests.rs"]

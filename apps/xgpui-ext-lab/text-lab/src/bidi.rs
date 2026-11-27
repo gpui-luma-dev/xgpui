@@ -14,7 +14,9 @@ use gpui::{
     VisualDirection, Window, canvas, div, fill, hsla, paint_paragraph, prelude::*, px, rgb,
 };
 use std::sync::Arc;
-use xgpui_parley::{ParleyTextSystem, typeset};
+use xgpui_parley::{
+    BaseDir, ParleyTextSystem, TextLayoutDirection, set_text_layout_direction, typeset,
+};
 
 const LABELS: [(&str, &str); 5] = [
     ("Latin", "Plain GPUI text label"),
@@ -58,6 +60,14 @@ const DIRECTIONS: [(&str, TextDirection); 3] = [
     ("Right to left", TextDirection::RightToLeft),
 ];
 
+const PLAIN_DIRECTIONS: [(&str, TextLayoutDirection); 5] = [
+    ("Auto", TextLayoutDirection::Auto),
+    ("Auto or LTR", TextLayoutDirection::AutoOr(BaseDir::Ltr)),
+    ("Auto or RTL", TextLayoutDirection::AutoOr(BaseDir::Rtl)),
+    ("Fixed LTR", TextLayoutDirection::Fixed(BaseDir::Ltr)),
+    ("Fixed RTL", TextLayoutDirection::Fixed(BaseDir::Rtl)),
+];
+
 #[derive(Clone, Copy, PartialEq)]
 enum Width {
     Fit,
@@ -99,6 +109,7 @@ pub struct BidiLab {
     applied: bool,
     sample: usize,
     direction: usize,
+    plain_direction: TextLayoutDirection,
     width: Width,
     focus: FocusHandle,
     anchor: ParagraphPosition,
@@ -136,6 +147,7 @@ impl BidiLab {
             applied: plain_on_parley,
             sample: 0,
             direction: 0,
+            plain_direction: TextLayoutDirection::Auto,
             width: Width::Fit,
             focus: cx.focus_handle(),
             anchor: start(),
@@ -229,7 +241,7 @@ impl BidiLab {
         id: &'static str,
         items: &[(&'static str, T)],
         selected: impl Fn(&Self, T) -> bool,
-        select: impl Fn(&mut Self, T) + Copy + 'static,
+        select: impl Fn(&mut Self, T, &mut Context<Self>) + Copy + 'static,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
@@ -247,7 +259,7 @@ impl BidiLab {
                     .bg(if on { rgb(0x2563eb) } else { rgb(0x374151) })
                     .child(label)
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        select(this, value);
+                        select(this, value, cx);
                         this.reset_caret();
                         cx.notify();
                     }))
@@ -464,7 +476,7 @@ impl Render for BidiLab {
                     ("Plain text: GPUI lines", false),
                 ],
                 |this, on| this.plain_on_parley == on,
-                |this, on| this.plain_on_parley = on,
+                |this, on, _| this.plain_on_parley = on,
                 cx,
             ));
         }
@@ -488,6 +500,49 @@ impl Render for BidiLab {
                     .child(tip("rtl-tooltip-typeset", true)),
             );
 
+        let plain_direction = self
+            .parley
+            .as_ref()
+            .filter(|_| self.plain_on_parley)
+            .map(|_| {
+                let frame = || {
+                    div()
+                        .w(WRAP_WIDTH)
+                        .h(px(30.))
+                        .px_2()
+                        .bg(rgb(0x374151))
+                        .text_left()
+                };
+                section(
+                "6. Default direction for plain text (#428)",
+                "Left column follows the app setting. Right column uses explicit LTR typeset text.",
+            )
+            .child(self.buttons(
+                "bidi-plain-direction",
+                &PLAIN_DIRECTIONS,
+                |this, direction| this.plain_direction == direction,
+                |this, direction, cx| {
+                    this.plain_direction = direction;
+                    set_text_layout_direction(direction, cx);
+                },
+                cx,
+            ))
+            .children([
+                ("Hebrew", "שמור"),
+                ("Digits then Hebrew", "42 קבצים"),
+                ("Latin then Hebrew", "Luma הגדרות"),
+                ("Digits", "42"),
+                ("Punctuation", "—"),
+                ("Empty", ""),
+                ("Latin with punctuation", "Save…"),
+            ].map(|(label, text)| {
+                div().flex().flex_wrap().gap_3()
+                    .child(div().w(px(150.)).child(label))
+                    .child(frame().child(text))
+                    .child(frame().child(typeset(text).ltr()))
+            }))
+            });
+
         let mut paragraph = section(
             "4. GPUI paragraph: window.text_system().layout_paragraph_with_options (#325 A)",
             "click places a caret, drag selects, Left/Right move visually and Shift extends. Hebrew (Auto) and Right to left start at the right edge with every backend. Min-content and max-content resize the paragraph to its reported content widths.",
@@ -496,7 +551,7 @@ impl Render for BidiLab {
             "bidi-sample",
             &[("Latin", 0), ("Hebrew", 1), ("Mixed", 2)],
             |this, ix| this.sample == ix,
-            |this, ix| this.sample = ix,
+            |this, ix, _| this.sample = ix,
             cx,
         ))
         .child(self.buttons(
@@ -507,14 +562,14 @@ impl Render for BidiLab {
                 (DIRECTIONS[2].0, 2),
             ],
             |this, ix| this.direction == ix,
-            |this, ix| this.direction = ix,
+            |this, ix, _| this.direction = ix,
             cx,
         ))
         .child(self.buttons(
             "bidi-width",
             &WIDTHS,
             |this, width| this.width == width,
-            |this, width| this.width = width,
+            |this, width, _| this.width = width,
             cx,
         ));
 
@@ -640,5 +695,6 @@ impl Render for BidiLab {
             .child(truncation)
             .child(paragraph)
             .child(wrapped)
+            .children(plain_direction)
     }
 }

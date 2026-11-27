@@ -86,6 +86,58 @@ fn nowrap(mut spec: TypesetSpec, overflow: Option<OverflowKey>) -> TypesetSpec {
     spec
 }
 
+#[test]
+fn plain_text_direction_resolves_and_reuses_cached_layouts() {
+    use BaseDir::{Ltr, Rtl};
+    use TextLayoutDirection::{Auto, AutoOr, Fixed};
+
+    let fixture = Fixture::new();
+    let width = px(240.);
+    let policies = [Auto, AutoOr(Ltr), AutoOr(Rtl), Fixed(Ltr), Fixed(Rtl), Auto];
+    for (text, expected) in [
+        ("שמור", [true, true, true, false, true, true]),
+        ("42 קבצים", [true, true, true, false, true, true]),
+        ("Luma הגדרות", [false, false, false, false, true, false]),
+        ("", [false, false, true, false, true, false]),
+        ("42", [false, false, true, false, true, false]),
+        ("—", [false, false, true, false, true, false]),
+        ("Save…", [false, false, false, false, true, false]),
+        (
+            "\u{2066}Luma\u{2069}42",
+            [false, false, true, false, true, false],
+        ),
+        ("42\u{2028}שמור", [true, true, true, false, true, true]),
+    ] {
+        let mut spec = fixture.spec(text);
+        let mut original = None;
+        for (policy, rtl) in policies.into_iter().zip(expected) {
+            spec.options.direction = text_layout::resolve_direction(policy, text);
+            let fitted = fixture.fit(&spec, AvailableSpace::Definite(width));
+            assert_eq!(fitted.shaped.shape.is_rtl(), rtl, "{text:?}, {policy:?}");
+            let layout = fixture
+                .engine
+                .layout(&fitted.shaped, Some(width), fitted.align)
+                .unwrap();
+            if !text.is_empty() {
+                let (offset, advance) = line_extents(&layout)[0];
+                let edge = if rtl {
+                    offset + advance - f32::from(width)
+                } else {
+                    offset
+                };
+                assert!(edge.abs() < 0.5, "{text:?}, {policy:?}: {edge}");
+            }
+            if policy == Auto {
+                if let Some(original) = &original {
+                    assert!(Arc::ptr_eq(original, &layout));
+                } else {
+                    original = Some(layout);
+                }
+            }
+        }
+    }
+}
+
 fn ellipsis() -> SharedString {
     "…".into()
 }
@@ -1093,6 +1145,29 @@ fn draw_plain(
         },
     );
     layout
+}
+
+#[test]
+fn plain_text_provider_applies_direction_changes_in_the_same_window() {
+    let (mut cx, _) = provider_app();
+    let window = cx.add_empty_window();
+    for (policy, expected) in [
+        (TextLayoutDirection::Auto, [false, false]),
+        (TextLayoutDirection::AutoOr(BaseDir::Rtl), [true, false]),
+        (TextLayoutDirection::Fixed(BaseDir::Rtl), [true, true]),
+        (TextLayoutDirection::Auto, [false, false]),
+    ] {
+        window.update(|_, cx| set_text_layout_direction(policy, cx));
+        for (text, rtl) in ["42", "Luma הגדרות"].into_iter().zip(expected) {
+            let layout = draw_plain(window, text, px(280.), |div| div.text_left());
+            let start = layout.position_for_index(0).unwrap();
+            assert_eq!(
+                start.x > layout.bounds().center().x,
+                rtl,
+                "{policy:?}: {text}"
+            );
+        }
+    }
 }
 
 #[test]

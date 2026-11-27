@@ -9,7 +9,85 @@ use gpui::{
     App, AvailableSpace, Bounds, ParagraphPosition, Pixels, Point, ProvidedTextLayout, Size,
     TextAffinity, TextLayoutProvider, TextLayoutRequest, Window, point, px,
 };
+use icu_properties::{CodePointMapData, props::BidiClass};
 use std::{rc::Rc, sync::Arc};
+
+/// An explicit base direction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BaseDir {
+    /// Left to right.
+    Ltr,
+    /// Right to left.
+    Rtl,
+}
+
+impl From<BaseDir> for TextDirection {
+    fn from(direction: BaseDir) -> Self {
+        match direction {
+            BaseDir::Ltr => Self::LeftToRight,
+            BaseDir::Rtl => Self::RightToLeft,
+        }
+    }
+}
+
+/// Base-direction policy for plain text laid out by [`install_text_layout`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TextLayoutDirection {
+    /// Infer direction from the first strong character, falling back to LTR.
+    #[default]
+    Auto,
+    /// Infer direction, using this fallback when there is no strong character
+    /// outside a directional isolate.
+    AutoOr(BaseDir),
+    /// Use this base direction for every plain text layout.
+    Fixed(BaseDir),
+}
+
+struct PlainTextDirection(TextLayoutDirection);
+
+impl gpui::Global for PlainTextDirection {}
+
+fn text_layout_direction(cx: &App) -> TextLayoutDirection {
+    cx.try_global::<PlainTextDirection>()
+        .map_or(TextLayoutDirection::Auto, |setting| setting.0)
+}
+
+/// Set the app-wide base direction for plain text laid out by
+/// [`install_text_layout`]. May be called before installation or at runtime.
+/// A change refreshes the app's windows. `typeset()` uses its own direction.
+pub fn set_text_layout_direction(direction: TextLayoutDirection, cx: &mut App) {
+    if text_layout_direction(cx) != direction {
+        cx.set_global(PlainTextDirection(direction));
+        cx.refresh_windows();
+    }
+}
+
+pub(super) fn resolve_direction(policy: TextLayoutDirection, text: &str) -> TextDirection {
+    let fallback = match policy {
+        TextLayoutDirection::Auto => return TextDirection::Auto,
+        TextLayoutDirection::Fixed(direction) => return direction.into(),
+        TextLayoutDirection::AutoOr(fallback) => fallback,
+    };
+
+    // UAX #9 P2 skips strong characters inside directional isolates.
+    let classes = CodePointMapData::<BidiClass>::new();
+    let mut isolate_depth = 0;
+    for character in text.chars() {
+        match classes.get(character) {
+            BidiClass::LeftToRightIsolate
+            | BidiClass::RightToLeftIsolate
+            | BidiClass::FirstStrongIsolate => isolate_depth += 1,
+            BidiClass::PopDirectionalIsolate if isolate_depth > 0 => isolate_depth -= 1,
+            BidiClass::LeftToRight | BidiClass::RightToLeft | BidiClass::ArabicLetter
+                if isolate_depth == 0 =>
+            {
+                return TextDirection::Auto;
+            }
+            _ => {}
+        }
+    }
+    fallback.into()
+}
 
 /// Lay out GPUI's plain text elements (`div().child("…")`, `StyledText` and
 /// the other built-in text elements) with the installed Parley engine, so
@@ -18,9 +96,9 @@ use std::{rc::Rc, sync::Arc};
 /// the engine behind `typeset()`, as [`install`] does.
 ///
 /// `parley` must be the text system installed with
-/// `Application::with_platform_and_text_system`. Each paragraph's direction
-/// comes from its first strong character; use `typeset()` for an explicit
-/// direction or language. Undo with `App::clear_text_layout_provider`.
+/// `Application::with_platform_and_text_system`. Use [`set_text_layout_direction`]
+/// for the app default and `typeset()` for an explicit direction or language.
+/// Undo with `App::clear_text_layout_provider`.
 pub fn install_text_layout(parley: Arc<ParleyTextSystem>, cx: &mut App) {
     install(parley, cx);
     cx.set_text_layout_provider(Rc::new(ParleyTextLayout));
@@ -38,7 +116,7 @@ impl TextLayoutProvider for ParleyTextLayout {
         cx: &mut App,
     ) -> Option<Box<dyn ProvidedTextLayout>> {
         let engine = cx.try_global::<TypesetEngine>()?;
-        let (spec, runs, breaks) = build_spec(
+        let (mut spec, runs, breaks) = build_spec(
             &request.text,
             request.runs.to_vec(),
             SpecStyle {
@@ -53,6 +131,9 @@ impl TextLayoutProvider for ParleyTextLayout {
             None,
             window,
         );
+        // build_spec normalizes hard breaks to line separators within one
+        // Parley paragraph. Resolve direction against the shaped text.
+        spec.options.direction = resolve_direction(text_layout_direction(cx), &spec.text);
         match engine.fit(&spec, known_dimensions, available_space) {
             Ok(fitted) => Some(Box::new(Laid {
                 len: request.text.len(),
