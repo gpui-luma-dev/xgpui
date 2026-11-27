@@ -36,10 +36,24 @@ cx.open_shell_window(options, ShellOptions::default(), |window, cx| {
 })?;
 </code></pre>
 <p>The returned handle refers to <code>ShellWindow</code>. Its <code>set_options</code> method updates that window's overrides. Set the initial title through <code>WindowOptions.titlebar.title</code>, or keep it synchronized with <code>set_shell_title</code>.</p>
+<h2 id="inspect-a-window">Inspect a window</h2>
+<table>
+<thead><tr><th scope="col">What do I need to know?</th><th scope="col">API to use</th></tr></thead>
+<tbody>
+<tr><th scope="row">What decoration mode did the platform report?</th><td><code>Window::window_decorations()</code> reports client or server decorations.</td></tr>
+<tr><th scope="row">Which window actions are available?</th><td><code>Window::window_controls()</code> reports platform support. Check <code>Window::is_resizable()</code> and <code>Window::is_minimizable()</code> for per-window limits.</td></tr>
+<tr><th scope="row">What button order did the desktop request?</th><td><code>App::button_layout()</code> returns the optional desktop layout. The shell uses its fallback when the desktop supplies none and filters controls by availability.</td></tr>
+<tr><th scope="row">What style will the shared frame use?</th><td><code>ShellOptions::resolved_preferences()</code> combines the window's overrides with desktop preferences. <code>ResolvedShellPreferences::resolved_look()</code> gives the colors, typography, and base sizes for an appearance and activation state.</td></tr>
+<tr><th scope="row">Where should I align my toolbar with the Windows caption buttons?</th><td><code>ShellWindow::windows_titlebar_metrics()</code> reports the actual row height, centerline, and reserved button insets. See <a href="#windows-caption-height">Windows caption height</a>.</td></tr>
+</tbody>
+</table>
 <h2 id="compose-a-title-bar">Compose a title bar</h2>
 <p>Use <code>ShellApp::open_shell_window_with_titlebar</code> with a builder returning <code>(Entity&lt;Titlebar&gt;, Entity&lt;Content&gt;)</code>. Place title text or empty space inside <code>ShellDragRegion</code>; keep interactive buttons and inputs outside that drag region.</p>
 <p>macOS retains native traffic lights. Windows uses app-composed content and shell controls. Linux/FreeBSD draw the client frame only when the platform reports client decorations; server decorations remain compositor-owned. Fullscreen suppresses the client frame. A decoration request is not proof that the compositor accepted it.</p>
 <p>On Windows the shell's controls behave like native caption buttons: pointer presses go through Windows' caption-button handling, so Windows 11 shows Snap Layouts when hovering Maximize (the shell adds no tooltip there), and the controls are not Tab stops. Screen readers can still activate them. On Linux client frames the controls are Tab stops and respond to Enter and Space.</p>
+<h3 id="windows-caption-height">Windows caption height</h3>
+<p>Set <code>ShellOptions::windows_titlebar_height</code> to <code>Some(px(48.))</code> for a taller app-composed title bar. The caption buttons fill the row, and their glyphs stay centered. The default starts at 32 logical pixels and grows with text size and scale. That default also sets the minimum when you supply a height.</p>
+<p>In the app title-bar view, call <code>ShellWindow::windows_titlebar_metrics</code> on the window's shell root for the resolved height, centerline, and widths already reserved for caption buttons. The method returns <code>None</code> when the shell has no Windows caption row. On Windows, <code>just shell --compare-caption-heights</code> opens the default and 48-pixel title bars side by side.</p>
 <h2 id="replace-window-control-artwork">Replace window-control artwork</h2>
 <p>A <code>ShellControlPresenter</code> replaces what the shell draws inside each window control (background, icon and hover/pressed/inactive treatment) without copying any window-management code:</p>
 <pre><code class="language-rust">use xgpui_shell::{ShellControl, ShellControlPresenter};
