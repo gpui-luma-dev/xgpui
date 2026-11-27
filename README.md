@@ -12,7 +12,7 @@ which captures GPUI and its supporting crates from
 ## Latest release
 
 **XGPUI 5.0.0**, released November 22, 2026, tracks upstream
-**gpui-unofficial 1.29.3** (Zed `v1.29.3`). The captured upstream release and
+**gpui-unofficial 1.30.2** (Zed `v1.30.2`). The captured upstream release and
 commit are recorded in [`upstream.json`](upstream.json); XGPUI crates keep their
 own version numbers, independent of the upstream version.
 
