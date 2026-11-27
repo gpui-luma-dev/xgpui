@@ -828,7 +828,7 @@ impl Drop for WaylandWindow {
         // The wl_surface itself should always be destroyed last.
         state.surface.destroy();
 
-        client.drop_window(&surface_id);
+        client.drop_window(&surface_id, state.handle);
         let state_ptr = self.0.clone();
         state
             .globals

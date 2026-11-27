@@ -804,11 +804,11 @@ impl WaylandClientStatePtr {
         }
     }
 
-    pub fn drop_window(&self, surface_id: &ObjectId) {
+    pub fn drop_window(&self, surface_id: &ObjectId, handle: AnyWindowHandle) {
         let client = self.get_client();
         let mut state = client.borrow_mut();
         let closed_window = state.windows.remove(surface_id).unwrap();
-        state.system_cursors.remove(&closed_window.handle());
+        state.system_cursors.remove(&handle);
         if let Some(window) = state.mouse_focused_window.take()
             && !window.ptr_eq(&closed_window)
         {
