@@ -248,6 +248,12 @@ harness = false
 required-features = ["windows-window-tests"]
 
 [[test]]
+name = "text_layout_direction_window"
+path = "tests/text_layout_direction_window.rs"
+harness = false
+required-features = ["native-window-tests"]
+
+[[test]]
 name = "windows_close"
 path = "tests/windows_close.rs"
 harness = false

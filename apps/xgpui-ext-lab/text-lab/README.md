@@ -24,6 +24,19 @@ just clippy ours
 `--timings-only` and `--exit-after-scroll` run comparison backends sequentially.
 Paragraph mode selects Parley; explicit native requests return Unsupported.
 
+## Plain text base direction
+
+```sh
+just labs text direction
+just labs text direction-window
+```
+
+The first command opens the Parley Right-to-Left page. In section 6, switch
+between Auto, Auto or RTL, and Fixed RTL to see how digits, punctuation,
+and mixed-script labels align. The explicit LTR column provides a reference.
+The second command runs the native probe for redraw and alignment in the
+same window after a direction change.
+
 ## Modes
 
 | Mode | Coverage | Controls |
