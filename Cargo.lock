@@ -8043,6 +8043,7 @@ dependencies = [
  "xgpui-curve",
  "xgpui-gamut",
  "xgpui-gpu-interop",
+ "xgpui-linux",
  "xgpui-media",
  "xgpui-parley",
  "xgpui-platform",

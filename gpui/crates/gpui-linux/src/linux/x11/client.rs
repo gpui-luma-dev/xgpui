@@ -54,6 +54,7 @@ use crate::linux::{
     log_cursor_icon_warning, modifiers_from_xkb, new_xkb_context, open_uri_internal,
     platform::{DOUBLE_CLICK_INTERVAL, SCROLL_LINES},
     reveal_path_internal,
+    system_cursor::{LinuxCursorAvailability, LinuxSystemCursor},
     xdg_desktop_portal::{Event as XDPEvent, XDPEventSource},
 };
 use crate::linux::{LinuxCommon, LinuxKeyboardLayout, X11Window, modifiers_from_xinput_info};
@@ -228,6 +229,8 @@ pub struct X11ClientState {
     pub(crate) cursor_handle: cursor::Handle,
     pub(crate) cursor_styles: HashMap<xproto::Window, CursorStyle>,
     pub(crate) cursor_cache: HashMap<CursorStyle, Option<xproto::Cursor>>,
+    system_cursors: HashMap<xproto::Window, LinuxSystemCursor>,
+    system_cursor_cache: HashMap<LinuxSystemCursor, Option<(&'static str, xproto::Cursor)>>,
     pub(crate) invisible_cursor_cache: Option<xproto::Cursor>,
     pub(crate) cursor_hidden_window: Option<xproto::Window>,
 
@@ -272,6 +275,7 @@ impl X11ClientStatePtr {
             state.cursor_hidden_window = None;
         }
         state.cursor_styles.remove(&x_window);
+        state.system_cursors.remove(&x_window);
     }
 
     pub fn update_ime_position(&self, bounds: Bounds<Pixels>) {
@@ -544,6 +548,8 @@ impl X11Connection {
                 cursor_handle,
                 cursor_styles: HashMap::default(),
                 cursor_cache: HashMap::default(),
+                system_cursors: HashMap::default(),
+                system_cursor_cache: HashMap::default(),
                 cursor_hidden_window: None,
                 invisible_cursor_cache: None,
 
@@ -1351,8 +1357,10 @@ impl X11Client {
                     let current_style = state
                         .cursor_styles
                         .get(&window.x_window)
-                        .unwrap_or(&CursorStyle::Arrow);
-                    if *current_style != style
+                        .copied()
+                        .unwrap_or_default();
+                    let had_system_cursor = state.system_cursors.remove(&window.x_window).is_some();
+                    if (had_system_cursor || current_style != style)
                         && let Some(cursor) = state.get_cursor_icon(style)
                     {
                         state.cursor_styles.insert(window.x_window, style);
@@ -1789,7 +1797,7 @@ impl X11Client {
             return;
         }
 
-        let Some(cursor) = state.get_cursor_icon(style) else {
+        let Some(cursor) = state.window_cursor(focused_window, style) else {
             return;
         };
 
@@ -1805,6 +1813,70 @@ impl X11Client {
         )
         .log_err();
         state.xcb_connection.flush().log_err();
+    }
+
+    pub(crate) fn system_cursor_availability(
+        &self,
+        window: AnyWindowHandle,
+        cursor: LinuxSystemCursor,
+    ) -> LinuxCursorAvailability {
+        let mut state = self.0.borrow_mut();
+        if !state
+            .windows
+            .values()
+            .any(|candidate| candidate.handle() == window)
+        {
+            return LinuxCursorAvailability::Unavailable;
+        }
+        state
+            .get_system_cursor(cursor)
+            .map_or(LinuxCursorAvailability::Unavailable, |(name, _)| {
+                LinuxCursorAvailability::XcursorName(name)
+            })
+    }
+
+    pub(crate) fn set_system_cursor(
+        &self,
+        window: AnyWindowHandle,
+        cursor: Option<LinuxSystemCursor>,
+    ) -> anyhow::Result<()> {
+        let mut state = self.0.borrow_mut();
+        let (x_window, blocked) = state
+            .windows
+            .iter()
+            .find(|(_, candidate)| candidate.handle() == window)
+            .map(|(id, candidate)| (*id, candidate.window.is_blocked()))
+            .context("window does not belong to this X11 connection")?;
+        anyhow::ensure!(
+            !blocked || cursor.is_none(),
+            "window is blocked by a modal window"
+        );
+        let icon = if let Some(cursor) = cursor {
+            state
+                .get_system_cursor(cursor)
+                .with_context(|| format!("X11 cursor {} is unavailable", cursor.name()))?
+                .1
+        } else {
+            let style = state
+                .cursor_styles
+                .get(&x_window)
+                .copied()
+                .unwrap_or_default();
+            state.get_cursor_icon(style).unwrap_or(x11rb::NONE)
+        };
+        if state.cursor_hidden_window != Some(x_window) {
+            state
+                .xcb_connection
+                .change_window_attributes(x_window, &ChangeWindowAttributesAux::new().cursor(icon))?
+                .check()?;
+            state.xcb_connection.flush()?;
+        }
+        if let Some(cursor) = cursor {
+            state.system_cursors.insert(x_window, cursor);
+        } else {
+            state.system_cursors.remove(&x_window);
+        }
+        Ok(())
     }
 
     pub(crate) fn hide_cursor_until_mouse_moves(&self) {
@@ -2095,6 +2167,37 @@ impl X11ClientState {
             .expect("Failed to initialize window refresh timer")
     }
 
+    fn get_system_cursor(
+        &mut self,
+        cursor: LinuxSystemCursor,
+    ) -> Option<(&'static str, xproto::Cursor)> {
+        if let Some(cached) = self.system_cursor_cache.get(&cursor) {
+            return *cached;
+        }
+        let loaded = cursor.theme_names().iter().copied().find_map(|name| {
+            self.cursor_handle
+                .load_cursor(&self.xcb_connection, name)
+                .ok()
+                .filter(|&id| id != x11rb::NONE)
+                .map(|id| (name, id))
+        });
+        self.system_cursor_cache.insert(cursor, loaded);
+        loaded
+    }
+
+    fn window_cursor(
+        &mut self,
+        window: xproto::Window,
+        style: CursorStyle,
+    ) -> Option<xproto::Cursor> {
+        self.system_cursors
+            .get(&window)
+            .copied()
+            .and_then(|cursor| self.get_system_cursor(cursor))
+            .map(|(_, id)| id)
+            .or_else(|| self.get_cursor_icon(style))
+    }
+
     fn get_cursor_icon(&mut self, style: CursorStyle) -> Option<xproto::Cursor> {
         if let Some(cursor) = self.cursor_cache.get(&style) {
             return *cursor;
@@ -2205,7 +2308,7 @@ impl X11ClientState {
             .get(&hidden_window)
             .copied()
             .unwrap_or(CursorStyle::Arrow);
-        let Some(cursor) = self.get_cursor_icon(style) else {
+        let Some(cursor) = self.window_cursor(hidden_window, style) else {
             log::warn!(
                 "X11: no cursor icon available to restore {:?} after hide; cursor may stay invisible",
                 style

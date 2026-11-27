@@ -36,6 +36,12 @@ group = "Main interactive labs"
 title = "Shell / window controls"
 about = "Desktop preference inspector and per-window shell override and state controls"
 
+[[lab.task]]
+name = "linux-cursors"
+about = "Linux cursor gallery (Wayland protocol and Xcursor availability)"
+platforms = ["linux"]
+args = ["--linux-cursor-gallery"]
+
 [[lab]]
 name = "canvas"
 bin = "canvas-lab"
