@@ -30,6 +30,28 @@ The registry package is `xgpui-linux`; its Rust library name is
 
 ## Documentation
 
+`system_cursor::LinuxCursorAccess::create_platform` creates a normal Linux
+platform and a handle for native cursor selection. Pass the platform to
+`gpui::Application::with_platform`. Once the app starts, use
+`LinuxSystemCursor::ALL` to enumerate the catalog, `availability()` to find the
+resolved cursor source for a window, and `set_for_window()` to select or clear a
+native cursor. Existing GPUI cursor styles remain usable with either platform
+constructor.
+
+Wayland uses the compositor's cursor-shape protocol when available. Otherwise
+it tries the active cursor theme. X11 resolves each name through Xcursor with
+the active theme and legacy cursor-font fallback. Availability reports the
+protocol shape or the name the backend resolved.
+
+On Linux, choose **Linux cursor gallery** under **Shell / window controls**
+in `just labs`. Use the default connection or compare backends explicitly:
+
+```sh
+just shell linux-cursors
+just shell linux-cursors --linux-cursor-backend wayland
+just shell linux-cursors --linux-cursor-backend x11
+```
+
 - [xgpui API additions and compatibility](https://xgpui.dev/gpui-public-api.html)
 - [Release preparation](https://xgpui.dev/releasing.html)
 - [Repository](https://github.com/gpui-luma-dev/xgpui) · [Website](https://xgpui.dev/)

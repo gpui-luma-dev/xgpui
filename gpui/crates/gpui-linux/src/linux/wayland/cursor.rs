@@ -91,6 +91,14 @@ impl Cursor {
         self.set_scaled_size(size);
     }
 
+    pub fn available_icon_name(&mut self, names: &[&'static str]) -> Option<&'static str> {
+        let theme = &mut self.loaded_theme.as_mut()?.theme;
+        names
+            .iter()
+            .copied()
+            .find(|name| theme.get_cursor(name).is_some())
+    }
+
     pub fn set_icon(
         &mut self,
         wl_pointer: &WlPointer,
