@@ -78,6 +78,7 @@ xgpui-media = { path = "../../extensions/crates/xgpui-media", version = "0.8.0",
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = { version = "0.38", default-features = false }
+gpui-linux = { package = "xgpui-linux", path = "../../gpui/crates/gpui-linux", version = "4.0.0" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 gpui-windows = { package = "xgpui-windows", path = "../../gpui/crates/gpui-windows", version = "4.0.0" }
@@ -86,6 +87,7 @@ raw-window-handle = { version = "0.6" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-apple = { package = "xgpui-apple", path = "../../gpui/crates/gpui-apple", version = "6.0.0", features = ["test-support", "font-kit"] }
+gpui-macos = { package = "xgpui-macos", path = "../../gpui/crates/gpui-macos", version = "6.1.0" }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSString"] }
 
 objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFDictionary", "CFBase"] }

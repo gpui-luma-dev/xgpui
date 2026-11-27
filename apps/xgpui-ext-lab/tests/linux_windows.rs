@@ -2,6 +2,9 @@
 #[cfg(target_os = "linux")]
 fn main() {
     use gpui::{prelude::*, *};
+    use gpui_linux::system_cursor::{
+        LinuxCursorAccess, LinuxCursorAvailability, LinuxCursorBackend, LinuxSystemCursor,
+    };
     use std::{cell::Cell, rc::Rc};
     use xgpui_ext_lab::{LabApp, LabWindowTitle};
 
@@ -61,16 +64,26 @@ fn main() {
     }
     let completed = Rc::new(Cell::new(0));
     let done = completed.clone();
-    gpui_platform::application().run(move |cx| {
+    let closed = Rc::new(Cell::new(0));
+    let closed_windows = closed.clone();
+    let (platform, cursor_access) = LinuxCursorAccess::create_platform(WindowingModes::all());
+    Application::with_platform(platform).run(move |cx| {
         assert!(
             !cx.displays().is_empty(),
             "smoke test needs a real display server"
+        );
+        cx.on_window_closed(move |_, _| closed_windows.set(closed_windows.get() + 1))
+            .detach();
+        let wayland = matches!(
+            cursor_access.backend(),
+            LinuxCursorBackend::WaylandShape | LinuxCursorBackend::WaylandTheme
         );
         for (decorations, title) in [
             (None, "Linux default window"),
             (Some(WindowDecorations::Client), "Linux client window"),
         ] {
             let completed = completed.clone();
+            let cursor_access = cursor_access.clone();
             cx.open_lab_window(
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(Bounds::new(
@@ -84,6 +97,17 @@ fn main() {
                     ..Default::default()
                 },
                 move |window, cx| {
+                    // Exercise Wayland close both with and without a native override.
+                    let cursor = LinuxSystemCursor::Default;
+                    if wayland
+                        && decorations.is_none()
+                        && cursor_access.availability(window, cursor)
+                            != LinuxCursorAvailability::Unavailable
+                    {
+                        cursor_access
+                            .set_for_window(window, Some(cursor))
+                            .expect("set a native cursor before closing the Wayland window");
+                    }
                     window.set_lab_title(title);
                     let notice = xgpui_ext_lab::negotiate_wide(window);
                     let status = window.color_status();
@@ -107,6 +131,7 @@ fn main() {
         2,
         "both default and client-decorated windows must complete frames"
     );
+    assert_eq!(closed.get(), 2, "both windows must close cleanly");
     println!(
         "Linux display smoke passed: window creation, rendered frames, title, decoration insets and color negotiation"
     );

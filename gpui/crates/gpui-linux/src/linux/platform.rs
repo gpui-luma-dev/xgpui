@@ -320,7 +320,7 @@ pub(crate) struct LinuxPlatform {
     /// The event loop, until `run` takes it.
     event_loop: RefCell<Option<EventLoop<'static, ()>>>,
     loop_handle: LoopHandle<'static, ()>,
-    connection: RefCell<DisplayConnection>,
+    pub(super) connection: RefCell<DisplayConnection>,
     allowed_modes: WindowingModes,
     /// The mode to start in, applied when `run` starts. Windowed in the process's own
     /// environment when unset.

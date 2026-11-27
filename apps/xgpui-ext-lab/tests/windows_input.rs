@@ -5,21 +5,44 @@
 //! repaints under a stationary cursor. The app must not see those, but must
 //! see real moves and moves with a button held.
 //! It also checks that `WM_DISPLAYCHANGE` delivered during an app update
-//! can return without reentering the app.
+//! can return without reentering the app, and that changing the system cursor
+//! during a window update does not synchronously hit-test the client area.
 #[cfg(target_os = "windows")]
 fn main() {
     use gpui::{prelude::*, *};
+    use gpui_windows::WindowsSystemCursor;
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    use std::{cell::RefCell, rc::Rc, time::Duration};
+    use std::{
+        cell::RefCell,
+        io::Write,
+        rc::Rc,
+        sync::atomic::{AtomicBool, Ordering},
+        time::Duration,
+    };
     use windows::Win32::{
         Foundation::{HWND, LPARAM, POINT, WPARAM},
         Graphics::Gdi::ClientToScreen,
         UI::WindowsAndMessaging::{
-            GetCursorPos, PostMessageW, SendMessageW, SetCursorPos, WM_DISPLAYCHANGE, WM_MOUSEMOVE,
+            GetCursor, GetCursorPos, PostMessageW, SendMessageW, SetCursorPos, WM_DISPLAYCHANGE,
+            WM_MOUSEMOVE,
         },
     };
 
     const MK_LBUTTON: usize = 0x0001;
+    static BORROWED_HIT_TEST: AtomicBool = AtomicBool::new(false);
+    env_logger::Builder::new()
+        .filter_level(log::LevelFilter::Error)
+        .format(|buffer, record| {
+            let message = record.args().to_string();
+            if record.target() == "gpui::window"
+                && message.contains("hit-testing window controls")
+                && message.contains("RefCell already borrowed")
+            {
+                BORROWED_HIT_TEST.store(true, Ordering::Relaxed);
+            }
+            writeln!(buffer, "{} {}: {message}", record.level(), record.target())
+        })
+        .init();
     type Moves = Rc<RefCell<Vec<(Point<Pixels>, bool)>>>;
 
     struct Probe {
@@ -116,6 +139,31 @@ fn main() {
                 };
                 // 1. The real cursor arrived: Windows delivers one real move at P.
                 timer(300).await;
+                BORROWED_HIT_TEST.store(false, Ordering::Relaxed);
+                window
+                    .update(cx, |_, window, _| {
+                        WindowsSystemCursor::set_for_window(window, Some(WindowsSystemCursor::Wait))
+                    })
+                    .expect("update the real window")
+                    .expect("select the Windows wait cursor");
+                if BORROWED_HIT_TEST.load(Ordering::Relaxed) {
+                    report(Err("selecting a system cursor synchronously hit-tested a borrowed App".into()));
+                }
+                timer(200).await;
+                if unsafe { GetCursor() } != WindowsSystemCursor::Wait.load().unwrap() {
+                    report(Err("the stationary pointer did not switch to the Windows wait cursor".into()));
+                }
+                window
+                    .update(cx, |_, window, _| WindowsSystemCursor::set_for_window(window, None))
+                    .expect("update the real window")
+                    .expect("restore the normal cursor");
+                timer(200).await;
+                if BORROWED_HIT_TEST.load(Ordering::Relaxed) {
+                    report(Err("changing a system cursor hit-tested a borrowed App".into()));
+                }
+                if unsafe { GetCursor() } == WindowsSystemCursor::Wait.load().unwrap() {
+                    report(Err("the Windows wait cursor remained after clearing the override".into()));
+                }
                 let post = |x: i32, y: i32, buttons: usize| unsafe {
                     PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(buttons), lparam(x, y))
                         .expect("post WM_MOUSEMOVE");
@@ -157,7 +205,7 @@ fn main() {
                     Err(format!("expected the real move to P+10 to arrive: {recorded:?}"))
                 } else {
                     Ok(format!(
-                        "scale {scale}: real arrival delivered, 2 synthetic repeats dropped, drag at same position delivered, real move delivered"
+                        "scale {scale}: stock cursor selected and cleared without reentry, 2 synthetic repeats dropped, real and held-button moves delivered"
                     ))
                 };
                 report(verdict);

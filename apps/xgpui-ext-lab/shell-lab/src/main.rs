@@ -1,4 +1,7 @@
 //! Interactive diagnostics for the shared shell; no desktop settings are written.
+mod cursor_gallery;
+mod linux_cursor_gallery;
+mod macos_cursor_gallery;
 mod titlebar;
 use anyhow::{Context as _, Result};
 use clap::Parser;
@@ -42,6 +45,15 @@ fn move_focus(cx: &mut App, forward: bool) {
 #[derive(Parser)]
 #[command(about = "Inspect desktop preferences and test per-window xgpui-shell overrides")]
 struct Options {
+    /// Open the Linux gallery for native cursors.
+    #[arg(long, conflicts_with_all = ["client_decorations", "fixed_size", "compare_caption_heights", "macos_cursor_gallery", "windows_cursor_gallery"])]
+    linux_cursor_gallery: bool,
+    /// Choose a display backend for the Linux cursor gallery.
+    #[arg(long, value_enum, requires = "linux_cursor_gallery")]
+    linux_cursor_backend: Option<LinuxCursorBackendChoice>,
+    /// Open the macOS gallery for built-in AppKit cursor shapes.
+    #[arg(long, conflicts_with_all = ["client_decorations", "fixed_size", "compare_caption_heights", "windows_cursor_gallery"])]
+    macos_cursor_gallery: bool,
     /// Request client decorations; the compositor still decides the actual mode.
     #[arg(long)]
     client_decorations: bool,
@@ -51,6 +63,15 @@ struct Options {
     /// Open default and 48-logical-pixel Windows caption rows side by side.
     #[arg(long)]
     compare_caption_heights: bool,
+    /// Open the Windows hover gallery for GPUI cursor styles.
+    #[arg(long, alias = "cursor-gallery", conflicts_with_all = ["client_decorations", "fixed_size", "compare_caption_heights"])]
+    windows_cursor_gallery: bool,
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum LinuxCursorBackendChoice {
+    Wayland,
+    X11,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -1425,6 +1446,10 @@ fn compare_caption_heights(cx: &mut App, fixed: bool) -> Result<()> {
 fn main() {
     env_logger::init();
     let options = Options::parse();
+    if options.linux_cursor_gallery {
+        linux_cursor_gallery::run(options.linux_cursor_backend);
+        return;
+    }
     gpui_platform::application()
         .with_assets(HeaderAssets)
         .run(move |cx| {
@@ -1441,7 +1466,11 @@ fn main() {
                 } else {
                     WindowDecorations::Server
                 };
-            let result = if options.compare_caption_heights {
+            let result = if options.macos_cursor_gallery {
+                macos_cursor_gallery::open(cx)
+            } else if options.windows_cursor_gallery {
+                cursor_gallery::open(cx)
+            } else if options.compare_caption_heights {
                 compare_caption_heights(cx, options.fixed_size)
             } else {
                 open_lab(cx, decorations, options.fixed_size).map(|_| ())
