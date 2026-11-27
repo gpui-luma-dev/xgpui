@@ -13,7 +13,7 @@ use gpui::{
     Modifiers, ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
     Pixels, PlatformAtlas, PlatformDisplay, PlatformFrameSignal, PlatformInput,
     PlatformInputHandler, PlatformWindow, Point, PromptButton, PromptLevel, RequestFrameOptions,
-    SharedString, Size, SystemWindowTab, WindowAppearance, WindowBackgroundAppearance,
+    SharedString, Size, SystemWindowTab, Window, WindowAppearance, WindowBackgroundAppearance,
     WindowBounds, WindowControlArea, WindowKind, WindowParams, WindowVisibility, point, px, size,
 };
 #[cfg(any(test, feature = "test-support"))]
@@ -40,7 +40,7 @@ use objc2::{
 use objc2_app_kit::NSFilenamesPboardType;
 use objc2_app_kit::{
     NSAlert, NSAlertStyle, NSAppearance, NSAutoresizingMaskOptions, NSBackingStoreType, NSBeep,
-    NSButton, NSColor, NSDragOperation, NSDraggingContext, NSDraggingImageComponent,
+    NSButton, NSColor, NSCursor, NSDragOperation, NSDraggingContext, NSDraggingImageComponent,
     NSDraggingImageComponentIconKey, NSDraggingItem, NSEventModifierFlags, NSEventType,
     NSPasteboardWriting, NSRequestUserAttentionType, NSScreen, NSTrackingArea,
     NSTrackingAreaOptions, NSView, NSViewLayerContentsRedrawPolicy, NSVisualEffectBlendingMode,
@@ -411,12 +411,48 @@ pub(crate) unsafe fn set_active_window_cursor_style(style: CursorStyle) {
         let mut window_state = window_state.lock();
         if window_state.cursor_style != style {
             window_state.cursor_style = style;
-            let _: () = msg_send![
-                window_state.native_window,
-                invalidateCursorRectsForView: window_state.native_view.as_ptr()
-            ];
+            if window_state.system_cursor.is_none() {
+                let (window, view) = (window_state.native_window, window_state.native_view);
+                drop(window_state);
+                let _: () = msg_send![window, invalidateCursorRectsForView: view.as_ptr()];
+            }
         }
     }
+}
+
+pub(crate) fn apply_system_cursor(
+    window: &Window,
+    cursor: Option<Retained<NSCursor>>,
+) -> Result<()> {
+    let handle = rwh::HasWindowHandle::window_handle(window)
+        .map_err(|error| anyhow::anyhow!("cannot access the native window: {error}"))?;
+    let rwh::RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        anyhow::bail!("expected an AppKit window");
+    };
+    // This runs on the AppKit main thread. Validate the class before reading
+    // GPUI's window-state ivar from the borrowed view.
+    let view = unsafe { &*handle.ns_view.cast::<AnyObject>().as_ptr() };
+    anyhow::ensure!(
+        ptr::eq(view.class(), unsafe { VIEW_CLASS }),
+        "expected a window owned by xgpui-macos"
+    );
+    let state = unsafe { get_window_state(view) };
+    let native_window = {
+        let mut state = state.lock();
+        if state.system_cursor.as_ref().map(Retained::as_ptr)
+            == cursor.as_ref().map(Retained::as_ptr)
+        {
+            return Ok(());
+        }
+        state.system_cursor = cursor;
+        state.native_window
+    };
+    // The key window can reset cursor rectangles synchronously, so release
+    // the state lock before calling AppKit.
+    unsafe {
+        let _: () = msg_send![native_window, invalidateCursorRectsForView: view];
+    }
+    Ok(())
 }
 
 unsafe fn build_window_class(name: &CStr, superclass: &AnyClass) -> *const AnyClass {
@@ -675,6 +711,7 @@ struct MacWindowState {
     blurred_view: Option<*mut AnyObject>,
     background_appearance: WindowBackgroundAppearance,
     cursor_style: CursorStyle,
+    system_cursor: Option<Retained<NSCursor>>,
     cursor_visible: Arc<AtomicBool>,
     frame_source: FrameSource,
     renderer: renderer::Renderer,
@@ -1187,6 +1224,7 @@ impl MacWindow {
                 blurred_view: None,
                 background_appearance: WindowBackgroundAppearance::Opaque,
                 cursor_style: CursorStyle::Arrow,
+                system_cursor: None,
                 cursor_visible,
                 frame_source: match &metal_frames {
                     Some(metal_frames) => FrameSource::Metal(metal_frames.clone()),
@@ -2788,7 +2826,15 @@ extern "C" fn reset_cursor_rects(this: &AnyObject, _: Sel) {
         let _: () = msg_send![super(this, class!(NSView)), resetCursorRects];
 
         let window_state = get_window_state(this);
-        let cursor_style = window_state.lock().cursor_style;
+        let (cursor_style, system_cursor) = {
+            let state = window_state.lock();
+            (state.cursor_style, state.system_cursor.clone())
+        };
+        let bounds: NSRect = msg_send![this, bounds];
+        if let Some(cursor) = system_cursor.as_deref() {
+            let _: () = msg_send![this, addCursorRect: bounds, cursor: cursor];
+            return;
+        }
 
         let cursor: *mut AnyObject = match cursor_style {
             CursorStyle::Arrow => msg_send![class!(NSCursor), arrowCursor],
@@ -2826,7 +2872,6 @@ extern "C" fn reset_cursor_rects(this: &AnyObject, _: Sel) {
             CursorStyle::ContextualMenu => msg_send![class!(NSCursor), contextualMenuCursor],
         };
 
-        let bounds: NSRect = msg_send![this, bounds];
         let _: () = msg_send![this, addCursorRect: bounds, cursor: cursor];
     }
 }

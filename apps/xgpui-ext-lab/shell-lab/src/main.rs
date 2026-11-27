@@ -1,4 +1,5 @@
 //! Interactive diagnostics for the shared shell; no desktop settings are written.
+mod macos_cursor_gallery;
 mod titlebar;
 use anyhow::{Context as _, Result};
 use clap::Parser;
@@ -42,6 +43,9 @@ fn move_focus(cx: &mut App, forward: bool) {
 #[derive(Parser)]
 #[command(about = "Inspect desktop preferences and test per-window xgpui-shell overrides")]
 struct Options {
+    /// Open the macOS gallery for built-in AppKit cursor shapes.
+    #[arg(long, conflicts_with_all = ["client_decorations", "fixed_size", "compare_caption_heights"])]
+    macos_cursor_gallery: bool,
     /// Request client decorations; the compositor still decides the actual mode.
     #[arg(long)]
     client_decorations: bool,
@@ -1441,7 +1445,9 @@ fn main() {
                 } else {
                     WindowDecorations::Server
                 };
-            let result = if options.compare_caption_heights {
+            let result = if options.macos_cursor_gallery {
+                macos_cursor_gallery::open(cx)
+            } else if options.compare_caption_heights {
                 compare_caption_heights(cx, options.fixed_size)
             } else {
                 open_lab(cx, decorations, options.fixed_size).map(|_| ())

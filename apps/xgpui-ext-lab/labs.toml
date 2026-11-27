@@ -36,6 +36,12 @@ group = "Main interactive labs"
 title = "Shell / window controls"
 about = "Desktop preference inspector and per-window shell override and state controls"
 
+[[lab.task]]
+name = "macos-cursors"
+about = "macOS cursor gallery (public AppKit cursors)"
+platforms = ["macos"]
+args = ["--macos-cursor-gallery"]
+
 [[lab]]
 name = "canvas"
 bin = "canvas-lab"
