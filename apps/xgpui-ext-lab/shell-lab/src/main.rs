@@ -48,14 +48,10 @@ struct Options {
     /// Open a non-resizable window to test capability filtering.
     #[arg(long)]
     fixed_size: bool,
-    /// Open default and 48-logical-pixel Windows caption rows side by side.
-    #[arg(long)]
-    compare_caption_heights: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct Overrides {
-    windows_titlebar_height: Option<Pixels>,
     contrast: Option<bool>,
     accent: Option<u32>,
     scale: Option<f32>,
@@ -68,7 +64,6 @@ struct Overrides {
 impl Overrides {
     fn shell_options(self) -> ShellOptions {
         ShellOptions {
-            windows_titlebar_height: self.windows_titlebar_height,
             high_contrast: self.contrast,
             accent: self.accent,
             text_scale: self.scale,
@@ -288,7 +283,6 @@ impl Lab {
     fn new(
         id: usize,
         requested: WindowDecorations,
-        overrides: Overrides,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -332,7 +326,7 @@ impl Lab {
         }));
         Self {
             id,
-            overrides,
+            overrides: Overrides::default(),
             requested,
             long_title: false,
             show_platform_readings: true,
@@ -1348,38 +1342,28 @@ fn open_lab(
     decorations: WindowDecorations,
     fixed: bool,
 ) -> Result<(WindowHandle<ShellWindow>, Entity<Lab>)> {
-    let bounds = Bounds::centered(None, size(px(1060.), px(820.)), cx);
-    open_lab_at(cx, decorations, fixed, bounds, Overrides::default())
-}
-
-fn open_lab_at(
-    cx: &mut App,
-    decorations: WindowDecorations,
-    fixed: bool,
-    bounds: Bounds<Pixels>,
-    overrides: Overrides,
-) -> Result<(WindowHandle<ShellWindow>, Entity<Lab>)> {
     let id = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
     let mut content = None;
     let handle = cx.open_shell_window_with_titlebar(
         WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                None,
+                size(px(1060.), px(820.)),
+                cx,
+            ))),
             titlebar: Some(TitlebarOptions {
                 title: Some(format!("XGPUI Shell Lab — Window {id}").into()),
                 ..Default::default()
             }),
-            window_min_size: Some(size(
-                px(500.).min(bounds.size.width),
-                px(400.).min(bounds.size.height),
-            )),
+            window_min_size: Some(size(px(500.), px(400.))),
             is_resizable: !fixed,
             window_decorations: Some(decorations),
             app_id: Some("dev.xgpui.ShellLab".into()),
             ..Default::default()
         },
-        overrides.shell_options(),
+        ShellOptions::default(),
         |window, cx| {
-            let lab = cx.new(|cx| Lab::new(id, decorations, overrides, window, cx));
+            let lab = cx.new(|cx| Lab::new(id, decorations, window, cx));
             content = Some(lab.clone());
             let titlebar = cx.new(|cx| LabTitleBar::new(lab.clone(), cx));
             (titlebar, lab)
@@ -1389,37 +1373,6 @@ fn open_lab_at(
         handle,
         content.context("shell content was not constructed")?,
     ))
-}
-
-fn compare_caption_heights(cx: &mut App, fixed: bool) -> Result<()> {
-    anyhow::ensure!(
-        cx.platform_info().os == OperatingSystem::Windows,
-        "Caption height comparison requires Windows"
-    );
-    let display = cx.primary_display().context("No primary display")?;
-    let work_area = display.visible_bounds();
-    let gap = px(16.);
-    let width = ((work_area.size.width - gap * 3.) / 2.).min(px(650.));
-    let height = (work_area.size.height - gap * 2.).min(px(700.));
-    anyhow::ensure!(
-        width >= px(280.) && height >= px(280.),
-        "Primary display is too small for two shell lab windows"
-    );
-    let pair = Bounds::centered_at(work_area.center(), size(width * 2. + gap, height));
-    for (offset, windows_titlebar_height) in [(px(0.), None), (width + gap, Some(px(48.)))] {
-        let bounds = Bounds::new(pair.origin + point(offset, px(0.)), size(width, height));
-        open_lab_at(
-            cx,
-            WindowDecorations::Server,
-            fixed,
-            bounds,
-            Overrides {
-                windows_titlebar_height,
-                ..Default::default()
-            },
-        )?;
-    }
-    Ok(())
 }
 
 fn main() {
@@ -1441,12 +1394,7 @@ fn main() {
                 } else {
                     WindowDecorations::Server
                 };
-            let result = if options.compare_caption_heights {
-                compare_caption_heights(cx, options.fixed_size)
-            } else {
-                open_lab(cx, decorations, options.fixed_size).map(|_| ())
-            };
-            if let Err(error) = result {
+            if let Err(error) = open_lab(cx, decorations, options.fixed_size) {
                 eprintln!("Could not open shell lab: {error:#}");
                 cx.quit();
             } else {
@@ -1459,39 +1407,6 @@ fn main() {
 mod tests {
     use super::*;
     use ::core::prelude::v1::test;
-
-    #[gpui::test]
-    fn caption_comparison_opens_two_shell_windows_side_by_side(cx: &mut TestAppContext) {
-        cx.set_platform_info(PlatformInfo {
-            os: OperatingSystem::Windows,
-            target: PlatformTarget::Native,
-        });
-        cx.update(|app| {
-            compare_caption_heights(app, false).unwrap();
-            let windows = app.windows();
-            assert_eq!(windows.len(), 2);
-            let mut layouts: Vec<_> = windows
-                .into_iter()
-                .map(|handle| {
-                    handle
-                        .update(app, |root, window, cx| {
-                            let shell = root.downcast::<ShellWindow>().unwrap();
-                            let metrics =
-                                shell.read(cx).windows_titlebar_metrics(window, cx).unwrap();
-                            (window.bounds(), metrics.height)
-                        })
-                        .unwrap()
-                })
-                .collect();
-            layouts.sort_by_key(|(bounds, _)| bounds.left());
-            let [(left, default_height), (right, tall_height)] = layouts.as_slice() else {
-                unreachable!("checked the number of windows");
-            };
-            assert!(left.right() < right.left());
-            assert_eq!(left.top(), right.top());
-            assert_eq!([*default_height, *tall_height], [px(32.), px(48.)]);
-        });
-    }
 
     #[gpui::test]
     fn app_titlebar_toggle_is_clickable_and_does_not_change_window_bounds(cx: &mut TestAppContext) {

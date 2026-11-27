@@ -30,33 +30,6 @@ Use `ShellApp::open_shell_window_with_titlebar` with a builder returning `(Entit
 
 macOS retains native traffic lights. Windows uses app-composed content and shell controls. Linux/FreeBSD draw the client frame only when the platform reports client decorations; server decorations remain compositor-owned. Fullscreen suppresses the client frame. A decoration request is not proof that the compositor accepted it.
 
-### Windows caption height
-
-Set `ShellOptions::windows_titlebar_height` when opening an app-composed title bar
-or replacing the window's options. For example, `Some(px(48.))` gives the title
-bar and its caption buttons a minimum height of 48 logical pixels. The default
-starts at 32 logical pixels and grows with text size and scale. The row grows
-above the requested height when needed to fit larger text. Caption-button width
-continues to follow text scale. If your code lists every `ShellOptions` field
-explicitly, use `windows_titlebar_height: None` to keep the default.
-
-Read the resolved metrics inside your title-bar view's `render` method:
-
-```rust
-use xgpui_shell::ShellWindow;
-
-let metrics = window
-    .root::<ShellWindow>()
-    .flatten()
-    .and_then(|root| root.read(cx).windows_titlebar_metrics(window, cx));
-```
-
-`height` and `centerline` let the app align its toolbar with the caption glyphs.
-`left_inset` and `right_inset` describe the space the shell already reserves for
-its buttons. `metrics` is `None` whenever the shell has no Windows caption row.
-On Windows, run `just shell --compare-caption-heights` to open default and
-48-pixel title bars side by side.
-
 ## Replace window-control artwork
 
 A `ShellControlPresenter` replaces what the shell draws inside each window control (background, icon and hover/pressed/inactive treatment) without copying any window-management code:

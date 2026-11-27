@@ -154,45 +154,6 @@ impl ShellWindow {
         cx.notify();
     }
 
-    /// Resolve the caption row for this window's app-composed Windows title bar.
-    ///
-    /// Returns `None` when the shell does not draw Windows caption buttons,
-    /// including in fullscreen. Dimensions are logical pixels.
-    pub fn windows_titlebar_metrics(
-        &self,
-        window: &Window,
-        cx: &App,
-    ) -> Option<WindowsTitlebarMetrics> {
-        if cx.platform_info().os != OperatingSystem::Windows
-            || !self.show_chrome
-            || self.titlebar.is_none()
-            || window.is_fullscreen()
-        {
-            return None;
-        }
-        let controls = shell_window_controls(window);
-        let layout = cx.button_layout().unwrap_or_else(fallback_button_layout);
-        let left = visible_buttons(layout.left, controls).len();
-        let right = visible_buttons(layout.right, controls).len();
-        if left + right == 0 {
-            return None;
-        }
-        let preferences = self.shell.resolved_preferences(&cx.desktop_preferences());
-        let look = preferences.resolved_look(window.appearance(), window.is_window_active());
-        let target = caption_target(
-            &look,
-            preferences.text_scale,
-            true,
-            self.shell.windows_titlebar_height,
-        );
-        Some(WindowsTitlebarMetrics {
-            height: target.height,
-            centerline: target.height / 2.,
-            left_inset: target.width * left as f32,
-            right_inset: target.width * right as f32,
-        })
-    }
-
     /// Replace the artwork of shell-drawn window controls, or pass `None` for the
     /// built-in look. Applies wherever the shell draws controls (Linux client
     /// frames and Windows app-composed title bars); native macOS traffic lights
@@ -282,7 +243,6 @@ impl Render for ShellWindow {
 
 struct ClientFrameState {
     preferences: ResolvedShellPreferences,
-    windows_titlebar_height: Option<Pixels>,
     appearance: WindowAppearance,
     active: bool,
     maximized: bool,
@@ -302,14 +262,16 @@ impl ClientFrameState {
             Decorations::Client { tiling } => tiling,
             Decorations::Server => Tiling::default(),
         };
+        let mut controls = window.window_controls();
+        controls.minimize &= window.is_minimizable();
+        controls.maximize &= window.is_resizable();
         Self {
             preferences: options.resolved_preferences(&cx.desktop_preferences()),
-            windows_titlebar_height: options.windows_titlebar_height,
             appearance: window.appearance(),
             active: window.is_window_active(),
             maximized: window.is_maximized(),
             tiling,
-            controls: shell_window_controls(window),
+            controls,
             resizable: window.is_resizable(),
             button_layout: cx.button_layout().unwrap_or_else(fallback_button_layout),
             title: window.shell_title().into(),
@@ -318,13 +280,6 @@ impl ClientFrameState {
             presenter: None,
         }
     }
-}
-
-fn shell_window_controls(window: &Window) -> WindowControls {
-    let mut controls = window.window_controls();
-    controls.minimize &= window.is_minimizable();
-    controls.maximize &= window.is_resizable();
-    controls
 }
 
 fn fallback_button_layout() -> WindowButtonLayout {
@@ -402,7 +357,6 @@ impl RenderOnce for ClientFramePreview {
         render_client_frame(
             ClientFrameState {
                 preferences: self.options.resolved_preferences(&cx.desktop_preferences()),
-                windows_titlebar_height: self.options.windows_titlebar_height,
                 appearance: self.appearance,
                 active: self.active,
                 maximized: self.maximized,
@@ -535,19 +489,12 @@ fn render_client_frame(
     frame.into_any_element()
 }
 
-fn caption_target(
-    look: &ResolvedShellLook,
-    scale: f32,
-    windows: bool,
-    requested_height: Option<Pixels>,
-) -> Size<Pixels> {
+fn caption_target(look: &ResolvedShellLook, scale: f32, windows: bool) -> Size<Pixels> {
     if windows {
-        let minimum = (32. * scale).max(look.typography.size * 1.5 + 4. * scale);
-        let height = requested_height
-            .map(Pixels::as_f32)
-            .filter(|height| height.is_finite())
-            .map_or(minimum, |height| height.max(minimum));
-        size(px(46. * scale), px(height))
+        size(
+            px(46. * scale),
+            px((32. * scale).max(look.typography.size * 1.5 + 4. * scale)),
+        )
     } else {
         size(px(look.button_size), px(look.button_size))
     }
@@ -577,7 +524,7 @@ fn render_titlebar(
     let right_buttons = visible_buttons(state.button_layout.right, controls);
     let windows = cx.platform_info().os == OperatingSystem::Windows
         && !(left_buttons.is_empty() && right_buttons.is_empty());
-    let target = caption_target(&look, scale, windows, state.windows_titlebar_height);
+    let target = caption_target(&look, scale, windows);
     let side_padding = if windows { px(0.) } else { px(8. * scale) };
     let side_width =
         target.width * left_buttons.len().max(right_buttons.len()) as f32 + side_padding;
@@ -698,7 +645,6 @@ fn with_control_behavior(
     interactive: bool,
 ) -> Stateful<Div> {
     element
-        .debug_selector(move || format!("shell-control-{}", button.id()))
         .when(interactive && cfg!(target_os = "windows"), |element| {
             element.window_control_area(match button {
                 WindowButton::Close => WindowControlArea::Close,
@@ -811,6 +757,7 @@ fn presented_control(
     // The shell paints only the focus ring; the presenter owns everything inside.
     let mut element = div()
         .id(button.id())
+        .debug_selector(move || format!("shell-control-{}", button.id()))
         .role(if interactive {
             Role::Button
         } else {
@@ -1000,10 +947,6 @@ pub struct ShellOptions {
     /// reserved control space and padding. Wins over `colors.header`.
     /// None uses the supplied palette header or the desktop/default header.
     pub titlebar_background: Option<u32>,
-    /// Minimum height of the app-composed Windows caption row, in logical pixels.
-    /// The default height still sets a lower bound based on text size and scale.
-    /// Non-finite values are ignored. Device DPI is applied by GPUI.
-    pub windows_titlebar_height: Option<Pixels>,
     /// Explicit shared-frame colors, overriding appearance, activation and the
     /// default high-contrast palette. Does not theme application content, native
     /// macOS artwork or compositor decorations, or synchronize native appearance.
@@ -1025,19 +968,6 @@ pub struct ShellOptions {
     pub middle_click_action: Option<TitlebarAction>,
     /// Override the desktop right-click action; fallback is the window menu.
     pub right_click_action: Option<TitlebarAction>,
-}
-
-/// Geometry of an app-composed Windows title bar with shell-drawn caption buttons.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct WindowsTitlebarMetrics {
-    /// Full caption row height in logical pixels.
-    pub height: Pixels,
-    /// Caption button center measured down from the top of the title bar.
-    pub centerline: Pixels,
-    /// Width reserved for caption buttons at the left edge of the title bar.
-    pub left_inset: Pixels,
-    /// Width reserved for caption buttons at the right edge of the title bar.
-    pub right_inset: Pixels,
 }
 
 fn shell_scale(scale: f32) -> f32 {
@@ -1457,48 +1387,16 @@ mod input_tests {
     fn windows_caption_targets_accept_rectangular_or_round_artwork() {
         let preferences = ShellOptions::default().resolved_preferences(&Default::default());
         let look = preferences.resolved_look(WindowAppearance::Light, true);
-        let target = caption_target(&look, 1., true, None);
+        let target = caption_target(&look, 1., true);
         assert_eq!(target, size(px(46.), px(32.)));
         let mut wrapper = caption_shape(div().id("caption").overflow_hidden(), target, true);
         assert_eq!(wrapper.style().corner_radii, Default::default());
 
         let mut artwork = div().rounded_full();
         assert_ne!(artwork.style().corner_radii, Default::default());
-        let mut linux_wrapper = caption_shape(
-            div().id("caption"),
-            caption_target(&look, 1., false, None),
-            false,
-        );
+        let mut linux_wrapper =
+            caption_shape(div().id("caption"), caption_target(&look, 1., false), false);
         assert_ne!(linux_wrapper.style().corner_radii, Default::default());
-    }
-
-    #[::core::prelude::v1::test]
-    fn windows_caption_height_preserves_the_scaled_minimum_and_other_platforms() {
-        let preferences = ShellOptions {
-            text_scale: Some(1.5),
-            ..Default::default()
-        }
-        .resolved_preferences(&Default::default());
-        let look = preferences.resolved_look(WindowAppearance::Light, true);
-        for height in [
-            None,
-            Some(px(40.)),
-            Some(px(f32::NAN)),
-            Some(px(f32::INFINITY)),
-        ] {
-            assert_eq!(
-                caption_target(&look, 1.5, true, height),
-                size(px(69.), px(48.))
-            );
-        }
-        assert_eq!(
-            caption_target(&look, 1.5, true, Some(px(60.))),
-            size(px(69.), px(60.))
-        );
-        assert_eq!(
-            caption_target(&look, 1.5, false, Some(px(60.))),
-            caption_target(&look, 1.5, false, None)
-        );
     }
 
     #[::core::prelude::v1::test]
@@ -1892,74 +1790,6 @@ mod composition_tests {
                 .child("Body")
         }
     }
-
-    #[gpui::test]
-    fn windows_caption_controls_fill_the_resolved_titlebar(cx: &mut TestAppContext) {
-        cx.set_platform_info(PlatformInfo {
-            os: OperatingSystem::Windows,
-            target: PlatformTarget::Native,
-        });
-        let handle = cx.update(|app| {
-            app.open_shell_window_with_titlebar(
-                WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                        Point::default(),
-                        size(px(600.), px(240.)),
-                    ))),
-                    ..Default::default()
-                },
-                ShellOptions::default(),
-                |_, app| (app.new(|_| Header(Rc::default())), app.new(|_| Body)),
-            )
-            .unwrap()
-        });
-        let mut visual = VisualTestContext::from_window(handle.into(), cx);
-        for (requested, height) in [(None, 32.), (Some(px(48.)), 48.), (None, 32.)] {
-            visual.update(|window, app| {
-                let root = window.root::<ShellWindow>().flatten().unwrap();
-                root.update(app, |shell, cx| {
-                    shell.set_options(
-                        ShellOptions {
-                            windows_titlebar_height: requested,
-                            ..Default::default()
-                        },
-                        cx,
-                    );
-                });
-                window.draw(app).clear(app);
-                let metrics = root.read(app).windows_titlebar_metrics(window, app);
-                assert_eq!(
-                    metrics,
-                    Some(WindowsTitlebarMetrics {
-                        height: px(height),
-                        centerline: px(height / 2.),
-                        left_inset: px(0.),
-                        right_inset: px(138.),
-                    })
-                );
-            });
-            let header = visual.debug_bounds("shell-titlebar-bounds").unwrap();
-            let app_button = visual.debug_bounds("app-button").unwrap();
-            let body = visual.debug_bounds("app-body").unwrap();
-            assert_eq!(header.size.height, px(height));
-            assert_eq!(app_button.center().y, header.center().y);
-            assert_eq!(body.top(), header.bottom());
-            for (index, id) in [
-                "shell-control-close",
-                "shell-control-maximize",
-                "shell-control-minimize",
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                let caption = visual.debug_bounds(id).unwrap();
-                assert_eq!(caption.size, size(px(46.), px(height)));
-                assert_eq!(caption.top(), header.top());
-                assert_eq!(caption.right(), header.right() - px(46. * index as f32));
-            }
-        }
-    }
-
     #[gpui::test]
     fn composed_mac_header_reserves_native_control_space_and_preserves_app_clicks(
         cx: &mut TestAppContext,
