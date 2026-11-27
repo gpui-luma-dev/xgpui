@@ -15,6 +15,7 @@ mod events;
 mod gpu_fault;
 mod keyboard;
 mod platform;
+mod system_cursor;
 mod system_notifications;
 mod system_settings;
 mod util;
@@ -41,6 +42,7 @@ pub(crate) use window::*;
 pub(crate) use wrapper::*;
 
 pub use platform::WindowsPlatform;
+pub use system_cursor::WindowsSystemCursor;
 
 pub(crate) use windows::Win32::Foundation::HWND;
 
