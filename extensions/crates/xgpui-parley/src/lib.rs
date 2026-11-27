@@ -22,7 +22,9 @@ pub use backend::{LayoutErrorHandler, ParleyTextSystem};
 mod options;
 pub use options::{ParagraphOptions, TextDirection, TextLanguage};
 pub mod typeset;
-pub use typeset::{Typeset, install_text_layout, typeset};
+pub use typeset::{
+    BaseDir, TextLayoutDirection, Typeset, install_text_layout, set_text_layout_direction, typeset,
+};
 
 #[cfg(test)]
 mod test_support;
