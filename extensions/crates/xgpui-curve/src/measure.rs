@@ -8,6 +8,10 @@ use std::ops::Range;
 use crate::error::{CurveError, finite};
 use crate::geom::{self, BezPath, PathEl, PathSeg, Point, QuadBez, Vec2};
 
+#[path = "measure/frames.rs"]
+mod frames;
+pub use frames::{ContourPolicy, PathFrame};
+
 /// Most segments (including implicit closing lines) a [`MeasuredPath`] accepts.
 pub const MAX_SEGMENTS: usize = 8192;
 /// Most output pieces [`MeasuredPath::apply`] produces.
@@ -227,15 +231,7 @@ impl MeasuredPath {
         for (index, contour) in self.contours.iter().enumerate() {
             // A zero-length contour is skipped unless nothing follows it.
             if (s <= contour.length && contour.length > 0.) || index == last {
-                let (segment, t) = self.locate_in(contour, s);
-                let seg = contour.segs[segment].seg;
-                return Some(Location {
-                    contour: index,
-                    segment,
-                    t,
-                    point: seg.eval(t),
-                    tangent: geom::tangent(seg, t),
-                });
+                return Some(self.location_in(index, s));
             }
             s -= contour.length;
         }
@@ -254,7 +250,23 @@ impl MeasuredPath {
         if !s.is_finite() {
             return None;
         }
-        let mut location = self.locate(s)?;
+        self.geometry_for(self.locate(s)?)
+    }
+
+    fn location_in(&self, index: usize, s: f64) -> Location {
+        let contour = &self.contours[index];
+        let (segment, t) = self.locate_in(contour, s);
+        let seg = contour.segs[segment].seg;
+        Location {
+            contour: index,
+            segment,
+            t,
+            point: seg.eval(t),
+            tangent: geom::tangent(seg, t),
+        }
+    }
+
+    fn geometry_for(&self, mut location: Location) -> Option<PathGeometry> {
         if !location.point.x.is_finite() || !location.point.y.is_finite() {
             return None;
         }

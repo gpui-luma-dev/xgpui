@@ -37,7 +37,7 @@ Every module except `geom` has a feature of the same name (`svg-path` for
 | Module | Contents |
 | --- | --- |
 | `geom` | Evaluation, derivatives, curvature, Hermite ↔ Bézier, tight bounds, nearest point, split, intersection, rectangle clipping, flattening, fill and stroke hit testing |
-| `measure` | Closed-form quadratic arc length, `MeasuredPath` (arc-length lookup, tangent/normal/curvature queries), trim and dash |
+| `measure` | Closed-form quadratic arc length, `MeasuredPath` (arc-length lookup, differential geometry, contour-aware frame sampling), trim and dash |
 | `series` | d3-style plot curves: linear, step, basis, cardinal, Catmull-Rom, natural, monotone (PCHIP), bundle; area fills |
 | `func` | `FunctionalCurve` (PCHIP, linear, x-clamped Bézier), CSS easing (`cubic-bezier`, `steps`, `linear()`), LUT baking |
 | `mesh` | `MeshLattice`: Hermite lattices with automatic or explicit tangents, fold clamping, cursor-exact edge dragging |
