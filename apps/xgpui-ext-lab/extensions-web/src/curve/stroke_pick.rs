@@ -3,12 +3,13 @@ use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
 use xgpui_curve::geom::{Affine, BezPath};
 use xgpui_curve::gpui_paint;
-use xgpui_curve::stroke::{Cap, Join, StrokeFootprint, StrokeSpace, StrokeStyle};
+use xgpui_curve::stroke::{Cap, Join, StrokeFootprint, StrokeProfile, StrokeSpace, StrokeStyle};
 
 pub struct StrokePanel {
     screen_width: bool,
     stretch: bool,
     dashed: bool,
+    variable_width: bool,
     guides: bool,
     pointer: Option<Point<Pixels>>,
 }
@@ -19,6 +20,7 @@ impl Default for StrokePanel {
             screen_width: false,
             stretch: true,
             dashed: true,
+            variable_width: false,
             guides: true,
             pointer: None,
         }
@@ -39,6 +41,7 @@ fn footprint(
     transform: Affine,
     screen_width: bool,
     dashed: bool,
+    variable_width: bool,
 ) -> Result<StrokeFootprint, xgpui_curve::CurveError> {
     let mut style = StrokeStyle::new(28.);
     style.start_cap = Cap::Square;
@@ -52,7 +55,23 @@ fn footprint(
     } else {
         StrokeSpace::Model
     };
-    StrokeFootprint::new(path, &style, transform, space, 0.1)
+    if variable_width {
+        let mut profile = StrokeProfile::new(vec![(0., 8.), (0.6, 36.), (1., 18.)])?;
+        profile.start_cap = style.start_cap;
+        profile.end_cap = style.end_cap;
+        profile.join = style.join;
+        StrokeFootprint::from_dashed_profile(
+            path,
+            &profile,
+            &style.dash_pattern,
+            0.,
+            transform,
+            space,
+            0.1,
+        )
+    } else {
+        StrokeFootprint::new(path, &style, transform, space, 0.1)
+    }
 }
 
 pub fn render(lab: &CurveLab, _window: &mut Window, cx: &mut Context<CurveLab>) -> AnyElement {
@@ -60,6 +79,7 @@ pub fn render(lab: &CurveLab, _window: &mut Window, cx: &mut Context<CurveLab>) 
         screen_width,
         stretch,
         dashed,
+        variable_width,
         guides,
         pointer,
     } = lab.stroke;
@@ -84,6 +104,10 @@ pub fn render(lab: &CurveLab, _window: &mut Window, cx: &mut Context<CurveLab>) 
                 })))
                 .child(button("Dashes", dashed).on_click(cx.listener(|this, _, _, cx| {
                     this.stroke.dashed = !this.stroke.dashed;
+                    cx.notify();
+                })))
+                .child(button("Variable width", variable_width).on_click(cx.listener(|this, _, _, cx| {
+                    this.stroke.variable_width = !this.stroke.variable_width;
                     cx.notify();
                 })))
                 .child(button("Bounds and centerline", guides).on_click(cx.listener(|this, _, _, cx| {
@@ -118,7 +142,7 @@ pub fn render(lab: &CurveLab, _window: &mut Window, cx: &mut Context<CurveLab>) 
                         let transform = fit(bounds, 740., 420.)
                             * Affine::scale_non_uniform(1., if stretch { 0.72 } else { 1. });
                         let path = connector();
-                        let footprint = match footprint(&path, transform, screen_width, dashed) {
+                        let footprint = match footprint(&path, transform, screen_width, dashed, variable_width) {
                             Ok(footprint) => footprint,
                             Err(error) => {
                                 log::error!("Could not build stroke footprint: {error}");
@@ -168,7 +192,7 @@ mod tests {
         let line = line(KPoint::new(0., 0.), KPoint::new(400., 0.));
         let transform = Affine::scale_non_uniform(1., 0.5);
         for screen_width in [false, true] {
-            let footprint = footprint(&line, transform, screen_width, true).unwrap();
+            let footprint = footprint(&line, transform, screen_width, true, false).unwrap();
             let painted = gpui_paint::stroke_footprint_path(&footprint)
                 .unwrap()
                 .unwrap();
@@ -180,6 +204,20 @@ mod tests {
             assert!(contains(40., 0.));
             assert!(!contains(115., 0.));
             assert_eq!(contains(40., 10.), screen_width);
+        }
+    }
+
+    #[::core::prelude::v1::test]
+    fn dashed_variable_width_connector_tessellates_in_both_width_modes() {
+        let path = connector();
+        let transform = Affine::scale_non_uniform(1., 0.72);
+        for screen_width in [false, true] {
+            let footprint = footprint(&path, transform, screen_width, true, true).unwrap();
+            let painted = gpui_paint::stroke_footprint_path(&footprint)
+                .unwrap()
+                .unwrap();
+            assert!(!painted.vertices.is_empty());
+            assert!(footprint.contains(transform * KPoint::new(95., 290.), 0.));
         }
     }
 }

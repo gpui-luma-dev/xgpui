@@ -312,3 +312,84 @@ fn shared_profile_restarts_at_each_contour_in_both_spaces() {
         }
     }
 }
+
+#[test]
+fn dashed_profile_samples_source_distance_and_restarts_phase_and_width() {
+    let mut path = BezPath::new();
+    path.move_to((0., 0.));
+    path.line_to((0., 0.));
+    for (y, length) in [(10., 101.), (40., 80.)] {
+        path.move_to((0., y));
+        path.line_to((length, y));
+    }
+    let profile = StrokeProfile::new(vec![(0., 2.), (1., 22.)]).unwrap();
+    let transform = geom::Affine::scale_non_uniform(2., 1.);
+    for (space, pattern, phase) in [
+        (StrokeSpace::Model, [20., 20.], 5.),
+        (StrokeSpace::LogicalPixels, [40., 40.], 10.),
+    ] {
+        let footprint = StrokeFootprint::from_dashed_profile(
+            &path, &profile, &pattern, phase, transform, space, 0.001,
+        )
+        .unwrap();
+        for y in [10., 40.] {
+            assert!(footprint.contains(Point::new(20., y + 1.5), 0.));
+            assert!(!footprint.contains(Point::new(20., y + 4.), 0.));
+            assert!(!footprint.contains(Point::new(50., y), 0.));
+            assert!(footprint.contains(Point::new(72., y + 4.), 0.));
+            assert!(footprint.contains(Point::new(108., y + 6.), 0.));
+        }
+        // Equal distance into the second dash, but different contour fractions.
+        assert!(!footprint.contains(Point::new(96., 16.5), 0.));
+        assert!(footprint.contains(Point::new(96., 46.5), 0.));
+    }
+}
+
+#[test]
+fn dashed_profile_joins_a_closed_seam_with_original_endpoint_widths() {
+    let mut path = BezPath::new();
+    path.move_to((0., 0.));
+    path.line_to((20., 0.));
+    path.line_to((20., 20.));
+    path.line_to((0., 20.));
+    path.close_path();
+    let profile = StrokeProfile::new(vec![(0., 2.), (1., 10.)]).unwrap();
+    let footprint = StrokeFootprint::from_dashed_profile(
+        &path,
+        &profile,
+        &[15., 20.],
+        0.,
+        geom::Affine::IDENTITY,
+        StrokeSpace::Model,
+        0.001,
+    )
+    .unwrap();
+    let hit = |x, y| footprint.contains(Point::new(x, y), 0.);
+    assert!(hit(-3., -0.5)); // Miter across the seam, between the outgoing and incoming offsets.
+    assert!(hit(-4., 4.));
+    assert!(!hit(4., -4.));
+    assert!(!hit(18., 0.));
+    assert!(!hit(0., 14.));
+}
+
+#[test]
+fn dashed_profile_keeps_narrow_width_changes_inside_a_dash() {
+    let mut path = BezPath::new();
+    path.move_to((0., 0.));
+    path.line_to((100., 0.));
+    let profile =
+        StrokeProfile::new(vec![(0., 2.), (0.521, 2.), (0.523, 20.), (0.525, 2.)]).unwrap();
+    let footprint = StrokeFootprint::from_dashed_profile(
+        &path,
+        &profile,
+        &[20., 20.],
+        0.,
+        geom::Affine::IDENTITY,
+        StrokeSpace::Model,
+        0.001,
+    )
+    .unwrap();
+    assert!(footprint.contains(Point::new(52.3, 8.), 0.));
+    assert!(!footprint.contains(Point::new(52., 8.), 0.));
+    assert!(!footprint.contains(Point::new(70., 0.), 0.));
+}

@@ -8,7 +8,7 @@
 
 use crate::error::{CurveError, finite};
 use crate::geom::{self, Affine, BezPath, FillRule, Hermite, PathSeg, Point, Rect, Vec2};
-use crate::measure::{MeasuredPath, arclen};
+use crate::measure::{MeasuredPath, PathEffect, arclen};
 
 /// Most subdivisions per offset piece.
 const MAX_DEPTH: u32 = 12;
@@ -154,60 +154,124 @@ impl StrokeProfile {
                 starts.push(s);
                 s += arclen(*seg, 0., 1., tolerance * 0.1);
             }
-            let left = self.side(&segs, &starts, total, 1., tolerance, closed);
-            let right = self.side(&segs, &starts, total, -1., tolerance, closed);
-            if closed {
-                append_closed(&mut out, &left);
-                append_closed(&mut out, &reverse(&right));
-            } else {
-                let half_start = 0.5 * self.width_at(0.).0;
-                let half_end = 0.5 * self.width_at(1.).0;
-                let first = segs[0];
-                let last = *segs.last().unwrap();
-                // Caps run between the full-width end points: an end inside a
-                // tight bend has its inner offset clamped short of them.
-                let n_end = geom::normal(last, 1.).unwrap_or(Vec2::new(0., 1.)) * half_end;
-                let n_start = geom::normal(first, 0.).unwrap_or(Vec2::new(0., 1.)) * half_start;
-                out.move_to(left[0].start());
-                for seg in &left {
-                    geom::push_seg(&mut out, *seg);
-                }
-                let right_rev = reverse(&right);
-                line_to(&mut out, last.end() + n_end);
-                cap(
-                    &mut out,
-                    last.end(),
-                    geom::tangent(last, 1.).unwrap_or(Vec2::new(1., 0.)),
-                    half_end,
-                    self.end_cap,
-                    last.end() - n_end,
-                );
-                line_to(&mut out, right_rev[0].start());
-                for seg in &right_rev {
-                    geom::push_seg(&mut out, *seg);
-                }
-                line_to(&mut out, first.start() - n_start);
-                cap(
-                    &mut out,
-                    first.start(),
-                    -geom::tangent(first, 0.).unwrap_or(Vec2::new(1., 0.)),
-                    half_start,
-                    self.start_cap,
-                    first.start() + n_start,
-                );
-                line_to(&mut out, left[0].start());
-                out.close_path();
-            }
+            let width = |k: usize, t| {
+                let s = starts[k] + arclen(segs[k], 0., t, tolerance * 0.1);
+                let (w, dw) = self.width_at(s / total);
+                (w, dw / total)
+            };
+            self.append_outline(
+                &mut out,
+                &segs,
+                width,
+                (self.width_at(0.).0, self.width_at(1.).0),
+                tolerance,
+                closed,
+            );
         }
         Ok(out)
+    }
+
+    fn dashed_outline(
+        &self,
+        path: &BezPath,
+        effect: &PathEffect,
+        tolerance: f64,
+    ) -> Result<BezPath, CurveError> {
+        let tolerance = tolerance.max(1e-9);
+        let accuracy = (tolerance * 0.1).clamp(1e-12, 16.);
+        let measured = MeasuredPath::new(path, accuracy)?;
+        let mut out = BezPath::new();
+        let mut segs = Vec::new();
+        let mut lengths = Vec::new();
+        // Give the offset fitter a segment boundary at each profile stop so
+        // a narrow feature cannot fall between its error samples.
+        let cuts: Vec<_> = self.stops.iter().map(|&(fraction, _)| fraction).collect();
+        measured.stroke_fragments(effect, &cuts, |source, total, closed| {
+            segs.clear();
+            lengths.clear();
+            for &(seg, _) in source {
+                segs.push(seg);
+                lengths.push(arclen(seg, 0., 1., accuracy));
+            }
+            let width = |k: usize, t: f64| {
+                let (seg, range) = &source[k];
+                let length = lengths[k];
+                let span = range.end - range.start;
+                let scale = if length > 0. { span / length } else { 0. };
+                let distance = if t == 1. {
+                    range.end
+                } else {
+                    (range.start + scale * arclen(*seg, 0., t, accuracy)).min(range.end)
+                };
+                let (w, dw) = self.width_at(distance / total);
+                (w, dw * scale / total)
+            };
+            let caps = (width(0, 0.).0, width(segs.len() - 1, 1.).0);
+            self.append_outline(&mut out, &segs, width, caps, tolerance, closed);
+        })?;
+        Ok(out)
+    }
+
+    fn append_outline(
+        &self,
+        out: &mut BezPath,
+        segs: &[PathSeg],
+        width: impl Fn(usize, f64) -> (f64, f64),
+        (start_width, end_width): (f64, f64),
+        tolerance: f64,
+        closed: bool,
+    ) {
+        let left = self.side(segs, &width, 1., tolerance, closed);
+        let right = self.side(segs, &width, -1., tolerance, closed);
+        if closed {
+            append_closed(out, &left);
+            append_closed(out, &reverse(&right));
+        } else {
+            let half_start = 0.5 * start_width;
+            let half_end = 0.5 * end_width;
+            let first = segs[0];
+            let last = *segs.last().unwrap();
+            // Caps run between the full-width end points: an end inside a
+            // tight bend has its inner offset clamped short of them.
+            let n_end = geom::normal(last, 1.).unwrap_or(Vec2::new(0., 1.)) * half_end;
+            let n_start = geom::normal(first, 0.).unwrap_or(Vec2::new(0., 1.)) * half_start;
+            out.move_to(left[0].start());
+            for seg in &left {
+                geom::push_seg(out, *seg);
+            }
+            let right_rev = reverse(&right);
+            line_to(out, last.end() + n_end);
+            cap(
+                out,
+                last.end(),
+                geom::tangent(last, 1.).unwrap_or(Vec2::new(1., 0.)),
+                half_end,
+                self.end_cap,
+                last.end() - n_end,
+            );
+            line_to(out, right_rev[0].start());
+            for seg in &right_rev {
+                geom::push_seg(out, *seg);
+            }
+            line_to(out, first.start() - n_start);
+            cap(
+                out,
+                first.start(),
+                -geom::tangent(first, 0.).unwrap_or(Vec2::new(1., 0.)),
+                half_start,
+                self.start_cap,
+                first.start() + n_start,
+            );
+            line_to(out, left[0].start());
+            out.close_path();
+        }
     }
 
     /// One side's offset segments, with joins, in path order.
     fn side(
         &self,
         segs: &[PathSeg],
-        starts: &[f64],
-        total: f64,
+        width: impl Fn(usize, f64) -> (f64, f64),
         sign: f64,
         tolerance: f64,
         closed: bool,
@@ -223,9 +287,8 @@ impl StrokeProfile {
         let mut prev_full = None;
         for (k, seg) in segs.iter().enumerate() {
             let w = |t: f64| {
-                let s = starts[k] + arclen(*seg, 0., t, tolerance * 0.1);
-                let (w, dw) = self.width_at(s / total);
-                (0.5 * w * sign, 0.5 * dw / total * sign)
+                let (w, dw) = width(k, t);
+                (0.5 * w * sign, 0.5 * dw * sign)
             };
             let start_full = full(*seg, 0., w(0.).0);
             first_full.get_or_insert(start_full);
@@ -815,6 +878,46 @@ impl StrokeFootprint {
         space: StrokeSpace,
         tolerance: f64,
     ) -> Result<Self, CurveError> {
+        Self::build_profile(path, profile, transform, space, tolerance, |path| {
+            profile.outline(path, tolerance)
+        })
+    }
+
+    /// Build a dashed variable-width footprint with the nonzero fill rule.
+    ///
+    /// Dash lengths, phase and tolerance use the selected stroke space.
+    /// Positive phase advances into the pattern. Each contour restarts the
+    /// phase and samples the profile over its full normalized arc length,
+    /// including gaps. A dash crossing a closed seam keeps its join and
+    /// uses the profile's end and start widths on the respective sides.
+    /// An empty pattern is equivalent to [`Self::from_profile`].
+    /// The dash pattern and fragment limits are those of [`PathEffect`].
+    pub fn from_dashed_profile(
+        path: &BezPath,
+        profile: &StrokeProfile,
+        dash_pattern: &[f64],
+        phase: f64,
+        transform: Affine,
+        space: StrokeSpace,
+        tolerance: f64,
+    ) -> Result<Self, CurveError> {
+        let effect = PathEffect::new().dash(dash_pattern, phase)?;
+        if dash_pattern.is_empty() {
+            return Self::from_profile(path, profile, transform, space, tolerance);
+        }
+        Self::build_profile(path, profile, transform, space, tolerance, |path| {
+            profile.dashed_outline(path, &effect, tolerance)
+        })
+    }
+
+    fn build_profile(
+        path: &BezPath,
+        profile: &StrokeProfile,
+        transform: Affine,
+        space: StrokeSpace,
+        tolerance: f64,
+        expand: impl FnOnce(&BezPath) -> Result<BezPath, CurveError>,
+    ) -> Result<Self, CurveError> {
         if let Join::Miter(limit) = profile.join {
             finite(&[limit])?;
             if limit <= 0. {
@@ -825,7 +928,7 @@ impl StrokeFootprint {
             if profile.stops.iter().all(|&(_, width)| width == 0.) {
                 return Ok(BezPath::new());
             }
-            profile.outline(path, tolerance)
+            expand(path)
         })
     }
 
