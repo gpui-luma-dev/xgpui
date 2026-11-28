@@ -186,10 +186,11 @@ impl ShapedLine {
 
     /// Split this shaped line at a byte index, returning `(prefix, suffix)`.
     ///
-    /// - `prefix` contains glyphs for bytes `[0, byte_index)` with original positions.
-    ///   Its width equals the x-advance up to the split point.
-    /// - `suffix` contains glyphs for bytes `[byte_index, len)` with positions
-    ///   shifted left so the first glyph starts at x=0, and byte indices rebased to 0.
+    /// - `prefix` contains glyphs for bytes `[0, byte_index)`.
+    /// - `suffix` contains glyphs for bytes `[byte_index, len)` with byte indices rebased to 0.
+    /// - When glyphs are in logical order, the prefix retains its positions and
+    ///   the suffix is shifted left. When glyphs are reordered, both halves
+    ///   start at x=0 and gaps left by glyphs assigned to the other half are removed.
     /// - Decoration runs are partitioned at the boundary; a run that straddles it is
     ///   split into two with adjusted lengths.
     /// - `font_size`, `ascent`, and `descent` are copied to both halves.

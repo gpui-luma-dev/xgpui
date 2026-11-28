@@ -116,6 +116,7 @@ pub struct BidiLab {
     caret: ParagraphPosition,
     dragging: bool,
     geometry: Option<(Bounds<Pixels>, Arc<dyn PlatformParagraphLayout>)>,
+    flat_carets: [Option<usize>; 2],
 }
 
 /// One frame's paragraph: the layout plus what the readout shows.
@@ -154,6 +155,7 @@ impl BidiLab {
             caret: start(),
             dragging: false,
             geometry: None,
+            flat_carets: [None; 2],
         }
     }
 
@@ -672,6 +674,74 @@ impl Render for BidiLab {
             }
         }
 
+        let flat_hit_testing = (!self.plain_on_parley).then(|| {
+            section(
+                "Flat-line caret hit testing (#427)",
+                "Click either label to place a caret and see its UTF-8 byte offset.",
+            )
+            .children([LABELS[1], LABELS[3]].into_iter().enumerate().map(
+                |(sample, (label, text))| {
+                    let styled = StyledText::new(text);
+                    let layout = styled.layout().clone();
+                    let click_layout = layout.clone();
+                    let caret = self.flat_carets[sample];
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_3()
+                        .child(div().w(px(60.)).child(label))
+                        .child(
+                            div()
+                                .id(("flat-bidi-hit", sample))
+                                .relative()
+                                .w(px(200.))
+                                .p_2()
+                                .font(font())
+                                .text_size(FONT_SIZE)
+                                .bg(rgb(0x374151))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                                        let bounds = click_layout.bounds();
+                                        if let Some(line) = click_layout.line_layout_for_index(0) {
+                                            this.flat_carets[sample] =
+                                                Some(line.unwrapped_layout.closest_index_for_x(
+                                                    event.position.x - bounds.origin.x,
+                                                ));
+                                            cx.notify();
+                                        }
+                                    }),
+                                )
+                                .child(styled)
+                                .child(
+                                    canvas(
+                                        |_, _, _| (),
+                                        move |_, _, window, _| {
+                                            if let Some(position) = caret
+                                                .and_then(|index| layout.position_for_index(index))
+                                            {
+                                                window.paint_quad(fill(
+                                                    Bounds::new(
+                                                        position,
+                                                        gpui::size(px(2.), FONT_SIZE),
+                                                    ),
+                                                    rgb(0xfbbf24),
+                                                ));
+                                            }
+                                        },
+                                    )
+                                    .absolute()
+                                    .inset_0(),
+                                ),
+                        )
+                        .child(caret.map_or_else(
+                            || "Click to place caret".to_string(),
+                            |index| format!("Byte {index}"),
+                        ))
+                },
+            ))
+        });
+
         div()
             .id("bidi-lab")
             .size_full()
@@ -691,6 +761,7 @@ impl Render for BidiLab {
             )
             .child(format!("Paragraph support: {support_note}"))
             .child(labels)
+            .children(flat_hit_testing)
             .child(styled)
             .child(truncation)
             .child(paragraph)
