@@ -37,6 +37,44 @@ pub fn fill_path(path: &BezPath, transform: Affine) -> Option<Path<Pixels>> {
     builder.build().ok()
 }
 
+/// Tessellate a shared stroke footprint with the nonzero fill rule.
+///
+/// An empty footprint returns `Ok(None)`. Invalid pixel coordinates and
+/// tessellation failures return an error.
+#[cfg(feature = "stroke")]
+pub fn stroke_footprint_path(
+    footprint: &crate::stroke::StrokeFootprint,
+) -> gpui::Result<Option<Path<Pixels>>> {
+    use gpui::{FillOptions, FillRule, PathStyle};
+
+    let outline = footprint.outline();
+    if outline.elements().is_empty() {
+        return Ok(None);
+    }
+    let pixel_limit = f64::from(f32::MAX);
+    let fits_pixels = |p: Point| p.x.abs() <= pixel_limit && p.y.abs() <= pixel_limit;
+    for element in outline.elements() {
+        let fits = match *element {
+            PathEl::MoveTo(p) | PathEl::LineTo(p) => fits_pixels(p),
+            PathEl::QuadTo(c, p) => fits_pixels(c) && fits_pixels(p),
+            PathEl::CurveTo(a, b, p) => fits_pixels(a) && fits_pixels(b) && fits_pixels(p),
+            PathEl::ClosePath => true,
+        };
+        if !fits {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "stroke footprint coordinates exceed GPUI pixel range",
+            )
+            .into());
+        }
+    }
+    let mut builder = PathBuilder::fill().with_style(PathStyle::Fill(
+        FillOptions::default().with_fill_rule(FillRule::NonZero),
+    ));
+    append(&mut builder, outline, Affine::IDENTITY);
+    Ok(Some(builder.build()?))
+}
+
 /// A stroked GPUI path of `width` pixels.
 pub fn stroke_path(path: &BezPath, transform: Affine, width: f32) -> Option<Path<Pixels>> {
     if path.elements().is_empty() || !(width.is_finite() && width > 0.) {

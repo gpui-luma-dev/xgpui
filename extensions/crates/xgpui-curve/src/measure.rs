@@ -350,13 +350,78 @@ impl MeasuredPath {
     /// Apply a trim and dash effect, returning the visible pieces as
     /// subpaths that keep their curve segments.
     pub fn apply(&self, effect: &PathEffect) -> Result<BezPath, CurveError> {
+        let mut out = BezPath::new();
+        self.visit_fragments(effect, |contour, range, wrap, closed| {
+            let (i, t) = self.locate_in(contour, range.start);
+            out.move_to(contour.segs[i].seg.eval(t));
+            for range in std::iter::once(range).chain(wrap) {
+                self.visit_slice(contour, range, |seg, _| geom::push_seg(&mut out, seg));
+            }
+            if closed {
+                out.close_path();
+            }
+        })?;
+        Ok(out)
+    }
+
+    /// Visit each dash with the original contour distances of its segments.
+    #[cfg(feature = "stroke")]
+    pub(crate) fn stroke_fragments(
+        &self,
+        effect: &PathEffect,
+        cuts: &[f64],
+        mut visit: impl FnMut(&[(PathSeg, Range<f64>)], f64, bool),
+    ) -> Result<(), CurveError> {
+        let mut segments = Vec::new();
+        self.visit_fragments(effect, |contour, range, wrap, closed| {
+            segments.clear();
+            for range in std::iter::once(range).chain(wrap) {
+                let mut append = |seg, source: Range<f64>| {
+                    if source.start < source.end {
+                        segments.push((seg, source));
+                    }
+                };
+                let total = contour.length;
+                let start = cuts.partition_point(|&cut| cut * total <= range.start);
+                let end = cuts.partition_point(|&cut| cut * total < range.end);
+                let mut from = range.start;
+                for &cut in &cuts[start..end] {
+                    let to = cut * total;
+                    if to > from {
+                        self.visit_slice(contour, from..to, &mut append);
+                        from = to;
+                    }
+                }
+                self.visit_slice(contour, from..range.end, append);
+            }
+            if !segments.is_empty() {
+                visit(&segments, contour.length, closed);
+            }
+        })
+    }
+
+    fn visit_fragments(
+        &self,
+        effect: &PathEffect,
+        mut visit: impl FnMut(&Contour, Range<f64>, Option<Range<f64>>, bool),
+    ) -> Result<(), CurveError> {
+        finite(&[self.length])?;
         let begin = self.length * effect.trim.start;
         let end = self.length * effect.trim.end;
-        let mut out = BezPath::new();
         if begin >= end {
-            return Ok(out);
+            return Ok(());
         }
         let mut pieces = 0usize;
+        let mut visit = |contour, range, wrap, closed| {
+            pieces += 1;
+            if pieces > MAX_FRAGMENTS {
+                return Err(CurveError::WorkLimit("path exceeds fragment limit"));
+            }
+            visit(contour, range, wrap, closed);
+            Ok(())
+        };
+        let period: f64 = effect.dash.iter().sum();
+        finite(&[period])?;
         let mut base = 0.;
         for contour in &self.contours {
             let from = if effect.trim.start == 0. {
@@ -375,10 +440,9 @@ impl MeasuredPath {
             }
             if effect.dash.is_empty() {
                 let closed = contour.closed && from == 0. && to == contour.length;
-                self.slice(contour, from, to, closed, &mut out, &mut pieces)?;
+                visit(contour, from..to, None, closed)?;
                 continue;
             }
-            let period: f64 = effect.dash.iter().sum();
             let mut offset = effect.phase.rem_euclid(period);
             let mut i = 0;
             while offset >= effect.dash[i] {
@@ -412,7 +476,7 @@ impl MeasuredPath {
             // runs from the final dash through the start.
             let wraps = contour.closed && from == 0. && to == contour.length;
             if wraps && visible.len() == 1 && visible[0] == (0., to) {
-                self.slice(contour, 0., to, true, &mut out, &mut pieces)?;
+                visit(contour, 0. ..to, None, true)?;
                 continue;
             }
             let mut joined = None;
@@ -422,47 +486,30 @@ impl MeasuredPath {
                 joined = Some((last_start, first_end));
             }
             for (a, b) in visible {
-                self.slice(contour, a, b, false, &mut out, &mut pieces)?;
+                visit(contour, a..b, None, false)?;
             }
             if let Some((last_start, first_end)) = joined {
-                self.slice(contour, last_start, to, false, &mut out, &mut pieces)?;
-                self.append(contour, 0., first_end, &mut out);
+                visit(contour, last_start..to, Some(0. ..first_end), false)?;
             }
-        }
-        Ok(out)
-    }
-
-    fn slice(
-        &self,
-        contour: &Contour,
-        from: f64,
-        to: f64,
-        close: bool,
-        out: &mut BezPath,
-        pieces: &mut usize,
-    ) -> Result<(), CurveError> {
-        *pieces += 1;
-        if *pieces > MAX_FRAGMENTS {
-            return Err(CurveError::WorkLimit("path exceeds fragment limit"));
-        }
-        let (i0, t0) = self.locate_in(contour, from);
-        out.move_to(contour.segs[i0].seg.eval(t0));
-        self.append(contour, from, to, out);
-        if close {
-            out.close_path();
         }
         Ok(())
     }
 
-    /// Append the drawing elements for `from..to` to the current subpath.
-    fn append(&self, contour: &Contour, from: f64, to: f64, out: &mut BezPath) {
-        let (i0, t0) = self.locate_in(contour, from);
-        let (i1, t1) = self.locate_in(contour, to);
+    fn visit_slice(
+        &self,
+        contour: &Contour,
+        range: Range<f64>,
+        mut visit: impl FnMut(PathSeg, Range<f64>),
+    ) {
+        let (i0, t0) = self.locate_in(contour, range.start);
+        let (i1, t1) = self.locate_in(contour, range.end);
         for (i, m) in contour.segs.iter().enumerate().take(i1 + 1).skip(i0) {
             let a = if i == i0 { t0 } else { 0. };
             let b = if i == i1 { t1 } else { 1. };
             if b > a {
-                geom::push_seg(out, m.seg.subsegment(a..b));
+                let start = range.start.max(m.start);
+                let end = range.end.min(m.start + m.length);
+                visit(m.seg.subsegment(a..b), start..end);
             }
         }
     }

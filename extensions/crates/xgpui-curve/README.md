@@ -44,10 +44,10 @@ Every module except `geom` has a feature of the same name (`svg-path` for
 | `spine` | `CurveSpine`: quadratic field spines, (s, d⊥) projection, arrowheads, the inner-bend seam rule, `CURVE_SPINE_WGSL` / `CURVE_SPINE_MSL` |
 | `node` | `NodePath`: Corner, Smooth, Symmetric and automatic (Catmull-Rom, natural, Hobby) nodes with constraint-preserving edits |
 | `shape` | `Squircle` (continuous-curvature corners), `ArcShape` (annular sectors) |
-| `stroke` | `StrokeProfile`: variable-width and tapered outlines with caps and joins |
+| `stroke` | Styled constant-width outlines, variable-width profiles, and `StrokeFootprint` for shared bounds and picking |
 | `fit` | Ramer–Douglas–Peucker, Schneider cubic fitting, and parameter-preserving fits with sample-error diagnostics |
 | `svg_path` | SVG `d` parsing and serialization |
-| `gpui_paint` | `gpui::Path<Pixels>` builders and a two-pass contrast stroke |
+| `gpui_paint` | `gpui::Path<Pixels>` builders, fallible footprint tessellation, and a two-pass contrast stroke |
 
 ## Plot a series
 

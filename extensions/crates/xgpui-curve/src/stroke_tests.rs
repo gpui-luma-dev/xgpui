@@ -229,3 +229,167 @@ fn an_empty_subpath_does_not_shift_later_tapers() {
         geom::FillRule::NonZero
     ));
 }
+#[test]
+fn shared_footprint_covers_caps_join_and_boundary_but_leaves_dash_gaps() {
+    let mut path = BezPath::new();
+    path.move_to((0., 0.));
+    path.line_to((25., 0.));
+    path.line_to((25., 100.));
+    path.move_to((100., 0.));
+    path.line_to((100., 100.));
+    let mut style = StrokeStyle::new(10.);
+    style.start_cap = Cap::Square;
+    style.end_cap = Cap::Round;
+    style.join = Join::Miter(4.);
+    style.dash_pattern = vec![60., 30.];
+    let transform = geom::Affine::scale_non_uniform(2., 1.);
+
+    for (space, left, right, join_x, round_tip, gap) in [
+        (StrokeSpace::Model, -10., 210., 58., 40., 50.),
+        (StrokeSpace::LogicalPixels, -5., 205., 54., 15., 25.),
+    ] {
+        let footprint = StrokeFootprint::new(&path, &style, transform, space, 0.001).unwrap();
+        let hit = |x, y| footprint.contains(Point::new(x, y), 0.);
+        let bounds = footprint.bounds().unwrap();
+        assert!((bounds.x0 - left).abs() < 1e-6);
+        assert!(hit(left, 4.));
+        assert!(!hit(left - 1., 4.));
+        assert!(footprint.contains(Point::new(left - 1., 4.), 1.));
+        assert!((bounds.x1 - right).abs() < 1e-6);
+        assert!(hit(200., 55.));
+        assert!(!hit(200., 75.));
+        assert!(hit(join_x, -4.));
+        assert!(hit(50., round_tip));
+        assert!(!hit(join_x, round_tip - 1.));
+        assert!(!hit(50., gap));
+    }
+}
+
+#[test]
+fn shared_footprint_validates_inputs_and_omits_zero_length_contours() {
+    let mut path = BezPath::new();
+    path.move_to((3., 4.));
+    path.line_to((3., 4.));
+    let mut style = StrokeStyle::new(2.);
+    let build = |style: &StrokeStyle| {
+        StrokeFootprint::new(
+            &path,
+            style,
+            geom::Affine::IDENTITY,
+            StrokeSpace::Model,
+            0.01,
+        )
+    };
+    let footprint = build(&style).unwrap();
+    assert!(footprint.bounds().is_none());
+    assert!(!footprint.contains(Point::new(3., 4.), 100.));
+    style.dash_pattern = vec![0., 2.];
+    assert!(matches!(
+        build(&style),
+        Err(CurveError::OutOfRange("dash length"))
+    ));
+}
+
+#[test]
+fn shared_profile_restarts_at_each_contour_in_both_spaces() {
+    let mut path = BezPath::new();
+    for y in [0., 50.] {
+        path.move_to((0., y));
+        path.line_to((100., y));
+    }
+    let profile = StrokeProfile::new(vec![(0., 2.), (1., 18.)]).unwrap();
+    let transform = geom::Affine::scale_non_uniform(1., 2.);
+    for space in [StrokeSpace::Model, StrokeSpace::LogicalPixels] {
+        let footprint =
+            StrokeFootprint::from_profile(&path, &profile, transform, space, 0.01).unwrap();
+        for y in [0., 100.] {
+            assert!(!footprint.contains(Point::new(10., y + 5.), 0.));
+            assert!(footprint.contains(Point::new(90., y + 7.), 0.));
+            assert_eq!(
+                footprint.contains(Point::new(90., y + 12.), 0.),
+                space == StrokeSpace::Model
+            );
+        }
+    }
+}
+
+#[test]
+fn dashed_profile_samples_source_distance_and_restarts_phase_and_width() {
+    let mut path = BezPath::new();
+    path.move_to((0., 0.));
+    path.line_to((0., 0.));
+    for (y, length) in [(10., 101.), (40., 80.)] {
+        path.move_to((0., y));
+        path.line_to((length, y));
+    }
+    let profile = StrokeProfile::new(vec![(0., 2.), (1., 22.)]).unwrap();
+    let transform = geom::Affine::scale_non_uniform(2., 1.);
+    for (space, pattern, phase) in [
+        (StrokeSpace::Model, [20., 20.], 5.),
+        (StrokeSpace::LogicalPixels, [40., 40.], 10.),
+    ] {
+        let footprint = StrokeFootprint::from_dashed_profile(
+            &path, &profile, &pattern, phase, transform, space, 0.001,
+        )
+        .unwrap();
+        for y in [10., 40.] {
+            assert!(footprint.contains(Point::new(20., y + 1.5), 0.));
+            assert!(!footprint.contains(Point::new(20., y + 4.), 0.));
+            assert!(!footprint.contains(Point::new(50., y), 0.));
+            assert!(footprint.contains(Point::new(72., y + 4.), 0.));
+            assert!(footprint.contains(Point::new(108., y + 6.), 0.));
+        }
+        // Equal distance into the second dash, but different contour fractions.
+        assert!(!footprint.contains(Point::new(96., 16.5), 0.));
+        assert!(footprint.contains(Point::new(96., 46.5), 0.));
+    }
+}
+
+#[test]
+fn dashed_profile_joins_a_closed_seam_with_original_endpoint_widths() {
+    let mut path = BezPath::new();
+    path.move_to((0., 0.));
+    path.line_to((20., 0.));
+    path.line_to((20., 20.));
+    path.line_to((0., 20.));
+    path.close_path();
+    let profile = StrokeProfile::new(vec![(0., 2.), (1., 10.)]).unwrap();
+    let footprint = StrokeFootprint::from_dashed_profile(
+        &path,
+        &profile,
+        &[15., 20.],
+        0.,
+        geom::Affine::IDENTITY,
+        StrokeSpace::Model,
+        0.001,
+    )
+    .unwrap();
+    let hit = |x, y| footprint.contains(Point::new(x, y), 0.);
+    assert!(hit(-3., -0.5)); // Miter across the seam, between the outgoing and incoming offsets.
+    assert!(hit(-4., 4.));
+    assert!(!hit(4., -4.));
+    assert!(!hit(18., 0.));
+    assert!(!hit(0., 14.));
+}
+
+#[test]
+fn dashed_profile_keeps_narrow_width_changes_inside_a_dash() {
+    let mut path = BezPath::new();
+    path.move_to((0., 0.));
+    path.line_to((100., 0.));
+    let profile =
+        StrokeProfile::new(vec![(0., 2.), (0.521, 2.), (0.523, 20.), (0.525, 2.)]).unwrap();
+    let footprint = StrokeFootprint::from_dashed_profile(
+        &path,
+        &profile,
+        &[20., 20.],
+        0.,
+        geom::Affine::IDENTITY,
+        StrokeSpace::Model,
+        0.001,
+    )
+    .unwrap();
+    assert!(footprint.contains(Point::new(52.3, 8.), 0.));
+    assert!(!footprint.contains(Point::new(52., 8.), 0.));
+    assert!(!footprint.contains(Point::new(70., 0.), 0.));
+}
