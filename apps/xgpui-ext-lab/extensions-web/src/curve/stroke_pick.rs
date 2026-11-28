@@ -1,7 +1,7 @@
 //! Compare the painted stroke with its bounds and pointer footprint.
 use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
-use xgpui_curve::geom::{Affine, BezPath, FillRule, Point as KPoint, fill_contains};
+use xgpui_curve::geom::{Affine, BezPath, FillRule, fill_contains};
 use xgpui_curve::gpui_paint;
 use xgpui_curve::stroke::{Cap, Join, StrokeStyle, stroke_outline};
 
@@ -148,6 +148,7 @@ pub fn render(lab: &CurveLab, _window: &mut Window, cx: &mut Context<CurveLab>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use xgpui_curve::geom::Point as KPoint;
 
     #[::core::prelude::v1::test]
     fn dashed_footprint_preserves_gaps_in_both_width_modes() {
