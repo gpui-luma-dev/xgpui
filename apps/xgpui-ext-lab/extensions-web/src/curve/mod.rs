@@ -10,6 +10,7 @@ mod nodes;
 mod series;
 mod shapes;
 mod spine;
+mod stroke_pick;
 mod zeta;
 #[cfg(not(target_family = "wasm"))]
 pub use zeta::benchmark as zeta_benchmark;
@@ -33,10 +34,12 @@ pub enum Panel {
     Shapes,
     /// Animated complex-plane zeta mapping.
     Zeta,
+    /// Shared stroke geometry for paint, bounds and picking.
+    StrokePicking,
 }
 
 impl Panel {
-    const ALL: [Panel; 7] = [
+    const ALL: [Panel; 8] = [
         Panel::Mesh,
         Panel::Spine,
         Panel::Nodes,
@@ -44,6 +47,7 @@ impl Panel {
         Panel::Functions,
         Panel::Shapes,
         Panel::Zeta,
+        Panel::StrokePicking,
     ];
 
     /// Parse a `panel=` query value (the same names as the native `--panel`).
@@ -57,6 +61,7 @@ impl Panel {
             "functions" => Panel::Functions,
             "shapes" => Panel::Shapes,
             "zeta" => Panel::Zeta,
+            "stroke-picking" => Panel::StrokePicking,
             _ => return None,
         })
     }
@@ -70,13 +75,17 @@ impl Panel {
             Panel::Functions => "Functions & easing",
             Panel::Shapes => "Shapes & strokes",
             Panel::Zeta => "Zeta mapping",
+            Panel::StrokePicking => "Stroke picking",
         }
     }
 
     fn about(self) -> &'static str {
         match self {
+            Panel::StrokePicking => {
+                "Move the pointer over the connector, its caps, or a dash gap to compare the painted and pickable areas."
+            }
             Panel::Zeta => {
-                "Animate a complex grid into ζ(z). Scrub the timeline; zoom to inspect the sampled curves. The pole at z = 1 is excluded."
+                "Animate a complex grid into ?(z). Scrub the timeline; zoom to inspect the sampled curves. The pole at z = 1 is excluded."
             }
             Panel::Mesh => {
                 "Drag nodes, or drag a wire to bend both of its tangents. Wires are the exact patch edges the GPU mesh gradient renders."
@@ -110,6 +119,7 @@ pub struct CurveLab {
     func: func::FuncPanel,
     shapes: shapes::ShapesPanel,
     zeta: zeta::ZetaPanel,
+    stroke: stroke_pick::StrokePanel,
 }
 
 impl CurveLab {
@@ -130,6 +140,7 @@ impl CurveLab {
             func: func::FuncPanel::new(),
             shapes: shapes::ShapesPanel::new(),
             zeta: zeta::ZetaPanel::new(),
+            stroke: stroke_pick::StrokePanel::default(),
         }
     }
 }
@@ -146,6 +157,7 @@ impl Render for CurveLab {
             Panel::Functions => func::render(self, window, cx),
             Panel::Shapes => shapes::render(self, window, cx),
             Panel::Zeta => zeta::render(self, window, cx),
+            Panel::StrokePicking => stroke_pick::render(self, window, cx),
         };
         div()
             .id("curve-lab")
@@ -176,14 +188,17 @@ impl Render for CurveLab {
                     })),
             )
             .child(div().text_color(rgb(0x9fb0cc)).child(panel.about()))
-            .when(panel != Panel::Series && panel != Panel::Zeta, |el| {
-                el.child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(0x7f8fa9))
-                        .child(common::NAV_HINT),
-                )
-            })
+            .when(
+                !matches!(panel, Panel::Series | Panel::Zeta | Panel::StrokePicking),
+                |el| {
+                    el.child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(0x7f8fa9))
+                            .child(common::NAV_HINT),
+                    )
+                },
+            )
             .child(div().flex_1().min_h_0().child(body))
     }
 }
