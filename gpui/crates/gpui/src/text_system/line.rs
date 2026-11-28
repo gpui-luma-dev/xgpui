@@ -186,10 +186,11 @@ impl ShapedLine {
 
     /// Split this shaped line at a byte index, returning `(prefix, suffix)`.
     ///
-    /// - `prefix` contains glyphs for bytes `[0, byte_index)` with original positions.
-    ///   Its width equals the x-advance up to the split point.
-    /// - `suffix` contains glyphs for bytes `[byte_index, len)` with positions
-    ///   shifted left so the first glyph starts at x=0, and byte indices rebased to 0.
+    /// - `prefix` contains glyphs for bytes `[0, byte_index)`.
+    /// - `suffix` contains glyphs for bytes `[byte_index, len)` with byte indices rebased to 0.
+    /// - When glyphs are in logical order, the prefix retains its positions and
+    ///   the suffix is shifted left. When glyphs are reordered, both halves
+    ///   start at x=0 and gaps left by glyphs assigned to the other half are removed.
     /// - Decoration runs are partitioned at the boundary; a run that straddles it is
     ///   split into two with adjusted lengths.
     /// - `font_size`, `ascent`, and `descent` are copied to both halves.
@@ -456,6 +457,22 @@ pub struct WrappedLine {
 }
 
 impl WrappedLine {
+    fn row_decorations(&self, range: &Range<usize>) -> Vec<DecorationRun> {
+        let mut start = 0;
+        self.decoration_runs
+            .iter()
+            .filter_map(|run| {
+                let end = start + run.len as usize;
+                let len = end.min(range.end).saturating_sub(start.max(range.start));
+                start = end;
+                (len > 0).then(|| DecorationRun {
+                    len: len as u32,
+                    ..run.clone()
+                })
+            })
+            .collect()
+    }
+
     /// The length of the underlying, unwrapped layout, in utf-8 bytes.
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
@@ -476,6 +493,22 @@ impl WrappedLine {
             Some(bounds) => Some(bounds.size.width),
             None => self.layout.wrap_width,
         };
+
+        if !self.logical_rows.is_empty() {
+            for (ix, (range, row)) in self.logical_rows.iter().enumerate() {
+                let row_origin = origin + point(Pixels::ZERO, line_height * ix);
+                row.paint(
+                    row_origin,
+                    line_height,
+                    align,
+                    align_width,
+                    &self.row_decorations(range),
+                    window,
+                    cx,
+                )?;
+            }
+            return Ok(());
+        }
 
         paint_line(
             origin,
@@ -509,6 +542,21 @@ impl WrappedLine {
         };
 
         if !has_background(&self.decoration_runs) {
+            return Ok(());
+        }
+        if !self.logical_rows.is_empty() {
+            for (ix, (range, row)) in self.logical_rows.iter().enumerate() {
+                let row_origin = origin + point(Pixels::ZERO, line_height * ix);
+                row.paint_background(
+                    row_origin,
+                    line_height,
+                    align,
+                    align_width,
+                    &self.row_decorations(range),
+                    window,
+                    cx,
+                )?;
+            }
             return Ok(());
         }
         paint_line_background(
@@ -1149,6 +1197,18 @@ mod tests {
         }
     }
 
+    #[test]
+    fn rtl_flat_line_alignment_uses_physical_edges() {
+        let line = make_shaped_line("אב", &[(2, 0.), (0, 10.)], 20., &[]);
+        let origin = point(px(10.), px(20.));
+        let height = px(16.);
+        let width = Some(px(100.));
+        let left = line_paint_bounds(origin, &line.layout, height, TextAlign::Left, width, &[]);
+        let right = line_paint_bounds(origin, &line.layout, height, TextAlign::Right, width, &[]);
+        assert_eq!(left.left(), origin.x);
+        assert_eq!(right.right(), origin.x + px(100.));
+    }
+
     #[gpui::test]
     fn test_underline_handler_matches_default_paint(cx: &mut TestAppContext) {
         test_underline_handler_at_scales(cx, |window, cx| {
@@ -1414,6 +1474,7 @@ mod tests {
                             glyph_ix: 2,
                         }]),
                         wrap_width: Some(px(16.)),
+                        logical_rows: Vec::new(),
                     }),
                     text: line.text,
                     decoration_runs: line.decoration_runs.into_vec(),

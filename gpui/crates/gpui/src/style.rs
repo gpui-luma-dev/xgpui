@@ -421,14 +421,14 @@ pub enum TextOverflow {
 /// How to align text within the element
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum TextAlign {
-    /// Align the text to the left of the element
+    /// Align flat text to the physical left edge of the element.
     #[default]
     Left,
 
     /// Center the text within the element
     Center,
 
-    /// Align the text to the right of the element
+    /// Align flat text to the physical right edge of the element.
     Right,
 }
 

@@ -1,17 +1,4 @@
-//! Local checks for gpui-luma-dev/xgpui#332. GPUI's own flat lines wrap
-//! right-to-left text in painting order; with Parley and
-//! `xgpui_parley::install_text_layout`, plain GPUI text wraps in logical order.
-//!
-//! A failure here means the right-to-left story changed, not necessarily that
-//! something broke:
-//! - `plain_text_wraps_rtl_in_painting_order_*`: GPUI's flat lines (or
-//!   upstream) changed how right-to-left lines wrap.
-//! - `install_text_layout_wraps_plain_rtl_in_logical_order`: plain text on the
-//!   Parley engine no longer wraps in logical order.
-//! - `typeset_covers_styled_text_api`: `StyledText`, `TextStyle` or
-//!   `HighlightStyle` changed, so `typeset()` may have fallen behind.
-//! - `bidi_page_wrapped_section_*`: the bidi lab's section 5 no longer shows
-//!   what it documents.
+//! Regression checks for flat and paragraph RTL layout in the bidi lab.
 use super::{bidi, paragraph, samples};
 use gpui::{
     FontRun, ParagraphPosition, PlatformTextSystem, StyledText, TestAppContext, TestDispatcher,
@@ -49,10 +36,42 @@ fn native() -> Arc<dyn PlatformTextSystem> {
     backend
 }
 
-/// Plain GPUI text breaks right-to-left lines on the visual (painted) glyph
-/// order, so its wrap boundaries run backwards through the text and the
-/// sentence's first words land on the last line. The paragraph API, which
-/// `typeset()` uses, breaks in logical order.
+#[cfg(target_os = "macos")]
+#[test]
+fn native_flat_hebrew_label_hit_testing() {
+    let text = "\u{05e9}\u{05dc}\u{05d5}\u{05dd}";
+    let mut cx = TestAppContext::build_with_text_system(TestDispatcher::new(0), None, native());
+    let window = cx.add_empty_window();
+    let styled = StyledText::new(text);
+    let layout = styled.layout().clone();
+    let element = Mutex::new(Some(styled));
+    window.draw(point(px(0.), px(0.)), size(px(300.), px(50.)), |_, _| {
+        div()
+            .font_family(FAMILY)
+            .text_size(px(20.))
+            .child(element.lock().unwrap().take().unwrap())
+    });
+    let start = layout.position_for_index(0).unwrap();
+    let end = layout.position_for_index(text.len()).unwrap();
+    assert!(start.x > end.x);
+    let line = layout.line_layout_for_index(0).unwrap();
+    let origin = layout.bounds().origin;
+    assert_eq!(
+        line.unwrapped_layout
+            .closest_index_for_x(start.x - origin.x),
+        0
+    );
+    assert_eq!(
+        line.unwrapped_layout.closest_index_for_x(end.x - origin.x),
+        text.len()
+    );
+    assert_eq!(
+        layout.index_for_position(point(start.x - px(1.), start.y)),
+        Ok(0)
+    );
+}
+
+/// Verify that flat and paragraph rows follow the original text order.
 fn wrap_order_checks(backend: Arc<dyn PlatformTextSystem>) {
     let text = bidi::WRAPPED;
     let mut cx = TestAppContext::build_with_text_system(TestDispatcher::new(0), None, backend);
@@ -72,22 +91,25 @@ fn wrap_order_checks(backend: Arc<dyn PlatformTextSystem>) {
     let lines = layout.line_layouts();
     assert_eq!(lines.len(), 1, "one hard line");
     let line = &lines[0];
-    let boundaries: Vec<usize> = line
-        .wrap_boundaries
-        .iter()
-        .map(|b| line.unwrapped_layout.runs[b.run_ix].glyphs[b.glyph_ix].index)
-        .collect();
+    let boundaries: Vec<usize> = line.soft_wrap_offsets().collect();
     assert!(
         boundaries.len() >= 2,
         "the sample must wrap to at least three lines: {boundaries:?}"
     );
     assert!(
-        boundaries.windows(2).all(|pair| pair[0] > pair[1]),
-        "plain GPUI text now wraps right-to-left text in another order \
-         (boundaries {boundaries:?}); revisit gpui-luma-dev/xgpui#332"
+        boundaries.windows(2).all(|pair| pair[0] < pair[1]),
+        "plain rows follow logical order: {boundaries:?}"
     );
-    // `wrapped_text` takes those boundaries in text order instead of
-    // panicking on them: one logical span per line, covering the whole text.
+    for (row, index) in std::iter::once(0)
+        .chain(boundaries.iter().copied())
+        .enumerate()
+    {
+        let caret = layout.position_for_index(index).unwrap();
+        assert_eq!(
+            (caret.y - layout.bounds().origin.y) / layout.line_height(),
+            row as f32
+        );
+    }
     let wrapped = layout.wrapped_text();
     assert_eq!(wrapped.lines().count(), boundaries.len() + 1, "{wrapped:?}");
     assert_eq!(wrapped.replace('\n', ""), text);
@@ -131,13 +153,13 @@ fn wrap_order_checks(backend: Arc<dyn PlatformTextSystem>) {
 }
 
 #[test]
-fn plain_text_wraps_rtl_in_painting_order_parley() {
+fn plain_text_wraps_rtl_in_logical_order_parley() {
     wrap_order_checks(parley());
 }
 
 #[cfg(target_os = "macos")]
 #[test]
-fn plain_text_wraps_rtl_in_painting_order_native() {
+fn plain_text_wraps_rtl_in_logical_order_native() {
     wrap_order_checks(native());
 }
 

@@ -301,7 +301,7 @@ impl Segment {
     }
 }
 
-fn slice_runs(runs: &[FontRun], range: Range<usize>) -> Vec<FontRun> {
+pub(super) fn slice_runs(runs: &[FontRun], range: Range<usize>) -> Vec<FontRun> {
     let mut sliced = Vec::new();
     let mut offset = 0;
     for run in runs {

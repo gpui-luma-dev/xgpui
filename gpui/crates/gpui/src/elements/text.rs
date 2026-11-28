@@ -1042,11 +1042,7 @@ impl TextLayout {
         let mut accumulator = String::new();
 
         for wrapped in self.0.borrow().as_ref().unwrap().lines.iter() {
-            let boundaries = wrapped.layout.wrap_boundaries.iter().map(|boundary| {
-                wrapped.layout.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix]
-                    .index
-            });
-            push_wrapped_line(&mut accumulator, &wrapped.text, boundaries);
+            push_wrapped_line(&mut accumulator, &wrapped.text, wrapped.layout.soft_wrap_offsets());
             accumulator.push('\n');
         }
         // Remove trailing newline
@@ -1057,11 +1053,8 @@ impl TextLayout {
 
 /// Append `text` with a newline at each soft-wrap boundary byte index.
 ///
-/// Boundaries follow the painted glyph order, which runs backwards through
-/// right-to-left text, so they are taken in text order here. Each piece is then
-/// a logical span of the text; for mixed-direction lines a painted line may not
-/// be one contiguous span. Indices that aren't character boundaries inside the
-/// text are skipped.
+/// Sort and deduplicate offsets defensively for layouts supplied by callers.
+/// Indices that aren't character boundaries inside the text are skipped.
 fn push_wrapped_line(
     accumulator: &mut String,
     text: &str,
