@@ -282,3 +282,103 @@ fn geometry_query_preserves_boundary_and_contour_selection() {
         m.geometry_at(0.).unwrap().location.tangent
     );
 }
+#[test]
+fn frame_distance_and_spacing_apply_the_selected_contour_policy() {
+    use ContourPolicy::{Continuous, PerContour};
+    let path = crate::svg_path::parse("M0,0 H10 M50,0 H50 M100,0 H114").unwrap();
+    let measured = MeasuredPath::new(&path, 1e-6).unwrap();
+    let at_break = measured.frames_at_distance(10., Continuous).unwrap();
+    assert_eq!(at_break[0].geometry.location.point, Point::new(100., 0.));
+    assert_eq!(at_break[0].geometry.location.contour, 2);
+    assert_eq!(at_break[0].contour_distance, 0.);
+
+    let points = |frames: Vec<PathFrame>| {
+        frames
+            .into_iter()
+            .map(|frame| frame.geometry.location.point.x)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        points(measured.frames_at_distance(10., PerContour).unwrap()),
+        [10., 110.]
+    );
+    assert_eq!(
+        points(measured.frames_by_spacing(6., 2., Continuous).unwrap()),
+        [2., 8., 104., 110.]
+    );
+    assert_eq!(
+        points(measured.frames_by_spacing(6., 2., PerContour).unwrap()),
+        [2., 8., 102., 108., 114.]
+    );
+}
+
+#[test]
+fn frame_counts_include_open_ends_and_sample_a_closed_seam_once() {
+    use ContourPolicy::{Continuous, PerContour};
+    let path = crate::svg_path::parse("M0,0 H10 V10 H0 Z M100,0 H112").unwrap();
+    let measured = MeasuredPath::new(&path, 1e-6).unwrap();
+    let frames = measured.frames_by_count(4, 0., PerContour).unwrap();
+    assert_eq!(
+        frames.iter().map(|f| f.distance).collect::<Vec<_>>(),
+        [0., 10., 20., 30., 40., 44., 48., 52.]
+    );
+    assert_eq!(frames[1].geometry.location.tangent, Some(Vec2::new(1., 0.)));
+    assert_eq!(frames[1].geometry.normal, Some(Vec2::new(0., 1.)));
+    let frames = measured.frames_by_count(3, 4., Continuous).unwrap();
+    assert_eq!(
+        frames.iter().map(|f| f.distance).collect::<Vec<_>>(),
+        [4., 28., 52.]
+    );
+    assert_eq!(measured.frames_by_count(3, 40., PerContour).unwrap(), []);
+    assert_eq!(
+        measured.frames_by_count(3, 52., Continuous).unwrap().len(),
+        1
+    );
+
+    let closed = crate::svg_path::parse("M0,0 H10 V10 H0 Z").unwrap();
+    let closed = MeasuredPath::new(&closed, 1e-6).unwrap();
+    assert_eq!(closed.frames_at_distance(40., Continuous).unwrap(), []);
+    assert_eq!(
+        closed.frames_by_spacing(10., 0., Continuous).unwrap().len(),
+        4
+    );
+    let frames = closed.frames_by_count(2, 10., Continuous).unwrap();
+    assert_eq!(
+        frames.iter().map(|f| f.distance).collect::<Vec<_>>(),
+        [10., 25.]
+    );
+}
+
+#[test]
+fn frame_queries_handle_cusps_empty_ranges_and_invalid_inputs() {
+    use ContourPolicy::Continuous;
+    let path = crate::svg_path::parse("M0,0 Q10,0 0,0").unwrap();
+    let measured = MeasuredPath::new(&path, 1e-6).unwrap();
+    let cusp = measured.frames_at_distance(5., Continuous).unwrap()[0];
+    assert_eq!(cusp.geometry.location.point, Point::new(5., 0.));
+    assert_eq!(cusp.geometry.curvature, None);
+    assert_eq!(measured.frames_by_count(0, 0., Continuous).unwrap(), []);
+    assert_eq!(measured.frames_at_distance(12., Continuous).unwrap(), []);
+    assert!(matches!(
+        measured.frames_at_distance(f64::NAN, Continuous),
+        Err(CurveError::NonFinite)
+    ));
+    assert!(matches!(
+        measured.frames_by_count(2, -1., Continuous),
+        Err(CurveError::OutOfRange(_))
+    ));
+    assert!(matches!(
+        measured.frames_by_spacing(0., 0., Continuous),
+        Err(CurveError::OutOfRange(_))
+    ));
+    assert!(matches!(
+        measured.frames_by_spacing(1e-5, 0., Continuous),
+        Err(CurveError::WorkLimit(_))
+    ));
+    assert!(matches!(
+        measured.frames_by_count(MAX_FRAGMENTS + 1, 0., Continuous),
+        Err(CurveError::WorkLimit(_))
+    ));
+    let empty = MeasuredPath::new(&BezPath::new(), 1e-6).unwrap();
+    assert_eq!(empty.frames_by_count(1, 0., Continuous).unwrap(), []);
+}
