@@ -353,6 +353,46 @@ impl LineLayout {
         (prefix, suffix)
     }
 
+    fn logical_wrap_offsets(
+        &self,
+        text: &str,
+        width: Pixels,
+        max_lines: Option<usize>,
+        scratch: &mut WrapScratch,
+    ) -> Vec<usize> {
+        // Keep the same line-break and clamp rules while measuring clusters in
+        // logical order. The caller shapes the resulting rows.
+        let mut clusters = self.visual_clusters();
+        clusters.sort_by_key(|cluster| cluster.index);
+        let mut x = Pixels::ZERO;
+        let glyphs = clusters
+            .into_iter()
+            .map(|cluster| {
+                let position = point(x, Pixels::ZERO);
+                x += cluster.right - cluster.left;
+                ShapedGlyph {
+                    id: GlyphId(0),
+                    position,
+                    index: cluster.index,
+                    is_emoji: false,
+                }
+            })
+            .collect();
+        let measured = Self {
+            width: x,
+            runs: vec![ShapedRun {
+                font_id: FontId(0),
+                glyphs,
+            }],
+            ..Self::default()
+        };
+        measured
+            .compute_wrap_boundaries(text, width, max_lines, scratch)
+            .iter()
+            .map(|boundary| measured.runs[0].glyphs[boundary.glyph_ix].index)
+            .collect()
+    }
+
     fn compute_wrap_boundaries(
         &self,
         text: &str,
@@ -460,11 +500,14 @@ pub struct WrappedLineLayout {
     /// The line layout, pre-wrapping.
     pub unwrapped_layout: Arc<LineLayout>,
 
-    /// The boundaries at which the line was wrapped
+    /// Glyph boundaries for rows that reuse the unwrapped layout.
+    /// Use [`Self::soft_wrap_offsets`] for the text offsets of all rows.
     pub wrap_boundaries: SmallVec<[WrapBoundary; 1]>,
 
     /// The width of the line, if it was wrapped
     pub wrap_width: Option<Pixels>,
+    // Independently shaped rows for a line whose glyphs were reordered.
+    pub(crate) logical_rows: Vec<(Range<usize>, Arc<LineLayout>)>,
 }
 
 /// A boundary at which a line was wrapped
@@ -477,6 +520,20 @@ pub struct WrapBoundary {
 }
 
 impl WrappedLineLayout {
+    /// Build a wrapped layout whose rows reuse glyphs from a single shaped line.
+    pub fn new(
+        unwrapped_layout: Arc<LineLayout>,
+        wrap_boundaries: SmallVec<[WrapBoundary; 1]>,
+        wrap_width: Option<Pixels>,
+    ) -> Self {
+        Self {
+            unwrapped_layout,
+            wrap_boundaries,
+            wrap_width,
+            logical_rows: Vec::new(),
+        }
+    }
+
     /// The length of the underlying text, in utf8 bytes.
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
@@ -485,9 +542,16 @@ impl WrappedLineLayout {
 
     /// The width of this line, in pixels, whether or not it was wrapped.
     pub fn width(&self) -> Pixels {
-        self.wrap_width
-            .unwrap_or(Pixels::MAX)
-            .min(self.unwrapped_layout.width)
+        let maximum = self.wrap_width.unwrap_or(Pixels::MAX);
+        if !self.logical_rows.is_empty() {
+            return self
+                .logical_rows
+                .iter()
+                .map(|(_, row)| row.width)
+                .fold(Pixels::ZERO, |width, row| width.max(row))
+                .min(maximum);
+        }
+        maximum.min(self.unwrapped_layout.width)
     }
 
     /// The size of the whole wrapped text, for the given line_height.
@@ -495,7 +559,7 @@ impl WrappedLineLayout {
     pub fn size(&self, line_height: Pixels) -> Size<Pixels> {
         Size {
             width: self.width(),
-            height: line_height * (self.wrap_boundaries.len() + 1),
+            height: line_height * (self.soft_wrap_count() + 1),
         }
     }
 
@@ -512,6 +576,21 @@ impl WrappedLineLayout {
     /// The wrap boundaries in this layout
     pub fn wrap_boundaries(&self) -> &[WrapBoundary] {
         &self.wrap_boundaries
+    }
+
+    /// Byte offsets where wrapped rows begin, excluding the first row.
+    pub fn soft_wrap_offsets(&self) -> impl Iterator<Item = usize> + '_ {
+        self.logical_rows
+            .iter()
+            .skip(1)
+            .map(|(range, _)| range.start)
+            .chain(self.wrap_boundaries.iter().map(|boundary| {
+                self.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix].index
+            }))
+    }
+
+    pub(crate) fn soft_wrap_count(&self) -> usize {
+        self.wrap_boundaries.len() + self.logical_rows.len().saturating_sub(1)
     }
 
     /// The font size of this layout
@@ -555,6 +634,23 @@ impl WrappedLineLayout {
         closest: bool,
     ) -> Result<usize, usize> {
         let wrapped_line_ix = (position.y / line_height) as usize;
+
+        if !self.logical_rows.is_empty() {
+            let Some((range, row)) = self.logical_rows.get(wrapped_line_ix) else {
+                return Err(0);
+            };
+            let x = position.x;
+            if x < Pixels::ZERO || x >= row.width {
+                return Err(range.start + row.closest_index_for_x(x));
+            }
+            return if closest {
+                Ok(range.start + row.closest_index_for_x(x))
+            } else {
+                row.index_for_x(x)
+                    .map(|index| range.start + index)
+                    .ok_or(range.end)
+            };
+        }
 
         let wrapped_line_start_index;
         let wrapped_line_start_x;
@@ -619,6 +715,19 @@ impl WrappedLineLayout {
 
     /// Returns the pixel position for the given byte index.
     pub fn position_for_index(&self, index: usize, line_height: Pixels) -> Option<Point<Pixels>> {
+        if !self.logical_rows.is_empty() {
+            let (row_ix, (range, row)) =
+                self.logical_rows
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (range, _))| {
+                        range.contains(&index) || index == self.len() && range.end == index
+                    })?;
+            return Some(point(
+                row.x_for_index(index - range.start),
+                line_height * row_ix,
+            ));
+        }
         let mut line_start_ix = 0;
         let line_end_indices = self
             .wrap_boundaries
@@ -804,6 +913,7 @@ impl LineLayoutCache {
             font_size,
             runs,
             wrap_width,
+            max_lines,
             force_width: None,
         } as &dyn AsCacheKeyRef;
 
@@ -826,7 +936,33 @@ impl LineLayoutCache {
             drop(state);
             let text = SharedString::from(text);
             let unwrapped_layout = self.layout_line::<&SharedString>(&text, font_size, runs, None);
-            let wrap_boundaries = if let Some(wrap_width) = wrap_width {
+            let mut logical_rows = Vec::new();
+            let wrap_boundaries = if let Some(width) =
+                wrap_width.filter(|_| unwrapped_layout.has_reordered_glyphs())
+            {
+                let offsets = unwrapped_layout.logical_wrap_offsets(
+                    &text,
+                    width,
+                    max_lines,
+                    &mut self.wrap_scratch.borrow_mut(),
+                );
+                if !offsets.is_empty() {
+                    let mut start = 0;
+                    for end in offsets.into_iter().chain([text.len()]) {
+                        let range = start..end;
+                        let row_runs = super::paragraph_fallback::slice_runs(runs, range.clone());
+                        let row = self.layout_line::<&str>(
+                            &text[range.clone()],
+                            font_size,
+                            &row_runs,
+                            None,
+                        );
+                        logical_rows.push((range, row));
+                        start = end;
+                    }
+                }
+                SmallVec::new()
+            } else if let Some(wrap_width) = wrap_width {
                 unwrapped_layout.compute_wrap_boundaries(
                     text.as_ref(),
                     wrap_width,
@@ -840,12 +976,14 @@ impl LineLayoutCache {
                 unwrapped_layout,
                 wrap_boundaries,
                 wrap_width,
+                logical_rows,
             });
             let key = Arc::new(CacheKey {
                 text,
                 font_size,
                 runs: SmallVec::from(runs),
                 wrap_width,
+                max_lines,
                 force_width: None,
             });
 
@@ -877,6 +1015,7 @@ impl LineLayoutCache {
             font_size,
             runs,
             wrap_width: None,
+            max_lines: None,
             force_width,
         } as &dyn AsCacheKeyRef;
 
@@ -910,6 +1049,7 @@ impl LineLayoutCache {
                 font_size,
                 runs: SmallVec::from(runs),
                 wrap_width: None,
+                max_lines: None,
                 force_width,
             });
             let layout = Arc::new(layout);
@@ -985,6 +1125,7 @@ struct CacheKey {
     font_size: Pixels,
     runs: SmallVec<[FontRun; 1]>,
     wrap_width: Option<Pixels>,
+    max_lines: Option<usize>,
     force_width: Option<Pixels>,
 }
 
@@ -994,6 +1135,7 @@ struct CacheKeyRef<'a> {
     font_size: Pixels,
     runs: &'a [FontRun],
     wrap_width: Option<Pixels>,
+    max_lines: Option<usize>,
     force_width: Option<Pixels>,
 }
 
@@ -1018,6 +1160,7 @@ impl AsCacheKeyRef for CacheKey {
             font_size: self.font_size,
             runs: self.runs.as_slice(),
             wrap_width: self.wrap_width,
+            max_lines: self.max_lines,
             force_width: self.force_width,
         }
     }
@@ -1119,11 +1262,7 @@ mod tests {
         assert_eq!(suffix.runs[0].glyphs[0].index, 2);
         assert_eq!(suffix.runs[0].glyphs[1].index, 0);
 
-        let wrapped = WrappedLineLayout {
-            unwrapped_layout: Arc::new(layout),
-            wrap_boundaries: SmallVec::new(),
-            wrap_width: None,
-        };
+        let wrapped = WrappedLineLayout::new(Arc::new(layout), SmallVec::new(), None);
         let height = px(20.);
         assert_eq!(
             wrapped.position_for_index(0, height),

@@ -463,10 +463,10 @@ impl Render for BidiLab {
                     "plain GPUI text uses the Parley engine (install_text_layout), so both columns match: lines wrap in logical order and the sentence's first words (שורה ראשונה) are at the top right. Switch to GPUI lines to compare."
                 }
                 (Some(_), false) => {
-                    "left column, plain GPUI text on GPUI's flat lines: lines wrap in painting order, so the sentence's first words (שורה ראשונה) land on the last line. Right column, typeset(): lines wrap in logical order, so the first words are at the top right. The clamp and the tooltip show the same difference."
+                    "Both columns wrap in logical order. Flat GPUI text uses physical alignment, while typeset() follows text direction."
                 }
                 (None, _) => {
-                    "no Parley engine is installed, so typeset() renders as plain GPUI text and both columns match. Both wrap in painting order: the sentence's first words (שורה ראשונה) land on the last line. Run with --backend parley to compare."
+                    "Both columns use flat GPUI text. The first words appear on the first row. Run with --backend parley to compare alignment."
                 }
             },
         );
