@@ -77,6 +77,7 @@ mod tests {
             "shapes",
             "zeta",
             "stroke-picking",
+            "contour-frames",
         ] {
             assert!(
                 Options::try_parse_from(["curve-lab", "--panel", name]).is_ok(),

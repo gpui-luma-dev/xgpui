@@ -4,6 +4,7 @@
 use gpui::{prelude::*, *};
 
 mod common;
+mod frames;
 mod func;
 mod mesh;
 mod nodes;
@@ -36,10 +37,12 @@ pub enum Panel {
     Zeta,
     /// Shared stroke geometry for paint, bounds and picking.
     StrokePicking,
+    /// Contour-aware tangent arrows and normal ticks.
+    ContourFrames,
 }
 
 impl Panel {
-    const ALL: [Panel; 8] = [
+    const ALL: [Panel; 9] = [
         Panel::Mesh,
         Panel::Spine,
         Panel::Nodes,
@@ -48,6 +51,7 @@ impl Panel {
         Panel::Shapes,
         Panel::Zeta,
         Panel::StrokePicking,
+        Panel::ContourFrames,
     ];
 
     /// Parse a `panel=` query value (the same names as the native `--panel`).
@@ -62,6 +66,7 @@ impl Panel {
             "shapes" => Panel::Shapes,
             "zeta" => Panel::Zeta,
             "stroke-picking" => Panel::StrokePicking,
+            "contour-frames" => Panel::ContourFrames,
             _ => return None,
         })
     }
@@ -76,11 +81,15 @@ impl Panel {
             Panel::Shapes => "Shapes & strokes",
             Panel::Zeta => "Zeta mapping",
             Panel::StrokePicking => "Stroke picking",
+            Panel::ContourFrames => "Contour frames",
         }
     }
 
     fn about(self) -> &'static str {
         match self {
+            Panel::ContourFrames => {
+                "Green arrows follow tangents. Gold ticks point along normals. Offsets and spacing are measured along the path in model units."
+            }
             Panel::StrokePicking => {
                 "Move the pointer over the connector, its caps, or a dash gap to compare the painted and pickable areas."
             }
@@ -120,6 +129,7 @@ pub struct CurveLab {
     shapes: shapes::ShapesPanel,
     zeta: zeta::ZetaPanel,
     stroke: stroke_pick::StrokePanel,
+    frames: frames::FramesPanel,
 }
 
 impl CurveLab {
@@ -141,6 +151,7 @@ impl CurveLab {
             shapes: shapes::ShapesPanel::new(),
             zeta: zeta::ZetaPanel::new(),
             stroke: stroke_pick::StrokePanel::default(),
+            frames: frames::FramesPanel::default(),
         }
     }
 }
@@ -158,6 +169,7 @@ impl Render for CurveLab {
             Panel::Shapes => shapes::render(self, window, cx),
             Panel::Zeta => zeta::render(self, window, cx),
             Panel::StrokePicking => stroke_pick::render(self, window, cx),
+            Panel::ContourFrames => frames::render(self, cx),
         };
         div()
             .id("curve-lab")
@@ -189,7 +201,10 @@ impl Render for CurveLab {
             )
             .child(div().text_color(rgb(0x9fb0cc)).child(panel.about()))
             .when(
-                !matches!(panel, Panel::Series | Panel::Zeta | Panel::StrokePicking),
+                !matches!(
+                    panel,
+                    Panel::Series | Panel::Zeta | Panel::StrokePicking | Panel::ContourFrames
+                ),
                 |el| {
                     el.child(
                         div()

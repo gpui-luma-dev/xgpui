@@ -275,6 +275,7 @@ title = "Curves / xgpui-curve"
 about = "Mesh wires, spine inspector, node modes, plot series, easing, squircles and fitted strokes"
 views = [
   { name = "stroke-picking", title = "Styled stroke bounds and picking", args = ["--panel", "stroke-picking"] },
+  { name = "contour-frames", title = "Contour-aware tangent arrows and normal ticks", args = ["--panel", "contour-frames"] },
   { name = "zeta", title = "Animated Riemann zeta mapping", args = ["--panel", "zeta"] },
   { name = "spine", title = "Spine inspector (GPU field)", args = ["--panel", "spine"] },
   { name = "nodes", title = "Node editor", args = ["--panel", "nodes"] },
