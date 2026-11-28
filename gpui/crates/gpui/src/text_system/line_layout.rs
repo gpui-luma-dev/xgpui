@@ -60,7 +60,68 @@ pub struct ShapedGlyph {
     pub is_emoji: bool,
 }
 
+struct VisualCluster {
+    index: usize,
+    end: usize,
+    left: Pixels,
+    right: Pixels,
+    rtl: bool,
+}
+
+impl VisualCluster {
+    fn edges(&self) -> [(Pixels, usize); 2] {
+        if self.rtl {
+            [(self.left, self.end), (self.right, self.index)]
+        } else {
+            [(self.left, self.index), (self.right, self.end)]
+        }
+    }
+}
+
 impl LineLayout {
+    fn has_reordered_glyphs(&self) -> bool {
+        !self
+            .runs
+            .iter()
+            .flat_map(|run| &run.glyphs)
+            .map(|glyph| glyph.index)
+            .is_sorted()
+    }
+
+    fn visual_clusters(&self) -> Vec<VisualCluster> {
+        let mut glyphs = self
+            .runs
+            .iter()
+            .flat_map(|run| &run.glyphs)
+            .dedup_by(|a, b| a.index == b.index)
+            .peekable();
+        let mut clusters = Vec::new();
+        while let Some(glyph) = glyphs.next() {
+            clusters.push(VisualCluster {
+                index: glyph.index,
+                end: self.len,
+                left: glyph.position.x,
+                right: glyphs.peek().map_or(self.width, |next| next.position.x),
+                rtl: false,
+            });
+        }
+        let mut indices: Vec<_> = clusters.iter().map(|cluster| cluster.index).collect();
+        indices.sort_unstable();
+        indices.dedup();
+        for i in 0..clusters.len() {
+            let logical = indices.partition_point(|index| *index < clusters[i].index);
+            let end = indices.get(logical + 1).copied().unwrap_or(self.len);
+            // A reversed pair of consecutive logical clusters identifies an RTL edge.
+            let rtl = clusters
+                .get(i + 1)
+                .is_some_and(|next| logical > 0 && next.index == indices[logical - 1])
+                || i > 0 && clusters[i - 1].index == end;
+            clusters[i].end = end;
+            clusters[i].rtl = rtl;
+        }
+        clusters
+    }
+
     /// The index for the character at the given x coordinate
     pub fn index_for_x(&self, x: Pixels) -> Option<usize> {
         if x >= self.width {
@@ -80,6 +141,16 @@ impl LineLayout {
     /// closest_index_for_x returns the character boundary closest to the given x coordinate
     /// (e.g. to handle aligning up/down arrow keys)
     pub fn closest_index_for_x(&self, x: Pixels) -> usize {
+        if self.has_reordered_glyphs() {
+            return self
+                .visual_clusters()
+                .iter()
+                .flat_map(VisualCluster::edges)
+                .min_by(|(a, _), (b, _)| {
+                    f32::from(*a - x).abs().total_cmp(&f32::from(*b - x).abs())
+                })
+                .map_or(0, |(_, index)| index);
+        }
         let mut prev_index = 0;
         let mut prev_x = px(0.);
 
@@ -110,6 +181,30 @@ impl LineLayout {
 
     /// The x position of the character at the given index
     pub fn x_for_index(&self, index: usize) -> Pixels {
+        if self.has_reordered_glyphs() {
+            let clusters = self.visual_clusters();
+            if let Some(cluster) = clusters
+                .iter()
+                .filter(|cluster| cluster.index >= index)
+                .min_by_key(|cluster| cluster.index)
+            {
+                return if cluster.rtl {
+                    cluster.right
+                } else {
+                    cluster.left
+                };
+            }
+            return clusters.iter().max_by_key(|cluster| cluster.index).map_or(
+                self.width,
+                |cluster| {
+                    if cluster.rtl {
+                        cluster.left
+                    } else {
+                        cluster.right
+                    }
+                },
+            );
+        }
         for run in &self.runs {
             for glyph in &run.glyphs {
                 if glyph.index >= index {
@@ -122,6 +217,19 @@ impl LineLayout {
 
     /// The corresponding Font at the given index
     pub fn font_id_for_index(&self, index: usize) -> Option<FontId> {
+        if self.has_reordered_glyphs() {
+            return self
+                .runs
+                .iter()
+                .flat_map(|run| {
+                    run.glyphs
+                        .iter()
+                        .map(move |glyph| (glyph.index, run.font_id))
+                })
+                .filter(|(glyph_index, _)| *glyph_index >= index)
+                .min_by_key(|(glyph_index, _)| *glyph_index)
+                .map(|(_, font_id)| font_id);
+        }
         for run in &self.runs {
             for glyph in &run.glyphs {
                 if glyph.index >= index {
@@ -134,12 +242,16 @@ impl LineLayout {
 
     /// Split this layout at a byte index, returning `(prefix, suffix)`.
     ///
-    /// - `prefix` contains glyphs for bytes `[0, byte_index)` with original positions.
-    ///   Its width equals the x-advance up to the split point.
-    /// - `suffix` contains glyphs for bytes `[byte_index, len)` with positions
-    ///   shifted left so the first glyph starts at x=0, and byte indices rebased to 0.
+    /// - `prefix` contains glyphs for bytes `[0, byte_index)`.
+    /// - `suffix` contains glyphs for bytes `[byte_index, len)` with byte indices rebased to 0.
+    /// - When glyphs are in logical order, the prefix retains its positions and
+    ///   the suffix is shifted left. When glyphs are reordered, both halves
+    ///   start at x=0 and gaps left by glyphs assigned to the other half are removed.
     /// - `font_size`, `ascent`, and `descent` are copied to both halves.
     pub fn split_at(&self, byte_index: usize) -> (LineLayout, LineLayout) {
+        if self.has_reordered_glyphs() {
+            return self.split_reordered(byte_index);
+        }
         let x_offset = self.x_for_index(byte_index);
 
         // Partition glyph runs. A single run may contribute glyphs to both halves.
@@ -192,6 +304,53 @@ impl LineLayout {
         };
 
         (left, right)
+    }
+
+    fn split_reordered(&self, byte_index: usize) -> (LineLayout, LineLayout) {
+        let empty_part = |len| LineLayout {
+            font_size: self.font_size,
+            ascent: self.ascent,
+            descent: self.descent,
+            len,
+            ..Default::default()
+        };
+        let mut prefix = empty_part(byte_index);
+        let mut suffix = empty_part(self.len - byte_index);
+        let mut end_positions = self
+            .runs
+            .iter()
+            .flat_map(|run| &run.glyphs)
+            .skip(1)
+            .map(|glyph| glyph.position.x)
+            .chain(std::iter::once(self.width));
+        for run in &self.runs {
+            let mut prefix_glyphs = Vec::new();
+            let mut suffix_glyphs = Vec::new();
+            for glyph in &run.glyphs {
+                let advance =
+                    end_positions.next().expect("one end position per glyph") - glyph.position.x;
+                let mut glyph = glyph.clone();
+                if glyph.index < byte_index {
+                    glyph.position.x = prefix.width;
+                    prefix.width += advance;
+                    prefix_glyphs.push(glyph);
+                } else {
+                    glyph.position.x = suffix.width;
+                    glyph.index -= byte_index;
+                    suffix.width += advance;
+                    suffix_glyphs.push(glyph);
+                }
+            }
+            for (part, glyphs) in [(&mut prefix, prefix_glyphs), (&mut suffix, suffix_glyphs)] {
+                if !glyphs.is_empty() {
+                    part.runs.push(ShapedRun {
+                        font_id: run.font_id,
+                        glyphs,
+                    });
+                }
+            }
+        }
+        (prefix, suffix)
     }
 
     fn compute_wrap_boundaries(
@@ -428,6 +587,17 @@ impl WrappedLineLayout {
 
         let mut position_in_unwrapped_line = position;
         position_in_unwrapped_line.x += wrapped_line_start_x;
+        if closest
+            && self.wrap_boundaries.is_empty()
+            && self.unwrapped_layout.has_reordered_glyphs()
+        {
+            let index = self.unwrapped_layout.closest_index_for_x(position.x);
+            return if position.x < Pixels::ZERO || position.x >= self.unwrapped_layout.width {
+                Err(index)
+            } else {
+                Ok(index)
+            };
+        }
         if position_in_unwrapped_line.x < wrapped_line_start_x {
             Err(wrapped_line_start_index)
         } else if position_in_unwrapped_line.x >= wrapped_line_end_x {
@@ -468,7 +638,16 @@ impl WrappedLineLayout {
                 line_start_ix = line_end_ix;
                 continue;
             } else {
-                let line_start_x = self.unwrapped_layout.x_for_index(line_start_ix);
+                let line_start_x = if !self.unwrapped_layout.has_reordered_glyphs() {
+                    self.unwrapped_layout.x_for_index(line_start_ix)
+                } else if ix == 0 {
+                    Pixels::ZERO
+                } else {
+                    let boundary = &self.wrap_boundaries[ix - 1];
+                    self.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix]
+                        .position
+                        .x
+                };
                 let x = self.unwrapped_layout.x_for_index(index) - line_start_x;
                 return Some(point(x, line_y));
             }
@@ -920,6 +1099,71 @@ mod tests {
             .iter()
             .map(|g| f32::from(g.position.x))
             .collect()
+    }
+
+    #[test]
+    fn rtl_carets_and_split_follow_logical_order() {
+        let mut layout = make_layout(vec![glyph_at(0., 4), glyph_at(10., 2), glyph_at(20., 0)]);
+        layout.width = px(30.);
+        layout.len = 6;
+        for (index, x) in [(0, 30.), (2, 20.), (4, 10.), (6, 0.)] {
+            assert_eq!(layout.x_for_index(index), px(x));
+            assert_eq!(layout.closest_index_for_x(px(x)), index);
+        }
+        assert_eq!(layout.closest_index_for_x(px(11.)), 4);
+        assert_eq!(layout.closest_index_for_x(px(19.)), 2);
+        let (prefix, suffix) = layout.split_at(2);
+        assert_eq!((prefix.width, suffix.width), (px(10.), px(20.)));
+        assert_eq!(glyph_x_positions(&prefix), vec![0.]);
+        assert_eq!(glyph_x_positions(&suffix), vec![0., 10.]);
+        assert_eq!(suffix.runs[0].glyphs[0].index, 2);
+        assert_eq!(suffix.runs[0].glyphs[1].index, 0);
+
+        let wrapped = WrappedLineLayout {
+            unwrapped_layout: Arc::new(layout),
+            wrap_boundaries: SmallVec::new(),
+            wrap_width: None,
+        };
+        let height = px(20.);
+        assert_eq!(
+            wrapped.position_for_index(0, height),
+            Some(point(px(30.), px(0.)))
+        );
+        assert_eq!(
+            wrapped.position_for_index(6, height),
+            Some(point(px(0.), px(0.)))
+        );
+        assert_eq!(
+            wrapped.closest_index_for_position(point(px(30.), px(0.)), height),
+            Err(0)
+        );
+    }
+
+    #[test]
+    fn mixed_direction_carets_and_fonts_follow_clusters_across_runs() {
+        let mut layout = make_layout(vec![glyph_at(0., 0), glyph_at(10., 3)]);
+        layout.runs.push(ShapedRun {
+            font_id: FontId(1),
+            glyphs: vec![glyph_at(20., 1), glyph_at(30., 5)],
+        });
+        layout.width = px(40.);
+        layout.len = 6;
+        assert_eq!(layout.x_for_index(1), px(30.));
+        assert_eq!(layout.x_for_index(3), px(20.));
+        assert_eq!(layout.closest_index_for_x(px(27.)), 1);
+        assert_eq!(layout.font_id_for_index(1), Some(FontId(1)));
+        assert_eq!(layout.font_id_for_index(3), Some(FontId(0)));
+        assert_eq!(layout.font_id_for_index(6), None);
+        let (prefix, suffix) = layout.split_at(3);
+        for (part, indices) in [(&prefix, [0, 1]), (&suffix, [0, 2])] {
+            assert_eq!(part.width, px(20.));
+            assert_eq!(part.runs.len(), 2);
+            for (i, run) in part.runs.iter().enumerate() {
+                assert_eq!(run.font_id, [FontId(0), FontId(1)][i]);
+                assert_eq!(run.glyphs[0].index, indices[i]);
+                assert_eq!(run.glyphs[0].position.x, px(i as f32 * 10.));
+            }
+        }
     }
 
     #[test]

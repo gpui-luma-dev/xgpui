@@ -49,6 +49,41 @@ fn native() -> Arc<dyn PlatformTextSystem> {
     backend
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn native_flat_hebrew_label_hit_testing() {
+    let text = "\u{05e9}\u{05dc}\u{05d5}\u{05dd}";
+    let mut cx = TestAppContext::build_with_text_system(TestDispatcher::new(0), None, native());
+    let window = cx.add_empty_window();
+    let styled = StyledText::new(text);
+    let layout = styled.layout().clone();
+    let element = Mutex::new(Some(styled));
+    window.draw(point(px(0.), px(0.)), size(px(300.), px(50.)), |_, _| {
+        div()
+            .font_family(FAMILY)
+            .text_size(px(20.))
+            .child(element.lock().unwrap().take().unwrap())
+    });
+    let start = layout.position_for_index(0).unwrap();
+    let end = layout.position_for_index(text.len()).unwrap();
+    assert!(start.x > end.x);
+    let line = layout.line_layout_for_index(0).unwrap();
+    let origin = layout.bounds().origin;
+    assert_eq!(
+        line.unwrapped_layout
+            .closest_index_for_x(start.x - origin.x),
+        0
+    );
+    assert_eq!(
+        line.unwrapped_layout.closest_index_for_x(end.x - origin.x),
+        text.len()
+    );
+    assert_eq!(
+        layout.index_for_position(point(start.x - px(1.), start.y)),
+        Ok(0)
+    );
+}
+
 /// Plain GPUI text breaks right-to-left lines on the visual (painted) glyph
 /// order, so its wrap boundaries run backwards through the text and the
 /// sentence's first words land on the last line. The paragraph API, which
