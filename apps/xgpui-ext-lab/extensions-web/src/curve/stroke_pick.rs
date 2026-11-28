@@ -1,9 +1,9 @@
 //! Compare the painted stroke with its bounds and pointer footprint.
 use super::{CurveLab, common::*};
 use gpui::{prelude::*, *};
-use xgpui_curve::geom::{Affine, BezPath, FillRule, fill_contains};
+use xgpui_curve::geom::{Affine, BezPath};
 use xgpui_curve::gpui_paint;
-use xgpui_curve::stroke::{Cap, Join, StrokeStyle, stroke_outline};
+use xgpui_curve::stroke::{Cap, Join, StrokeFootprint, StrokeSpace, StrokeStyle};
 
 pub struct StrokePanel {
     screen_width: bool,
@@ -34,7 +34,12 @@ fn connector() -> BezPath {
     path
 }
 
-fn footprint(path: &BezPath, transform: Affine, screen_width: bool, dashed: bool) -> BezPath {
+fn footprint(
+    path: &BezPath,
+    transform: Affine,
+    screen_width: bool,
+    dashed: bool,
+) -> Result<StrokeFootprint, xgpui_curve::CurveError> {
     let mut style = StrokeStyle::new(28.);
     style.start_cap = Cap::Square;
     style.end_cap = Cap::Round;
@@ -42,11 +47,12 @@ fn footprint(path: &BezPath, transform: Affine, screen_width: bool, dashed: bool
     if dashed {
         style.dash_pattern = vec![95., 40.];
     }
-    if screen_width {
-        stroke_outline(&(transform * path), &style, 0.1)
+    let space = if screen_width {
+        StrokeSpace::LogicalPixels
     } else {
-        transform * stroke_outline(path, &style, 0.1)
-    }
+        StrokeSpace::Model
+    };
+    StrokeFootprint::new(path, &style, transform, space, 0.1)
 }
 
 pub fn render(lab: &CurveLab, _window: &mut Window, cx: &mut Context<CurveLab>) -> AnyElement {
@@ -112,28 +118,35 @@ pub fn render(lab: &CurveLab, _window: &mut Window, cx: &mut Context<CurveLab>) 
                         let transform = fit(bounds, 740., 420.)
                             * Affine::scale_non_uniform(1., if stretch { 0.72 } else { 1. });
                         let path = connector();
-                        let outline = footprint(&path, transform, screen_width, dashed);
+                        let footprint = match footprint(&path, transform, screen_width, dashed) {
+                            Ok(footprint) => footprint,
+                            Err(error) => {
+                                log::error!("Could not build stroke footprint: {error}");
+                                return;
+                            }
+                        };
                         let pointer = pointer.filter(|p| bounds.contains(p)).map(kp);
-                        let hit = pointer.is_some_and(|p| fill_contains(&outline, p, FillRule::NonZero));
+                        let hit = pointer.is_some_and(|p| footprint.contains(p, 0.));
 
-                        let mut builder = PathBuilder::fill().with_style(PathStyle::Fill(
-                            FillOptions::default().with_fill_rule(gpui::FillRule::NonZero),
-                        ));
-                        gpui_paint::append(&mut builder, &outline, Affine::IDENTITY);
-                        match builder.build() {
-                            Ok(path) => window.paint_path(path, rgb(if hit { 0x4dd2a8 } else { 0x5aa9ff })),
-                            Err(_) => return,
+                        match gpui_paint::stroke_footprint_path(&footprint) {
+                            Ok(Some(path)) => window.paint_path(path, rgb(if hit { 0x4dd2a8 } else { 0x5aa9ff })),
+                            Ok(None) => {}
+                            Err(error) => {
+                                log::error!("Could not tessellate stroke footprint: {error}");
+                                return;
+                            }
                         }
 
                         if guides {
-                            let b = outline.bounding_box();
-                            let mut frame = BezPath::new();
-                            frame.move_to((b.x0, b.y0));
-                            frame.line_to((b.x1, b.y0));
-                            frame.line_to((b.x1, b.y1));
-                            frame.line_to((b.x0, b.y1));
-                            frame.close_path();
-                            stroke(window, &frame, Affine::IDENTITY, 1., rgb(0xffd166));
+                            if let Some(b) = footprint.bounds() {
+                                let mut frame = BezPath::new();
+                                frame.move_to((b.x0, b.y0));
+                                frame.line_to((b.x1, b.y0));
+                                frame.line_to((b.x1, b.y1));
+                                frame.line_to((b.x0, b.y1));
+                                frame.close_path();
+                                stroke(window, &frame, Affine::IDENTITY, 1., rgb(0xffd166));
+                            }
                             stroke(window, &path, transform, 1., rgb(0x9fb0cc));
                         }
                         if let Some(p) = pointer {
@@ -155,8 +168,15 @@ mod tests {
         let line = line(KPoint::new(0., 0.), KPoint::new(400., 0.));
         let transform = Affine::scale_non_uniform(1., 0.5);
         for screen_width in [false, true] {
-            let outline = footprint(&line, transform, screen_width, true);
-            let contains = |x, y| fill_contains(&outline, KPoint::new(x, y), FillRule::NonZero);
+            let footprint = footprint(&line, transform, screen_width, true).unwrap();
+            let painted = gpui_paint::stroke_footprint_path(&footprint)
+                .unwrap()
+                .unwrap();
+            assert!(!painted.vertices.is_empty());
+            let bounds = footprint.bounds().unwrap();
+            assert_eq!(f32::from(painted.bounds.origin.x), bounds.x0 as f32);
+            assert_eq!(f32::from(painted.bounds.origin.y), bounds.y0 as f32);
+            let contains = |x, y| footprint.contains(KPoint::new(x, y), 0.);
             assert!(contains(40., 0.));
             assert!(!contains(115., 0.));
             assert_eq!(contains(40., 10.), screen_width);
