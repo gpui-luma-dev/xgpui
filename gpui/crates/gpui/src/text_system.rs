@@ -823,7 +823,7 @@ impl WindowTextSystem {
                 wrap_width,
                 max_wrap_lines.map(|max| max.saturating_sub(wrapped_lines)),
             );
-            wrapped_lines += layout.wrap_boundaries.len();
+            wrapped_lines += layout.soft_wrap_count();
 
             lines.push(WrappedLine {
                 layout,
