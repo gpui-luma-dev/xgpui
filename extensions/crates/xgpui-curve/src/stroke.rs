@@ -845,7 +845,7 @@ impl StrokeFootprint {
             }
         }
         let dash_total = style.dash_pattern.iter().sum::<f64>();
-        finite(&[if style.dash_pattern.len() % 2 == 0 {
+        finite(&[if style.dash_pattern.len().is_multiple_of(2) {
             dash_total
         } else {
             2. * dash_total
